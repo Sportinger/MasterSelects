@@ -2,7 +2,7 @@
 title: "Effects"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 MasterSelects has a modular GPU effect system built around registered effect modules, shared WGSL utilities, and a compositor pipeline that can run inline color ops without extra passes.
 
@@ -17,7 +17,7 @@ applying one. Click **Gaussian Blur** to add it to the clip's effect stack.
 
 <div class="docs-shot-stage">
 
-![Big Buck Bunny in the preview beside the Effects catalog filtered to blur, with six live effect thumbnails.](/docs/assets/workflows/effects-catalog-detail.webp)
+<a class="docs-shot-zoom" href="/docs/assets/workflows/effects-catalog-detail.webp" title="Open the full-size picture"><img src="/docs/assets/workflows/effects-catalog-detail.webp" alt="Big Buck Bunny in the preview beside the Effects catalog filtered to blur, with six live effect thumbnails." width="1017" height="601" decoding="async"></a>
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
 <defs><marker id="effects-catalog-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -44,7 +44,7 @@ default. The diamond adds a keyframe at the current playhead position.
 
 <div class="docs-shot-stage">
 
-![Gaussian Blur enabled with Radius 10; the Big Buck Bunny frame is visibly softened.](/docs/assets/workflows/effects-blur-after-detail.webp)
+<a class="docs-shot-zoom" href="/docs/assets/workflows/effects-blur-after-detail.webp" title="Open the full-size picture"><img src="/docs/assets/workflows/effects-blur-after-detail.webp" alt="Gaussian Blur enabled with Radius 10; the Big Buck Bunny frame is visibly softened." width="1017" height="601" loading="lazy" decoding="async"></a>
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
 <defs><marker id="effects-blur-after-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -67,7 +67,7 @@ button only when you want to delete the effect from the stack.
 
 <div class="docs-shot-stage">
 
-![The same Big Buck Bunny frame with Gaussian Blur bypassed, a dimmed effect header and the original sharp preview.](/docs/assets/workflows/effects-blur-before-detail.webp)
+<a class="docs-shot-zoom" href="/docs/assets/workflows/effects-blur-before-detail.webp" title="Open the full-size picture"><img src="/docs/assets/workflows/effects-blur-before-detail.webp" alt="The same Big Buck Bunny frame with Gaussian Blur bypassed, a dimmed effect header and the original sharp preview." width="1017" height="601" loading="lazy" decoding="async"></a>
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
 <defs><marker id="effects-blur-before-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -86,7 +86,7 @@ excerpt resized for the demonstration; the enabled example adds Gaussian blur.*
 ## At A Glance
 
 Color numeric channels, Hue Shift's Shift and Gaussian Blur's Radius share
-[parameter sources](/features/node-workspace/#procedural-parameter-sources): local
+[parameter sources](/docs/features/node-workspace/#procedural-parameter-sources): local
 values/keyframes or connected Constant, Time, LFO, Math and Remap nodes. The
 normal compact effect inspector retains its design and shows the effective value
 and source. Other effects and structural settings are not implicitly enabled.
@@ -98,20 +98,21 @@ and source. Other effects and structural settings are not implicitly enabled.
 - The populated clip-effect categories are `color`, `blur`, `distort`,
   `stylize`, `generate`, `keying`, `halftone`, `analog`, `pixel`, `glyph`,
   `geometry`, `tracking`, and `time`.
-- `generate` holds the [Memory Leak](/features/memory-leak/) generator, which
+- `generate` holds the [Memory Leak](/docs/features/memory-leak/) generator, which
   reinterprets leftover bytes of the FFmpeg wasm heap as pixels through the
   byte-texture binding described below.
-- `time` contains Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
+- `time` contains Time Stack and Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
 ## Glow on transparent and 3D layers
 
-Glow samples premultiplied light energy and expands alpha into its halo. Hidden RGB
-in fully transparent pixels contributes no light, and pixel-radius sampling stays
-circular on portrait frames. Canonical saved Glow recipes, including composition
-folders, upgrade automatically; custom rewired graphs retain their own behavior.
+Glow builds its bloom from premultiplied light and expands alpha into its halo, so a
+title on a transparent layer glows outside its letters too. Hidden RGB in fully
+transparent pixels contributes no light, and the halo is round on any aspect. Glows
+saved with the earlier ring version keep it (see Glow below); custom rewired graphs
+retain their own behavior.
 Raster Weave strands process their own projected effect stack before joining the
 shared 3D scene, so Glow works with other strands or particles without affecting
-those layers. See [Weave](/features/weave/) for rendering limitations.
+those layers. See [Weave](/docs/features/weave/) for rendering limitations.
 
 ## Slit Scan
 
@@ -135,7 +136,7 @@ field shaping, protection, quantization and temporal interpolation can alter the
 final result. Object stabilization must be disabled because this first version
 uses source coordinates. Shape settings and the tracking asset persist normally.
 
-The separate [Space-time slice](/features/slit-scan-3d/#space-time-slice-observed-depth)
+The separate [Space-time slice](/docs/features/slit-scan-3d/#space-time-slice-observed-depth)
 representation uses baked per-time depth and color rather than a time relief.
 
 DIS motion analysis drains both GPU allocation error scopes and preserves the
@@ -189,7 +190,7 @@ and source placement; full live audio/export verification remains pending.
 Time fields support input/external Luma, Alpha, RGB and HSV channels, deterministic
 smooth/cell noise and independent clip masks. Shaping and an optional noise
 combination feed the existing bands and protection stages. External sources also
-offer **Bake and use as time map** through the shared [Depth controls](/features/depth-estimation/#slit-scan-time-maps).
+offer **Bake and use as time map** through the shared [Depth controls](/docs/features/depth-estimation/#slit-scan-time-maps).
 Depth source alignment validates provenance and coverage; freely aligned external
 videos retain the timeline offset. End-to-end validation of these additions is pending.
 
@@ -256,11 +257,29 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
-- **Sampling**, **Preview quality**, **Time** and **Wave** appear first in the Slit Scan inspector because they have no section bypass switch. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Sampling opens by default. **Preview quality**
+- **Look** (top of the Time section) applies a starting point: Sweep (left → right, the
+  defaults), Falling time (top → bottom), Center out, Wave folds, Radial bloom, Time
+  rings or Time steps (12 bands). A look sets only Profile, Angle, Delay, Time bands,
+  Mix, Waves, Phase and Speed; it reads **Custom** once any of them changes, and while
+  any of them has keyframes or a node source (the inspector names those values, which
+  keep animating).
+- **Radial scan** and **Time rings** live in the Wave & Profile folder of the graph.
+  Earlier graphs kept them in the Protected Center folder, whose mute (the default for
+  new effects) routed the profile back to Wave, so Radial scan and Time rings rendered as
+  Wave. Saved graphs are upgraded on load (the nodes move to the profile folder) and
+  now render the chosen profile; muting Protected Center removes only the protection.
+- **Time** and **Wave** come first in the Slit Scan inspector, followed by the collapsed
+  **Sampling**, **Motion compensation** (with its header switch) and **Preview quality**
+  sections; 3D geometry and the other switchable sections follow. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Time opens by default. **Preview quality**
   switches between Small preview
   (160 px maximum edge) and Full size. Both use the same source timestamps and sample
   count. New Slit Scan effects default to resident GPU history, 4 GiB history memory,
-  Nearest temporal sampling, shared-source Hybrid export processing, 1920 samples,
+  Blend adjacent frames temporal sampling (**Sampling → Temporal sampling**; Nearest
+  leaves hard stair steps on moving subjects, Blend softens them into overlapping
+  ghosts but does not remove them on fast limbs: **Motion compensation** shifts each
+  frame along the optical flow for a continuous smear; older saved effects without
+  this setting already rendered with Blend),
+  shared-source Hybrid export processing, 1920 samples,
   zero scan smoothing, a 0.25 deformation threshold, Full size and Adaptive preview quality.
   The sample count is limited by the source's longer dimension in the inspector.
   Full size follows timeline Proxy mode for GPU cache: it uses the actual full JPEG proxy
@@ -596,13 +615,13 @@ grades that have not stored their default values yet.
 
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
-- `distort` (8): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge, Fisheye Lens
-- `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
+- `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](/docs/features/effects-distort/) and, for Pixelate, Kaleidoscope, Mirror and RGB Split, [Mirror, Split and Pixel Effects](/docs/features/effects-mirror-pixel/)
+- `stylize` (13): Vignette, Grain, Sharpen, Posterize, Glow, Sheen, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate; for Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate see [Painterly, Relief and Particle Effects](/docs/features/effects-stylize-art/)
 - `keying` (1): Chroma Key
-- `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](/features/flock-clips/#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](/features/node-workspace/#stick-figures-and-rig-nodes))
+- `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](/docs/features/flock-clips/#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](/docs/features/node-workspace/#stick-figures-and-rig-nodes))
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
-- `analog` (10): glitch, crystal/glass, ribbon, CRT, prism, wave, hologram, compute Pixel Sort, and Analog Signal Lab
-- `pixel` (2): Blockify and Block Mosaic
+- `analog` (10): CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and compute Pixel Sort (user guide: [Analog Effects](/docs/features/effects-analog/))
+- `pixel` (2): Blockify and Block Mosaic; see [Mirror, Split and Pixel Effects](/docs/features/effects-mirror-pixel/)
 - `glyph` (18): ASCII, word/number/symbol matrices, code, collage, brand, and stitch treatments
 - `geometry` (11): compute Voronoi, Quadtree, and Contour plus engraving, textile, outline, and brick treatments
 - `tracking` (8): subject, motion/HUD/CCTV, kinetic trace, rain, stardust, and hand-particle treatments
@@ -621,7 +640,11 @@ Fisheye's default image graph is editable rather than an opaque distortion
 node. It exposes AA jitter, lens projection, edge policy, chromatic sampling,
 vignette, outside coverage and final resolve while retaining one effect pass.
 Persisted edits therefore change preview and export execution, not merely the
-workspace diagram.
+workspace diagram. Each sample is premultiplied as it is read and the averaged
+result is unpremultiplied, so lens and frame feathering, the outside mix and edge
+sampling lower coverage instead of darkening colour; the worker CPU path does the
+same. Untouched saved graphs of the earlier straight-alpha recipe (recognized by a
+frozen recipe fingerprint) load as the current recipe; edited graphs stay as saved.
 
 Image effects reuse a bounded cache of validated graphs and compiled CPU render
 plans across playback, inline rendering, previews and worker-software export.
@@ -708,14 +731,42 @@ ASCII Ghost combines the current result with explicit previous-frame history usi
 component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
 
-Acuarela uses generic noise, vector math, image sampling and blend operators with
-an explicit `image.frame-history` source. The runtime supplies the committed previous
-frame; editing the graph never stores textures in the project. Disconnecting the
-history source removes its runtime dependency, and a direct source-to-output
-connection bypasses the watercolor processing.
+Acuarela is a four-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
+premultiplied source cache, two edge-aware 7 x 7 washes with per-pixel jittered taps
+(each pixel turns and shifts its tap grid at random, so thin lines become fine grain
+instead of repeated copies; taps 0.6 sigma apart, weight
+`exp(-0.18 |k|^2 - |dc|^2 / (2 s_r^2))` with `dc` the premultiplied colour difference to
+the centre tap). The first wash reads at a position that wobbles by
+`min(Bleed (0.25 + 0.5 wet), 12)` pixels (so neighbouring pixels never read far-apart rows;
+above Bleed 16 only the second wash widens, and the effect card says so), sigma
+`Wash (1 + 0.3 wet)`, into `wash-first-cache`; the second smooths the first with sigma
+`0.6 Wash + 0.25 Bleed wet` into `wash-cache` (`wet` 0-1 in wet patches; colour tolerance
+`s_r` grows from 0.1 dry to 0.3 and 0.5 wet). The last pass groups the wash into tones
+(Simplify) and changes each colour like more or less pigment,
+`C' = C - (C - C^2) e`. The excess `e` eases instead of clamping (`1 - exp(-x)` for more
+pigment, `exp(x) - 1` for less, `x` = edge pooling + granulation + blooms), so the density
+`1 + e` stays inside 0-2, where the formula keeps every channel between `C^2` and
+`2C - C^2`: pooled edges become a deeper tint of their own colour, never black ink lines.
+Edge pooling compares the wash with a Gaussian mean of its 5 x 5 neighbourhood (1.5 px
+apart, sigma 2 px) through a smoothstep, a 2-4 px gradient on the darker side of each
+border. Granulation follows a paper height field, weighted toward mid-light washes (less on
+dense dark paint and near-white). Shadow Pigment then lifts black toward an indigo pigment,
+also on pooled edges, and Mix blends
+premultiplied. Its noise fields use the shared
+**Fractal Noise** node (`noise.fractal2d.vec2`, PCG-hashed gradient noise, 1-8 octaves),
+which stays free of the streaks Random (Hash) shows at large positions. Sizes are pixels
+of a 1080p frame; the recipe has no frame history and Mix 0 is skipped. Acuarela effects
+saved with the original watery-smoke recipe keep it: a stored graph renders as saved,
+and a graph-less effect with only the smoke parameters resolves to
+`createLegacyAcuarelaGraph()` (generic noise, vector math and blend operators with an
+explicit `image.frame-history` source, like Rom1). The smoke parameters are retired for
+the watercolour and shown only where a graph reads them; History Loop and Reset show only
+for graphs with frame history. The worker software renderer runs the smoke recipe on the
+CPU; the watercolour (minutes per frame there) is unsupported in software, so preview and
+export fall back to the main-thread GPU renderer.
 
 `ComputeEffectRuntime` adds storage-texture compute passes to the normal
-ping-pong effect stack. Pixel Sort uses bounded segments, Voronoi uses a
+ping-pong effect stack. Pixel Sort uses bounded segments of at most 16 pixels, Voronoi uses a
 jump-flood sequence, Quadtree Zoom evaluates hierarchical block variance, and
 Contour uses marching-squares cases with interpolated edge crossings. Compute
 and fragment effects can be mixed in one clip stack and use the same preview,
@@ -737,8 +788,15 @@ Rec.709 luminance eligibility, amount mixing, and source-alpha preservation.
 The sort keeps legacy duplicate-last padding, nearest-even segment-size rounding,
 and strict greater-than comparisons for ties. Its inputs can be rewired or
 bypassed; the default graph still emits a single compute pass. Effect controls
-retain their authoritative defaults, including segment size 16, amount 0.8,
-and threshold 0.45.
+retain their authoritative defaults, including segment size 16, amount 0.5
+(0.8 before 2026-10; saved effects keep their value), and threshold 0.45. Pixel
+Sort is marked experimental in the effect list, the inspector and tool results.
+Because every run is at most 16 pixels long and the threshold
+only decides which pixels take the sorted colour, the result is a fine streaky
+texture, not the long sorted streaks of classic pixel sorting; that needs a
+row-wide interval sort as its own compute stage. Segment sizes outside 4 to 16,
+Amount outside 0 to 1 and a Threshold of 1 or more are reported in the inspector
+and tool results.
 
 Quadtree Zoom exposes a bounded adaptive partition with jointly computed cell
 origin and size. Its six-level search preserves the legacy five-sample variance
@@ -774,41 +832,138 @@ cell-center luminance, contour bands, and screen-space derivative coverage.
 
 ### Editable keying and feedback graphs
 
-Chroma Key has an editable graph for Rec.601 YCbCr chrominance distance,
-tolerance/softness matte, and green/blue spill suppression. RGB stays straight;
-the matte multiplies source alpha. Existing key choices and parameter IDs remain
-unchanged, including the legacy Custom choice's green fallback. It retains its
-fullscreen output boundary rather than adding a new inline optimization.
+Chroma Key is an editable screen-difference keyer in three passes: a 64 px Screen
+Grid of screen-like colours, a 1 px Screen Color average (the automatic screen
+colour) and the key pass with Clip Black/White, optional Shrink/Grow and Edge
+Softness passes (pixels at 1080p, none while both are 0), screen subtraction with
+the local grid colour, and Neutral or Gentle spill suppression. A picked screen colour
+folds both measurement passes away. See
+[Keying and Time Effects](/docs/features/effects-keying-time/). Untouched saved Rec.601 graphs
+upgrade; edited ones keep reading the retired Tolerance and Edge Softness: their
+inspector shows those controls, and tools report the new parameters as unused there.
+The worker CPU keyer (software preview and export readback) keys only a layer whose
+sole effect is one Chroma Key, also when the layer stores the untouched graph (every
+loaded project does); with other effects, a second key or a colour grade it declines,
+since its fixed order and source-frame screen measurement would differ from the GPU.
+An automatic key on a clip without that screen colour keys nothing; the inspector and
+`addEffect`/`updateEffect` say so, checked on the clip's thumbnails.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
-feedback decay, and final RGBA mixing as shared nodes. Detail changes frequency,
+feedback decay, and final RGBA mixing as shared nodes. Its source lift passes Gain through a
+knee: the lift equals Gain up to 0.25, then eases as `0.25 + 0.25 (1 - exp(-(Gain - 0.25) / 0.25))`
+toward 0.5 (`rom1GainLift`), so saved looks with typical Gain stay the same and large values
+wash the frame out instead of turning it white; saved graphs get the knee nodes on load. Detail changes frequency,
 not octave count; Speed scales displacement, not timeline time. Its history uses
 the shared seek/reset/loop contract, and feedback can raise output alpha as in
 the legacy shader. Direct source wiring prunes history resources and processing.
 
 ### Editable color effect graphs
 
-Brightness, Contrast, Saturation, Invert, Exposure, Levels, Hue Shift,
-Temperature, and Vibrance expose editable node groups.
-Their math is compiled into the existing image processing path: a single
-eligible effect stays inline, while effect stacks retain their ordered passes
-and intermediate clamps. Bound Amount nodes retain the effect's original
-range, default, and keyframe property; alpha bypasses the RGB calculations.
-The other exposed parameters likewise retain their original IDs and ranges.
-Hue Shift uses HSV conversion and wrapped hue in turns; it is not the
-Resolve-style workspace's YIQ hue rotation. Levels retains its original
-unguarded normalization: equal input black/white points remain a singular
-case with backend-dependent output, rather than silently gaining an epsilon.
+Brightness, Contrast, Saturation, Vibrance, Exposure, Levels, Hue Shift,
+Temperature and Invert are editable node graphs; the user page is
+[Color Effects](/docs/features/effects-color/). A single color effect on a clip runs inside
+the composite pass; in a stack each one runs as its own pass, in stack order. Alpha
+bypasses the RGB math. New instances (since the 2026-10 rebuild,
+`colorEffectGraphs.ts`, tuning in `COLOR_RECIPE`) compute:
 
-Threshold and Posterize also expose executable pointwise groups. Threshold
-uses Rec.709 luminance and a strict greater-than comparison (equality is black).
-Posterize retains the original `floor(rgb * levels) / (levels - 1)` formula,
-with levels bounded below by two and no internal output clamp. Both preserve
-source alpha and the original parameter ranges, defaults, and keyframe IDs.
+- **Brightness**: per channel `y = x·m / (x·m + 1 − x)` with `m = 2^(2.5 · Amount)`;
+  black and white stay fixed, so there is no grey veil.
+- **Contrast**: S-curve `y = x^c / (x^c + (1 − x)^c)`, slope `c` = Amount at
+  mid-grey 0.5; highlights and shadows roll off instead of clipping. Per channel,
+  so strong values also raise saturation.
+- **Saturation**: mix of Rec.709 luma and RGB by Amount, stopped where the first
+  channel reaches 0 or 1, so hue and luma stay (gamut-safe).
+- **Vibrance**: the same gamut-safe mix, with Amount weighted by `1 − S` (HSV
+  saturation) and up to 70 % less on skin hues (a Gaussian around 0.07 turns, about 25°),
+  faded in over HSV value 0.15–0.35 and out over saturation 0.6–0.8 (dark warm
+  floors and saturated orange light are not skin).
+- **Exposure**: `2^EV` in linear light (exact sRGB transfer both ways), then the
+  display-referred Offset and Gamma of the original effect.
+- **Temperature / Tint**: channel gains in linear light. Per Temperature unit red
+  rises and blue falls by 0.6 stops each (1.2 stops apart); per Tint unit green falls
+  0.5 stops and red and blue rise 0.25. The gains are scaled so grey keeps its Rec.709
+  luminance; black stays black.
+- **Hue Shift**: rotation in OkLCh by Shift turns (the inspector shows degrees);
+  lightness and chroma stay, colours that leave sRGB are clamped.
+- **Levels**: unchanged remap, but equal input points act as a hard per-channel threshold and
+  swapped points as a negative (range `max(|white − black|, 1e-4)` with its sign).
+- **Invert**: `1 − rgb`, unchanged.
 
-Vignette exposes normalized pixel coordinates, center/aspect adjustment,
-distance, smoothstep falloff, and gain as an editable graph. It retains its
-existing fullscreen pass and alpha behavior. UV-dependent node previews show
+Inputs are limited to 0–1 (the effect chain carries 8-bit display-referred colour).
+Values outside a parameter's render range (`renderMin`/`renderMax`: Brightness ±4,
+Contrast and Saturation 0–10, Vibrance −1 to 4, Exposure ±20 EV, Gamma 0.2–10 for
+Exposure and 0.1–10 for Levels, Temperature and Tint ±4) are clamped by the graph's
+`<param>-clamped` node; the inspector and the add/update effect tools say what
+renders instead (a gamma floor adds "very dark" or "almost black").
+
+Effect rows share one display rule (`effectParamDisplay` in
+`src/effects/paramDisplay.ts`), in the Resolve rows and in node-source rows alike:
+`displayUnit: 'degrees'` shows radians as whole degrees (Twirl, Kaleidoscope,
+Mirror, RGB Split), `displayScale` with `unit` shows a scaled unit (Hue Shift's turns
+as degrees) and `unit` alone a suffix (" EV") with as many decimals as the stored
+value needs; other rows show the decimals their step implies. Stored values,
+keyframes, tools and MIDI keep the parameter's own unit.
+
+Saved work keeps its look. Projects keep the graph they were saved with (the
+previous recipes stay in `legacyColorEffectGraphs.ts`). A color effect stored
+without any graph (projects from before 2026-09-21) is given the original graph when
+the project file is converted (`migrateLoadedEffectOperatorGraph` in
+`loadTimelineHydration.ts`); `addClipEffect` gives new color effects the recipe graph,
+so a graphless effect in the running editor is never mistaken for an old one.
+`editMotionAdjustment` (`create`/`configure`, which replace the whole effect list from
+parameters) keeps the graph of every effect whose id and type it keeps and gives new
+color effects the recipe (`adjustmentEffectGraphs.ts`). Custom Looks without
+`schemaVersion` (saved before the rebuild) apply their color effects with the original
+graphs; Look schema 2 stores each color effect's graph per stack entry. A stored Look
+graph is validated like a project-file graph when the Look is applied or drawn as a
+thumbnail (`checkedLookEntryOperatorGraph`); a graph that no longer validates is logged,
+named in the Looks panel and replaced by the recipe. `getClipDetails` lists each effect
+graph only as a summary (`nodes`, `edges`, for color effects `state`: `recipe`,
+`original` or `edited`); `getOperatorGraph` returns the graph. Saved original graphs keep their original Node Workspace folders (Color
+Processing, Clamp & Alpha); the recipe stages are only applied to the unedited recipe.
+
+The worker software render modes evaluate the same graphs instead of their former
+shortcuts; programs that read only their own pixel (all color recipes) are evaluated
+once per distinct RGBA8 colour of the frame (about 0.2–0.4 s for a 1080p photo,
+`workerSoftwareImageGraphs.ts`). A layer that mixes them with the retired `blur`
+effect is skipped as `unsupported-effects`. Adjustment layers in the worker GPU
+modes still use the motion-adjustment 4×5 colour matrix for Brightness, Contrast and
+Saturation (linear offset, linear contrast, Rec.709 matrix saturation), which matches
+only the original graphs: each other such effect is reported once per layer in the
+`WorkerGpuAdjustment` log and, while a worker render host mode is selected, in the
+adjustment inspector (`adjustment-color-recipe-unsupported`,
+`workerGpuAdjustmentColorParity.ts`).
+GPU-against-CPU parity of the recipes (within one 8-bit step, including the OkLCh and
+sRGB helpers) is checked by `tests/browser/image-graph-probe.html?suite=color-recipes`;
+`colorRecipeWgsl.test.ts` validates every recipe module with naga where it is installed.
+
+Threshold and Posterize also expose executable pointwise groups (contract in
+`src/effects/stylize/pointwiseModel.ts`). Threshold uses Rec.709 luminance and a
+strict greater-than comparison (equality is black). Posterize uses
+`floor(rgb * levels) / (levels - 1)` with levels bounded below by two, limited to
+0–1 (the earlier graph let white overflow to `L / (L - 1)` until the render target
+clamped it). Since 2026-10-21 both have a **Softness** (default 0): Threshold ramps
+smoothly from Level − Softness/2 to Level + Softness/2 (a brightness width, 0–0.5);
+Posterize rounds each step edge into a smooth ramp of that share of a step (0–1).
+Posterize also has **Brightness Only**: the staircase runs on the brightest channel
+and the colour is scaled with it, so hue and saturation stay and light neutral areas
+cannot split into false colours where their channels cross a step apart. New
+Posterize effects start with it on (`stylizeNewInstanceParams`); the parameter
+default stays off, which is what saved effects and Custom Look entries without the
+value mean, so they keep stepping each channel. Softness 0 without Brightness Only
+renders exactly the earlier math, so untouched saved graphs simply read as the
+current recipe. Both preserve source alpha and the original ranges, defaults and
+keyframe IDs; Levels below 2 and negative Softness are reported, not silently clamped.
+
+Vignette (contract `src/effects/stylize/vignette/vignetteModel.ts`) measures the
+distance from the centre in pixels, normalized so every corner is at 1 on any
+resolution and aspect. **Roundness** blends from the frame's shape (0, an ellipse
+touching all four edges at the same distance) to a true circle (1, the default).
+The darkening starts at Size and is complete at Size + Softness (smoothstep, never
+narrower than 1.5 px), `gain = 1 − Amount × falloff`; a dither of at most half an
+8-bit step, only where the gain changes the picture, keeps dark gradients free of
+banding. One fullscreen pass; alpha is kept. Vignettes saved before 2026-10-21 keep
+their earlier graph, where Roundness (0.5–2) stretched a UV ellipse vertically. UV-dependent node previews show
 the spatial field instead of inventing a single numeric value. Adding a UV
 dependency to another image graph also routes it through the contextual
 fullscreen path; ordinary pixel-only graphs keep their inline optimization.
@@ -816,148 +971,313 @@ Animated graph parameters update GPU uniform values while reusing the compiled
 pipeline; changing graph wiring or a structural node constant recompiles it.
 
 Scanlines and Film Grain also expose executable UV/time/math graphs. They use
-composition timeline time for reproducible preview, seeking and export, replacing
-their former wall-clock animation even for legacy graph-less effects. Grain adds
-an explicit Seed control with default `0`; existing controls keep their original
-ranges and defaults. Both preserve source alpha and use one fullscreen pass.
+composition timeline time for reproducible preview, seeking and export. Both
+preserve source alpha and use one fullscreen pass.
 
-Pixelate, Mirror and RGB Split expose editable coordinate and sampling graphs.
-Sampling follows the connected upstream image expression, so rewiring math before
-the sample changes the real result. Pixelate uses the render resolution; Mirror
-keeps its boolean Horizontal/Vertical controls; RGB Split preserves center alpha.
-Each retains its existing parameter defaults and one fullscreen render pass.
+- **Scanlines** (`scanlinesModel.ts`): `0.5 + 0.5 sin((v + time × Speed × 0.1) ×
+  Density × 100)` over the frame height, so Density 5 gives about 80 lines on any
+  resolution. Lines closer than 4 px fade into their even average (fully below
+  2 px) instead of flickering as moiré; Opacity is limited to 0–1. Both limits are
+  reported in the inspector and tool results.
+- **Film Grain** (`grainModel.ts`, since 2026-10-21): smooth value noise built from
+  **Random (Cell)** hashes on a grid of Size pixels of a 1080p frame, so the grain
+  looks the same at every render size. Three layers of it, their grids turned by 0°,
+  30° and 60°, add up to grain without a grid direction (a single layer shows squares
+  at coarse sizes). A new pattern appears at `round(time × 60 × Speed)` (Speed 1
+  changes it on every frame up to 60 fps, 0 freezes it; Speed above 1 changes nothing
+  more and is reported); the whole-number pattern index and Seed pick the pattern
+  offset through Random (Cell), exact up to index 2²⁴, so long timelines never cycle
+  through a few patterns. The noise is zero-mean (no pumping),
+  strongest in the midtones (30 % of it in black and white, like film) and has a
+  standard deviation of about `0.35 × Amount` there. **Color** (0–1) mixes each
+  channel from shared grain towards its own. Grains saved earlier keep their
+  seeded sine-dot noise (Speed there scrolled the pattern, 0–5).
 
-Blockify and Block Mosaic use the same coordinate/sampling compiler. Their graphs
-expose cell snapping, quantization or tile borders, and blending; both retain the
-alpha of the snapped sample and the original edge clamp. Block Mosaic replaces
-wall-clock animation with composition timeline time, including for legacy effects,
-so seeking and export reproduce the same tile pattern. Its hash uses the shared
-shader implementation. Bound color nodes read the canonical effect color (including
-eight-digit hex alpha) and update uniforms without recompiling the pipeline.
-Original parameter IDs, ranges and defaults remain unchanged; each effect uses
-one fullscreen pass.
+### Editable mirror, split and pixel graphs
+
+User guide with pictures: [Mirror, Split and Pixel Effects](/docs/features/effects-mirror-pixel/).
+All six effects read a premultiplied `rgba16float` copy of the frame and
+unpremultiply the result, so transparent pixels never darken an edge or a cell.
+Kaleidoscope, Mirror and RGB Split follow **Frame Edges** (Mirror, Clamp,
+Transparent; Transparent fades over one source pixel by lowering alpha only) for
+reads beyond the frame. Angles are on-screen angles, stored in radians and shown
+in degrees. RGB Split's alpha is the largest of its three channel reads.
+Pixelate, Blockify and Block Mosaic share one centred cell grid (sizes in pixels
+of a 1080p frame, rounded to whole rendered pixels) and an exact two-pass cell
+average of the premultiplied frame (three passes in all); cells wider than 128
+rendered pixels average evenly spread taps. Blockify's dither is a 4 × 4 Bayer
+threshold per block that fades out over the darkest level step, so black stays
+flat. Block Mosaic draws its large tiles from timeline time, so
+seeking and export reproduce the same pattern; bound colour nodes read the
+canonical effect colour (including eight-digit hex alpha) without recompiling.
+Untouched saved graphs and graph-less saved effects move to the current recipes
+with values that keep their look where it can be kept. Neutral settings (RGB
+Split Amount 0, Mirror with both axes off, Pixelate cells below two rendered
+pixels, Blockify and Block Mosaic at Amount 0) skip the built-in recipe.
+
+**Worker CPU fallback.** Without WebGPU (software preview, worker-first export
+readback) the untouched Kaleidoscope, Mirror, RGB Split and Pixelate recipes run
+as one hand-written whole-frame pass with the same mappings, frame edges and
+premultiplied reads, within 1/255 of the graphs in tests; Pixelate averages every
+cell exactly there. The pass runs before the layer's other CPU effects. Pointwise
+effects in front of it (Invert, Threshold, Posterize, Vignette, Scanlines) join it
+as whole-frame steps in stack order, with 8-bit values between effects like the
+GPU, so a vignette or a posterize before Pixelate or Kaleidoscope stays exact and
+fast. Only graphless effects (transition effects) take these steps; Threshold,
+Posterize, Vignette and Scanlines follow their current recipes there (Softness,
+Brightness Only, the pixel-true vignette distance without its half-step dither,
+the fade of too dense lines; [Stylize Effects](/docs/features/effects-stylize/)). The rebuilt
+color effects (Brightness, Contrast, Saturation, Exposure, Levels, Hue Shift,
+Temperature, Vibrance) and Film Grain have no hand-written twin: a layer with one
+runs as ordered graph plans, the color programs once per distinct colour
+([Color Effects](/docs/features/effects-color/)). Chroma Key measures its screen from
+the whole layer source, so its CPU keyer runs only as a layer's sole effect
+([Keying and Time Effects](/docs/features/effects-keying-time/)); a stored key graph among
+other effects runs as graph plans. A
+distort, blur, glow, sharpen or feedback effect in front of the pass, and edited
+graphs, run the layer as ordered graph plans too, which are much slower. The pass keeps one float copy of the frame (two for a
+chain of resampling effects) and frees it after two idle seconds.
 
 ### Editable blur kernels
 
-Untouched Box Blur/Sharpen and Motion/Radial/Zoom Blur graphs now have named
-sampling, weighting and resolve stages. Their compatible regions share Texel
-Offset, Gaussian Weight, Normalize Weighted RGBA, Bounded Sample Count and Scale
-From Center recipes. Reuse is exact-pattern based: different formulas retain
-their original operators, with sample order, bypass thresholds and alpha handling
-owned by the original graph.
+User guide with pictures: [Blur Effects](/docs/features/effects-blur/). The shared sampling
+contract lives in `src/effects/blur/blurSampling.ts`; the operator graphs
+(`blurEffectGraphs.ts`, `directionalBlurEffectGraphs.ts`), the WGSL references
+(`separableBlur.wgsl`, `directionalBlur.wgsl`) and the unit tests follow it.
 
-Gaussian Blur's original graph has four expandable areas: Radius & Sample Count,
-Kernel Sampling, Gaussian Weight, and Weighted Blur & Bypass. Shared Texel Offset,
-Gaussian Weight, and Normalize Weighted RGBA compositions expose their internal
-primitive nodes. Exact-pattern recognition also reuses compatible pieces in Box
-Blur and Sharpen without changing their formulas. Custom wiring/grouping is not
-replaced by the default presentation, and detached compositions stay local.
-The same blocks can be inserted through Reusable Nodes → Sampling in other image
-graphs; connect their explicit inputs, keeping kernel-index evaluation inside a
-reducer. This change does not introduce another GPU pass or change the blur curve.
+**Radius unit.** Box and Gaussian Radius are pixels on a 1080p frame (the shorter
+frame side counts as 1080 px) and scale with the rendered size. A half-quality
+preview, the export and a 4K composition therefore show the same blur relative to
+the picture. Motion, Radial and Zoom were already relative to the frame.
 
-The organization/reuse pass also covers Glow, Edge Detect, Wave, Twirl, Bulge,
-Pixelate, Mirror, RGB Split, Blockify, Block Mosaic, the basic color effects and
-all ASCII/Glyph variants. Glow exposes Soft Bright Pass, Edge Detect exposes
-Sobel Magnitude, and Saturation/Vibrance share Luma Saturation. Glyph Cell Grid,
+**Premultiplied source.** Every blur first premultiplies the frame into an
+`rgba16float` cache (**Premultiplied Source (cached)**). All later reads filter
+between texels; filtering premultiplied texels is exact, while premultiplying a
+filtered straight-alpha read darkened colour wherever an alpha edge fell between
+two texels (a dark fringe on text, logos and cutouts).
+
+**Box and Gaussian (separable).** A horizontal pass over the premultiplied source
+is cached as `rgba16float`, then a vertical pass reads it and restores straight
+alpha (three GPU passes with the source cache). Each pass is a sequence of
+`2 * pairs + 1` taps: the centre texel plus
+pairs of texels merged into one linear-filtered tap at their weighted centre
+(shared blocks **Pair Tap Offsets** and **Merge Pair Weights**), which is exact for
+any kernel. Gaussian uses sigma = radius / 2 truncated at 3 sigma; at the old
+default (Radius 10, Samples 5) this matches the previous softness at 1080p, but
+without the old 11 × 11 tap grid that showed squares from radius ~10 upwards. The
+old grid grew with radius² / (3 × Samples), so saved projects change look: small
+radii are stronger (Radius 3 about 2.5×, Radius 5 1.5×), large ones about 20 %
+softer, projects that are not 1080p scale with their size (a 4K project blurs 2×
+as many pixels as before, 720p 0.67×), and other Samples values no longer change
+the strength. Box gives full weight inside the radius plus a
+fractional edge tap, so integer radii match the old box exactly and animated radii
+no longer jump. Past 127 pairs per side (Gaussian Radius 50 above a ~3600 px short
+side) the pairs spread out instead of truncating the kernel, and `addEffect`,
+`updateEffect` and the inspector say so for the composition size. Cost at 1080p:
+`0.75 × radius` (Gaussian) or `radius / 2` (Box) pairs per side, so about
+`1.5 × radius + 1` or `radius + 2` reads per pass, instead of up to
+`(2 × samples + 1)²`.
+
+**Motion, Zoom and Radial (two stages).** Every tap is T(u) of a one-parameter
+transform group in pixels: a translation (Motion), a log-scale about the centre
+(Zoom, Radial Zoom) or a rotation (Radial Spin). Stage A averages a short box of
+length h of the premultiplied source with taps at most one pixel apart into an
+`rgba16float` cache; stage B
+sums coarse taps h apart over the whole range and samples that cache. Because
+T(a)·T(b) = T(a + b), the boxes tile the range exactly, so streaks stay continuous
+at any length with about `2 × sqrt(2 × streak length in px)` taps per pixel; the old
+fixed sample counts showed ghost copies and stair steps on long streaks. A partial
+last box (Radial Zoom ranges differ per pixel) is weighted by its covered share.
+Motion Blur's direction is now an exact on-screen angle (diagonal angles were
+skewed on non-square frames); its reach to each side keeps the legacy length,
+Length × |(cos × width, sin × height)|: a share of the width for horizontal and of
+the height for vertical streaks, so saved projects and the Film Roll transition
+(Length 0.1, vertical) keep their streaks on every aspect ratio. Below 0, Motion
+and Radial Blur leave the picture unchanged, as the old shaders did (they returned
+their input below Length 0.001 / Amount 0.01): the graph clamps the amount at 0
+(**Maximum**, port "Amount ≥ 0"), the pipeline skips the effect, and tool results
+and the inspector say so. Keyframe overshoot or a tool call can produce such values.
+Zoom Blur streaks inward below 0, as it did on the GPU. Scales never go below 0.05,
+and the tool and inspector report that limit and streaks beyond the 64 × 256 read
+budget. Motion mirrors samples at the frame edge; Zoom and
+Radial keep the sampler's edge clamp (a mirrored zoom or spin path folds onto other
+rays, where the cached boxes no longer tile). Radial Blur gained **Type: Spin**
+(Amount 1 = a 20° arc); missing values keep the old Zoom look. A blur at zero
+strength (the built-in recipe only, also when an older project stores it in the
+`operatorGraph` parameter) is skipped by the effects pipeline, so its
+input passes through exactly without running the passes. Its effect preview in the
+Node Workspace shows that input; while a preview of one of its inner nodes is open,
+the effect renders normally so those previews have pictures.
+
+**Alpha.** All five blurs average premultiplied colour and return straight alpha,
+so transparent surroundings no longer darken edges (the old straight-alpha average
+drew a dark rim around logos, titles and scaled clips). Ground-truth tests
+(`tests/unit/blurGroundTruth.test.ts`) read discrete textures with bilinear
+filtering and float16 caches and compare hard alpha edges with dense premultiplied
+kernels; the GPU check (`image-graph-probe.html?suite=blur`) renders the same edges.
+
+**Pass caches.** The `rgba16float` caches between passes come from one pool in
+`ImageGraphPassRuntime`, keyed by size: a cache is leased for one encode (or one
+effect's batch) and returns to the pool, so all effects of a frame share a few
+textures per size; textures no encoder used for 120 encoders are destroyed.
+Releasing a batch also forgets its views and refuses further use, so nothing can
+read a cache the next effect has overwritten. Each lease carries a token: a batch
+released after the next encoder already took its textures back returns nothing,
+so it cannot free a texture another batch holds now.
+
+**Limits at the rendered size.** Tool results and the inspector state the limits at
+the size of the edited composition (the export size). The frame actually rendered
+can be smaller or larger (reduced-quality preview, nested compositions, 3D
+layer-space effects at their layer's own resolution, where Radius is relative to that
+resolution); the pipeline logs once per effect and size (`BlurBudget`) when the
+kernel is spread or capped there.
+
+**Worker hosts.** The opt-in worker render modes follow the same units: worker
+software draws Gaussian and Box as a canvas blur with the contract's sigma, and
+Motion, Radial (Zoom and Spin) and Zoom along the contract's paths in one stage of
+up to 64 taps with premultiplied alpha (longer streaks step visibly there; the
+`SoftwareBlur` log says so once per effect, size and streak); worker GPU runs the
+blur graphs. Gaussian
+Blur on a motion-adjustment layer in the worker GPU host
+(`workerGpuAdjustmentBlur.ts`) renders the tap list of `separableBlurTaps` itself:
+a premultiplied `rgba16float` source and horizontal pass, straight alpha after the
+vertical pass, Radius relative to 1080p, Samples not read.
+
+**Retired Samples.** Gaussian, Motion, Radial and Zoom Blur choose their taps
+themselves. Their `samples` parameters stay in saved projects but are hidden, have
+no effect and are marked `deprecated`; `addEffect`/`updateEffect` accept them and
+return a warning, and `listEffects` and the `updateEffect` list of valid names leave
+out retired (`deprecated`) parameters; other hidden parameters stay listed. New instances
+do not carry them (`getDefaultParams` leaves deprecated parameters out); graphs that
+still read one fall back to its catalog default. Visibility
+follows the instance's graph (`effectParamVisibility.ts`): an edited saved graph
+that still reads Samples shows it again without a warning, and Radial's Type
+(`graphOnly`) is hidden, and reported when set, on a graph that does not read it.
+
+**Saved graphs.** An untouched saved copy of an old blur graph (any layout, folders
+or packed compositions) is replaced by the current recipe on load
+(`blurGraphUpgrade.ts`); edited graphs stay as the user left them. The previous
+recipes remain in `legacyBlurEffectGraphs.ts` and
+`legacyDirectionalBlurEffectGraphs.ts` for that recognition and for the shared
+compositions extracted from them (Bounded Sample Count, Scale UV).
+
+The organization/reuse pass also covers Glow, Edge Detect, Sharpen, Vignette, Film
+Grain, Scanlines, Wave, Twirl, Bulge, Pixelate, Mirror, RGB Split, Blockify, Block
+Mosaic, the basic color effects and all ASCII/Glyph variants. The earlier Glow
+exposes Soft Bright Pass, the earlier Edge Detect exposes Sobel Magnitude, and
+Saturation/Vibrance share Saturation (Gamut-Safe). Stylize graphs saved with their
+earlier recipe keep that recipe's folders. Glyph Cell Grid,
 Tone to Glyph Index and Glyph Atlas Alpha share compatible glyph computations.
 ASCII Ghost's Decay & Max RGBA accepts its current and previous frames explicitly;
 the existing history resource, reset policy and clock remain unchanged. These
 blocks are insertable from Reusable Nodes and expandable into their primitives.
 Saved custom layouts/groups are not automatically replaced by presentation stages.
 
-Box Blur and Gaussian Blur expose their neighborhood sampling as editable graphs:
-kernel index, UV offset, image sample, weight, accumulation and normalization.
-The shared kernel reducer evaluates the connected sample and weight expressions
-for each grid position. Changing those connections changes the filter itself.
-A lazy image selection keeps the original radius-below-0.5 identity path without
-evaluating an unused, potentially singular Gaussian expression.
+**Sharpen** (contract `src/effects/stylize/sharpen/sharpenModel.ts`, since
+2026-10-21) premultiplies the frame into a cache, blurs it with the separable
+Gaussian Blur passes (σ = Radius pixels of a 1080p frame, at least 0.25 px) and adds
+`Amount × (luma − blurred luma)` to R, G and B alike, so edges get crisp without
+colour fringes. A halo limit removes most of the bright and dark outlines of a
+classic unsharp mask. It takes a smooth darkest and brightest brightness of the
+neighbourhood within ±2σ (at least ±1 px), densely, one pixel apart (up to 24 taps
+per side, wider steps beyond): first along each row in the horizontal blur pass,
+whose cache then holds blurred brightness, blurred alpha, row brightest and row
+darkest; then down a column of those rows in the final pass (means weighted by
+`exp(±64 × Δluma)`; transparent taps weigh nothing, rows without an opaque tap are
+ignored). The sharpened brightness passes unchanged between Floor and Ceiling (that
+range ± a margin of 5 % of it, at least 0.04); beyond, the excess e rolls off as
+`s × ln(1 + e / s)` with s = half the margin. It keeps growing, so stronger settings
+keep adding contrast and neighbouring pixels never swap their order; a step edge's
+halo stays at about 18 % of the step at Amount 1 and about 26 % at Amount 5 (a
+plain unsharp mask overshoots by 40 % or more). At Amount 3–5 on strong texture the
+peaks are compressed, and two neighbours at a peak can round to the same level.
+Nothing depends on the timeline time. Negative Amount softens; alpha is kept. Three
+passes. Sharpens saved
+earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
-Both preserve the existing two-dimensional sample order, clamp-to-edge sampling,
-RGBA averaging and one fullscreen pass. Gaussian Blur retains its existing
-Radius and Samples controls; this migration does not replace its kernel with a
-different separable approximation. Existing effect-stack texture boundaries and
-their quantization remain unchanged.
+**Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,
+since 2026-10-21) is a derivative-of-Gaussian gradient of premultiplied brightness
+in one window reduction: σ = **Width** pixels of a 1080p frame (at least 0.7 px),
+window ±2σ up to ±8 px. Dividing by the window's own second moment makes it exact for
+brightness ramps at any Width and resolution, so a step of contrast c gives a
+response of about `x = c × 4 × Strength` (the brightness of the earlier Sobel); the
+line strength is `1 − exp(−x)`, linear for faint edges and rolling off softly instead
+of clipping, so dense detail keeps its structure. Lines are white on black (Invert:
+black on white); **Color** tints them with the picture's own colour at full
+brightness, the alpha-weighted mean of the pixel and two taps one and two σ towards
+the brighter side. Lines are composited over the background premultiplied: alpha =
+`edge + source alpha × (1 − edge)`, colour = `(line × edge + background × source
+alpha × (1 − edge)) / alpha`, so transparent surroundings stay transparent and a
+layer's outline shows outside it in its full line colour. Cost grows with Width:
+(2⌈2σ⌉ + 1)² taps, 25 at the default on 1080p, at most 289, plus two colour taps. Edge Detects saved earlier
+keep the eight-tap Sobel at render resolution (alpha always one); its Sobel Magnitude
+stays available as a reusable block.
 
-Sharpen reuses the same kernel reduction for its weighted neighborhood, then
-exposes the unsharp-mask subtraction, gain, addition and RGB clamp as nodes.
-Unlike the blur effects, it retains the original center-pixel alpha.
-Kernel Index has a per-sample scope rather than a single preview value.
+**Glow** (contract `src/effects/stylize/glow/glowBloom.ts`, since 2026-10-21) is a
+lens bloom in 21 graph passes, most of them tiny:
 
-Motion, Radial and Zoom Blur reuse a one-dimensional sequence reduction. The
-Sequence Index exposes the current sample index and normalized position inside
-that reduction, not a single frame-wide preview value. Sample positions, weights
-and averaging remain editable graph operations, and all four RGBA channels are
-averaged. Motion Blur uses explicit mirrored UV boundaries; Radial and Zoom Blur
-retain linear, clamp-to-edge sampling. Existing parameter IDs, defaults, ranges
-and quality controls are unchanged. Each default graph remains one GPU pass.
+1. **Bright pass** (full size, cached): each pixel's light times a smoothstep of its
+   brightest channel from `Threshold − Softness × min(Threshold, 1 − Threshold)` up
+   to white (1), where all of its light glows; premultiplied by alpha. The brightest
+   channel lets saturated neon glow; ending the ramp at white makes lamps and clipped
+   lights glow fully, so the default Threshold 0.95 (Amount 2.5, Radius 80) reads on
+   night and stage pictures while a daylight sky (brightest channel about 0.8) stays
+   out: on the lab's neon street the frame brightens by about 7 levels, on the
+   daylight harbour by about 4. A Threshold of 1 or more glows only above white.
+2. **Pyramid down**: ten Cache Images at 1/2 … 1/1024 of the frame, each a
+   `[1 3 3 1]` reduction of the one above.
+3. **Pyramid up**: from the smallest level back up with a 3×3 tent; each level joins
+   with a weight that grows smoothly as Radius (pixels of a 1080p frame) reaches its
+   reach, so Radius widens the glow continuously. Levels finer than 3 px (1080p) fade
+   out, so 4K renders the same levels as 1080p. **Level 0**, the bright pass itself,
+   stands for the 1080p levels a smaller render cannot resolve
+   (`log2(min(Radius, its reach) / 3) + 1` of them) and fills up to a total weight of
+   1 when Radius is finer than the pyramid: a reduced preview matches the export and
+   a tiny Radius stays tight.
+4. **Resolve**: the glow, divided by the square root of the summed level weights
+   (wide glows grow without flooding the frame), × Amount × **Color**, is screened
+   onto the premultiplied source with a soft roll-off, `1 − (1 − picture) ×
+   exp(−glow)`: faint glows add their light, bright areas have less room left and
+   nothing passes white, so it never clips hard; very strong settings still approach
+   white and wash the colours out. Output
+   alpha is `max(source alpha, brightest result channel)` and RGB is un-premultiplied
+   by it, so the halo also appears around glyphs on transparent layers.
 
-The sequence reducer supports up to 256 samples; Motion's default graph retains
-its 128-sample ceiling. The existing small-amount identity branches remain lazy
-for Motion and Radial Blur. Zoom Blur still evaluates its sampling path at zero
-amount, matching the legacy shader rather than introducing a new bypass.
+Cost does not depend on Radius: about 2.7 full-frame passes of work and about 1.7
+frames of `rgba16float` cache memory per Glow (the full-size bright pass plus two
+pyramids of a third of a frame each). Radius stops
+widening the glow once the largest level is reached (about 1536 at 1080p); the
+inspector and tool results say so, as they do for negative values and for a
+Threshold at or above white (only HDR values glow).
 
-Edge Detect uses eight shared neighbor samples in one pass. Each sampled image is
-converted to Rec.709 luminance before the two Sobel gradients are evaluated in
-their original arithmetic order. Strength is applied to the gradient magnitude,
-then clamped before optional inversion. As in the legacy effect, output alpha is
-always one, independent of source alpha. Strength remains animatable with default
-1 and range 0–5; Invert defaults to false. Sampling, coefficients and the final
-clamp are editable graph connections rather than an opaque Sobel operation.
+Glows saved before 2026-10-21 keep the **earlier ring version** (contract
+`glowSampling.ts`, graph `createRingGlowGraph`): a bright pass, a separable
+prefilter and ring sampling at `k × Radius × 10` pixels with Rings and
+Samples/Ring (both retired for new Glows, still read by the ring graph, and its
+quality limits are still reported in the inspector). Untouched saved single-pass
+originals upgrade to that ring graph as before; edited graphs stay as authored. The
+inspector offers **Use the new Glow** (which resets Amount, Threshold, Softness and
+Radius to the bloom's defaults) for an untouched ring Glow.
 
-Glow composes a bright pass, a separable prefilter, a ring blur and an additive
-resolve from the same image and math operators, in three graph passes (two
-`Cache Image` stages). The shared contract lives in
-`src/effects/stylize/glow/glowSampling.ts`; the operator graph, the three-pass
-WGSL reference (`shader.wgsl`) and the worker software path follow it:
+### Editable UV distortions
 
-1. **Bright pass + horizontal prefilter.** Each tap emits
-   `rgb × alpha × smoothstep(threshold ± 0.1, Rec.709 luma)`, so transparent
-   pixels never glow. A horizontal Gaussian with σ = half the sample spacing
-   averages that light; its taps sit on texel boundaries two pixels apart, so the
-   linear sampler covers every texel once and thin strokes are never skipped.
-2. **Vertical prefilter** with the same taps over the cached horizontal result.
-3. **Rings.** Ring *k* sits at `k × Radius × 10` pixels, converted per axis, so
-   the glow is round on non-square layers (a 1080×1920 layer used to stretch it
-   1.78× vertically; landscape layers squashed it). Rings and Samples/Ring keep
-   their truncation and limits (1–32, 4–64). Each ring keeps its legacy total
-   weight `Samples/Ring × gaussian(k / rings, Softness + 0.3)` but spreads it
-   over enough samples (`floor(2π × rings) + 1`, at most 64) that the outer arc
-   spacing never exceeds the ring spacing. Samples/Ring therefore acts as the
-   minimum count and still sets the ring-versus-center balance.
-4. **Resolve.** The weighted center light (weight 2) is added, the light is
-   normalized, Amount × 2 is applied and added to the premultiplied source.
-   Output alpha is `max(source alpha, brightest premultiplied channel)` and RGB is
-   un-premultiplied by it. The compositor blends layers with straight alpha
-   (`mix(base, layer, alpha)`), so the result equals the original layer plus the
-   glow light: opaque pixels keep `clamp(color + glow)` exactly as before, and a
-   halo now also appears around glyphs on transparent layers (previously it was
-   clipped to the source alpha and only showed inside opaque areas).
-
-The prefilter is what removes the mottled, blotchy texture that sparse rings
-produced next to thin bright strokes at larger radii (for example a 6 px cyan
-outline around dark text fill at Radius 2.4). Quality degrades gracefully: when
-2π × rings exceeds 64 samples per ring, the prefilter widens to the larger arc
-spacing instead of leaving gaps; the prefilter itself holds at most 32 taps per
-side (±63 px), so radii above roughly 4 with the default ring count can keep
-faint ring structure. Both limits, and clamped Rings or Samples/Ring values, are
-reported below the Glow parameters in the inspector instead of being applied
-silently. Default settings cost about 16 + 16 prefilter taps plus 6 × 38 ring
-taps per pixel and two full-resolution `rgba16float` textures per Glow instance.
-
-Saved projects keep their parameters. Both the original and alpha-aware single-pass recipes upgrade to the prefiltered graph; custom wiring and edited constants remain unchanged. Their untouched saved Glow graph (any
-packed, folded or laid-out form of the original single-pass recipe) is upgraded
-to the new recipe on load; graphs whose nodes, wiring, exposed values or folder
-bypasses were edited are kept exactly as authored and keep the legacy sampling.
-
-Wave, Twirl, Bulge and Kaleidoscope use editable UV/math graphs followed by a
-single image sample. Wave preserves its sequential cross-axis displacement;
-Twirl and Bulge retain their strict radius tests and original center behavior.
-Kaleidoscope retains fractional segment counts and its reflected angular fold.
-All four preserve the existing parameter IDs, defaults and ranges. Their RGBA
-output is sampled at the transformed coordinates, including alpha, with the
-existing linear/clamp sampler. Rewiring the sample to the original UV bypasses
-the distortion without introducing another render pass.
+Wave, Twirl, Bulge & Pinch and Kaleidoscope use editable UV/math graphs followed
+by a single image sample (Kaleidoscope: two, crossfaded between neighbouring whole
+segment counts). Wave, Twirl and Bulge & Pinch (see
+[Distort Effects](/docs/features/effects-distort/)) read that sample from a premultiplied
+`rgba16float` copy of the frame and unpremultiply the result (two passes), so a
+magnified or squeezed transparent edge keeps its colour; at zero strength (Wave
+heights 0, Twist 0, Amount 1) the built-in recipe is skipped. Twirl and Bulge
+measure Radius in units of the shorter frame side (Shape: Circle) or per axis
+(Stretch to Frame); Frame Edges mirrors, clamps or clears samples from beyond the
+frame. Twist is stored in radians and shown in degrees. Bulge & Pinch above
+Amount 1 magnifies the centre exactly Amount times. Untouched saved Wave, Twirl
+and Bulge graphs, and effects saved before effects owned a graph, move to the
+current recipes with Stretch to Frame, Clamp and (Wave) Speed 0, which keeps the
+saved Wave and Twirl look; Bulge gets the smooth curve. The worker CPU fallback
+renders the untouched recipes with a hand-written pass that matches the graph.
+Kaleidoscope is covered with the mirror effects: see
+[Editable mirror, split and pixel graphs](#editable-mirror-split-and-pixel-graphs).
 
 The image operator catalog also offers two-dimensional rotation and radial
 projection/inverse-projection primitives for equidistant, equisolid,
@@ -1057,45 +1377,115 @@ Z validity, W reserved), not color images, and require declared stage provenance
 
 ### CRT Screen
 
-CRT Screen stores its editable generic image graph with the effect. Curvature,
-scanlines, phosphor-mask channels, flicker and final blending remain connected
-operators with the original effect parameter and keyframe IDs. Flicker reads
-composition timeline time, so preview, seeking and export share the same clock.
+User guide: [Analog Effects](/docs/features/effects-analog/#crt-screen). CRT Screen is a
+frame-relative recipe (`src/services/operators/crtScreenRecipe.ts`): a barrel-warped
+tube (`k = 0.18 × Curvature × Mix`, rounded corners of 5 % of the frame height,
+transparent outside, rim darkened by up to 40 %), Line Count Gaussian scanline beams
+over the frame height (16 to 1080; the control and the recipe clamp share one range)
+whose width grows from 0.16 to 0.42 line heights with the line's brightness and
+never drops below half an output pixel, and an Aperture Grille or Slot Mask whose
+stripe width is Mask Size pixels at 1080 lines. Each pixel adds the two nearest
+lines. A line's light is the picture averaged over every row of the line: a second
+cache box-filters the frame down over an eighth of a line height (16 reads), and
+each line reads that eight times an eighth of a line apart, so thin detail between
+line centres is never skipped at any line height (tested at 4.5, 9 and 18 px lines:
+a single bright row keeps 0.94 to 1.08 of its light at every offset), and each beam profile is
+divided by its area (√(2π) × width), so a beam spreads its line's light without
+adding or losing any: dark, mid and bright tones keep their average exposure
+(within 5 %, tested from grey 0.1 to 0.75). Both masks keep the average light; the
+Slot Mask divides its slot term by its mean (1 − 0.7 × 0.14). Bright areas can clip
+where a beam or a mask stripe peaks. Lines closer than 2.25 output pixels and
+stripes below 1 pixel fade out instead of aliasing, and the inspector and tool
+results say so. Sizes count against the frame being rendered, so a reduced Preview
+Quality shows fewer pixels per line: at 0.25 a 1080p composition renders 270 rows,
+and the default 240 lines and 2 px stripes fade in the preview while the export shows
+them. Flicker is a slow rolling hum bar plus a brightness flutter on composition
+timeline time. All reads come from caches of the frame as premultiplied linear
+light (`rgba16float`: the frame, and its line box), so filtered reads average light and
+cut-out edges keep their colour. Values outside the rendered ranges are clamped and
+reported.
 
-Untouched CRT graphs organize into Screen Curvature, Clamped Image Sampling,
-Scanlines, RGB Phosphor Mask, Timeline Flicker, and Color Mix & Sampled Alpha,
-alongside parameter, constant and source folders. A stage consisting of one
-shared block stays as that expandable block rather than gaining an extra folder.
-Saved user groups, wiring and explicit ungrouping remain authoritative.
+Effects saved before the 2026-10 rebuild keep the original graph
+(`legacyCrtScreenGraph.ts`: 2 px scanlines, per-pixel mask stripes, clamped edges):
+a saved graph stays as saved, and a graph-less effect or custom Look entry without
+the recipe's Line Count parameter is given the frozen original on load
+(`analogLegacyGraphs.ts`). The new controls are `graphOnly`, the retired Mask
+Density (`scale`) and the unused Angle and colours are `deprecated`, so each
+instance shows exactly the controls its graph reads.
 
-Four reusable compositions expose the existing primitives: Radial UV Curvature
-(UV, curvature and amount), RGB Stripe Mask (horizontal UV, pixel width, stripe
-width and low/high levels), Sine Gain (phase, amplitude and base), and Clamped
-Image Sample (image, UV and clamp bounds). The same Sine Gain recipe serves CRT
-scanlines and flicker. Exact clamped-sampling regions in Glitch share the sampling
-recipe, including alpha. Final CRT mixing still preserves alpha from the curved
-sample; no GPU pass, clock, parameter binding or shader formula is added.
+The four reusable compositions Radial UV Curvature, RGB Stripe Mask, Sine Gain and
+Clamped Image Sample are still extracted from the original CRT graph and keep their
+definitions.
 
 The separate Scanlines effect retains its scrolling/density phase and operand
-order. Grain retains its seeded sine-dot noise instead of being substituted with
-Glitch's Hash 2D or CRT's sine gain. Shared primitive operators already cover
+order. Film Grain uses its own Random (Cell) value noise rather than Glitch's
+Hash 2D or CRT's sine gain. Shared primitive operators already cover
 those differences; similarity alone is not treated as an identical recipe.
 
-Glitch and Film Prism likewise store editable generic graphs. Glitch composes
-its band ticks, shared hash and channel samples explicitly; Film Prism exposes
-radial sampling and the shared noise calculation. Both read composition
-timeline time and retain their catalog parameter and keyframe IDs.
+Glitch, Film Prism, Holo and Ribbon Scan were rebuilt the same way (`glitchRecipe.ts`,
+`filmPrismRecipe.ts`, `holoRecipe.ts`, `ribbonScanRecipe.ts`; originals in
+`legacyGlitchGraph.ts`, `legacyFilmPrismGraph.ts`, `legacyHoloGraph.ts` and
+`legacyRibbonScanGraph.ts`, pinned for old data by the Density, Grain, Stripes and
+Edges markers).
+Glitch changes state 12 × Speed times per timeline second (Speed 0 freezes it):
+Density decides how many states glitch (a 20 % floor, all at 1) and how many rows
+tear and blocks move; torn rows split at a random height and shift by up to 15 %
+of the width, thin slices by up to 2 %, square blocks copy whole blocks (the offset
+rounds to the nearest block, so a faint Intensity moves nothing), one in ten of them
+reads from four times as far and blends its rotated channels into its own, up to
+half on a textured block and 0.15 on a flat one (the luma range of four points in
+the copied block, smoothstep 0.03 to 0.15; scaled with the burst level), so a swap
+never paints sky as a solid tile, and RGB Split widens inside the damage. Every read
+lands on a texel centre and wraps around the frame, so the picture stays sharp; each
+channel keeps its own coverage. The state counter cycles every 1024 states; seed and
+cycle fold into 509 seed keys by an integer modulo, and every roll adds its own
+integer salt, so all hash keys are exact integers below 2^24.
+Film Prism reads seven spectrum-weighted taps (stratified per-pixel jitter, reach
+±1.5 % at Fringe 1) either scaled about the centre (Lens) or shifted along Prism
+Angle in frame heights (Prism); only colour spreads: the Rec. 709 luma of the
+spread is replaced by the pixel's own where it has coverage, so the picture stays
+sharp (a hard edge stays within 2 px in brightness at the default Fringe). It adds
+two octaves of mid-tone-weighted value-noise
+grain sized in pixels at 1080 lines, renewed 24 × Grain Speed times a second. Grain
+corner keys are the integer cell indices plus 16384 key rows per grain frame (997
+frames per cycle), so two cells that share a corner hash bit-identical keys at any
+resolution: no seams. Because every key of both recipes is an exact integer, the GPU
+(f32) and the worker software path (f64) hash the same bits.
+
+Both recipes use `noise.hash2d-pcg.vec2` (Random (Integer Hash)): a lowbias32 bit mix followed by PCG2D on the exact float bits. Unlike the
+shared sine hash `noise.hash2d.vec2`, it shows no diagonal stripes on cell grids and
+stays uniform for large or fractional keys; the sine hash itself is unchanged, so
+other effects keep their look.
+
+Opened in the Node Workspace, the untouched recipes show stage folders
+(`effectPresentationPlans.ts`, presentation only): CRT Screen Tube Shape & Rim,
+Scanline Beams, Phosphor Mask, Hum Bar & Flutter and Light Out & Alpha; Glitch Burst
+Clock, Torn Rows, Block Copies, Read Position & RGB Split, Channel Reads & Swap and
+Colour & Alpha; Film Prism Fringe Spread & Direction, Tap Positions, Spectrum Reads &
+Sum, Sharp Brightness, Grain Noise, Grain Strength and Add Grain & Alpha. Folder ports carry the
+parameter or signal they pass (Line Count, Burst Level, Tap 1 Position).
 
 Crystal and Glass Dispersion expose their facet direction, refraction offsets
 and image sampling as editable generic graphs. Their vector normalization uses
 the native operation shared by the compiler and evaluator; sampled alpha is
-preserved, and shimmer/pulse animation reads composition timeline time.
+preserved, and shimmer/pulse animation reads composition timeline time. Both are
+marked experimental (an `experimental` note on the effect definition: the effect
+list shows "(Experimental)", the inspector and tool results give the reason):
+Crystal's facets are squares of the frame with hard seams and strong Refraction
+ghosts edges; Glass Dispersion's cells are sized in output pixels and split red and
+blue per cell into RGB blocks. Their Amount defaults are 0.3 (0.75 before 2026-10).
 
-Holo exposes its timeline-driven interference, spectrum blend and luminance-edge
-response as an editable generic graph while preserving source alpha. GPU shaders
-retain native automatic derivatives, whose fine/coarse choice is device-defined;
-the deterministic software backend explicitly evaluates automatic derivatives
-as coarse fragment quads rather than claiming universal CPU/GPU byte equality.
+Holo (`holoRecipe.ts`) mixes linearly from the source (Amount 0) to a bounded foil
+(Amount 1): screen(colour × 0.85, vivid spectrum × (0.25 × tone + 0.75 × edge)),
+where tone = smoothstep(0.02, 0.35, brightness) keeps true blacks black away from
+outlines and the vivid spectrum is pushed 1.6 × away from its own grey. The spectrum blends
+Spectrum A and B by diagonal interference bands (phase 12u + 19v + 2 × Speed × time
++ 4 × brightness; Stripes blends from an even tint to the full bands), and the edge
+term compares brightness × coverage ±0.2 % of the frame height apart (four reads),
+so outlines have the same width at every resolution. Amount defaults to 0.35. The
+original Holo graph (per-pixel derivatives, saturating at every Amount) stays in
+`legacyHoloGraph.ts` for saved effects; its GPU shader keeps native automatic
+derivatives, which the software backend evaluates as coarse fragment quads.
 
 Halftone and Pattern Halftone share an editable generic graph construction for
 rotated cell coordinates, luminance-derived mark size, ink mixing and preserved
@@ -1125,25 +1515,64 @@ undisplaced pixel.
 
 ### Ribbon Scan
 
-Ribbon Scan exposes its phase, smoothstep ribbon mask, horizontal displacement,
-sampling and RGB blend as a generic image graph. Both samples retain the original
-UV clamp; output alpha comes from the displaced sample. Scale, amount and speed
-bind to the existing effect parameters, and animation uses composition time.
+Ribbon Scan (`ribbonScanRecipe.ts`) scrolls Ribbons bands (`scale`, at least 3)
+over the frame height by Speed bands per second; inside a band the picture shifts
+sideways by sin(2π phase) × Displacement² × 6 % of the frame width (`amount`,
+default 0.3: at most 0.54 %), so the low half of the control stays subtle. Edges
+(`edges`) mirrors or wraps reads past the frame edge instead of repeating the border
+pixel. Both reads come from a premultiplied cache and blend premultiplied. The
+original graph (up to 8 % shift, clamped edges) stays in `legacyRibbonScanGraph.ts`
+for saved effects.
 
 ### Wave Lines
 
 Wave Lines uses shared luminance, coordinate, scalar and color operators for its
-animated line mask and nested color blend. The two colors remain bound to the
-catalog parameters and use the common color normalization. Source alpha is
-preserved; preview and export use the same composition timeline clock.
+animated line mask and nested color blend. Line Density (`scale`, at least 3) and
+the Lines and Background colours remain bound to the catalog parameters and use the
+common color normalization. Source alpha is preserved; preview and export use the
+same composition timeline clock. Wave Lines is a graphic line-art look that covers
+most of the picture from about Amount 0.5; new Wave Lines start at Amount 0.3 (the
+catalog default 0.75 before 2026-10), saved ones keep their value.
+
+Crystal Glass (Facets, at least 4 across each axis, so facets stretch with the frame
+shape), Glass Dispersion (Cell Size in output pixels, so the pattern changes with
+the resolution) and Wave Lines keep their graphs; their unused catalog controls are
+retired and values below a shader floor are reported instead of being silently
+raised. The controls of CRT Screen, Glitch, Film Prism, Holo, Ribbon Scan, Crystal
+Glass, Glass Dispersion, Wave Lines and Pixel Sort use the shared Resolve inspector
+rows (slider, value field, keyframe and reset; `RESOLVE_ROW_EFFECTS`); their colour
+parameters (Holo's Spectrum A and B, Wave Lines' Lines and Background) use the
+shared colour row `ResolveInspectorColorRow` (swatch, hex field and reset; pointer
+activation leaves no focus ring, keyboard focus shows the product ring). Colour
+parameters had no inspector control in the generic rows before.
 
 ### Analog Signal Lab
 
-`Analog Signal Lab` is a dedicated six-pass compute effect rather than a
+`Analog Signal Lab` is a dedicated compute effect (a source footprint pass plus the six stage passes) rather than a
 screen-space RGB glitch. It encodes the source as a 13.5 MHz PAL composite
 field, applies a complex-equivalent terrestrial channel, passes the recovered
 signal through an optional VHS transport, measures horizontal sync and color
 burst per line, decodes PAL, and resolves an optional CRT display stage.
+
+PAL Encode averages the source over each sample's footprint (21 half-sample taps,
+two sub-rows), low-passes luma by Luma Bandwidth (Gaussian σ 1.0 to 0.55 samples)
+and chroma to about 1.3 MHz, and traps luma in the subcarrier band with a
+[1 2 3 2 1] / 9 kernel over whole samples, except for the Y/C Crosstalk share. PAL
+Decode separates chroma as the composite minus its 3-sample mean (exactly zero for
+flat areas), demodulates it with the burst-locked phase and low-passes U/V with a
+Gaussian window (σ 2.6 to 1.1 samples, about 0.7 to 1.6 MHz, by Chroma Bandwidth). Flat colours therefore
+decode without colour from luma, Chroma Level 0 stays monochrome, and only fine
+stripes near 4.43 MHz show cross-colour, in proportion to Y/C Crosstalk. PAL Encode
+reads Luma Bandwidth and Y/C Crosstalk from the PAL Decode it feeds.
+
+VHS Transport models colour-under recording: it separates luma and chroma around
+the jittered tape position with taps on whole samples (a fractional read would
+weaken the subcarrier), low-passes luma to about 3 MHz (SP) to 2.2 MHz (EP) after
+adding the tape noise, so noise stays out of the chroma band, records chroma at
+roughly 0.6 MHz (SP) and less at slower speeds and with Chroma Bleed (which also
+delays it by up to 2.5 samples), adds chroma noise that is smooth along the line (sideways streaks), and
+re-modulates chroma on the stable reference: hue survives the time-base error, and
+saturation drops to 0.93 / 0.87 / 0.81 at SP / LP / EP. The burst passes unchanged.
 
 Select the clip in the timeline to edit its executable node group: Frame,
 PAL Encode, RF Channel, VHS Transport, Receiver Analysis, PAL Decode,
@@ -1157,7 +1586,7 @@ Decoded and resolved node previews tap the actual GPU output on demand.
 New graphs expand Display Resolve into a group of shared math, coordinate,
 sampling, and color nodes: curvature, bloom, scanlines, phosphor mask, flicker,
 and blending are editable connections rather than an opaque display shader.
-The default remains six compute passes; the display group adds no pass.
+The default runs seven compute passes (the source footprint pass and the six stages); the display group adds no pass.
 Its decoder signal-strength input follows the actual connected transport
 stages, including bypass. Original straight alpha is preserved. Complete saved
 Display Resolve graphs expand on load while preserving bindings, constants,
@@ -1170,10 +1599,35 @@ receiver tuning and sync/color lock, PAL simple/delay-line/comb decoder modes,
 VHS tracking/dropouts/time-base error/tape wear/chroma bleed/head switching and
 SP/LP/EP speed, plus CRT scanlines, phosphor mask, bloom, curvature, and field
 flicker. Noise is seeded and driven by timeline time, so preview and export are
-repeatable.
+repeatable. The built-in Looks PAL Broadcast, Weak Antenna and Worn VHS are starting
+points. Values outside a control's range are reported: the Mix, stage (VHS Stage
+included), bandwidth, Chroma Level, Y/C, Signal Strength and Color Lock values are
+clamped, the others are used as given; a unit test checks the list against the
+shader. Saved projects: the 2026-10 PAL chain fix changes how every saved Analog
+Signal Lab effect looks, on purpose and without a switch back (no colour confetti on
+detail or at the frame edges, a sharper broadcast, VHS keeps its colours and is
+softer than broadcast); their settings are unchanged.
+`tests/browser/analog-signal-gpu-check.ts` checks grey, Chroma Level 0, colour bars
+through PAL and VHS LP, the VHS noise direction, colour at the frame edges of a flat
+grey frame (0.5/255), a 2.6 MHz luma sine (broadcast 0.80, VHS LP 0.40 of its
+contrast) and the VHS Stage fade-in (0 against 0.002: one 8-bit step at most)
+against plain maths on the GPU.
 
-The realtime path models one 313-line PAL field with a 360x288 decoded working
-raster while retaining the 864-sample line timing. When the effect is attached
+The realtime path models one 313-line PAL field at BT.601 sampling (864 samples per
+line at 13.5 MHz, 702 of them picture) and decodes it to a 702 × 288 raster, one
+pixel per picture sample and field line. A footprint pass first box-averages the
+source over each sample and line (alpha-weighted, every source row and column, so a
+4K or 8K frame is not skipped). PAL Encode low-passes luma to the Luma Bandwidth
+cutoff (2.5 to 5.5 MHz) and removes the luma the decoder would read as chroma
+(subcarrier ± the U/V cutoff + 0.35 MHz) except for the Y/C Crosstalk share; chroma
+is low-passed to 1.3 MHz. PAL Decode notches luma over about 3.6 to 5.2 MHz and
+low-passes the demodulated U/V to 0.6 to 1.3 MHz (Chroma Bandwidth). The filters are
+41-tap frequency-sampled FIRs (Hann window) computed once per workgroup. The picture
+continues 16 samples into the blanking on both sides with its edge colour, so the
+filters and small sync shifts near the frame edges read picture, not blanking. VHS
+Transport low-passes luma itself to 3, 2.6 and 2.2 MHz (SP, LP, EP; Tape Wear lowers
+it by up to 0.5 MHz), smooths its tape noise along the line and fades the whole
+stage in over VHS Stage 0 to 0.1, so a keyframed fade-in has no step. When the effect is attached
 to a video/image plane switched to 3D, the analog stack is evaluated into a
 per-layer texture before native scene projection. The disturbance therefore
 foreshortens, rotates, and scales with the plane instead of being applied to
@@ -1272,14 +1726,10 @@ not alter project media or the exported result.
   default to animatable unless the effect explicitly opts out. This keeps the
   stopwatch/keyframe behavior consistent for registry-provided controls.
 
-The registered quality parameters are:
+The registered quality parameters are (the blurs and the Glow bloom choose their own
+taps; the blurs' old `samples` and Glow's `rings`/`samplesPerRing` are retired and only
+read by graphs saved with them, see Editable blur kernels and Glow):
 
-- Gaussian Blur: `samples`
-- Motion Blur: `samples`
-- Radial Blur: `samples`
-- Zoom Blur: `samples`
-- Glow: `rings`, `samplesPerRing` (Samples/Ring is a minimum; outer rings get
-  more samples automatically, see the Glow graph section)
 - Voxel Relief: `maxSteps`
 - Pixel Particle Disintegrate: `maxPreviewParticles`, `maxExportParticles`,
   `maxInstances`
@@ -1289,29 +1739,45 @@ The `performanceMonitor` service can also reset quality parameters to defaults w
 
 ## Inline Effects
 
-These effects are applied directly in the composite shader instead of running as separate effect passes:
-
-- Brightness
-- Contrast
-- Saturation
-- Invert
-
-That keeps them zero-overhead relative to the full ping-pong effect chain.
+When a clip has exactly one enabled effect and it is a pointwise image graph
+(Brightness, Contrast, Saturation, Vibrance, Exposure, Levels, Hue Shift,
+Temperature, Invert, Threshold or Posterize), its compiled program runs inside the
+composite shader instead of a separate effect pass. Stacks of several effects run
+as ordered passes so their order is kept.
 
 ## Particle Render Effects
 
 `Pixel Particle Disintegrate` is a `particle-render` clip effect. It samples
 the live source texture into deterministic instanced quads and resolves a
-straight-alpha texture back into the normal layer compositor. At progress `0`
-the source is already represented by particle cells at their origin positions;
-progress moves, curls, and fades those cells rather than crossfading from a
-normal full-frame video plane. Particle release is driven by a deterministic
-gust field: coherent noise pockets, a wind-front delay, and the clip seed decide
+straight-alpha texture back into the normal layer compositor. Cells that have not
+been released are drawn by a flat pass as exact source pixels, so progress `0` is the
+untouched picture; a released cell becomes its particle, which starts as the exact
+cell, grows to Particle Size and takes its shape over the first quarter of its flight.
+Fade (0-1) thins and shrinks each particle over its own flight (effects saved before
+Fade read 0). Particles read the source premultiplied (manual bilinear), so cut-out
+edges keep their colour. Particle release is driven by a deterministic
+gust field: coherent noise pockets (4 octaves of the shared gradient Fractal Noise, turned
+per octave, so no pocket has straight lattice edges), a wind-front delay, and the clip seed decide
 which regions separate first, so the breakup starts in scattered islands and
-then grows without relying on accumulated simulation state. Each particle
+then grows without relying on accumulated simulation state. Those raw delays bunch up (the
+gust field's values cluster), so the renderer measures their spread for the current settings
+(33 quantiles over a sample of the cells, `releaseTiming.ts`) and the shader lays each cell's
+rank among them out evenly over a release window of 1.8 times the raw spread (at most 0.9):
+at the defaults the releases run from Progress 0 to about 0.84 and the visible picture thins
+out at an even rate (mean alpha about 0.82, 0.51 and 0.18 at Progress 0.25, 0.5 and 0.75).
+A flight ends at `delay + Tail (1 - delay)`, so every particle has landed by Progress 1. The
+flat pass finds a pixel's cell with integer arithmetic on its framebuffer position and the
+per-cell detail value is an integer hash, so the flat and particle passes agree exactly, also
+for fractional cells whose borders fall on pixel centres. Each particle
 carries UVs from its original source cell, so moving particles keep their
 assigned image patch instead of sampling from their new screen position. Preview
 and export use explicit render/media time instead of wall-clock time.
+The grid has one particle per Cell Size cell, with Cell Size in pixels of a 1080p frame
+(shorter side), so previews at any Preview Quality, thumbnails and exports cut the same
+grid; effects saved before keep counting output pixels (`cellReference: 'output'`, set on
+load, reported in the effect card). Above the preview or export particle budget the cells
+grow until the grid fits (rows are never dropped), the renderer logs it once, and the
+effect card names the cell sizes preview and export draw.
 
 This effect is terminal in the clip effect stack. Effects before it are pre-rendered
 into the particle source texture; effects after it are ignored with a renderer
@@ -1342,12 +1808,17 @@ transition family. `Blur Dissolve`
 and `Zoom Blur` use the same assembly path to append temporary registered GPU
 effects to the incoming and outgoing participant layers while preserving each
 clip's existing effect stack. `Directional Blur` and `Whip Pan` use the same
-registered-effect path with `motion-blur`; the Motion Blur shader mirrors edge
-samples for out-of-range UVs so fast horizontal transition blurs do not expose
-transparent borders. `Projector Flicker` uses deterministic generated-solid
+registered-effect path with `motion-blur`; Motion Blur mirrors edge samples for
+out-of-range UVs so fast horizontal transition blurs do not expose transparent
+borders. `Projector Flicker` uses deterministic generated-solid
 exposure pulses, `Film Roll` combines vertical transform overscan with
 transition-scoped Motion Blur, and `Vignette Bloom` uses registered `glow` and
-`vignette` effects on both transition participants. `Light Sweep` uses a
+`vignette` effects on both transition participants (since 2026-10-21 tuned for the
+bloom Glow, Amount 0.1–1.4 and Radius 60–240, and for the pixel-distance Vignette,
+Roundness 0 with Size and Softness divided by √2, the same falloff as before). These
+effects carry no graph; the worker software preview renders them with the current
+recipes too (`workerSoftwareBloom.ts`, a CPU pyramid of the bloom, and the current
+Vignette distance). `Light Sweep` uses a
 cached transparent generated overlay canvas with a screen-blended diagonal
 highlight band, while `Light Leak` uses the same deterministic overlay
 primitive for warm edge streaks and analog wash. Those overlay canvases are
@@ -1359,6 +1830,52 @@ They stay deterministic without bundled overlay video. `Additive Dissolve` and
 `Non-Additive Dissolve`
 use temporary transition blend windows on the incoming participant, so they
 stay in the same layer assembly path instead of adding one-off shaders.
+`Crossfade` is a true dissolve, outgoing·(1−t) + incoming·t: the incoming clip
+is added with the internal `plus` blend mode (premultiplied), so transparent
+clips (titles, keyed or scaled clips) dissolve too. Clip blend modes carry
+through every transition (`transitionCompositionBlend`): the transition
+composition is drawn in parts, each composited in its own mode over the lower
+tracks. Clips sharing a mode form one part, solids and overlays (Dip, Light
+Leak, …) are separate parts, and clips with different modes are two parts
+(exact at both edges; mid-dissolve shows a little of the lower tracks). Clips
+added inside the composition below the transition's own clips are a separate
+Normal part, so `plus` does not add them; if the transition's clips cannot be
+found among the layers, their mode stays inside the composition and a warning is
+logged; an incoming clip moved below the outgoing one inside the composition
+takes the Normal mode and the upper clip gets `plus`. Audio (Include audio, or
+two audio clips) uses one plan for preview, Properties and export
+(`audioCrossfadePlanning`, `audioCrossfadeGains`): the fade runs only where both
+clips have sound, with 5 ms de-clicks when they overlap less than 10 ms, and the
+gains apply before the clip and track effects, so effect tails ring out alike.
+Preview schedules them on each route's pre-effect gain on the audio clock
+(`audioCrossfadePreviewVoices`): the incoming sound starts 0.25 s early at gain
+0, crossfaded clips stay on their own audio element (no buffer mixer, no cut
+handoff), and the halves of one recording (same file and source offset) play
+once with both gains added, as the export's sample sum does. That one-voice
+choice is made once per crossfade from both routes at the edit (ids ignored),
+so keyframed volume or EQ cannot switch voices mid-fade. The outgoing sound
+stays on the element it already plays on (its own, a cut handoff's or a split
+recording's), and an upcoming incoming element or audio proxy is positioned,
+paused and routed ahead; dropped proxy clones dispose their route, and a route
+removed while it is still being built is cancelled. A track plays one window at
+a time: around a short clip the later crossfade's pre-roll waits until the
+earlier window ends, and crossfades that overlap on one clip start the later
+one where the earlier ends (logged; export renders both). A clip with fades on
+both edges keeps both, multiplied as in export, and crossfaded edges never
+apply their automatic cut de-click. The faded-out sound's effect tail (clip and
+track effects) keeps the route of the element it played on connected, also when
+that is another clip's proxy from a cut handoff. Clips playing audible separated stems
+cut at the edit in preview (logged); export renders their crossfade. Retimed, reversed
+or composition clips cannot play their extra footage in step, so they meet at
+the edit everywhere (Properties: "Cut (retimed clip)"). Audio curve: Auto
+(default; also for crossfades saved without one) is Equal gain for the halves of
+one recording and Equal power otherwise. Audio crossfades inside a nested
+composition are not rendered; its mixdown cuts at the edit in preview and
+export, and the export log says so. Default length 1 s, snapped to project
+frames in Properties; the Transitions panel's length field is Auto unless a
+length is typed. Checked in the editor on a real GPU against (1−t)·A + t·B and
+a recording of the preview output.
+User guide with pictures: [Dissolve Transitions](/docs/features/transitions-dissolve/).
 
 The current user-facing suite is grouped by family in the Transitions panel and
 the transition-scoped Properties tab. It includes dissolve/dip, directional
@@ -1394,6 +1911,132 @@ effects during application.
 Effects with `uniformSize` 0 use no uniform buffer.
 Most effects use a 16-byte-aligned uniform block; a few multi-parameter effects use larger blocks.
 
+### Effect Lab (review and doc stills)
+
+`scripts/effect-lab.mjs` renders one effect through the real `EffectsPipeline` on
+the hardware GPU (`tests/browser/effect-lab/`) and writes a PNG per image and
+parameter variant plus a labelled contact sheet with the original as first
+column. Test images (`tests/browser/effect-lab/images/`) cover skin tones in
+stage light, fine daylight detail and saturated night lights. Run a Vite of the
+checkout first (`npx vite --port 5175 --strictPort`), then for example
+`node scripts/effect-lab.mjs --effect gaussian-blur --variants '[{"label":"r20","params":{"radius":20}}]' --out /tmp/blur`;
+`--list` prints every effect with its parameters, `--times` renders a frame
+sequence for temporal effects, and `--inset 0.7` places the image at 70 % on a
+transparent frame (the contact sheet shows cells over a checkerboard) to check
+alpha handling such as dark rims. `--metrics` adds per-cell numbers to the summary: mean
+alpha (coverage, e.g. how far a particle outro has progressed), transparent pixels in the
+outer 8 px, and newly crushed black (channels below 20 where the original averaged above
+60); `--require-filled-border` fails the run when a variant leaves the frame border
+transparent. Effects that need clip context (masks, face
+landmarks, temporal source, tracking) render without it and are checked in the
+editor instead. `--pairs <file>` writes docs close-ups: each entry renders two
+effects (or `original`) on one image, crops the same region of both (`crop`, in
+pixels of the rendered frame, `zoom` enlarges it) and puts them side by side as a
+WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`;
+`"backdrop": "checker"` or a flat colour (`"#3c6ec8"`, readable at float size) shows
+transparent pixels.
+
+### Effect graph pictures
+
+`?test=effect-graph&effect=<id>` shows an effect's default operator graph on the
+real Node Workspace canvas, read-only and without editor chrome: the clip graph
+of a freshly added effect, cropped to the effect and fitted to the window. Card
+titles use the canvas' enlarged overview lettering with one size per picture
+(`overviewTitles: 'uniform'`: the size at which half the titles fit; longer ones
+may come out smaller, short ones no larger), so short stub names do not outshout
+the recipe. Parameters choose the level:
+`level=stages` (default, folders folded as when an effect is opened) or
+`level=all`; `open=a,b` opens folders by label slug, `parent/child` path or
+group id; `focus=folder` shows only one folder, with the flow layout it has
+inside the effect wrapped into rows (`rows=n` sets the count, `break=a,b` starts
+rows at these node ids instead) and named stub cards for the values that come from
+outside the folder (Constants excepted); `only=a,b` (with `focus`) keeps just
+these node ids and turns their other inputs into stubs, so a picture shows a recipe
+instead of the whole folder (`--list` prints the ids; a composition's `@` may be
+left out). The folder's own unpicked number cards, such as a Clamp's 0 and 1, are
+left out instead of stubbed (say so in the caption). The literal values the picks
+read from the Constants folder appear as
+their own value cards ("Taper Gain −2"; `constants=hide` leaves them cut). A recipe
+is laid out afresh (`compactRecipeLayout`): columns follow the cables, each card as
+far right as its consumers allow; fed cards sit level with their highest source;
+stubs and constants sit beside the port they feed, in a free slot that no cable
+crosses (stacked at the canvas' 56-unit clearance, in port order); then cards that a
+long cable still runs through move up or down until no cable passes a card it does
+not connect, and back towards their first position as far as that allows. Each
+wrapped row is as tall as its own cards; `plumbing=hide` leaves out the Constants
+and Coordinates & Resources folders and their cables and lays the stages out the
+same way, so an overview reads as one path; `omit=a,b` leaves out cards (an
+overview without the effect's Output card); `chain=1` keeps the clip source and
+output; `cables=avoid` routes the cables around the cards like the Node Workspace's
+**Avoid** button (`NodeGraph.cableRouting`), so no cable runs behind a stub or a
+wrapped row and shows the wrong wiring. The page mounts the canvas only once the
+clip is in the timeline store, so its first placement does not reserve preview space
+under cards that have none. Folder ports are named after what
+they carry ("Sigma", "Tap Count"): an effect's presentation plan names its key
+outputs (`portLabels` in `effectPresentationPlans.ts`). Folder headers stay
+clickable for exploring. The page is part of dev builds only.
+
+`scripts/effect-graph-shot.mjs` captures shots of that page in hardware-GPU
+Chrome as WebP (at most 1600 px wide and 200 KB) into
+`docs/Features/assets/effects/graphs/`, for example
+`node scripts/effect-graph-shot.mjs --manifest scripts/effect-graph-shots/blur.json`
+(one manifest per docs page keeps its pictures reproducible) or
+`node scripts/effect-graph-shot.mjs 'gaussian-blur?plumbing=hide'`,
+with a Vite of the checkout running (`npx vite --port 5176 --strictPort`). A shot
+is `<effect>[?query][@file name]`; `--list` prints the folders and node ids of each
+effect. Cables that bend out past the cards (the last cable of a wrapped row, or an
+avoiding route) stay inside the crop. Two checks keep pictures readable: a shot fails
+when a cable runs through (or within 8 units of) a card other than its two ends, since
+it would look like that card's connection (`crossings=allow` lets it pass with a
+warning), and a shot warns when card titles show below 11 px at the docs width of its
+layout (720 px full, 418 px float). Before warning, the script narrows the page step
+by step: a lower zoom letters titles larger relative to the cards, and the picture
+still fills the column. Folded cards show their › on the canvas (it used to be drawn
+only by the DOM button of an active card).
+`marks=id[:from][:reach],…` in a shot's query adds numbered callouts on those node
+cards (a stub id such as `wave-uv-split:y` keeps its colon; `reach` is the arrow
+length in overlay units, default 84) and prints the figure markup (`layout=float`
+sizes them for a picture beside the text). The crop grows into the canvas margin,
+with extra room above and below for vertical callouts, so an arrow keeps its length
+instead of shrinking to a badge on the card edge. The docs site links every picture to its full-size file and lets node
+graphs scroll sideways on narrow screens.
+
+For an effect without folders (Time Stack), `only=` without `focus` picks the
+recipe from the whole effect. In a recipe, `omit=` also takes stubs (`uv:uv`, as
+the stub list names them) and leaves them out before the layout, so they leave no
+gap. A stub carries the name of what its source outputs: name those outputs in the
+effect's port labels (`portLabels` in `effectPresentationPlans.ts`, for example "Time
+Map" on Slit Scan's Switch), so the editor's cards and folder ports read the same.
+`name.<id>=Label` overrides a stub's name for the picture only; real cards keep their
+editor names, and a name that matches no stub fails with the list of stubs. Port
+labels show at about 9 px in the 720 px docs column while a picture is three cards
+wide (four: about 7 px): crop a recipe to the cards its text and remix need.
+
+### Effect editor excerpts
+
+`scripts/effect-editor-shot.mjs <shot file>` shows where an effect's controls
+live: in a fresh project of hardware-GPU Chrome it puts an Effect Lab image on
+the timeline, adds the effect with the given parameters, opens Properties →
+Effects and captures the inspector with a strip of the preview as WebP (2× pixel
+density, at most 200 KB) into `docs/Features/assets/effects/editor/`. It prints
+the docs `<figure>` with numbered callouts on the named controls (parameter
+labels, `tab:Effects`, `bypass`, `remove`, `add` or `preview:x,y`; text targets end
+at the words, not at the empty rest of their row) in the
+`docs-shot-overlay` style; `view: "nodes"` captures the Nodes tab instead, with the
+clip picked as its graph source (targets `dock:Nodes`, `source`, `expand:<card>`
+for the › of a folded card, `port:<name>`); `layout: "float"` sizes them for a picture beside the
+text. `top: "tabs"` crops below the dock tab row (from the Properties sub-tabs),
+`preview` sets the width of the preview strip (0: the card alone), a mark's `reach`
+sets its arrow length (the crop grows to keep it), a parameter callout points at the
+label text, and `hide` leaves named buttons that
+the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
+`--only <name>` recaptures one shot. A control the script cannot find stops it
+with the card's text, so a renamed parameter does not silently drop a callout.
+`viewport: { width, height }` sets the editor window (default 1600 × 900). Keep the
+default width so the picture shows the inspector as most users see it; a taller window
+fits a long card. A card taller than the panel is cropped at the panel's bottom edge,
+not in the timeline below.
+
 ### When the GPU cannot build an effect
 
 Building a pipeline can fail on a device in three ways: an invalid shader or
@@ -1412,7 +2055,7 @@ skipped (pass-through) while every other effect keeps rendering. The failure is
 logged with its kind and recorded in `src/effects/effectGpuFailures.ts`; the
 effect card shows "This device's graphics driver could not build this effect,
 so it is skipped." (full driver message as tooltip). A new GPU device clears the
-record. The device-wide guard (see [GPU Engine](/features/gpu-engine/#pipelines-the-driver-cannot-build))
+record. The device-wide guard (see [GPU Engine](/docs/features/gpu-engine/#pipelines-the-driver-cannot-build))
 covers every other GPU subsystem the same way.
 
 Shader compile cost matters on mobile drivers. Voxel Relief used to inline its
@@ -1436,25 +2079,26 @@ Effects can opt into temporal feedback through `usesFeedback`. Feedback effects
 sample their own previous output frame on binding 3 and the pipeline maintains
 separate committed-history and current-output textures per composition/layer/effect.
 Repeated renders at the same timeline time re-evaluate against committed history;
-only advancing the frame promotes the latest current output. Acuarela and the frozen Rom1 snapshot
-use this path to build a watery smoke trail from animated fractal UV offsets.
+only advancing the frame promotes the latest current output. Rom1 and Acuarela effects
+saved with its original smoke recipe use this path to build a watery smoke trail from
+animated fractal UV offsets.
 Acuarela, Rom1 and glyph animation use the supplied composition timeline time
 (zero when omitted), not the wall clock. Explicit seeks, backwards jumps,
 owner revisions and export starts clear frame history. The saved, non-animatable
 `historyLoop` parameter chooses `reset` (the legacy/missing-value default) or
 `continuous` across explicit playback-loop boundaries. Render surfaces receive
 the same event revision so repeated renders consume a discontinuity only once.
-The worker software renderer mirrors standalone Acuarela/Rom1 feedback with a
+The worker software renderer mirrors standalone smoke-recipe Acuarela/Rom1 feedback with a
 composition/target/effect software feedback cache with the same two-history
 transition policy for preview and export readback;
 Voxel Relief uses the same binding to smooth a
 raymarched block-heightfield between video frames and remains a complex
 raymarch/feedback effect.
 
-Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled.
+Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled, with Distance 0.8 so the relief fills the layer at the default tilt (the Effect Lab's `--metrics --require-filled-border` check finds no transparent pixel in the outer 8 px of the three lab images at 960 and 1920 px; 0.85 left a wedge). Effects saved before Distance existed keep Distance 1 (set on load). Block sides keep at least 55 % of the column colour and tall columns brighten their own colour (2D raymarch and native 3D); effects saved before keep the darker, greying shading (`shading: 'legacy'`, set on load).
 With `Limit to Video` enabled, the raymarcher discards voxel cells outside the source rectangle and uses a finite source-sized floor, so orbit views show only the actual video footprint instead of repeating its edge pixels around the subject. Existing project instances retain their stored parameters.
 
-Glow also starts from the iPad-tuned preset: amount 5, threshold 0.7935, radius 1, softness 0.496, 6.85 rings, and 17.95 samples per ring. Existing Glow instances likewise retain their stored parameters.
+New Glows start from the bloom defaults (`GLOW_DEFAULTS`): Amount 2.5, Threshold 0.95, Softness 0.5, Radius 80 and white Color. Saved ring Glows keep their stored parameters (the earlier iPad-tuned preset was Amount 5, Threshold 0.7935, Radius 1, Softness 0.496, 6.85 rings and 17.95 samples per ring).
 
 ### Editable Voxel Relief nodes
 
@@ -1554,9 +2198,9 @@ The clip context menu supports Copy Effects and Paste Effects. This copies the f
 
 ## Related Docs
 
-- [Masks](/features/masks/)
-- [Text Clips](/features/text-clips/)
-- [Keyframes](/features/keyframes/)
+- [Masks](/docs/features/masks/)
+- [Text Clips](/docs/features/text-clips/)
+- [Keyframes](/docs/features/keyframes/)
 
 
 ### Preview source changes
@@ -1573,7 +2217,7 @@ Touch activation suppresses the native tap highlight.
 
 ### Face Cables
 
-The [Node Workspace](/features/node-workspace/) exposes nested Tracking, Surface & depth,
+The [Node Workspace](/docs/features/node-workspace/) exposes nested Tracking, Surface & depth,
 Cable physics and Cable rendering groups. MediaPipe landmarks, face meshing, depth
 calibration, depth meshing and surface merging are separate typed stages. Merge
 seam width and subdivision settings are saved with the successful bake and shared
@@ -1750,7 +2394,7 @@ simulation and rendering operators. Node parameters and the effect form share
 canonical settings and keyframes. Added Wind/Gravity/Drag nodes feed the solver;
 Value/Oscillator nodes can drive wind strength. Layout, group state and graph
 connections are saved in project data; existing bakes remain intact until a new
-bake succeeds. See [Node Workspace](/features/node-workspace/).
+bake succeeds. See [Node Workspace](/docs/features/node-workspace/).
 
 ### Face Cables live frame preview
 
@@ -1851,6 +2495,11 @@ numeric controls support keyframes. Manual adjustments below are added on top.
 
 The default is an identity transform. Uncovered borders are transparent, and
 corrections are nondestructive, saved with the effect, and applied during export.
+Barrel correction strong enough to fold the outer picture back on itself (Remove
+Distortion below about −33, Fine Distortion below about −20, or less together with
+a profile) stops at the fold: pixels beyond it stay transparent, and the inspector
+and tool results say so. The fringe channels repeat the border pixel instead of
+turning black, so no coloured line runs along the frame.
 Selecting a profile is explicit; automatic matching and other lens variants are
 not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed
 in Third-party notices.
@@ -1896,7 +2545,10 @@ the selected clip or composition cancels the draft session.
 
 The effect derives a projective transform from the guide vanishing points and fits
 the entire photo with uniform scale. **Scale** can crop transparent borders;
-**Strength** blends back toward the original geometry. Both support keyframes.
+**Strength** blends the transform back toward the original geometry, so lines stay
+straight at any Strength (saved projects with Strength below 100 render this
+corrected blend). Both support keyframes. Slanted borders get a one-pixel soft edge;
+out-of-range Scale, Strength or matrix values are clamped and reported.
 Guides and correction persist in the project and render during export. Duplicate,
 short, incomplete, and unstable guide pairs are rejected with an explanation.
 Drawing guides currently supports still images, including CR2. The guide photo

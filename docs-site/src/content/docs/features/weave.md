@@ -17,7 +17,7 @@ These instance-owned values are also registered as numeric animatable properties
 property search and atomic keyframe authoring use their saved labels, ranges and
 steps. Unexposing a value removes it from property discovery without changing other
 effect instances or catalog-owned parameter contracts.
-Node contracts are listed in the [Node Catalog](/features/node-catalog/#curve-graphs-weave).
+Node contracts are listed in the [Node Catalog](/docs/features/node-catalog/#curve-graphs-weave).
 
 ## Saved graph compatibility
 
@@ -507,7 +507,7 @@ irradiance. Light that passes fibers is tinted by their color once per two fiber
 **Fiber Material** node (wool, cotton, silk, synthetic, hair) sets color, roughness
 and highlights for the raster and the path tracer alike; with **Path Traced** the
 composition renders every fiber as a ray traced round cone with a hair BSDF (see
-[Path Tracing](/features/path-tracing/)).
+[Path Tracing](/docs/features/path-tracing/)).
 
 **Antialiasing** (Strand Render) applies to preview, export, nested compositions
 and both render hosts:
@@ -828,7 +828,7 @@ This mode runs the existing tracking compute pass against the already prepared G
 
 Opaque WebCodecs/HTMLVideo export now matches preview coverage on GPU readback:
 soft dust and thin yarn RGB are not attenuated again by residual compositor alpha.
-See [Export](/features/export/) for the readback and stacked-alpha contracts.
+See [Export](/docs/features/export/) for the readback and stacked-alpha contracts.
 
 ### Sequential camera locks
 

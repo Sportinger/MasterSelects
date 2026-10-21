@@ -2,7 +2,7 @@
 title: "Native Helper"
 ---
 
-[← Back to Index](/features/readme/)
+[← Back to Index](/docs/getting-started/overview/)
 
 
 The Native Helper is a local companion application that provides Firefox project persistence, external AI control, yt-dlp-based downloads, and isolated local-AI runtimes.
@@ -292,6 +292,6 @@ The helper has Rust unit tests for protocol normalization, path-policy behavior,
 
 ## Related Documents
 
-- [Media Downloads](/features/download-panel/) -- Media panel download UI powered by the Native Helper
-- [Project Persistence](/features/project-persistence/) -- Firefox project persistence via Native Helper file system ops
-- [MuScriptor Music-to-MIDI](/features/muscriptor/) -- Local audio-to-MIDI provider and timeline workflow
+- [Media Downloads](/docs/features/download-panel/) -- Media panel download UI powered by the Native Helper
+- [Project Persistence](/docs/features/project-persistence/) -- Firefox project persistence via Native Helper file system ops
+- [MuScriptor Music-to-MIDI](/docs/features/muscriptor/) -- Local audio-to-MIDI provider and timeline workflow

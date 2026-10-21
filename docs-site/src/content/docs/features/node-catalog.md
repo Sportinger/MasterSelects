@@ -2,7 +2,7 @@
 title: "Node Catalog"
 ---
 
-[Back to Features](/features/readme/) · [Node Workspace](/features/node-workspace/)
+[Back to Features](/docs/getting-started/overview/) · [Node Workspace](/docs/features/node-workspace/)
 
 
 ## Agent discovery
@@ -24,7 +24,7 @@ These discovery/focus tools do not create or mutate graphs. Shaders, implementat
 
 ## Codex Direct node stream
 
-Timeline content (tracks, clips, figures, keys, MIDI) streams through the sibling format `ms-scene-v1`; see [Scene Streams](/features/scene-streams/).
+Timeline content (tracks, clips, figures, keys, MIDI) streams through the sibling format `ms-scene-v1`; see [Scene Streams](/docs/features/scene-streams/).
 
 Direct receives the `nodeGraphStream` version-1 contract alongside the inventory. An exact `ms-nodegraph-v1` fenced block contains newline-delimited JSON. Its first record is `{"op":"begin","schemaVersion":1,"clipId":"<existing clip ID>"}`. Only after receiving that complete record does the browser select the clip and open Nodes beside Preview automatically; no separate focus call is necessary. If a Nodes panel is already visible elsewhere (the active tab of a docked group, a floating panel or a detached window), that panel is switched to the clip in place and no additional Nodes panel is opened or moved. A new clip must be created before the stream, using its returned ID.
 
@@ -108,7 +108,8 @@ Earlier local-estimator probes do not validate DIS. Build/test execution is paus
 live DIS quality and performance have not yet been verified.
 
 The catalog includes the 15 Fisheye processing groups, the shared coordinate
-compositions and the expandable HSV-based Hue Shift composition. To insert one,
+compositions, the colour recipe blocks of the colour effects and the HSV-based Hue
+Shift composition of older saved graphs. To insert one,
 select an image effect or an internal node and use
 **right-click → Reusable Nodes**, or the inspector's **Add node** selector.
 Each entry exposes its typed boundary and can be expanded after insertion.
@@ -155,8 +156,12 @@ Further reusable processing recipes are available in the same menu:
 | Category | Blocks | Boundary contract |
 | --- | --- | --- |
 | Sampling | Bounded Sample Count | Explicit count, minimum and maximum; integer truncation remains with the reducer. |
+| Sampling | Pair Tap Offsets; Merge Pair Weights | Sequence index, pairs per side and texel stride give the near/far texel offsets, a centre gate and the side; two kernel weights then merge into one linear-filtered tap (exact for any weights). Used by Box and Gaussian Blur. |
 | Coordinates | Scale From Center | Direction, scalar scale and center; no hidden UV or resolution source. |
-| Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. |
+| Color | Brightness Curve; Contrast Curve | 0–1 RGB and the amount; black and white stay fixed (odds curve with gain `2^(2.5·Brightness)`, S-curve with slope Contrast at mid-grey). Used by Brightness and Contrast. |
+| Color | Exposure (Stops); White Balance | RGB and stops, or Temperature and Tint (per unit red up and blue down 0.6 stops each; Tint green down 0.5, red and blue up 0.25); the light math runs between sRGB to Linear and Linear to sRGB, not clamped. Used by Exposure and Temperature. |
+| Color | Saturation (Gamut-Safe); Hue Rotate (OkLCh) | 0–1 RGB and amount (≥ 0) mixed with Rec.709 luma up to the gamut edge; or RGB and a shift in turns rotated in OkLCh, not clamped. Used by Saturation, Vibrance and Hue Shift. |
+| Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. Kept for colour effects saved before 2026-10. |
 | Color | Soft Bright Pass; Sobel Magnitude | Explicit threshold edges and image, or eight neighboring luminance values; no hidden sampling pass. |
 | Glyph | Glyph Cell Grid; Tone to Glyph Index; Glyph Atlas Alpha | Explicit UV/resolution/cell size, tone/invert/count, and atlas image/dimensions/index/local UV/clamp bounds. Atlas loading stays outside the recipes. |
 | Feedback | Decay & Max RGBA | Componentwise `max(current, previous * decay)`; both images and decay are inputs. The block is stateless and never advances history. |
@@ -239,6 +244,42 @@ primitive patterns can adopt the same definitions across image effects.
 The numeric Value family exposes Float and Integer variants in the inspector;
 Integer truncates toward zero and keeps the number-port contract.
 
+## Random nodes
+
+Image graphs offer two deterministic hashes of a Vector 2 key, both returning a
+number in 0, 1): **Random (Hash)** (`noise.hash2d.vec2`), the original sine hash
+that older effects keep, and **Random (Integer Hash)** (`noise.hash2d-pcg.vec2`), a
+lowbias32 bit mix plus PCG2D on the exact float bits. Use the integer hash for new
+graphs: the sine hash shows diagonal stripes on cell grids and loses quality on
+large keys, the integer hash stays uniform for any key (Glitch and Film Prism use
+it), and for the same key it gives bit-identical values on the GPU and in the CPU
+evaluator. Feed it whole numbers (cell indices, counters, integer salts): the GPU
+computes keys in 32-bit floats and the CPU in 64-bit, so only exact integers below
+2^24 reach the hash as the same bits on both. Both are one Random node: its
+inspector's **Algorithm** choice switches between Sine and Integer (PCG).
+
+**Random (Cell)** (`noise.cell-hash.vec2`) is a separate node for one value per
+whole-number cell: it rounds its input down and hashes the cell with PCG2D,
+identical on every GPU and in the software renderer. Film Grain blends four of them
+into smooth value noise; Vignette uses two per pixel as its anti-banding dither.
+Use Random (Integer Hash) when the key itself is already the exact integer to hash,
+Random (Cell) when a coordinate should give one value per cell.
+
+**Fractal Noise** (`noise.fractal2d.vec2`) is smooth gradient noise at a Position in
+noise cells (one cell is one blob), summed over Octaves (1-8; each doubles the frequency,
+turned by 37.5° so the octaves never line up) with Roughness (0-1) as each octave's share.
+It returns 0-1 around a 0.5 mean. Its lattice hash is the integer PCG2D hash, so it stays
+clean at large positions, where Random (Hash) (a sine hash) turns into diagonal streaks;
+use it for paper, clouds and organic masks (Acuarela builds its paper, wet patches and
+blooms from it). GPU and CPU evaluation match within float rounding.
+
+**Cache Image** (`image.materialize`) has a **Resolution** setting (Full, 1/2 …
+1/1024): the cached pass renders at that fraction of the frame (at least one
+pixel) and later passes read it with normalized UV, so it acts as a smooth, cheaper
+copy. It is a fixed setting: it decides texture sizes before rendering, so it
+cannot be animated or bound to a parameter (the compiler says so). Glow builds its
+bloom pyramid from ten such levels.
+
 ## Categories, names and visibility
 
 `src/services/operators/operatorTaxonomy.ts` is the one presentation taxonomy for
@@ -256,6 +297,7 @@ cards show a short form of the same category ("Math", "Color Group").
   details** switch shows compiler facts such as family, execution and state.
 - **Families** appear as one entry and switch their saved variant in the inspector:
   Value (Float/Integer), Switch (Value, Vector 2, Image), Luminance (Rec.709/Rec.601),
+  sRGB to Linear/Linear to sRGB (exact sRGB transfer), RGB to OkLCh/OkLCh to RGB,
   Primitive (Box/Sphere/Cylinder), Derivative, Smallest Component, Temporal Smooth and
   the adaptive math and vector families.
 - **Names** are English Title Case nouns without type suffixes or implementation
@@ -271,8 +313,8 @@ Lines & Engraving, Textile & Craft, Text & Glyph, Analog & Glitch, Keying, Time,
 Tracking & Overlays, 3D & Particles); the registry `category` stays internal.
 Looks of one engine with identical parameters are styles: the Effects tab shows a
 **Style** selector that switches in place and keeps the effect ID, values and
-keyframes (a customized node graph restarts from the new look's default). Rom1 is
-kept for saved projects and reachable as a style of Acuarela.
+keyframes (a customized node graph restarts from the new look's default). Rom1, the
+watery-smoke look, is its own effect again since Acuarela became a watercolour.
 Audio effects use six groups: Level & Channels, EQ & Filter, Dynamics, Repair,
 Time & Space, Character & Advanced.
 
@@ -284,6 +326,14 @@ categorized, every effect grouped and described, and graph menus free of duplica
 names.
 
 ## Temporal smoothing
+
+**Cache Image** (`image.materialize`) stores an image expression in an internal
+`rgba16float` pass so later nodes can sample it. **Max size (px)** (default 0 = full
+size, at most 8192) renders the cache smaller, with its longer side at most that many
+pixels. It can be a constant or bound to an effect parameter; a bound value is read
+once per compile, and a change recompiles the plan. Use it for statistics, not for pictures: Chroma Key keeps its 64 px Screen Grid
+and its 1 px automatic screen colour this way. Later reads filter it like any image,
+and a resolution node inside that pass reports the reduced size.
 
 **Temporal Smooth** (`image.temporal-smooth` for images,
 `image.temporal-smooth.scalar` for per-pixel values such as key masks) blends each
@@ -332,7 +382,7 @@ media.source → depth.estimate → depth.calibrate → geometry.depth ───
 | `tracking.face` | Image → landmarks | Precise MediaPipe tracking series in `landmarkTracking/` |
 | `tracking.smooth` | Landmarks → landmarks | `samplePreciseFace` in `preciseFaceSampling.ts`; shared result feeds consumers |
 | `tracking.anchors` | Landmarks → anchors | Cable endpoint configuration; consumes the same landmark source |
-| `geometry.face` | Landmarks + topology → UV geometry | `landmarksToMesh`; topology supplied by the face adapter |
+| `geometry.face` | Landmarks + topology → UV geometry | [`landmarksToMesh`; topology supplied by the face adapter |
 | `depth.estimate` | Image → relative depth | Existing local depth worker/model; no mesh or landmark replacement |
 | `depth.calibrate` | Relative depth + optional reference geometry → calibrated depth | `calibrateCableDepth`; reference disconnection uses image-relative normalization |
 | `geometry.depth` | Calibrated depth → UV geometry | `depthToMesh` |
@@ -430,7 +480,7 @@ node is one node in every graph rather than a per-domain copy.
 The default Weave graph is Weave Pattern → Set Position (Handmade) → Thread Along →
 Yarn Profile → Flyaways → Surface Bind → Strand Render: a plain weave of fuzzy
 three-ply yarns with handmade irregularity whose threads are pulled in over the
-first four seconds of the clip and then billow in the wind (see [Weave](/features/weave/)).
+first four seconds of the clip and then billow in the wind (see [Weave](/docs/features/weave/)).
 Weave Pattern is the only weave-specific node; crimp is
 analytic (cosine transitions between crossings, with the draft deciding which
 thread lies in front). Yarn Profile is general: plies circle the curve and fibers

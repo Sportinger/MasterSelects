@@ -2,7 +2,7 @@
 title: "Visitor Notifier"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 Operational sidecar for monitoring site visits through Cloudflare Pages/KV and a Windows tray notifier.
 
@@ -111,5 +111,5 @@ Important values:
 
 ## Related Features
 
-- [Kernel Client](/features/kernel-client/)
-- [Security](/features/security/)
+- [Kernel Client](/docs/features/kernel-client/)
+- [Security](/docs/features/security/)

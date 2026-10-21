@@ -217,7 +217,7 @@ algorithm is unchanged. **Add splat to Media** exports the latest trained
 splats to an in-memory PLY and sends that file through the normal Gaussian
 splat import path. Imported results therefore use the existing native WebGPU
 scene, timeline, transform, effector, preview, and export contracts described
-in [3D Layers](/features/3d-layers/).
+in [3D Layers](/docs/features/3d-layers/).
 
 Existing `.ply`, `.compressed.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`,
 `.lcc`, and supported ZIP splats can also be added directly with
@@ -229,7 +229,7 @@ For a marker projected onto reconstructed ground, **Properties → Tracking** al
 uses the browser camera solver with decoded frame timestamps and a sparse mesh.
 That workflow keeps poses on the source surface and offers a geometry inspector;
 it does not create a separate camera clip or run dense reconstruction. See
-[Surface Tracking](/features/surface-tracking/#3d-camera-and-ground-mesh).
+[Surface Tracking](/docs/features/surface-tracking/#3d-camera-and-ground-mesh).
 
 - Video-to-frames is browser-local and complete.
 - Timeline-video feature matching, camera-pose solving, COLMAP persistence,

@@ -2,7 +2,7 @@
 title: "Linux / Mesa GPU Constraints"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 **Read this before adding or refactoring a `<canvas>`, `OffscreenCanvas`, or
 WebGPU presentation path.** Linux fallback policy is shared across timeline
@@ -74,7 +74,7 @@ only on try/catch or return values when diagnosing them.
 
 ## How to diagnose (no console access required)
 
-Use the AI debug bridge (see [Debugging](/features/debugging/)):
+Use the AI debug bridge (see [Debugging](/docs/features/debugging/)):
 
 - `getStats` → `timelineCanvas` diagnostics report per-track `workerMode`,
   `drawnClipCount`, and `workerError`. "All drawn, no errors, nothing visible"

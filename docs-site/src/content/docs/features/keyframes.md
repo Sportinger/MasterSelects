@@ -2,11 +2,11 @@
 title: "Keyframes"
 ---
 
-[<- Back to Index](/features/readme/)
+[<- Back to Index](/docs/getting-started/overview/)
 
 The keyframe system animates clip properties over time using per-clip keyframe maps, Graph mode, and Bezier handles. It supports transform properties, speed, numeric effect parameters, color, masks, text bounds, camera and light settings, custom-node parameters, vector-animation state/input properties, and numeric motion-shape properties.
 
-The [Node Workspace](/features/node-workspace/#keyframe-nodes) shows independent curves
+The [Node Workspace](/docs/features/node-workspace/#keyframe-nodes) shows independent curves
 in a compact **Animation** area on their parameter's owning node. Existing
 projects appear this way automatically, including previously saved independent
 keyframe nodes. The area shows a curve count, mini curve, current value and time
@@ -104,7 +104,7 @@ The Color panel can enable every color stopwatch for the active grade version at
 
 Text bounds use `textBounds.path` for the complete bounds shape and `textBounds.position.x` / `textBounds.position.y` for numeric offsets.
 
-Text clips also animate `text.fontSize`, `text.lineHeight`, `text.letterSpacing`, `text.strokeWidth`, `text.shadowOffsetX` / `.Y`, `text.shadowBlur`, and `text.value` — the number printed by `{value}` tokens in the text (see [Text Clips](/features/text-clips/#animated-numbers-value-tokens)).
+Text clips also animate `text.fontSize`, `text.lineHeight`, `text.letterSpacing`, `text.strokeWidth`, `text.shadowOffsetX` / `.Y`, `text.shadowBlur`, and `text.value` — the number printed by `{value}` tokens in the text (see [Text Clips](/docs/features/text-clips/#animated-numbers-value-tokens)).
 
 Light clips expose `light.intensity`, `light.diameter`, `light.shadowStrength`, and `light.color.r` / `.g` / `.b`. Exposed custom-node parameters use `node.{nodeId}.{paramName}`; color parameters are stored as per-channel paths.
 
@@ -217,7 +217,7 @@ When recording is enabled:
 
 ### Curve Editor
 
-![Bezier curve editor with selected keyframe handles](/docs/assets/keyframes/bezier-curve-editor.png)
+<a class="docs-shot-zoom" href="/docs/assets/keyframes/bezier-curve-editor.png" title="Open the full-size picture"><img src="/docs/assets/keyframes/bezier-curve-editor.png" alt="Bezier curve editor with selected keyframe handles" width="1280" height="720" decoding="async"></a>
 
 - Double-click a property row or keyframe diamond to open Graph mode.
 - Graph mode shows the selected clip's animated numeric properties as selectable curve series; only one property is expanded in the track header at a time.
@@ -330,10 +330,10 @@ The row-height constant is 18 px.
 
 ## Related Docs
 
-- [Timeline](/features/timeline/)
-- [Keyboard Shortcuts](/features/keyboard-shortcuts/)
-- [Preview](/features/preview/)
-- [Effects](/features/effects/)
+- [Timeline](/docs/features/timeline/)
+- [Keyboard Shortcuts](/docs/features/keyboard-shortcuts/)
+- [Preview](/docs/features/preview/)
+- [Effects](/docs/features/effects/)
 
 ## Dense tracking and stabilization keys
 

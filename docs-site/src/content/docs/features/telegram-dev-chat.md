@@ -2,7 +2,7 @@
 title: "Telegram Dev Chat"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 Operational runbook for the two-way support chat between MasterSelects and a
 private Telegram group.

@@ -2,7 +2,7 @@
 title: "UI & Panels"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 Dockable panel system with an After Effects-style menu bar, unified clip properties, and touch interactions on phones and tablets. Every device uses the same editor shell.
 
@@ -137,9 +137,9 @@ MasterSelects registers 18 dockable editor panel types, plus the Slot Grid overl
 | **Media** | `media` | Media browser, folders, and project items |
 | **Properties** | `clip-properties` | Unified clip inspector |
 | **Tools** | `tools` | One tool strip for all workspaces: canvas tools for the Preview, or the Timeline's tool groups when the timeline was clicked last (see [Tools panel](#tools-panel)) |
-| **Layers** | `layers` | Layer view of the active composition (all layers of an image document, or the clips at the playhead) with each layer's masks and effect stack (see [Image Mode](/features/image-mode/)) |
+| **Layers** | `layers` | Layer view of the active composition (all layers of an image document, or the clips at the playhead) with each layer's masks and effect stack (see [Image Mode](/docs/features/image-mode/)) |
 | **History** | `history` | Undo/redo history |
-| **Annotations** | `annotations` | Timed notes on the active composition and its source media, mirrored as ruler bars (see [Annotations](/features/annotations/)) |
+| **Annotations** | `annotations` | Timed notes on the active composition and its source media, mirrored as ruler bars (see [Annotations](/docs/features/annotations/)) |
 | **Audio Mixer** | `audio-mixer` | Track and master audio controls |
 | **Node Workspace** | `node-workspace` | AI-assisted node workspace |
 | **Export** | `export` | Render and export controls |
@@ -355,7 +355,7 @@ Resolume-style slot grid for simultaneous multi-layer composition playback. The 
 - Deactivating a layer returns control to the next active layer if needed
 - Optional warm-deck badges show slot preparation state when `useWarmSlotDecks` is enabled (the current feature flag is disabled by default)
 
-See [Slot Grid](/features/slot-grid/) for the current live/deck behavior, slot-clip trimming, and context-menu actions.
+See [Slot Grid](/docs/features/slot-grid/) for the current live/deck behavior, slot-clip trimming, and context-menu actions.
 
 ---
 
@@ -389,7 +389,7 @@ leaks into their saved factory state.
 The migration is intentionally incremental. The Transform inspector is the
 first complete component family; remaining inspector sections and editor
 workspaces continue to use compatibility mappings until their Resolve-style
-counterparts land. See [Node Workspace](/features/node-workspace/) for the graph workspace controls.
+counterparts land. See [Node Workspace](/docs/features/node-workspace/) for the graph workspace controls.
 
 ---
 
@@ -611,7 +611,7 @@ The built-in `AUDIO EDIT` layout keeps Timeline above Media, Audio Mixer, and Pr
 
 The built-in `3D EDIT` layout keeps four independent Preview panels in a 2x2 grid above the Timeline, with Media and Properties/Export/History on the right. The previews open directly in Edit mode as Front, Side, Top, and Perspective views. Loading the layout keeps the current playhead when it is already covered by a camera clip, jumps to the earliest camera when cameras exist elsewhere in the composition, and creates one composition-length camera only when none exists.
 
-The built-in `IMAGE` layout edits still images: the Tools strip at the left edge, Media/AI Studio/AI Segment next to it, the Preview as a 2D edit canvas with the transparency grid in the center, and Layers/History above Properties/Coloring/Export on the right, without a timeline. See [Image Mode](/features/image-mode/).
+The built-in `IMAGE` layout edits still images: the Tools strip at the left edge, Media/AI Studio/AI Segment next to it, the Preview as a 2D edit canvas with the transparency grid in the center, and Layers/History above Properties/Coloring/Export on the right, without a timeline. See [Image Mode](/docs/features/image-mode/).
 
 Medium and Mobile are presentation modifiers above the selected named layout rather than separate layout entries (`src/stores/dockStore/overLayoutMode.ts`, `src/components/dock/useOverLayoutSync.ts`). The bottom workspace bar exposes a **Medium** toggle and a **Mobile** toggle beside **Layouts** while continuing to highlight the underlying Video, Audio, 3D, Color, Image, or custom layout. The two modifiers stack: Medium alone applies the Medium editing arrangement (and the `app--medium-experience` styling) over the base workspace, Mobile alone applies the compact phone/tablet arrangement, and Medium plus Mobile applies the Medium-Mobile timeline skin (`src/components/timeline/MediumMobileTimeline.css`) in which the main timeline controls move from the ruler strip into the timebar, the mobile action bubbles are suppressed, and the Preview split uses Medium-specific ratios. Changing the base layout while a modifier is active immediately reapplies the matching arrangement; turning the modifiers off restores the saved panel and timeline arrangement from before they were entered. That pre-modifier snapshot lives in memory only, so after a page reload turning the modifiers off restores the factory arrangement of the base layout instead. Its horizontal/portrait arrangement is selected internally from the active composition aspect. On each entry into either Mobile arrangement, the Preview split is fitted once to the active composition; subsequent divider changes remain under user control until Mobile or the underlying layout is entered again. Detected phones, tablets, and other coarse-pointer devices enter Mobile automatically, but the same toggle can explicitly return them to desktop mode. Browser widths at or below the compact breakpoint follow `Settings -> General -> Automatically use Mobile layout when space is limited` and can likewise be overridden from the workspace bar. In the Video workspace and both internal Mobile factories, AI Studio occupies the left-side position formerly used by Discover, while Coloring occupies the right-side position formerly used by AI Studio.
 

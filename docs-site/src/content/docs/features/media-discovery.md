@@ -2,7 +2,7 @@
 title: "Media Discovery"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 Discover is a dockable search and import panel for open media, meme templates,
 and user-directed web downloads. It keeps catalog search separate from the
@@ -71,7 +71,7 @@ the material.
 
 ## Related features
 
-- [Media Downloads](/features/download-panel/)
-- [Media Panel](/features/media-panel/)
-- [Native Helper](/features/native-helper/)
-- [Project Persistence](/features/project-persistence/)
+- [Media Downloads](/docs/features/download-panel/)
+- [Media Panel](/docs/features/media-panel/)
+- [Native Helper](/docs/features/native-helper/)
+- [Project Persistence](/docs/features/project-persistence/)

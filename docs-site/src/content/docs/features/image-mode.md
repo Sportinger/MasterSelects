@@ -33,7 +33,7 @@ The factory layout `factory-image-edit`
 bottom workspace bar:
 
 - **Left edge:** the Tools strip (Move, Hand, Zoom, Text, mask tools, AI
-  Segment). See [UI Panels](/features/ui-panels/#tools-panel).
+  Segment). See [UI Panels](/docs/features/ui-panels/#tools-panel).
 - **Left:** Media, AI Studio, AI Segment.
 - **Center:** Preview as the canvas. It opens in 2D edit mode with the
   transparency grid. A preview with `initialEditMode` and no
@@ -105,11 +105,11 @@ Controls:
 
 - The Image workspace preview opens with pixel rulers (`Shift+R` toggles
   them). Drag out of a ruler to create a guide; layers snap to visible guides
-  while you move them. See [Preview](/features/preview/#guides).
+  while you move them. See [Preview](/docs/features/preview/#guides).
 - The workspace has no Timeline panel, so `EditorPlaybackRuntimeHost` syncs
   the render layers that preview hit-testing and transform handles use.
 - For image documents the time transport is replaced by a zoom bar with Fit,
-  1:1, zoom steps and the zoom level. See [Preview](/features/preview/#rulers-and-still-image-zoom).
+  1:1, zoom steps and the zoom level. See [Preview](/docs/features/preview/#rulers-and-still-image-zoom).
 
 ## Entry points
 

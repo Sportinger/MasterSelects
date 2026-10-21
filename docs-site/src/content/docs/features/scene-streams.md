@@ -2,9 +2,9 @@
 title: "Scene Streams"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
-A scene stream (`ms-scene-v1`) is a named, re-runnable block of editor tool records that builds a piece of a timeline: tracks, solid and Blank clips, text, Motion Design shapes, stick figures with action clips, keyframes, effects, masks, markers and MIDI clips. It is the timeline counterpart of the [node stream](/features/node-catalog/#codex-direct-node-stream) (`ms-nodegraph-v1`) and uses the same parser (`src/services/nodeGraph/fencedRecordStream.ts`).
+A scene stream (`ms-scene-v1`) is a named, re-runnable block of editor tool records that builds a piece of a timeline: tracks, solid and Blank clips, text, Motion Design shapes, stick figures with action clips, keyframes, effects, masks, markers and MIDI clips. It is the timeline counterpart of the [node stream](/docs/features/node-catalog/#codex-direct-node-stream) (`ms-nodegraph-v1`) and uses the same parser (`src/services/nodeGraph/fencedRecordStream.ts`).
 
 ## Format
 

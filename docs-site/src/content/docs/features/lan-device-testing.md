@@ -5,7 +5,7 @@ title: "LAN Device Testing"
 Runs the dev server against a real phone or tablet on the same Wi-Fi, so
 WebGPU, WebCodecs, touch input, and export can be verified on hardware the
 development machine does not have — an iPad or iPhone running Safari, or an
-Android device. The [AI bridge](/features/ai-bridge-control/) works unchanged
+Android device. The [AI bridge](/docs/features/ai-bridge-control/) works unchanged
 across the network, so an agent on the development machine can screenshot,
 click, read stats, and drive chat on the remote device.
 

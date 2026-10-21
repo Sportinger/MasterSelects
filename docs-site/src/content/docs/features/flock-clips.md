@@ -46,7 +46,7 @@ per clip: adding Flocking again selects the existing effect.
 - AI tools: `addEffect` with `effectType: "flocking"` adds a swarm to an existing
   clip; every flock tool accepts any clip with a Flocking effect.
 
-See [Node Workspace](/features/node-workspace/) for graph editing and shared controls.
+See [Node Workspace](/docs/features/node-workspace/) for graph editing and shared controls.
 
 ---
 
@@ -630,7 +630,7 @@ have not been measured yet.
 
 The Wind operator shares its directional-force contract and CPU/WGSL calculation
 with Face Cables. Existing Flock defaults and deterministic gust modulation are
-retained. See [Node Workspace](/features/node-workspace/) for the common canvas.
+retained. See [Node Workspace](/docs/features/node-workspace/) for the common canvas.
 
 ### Soft particles and layer compositing
 

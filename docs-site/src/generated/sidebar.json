@@ -105,6 +105,14 @@
         "slug": "features/effects-stylize"
       },
       {
+        "label": "Analog Effects",
+        "slug": "features/effects-analog"
+      },
+      {
+        "label": "Painterly, Relief and Particle Effects",
+        "slug": "features/effects-stylize-art"
+      },
+      {
         "label": "Color Correction",
         "slug": "features/color-correction"
       },

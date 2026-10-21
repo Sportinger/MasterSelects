@@ -2,7 +2,7 @@
 title: "Masks"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 MasterSelects supports per-clip vector masks with preview-overlay editing, selectable vertices, bezier handle modes, and GPU compositing through the layer pipeline.
 
@@ -24,7 +24,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - The active mask can be copied and pasted to another selected clip together with its mask keyframes, keeping keyframe times relative to the target clip start.
 - Mask rows can be moved up or down to change mask compositing order.
 - **Mask usage** separates clip compositing from effect inputs. Choose **Effect input only** to keep a mask available for an effect without cutting the clip alpha; **Composite + effect input** retains normal compositing. Existing masks keep normal compositing by default.
-- **Slit Scan object stabilization** can track a selected object mask in both directions and create a separate, static reference-space protection mask. Set **New mask feather** before tracking (default 30 px); the generated mask automatically uses **Effect input only**. Its interior keeps the current time while the surrounding image receives time displacement. Adjust its feather in Slit Scan or its geometry in Masks. Recreate it after changing the stabilization reference. See [Effects](/features/effects/#slit-scan).
+- **Slit Scan object stabilization** can track a selected object mask in both directions and create a separate, static reference-space protection mask. Set **New mask feather** before tracking (default 30 px); the generated mask automatically uses **Effect input only**. Its interior keeps the current time while the surrounding image receives time displacement. Adjust its feather in Slit Scan or its geometry in Masks. Recreate it after changing the stabilization reference. See [Effects](/docs/features/effects/#slit-scan).
 - Individual mask edges can be selected and given their own edge feather value.
 - The registered AI tool surface can inspect, create, remove, and update masks and vertices, including whole-path keyframes.
 - Mask changes are serialized with the project.

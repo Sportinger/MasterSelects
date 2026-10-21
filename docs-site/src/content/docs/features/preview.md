@@ -2,7 +2,7 @@
 title: "Preview & Playback"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 WebGPU-backed preview with RAM preview caching, source monitor playback, edit overlays, multi-preview targets, and output windows.
 
@@ -101,7 +101,7 @@ The source monitor shows a raw media file in the preview panel instead of the co
 
 ### Behavior
 
-- Regular video sources use the panel-local HTML `<video>` path. Codec providers handle ProRes, HAP, MXF and HEVC; [HEVC](/features/hevc-decoding/) verifies native decoding and falls back to WASM automatically, including source audio and container rotation.
+- Regular video sources use the panel-local HTML `<video>` path. Codec providers handle ProRes, HAP, MXF and HEVC; [HEVC](/docs/features/hevc-decoding/) verifies native decoding and falls back to WASM automatically, including source audio and container rotation.
 - Audio sources use a panel-local audio playback path with waveform display and scrubbing.
 - Images render through a plain `<img>` element in the same panel surface.
 - Supports images, but images do not show transport controls.
@@ -195,7 +195,7 @@ RAM preview is implemented by `RamPreviewEngine` and the timeline RAM preview sl
 - During a playhead drag, off-air camera views hold their pictures and catch up on release. The program camera borrows the main preview's current source instead of decoding the same picture twice. H.264 Long-GOP MXF reuses its warm track decoder for playback, scrubbing, and release; native WebCodecs sources retain their separate scrub sessions. The MXF H.264 WebCodecs adapter prefers software decoding to reduce hardware-decoder contention between concurrent camera seeks; this preserves source resolution and leaves GPU composition unchanged. MXF seeks can feed bounded reordering input as the decoder consumes packets, avoiding a fixed 300 ms wait for pictures that need further input.
 - When a browser frame is delayed during forward playback, the main preview can retain its last complete video composite for the same clip and source. Composition changes, cuts, explicit seeks, loop jumps, and timeline edits invalidate that longer hold; real gaps still clear.
 - Inactive tracking, roto, face, live-input, and storyboard overlays do not subscribe to playback updates. Opening the relevant editing feature restores its live overlay updates.
-- The **Multicam** toggle turns on multicam cut mode for the active composition (see [Timeline Multicam](/features/timeline/#multicam)). The slots show camera angles 1-4 with their number and track name, using original source decoding and panel-sized presentation, also where a camera is currently cut out of the program. The camera on air at the playhead is framed in red. MXF and other codec-provider cameras share the decode session of their program track, so a cut to that camera finds its decoder already at the playhead; other video plays through a muted element kept in sync with the timeline. A slot keeps its last picture while its decoder catches up instead of flashing black. When a camera's media switches to another file (linked proxy, relink or reconnect, e.g. an H.264 copy of an HEVC original), its slot rebuilds its decoder for that file.
+- The **Multicam** toggle turns on multicam cut mode for the active composition (see [Timeline Multicam](/docs/features/timeline/#multicam)). The slots show camera angles 1-4 with their number and track name, using original source decoding and panel-sized presentation, also where a camera is currently cut out of the program. The camera on air at the playhead is framed in red. MXF and other codec-provider cameras share the decode session of their program track, so a cut to that camera finds its decoder already at the playhead; other video plays through a muted element kept in sync with the timeline. A slot keeps its last picture while its decoder catches up instead of flashing black. When a camera's media switches to another file (linked proxy, relink or reconnect, e.g. an H.264 copy of an HEVC original), its slot rebuilds its decoder for that file.
 - Isolated layer slots render the layer as its source by normalizing non-normal blend modes for that slot only. The original composition layer keeps its stored blend mode.
 - Every camera-edit Preview owns its viewport camera and panel-sized render surface. Any number of visible panels can therefore show different live perspectives of the same composition while sharing timeline, selection, object transforms, and gizmo state.
 - A panel in Edit mode is rendered as an independent target; non-edit panels continue to show the timeline camera instead of inheriting or freezing the edited panel's view.
@@ -239,7 +239,7 @@ Edit mode is a canvas overlay for layer transforms.
 - Two-finger pinch cancels an active one-finger orbit and changes edit-view zoom or camera distance continuously from the live finger spacing, without fixed zoom steps. In both 2D and 3D Preview Edit modes its touch zoom delta is amplified to four times the normal preview pinch rate.
 - 2D transform, text, and mask editing preserve the composition resolution and aspect ratio; only camera/3D edit views use the full panel viewport for an independent perspective.
 - Moving or scaling a layer publishes a transient render transform once per animation frame, so the canvas and edit handles stay live without rewriting the durable clip, mask state, or RAM-preview caches. The final transform is committed as one history batch when the pointer is released.
-- A dock preview with `initialEditMode` starts in Edit mode. With `initialEditCameraView` it opens a 3D camera edit view (3D workspace); without one it opens 2D canvas edit mode (Image workspace, see [Image Mode](/features/image-mode/)).
+- A dock preview with `initialEditMode` starts in Edit mode. With `initialEditCameraView` it opens a 3D camera edit view (3D workspace); without one it opens 2D canvas edit mode (Image workspace, see [Image Mode](/docs/features/image-mode/)).
 - Multiple preview panels can mix edit and non-edit views at the same time. Camera and object changes update every visible view immediately, while each panel keeps its own perspective.
 - 3D object handles remain visible across preview modes; selecting one activates the native 3D scene gizmo for that clip.
 - In camera Edit mode, the independent editor camera always orbits the scene origin `(0, 0, 0)`; timeline and viewport selection do not change its pivot.
@@ -248,7 +248,7 @@ Edit mode is a canvas overlay for layer transforms.
 - The projected timeline-camera frame in camera Edit mode is a world-space object drawn from the camera's FOV/mm and Resolution X/Y. It becomes smaller with distance, wide lenses draw a larger front frame, tele lenses draw a smaller one, and the frame aspect follows the camera resolution.
 - Edit views can render a projected world grid that follows camera-view animation instead of snapping as a screen overlay. The grid plane matches the edit view: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`.
 - Holding Shift while dragging a layer in Edit mode enables snapping for that drag. The layer can snap to composition edges/center and to the bounds of other visible layers. Visible ruler guides snap without Shift; otherwise layer movement stays free.
-- The Tools panel's canvas tools change what a left click on the canvas does: Hand pans, Zoom zooms around the pointer (Alt zooms out), Text places a text layer. They take the click before layer selection, show their own cursor, and need Edit mode (`usePreviewCanvasToolPointer.ts`, see [UI Panels](/features/ui-panels/#tools-panel)).
+- The Tools panel's canvas tools change what a left click on the canvas does: Hand pans, Zoom zooms around the pointer (Alt zooms out), Text places a text layer. They take the click before layer selection, show their own cursor, and need Edit mode (`usePreviewCanvasToolPointer.ts`, see [UI Panels](/docs/features/ui-panels/#tools-panel)).
 - Pan and zoom move the canvas without a CSS transition, and the edit overlay is drawn in a layout effect. The canvas, its handles, rulers and guides therefore move in the same frame instead of the canvas easing behind them.
 - Hit-testing and handles use the render layers that the Timeline panel syncs. In layouts without a Timeline panel (the Image workspace), `EditorPlaybackRuntimeHost` runs the same layer sync headlessly (`HeadlessLayerSync.tsx`, `timelineLayerSyncOwners.ts`).
 

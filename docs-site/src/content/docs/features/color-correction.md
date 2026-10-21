@@ -2,7 +2,7 @@
 title: "Color Correction"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 MasterSelects has a clip-level Color tab and a dedicated Resolve-inspired Color workspace. Both surfaces edit the same saved color-grade state, expose its Color-themed projection from the global node-graph document, and share the realtime render path.
 
@@ -14,7 +14,7 @@ The workflow provides a default `Input -> Primary -> Output` graph, serial Prima
 
 Each wheel heading includes a grouped keyframe toggle for its R, G, B and luminance channels. Individual channel toggles remain available and record the actual parameter value, preserving the normal timeline keyframe workflow.
 
-Numeric Corrector/Wheels parameters also accept [procedural parameter sources](/features/node-workspace/#procedural-parameter-sources).
+Numeric Corrector/Wheels parameters also accept [procedural parameter sources](/docs/features/node-workspace/#procedural-parameter-sources).
 Choose a source in the ordinary Properties/Nodes inspector; the dedicated Color
 tab keeps its wheel layout and displays effective driven values. A driven channel
 locks the wheel's puck/group actions, while unconnected channels remain editable

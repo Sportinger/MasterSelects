@@ -2,7 +2,7 @@
 title: "Project Repository and Durable History"
 ---
 
-[Back to feature index](/features/readme/)
+[Back to feature index](/docs/getting-started/overview/)
 
 The project repository stores content and undo history together. Edits produce
 immutable revisions; undo and redo move between revisions. Editing an earlier

@@ -2,7 +2,7 @@
 title: "Debugging & Logging"
 ---
 
-[← Back to Index](/features/readme/)
+[← Back to Index](/docs/getting-started/overview/)
 
 
 MasterSelects includes a Logger service plus several playback and health monitors that are surfaced both in the browser console and through the AI bridge.
