@@ -1626,8 +1626,8 @@ describe('timeline edit operations kernel', () => {
     const clipA = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a');
     const clipB = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b');
     expect(result.success).toBe(true);
-    expect(clipA?.transitionOut?.params).toEqual({ includeAudio: false });
-    expect(clipB?.transitionIn?.params).toEqual({ includeAudio: false });
+    expect(clipA?.transitionOut?.params).toEqual({ includeAudio: false, audioCurve: 'equal-power' });
+    expect(clipB?.transitionIn?.params).toEqual({ includeAudio: false, audioCurve: 'equal-power' });
   });
 
   it('normalizes params when changing transition types and drops stale schema fields', () => {
@@ -1770,7 +1770,7 @@ describe('timeline edit operations kernel', () => {
     expect(result.success).toBe(true);
     expect(useHistoryStore.getState().canUndo()).toBe(true);
     expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a')?.transitionOut?.params)
-      .toEqual({ includeAudio: false });
+      .toEqual({ includeAudio: false, audioCurve: 'equal-power' });
 
     expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a')?.transitionOut?.params)
@@ -1780,9 +1780,9 @@ describe('timeline edit operations kernel', () => {
 
     expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a')?.transitionOut?.params)
-      .toEqual({ includeAudio: false });
+      .toEqual({ includeAudio: false, audioCurve: 'equal-power' });
     expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b')?.transitionIn?.params)
-      .toEqual({ includeAudio: false });
+      .toEqual({ includeAudio: false, audioCurve: 'equal-power' });
   });
 
   it('normalizes known transition params but preserves future transition params while serializing', () => {

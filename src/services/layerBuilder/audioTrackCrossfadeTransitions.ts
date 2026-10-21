@@ -4,8 +4,12 @@ import {
   type ActiveTransitionPlan,
   type TransitionParticipantPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
-import { getCrossfadeAudioGains } from '../../transitions';
-import { getAudioCrossfadeProgress, planAudioCrossfadeFromClip } from '../audio/audioCrossfadePlanning';
+import { getAudioCrossfadeGainsAt, type AudioCrossfadeFade } from '../audio/audioCrossfadeGains';
+import {
+  getAudioCrossfadeOutgoingTrackId,
+  planAudioCrossfadeFromClip,
+  withoutCrossfadedCutDeClick,
+} from '../audio/audioCrossfadePlanning';
 import { createLiveAudioRouteSettings } from '../audio/audioGraphRouteSettings';
 import { getClipAudioEditPreviewVolumeMultiplier } from '../audio/clipAudioEditPreview';
 import { proxyFrameCache } from '../proxyFrameCache';
@@ -44,6 +48,11 @@ export interface AudioTrackCrossfadeTransitionSyncDeps {
   ) => void;
 }
 
+/** An active audio crossfade with the window its sounds fade over. */
+export interface ActiveAudioCrossfade extends ActiveTransitionPlan {
+  fade: AudioCrossfadeFade;
+}
+
 export class AudioTrackCrossfadeTransitionSync {
   private readonly deps: AudioTrackCrossfadeTransitionSyncDeps;
 
@@ -51,18 +60,23 @@ export class AudioTrackCrossfadeTransitionSync {
     this.deps = deps;
   }
 
-  getActiveForTrack(ctx: FrameContext, track: TimelineTrack): ActiveTransitionPlan | null {
+  getActiveForTrack(ctx: FrameContext, track: TimelineTrack): ActiveAudioCrossfade | null {
     const options = {
       isAudioSourceClip: this.deps.isAudioSourceClip,
       getMediaDuration: (mediaFileId: string) => ctx.mediaFileById.get(mediaFileId)?.duration,
     };
     for (const clip of ctx.clips) {
-      if (clip.transitionOut?.type !== 'crossfade') continue;
+      const transition = clip.transitionOut;
+      if (transition?.type !== 'crossfade') continue;
+      // Skip crossfades far from the playhead or on other tracks before planning them.
+      const junction = clip.startTime + clip.duration + (transition.offset ?? 0);
+      if (Math.abs(ctx.playheadPosition - junction) > Math.max(transition.duration, 0.1)) continue;
+      if (getAudioCrossfadeOutgoingTrackId(clip, ctx.clips, this.deps.isAudioSourceClip) !== track.id) continue;
       // The export renders the same pairs (exportAudioCrossfades) from this planner.
       const pair = planAudioCrossfadeFromClip(clip, ctx.clips, options);
       if (!pair || pair.outgoingClip.trackId !== track.id) continue;
       if (ctx.playheadPosition >= pair.plan.bodyStart && ctx.playheadPosition < pair.plan.bodyEnd) {
-        return { plan: pair.plan, outgoingClip: pair.outgoingClip, incomingClip: pair.incomingClip };
+        return { plan: pair.plan, fade: pair.fade, outgoingClip: pair.outgoingClip, incomingClip: pair.incomingClip };
       }
     }
     return null;
@@ -79,11 +93,11 @@ export class AudioTrackCrossfadeTransitionSync {
     ctx: FrameContext;
     state: AudioSyncState;
     track: TimelineTrack;
-    activeTransition: ActiveTransitionPlan;
+    activeTransition: ActiveAudioCrossfade;
     activeTransitionAudioClipIds: Set<string>;
     regionGainPreview: ClipAudioRegionGainPreview | null | undefined;
   }): void {
-    const gains = getCrossfadeAudioGains(getAudioCrossfadeProgress(activeTransition.plan, ctx.playheadPosition));
+    const gains = getAudioCrossfadeGainsAt(activeTransition.fade, ctx.playheadPosition);
     activeTransitionAudioClipIds.add(activeTransition.outgoingClip.id);
     activeTransitionAudioClipIds.add(activeTransition.incomingClip.id);
 
@@ -91,7 +105,7 @@ export class AudioTrackCrossfadeTransitionSync {
       ctx,
       state,
       track,
-      clip: activeTransition.outgoingClip,
+      clip: withoutCrossfadedCutDeClick(activeTransition.outgoingClip, 'outgoing'),
       participant: activeTransition.plan.outgoing,
       volumeMultiplier: gains.outgoing,
       canBeMaster: !state.masterSet,
@@ -101,7 +115,7 @@ export class AudioTrackCrossfadeTransitionSync {
       ctx,
       state,
       track,
-      clip: activeTransition.incomingClip,
+      clip: withoutCrossfadedCutDeClick(activeTransition.incomingClip, 'incoming'),
       participant: activeTransition.plan.incoming,
       volumeMultiplier: gains.incoming,
       canBeMaster: !state.masterSet,

@@ -1426,6 +1426,12 @@
   color: #ff6b6b;
 }
 
+.transition-param-note {
+  margin: -2px 0 4px;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
 .transition-remove-button {
   align-self: flex-start;
   padding: 6px 10px;

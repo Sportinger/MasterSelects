@@ -1357,21 +1357,21 @@ They stay deterministic without bundled overlay video. `Additive Dissolve` and
 `Non-Additive Dissolve`
 use temporary transition blend windows on the incoming participant, so they
 stay in the same layer assembly path instead of adding one-off shaders.
-`Crossfade` is a true dissolve, outgoing·(1−t) + incoming·t: the outgoing clip
-fades out while the incoming clip is added with the internal `plus` blend mode
-(Porter-Duff plus, premultiplied colour and alpha), so clips with transparency
-(titles, keyed or scaled clips) no longer stay fully visible until the cut.
-Opaque full-frame clips give the same pixels as before. Clips that share a
-blend mode (Screen, Add, Multiply, …) keep it through the transition: they
-dissolve in Normal inside the transition composition, and the composition layer
-blends the result with their mode over the lower tracks
-(`transitionCompositionBlend`); clips with different modes fall back to Normal
-for the transition and log a warning. Its audio option uses equal-power gains
-in preview and export: both plan the same pairs (`audioCrossfadePlanning`), and
-the export extends the outgoing clip into its tail handle and the incoming clip
-into its head handle and applies the gains as Web Audio value curves. Retimed
-clips fade without handles, and crossfades inside nested compositions are not
-rendered; the export log names both. The default duration is 1 s.
+`Crossfade` is a true dissolve, outgoing·(1−t) + incoming·t: the incoming clip
+is added with the internal `plus` blend mode (premultiplied), so transparent
+clips (titles, keyed or scaled clips) dissolve too. Clip blend modes carry
+through every transition (`transitionCompositionBlend`): the transition
+composition is drawn in parts, each composited in its own mode over the lower
+tracks. Clips sharing a mode form one part, solids and overlays (Dip, Light
+Leak, …) are separate parts, and clips with different modes are two parts
+(exact at both edges; mid-dissolve shows a little of the lower tracks). Audio
+(Include audio, or two audio clips) uses one plan for preview and export
+(`audioCrossfadePlanning`, `audioCrossfadeGains`): the fade runs only where both
+clips have sound, with 5 ms de-clicks when they overlap less than 10 ms, and
+export applies the gains before the clip and track effects. Audio curve: Equal
+power (default) or Equal gain. Retimed clips meet at the edit and nested
+crossfades are not rendered; the export log names both. Default length 1 s; the
+Transitions panel's length field is Auto unless a length is typed.
 User guide with pictures: [Dissolve Transitions](./Transitions-Dissolve.md).
 
 The current user-facing suite is grouped by family in the Transitions panel and

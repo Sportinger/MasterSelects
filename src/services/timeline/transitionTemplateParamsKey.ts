@@ -16,6 +16,20 @@ interface ParsedTemplateParamsKey {
   revision: string;
 }
 
+type ParamEntry = [string, unknown];
+
+/**
+ * Parameters that only change the sound (Include audio, Audio curve) are not
+ * part of the key: changing them must not rebuild the composition and discard
+ * what the user made inside it.
+ */
+function getPictureParamEntries(entries: readonly ParamEntry[], transitionType: string | undefined): ParamEntry[] {
+  const definitions = transitionType ? getRuntimeTransition(transitionType)?.params : undefined;
+  return entries
+    .filter(([key]) => definitions?.[key]?.affectsPicture !== false)
+    .toSorted(([a], [b]) => a.localeCompare(b));
+}
+
 export function getTransitionTemplateParamsKey(
   transition: TimelineTransition,
   _outgoingClip: TimelineClip,
@@ -23,19 +37,25 @@ export function getTransitionTemplateParamsKey(
 ): string {
   const recipeRevision = getRuntimeTransition(transition.type)?.recipeRevision ?? 0;
   return JSON.stringify({
-    params: Object.entries(transition.params ?? {}).toSorted(([a], [b]) => a.localeCompare(b)),
+    params: getPictureParamEntries(Object.entries(transition.params ?? {}), transition.type),
     revision: [TRANSITION_MATERIALIZER_REVISION, recipeRevision],
   });
 }
 
-function parseTemplateParamsKey(key: string | undefined): ParsedTemplateParamsKey | null {
+function isParamEntry(value: unknown): value is ParamEntry {
+  return Array.isArray(value) && value.length === 2 && typeof value[0] === 'string';
+}
+
+function parseTemplateParamsKey(key: string | undefined, transitionType: string | undefined): ParsedTemplateParamsKey | null {
   if (typeof key !== 'string') return null;
   try {
     const parsed = JSON.parse(key) as { params?: unknown; revision?: unknown; recipeRevision?: unknown };
     if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.params)) return null;
     // Keys written before the shared revision carried only `recipeRevision` (or nothing).
     const revision = parsed.revision ?? [0, parsed.recipeRevision ?? 0];
-    return { params: JSON.stringify(parsed.params), revision: JSON.stringify(revision) };
+    // Older keys also carried the sound-only parameters; compare without them.
+    const params = getPictureParamEntries(parsed.params.filter(isParamEntry), transitionType);
+    return { params: JSON.stringify(params), revision: JSON.stringify(revision) };
   } catch {
     return null;
   }
@@ -44,16 +64,17 @@ function parseTemplateParamsKey(key: string | undefined): ParsedTemplateParamsKe
 /**
  * 'same' keeps a stored composition, 'revision' means only the template
  * revision moved on (the user's parameters are unchanged, so the stored
- * composition is upgraded in place), 'params' means the parameters differ and
- * the composition is rebuilt from the template.
+ * composition is upgraded in place), 'params' means a parameter that changes
+ * the picture differs and the composition is rebuilt from the template.
  */
 export function compareTransitionTemplateParamsKeys(
   storedKey: string | undefined,
   generatedKey: string | undefined,
+  transitionType?: string,
 ): 'same' | 'revision' | 'params' {
   if (storedKey === generatedKey) return 'same';
-  const stored = parseTemplateParamsKey(storedKey);
-  const generated = parseTemplateParamsKey(generatedKey);
+  const stored = parseTemplateParamsKey(storedKey, transitionType);
+  const generated = parseTemplateParamsKey(generatedKey, transitionType);
   if (!stored || !generated || stored.params !== generated.params) return 'params';
   return stored.revision === generated.revision ? 'same' : 'revision';
 }

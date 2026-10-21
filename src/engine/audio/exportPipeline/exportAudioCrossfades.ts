@@ -1,8 +1,17 @@
-import type { Keyframe, TimelineClip } from '../../../types';
+import type { Keyframe } from '../../../types/keyframes';
+import type { TimelineClip } from '../../../types/timeline';
 import type { TransitionSourceDurationResolver } from '../../../stores/timeline/editOperations/transitionPlanner';
-import { findAudioCrossfadePairs, type AudioCrossfadePair } from '../../../services/audio/audioCrossfadePlanning';
+import {
+  findAudioCrossfadePairs,
+  withoutCrossfadedCutDeClick,
+  type AudioCrossfadePair,
+} from '../../../services/audio/audioCrossfadePlanning';
+import {
+  getAudioCrossfadeEnvelopes,
+  planAudioCrossfadeFade,
+  type AudioCrossfadeGainEnvelope,
+} from '../../../services/audio/audioCrossfadeGains';
 import { createClipSpeedSource } from '../../../services/timeline/retime/clipRetime';
-import type { AudioCrossfadeGainEnvelope } from './audioCrossfadeGainCurve';
 
 const EDGE_EPSILON = 1e-3;
 
@@ -17,6 +26,7 @@ export interface ExportAudioCrossfadePreparation {
   clips: TimelineClip[];
   /** Keyframes of extended incoming clips moved with their earlier start. */
   clipKeyframes: Map<string, Keyframe[]>;
+  /** Crossfade gains per clip in timeline seconds, applied before the clip's effects. */
   envelopes: Map<string, AudioCrossfadeGainEnvelope[]>;
   /** Crossfades rendered only partly, for the export log. */
   notes: ExportAudioCrossfadeNote[];
@@ -69,12 +79,12 @@ function hasNestedAudioCrossfade(clip: TimelineClip): boolean {
 }
 
 /**
- * Renders audio crossfades in export like preview plays them: the same pairs
- * and plan (edit point, offset, hold policy), the outgoing clip continues into
- * its tail handle and the incoming clip starts early from its head handle, and
- * both get the equal-power gains of getCrossfadeAudioGains across the body.
- * Where a clip has no handle, its side of the crossfade is silent, as in
- * preview, where the held frame plays no sound.
+ * Renders audio crossfades in export like preview plays them: the same pairs,
+ * plan (edit point, offset, hold policy) and fade window. The outgoing clip
+ * continues into its tail handle and the incoming clip starts early from its
+ * head handle; the gains fade only where both have sound, and without extra
+ * sound the clips meet at the edit with a short de-click. Automatic cut
+ * de-clicks at the crossfaded edges are left out, as in preview.
  */
 export function prepareExportAudioCrossfades(input: {
   clips: readonly TimelineClip[];
@@ -95,18 +105,24 @@ export function prepareExportAudioCrossfades(input: {
     const incoming = clipsById.get(pair.incomingClip.id);
     if (!outgoing || !incoming) continue;
 
-    const body = { bodyStart: plan.bodyStart, bodyEnd: plan.bodyEnd };
-    addEnvelope(envelopes, outgoing.id, { role: 'outgoing', ...body });
-    addEnvelope(envelopes, incoming.id, { role: 'incoming', ...body });
-
     const outgoingKeys = clipKeyframes.get(outgoing.id) ?? [];
     const incomingKeys = clipKeyframes.get(incoming.id) ?? [];
-    if (!canExtendIntoHandle(outgoing, outgoingKeys) || !canExtendIntoHandle(incoming, incomingKeys)) {
+    const canExtend = canExtendIntoHandle(outgoing, outgoingKeys) && canExtendIntoHandle(incoming, incomingKeys);
+    // Retimed clips cannot play their extra footage here: they meet at the edit.
+    const fade = canExtend ? pair.fade : planAudioCrossfadeFade(plan, pair.fade.curve, false);
+    const fadeEnvelopes = getAudioCrossfadeEnvelopes(fade);
+    addEnvelope(envelopes, outgoing.id, fadeEnvelopes.outgoing);
+    addEnvelope(envelopes, incoming.id, fadeEnvelopes.incoming);
+    const outgoingClip = withoutCrossfadedCutDeClick(outgoing, 'outgoing');
+    const incomingClip = withoutCrossfadedCutDeClick(incoming, 'incoming');
+    if (!canExtend) {
       notes.push({ transitionId: pair.transitionId, junctionTime: plan.junctionTime, reason: 'retimed-clip' });
+      clipsById.set(outgoing.id, outgoingClip);
+      clipsById.set(incoming.id, incomingClip);
       continue;
     }
-    clipsById.set(outgoing.id, extendOutgoingTail(outgoing, pair));
-    const extended = extendIncomingHead(incoming, pair);
+    clipsById.set(outgoing.id, extendOutgoingTail(outgoingClip, pair));
+    const extended = extendIncomingHead(incomingClip, pair);
     clipsById.set(incoming.id, extended.clip);
     if (extended.shift > 0 && incomingKeys.length > 0) {
       clipKeyframes.set(incoming.id, incomingKeys.map((keyframe) => ({ ...keyframe, time: keyframe.time + extended.shift })));

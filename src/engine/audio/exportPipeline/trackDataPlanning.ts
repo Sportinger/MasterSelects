@@ -2,15 +2,13 @@ import type { AudioGraphRenderPlan } from '../AudioGraphTypes';
 import { renderAudioGraph } from '../AudioGraphRenderer';
 import type { AudioTrackData } from '../AudioMixer';
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
-import type { AudioCrossfadeGainEnvelope } from './audioCrossfadeGainCurve';
 
 export function prepareExportTrackData(
   clips: TimelineClip[],
   buffers: Map<string, AudioBuffer>,
   tracks: TimelineTrack[],
   exportStartTime: number,
-  audioGraphPlan?: AudioGraphRenderPlan,
-  crossfadeEnvelopes?: ReadonlyMap<string, readonly AudioCrossfadeGainEnvelope[]>
+  audioGraphPlan?: AudioGraphRenderPlan
 ): AudioTrackData[] {
   const trackData: AudioTrackData[] = [];
   const plan = audioGraphPlan ?? renderAudioGraph({ clips, tracks, mode: 'export' });
@@ -28,14 +26,7 @@ export function prepareExportTrackData(
     const trackPlan = trackPlanById.get(clip.trackId);
     if (!clipPlan?.active || !trackPlan?.active) continue;
 
-    // Crossfade gains in export time; sends inherit them, like the clip itself.
-    const envelopes = crossfadeEnvelopes?.get(clip.id)?.map((envelope) => ({
-      ...envelope,
-      bodyStart: envelope.bodyStart - exportStartTime,
-      bodyEnd: envelope.bodyEnd - exportStartTime,
-    }));
     const baseTrackData: AudioTrackData = {
-      ...(envelopes?.length ? { crossfadeEnvelopes: envelopes } : {}),
       clipId: clip.id,
       buffer,
       startTime: clip.startTime - exportStartTime,

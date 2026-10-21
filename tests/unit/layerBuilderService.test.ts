@@ -550,6 +550,50 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(incoming?.opacity).toBeCloseTo(0.75);
   });
 
+  it('crossfades a Normal clip into a Screen clip as two parts, each in its clip\'s own mode', () => {
+    const service = new LayerBuilderService();
+    setSingleVideoTrackMediaState();
+    const videoClip = (id: string, startTime: number, inPoint: number, player: WebCodecsPlayerSlot, blendMode: 'normal' | 'screen') => ({
+      id,
+      trackId: 'track-v1',
+      name: `${id}.mp4`,
+      startTime,
+      duration: 8,
+      inPoint,
+      outPoint: inPoint + 8,
+      effects: [],
+      transform: { ...DEFAULT_TRANSFORM, blendMode },
+      source: { type: 'video' as const, naturalDuration: 10, webCodecsPlayer: player },
+      isLoading: false,
+    });
+    useTimelineStore.setState({
+      tracks: [{ id: 'track-v1', name: 'Video 1', type: 'video', visible: true, muted: false, solo: false }],
+      clips: [
+        { ...videoClip('clip-a', 0, 0, createTestWebCodecsPlayer(8), 'normal'), transitionOut: { id: 'mixed-fade', type: 'crossfade', duration: 2, linkedClipId: 'clip-b' } },
+        { ...videoClip('clip-b', 8, 1, createTestWebCodecsPlayer(1), 'screen'), transitionIn: { id: 'mixed-fade', type: 'crossfade', duration: 2, linkedClipId: 'clip-a' } },
+      ],
+      playheadPosition: 8.5,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = service.buildLayersFromStore();
+    const nestedIds = layers.map((layer) => (layer.source?.nestedComposition?.layers ?? []).map((nested) => nested.id));
+
+    // Top first: the incoming clip screens over the outgoing clip, which is drawn Normal.
+    expect(layers.map((layer) => layer.blendMode)).toEqual(['screen', 'normal']);
+    expect(nestedIds).toEqual([
+      ['nested-layer-transition-comp:mixed-fade:incoming'],
+      ['nested-layer-transition-comp:mixed-fade:outgoing'],
+    ]);
+    const [incoming] = layers[0].source?.nestedComposition?.layers ?? [];
+    const [outgoing] = layers[1].source?.nestedComposition?.layers ?? [];
+    expect(incoming).toMatchObject({ blendMode: 'normal' });
+    expect(incoming?.opacity).toBeCloseTo(0.75);
+    expect(outgoing?.opacity).toBeCloseTo(0.25);
+  });
+
   it('hydrates transition composition playback with parent clip runtime sources', () => {
     const service = new LayerBuilderService();
     const outgoingPlayer = createTestWebCodecsPlayer(9);

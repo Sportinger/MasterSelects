@@ -55,7 +55,7 @@ import {
   type ActiveTransitionPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
 import { ensureTransitionCompositionsForActiveTimeline } from '../../stores/timeline/editOperations/transitionCompositionMaintenance';
-import { buildLayerBuilderTransitionCompositionLayer } from './layerBuilderTransitionComposition';
+import { buildLayerBuilderTransitionCompositionLayers } from './layerBuilderTransitionComposition';
 import { bindTerrainLayer } from '../planarTracking/terrainLayerBindings';
 const log = Logger.create('LayerBuilder');
 /**
@@ -332,15 +332,12 @@ export class LayerBuilderService {
 
       const activeTransition = this.getActiveTransitionForTrack(ctx, track.id);
       if (activeTransition) {
-        const transitionCompLayer = buildLayerBuilderTransitionCompositionLayer(
+        layers.push(...buildLayerBuilderTransitionCompositionLayers(
           activeTransition,
           layerIndex,
           ctx,
           this.proxyFrames,
-        );
-        if (transitionCompLayer) {
-          layers.push(transitionCompLayer);
-        }
+        ));
         return;
       }
 

@@ -17,7 +17,13 @@ interface TransitionNestedCompositionRuntime {
   ) => Layer[];
 }
 
-export function createTransitionNestedCompositionLayer(params: {
+/**
+ * The layers that draw a transition composition over the lower tracks, top
+ * first: one layer, or one per blend part when the clips use blend modes
+ * (see resolveTransitionCompositionBlend). Every render path pushes all of
+ * them in this order.
+ */
+export function createTransitionNestedCompositionLayers(params: {
   transition: TimelineTransition;
   composition: Composition;
   compositionTime: number;
@@ -26,7 +32,7 @@ export function createTransitionNestedCompositionLayer(params: {
   layerIdPrefix: string;
   sceneClips?: TimelineClip[];
   sceneTracks?: TimelineTrack[];
-}): Layer {
+}): Layer[] {
   const {
     transition,
     composition,
@@ -38,17 +44,24 @@ export function createTransitionNestedCompositionLayer(params: {
     sceneTracks,
   } = params;
 
-  // The clips' shared blend mode (Screen, Multiply, …) blends the finished
+  // The clips' blend modes (Screen, Multiply, …) blend the finished
   // transition over the lower tracks instead of a transparent background.
-  const blend = resolveTransitionCompositionBlend({ transitionId: transition.id, composition, nestedLayers });
+  const blend = resolveTransitionCompositionBlend({
+    transitionId: transition.id,
+    composition,
+    nestedLayers,
+    compositionTime,
+  });
+  const baseId = `${layerIdPrefix}_transition_comp_${layerIndex}_${transition.id}`;
 
-  return {
-    id: `${layerIdPrefix}_transition_comp_${layerIndex}_${transition.id}`,
+  return blend.parts.map((part, index) => ({
+    // Each part renders into its own texture (keyed by layer id).
+    id: index === 0 ? baseId : `${baseId}_part${index}`,
     name: composition.name,
     sourceClipId: transition.id,
     visible: true,
     opacity: 1,
-    blendMode: blend.blendMode,
+    blendMode: part.blendMode,
     // The transition composition is rendered by the compositor, whose output
     // is premultiplied; composite it as such over the lower tracks.
     premultipliedAlpha: true,
@@ -57,7 +70,7 @@ export function createTransitionNestedCompositionLayer(params: {
       mediaTime: compositionTime,
       nestedComposition: {
         compositionId: composition.id,
-        layers: blend.nestedLayers,
+        layers: part.nestedLayers,
         width: composition.width,
         height: composition.height,
         frameRate: composition.frameRate,
@@ -70,10 +83,10 @@ export function createTransitionNestedCompositionLayer(params: {
     position: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1 },
     rotation: { x: 0, y: 0, z: 0 },
-  };
+  }));
 }
 
-export function buildTransitionNestedCompositionLayer(params: {
+export function buildTransitionNestedCompositionLayers(params: {
   activeTransition: ActiveTransitionPlan;
   layerIndex: number;
   parentCompositionId: string;
@@ -81,7 +94,7 @@ export function buildTransitionNestedCompositionLayer(params: {
   layerIdPrefix: string;
   playbackOptions?: BackgroundVideoPlaybackOptions;
   runtime: TransitionNestedCompositionRuntime;
-}): Layer | null {
+}): Layer[] {
   const {
     activeTransition,
     layerIndex,
@@ -93,11 +106,11 @@ export function buildTransitionNestedCompositionLayer(params: {
   } = params;
   const transition = activeTransition.outgoingClip.transitionOut;
   const compositionId = transition?.compositionId;
-  if (!compositionId || compositionId === parentCompositionId) return null;
+  if (!compositionId || compositionId === parentCompositionId) return [];
 
   const composition = runtime.getComposition(compositionId);
-  if (!composition) return null;
-  if (composition.transitionComp?.kind !== 'transition-comp') return null;
+  if (!composition) return [];
+  if (composition.transitionComp?.kind !== 'transition-comp') return [];
 
   const compositionDuration = Math.max(0.0001, composition.timelineData?.duration ?? composition.duration);
   const maxSampleTime = Math.max(0, compositionDuration - 0.0001);
@@ -115,7 +128,7 @@ export function buildTransitionNestedCompositionLayer(params: {
     });
   }
 
-  return createTransitionNestedCompositionLayer({
+  return createTransitionNestedCompositionLayers({
     transition,
     composition,
     compositionTime,

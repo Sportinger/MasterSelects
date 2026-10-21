@@ -64,6 +64,7 @@ import {
 } from '../../../transitions';
 import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from '../../../stores/timeline/editOperations/transitionPlanner';
 import { createTransitionMediaDurationResolver } from '../../../stores/timeline/editOperations/transitionMediaDurationResolver';
+import { resolveAudioCrossfadeFromClip } from '../../../services/audio/audioCrossfadePlanning';
 import type { TimelineClip } from '../../../types';
 import {
   DIP_OPTIONS,
@@ -136,6 +137,9 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
       getMediaDuration,
     });
   }, [displayDuration, displayOffset, getMediaDuration, incomingClip, outgoingClip, transition]);
+  const audio = useMemo(() => outgoingClip?.transitionOut?.type === 'crossfade'
+    ? resolveAudioCrossfadeFromClip(outgoingClip, clips, { getMediaDuration })
+    : null, [clips, getMediaDuration, outgoingClip]);
 
   const updateDuration = useCallback((nextDuration: number) => {
     if (!transition || !Number.isFinite(nextDuration) || nextDuration <= 0) return;
@@ -279,12 +283,6 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
   const dipColorValue = dipOption === 'custom'
     ? String(getTransitionParamValue(transition, definition, 'color') ?? '#000000')
     : '#000000';
-  const params = definition.params
-    ? Object.entries(definition.params)
-      .filter(([, param]) => param.hidden !== true)
-      .filter(([paramId]) => !(isAudioOnlyTransition && paramId === 'includeAudio'))
-      .filter(([paramId]) => !handledParamIds.has(paramId))
-    : [];
 
   return (
     <div className="transition-properties-tab">
@@ -686,7 +684,9 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
         bodyEnd={plan.bodyEnd}
         realHandleDuration={realHandleDuration}
         holdDuration={holdDuration}
-        params={params}
+        isAudioOnlyTransition={isAudioOnlyTransition}
+        handledParamIds={handledParamIds}
+        audio={audio}
         onUpdateDuration={updateDuration}
         onUpdateParam={updateParam}
       />

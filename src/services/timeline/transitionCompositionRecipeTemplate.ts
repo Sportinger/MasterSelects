@@ -194,7 +194,6 @@ export function buildTransitionRecipeBlendWindows(
   recipe: readonly TransitionPrimitive[],
   target: 'outgoing' | 'incoming',
   duration: number,
-  baseBlendMode: SerializableClip['transform']['blendMode'],
 ): SerializableClip['transitionRecipeBlendWindows'] {
   const blends = recipe
     .filter((primitive): primitive is Extract<TransitionPrimitive, { kind: 'blend' }> =>
@@ -215,13 +214,11 @@ export function buildTransitionRecipeBlendWindows(
   for (let index = 0; index < points.length - 1; index += 1) {
     const compStart = points[index];
     const compEnd = points[index + 1];
-    let blendMode = baseBlendMode;
-    for (const blend of blends) {
-      if (compStart >= blend.startTime && compStart < blend.endTime) {
-        blendMode = blend.mode as SerializableClip['transform']['blendMode'];
-      }
-    }
-    if (blendMode === baseBlendMode) continue;
+    // A window is kept even when the recipe mode equals the clip's own mode, so
+    // the renderer can tell the recipe's Add/Multiply from the clip's mode.
+    const active = blends.filter((blend) => compStart >= blend.startTime && compStart < blend.endTime);
+    if (active.length === 0) continue;
+    const blendMode = active[active.length - 1].mode as SerializableClip['transform']['blendMode'];
 
     const previous = windows[windows.length - 1];
     if (previous?.compEnd === compStart && previous.blendMode === blendMode) {
@@ -489,12 +486,7 @@ export function buildTransitionTimelineData(input: {
     const transformKeyframes = buildTransformKeyframesFromRecipe(recipe, target, clip, duration);
     const effects = buildEffectMaterializationFromRecipe(recipe, target, clip.id, duration);
     const masks = buildMaskMaterializationFromRecipe(recipe, target, clip.id, duration, getTransitionSeed(transition));
-    const transitionRecipeBlendWindows = buildTransitionRecipeBlendWindows(
-      recipe,
-      target,
-      duration,
-      clip.transform.blendMode,
-    );
+    const transitionRecipeBlendWindows = buildTransitionRecipeBlendWindows(recipe, target, duration);
     const clipWithGeneratedProperties: SerializableClip = {
       ...clip,
       transform: {

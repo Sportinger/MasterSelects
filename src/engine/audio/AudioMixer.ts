@@ -19,7 +19,6 @@ import {
   volumeDbToLinearGain,
 } from './audioMath';
 import { createBuffer } from './audioBufferFactory';
-import { scheduleCrossfadeEnvelopes, type AudioCrossfadeGainEnvelope } from './exportPipeline/audioCrossfadeGainCurve';
 
 const log = Logger.create('AudioMixer');
 
@@ -38,8 +37,6 @@ export interface AudioTrackData {
   clipVolume?: number;      // Additional clip volume (0-1, default 1)
   trackVolumeDb?: number;   // Track fader in dB, default 0
   trackPan?: number;        // Stereo pan -1..1, default 0
-  /** Equal-power crossfade gains (export-relative seconds), applied sample-accurately. */
-  crossfadeEnvelopes?: readonly AudioCrossfadeGainEnvelope[];
 }
 
 export interface MixerSettings {
@@ -216,11 +213,9 @@ export class AudioMixer {
     const combinedGain = clipGain * trackGain;
     let outputNode: AudioNode = source;
 
-    if (Math.abs(combinedGain - 1) > 0.001 || track.crossfadeEnvelopes?.length) {
+    if (Math.abs(combinedGain - 1) > 0.001) {
       const gainNode = context.createGain();
-      const gain = Math.max(0, Math.min(8, combinedGain));
-      gainNode.gain.value = gain;
-      scheduleCrossfadeEnvelopes(gainNode.gain, track.crossfadeEnvelopes, gain, context.length / context.sampleRate);
+      gainNode.gain.value = Math.max(0, Math.min(8, combinedGain));
       outputNode.connect(gainNode);
       outputNode = gainNode;
     }

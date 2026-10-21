@@ -290,6 +290,14 @@ export interface TransitionParamDefinition {
   defaultValue: TransitionParamValue;
   /** Internal values participate in serialization but are not rendered as controls. */
   hidden?: boolean;
+  /**
+   * False for parameters that change only the sound (Include audio, Audio
+   * curve). They are left out of the transition composition's template key,
+   * so changing them keeps everything made inside the composition.
+   */
+  affectsPicture?: boolean;
+  /** Shown only when the transition blends sound (an audio transition, or Include audio on). */
+  audioOnly?: boolean;
   min?: number;
   max?: number;
   step?: number;
@@ -462,8 +470,9 @@ export interface TransitionDefinition {
 
   /**
    * Bump when the recipe changes how stored transition compositions must look.
-   * It is part of the template key, so stored compositions of this type are
-   * rebuilt once instead of mixing new blend windows with old keyframes.
+   * It is part of the template key, so stored compositions of this type get
+   * their generated content upgraded in place once (keyframes, effects and
+   * masks the user edited inside the composition are kept).
    */
   recipeRevision?: number;
 }

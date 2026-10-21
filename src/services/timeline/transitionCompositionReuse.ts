@@ -1,12 +1,24 @@
 import type { Composition } from '../../stores/mediaStore/types';
-import type { ClipMask } from '../../types/masks';
-import type { Effect } from '../../types/effects';
 import type { CompositionTimelineData, SerializableClip } from '../../types/timeline';
 import type { TransitionCompositionLink } from '../../types/timelineCore';
 import { Logger } from '../logger';
 import { mergeGeneratedKeyframes } from './transitionCompositionKeyframes';
 import { mergeTransitionMarkers } from './transitionCompositionRecipeTemplate';
+import {
+  hasUserContentOnLinkedClip,
+  mergeGeneratedEffects,
+  mergeGeneratedMasks,
+  upgradeGeneratedClipContent,
+} from './transitionGeneratedContent';
 import { compareTransitionTemplateParamsKeys } from './transitionTemplateParamsKey';
+
+export {
+  isGeneratedTransitionEffect,
+  isGeneratedTransitionKeyframeId,
+  isGeneratedTransitionMask,
+  mergeGeneratedEffects,
+  mergeGeneratedMasks,
+} from './transitionGeneratedContent';
 
 const log = Logger.create('TransitionCompositionReuse');
 
@@ -54,39 +66,14 @@ export function normalizeExistingTransitionTimelineData(
   };
 }
 
-/** Generated keyframes carry `<clipId>:kf:` ids; keyframes the user adds never do. */
-export function isGeneratedTransitionKeyframeId(clipId: string, keyframeId: string): boolean {
-  return keyframeId.startsWith(`${clipId}:kf:`);
-}
-
-/**
- * Template upgrade of one linked clip: the recipe-owned content (generated
- * keyframes, effects, masks and blend windows) is rebuilt; the user's own
- * keyframes, effects, masks, grade and transform stay.
- */
-function upgradeGeneratedClipContent(
-  refreshed: SerializableClip,
-  existing: SerializableClip,
-  generated: SerializableClip,
-): SerializableClip {
-  const isGenerated = (keyframe: { id: string }) => isGeneratedTransitionKeyframeId(existing.id, keyframe.id);
-  const keyframes = [
-    ...(existing.keyframes ?? []).filter((keyframe) => !isGenerated(keyframe)),
-    ...(generated.keyframes ?? []).filter(isGenerated),
-  ];
-  return {
-    ...refreshed,
-    effects: mergeGeneratedEffects(existing.effects, generated.effects),
-    masks: mergeGeneratedMasks(existing.masks, generated.masks),
-    keyframes: keyframes.length > 0 ? keyframes : undefined,
-  };
-}
+/** Generated items the user edited, kept by a template upgrade (see upgradeGeneratedClipContent). */
+type KeptEditedItems = string[];
 
 export function refreshLinkedSourceClip(
   existing: SerializableClip,
   generated: SerializableClip,
   syncTiming: boolean,
-  upgradeGeneratedContent = false,
+  upgradeGeneratedContent: KeptEditedItems | false = false,
 ): SerializableClip {
   const sourceSignatureChanged = getLinkedSourceSignature(existing) !== getLinkedSourceSignature(generated);
   const refreshed: SerializableClip = {
@@ -118,7 +105,7 @@ export function refreshLinkedSourceClip(
       ? clone(generated.transitionRecipeBlendWindows)
       : undefined,
   };
-  if (upgradeGeneratedContent) return upgradeGeneratedClipContent(refreshed, existing, generated);
+  if (upgradeGeneratedContent) return upgradeGeneratedClipContent(refreshed, existing, generated, upgradeGeneratedContent);
   if (!sourceSignatureChanged) return refreshed;
 
   return {
@@ -146,35 +133,6 @@ export function getLinkedSourceSignature(clip: SerializableClip): string {
   });
 }
 
-export function isGeneratedTransitionEffect(effect: Effect): boolean {
-  return effect.id.startsWith('transition-effect:');
-}
-
-export function mergeGeneratedEffects(
-  existing: SerializableClip['effects'],
-  generated: SerializableClip['effects'],
-): SerializableClip['effects'] {
-  return [
-    ...(existing ?? []).filter((effect) => !isGeneratedTransitionEffect(effect)),
-    ...(generated ?? []).filter(isGeneratedTransitionEffect),
-  ];
-}
-
-export function isGeneratedTransitionMask(mask: ClipMask): boolean {
-  return mask.id.startsWith('transition-comp:');
-}
-
-export function mergeGeneratedMasks(
-  existing: SerializableClip['masks'],
-  generated: SerializableClip['masks'],
-): SerializableClip['masks'] {
-  const masks = [
-    ...(existing ?? []).filter((mask) => !isGeneratedTransitionMask(mask)),
-    ...(generated ?? []).filter(isGeneratedTransitionMask),
-  ];
-  return masks.length > 0 ? masks : undefined;
-}
-
 export function isLinkedSourceClipId(clipId: string, link: Pick<TransitionCompositionLink, 'linkedOutgoingClipId' | 'linkedIncomingClipId'>): boolean {
   const matches = (baseId: string) =>
     clipId === baseId ||
@@ -199,7 +157,7 @@ export function isTransitionCompositionForPair(
 export function refreshLinkedSourceWindows(
   existing: CompositionTimelineData,
   generated: { timelineData: CompositionTimelineData; link: Omit<TransitionCompositionLink, 'parentCompositionId'> },
-  upgradeGeneratedContent = false,
+  upgradeGeneratedContent: KeptEditedItems | false = false,
 ): CompositionTimelineData {
   const existingClipsById = new Map(existing.clips.map((clip) => [clip.id, clip]));
   const generatedLinkedClips = generated.timelineData.clips.filter((clip) =>
@@ -228,13 +186,13 @@ export function refreshLinkedSourceWindows(
 /** True when a stored composition holds changes the template would not recreate. */
 function hasChangesInsideComposition(
   timelineData: CompositionTimelineData,
+  generatedTimelineData: CompositionTimelineData,
   link: Pick<TransitionCompositionLink, 'linkedOutgoingClipId' | 'linkedIncomingClipId'>,
 ): boolean {
+  const regeneratedById = new Map(generatedTimelineData.clips.map((clip) => [clip.id, clip]));
   return timelineData.clips.some((clip) => {
     if (!isLinkedSourceClipId(clip.id, link)) return !clip.id.startsWith('transition-comp:');
-    return (clip.keyframes ?? []).some((keyframe) => !isGeneratedTransitionKeyframeId(clip.id, keyframe.id)) ||
-      (clip.effects ?? []).some((effect) => !isGeneratedTransitionEffect(effect)) ||
-      (clip.masks ?? []).some((mask) => !isGeneratedTransitionMask(mask));
+    return hasUserContentOnLinkedClip(clip, regeneratedById.get(clip.id));
   });
 }
 
@@ -244,7 +202,8 @@ function rebuildFromTemplate(
   reason: string,
 ): CompositionTimelineData {
   const details = { compositionId: existing.id, reason };
-  if (existing.timelineData && hasChangesInsideComposition(existing.timelineData, existing.transitionComp ?? generated.link)) {
+  if (existing.timelineData &&
+    hasChangesInsideComposition(existing.timelineData, generated.timelineData, existing.transitionComp ?? generated.link)) {
     log.warn('Rebuilt a transition composition from its template; changes made inside it were replaced', details);
   } else {
     log.info('Rebuilt a transition composition from its template', details);
@@ -269,6 +228,7 @@ export function reuseExistingTimelineData(
   const paramsChange = compareTransitionTemplateParamsKeys(
     existing.transitionComp?.templateParamsKey,
     generated.link.templateParamsKey,
+    generated.link.templateType,
   );
   if (paramsChange === 'params') {
     return rebuildFromTemplate(existing, generated, 'transition parameters changed');
@@ -285,16 +245,26 @@ export function reuseExistingTimelineData(
   const timelineData = needsTimelineNormalize
     ? normalizeExistingTransitionTimelineData(existing, generated.timelineData.duration)
     : existing.timelineData;
-  const upgradeGeneratedContent = paramsChange === 'revision';
-  if (upgradeGeneratedContent) {
-    log.info('Upgraded the generated keyframes of a stored transition composition; changes made inside it are kept', {
-      compositionId: existing.id,
-      templateType: generated.link.templateType,
-    });
+  if (paramsChange !== 'revision') {
+    return {
+      ...refreshLinkedSourceWindows(timelineData, generated),
+      markers: mergeTransitionMarkers(timelineData.markers, generated.link.parentTransitionId, 0, generated.timelineData.duration),
+    };
   }
 
+  const keptEditedItems: KeptEditedItems = [];
+  const upgraded = refreshLinkedSourceWindows(timelineData, generated, keptEditedItems);
+  const details = { compositionId: existing.id, templateType: generated.link.templateType };
+  if (keptEditedItems.length > 0) {
+    log.warn('Upgraded a stored transition composition to the current template; generated items edited inside it were kept as edited', {
+      ...details,
+      keptEditedItems,
+    });
+  } else {
+    log.info('Upgraded a stored transition composition to the current template', details);
+  }
   return {
-    ...refreshLinkedSourceWindows(timelineData, generated, upgradeGeneratedContent),
+    ...upgraded,
     markers: mergeTransitionMarkers(timelineData.markers, generated.link.parentTransitionId, 0, generated.timelineData.duration),
   };
 }

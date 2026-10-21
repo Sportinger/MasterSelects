@@ -39,3 +39,14 @@ export function resolveTransitionRecipeBlendMode(
   }
   return blendMode;
 }
+
+/** True when a valid recipe window covers the composition time, whatever its mode. */
+export function isTransitionRecipeBlendWindowActive(
+  windows: readonly TransitionRecipeBlendWindow[] | undefined | null,
+  parentCompositionTime: number,
+): boolean {
+  if (!Number.isFinite(parentCompositionTime) || !Array.isArray(windows)) return false;
+  return windows.some((window) => isValidWindow(window) &&
+    parentCompositionTime >= window.compStart &&
+    parentCompositionTime < window.compEnd);
+}

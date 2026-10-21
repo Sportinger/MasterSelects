@@ -1,21 +1,24 @@
 import type { Composition } from '../../stores/mediaStore/types';
 import type { BlendMode } from '../../types/blendMode';
 import type { Layer } from '../../types/layers';
+import type { SerializableClip } from '../../types/timeline';
+import { isTransitionRecipeBlendWindowActive } from '../timeline/transitionRecipeBlendWindows';
 import { Logger } from '../logger';
 
 const log = Logger.create('TransitionCompositionBlend');
 
 /**
- * Blend modes that can be applied once to the finished transition instead of
- * to each clip inside it. Their result depends only on the straightened layer
- * colour and on alpha × opacity, so a clip drawn 'normal' into the transition
- * composition and then blended with the mode over the lower tracks gives the
- * same pixels as the clip drawn with the mode directly: no jump at either edge
- * of the transition. For modes that are linear in the layer colour (multiply,
- * screen, add, overlay, …) the dissolve itself is exact as well; the others
- * are exact at both ends and smooth in between. The luma stencil and the
- * silhouettes read opacity separately and are exact at full clip opacity.
- * Dissolve and Dancing Dissolve dither by layer opacity and are not liftable.
+ * Blend modes that can be applied once to a finished part of the transition
+ * instead of to each layer inside it. Their result depends only on the
+ * straightened layer colour and on alpha × opacity, so a layer drawn 'normal'
+ * into the part and the part then blended with the mode over the lower tracks
+ * gives the same pixels as the layer drawn with the mode directly: no jump at
+ * either edge of the transition. For modes that are linear in the layer
+ * colour (multiply, screen, add, overlay, …) a dissolve inside the part is
+ * exact as well; the others are exact at both ends and smooth in between. The
+ * luma stencil and the silhouettes read opacity separately and are exact at
+ * full clip opacity. Dissolve and Dancing Dissolve dither by layer opacity and
+ * are not liftable.
  */
 const LIFTABLE_BLEND_MODES = new Set<BlendMode>([
   'darken', 'multiply', 'color-burn', 'classic-color-burn', 'linear-burn', 'darker-color',
@@ -28,24 +31,35 @@ const LIFTABLE_BLEND_MODES = new Set<BlendMode>([
 
 export type TransitionCompositionBlendFallback = 'mixed-blend-modes' | 'unsupported-blend-mode';
 
-export interface TransitionCompositionBlendResolution {
-  /** Blend mode of the transition composition layer over the lower tracks. */
+/** One pass of the transition composition over the lower tracks. */
+export interface TransitionCompositionBlendPart {
+  /** Blend mode of this part over the lower tracks. */
   blendMode: BlendMode;
-  /** Nested layers with the participants' own blend mode moved to the composition layer. */
+  /** The part's nested layers, top first. */
   nestedLayers: Layer[];
-  /** Set when the participants' blend modes could not be carried through the transition. */
+}
+
+export interface TransitionCompositionBlendResolution {
+  /**
+   * Parts top first. One part unless the clips use blend modes: then the
+   * clips and the transition's own solids and overlays are drawn as separate
+   * parts, each in its own mode.
+   */
+  parts: TransitionCompositionBlendPart[];
+  /** Set when the transition cannot carry the clips' blend modes exactly. */
   fallback?: TransitionCompositionBlendFallback;
   participantBlendModes: BlendMode[];
 }
 
+type ParticipantRole = 'outgoing' | 'incoming';
+
 const reportedFallbacks = new Set<string>();
 
-function isParticipantClipId(clipId: string | undefined, baseIds: readonly string[]): boolean {
-  if (!clipId) return false;
-  return baseIds.some((baseId) => clipId === baseId || clipId.startsWith(`${baseId}:`));
+function isParticipantClipId(clipId: string | undefined, baseId: string): boolean {
+  return !!clipId && (clipId === baseId || clipId.startsWith(`${baseId}:`));
 }
 
-/** True when an evaluated layer id embeds the clip id (`nested-layer-<id>`, `<compId>-<id>`, panels `<id>:…`). */
+/** True when an evaluated layer id embeds the clip id (`nested-layer-<id>`, `nested-export-<id>`, `<compId>-<id>`, panels `<id>:…`). */
 function embedsClipId(layerId: string, baseId: string): boolean {
   for (let index = layerId.indexOf(baseId); index >= 0; index = layerId.indexOf(baseId, index + 1)) {
     const before = index === 0 ? '-' : layerId[index - 1];
@@ -60,36 +74,56 @@ function embedsClipId(layerId: string, baseId: string): boolean {
  * runtime source id in sourceClipId, composition evaluation sets clipId and
  * export uses the clip id; every path embeds the clip id in the layer id.
  */
-function isParticipantLayer(layer: Layer, baseIds: readonly string[]): boolean {
-  const { clipId } = layer as Layer & { clipId?: string };
-  return isParticipantClipId(clipId, baseIds) ||
-    isParticipantClipId(layer.sourceClipId, baseIds) ||
-    baseIds.some((baseId) => embedsClipId(layer.id, baseId));
+function layerBelongsToClip(layer: Layer, clipId: string): boolean {
+  const { clipId: layerClipId } = layer as Layer & { clipId?: string };
+  return isParticipantClipId(layerClipId, clipId) ||
+    isParticipantClipId(layer.sourceClipId, clipId) ||
+    embedsClipId(layer.id, clipId);
 }
 
-function getParticipantBlendModes(composition: Composition, baseIds: readonly string[]): BlendMode[] {
-  const modes = new Set<BlendMode>();
-  for (const clip of composition.timelineData?.clips ?? []) {
-    if (!isParticipantClipId(clip.id, baseIds)) continue;
-    modes.add(clip.transform?.blendMode ?? 'normal');
-  }
-  return [...modes];
+interface ParticipantInfo {
+  role: ParticipantRole;
+  baseId: string;
+  mode: BlendMode;
+  clips: SerializableClip[];
 }
 
-/** Rewrites participant layers that still use their own mode; recipe modes ('plus', …) stay. */
-function normalizeParticipantLayers(
-  nestedLayers: Layer[],
-  baseIds: readonly string[],
-  participantModes: ReadonlySet<BlendMode>,
-): Layer[] {
-  let changed = false;
-  const layers = nestedLayers.map((layer) => {
-    if (layer.blendMode === 'normal' || !participantModes.has(layer.blendMode)) return layer;
-    if (!isParticipantLayer(layer, baseIds)) return layer;
-    changed = true;
-    return { ...layer, blendMode: 'normal' as const };
+function getParticipants(composition: Composition, baseIds: Record<ParticipantRole, string>): ParticipantInfo[] {
+  const clips = composition.timelineData?.clips ?? [];
+  return (['outgoing', 'incoming'] as const).map((role) => {
+    const baseId = baseIds[role];
+    const roleClips = baseId ? clips.filter((clip) => isParticipantClipId(clip.id, baseId)) : [];
+    const baseClip = roleClips.find((clip) => clip.id === baseId) ?? roleClips[0];
+    return { role, baseId, mode: baseClip?.transform?.blendMode ?? 'normal', clips: roleClips };
   });
-  return changed ? layers : nestedLayers;
+}
+
+function findParticipant(layer: Layer, participants: readonly ParticipantInfo[]): ParticipantInfo | undefined {
+  return participants.find((participant) => participant.baseId && layerBelongsToClip(layer, participant.baseId));
+}
+
+/** The stored clip a participant layer was evaluated from (the longest matching id wins for panels). */
+function findStoredClip(layer: Layer, participant: ParticipantInfo): SerializableClip | undefined {
+  return participant.clips
+    .filter((clip) => layerBelongsToClip(layer, clip.id))
+    .toSorted((a, b) => b.id.length - a.id.length)[0];
+}
+
+/**
+ * A participant layer still drawn in its clip's own mode is drawn Normal
+ * inside its part; that mode blends the part instead. A recipe mode (the
+ * Crossfade's 'plus', Additive Dissolve's 'add', …) stays, also when it
+ * happens to equal the clip's own mode.
+ */
+function normalizeParticipantLayer(
+  layer: Layer,
+  participant: ParticipantInfo,
+  compositionTime: number,
+): Layer {
+  if (participant.mode === 'normal' || layer.blendMode !== participant.mode) return layer;
+  const stored = findStoredClip(layer, participant);
+  if (isTransitionRecipeBlendWindowActive(stored?.transitionRecipeBlendWindows, compositionTime)) return layer;
+  return { ...layer, blendMode: 'normal' };
 }
 
 function reportFallback(
@@ -101,46 +135,104 @@ function reportFallback(
   if (reportedFallbacks.has(key)) return;
   if (reportedFallbacks.size > 500) reportedFallbacks.clear();
   reportedFallbacks.add(key);
+  if (fallback === 'mixed-blend-modes') {
+    log.info(
+      'The clips of this transition use different blend modes; each clip keeps its own mode, so the middle of the dissolve shows a little of the lower tracks',
+      { transitionId, participantBlendModes },
+    );
+    return;
+  }
   log.warn(
-    fallback === 'mixed-blend-modes'
-      ? 'The clips of this transition use different blend modes; the transition is drawn in Normal mode and each blend mode returns after it'
-      : 'This blend mode cannot be carried through a transition; the transition is drawn in Normal mode',
+    'This blend mode cannot be carried through a transition; the clip is drawn in Normal mode during the transition',
     { transitionId, participantBlendModes },
   );
+}
+
+interface PartDraft extends TransitionCompositionBlendPart {
+  key: string;
 }
 
 /**
  * Inside a transition composition every clip is drawn over a transparent
  * background, where Screen, Add or Multiply have nothing to blend with
- * (Multiply turns black). The participants' shared blend mode therefore moves
- * to the composition layer, which blends the finished transition over the
- * lower tracks. Different or unsupported modes fall back to Normal for the
- * transition and say so in the log.
+ * (Multiply turns black). The clips' blend mode therefore moves out of the
+ * composition and blends a part of it over the lower tracks:
+ * - both clips Normal: one part, as authored;
+ * - both clips share a mode: the clips dissolve inside one part blended with
+ *   that mode; the transition's own solids and overlays (Dip, Light Leak, …)
+ *   are separate parts in their own mode, so a dip stays black and a light
+ *   streak still screens;
+ * - different modes: the outgoing and the incoming clip are separate parts,
+ *   each in its own mode, so both edges match the clips exactly; only the
+ *   middle of the dissolve differs a little from a single-mode dissolve.
+ * Modes that cannot be lifted fall back to Normal and say so in the log.
  */
 export function resolveTransitionCompositionBlend(params: {
   transitionId: string;
   composition: Composition;
   nestedLayers: Layer[];
+  compositionTime?: number;
 }): TransitionCompositionBlendResolution {
-  const { transitionId, composition, nestedLayers } = params;
+  const { transitionId, composition, nestedLayers, compositionTime = Number.NaN } = params;
   const link = composition.transitionComp;
   if (link?.kind !== 'transition-comp') {
-    return { blendMode: 'normal', nestedLayers, participantBlendModes: [] };
+    return { parts: [{ blendMode: 'normal', nestedLayers }], participantBlendModes: [] };
   }
-  const baseIds = [link.linkedOutgoingClipId, link.linkedIncomingClipId].filter(Boolean);
-  const participantBlendModes = getParticipantBlendModes(composition, baseIds);
-  const nonNormalModes = new Set(participantBlendModes.filter((mode) => mode !== 'normal'));
-  if (nonNormalModes.size === 0) {
-    return { blendMode: 'normal', nestedLayers, participantBlendModes };
-  }
-
-  const normalizedLayers = normalizeParticipantLayers(nestedLayers, baseIds, nonNormalModes);
-  const sharedMode = participantBlendModes.length === 1 ? participantBlendModes[0] : undefined;
-  if (sharedMode && LIFTABLE_BLEND_MODES.has(sharedMode)) {
-    return { blendMode: sharedMode, nestedLayers: normalizedLayers, participantBlendModes };
+  const participants = getParticipants(composition, {
+    outgoing: link.linkedOutgoingClipId,
+    incoming: link.linkedIncomingClipId,
+  });
+  const participantBlendModes = [...new Set(participants.filter((participant) => participant.clips.length > 0)
+    .map((participant) => participant.mode))];
+  if (participants.every((participant) => participant.mode === 'normal')) {
+    return { parts: [{ blendMode: 'normal', nestedLayers }], participantBlendModes };
   }
 
-  const fallback: TransitionCompositionBlendFallback = sharedMode ? 'unsupported-blend-mode' : 'mixed-blend-modes';
-  reportFallback(transitionId, fallback, participantBlendModes);
-  return { blendMode: 'normal', nestedLayers: normalizedLayers, fallback, participantBlendModes };
+  const outerMode = (participant: ParticipantInfo): BlendMode =>
+    LIFTABLE_BLEND_MODES.has(participant.mode) ? participant.mode : 'normal';
+  const sharedMode = participants[0].mode === participants[1].mode;
+  const fallback: TransitionCompositionBlendFallback | undefined =
+    participants.some((participant) => participant.mode !== 'normal' && !LIFTABLE_BLEND_MODES.has(participant.mode))
+      ? 'unsupported-blend-mode'
+      : sharedMode ? undefined : 'mixed-blend-modes';
+  if (fallback) reportFallback(transitionId, fallback, participantBlendModes);
+
+  const drafts: PartDraft[] = [];
+  nestedLayers.forEach((layer, index) => {
+    const participant = findParticipant(layer, participants);
+    let key: string;
+    let blendMode: BlendMode;
+    let partLayer = layer;
+    if (participant) {
+      key = sharedMode ? 'participants' : participant.role;
+      blendMode = outerMode(participant);
+      partLayer = normalizeParticipantLayer(layer, participant, compositionTime);
+    } else if (layer.blendMode !== 'normal' && LIFTABLE_BLEND_MODES.has(layer.blendMode)) {
+      // A solid or overlay with its own mode blends over everything below it.
+      key = `overlay:${index}`;
+      blendMode = layer.blendMode;
+      partLayer = { ...layer, blendMode: 'normal' };
+    } else {
+      key = 'normal';
+      blendMode = 'normal';
+    }
+    const last = drafts[drafts.length - 1];
+    if (last && (last.key === key || (last.blendMode === 'normal' && blendMode === 'normal'))) {
+      last.nestedLayers.push(partLayer);
+    } else {
+      drafts.push({ key, blendMode, nestedLayers: [partLayer] });
+    }
+  });
+  if (drafts.length === 0) drafts.push({ key: 'empty', blendMode: 'normal', nestedLayers: [] });
+
+  const split = drafts.length > 1;
+  const parts = drafts.map(({ blendMode, nestedLayers: layers }) => {
+    // Alone in its part, the Crossfade's 'plus' has nothing to add to: draw it Normal.
+    const lowest = layers[layers.length - 1];
+    if (split && lowest?.blendMode === 'plus') {
+      return { blendMode, nestedLayers: [...layers.slice(0, -1), { ...lowest, blendMode: 'normal' as const }] };
+    }
+    return { blendMode, nestedLayers: layers };
+  });
+  return { parts, participantBlendModes, ...(fallback ? { fallback } : {}) };
 }

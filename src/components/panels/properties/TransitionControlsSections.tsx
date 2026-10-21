@@ -1,10 +1,12 @@
 import {
+  getBooleanTransitionParam,
   getTransitionParamValue,
   type TransitionDefinition,
   type TransitionParamDefinition,
   type TransitionParamValue,
 } from '../../../transitions';
 import type { TimelineTransition } from '../../../types/timelineCore';
+import type { AudioCrossfadeResolution } from '../../../services/audio/audioCrossfadePlanning';
 
 interface TransitionControlsSectionsProps {
   definition: TransitionDefinition;
@@ -14,7 +16,12 @@ interface TransitionControlsSectionsProps {
   bodyEnd: number;
   realHandleDuration: number;
   holdDuration: number;
-  params: Array<[string, TransitionParamDefinition]>;
+  /** Two sound clips: Include audio is implied and not shown. */
+  isAudioOnlyTransition: boolean;
+  /** Parameters an earlier section already shows (e.g. the dip colour). */
+  handledParamIds: ReadonlySet<string>;
+  /** The sound this transition blends, or why Include audio blends nothing. */
+  audio: AudioCrossfadeResolution | null;
   onUpdateDuration: (duration: number) => void;
   onUpdateParam: (paramId: string, value: TransitionParamValue) => void;
 }
@@ -22,6 +29,25 @@ interface TransitionControlsSectionsProps {
 function formatSeconds(value: number): string {
   return `${value.toFixed(2)}s`;
 }
+
+function getVisibleParams(
+  definition: TransitionDefinition,
+  transition: TimelineTransition,
+  isAudioOnlyTransition: boolean,
+  handledParamIds: ReadonlySet<string>,
+): Array<[string, TransitionParamDefinition]> {
+  const blendsSound = isAudioOnlyTransition || getBooleanTransitionParam(transition, definition, 'includeAudio');
+  return Object.entries(definition.params ?? {})
+    .filter(([, param]) => param.hidden !== true)
+    .filter(([paramId]) => !(isAudioOnlyTransition && paramId === 'includeAudio'))
+    .filter(([, param]) => param.audioOnly !== true || blendsSound)
+    .filter(([paramId]) => !handledParamIds.has(paramId));
+}
+
+const AUDIO_SKIP_NOTES = {
+  'no-linked-audio': 'No linked sound on one track – nothing to blend',
+  'linked-audio-on-different-tracks': 'The clips\u2019 sound is on different tracks – nothing to blend',
+} as const;
 
 export function TransitionControlsSections({
   definition,
@@ -31,10 +57,15 @@ export function TransitionControlsSections({
   bodyEnd,
   realHandleDuration,
   holdDuration,
-  params,
+  isAudioOnlyTransition,
+  handledParamIds,
+  audio,
   onUpdateDuration,
   onUpdateParam,
 }: TransitionControlsSectionsProps) {
+  const params = getVisibleParams(definition, transition, isAudioOnlyTransition, handledParamIds);
+  const fade = audio?.pair?.fade;
+  const audioShortened = !!fade && fade.overlap < duration - 0.005;
   return (
     <>
       <section className="properties-section">
@@ -65,6 +96,14 @@ export function TransitionControlsSections({
             {formatSeconds(holdDuration)}
           </span>
         </div>
+        {fade ? (
+          <div className="control-row" title="The sound fades only where both clips have sound beyond the cut">
+            <span className="prop-label">Audio</span>
+            <span className={audioShortened ? 'transition-hold-value' : 'transition-static-value'}>
+              {fade.kind === 'declick' ? 'Cut (no extra sound)' : formatSeconds(fade.overlap)}
+            </span>
+          </div>
+        ) : null}
       </section>
 
       <section className="properties-section">
@@ -74,15 +113,19 @@ export function TransitionControlsSections({
         ) : params.map(([paramId, param]) => {
           const value = getTransitionParamValue(transition, definition, paramId);
           if (param.type === 'boolean') {
+            const skipReason = paramId === 'includeAudio' && value === true ? audio?.skipReason : undefined;
             return (
-              <label className="control-row transition-param-row transition-checkbox-row" key={paramId}>
-                <span className="prop-label">{param.label}</span>
-                <input
-                  type="checkbox"
-                  checked={value === true}
-                  onChange={(event) => onUpdateParam(paramId, event.currentTarget.checked)}
-                />
-              </label>
+              <div key={paramId}>
+                <label className="control-row transition-param-row transition-checkbox-row">
+                  <span className="prop-label">{param.label}</span>
+                  <input
+                    type="checkbox"
+                    checked={value === true}
+                    onChange={(event) => onUpdateParam(paramId, event.currentTarget.checked)}
+                  />
+                </label>
+                {skipReason ? <div className="transition-param-note">{AUDIO_SKIP_NOTES[skipReason]}</div> : null}
+              </div>
             );
           }
           if (param.type === 'number') {

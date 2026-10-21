@@ -155,7 +155,8 @@ export class AudioExportPipeline {
         extractedBuffers,
         clipKeyframes,
         audioGraphPlan,
-        onProgress
+        onProgress,
+        crossfades.envelopes
       );
       this.releaseRenderedSourceAudioBuffers(audioClips, extractedBuffers, effectBuffers);
 
@@ -163,7 +164,7 @@ export class AudioExportPipeline {
 
       // 4. Mix all tracks
       onProgress?.({ phase: 'mixing', percent: 0, message: 'Mixing tracks...' });
-      const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan, crossfades.envelopes);
+      const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan);
       const plannedMixBuffer = createAudioBufferLike(
         2,
         Math.ceil(duration * this.settings.sampleRate),
@@ -266,7 +267,8 @@ export class AudioExportPipeline {
         extractedBuffers,
         clipKeyframes,
         audioGraphPlan,
-        onProgress
+        onProgress,
+        crossfades.envelopes
       );
       this.releaseRenderedSourceAudioBuffers(audioClips, extractedBuffers, effectBuffers);
 
@@ -274,7 +276,7 @@ export class AudioExportPipeline {
 
       // 4. Mix all tracks
       onProgress?.({ phase: 'mixing', percent: 0, message: 'Mixing tracks...' });
-      const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan, crossfades.envelopes);
+      const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan);
       const plannedMixBuffer = createAudioBufferLike(
         2,
         Math.ceil(duration * this.settings.sampleRate),
@@ -535,7 +537,7 @@ export class AudioExportPipeline {
     });
     for (const note of crossfades.notes) {
       log.warn(note.reason === 'retimed-clip'
-        ? 'Audio crossfade on a retimed or reversed clip: it fades over the clips as cut, without extra footage'
+        ? 'Audio crossfade on a retimed or reversed clip: it cannot use extra footage, so the sounds meet at the edit with a short de-click'
         : 'Audio crossfades inside a nested composition are not rendered; its mixdown cuts at the edit point', note);
     }
     return crossfades;
@@ -575,7 +577,8 @@ export class AudioExportPipeline {
     buffers: Map<string, AudioBuffer>,
     clipKeyframes: Map<string, Keyframe[]>,
     audioGraphPlan: AudioGraphRenderPlan,
-    onProgress?: AudioExportProgressCallback
+    onProgress?: AudioExportProgressCallback,
+    crossfadeEnvelopes?: ExportAudioCrossfadePreparation['envelopes']
   ): Promise<Map<string, AudioBuffer>> {
     return renderExportClipAudioEffects({
       clips,
@@ -583,6 +586,7 @@ export class AudioExportPipeline {
       preTrimmedClipIds: this.preTrimmedClipIds,
       sourceBufferStarts: this.sourceBufferStarts,
       clipKeyframes,
+      crossfadeEnvelopes,
       audioGraphPlan,
       clipAudioRenderer: this.clipAudioRenderer,
       graphEffectRenderer: this.graphEffectRenderer,
@@ -617,10 +621,9 @@ export class AudioExportPipeline {
     buffers: Map<string, AudioBuffer>,
     tracks: TimelineTrack[],
     exportStartTime: number,
-    audioGraphPlan?: AudioGraphRenderPlan,
-    crossfadeEnvelopes?: ExportAudioCrossfadePreparation['envelopes']
+    audioGraphPlan?: AudioGraphRenderPlan
   ): AudioTrackData[] {
-    return prepareExportTrackData(clips, buffers, tracks, exportStartTime, audioGraphPlan, crossfadeEnvelopes);
+    return prepareExportTrackData(clips, buffers, tracks, exportStartTime, audioGraphPlan);
   }
 
   /**

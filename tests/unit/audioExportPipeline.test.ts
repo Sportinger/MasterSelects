@@ -511,7 +511,7 @@ describe('AudioExportPipeline audio preflight', () => {
     ]);
   });
 
-  it('renders audio crossfades like preview: handles, equal-power envelopes and a log for retimed clips', async () => {
+  it('renders audio crossfades like preview: handles, equal-power gains before effects and a log for retimed clips', async () => {
     const audioClip = (id: string, startTime: number, extra: Partial<TimelineClip> = {}) => createClip({
       id, trackId: audioTrack.id, startTime, duration: 4, inPoint: 2, outPoint: 6, mediaFileId: `${id}-media`,
       source: { type: 'audio', audioElement: {} as HTMLAudioElement, naturalDuration: 20 }, ...extra,
@@ -534,9 +534,12 @@ describe('AudioExportPipeline audio preflight', () => {
       extractedClips = clips;
       return new Map(clips.map((clip) => [clip.id, buffer]));
     });
-    pipeline.renderAllClipAudio = vi.fn(async (clips: TimelineClip[]) => new Map(clips.map((clip) => [clip.id, buffer])));
-    let mixed: AudioTrackData[] = [];
-    pipeline.mixer = { updateSettings: vi.fn(), mixTracks: vi.fn(async (trackData: AudioTrackData[]) => { mixed = [...trackData]; return buffer; }) };
+    let renderedEnvelopes = new Map<string, unknown>();
+    pipeline.renderAllClipAudio = vi.fn(async (clips: TimelineClip[], ...rest: unknown[]) => {
+      renderedEnvelopes = rest[4] as Map<string, unknown>;
+      return new Map(clips.map((clip) => [clip.id, buffer]));
+    });
+    pipeline.mixer = { updateSettings: vi.fn(), mixTracks: vi.fn(async () => buffer) };
     pipeline.renderMasterBusAudio = vi.fn(async () => buffer);
     Logger.clear();
 
@@ -546,9 +549,9 @@ describe('AudioExportPipeline audio preflight', () => {
     expect(byId.get('fade-out')).toMatchObject({ startTime: 0, duration: 5, outPoint: 7 });
     expect(byId.get('fade-in')).toMatchObject({ startTime: 3, duration: 5, inPoint: 1 });
     expect(byId.get('slow')).toMatchObject({ duration: 4, outPoint: 6 });
-    const envelopes = new Map(mixed.map((entry) => [entry.clipId, entry.crossfadeEnvelopes]));
-    expect(envelopes.get('fade-out')).toEqual([{ role: 'outgoing', bodyStart: 2, bodyEnd: 4 }]);
-    expect(envelopes.get('fade-in')).toEqual([{ role: 'incoming', bodyStart: 2, bodyEnd: 4 }]);
+    // The gains reach the clip renderer (before effects) in timeline seconds.
+    expect(renderedEnvelopes.get('fade-out')).toEqual([{ role: 'outgoing', start: 3, end: 5, curve: 'equal-power' }]);
+    expect(renderedEnvelopes.get('fade-in')).toEqual([{ role: 'incoming', start: 3, end: 5, curve: 'equal-power' }]);
     expect(Logger.search('retimed or reversed clip')).toHaveLength(1);
   });
 

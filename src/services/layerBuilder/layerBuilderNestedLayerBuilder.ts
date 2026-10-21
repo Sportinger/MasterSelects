@@ -17,7 +17,7 @@ import {
 } from './layerBuilderNestedLayers';
 import { getLayerBuilderVideoSourceDebugInfo } from './layerBuilderVideoSources';
 import type { FrameContext } from './types';
-import { buildLayerBuilderNestedTransitionLayer } from './layerBuilderNestedTransitionLayer';
+import { buildLayerBuilderNestedTransitionLayers } from './layerBuilderNestedTransitionLayer';
 import {
   buildLayerBuilderNestedCompositionLayer,
   type BuildNestedCompLayerParams,
@@ -149,15 +149,15 @@ export function buildLayerBuilderNestedLayers(params: BuildNestedLayersParams): 
 
   for (let i = 0; i < nestedVideoTracks.length; i++) {
     const nestedTrack = nestedVideoTracks[i];
-    const transitionLayer = buildLayerBuilderNestedTransitionLayer({
+    const transitionLayers = buildLayerBuilderNestedTransitionLayers({
       parentClip: clip,
       nestedTrack,
       layerIndex: i,
       clipTime,
       ctx,
     });
-    if (transitionLayer) {
-      layers.push(transitionLayer);
+    if (transitionLayers) {
+      layers.push(...transitionLayers);
       continue;
     }
 
