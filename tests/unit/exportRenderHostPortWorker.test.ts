@@ -799,10 +799,12 @@ describe('worker-first export render host port', () => {
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
       .toMatchObject({
         chromaKeyAdjustments: [{
-          keyColor: 'green',
-          tolerance: 0.2,
-          softness: 0.1,
+          screen: 'green',
+          clipBlack: 0.3,
+          clipWhite: 0.85,
           spillSuppression: 0.5,
+          spillMethod: 'average',
+          view: 'result',
         }],
       });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();

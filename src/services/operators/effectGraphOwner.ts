@@ -70,6 +70,7 @@ import { createDefaultPixelSortGraph } from './pixelSortEffectGraph';
 import { createDefaultQuadtreeGraph } from './quadtreeEffectGraph';
 import { createDefaultContourGraph } from './contourEffectGraph';
 import { createDefaultChromaKeyGraph } from './chromaKeyEffectGraph';
+import { upgradeChromaKeyGraph } from './chromaKeyGraphUpgrade';
 import { createDefaultRom1Graph } from './rom1EffectGraph';
 import { createDefaultMemoryLeakGraph } from './memoryLeakEffectGraph';
 import { createDefaultContourTypeGraph } from './asciiEffectGraph';
@@ -237,7 +238,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     if (known && known.signature === signature && (options.inspectionOnly || known.params === effect.params)) return known.graph;
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
-      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved) : saved;
+      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
+        : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : saved;
     const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');

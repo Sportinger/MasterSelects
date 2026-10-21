@@ -38,6 +38,16 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
             : includes('min-vec2 max-vec2 clamped-uv curved-sample color', id) ? 'sampling'
               : /^(masked-color|scanned-color|flickered-color|mixed-color|combine)$/.test(id) ? 'finish' : 'curvature',
   };
+  if (type === 'chroma-key') return {
+    labels: { channel: 'Screen Channel', grid: 'Screen Grid (64 px cache)', average: 'Screen Average (1 px cache)', screen: 'Screen Color',
+      matte: 'Screen Matte & Clip', kernel: 'Edge Sizes', cache: 'Matte Cache', shrink: 'Shrink / Grow (soft min/max)',
+      soften: 'Edge Softness (blur)', edge: 'Edge Result', unmix: 'Screen Subtraction', spill: 'Spill Suppression', view: 'View & Output' },
+    stage: ({ id }) => /^screen-(cell-|grid)/.test(id) ? 'grid' : /^screen-(average-|color-estimate|centre-uv)/.test(id) ? 'average'
+      : /^screen-(is-|picked-|green-channel|blue-channel|preset-channel|channel$|other-channels|all-channels)/.test(id) ? 'channel'
+        : /^matte-/.test(id) ? 'matte' : /^kernel-/.test(id) ? 'kernel' : /^edge-(key-|keyed-alpha|source-alpha|negative-sharpness)/.test(id) ? 'cache'
+          : /^edge-(shrink-|erode|grow|shrunk)/.test(id) ? 'shrink' : /^edge-soften-/.test(id) ? 'soften' : /^edge-/.test(id) ? 'edge'
+            : /^unmix-/.test(id) ? 'unmix' : /^spill-/.test(id) ? 'spill' : /^(view-|result$)/.test(id) ? 'view' : 'screen',
+  };
   if (type === 'gaussian-blur' || type === 'box-blur') return {
     labels: { premultiply: 'Premultiplied Source (cached)', size: 'Radius & Tap Count', horizontal: 'Horizontal Pass', vertical: 'Vertical Pass', finish: 'Straight Alpha Output' },
     portLabels: SEPARABLE_PORTS,

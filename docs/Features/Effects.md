@@ -772,11 +772,13 @@ cell-center luminance, contour bands, and screen-space derivative coverage.
 
 ### Editable keying and feedback graphs
 
-Chroma Key has an editable graph for Rec.601 YCbCr chrominance distance,
-tolerance/softness matte, and green/blue spill suppression. RGB stays straight;
-the matte multiplies source alpha. Existing key choices and parameter IDs remain
-unchanged, including the legacy Custom choice's green fallback. It retains its
-fullscreen output boundary rather than adding a new inline optimization.
+Chroma Key is an editable screen-difference keyer in three passes: a 64 px Screen
+Grid of screen-like colours, a 1 px Screen Color average (the automatic screen
+colour) and the key pass with Clip Black/White, optional Shrink/Grow and Edge
+Softness passes (pixels at 1080p, none while both are 0), screen subtraction with
+the local grid colour, and Neutral or Gentle spill suppression. See
+[Keying and Time Effects](./Effects-Keying-Time.md). Untouched saved Rec.601 graphs
+upgrade; edited ones keep reading the retired Tolerance and Edge Softness.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
 feedback decay, and final RGBA mixing as shared nodes. Detail changes frequency,

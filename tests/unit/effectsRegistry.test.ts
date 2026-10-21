@@ -631,10 +631,7 @@ describe('Registry helper functions', () => {
     const defaults = getDefaultParams('chroma-key');
     expect(defaults).toHaveProperty('keyColor');
     expect(defaults.keyColor).toBe('green');
-    expect(defaults).toHaveProperty('tolerance');
-    expect(defaults.tolerance).toBe(0.2);
-    expect(defaults).toHaveProperty('softness');
-    expect(defaults).toHaveProperty('spillSuppression');
+    expect(defaults).toMatchObject({ clipBlack: 0.3, clipWhite: 0.85, edgeShrink: 0, edgeSoftness: 0, spillSuppression: 1, spillMethod: 'average', view: 'result' });
   });
 
   it('getDefaultParams should return correct defaults for mirror (boolean params)', () => {
@@ -783,31 +780,24 @@ describe('packUniforms function', () => {
     const effect = getEffect('chroma-key')!;
     expect(isFullscreenEffectDefinition(effect)).toBe(true);
     if (!isFullscreenEffectDefinition(effect)) return;
-    const uniforms = effect.packUniforms(
-      { keyColor: 'green', tolerance: 0.2, softness: 0.1, spillSuppression: 0.5 },
-      1920, 1080,
-    );
+    const uniforms = effect.packUniforms({ keyColor: 'green', clipBlack: 0.2, clipWhite: 0.9, spillSuppression: 0.5 }, 1920, 1080);
     expect(uniforms).toBeInstanceOf(Float32Array);
-    // Green: R=0, G=1, B=0
-    expect(uniforms![0]).toBe(0); // keyR
-    expect(uniforms![1]).toBe(1); // keyG
-    expect(uniforms![2]).toBe(0); // keyB
-    expect(uniforms![3]).toBeCloseTo(0.2, 5); // tolerance (Float32 precision)
+    // Preset green screen colour, green as the screen channel, then Clip Black/White, spill and spill method.
+    expect(Array.from(uniforms!.slice(0, 3))).toEqual([0.25, 0.6, 0.3].map(Math.fround));
+    expect(Array.from(uniforms!.slice(4, 7))).toEqual([0, 1, 0]);
+    expect(Array.from(uniforms!.slice(8, 12))).toEqual([0.2, 0.9, 0.5, 0].map(Math.fround));
   });
 
   it('chroma-key packUniforms should encode blue screen correctly', () => {
     const effect = getEffect('chroma-key')!;
     expect(isFullscreenEffectDefinition(effect)).toBe(true);
     if (!isFullscreenEffectDefinition(effect)) return;
-    const uniforms = effect.packUniforms(
-      { keyColor: 'blue', tolerance: 0.3, softness: 0.15, spillSuppression: 0.6 },
-      1920, 1080,
-    );
+    const uniforms = effect.packUniforms({ keyColor: 'blue', clipBlack: 3, spillSuppression: 0.6, spillMethod: 'max' }, 1920, 1080);
     expect(uniforms).toBeInstanceOf(Float32Array);
-    // Blue: R=0, G=0, B=1
-    expect(uniforms![0]).toBe(0); // keyR
-    expect(uniforms![1]).toBe(0); // keyG
-    expect(uniforms![2]).toBe(1); // keyB
+    expect(Array.from(uniforms!.slice(0, 3))).toEqual([0.2, 0.3, 0.65].map(Math.fround));
+    expect(Array.from(uniforms!.slice(4, 7))).toEqual([0, 0, 1]);
+    // Out-of-range Clip Black arrives clamped; Gentle spill is 1.
+    expect(Array.from(uniforms!.slice(8, 12))).toEqual([1, 0.85, 0.6, 1].map(Math.fround));
   });
 
   it('mirror packUniforms should encode boolean params as 0/1 floats', () => {
@@ -962,9 +952,9 @@ describe('Specific effect definitions', () => {
     expect(gb.uniformSize).toBe(16);
   });
 
-  it('chroma-key uniformSize should be 32 bytes', () => {
+  it('chroma-key uniformSize should be 48 bytes', () => {
     const ck = getEffect('chroma-key')!;
-    expect(ck.uniformSize).toBe(32);
+    expect(ck.uniformSize).toBe(48);
   });
 
   it('glow uniformSize should be 32 bytes', () => {

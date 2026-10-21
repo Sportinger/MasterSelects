@@ -470,28 +470,37 @@ describe('worker software painter', () => {
     ]);
   });
 
-  it('applies chroma key alpha and spill suppression in the worker pixel pass', () => {
+  it('applies the chroma key screen matte, screen subtraction and spill in the worker pixel pass', () => {
+    // Two screen pixels (the screen colour is measured from the frame), a near-white subject and red.
     const inputPixels = new Uint8ClampedArray([
-      0, 255, 0, 255,
+      60, 150, 70, 255,
+      60, 150, 70, 255,
+      230, 230, 225, 255,
       255, 0, 0, 255,
     ]);
     const outputPixels = drawLayerWithPixels(
       inputPixels,
-      2,
+      4,
       1,
       {
         brightness: 0,
         chromaKeyAdjustments: [{
-          keyColor: 'green',
-          tolerance: 0.2,
-          softness: 0.1,
-          spillSuppression: 0.5,
+          screen: 'green',
+          screenColor: [0.3, 0.6, 0.35],
+          clipBlack: 0.3,
+          clipWhite: 0.85,
+          spillSuppression: 1,
+          view: 'result',
         }],
       },
     );
 
+    // Screen: transparent, despilled to the mean of red and blue; the subject stays opaque and only loses
+    // its slight green excess (Neutral spill), red stays as it is.
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      64, 128, 64, 0,
+      60, 65, 70, 0,
+      60, 65, 70, 0,
+      230, 227, 225, 255,
       255, 0, 0, 255,
     ]);
   });

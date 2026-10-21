@@ -7,6 +7,12 @@ import { bypassIdentityImageFilters } from './imageFilterShortcuts';
 import { expandTemporalSmoothing } from './temporalSmoothPasses';
 
 type CompileSingle = (graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget) => ImageOperatorPlan;
+/** Cache Image `maxEdge` (literal constant, pixels of the longer side; 0 = full size). Downscaled caches
+ * hold statistics and analysis images; reads from them are filtered like any other resource. */
+function materializeMaxEdge(node: { constants?: Record<string, unknown> }): number | undefined {
+  const value = Number(node.constants?.maxEdge);
+  return Number.isFinite(value) && value >= 1 ? Math.round(value) : undefined;
+}
 interface Cut { nodeId: string; producerNodeId: string; producerPort: string; resourceId: string; passId: string; edgeId?: string; maxEdge?: number }
 
 /** Adds explicit and required neighborhood barriers while every pass still uses the canonical image instruction compiler. */
@@ -49,7 +55,7 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
     if (!source) throw new Error(`Image materialize ${item.id}:image is not connected.`);
     cuts.push({ nodeId: item.id, producerNodeId: source.from, producerPort: source.output,
       resourceId: `image-resource:${item.id}:image`, passId: `image-pass:${item.id}`,
-      maxEdge: item.id.startsWith('__motion-') ? Number(item.constants?.maxEdge) || undefined : undefined });
+      maxEdge: materializeMaxEdge(item) });
   }
   const hasNeighborhoodUpstream = (id: string, seen = new Set<string>()): boolean => {
     if (seen.has(id)) return false; seen.add(id);

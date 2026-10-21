@@ -283,6 +283,13 @@ names.
 
 ## Temporal smoothing
 
+**Cache Image** (`image.materialize`) stores an image expression in an internal
+`rgba16float` pass so later nodes can sample it. **Max size (px)** (default 0 = full
+size) renders the cache smaller, with its longer side at most that many pixels.
+Use it for statistics, not for pictures: Chroma Key keeps its 64 px Screen Grid
+and its 1 px automatic screen colour this way. Later reads filter it like any image,
+and a resolution node inside that pass reports the reduced size.
+
 **Temporal Smooth** (`image.temporal-smooth` for images,
 `image.temporal-smooth.scalar` for per-pixel values such as key masks) blends each
 frame with the node's own previous result: `mix(current, previous, amount)`. Amount

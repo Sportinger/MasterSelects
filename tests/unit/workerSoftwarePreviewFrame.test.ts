@@ -1734,7 +1734,7 @@ describe('worker software preview frame builder', () => {
           type: 'chroma-key',
           name: 'Chroma Key',
           enabled: true,
-          params: { keyColor: 'green', tolerance: 0.2, softness: 0.1, spillSuppression: 0.5 },
+          params: { keyColor: 'green', clipBlack: 0.25, clipWhite: 0.8, spillSuppression: 0.5, spillMethod: 'max' },
         }],
       })],
       { width: 640, height: 360 },
@@ -1744,10 +1744,12 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
       chromaKeyAdjustments: [{
-        keyColor: 'green',
-        tolerance: 0.2,
-        softness: 0.1,
+        screen: 'green',
+        clipBlack: 0.25,
+        clipWhite: 0.8,
         spillSuppression: 0.5,
+        spillMethod: 'max',
+        view: 'result',
       }],
     });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);

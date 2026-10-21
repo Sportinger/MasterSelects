@@ -1,4 +1,5 @@
 import type { WorkerRenderSoftwareFrame } from './workerRenderHostRuntimeCommands';
+import { chromaKeyCpuPixel, chromaKeyCpuScreen } from '../../effects/keying/chroma-key/keyerCpu';
 import type { RuntimePrimaryColorParams } from '../../types/colorCorrection';
 import { applyShadowHighlightTone } from '../../engine/color/shadowHighlightTone';
 import {
@@ -218,50 +219,6 @@ function applyVignetteAdjustment(
   const vignette = 1 - smoothstep(size, size + softness, distance);
   const factor = 1 * (1 - amount) + vignette * amount;
   return [input[0] * factor, input[1] * factor, input[2] * factor];
-}
-
-function rgbToYcbcr(input: readonly [number, number, number]): readonly [number, number, number] {
-  const y = 0.299 * input[0] + 0.587 * input[1] + 0.114 * input[2];
-  const cb = 0.564 * (input[2] - y);
-  const cr = 0.713 * (input[0] - y);
-  return [y, cb, cr];
-}
-
-function applyChromaKeyAdjustment(
-  input: readonly [number, number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['chromaKeyAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  const key: readonly [number, number, number] = adjustment.keyColor === 'blue'
-    ? [0, 0, 1]
-    : [0, 1, 0];
-  const sourceYcbcr = rgbToYcbcr([input[0], input[1], input[2]]);
-  const keyYcbcr = rgbToYcbcr(key);
-  const cbcrDistance = Math.hypot(sourceYcbcr[1] - keyYcbcr[1], sourceYcbcr[2] - keyYcbcr[2]);
-  const alpha = smoothstep(
-    finiteNumber(adjustment.tolerance, 0.2),
-    finiteNumber(adjustment.tolerance, 0.2) + finiteNumber(adjustment.softness, 0.1),
-    cbcrDistance,
-  );
-  const spillSuppression = Math.max(0, finiteNumber(adjustment.spillSuppression, 0.5));
-  let r = input[0];
-  let g = input[1];
-  let b = input[2];
-  if (spillSuppression > 0) {
-    if (adjustment.keyColor === 'green') {
-      const spillAmount = Math.max(0, g - Math.max(r, b)) * spillSuppression;
-      g -= spillAmount;
-      r += spillAmount * 0.5;
-      b += spillAmount * 0.5;
-    } else {
-      const spillAmount = Math.max(0, b - Math.max(r, g)) * spillSuppression;
-      b -= spillAmount;
-      r += spillAmount * 0.5;
-      g += spillAmount * 0.5;
-    }
-  }
-  return [r, g, b, input[3] * alpha];
 }
 
 function sampleLuma(
@@ -523,6 +480,8 @@ export function applyWorkerSoftwarePixelEffects(
     || colorGradePrimaryNodes.length > 0
     ? new Uint8ClampedArray(data)
     : data;
+  // Chroma Key estimates its screen colour and local Screen Grid once per frame (from the layer source pixels).
+  const chromaKeyScreens = chromaKeyAdjustments.map(adjustment => chromaKeyCpuScreen(sourceData, adjustment, width, height));
   // Glow is a separable neighborhood prefilter; build it once per frame, then sample rings per pixel.
   const glowFields = glowAdjustments.map(adjustment => prepareWorkerSoftwareGlow(sourceData, width, height, adjustment));
   const splitDx = hasRgbSplit ? Math.round(Math.cos(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * width) : 0;
@@ -589,8 +548,8 @@ export function applyWorkerSoftwarePixelEffects(
         const uvY = (y + 0.5) / height;
         [r, g, b] = applyVignetteAdjustment([r, g, b], adjustment, uvX, uvY);
       }
-      for (const adjustment of chromaKeyAdjustments) {
-        [r, g, b, alpha] = applyChromaKeyAdjustment([r, g, b, alpha], adjustment);
+      for (const [index, adjustment] of chromaKeyAdjustments.entries()) {
+        [r, g, b, alpha] = chromaKeyCpuPixel([r, g, b, alpha], chromaKeyScreens[index], adjustment, pixelX, pixelY);
       }
       for (const adjustment of edgeDetectAdjustments) {
         [r, g, b, alpha] = applyEdgeDetectAdjustment(sourceData, width, height, pixelX, pixelY, adjustment);

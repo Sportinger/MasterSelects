@@ -8,6 +8,8 @@ import { isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
+import { chromaKeyHexColor, chromaKeyNumbers, chromaKeyScreen, chromaKeySpillMethod } from '../../effects/keying/chroma-key/keyerContract';
+import type { ChromaKeyCpuSettings } from '../../effects/keying/chroma-key/keyerCpu';
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
@@ -83,12 +85,7 @@ interface MutableWorkerSoftwarePixelEffects {
   thresholdAdjustments?: { level: number }[];
   posterizeAdjustments?: { levels: number }[];
   vignetteAdjustments?: { amount: number; size: number; softness: number; roundness: number }[];
-  chromaKeyAdjustments?: {
-    keyColor: 'green' | 'blue';
-    tolerance: number;
-    softness: number;
-    spillSuppression: number;
-  }[];
+  chromaKeyAdjustments?: ChromaKeyCpuSettings[];
   edgeDetectAdjustments?: { strength: number; invert: boolean }[];
   sharpenAdjustments?: { amount: number; radius: number }[];
   glowAdjustments?: {
@@ -282,12 +279,17 @@ function effectFilterPart(
       });
       return '';
     case 'chroma-key': {
-      const keyColor = effect.params.keyColor === 'blue' ? 'blue' : 'green';
+      const numbers = chromaKeyNumbers(effect.params);
+      // The CPU pixel pass has no neighbourhood kernel: decline instead of dropping the edge settings.
+      if (numbers.softness > 0 || numbers.shrink !== 0) return null;
       (pixelEffects.chromaKeyAdjustments ??= []).push({
-        keyColor,
-        tolerance: finiteEffectNumber(effect.params.tolerance, 0.2),
-        softness: finiteEffectNumber(effect.params.softness, 0.1),
-        spillSuppression: finiteEffectNumber(effect.params.spillSuppression, 0.5),
+        screen: chromaKeyScreen(effect.params.keyColor),
+        screenColor: chromaKeyHexColor(effect.params.screenColor),
+        clipBlack: numbers.clipBlack,
+        clipWhite: numbers.clipWhite,
+        spillSuppression: numbers.spill,
+        spillMethod: chromaKeySpillMethod(effect.params.spillMethod),
+        view: effect.params.view === 'matte' ? 'matte' : 'result',
       });
       return '';
     }

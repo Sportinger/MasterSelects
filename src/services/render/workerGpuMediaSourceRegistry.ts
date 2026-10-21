@@ -302,8 +302,8 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
         params.rgbSplitAmount = finiteEffectNumber(effectParams.amount, 0.01);
         params.rgbSplitAngle = finiteEffectNumber(effectParams.angle, 0);
         break;
-      // Gaussian, Box, Motion, Radial and Zoom Blur are image graphs: they never reach this
-      // legacy table (filtered above) and run their own graph in the worker compositor.
+      // Gaussian, Box, Motion, Radial and Zoom Blur and Chroma Key are image graphs: they never reach
+      // this legacy table (filtered above) and run their own graph in the worker compositor.
       case 'blur':
         params.blurRadius = Math.max(0, finiteEffectNumber(effectParams.radius, finiteEffectNumber(effectParams.amount, 10)));
         break;
@@ -330,12 +330,6 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
         params.vignetteSize = finiteEffectNumber(effectParams.size, 0.5);
         params.vignetteSoftness = finiteEffectNumber(effectParams.softness, 0.5);
         params.vignetteRoundness = finiteEffectNumber(effectParams.roundness, 1);
-        break;
-      case 'chroma-key':
-        params.chromaKeyMode = effectParams.keyColor === 'blue' ? 2 : 1;
-        params.chromaKeyTolerance = finiteEffectNumber(effectParams.tolerance, 0.2);
-        params.chromaKeySoftness = finiteEffectNumber(effectParams.softness, 0.1);
-        params.chromaKeySpill = finiteEffectNumber(effectParams.spillSuppression, 0.5);
         break;
       case 'scanlines':
         params.scanlineDensity = finiteEffectNumber(effectParams.density, 5);
