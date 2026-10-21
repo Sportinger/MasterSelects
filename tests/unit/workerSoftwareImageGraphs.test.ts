@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLegacyBrightnessGraph, createLegacyContrastGraph } from '../../src/services/operators/legacyColorEffectGraphs';
-import { compileImageOperatorGraph, createDefaultInvertImageGraph, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { compileImageOperatorGraph, createDefaultInvertImageGraph, evaluateImageOperatorPlan, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { createDefaultColorEffectGraph } from '../../src/services/operators/colorEffectGraphs';
+import { getDefaultParams } from '../../src/effects';
 const rasterizeGlyphAtlas = vi.hoisted(() => vi.fn());
 vi.mock('../../src/effects/_shared/glyphAtlasRaster', () => ({ rasterizeGlyphAtlas }));
 import { applyWorkerSoftwareImageGraphs, canApplyWorkerSoftwareImageGraphPlan, clearWorkerSoftwareGlyphAtlasCache } from '../../src/services/render/workerSoftwareImageGraphs';
@@ -62,6 +64,25 @@ describe('worker software image graphs', () => {
     expect(identity).toEqual(original);
     applyWorkerSoftwareImageGraphs(identity, 2, 1, [compileImageOperatorGraph(createDefaultInvertImageGraph())], 0);
     expect([...identity]).toEqual([235, 175, 95, 37, 55, 215, 245, 219]);
+  });
+
+  it('writes the same bytes for a pointwise color recipe as per-pixel evaluation, from aligned and unaligned rasters', () => {
+    // Repeated colours, like a photo, inside a larger buffer: offset 4 takes the per-colour path, offset 1 the per-pixel one.
+    const width = 37, height = 23, colours = Array.from({ length: 61 }, (_, index) => [index * 4 % 256, index * 17 % 256, index * 89 % 256, 255 - index]);
+    for (const type of ['vibrance', 'hue-shift', 'exposure'] as const) {
+      const plan = compileImageOperatorGraph(createDefaultColorEffectGraph(type), { ...getDefaultParams(type), amount: 0.8, shift: 0.3, exposure: 1.2, gamma: 0.8 });
+      for (const start of [4, 1]) {
+        const buffer = new Uint8ClampedArray(width * height * 4 + 8), data = buffer.subarray(start, start + width * height * 4);
+        for (let index = 0; index < width * height; index++) data.set(colours[(index * 7) % colours.length], index * 4);
+        const expected = new Uint8ClampedArray(data.length);
+        for (let offset = 0; offset < data.length; offset += 4) {
+          const out = evaluateImageOperatorPlan(plan, [...data.subarray(offset, offset + 4)].map(value => value / 255) as [number, number, number, number]);
+          expected.set(out.map(value => Math.round(Math.min(1, Math.max(0, value)) * 255)), offset);
+        }
+        applyWorkerSoftwareImageGraphs(data, width, height, [plan], 0);
+        expect(data, `${type} at byte ${start}`).toEqual(expected);
+      }
+    }
   });
 
   it('bilinearly samples all four straight-alpha channels at normalized coordinates', () => {

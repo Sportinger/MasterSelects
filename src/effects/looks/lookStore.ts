@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import { getEffect } from '..';
 import { STARTER_LOOKS } from './starterLooks';
-import type { LookCategory, LookDefinition, LookStackEntry } from './types';
+import { LOOK_SCHEMA_VERSION, type LookCategory, type LookDefinition, type LookStackEntry } from './types';
 
 interface LookStoreState {
   customLooks: LookDefinition[];
@@ -22,6 +22,7 @@ function cleanStack(stack: LookStackEntry[]): LookStackEntry[] {
       params: Object.fromEntries(Object.entries(entry.params).filter(([, value]) => (
         typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
       ))),
+      ...(entry.operatorGraph && typeof entry.operatorGraph === 'object' ? { operatorGraph: structuredClone(entry.operatorGraph) } : {}),
     }));
 }
 
@@ -46,6 +47,7 @@ export const useLookStore = create<LookStoreState>()(
             stack: normalizedStack,
             tags: ['custom'],
             builtIn: false,
+            schemaVersion: LOOK_SCHEMA_VERSION,
           };
           set((state) => ({ customLooks: [...state.customLooks, saved] }));
           return saved;

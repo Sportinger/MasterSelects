@@ -68,7 +68,7 @@ const RECIPE_COMPOSITIONS: readonly OperatorDefinition[] = [
   }),
   extractImageComposition(temperature, {
     id: 'color.white-balance.rgb', label: 'White Balance',
-    description: 'Temperature (+ warm, − cool) and Tint (+ magenta, − green) as channel gains in linear light, scaled so grey keeps its brightness and black stays black. 1 = 0.6 stops red against blue. Not clamped.',
+    description: 'Temperature (+ warm, − cool) and Tint (+ magenta, − green) as channel gains in linear light, scaled so grey keeps its brightness and black stays black. Temperature 1 raises red and lowers blue by 0.6 stops each; Tint 1 lowers green 0.5 stops and raises red and blue 0.25. Not clamped.',
     members: [...ids(temperature, /^(gain|light)-/)], consumers: consumers('Temperature'),
     inputLabels: { ...rgbIn, 'temperature-clamped-value': 'Temperature', 'tint-clamped-value': 'Tint' }, outputLabels: { 'light-encoded-rgb': 'RGB' },
   }),

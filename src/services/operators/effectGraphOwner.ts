@@ -29,7 +29,9 @@ import type { ImageOperatorCompileContext } from './imageOperatorChoice';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from './analogSignalGraph';
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { migrateAnalogSignalGraph } from './analogSignalMigration';
-import { createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
+import { COLOR_RECIPE_EFFECT_TYPES, createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
+import { createLegacyColorEffectGraph } from './legacyColorEffectGraphs';
+import { ORIGINAL_COLOR_PRESENTATION } from './effectPresentationPlans';
 import { getEffect } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
 import { createDefaultContextualEffectGraph, type EditableContextualEffectType } from './contextualEffectGraphs';
@@ -238,7 +240,10 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved) : saved;
-    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
+    // A saved original color graph (before 2026-10) keeps its original folders; the recipe stages fit only the recipe.
+    const earlier = COLOR_RECIPE_EFFECT_TYPES.has(effectType) && effectType !== 'hue-shift' ? { key: 'original-color', plan: ORIGINAL_COLOR_PRESENTATION,
+      createDefault: () => createLegacyColorEffectGraph(effectType as EditableColorEffectType) } : undefined;
+    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback, earlier);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
@@ -254,6 +259,17 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
   if (effect.type === WEAVE_EFFECT_TYPE) return expandOperatorCompositions(weaveOperatorGraph(params));
   if (effect.type === 'face-cables') return cableOperatorGraph(params);
   throw new Error('This effect has no operator graph.');
+}
+
+/**
+ * Project-file entry point. A color effect saved before effect graphs existed (no graph at all,
+ * projects before 2026-09-21) rendered the original color math, so it gets that graph instead of
+ * the 2026-10 recipe; a graphless effect in the running editor is a new one and keeps the recipe.
+ */
+export function migrateLoadedEffectOperatorGraph(effect: Effect): Effect {
+  const graphless = !effect.operatorGraph && effect.params[EFFECT_GRAPH_PARAM] === undefined;
+  return migratePersistedEffectOperatorGraph(graphless && COLOR_RECIPE_EFFECT_TYPES.has(effect.type)
+    ? { ...effect, operatorGraph: createLegacyColorEffectGraph(effect.type as EditableColorEffectType) } : effect);
 }
 
 /** Converts the former JSON parameter into the canonical effect-owned field.

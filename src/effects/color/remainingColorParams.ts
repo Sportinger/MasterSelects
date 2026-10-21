@@ -7,10 +7,12 @@ const number = (label: string, defaultValue: number, min: number, max: number, s
 /** Parameter schemas shared by legacy controls and canonical image graphs. */
 export const EXPOSURE_PARAMS = {
   exposure: { ...number('Exposure', 0, -3, 3, 0.1, [-20, 20]), unit: ' EV' }, offset: number('Offset', 0, -0.5, 0.5),
-  gamma: number('Gamma', 1, 0.2, 3, 0.01, [0.1, 10]),
+  // The floor matches the slider: gamma 0.2 is x^5, already very dark.
+  gamma: { ...number('Gamma', 1, 0.2, 3, 0.01, [0.2, 10]), renderMinLook: 'very dark' },
 } satisfies Record<string, EffectParam>;
 export const LEVELS_PARAMS = {
-  inputBlack: number('Input Black', 0, 0, 1), inputWhite: number('Input White', 1, 0, 1), gamma: number('Gamma', 1, 0.1, 3, 0.01, [0.1, 10]),
+  inputBlack: number('Input Black', 0, 0, 1), inputWhite: number('Input White', 1, 0, 1),
+  gamma: { ...number('Gamma', 1, 0.1, 3, 0.01, [0.1, 10]), renderMinLook: 'almost black' },
   outputBlack: number('Output Black', 0, 0, 1), outputWhite: number('Output White', 1, 0, 1),
 } satisfies Record<string, EffectParam>;
 // Stored in turns (0.5 = 180°) since the first release; inspectors show degrees.

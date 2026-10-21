@@ -29,6 +29,6 @@ export function paramRangeNotes(definitions: Record<string, EffectParam>, values
     if (rendered === value) return [];
     const side = value < rendered ? 'below' : 'above';
     return [{ param, label: definition.label, value, rendered,
-      message: `${definition.label} ${format(value)} is ${side} the rendered range (${format(renderMin ?? -Infinity)} to ${format(renderMax ?? Infinity)}) and renders as ${format(rendered)}.` }];
+      message: `${definition.label} ${format(value)} is ${side} the rendered range (${format(renderMin ?? -Infinity)} to ${format(renderMax ?? Infinity)}) and renders as ${format(rendered)}${side === 'below' && definition.renderMinLook ? ` (${definition.renderMinLook})` : ''}.` }];
   });
 }

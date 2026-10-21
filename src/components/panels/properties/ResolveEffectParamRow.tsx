@@ -25,8 +25,15 @@ interface ResolveEffectParamRowProps {
     inputMethod: 'click' | 'drag' | 'keyboard' | 'reset' | 'select' | 'type') => void;
 }
 
-/** Few enough decimals that a value with its unit (" EV", "°") fits the field. */
-const decimalsFor = (step: number) => step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+/**
+ * Few enough decimals that a value with its unit (" EV", "°") fits the field, but as many as the
+ * stored value needs (up to 3), so a stored 0.25 EV never reads 0.3 EV.
+ */
+function unitFieldDecimals(step: number, value: number): number {
+  let decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+  while (decimals < 3 && Number.isFinite(value) && Math.abs(Number(value.toFixed(decimals)) - value) > 1e-6) decimals += 1;
+  return decimals;
+}
 
 /** One parameter row for the types `hasResolveEffectParamRow` accepts (callers check it first). */
 export function ResolveEffectParamRow({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit }: ResolveEffectParamRowProps) {
@@ -49,7 +56,7 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
   return <ResolveInspectorNumberRow label={definition.label} value={shown(number)} defaultValue={shown(Number(definition.default))}
     min={shown(min)} max={shown(max)} step={shown(definition.step ?? 0.01)} sensitivity={Math.max(0.5, shown(max - min) / 100)}
     numberMin={shown(definition.renderMin ?? min)} numberMax={shown(definition.renderMax ?? max)} suffix={definition.unit}
-    decimals={definition.unit ? decimalsFor(shown(definition.step ?? 0.01)) : undefined}
+    decimals={definition.unit ? unitFieldDecimals(shown(definition.step ?? 0.01), shown(number)) : undefined}
     persistenceKey={`effect.${clipId ?? 'global'}.${effect.id}.${paramName}`}
     midiTarget={clipId ? { clipId, property: createEffectProperty(effect.id, paramName), label: definition.label, currentValue: number, min, max } : null}
     onChange={next => set(next / scale)} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={method => onParamCommit?.(paramName, 'number', method)}

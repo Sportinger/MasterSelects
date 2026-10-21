@@ -3,6 +3,7 @@ import { getDefaultParams } from '..';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { Logger } from '../../services/logger';
 import type { LookDefinition } from './types';
+import { lookEntryOperatorGraph } from './lookEntryGraph';
 import { fitThumbnailToWidthRect } from './lookThumbnailGeometry';
 import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
 
@@ -192,6 +193,7 @@ class LookThumbnailRuntime {
       name: entry.effectId,
       enabled: entry.enabled,
       params: { ...getDefaultParams(entry.effectId), ...entry.params },
+      operatorGraph: lookEntryOperatorGraph(look, entry),
     }));
     const encoder = device.createCommandEncoder();
     const result = this.pipeline.applyEffects(

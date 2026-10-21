@@ -29,6 +29,11 @@ export const COLOR_RECIPE = Object.freeze({
   tintStops: 0.5,
   /** Vibrance: hue (turns, HSV) and width of the protected skin tones, and how much they are spared. */
   skinHue: 0.07, skinWidth: 0.05, skinProtection: 0.7,
+  /**
+   * Vibrance: skin is also lit and not neon. Protection fades in over these HSV values (dark warm
+   * stage floors are not skin) and out over these saturations (strongly saturated orange light).
+   */
+  skinLitValue: [0.15, 0.35] as const, skinVividSaturation: [0.6, 0.8] as const,
   /** Levels treats input ranges narrower than this as this wide (a hard threshold). */
   levelsMinimumRange: 1e-4,
   /** Saturation limit: chroma below this counts as neutral. */
@@ -117,7 +122,7 @@ export function createDefaultSaturationGraph(): EffectOperatorGraph {
   return finish(g, gamutSafeSaturation(g, clampRgb(g, 'input', ['split', 'rgb']), amount));
 }
 
-/** Boosts muted colours more than vivid ones and spares skin tones; never clips. */
+/** Boosts muted colours more than vivid ones and spares lit skin tones; never clips. */
 export function createDefaultVibranceGraph(): EffectOperatorGraph {
   const g = begin();
   const amount = boundParameter(g, 'amount', VIBRANCE_PARAMS.amount);
@@ -127,7 +132,12 @@ export function createDefaultVibranceGraph(): EffectOperatorGraph {
   const muted = g.binary('weight-muted', 'math.subtract.scalar', one, [hsv, 'y']);
   const offset = g.binary('skin-offset', 'math.add.scalar', g.binary('skin-hue-offset', 'math.subtract.scalar', [hsv, 'x'], g.number('skin-hue', COLOR_RECIPE.skinHue)), half);
   const distance = g.unary('skin-distance', 'math.abs.scalar', g.binary('skin-signed', 'math.subtract.scalar', g.unary('skin-wrapped', 'math.fract.scalar', offset), half));
-  const match = g.add('skin-match', 'math.gaussian.scalar', { value: distance, sigma: g.number('skin-width', COLOR_RECIPE.skinWidth) });
+  const hueMatch = g.add('skin-match', 'math.gaussian.scalar', { value: distance, sigma: g.number('skin-width', COLOR_RECIPE.skinWidth) });
+  const [dark, lit] = COLOR_RECIPE.skinLitValue, [pale, vivid] = COLOR_RECIPE.skinVividSaturation;
+  const litWeight = g.add('skin-lit', 'math.smoothstep.scalar', { edge0: g.number('skin-dark-value', dark), edge1: g.number('skin-lit-value', lit), value: [hsv, 'z'] });
+  const vividWeight = g.add('skin-vivid', 'math.smoothstep.scalar', { edge0: g.number('skin-pale-saturation', pale), edge1: g.number('skin-vivid-saturation', vivid), value: [hsv, 'y'] });
+  const band = g.binary('skin-band', 'math.multiply.scalar', litWeight, g.binary('skin-not-vivid', 'math.subtract.scalar', one, vividWeight));
+  const match = g.binary('skin-weighted', 'math.multiply.scalar', hueMatch, band);
   const spared = g.binary('skin-kept', 'math.subtract.scalar', one, g.binary('skin-spared', 'math.multiply.scalar', match, g.number('skin-protection', COLOR_RECIPE.skinProtection)));
   const boost = g.binary('weight-boost', 'math.multiply.scalar', amount, g.binary('weight', 'math.multiply.scalar', muted, spared));
   const saturation = g.binary('weight-saturation', 'math.max.scalar', g.binary('weight-amount', 'math.add.scalar', one, boost), g.number('weight-zero', 0));

@@ -37,6 +37,8 @@ export interface EffectParam {
   // node drivers). The effect graph clamps to it; the inspector and tool results say so.
   renderMin?: number;
   renderMax?: number;
+  // How the lower render limit looks (e.g. "almost black" for a gamma floor), added to that notice.
+  renderMinLook?: string;
   // Display only: inspectors show value × displayScale with this unit (Hue Shift stores turns and
   // shows degrees). Stored values, keyframes and tool calls keep the parameter's own unit.
   displayScale?: number;

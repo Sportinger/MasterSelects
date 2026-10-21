@@ -114,6 +114,20 @@ describe('rebuilt color effect recipes', () => {
     expectPixel(render('vibrance', { amount: 1 }, [0.4, 0.4, 0.4, 1]), [0.4, 0.4, 0.4, 1]);
   });
 
+  it('Vibrance spares lit skin but not a dark warm stage floor or strongly saturated orange light', () => {
+    // Pairs with the same HSV saturation and value, skin hue (orange) against a cool blue.
+    const ratio = (warm: Pixel, cool: Pixel, amount = 0.5) => {
+      const chroma = (pixel: number[]) => Math.hypot(...pixel.slice(0, 3).map(v => v - luma709(pixel)));
+      return (chroma(render('vibrance', { amount }, warm)) / chroma(warm)) / (chroma(render('vibrance', { amount }, cool)) / chroma(cool));
+    };
+    // Lit skin (V 0.8, S 0.38) moves clearly less than the blue.
+    expect(ratio([0.8, 0.6, 0.5, 1], [0.5, 0.6, 0.8, 1])).toBeLessThan(0.9);
+    // The warm stage floor of dancer_stage is dark (V 0.12): no skin, it gets the full boost.
+    expect(ratio([0.12, 0.085, 0.06, 1], [0.06, 0.085, 0.12, 1])).toBeCloseTo(1, 2);
+    // Tungsten-orange light at S 0.85 is not skin either.
+    expect(ratio([0.9, 0.5, 0.135, 1], [0.135, 0.5, 0.9, 1], 0.3)).toBeCloseTo(1, 2);
+  });
+
   it('Exposure works in camera stops in linear light, then applies Offset and Gamma', () => {
     for (const texel of TEXELS) for (const exposure of [-1, 0.5, 1, 2]) {
       const expected = texel.slice(0, 3).map(x => clamp01(linearToSrgb(srgbToLinear(x) * 2 ** exposure)));

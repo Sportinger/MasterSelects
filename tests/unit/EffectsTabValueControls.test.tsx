@@ -111,6 +111,15 @@ describe('EffectsTab numeric controls', () => {
     expect(numeric).toHaveBeenCalledWith('clip:effects-controls', 'effect.units-exposure.exposure', 0);
   });
 
+  it('shows as many decimals as a stored unit value needs, so the field never rounds what renders', () => {
+    const exposure: Effect = { id: 'units-fine', type: 'exposure', name: 'Exposure', enabled: true, params: { exposure: 0.25, offset: 0, gamma: 1 } };
+    const { unmount } = render(<EffectsTab clipId="clip:effects-controls" effects={[exposure]} />);
+    expect(screen.getByLabelText('Exposure')).toHaveTextContent('0.25 EV');
+    unmount();
+    render(<EffectsTab clipId="clip:effects-controls" effects={[{ ...exposure, params: { ...exposure.params, exposure: -1.125 } }]} />);
+    expect(screen.getByLabelText('Exposure')).toHaveTextContent('-1.125 EV');
+  });
+
   it('titles a newly added effect with its registered name and keeps a renamed one', () => {
     const added: Effect = { id: 'named-by-type', type: 'gaussian-blur', name: 'gaussian-blur', enabled: true, params: { radius: 12 } };
     const renamed: Effect = { id: 'renamed', type: 'radial-blur', name: 'Stage swirl', enabled: true, params: { mode: 'spin', amount: 0.5 } };

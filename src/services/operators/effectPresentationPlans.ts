@@ -6,13 +6,22 @@ export interface EffectPresentationPlan {
   /** What a node's output carries, by node id (its value output) or `id:port`: the output port is
    * named so, and folder ports it feeds read "Sigma" instead of "Maximum: Value". */
   portLabels?: Record<string, string>;
+  /** What an input receives, by `id:port`, where the operator's own names (X, Y, Z) say nothing. */
+  inputLabels?: Record<string, string>;
 }
 const includes = (list: string, id: string) => list.split(' ').includes(id);
 export const GLYPH_PRESENTATION_EFFECTS = new Set(['ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic',
   'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither',
   'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'contour-type']);
-const COLORS = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize', 'invert']);
-/** Stages of the rebuilt color recipes (node id prefixes, see colorEffectGraphs.ts); older graphs use processing/finish. */
+/** Pointwise color effects whose graphs predate the 2026-10 recipes (and the saved original color graphs). */
+const COLORS = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'temperature', 'vibrance', 'threshold', 'posterize', 'invert']);
+const COLOR_RECIPES = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance']);
+/** Original color graphs: everything is processing except the final clamp and recombine. */
+export const ORIGINAL_COLOR_PRESENTATION: EffectPresentationPlan = {
+  labels: { processing: 'Color Processing', finish: 'Clamp & Alpha' },
+  stage: ({ id }) => includes('clamp combine image', id) ? 'finish' : 'processing',
+};
+/** Stages of the rebuilt color recipes (node id prefixes, see colorEffectGraphs.ts); only applied to the unedited recipe. */
 const COLOR_STAGES: readonly [RegExp, string, string][] = [
   [/-clamped$/, 'controls', 'Parameters'], [/^(clamp|combine|image)(-|$)/, 'finish', 'Clamp & Alpha'],
   [/^input(-|$)/, 'input', 'Input 0–1'], [/^curve(-|$)/, 'curve', 'Tone Curve'], [/^light-/, 'light', 'Linear Light'],
@@ -22,7 +31,7 @@ const COLOR_STAGES: readonly [RegExp, string, string][] = [
 ];
 /** What the inner values of the color recipes carry (bound parameters name themselves after their clamp). */
 const COLOR_PORTS = { input: 'RGB 0–1', 'light-linear': 'Linear RGB', 'light-encoded': 'sRGB', 'tone-gamma': 'Toned RGB',
-  'measure-hsv-split:x': 'Hue (HSV)', 'measure-hsv-split:y': 'Saturation (HSV)', 'measure-hsv-split:z': 'Value (HSV)', 'skin-kept': 'Skin Weight', 'weight-saturation': 'Saturation Amount',
+  'measure-hsv-split:x': 'Hue (HSV)', 'measure-hsv-split:y': 'Saturation', 'measure-hsv-split:z': 'Value (HSV)', 'skin-kept': 'Skin Weight', 'weight-saturation': 'Mix Amount',
   'hue-lch-split:x': 'Lightness', 'hue-lch-split:y': 'Chroma', 'hue-lch-split:z': 'Hue', 'hue-rgb': 'Rotated RGB',
   'gain-balanced': 'Balanced Gains', 'range-safe': 'Input Range', 'remap-clamp': 'Normalized RGB', 'gamma-curve': 'Curved RGB', 'output-range': 'Levels RGB' };
 const REDUCE = 'reduce weight-vec4 average blurred';
@@ -99,11 +108,13 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     stage: ({ id, operator }) => operator === 'image.sample' ? 'sampling'
       : /split|^combine$|^image$|^color-|^ink|^mosaic$|^mixed$|^scaled-color$|^poster|^eight-rgb$|^seven-rgb$|^cell-fract$|^border|^plus4$|^center4$|^minus4$/.test(id) ? 'finish' : 'coordinates',
   };
-  if (COLORS.has(type)) return {
+  if (COLOR_RECIPES.has(type)) return {
     labels: { processing: 'Color Processing', ...Object.fromEntries(COLOR_STAGES.map(([, stage, label]) => [stage, label])) },
     portLabels: COLOR_PORTS,
+    inputLabels: { 'hue-lch-combine:x': 'Lightness', 'hue-lch-combine:y': 'Chroma', 'hue-lch-combine:z': 'Hue' },
     stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
+  if (COLORS.has(type)) return ORIGINAL_COLOR_PRESENTATION;
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
     labels: { grid: 'Cell Grid', source: 'Cell Sampling & Tone', index: 'Glyph Selection', atlas: 'Atlas Sampling', appearance: 'Ink & Appearance', feedback: 'Feedback Resolve' },
     stage: ({ id }) => /^(tiny-vec2|almost-vec2)$/.test(id) ? 'sources'
