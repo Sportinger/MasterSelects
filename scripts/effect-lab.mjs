@@ -8,6 +8,10 @@
 //       [--times 0,0.033,0.067] [--url http://localhost:5175]
 //       [--inset 0.7]   # image at 70 % on transparency; the sheet shows cells over a checkerboard
 //       [--quality export]  # particle-render effects: export particle budget instead of preview
+//       [--metrics]     # per cell: meanAlpha, edgeTransparent (alpha < 250 in the outer 8 px),
+//                       # newBlack (max channel < 20 where the original's mean is above 60)
+//       [--require-filled-border]  # with --metrics: fail when a variant leaves a transparent pixel in the
+//                       # outer 8 px (an effect that should fill the layer, e.g. Voxel Relief at its defaults)
 //   node scripts/effect-lab.mjs --compile-probe --effect voxel-relief [--width 1920]
 //       # first frame (waits for the driver to build the pipelines) vs steady frame, in a fresh page
 //   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>]
@@ -21,7 +25,8 @@
 //     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ..., "times": [...] } }
 // (`times`: timeline seconds rendered in order, for feedback effects that build up over frames)
 // (an effect of "original" is the unchanged image).
-// `"backdrop": "checker"` draws a checkerboard behind both crops, so transparent pixels show.
+// `"backdrop": "checker"` draws a checkerboard behind both crops, so transparent pixels show; a colour
+// (`"backdrop": "#3c6ec8"`) fills them flat instead, which stays readable at float size.
 // `"layout": "split"` shows one picture: the crop (default: the whole frame) of the left side up to
 // `"split"` (0.5) of its width, the right side's crop after it, and a thin light divider; `"stack"`
 // puts the two crops one above the other with `gap` between them. `"outWidth"` scales the result.
@@ -60,6 +65,8 @@ async function composePair(page, entry) {
           context.fillStyle = ((tx + ty) / 16) % 2 ? '#8c8c8c' : '#bdbdbd';
           context.fillRect(left + tx, top + ty, Math.min(16, cw - tx), Math.min(16, ch - ty));
         }
+        // A flat colour ("#3c6ec8") reads as "nothing there" even at float size, where a checkerboard looks like dust.
+        else if (typeof backdrop === 'string' && backdrop.startsWith('#')) { context.fillStyle = backdrop; context.fillRect(left, top, cw, ch); }
         context.drawImage(bitmap, x, y, w, h, left, top, cw, ch);
       }
     }
@@ -131,6 +138,28 @@ try {
       }
       results.push({ image, row });
     }
+    // --metrics: coverage, transparent frame border and newly crushed black, against the original cell.
+    if (args.includes('--metrics')) for (const { row } of results) {
+      const metrics = await page.evaluate(async pngs => {
+        const read = async png => { const bitmap = await createImageBitmap(await (await fetch(png)).blob());
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height), context = canvas.getContext('2d');
+          context.drawImage(bitmap, 0, 0); return context.getImageData(0, 0, bitmap.width, bitmap.height); };
+        const original = await read(pngs[0]);
+        return Promise.all(pngs.map(async png => {
+          const { data, width, height } = await read(png);
+          let alpha = 0, edgeTransparent = 0, newBlack = 0;
+          for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+            const i = (y * width + x) * 4;
+            alpha += data[i + 3];
+            if ((x < 8 || y < 8 || x >= width - 8 || y >= height - 8) && data[i + 3] < 250) edgeTransparent += 1;
+            const before = (original.data[i] + original.data[i + 1] + original.data[i + 2]) / 3;
+            if (data[i + 3] > 0 && Math.max(data[i], data[i + 1], data[i + 2]) < 20 && before > 60) newBlack += 1;
+          }
+          return { meanAlpha: +(alpha / (255 * width * height)).toFixed(4), edgeTransparent, newBlack };
+        }));
+      }, row.map(cell => cell.png));
+      row.forEach((cell, index) => { cell.metrics = metrics[index]; });
+    }
     // Contact sheet: rows = images, columns = original + variants, labels on top.
     const sheet = await page.evaluate(async ({ rows, effectId }) => {
       const thumbWidth = 480, label = 22;
@@ -162,10 +191,15 @@ try {
     const summary = {
       effectId, sheet: sheetFile, errors,
       cells: results.flatMap(({ image, row }) => row.map(cell => ({ image, label: cell.label, file: cell.file, renderMs: cell.renderMs,
-        gpuFailure: cell.gpuFailure, pipelineFailures: cell.pipelineFailures?.length ? cell.pipelineFailures : undefined }))),
+        gpuFailure: cell.gpuFailure, metrics: cell.metrics, pipelineFailures: cell.pipelineFailures?.length ? cell.pipelineFailures : undefined }))),
     };
     fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(summary, null, 1));
     console.log(JSON.stringify(summary, null, 1));
+    if (args.includes('--require-filled-border')) {
+      const open = summary.cells.filter(cell => cell.label !== 'original' && cell.metrics?.edgeTransparent > 0);
+      if (open.length) throw new Error(`transparent frame border: ${open.map(cell => `${cell.image} ${cell.label} (${cell.metrics.edgeTransparent} px)`).join(', ')}`);
+      console.log('filled border: every variant covers the outer 8 px');
+    }
   }
 } finally {
   await browser.close();
