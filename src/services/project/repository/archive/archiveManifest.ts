@@ -14,6 +14,8 @@ export interface ArchiveOptions {
   /** Must enumerate every required external original for each selected object. */
   resolveSources?: (record: RepositoryRecord) => AsyncIterable<ArchiveSource>;
   metadata?: Record<string, RecordReference>;
+  /** Display name recorded in the manifest, so an import can name its project before restoring it. */
+  projectName?: string;
   signal?: AbortSignal;
 }
 export interface RepositoryArchiveManifest {
@@ -29,4 +31,6 @@ export interface RepositoryArchiveManifest {
   media: 'linked' | 'self-contained';
   selfContained: boolean;
   sourceBindingsHead: RecordReference | null;
+  /** Absent in archives written before it was recorded; importers then fall back to the file name. */
+  projectName?: string;
 }

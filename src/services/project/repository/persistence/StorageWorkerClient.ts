@@ -133,6 +133,12 @@ export class StorageWorkerClient {
   readBlob(reference: BlobReference, mimeType?: string, signal?: AbortSignal): Promise<Blob | null> {
     return this.request({ type: 'blob-read', reference, mimeType }, signal);
   }
+  /** Cheap presence probe (one byte, no digest); readBlob still verifies the whole content before it is used. */
+  async hasStoredBlob(reference: BlobReference, signal?: AbortSignal): Promise<boolean> {
+    if (!(reference.length > 0)) return false;
+    try { await this.request<Uint8Array>({ type: 'blob-range', reference, offset: 0, length: 1 }, signal); return true; }
+    catch (error) { if (error instanceof RepositoryError && error.code !== 'cancelled' && error.code !== 'access') return false; throw error; }
+  }
   async *readBlobStream(reference: BlobReference, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
     await this.verifyBlob(reference, signal);
     for (let offset = 0; offset < reference.length; offset += 256 * 1024) {

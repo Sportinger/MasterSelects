@@ -405,7 +405,8 @@ the 4 GiB size boundary or 65,535-entry boundary instead of emitting an invalid
 file; ZIP64 is not supported. Directory-based repository storage and backups do
 not use this ZIP container limit. The exported file is named after the open
 project (`<Project name>.msproj`); only an unnamed project falls back to
-`MasterSelects Project.msproj`.
+`MasterSelects Project.msproj`. The archive manifest records the project name
+(`projectName`), so an import can name the project before restoring it.
 
 Restoring an archive streams it entry by entry: entries are stored strictly in
 archive order, so a small entry never waits behind a later entry that still
@@ -419,6 +420,19 @@ repository entry instead of being buffered in memory as an old package first.
 The restore stages into `repository-archive-staging/<import>`; that copy is
 removed once the project holds it, after a failed in-place import, and after a
 cancel. Only a failed import into a separate folder keeps it, to resume from.
+
+A restored archive is an ordinary repository project afterwards. The import
+records `.masterselects/imports/<import>/target.json` before copying and
+`complete.json` (kind `repository-archive`, the archive file, the restored
+commit) after it, so every later open, reload or browser restart opens the
+repository directly instead of treating the archive beside it as an unconverted
+package. A restore that stopped before its commit is refused with a clear
+message (import the archive again into a new project) instead of opening half
+built. Originals embedded in a self-contained archive live in the repository's
+`.masterselects/artifacts/`; they are opened into runtime files in the
+background right after the project activates (two at a time, each verified
+against its content hash), without a clip having to use them first. Media
+outside the repository still open on demand.
 
 Duplicates receive a new repository identity and retain the content lineage.
 Incremental backups preserve the source's immutable descriptor and commit chain;
@@ -461,8 +475,16 @@ projects as well as cached handles.
   (Firefox, Safari) open project folders only through a running Native Helper.
   Without it, File > Open Project lists the projects stored in this browser and
   offers **Import .msproj archive**: the archive is copied into a new
-  browser-storage project folder (`Name`, `Name (2)`, …) and opened there, which
-  restores a repository archive or converts an older `.msproj` package in place.
+  browser-storage project folder and opened there, which restores a repository
+  archive or converts an older `.msproj` package in place. The folder is named
+  after the project recorded in the archive manifest (`Name`, `Name (2)`, …);
+  archives written before the name was recorded use the file name. Once a
+  repository archive is restored, its copy is removed from the folder (an older
+  package stays, because its converted project still reads it); reopening the
+  project later never imports again. Opening a stored project that no longer
+  exists reports that instead of creating an empty folder, and a folder without
+  any project is reported as such instead of being sent to the old-project
+  converter.
   The archive is streamed from disk into browser storage; the log line
   `Project archive copied into browser storage` reports setup and copy times.
   An incomplete copy or an import that does not open is removed again and

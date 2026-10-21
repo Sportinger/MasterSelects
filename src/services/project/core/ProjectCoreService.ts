@@ -11,7 +11,7 @@ import { requestMediaFileAccess, requestMediaSourceRootAccess } from '../mediaSo
 import { getTabLastProjectHandleKey, LEGACY_LAST_PROJECT_HANDLE_KEY, readLastOpfsProjectName } from '../tabProjectPersistence';
 import { openRepositoryProject, createRepositoryAt, renameRepositoryProject, createIndependentProjectBackup, repositoryHasUnsavedChanges } from '../repository/lifecycle/repositoryProjectOperations';
 import { closeEditorRepository, flushEditorRepository, getActiveRepositorySession, readEditorRepositoryProject, isScratchRepository } from '../repository/lifecycle/editorRepositoryLifecycle';
-import { directoryForOpfs, isLegacyProjectLocation } from '../repository/lifecycle/repositoryLocations';
+import { directoryForOpfs, isLegacyProjectLocation, opfsLocationExists } from '../repository/lifecycle/repositoryLocations';
 import { requestLegacyImportTarget } from '../legacyImportTarget';
 import type { RepositoryLocation } from '../repository/storageWorkerProtocol';
 import { RepositoryError } from '../repository/contracts';
@@ -73,6 +73,7 @@ export class ProjectCoreService {
     const root = await acquireProjectRoot('opfs', { throwOnFailure: true }); return root ? listProjectFolderNames(root) : [];
   }
   async openStoredProject(path: string, options: { signal?: AbortSignal } = {}): Promise<boolean> {
+    if (!await opfsLocationExists(path)) throw new RepositoryError('io', `"${path}" is no longer stored in this browser.`);
     await openRepositoryProject({ kind: 'opfs', path }, { signal: options.signal }); await this.adoptSession(await directoryForOpfs(path)); return true;
   }
   async loadProject(handle: FileSystemDirectoryHandle): Promise<boolean> {
@@ -100,8 +101,13 @@ export class ProjectCoreService {
   async renameProject(name: string): Promise<boolean> { return renameRepositoryProject(name); }
   async restoreLastProject(): Promise<boolean> {
     const repositoryPath = sessionStorage.getItem('ms.repository.last-opfs-path');
-    if (repositoryPath) return this.openStoredProject(repositoryPath);
-    if (resolveProjectRootMode() === 'opfs') { const name = readLastOpfsProjectName(); return name ? this.openStoredProject(name) : false; }
+    const lastStored = repositoryPath ?? (resolveProjectRootMode() === 'opfs' ? readLastOpfsProjectName() : null);
+    if (lastStored) {
+      // A project removed from browser storage since then is simply not restored.
+      if (await opfsLocationExists(lastStored)) return this.openStoredProject(lastStored);
+      log.info('Last stored project no longer exists; nothing restored', { name: lastStored }); return false;
+    }
+    if (resolveProjectRootMode() === 'opfs') return false;
     try {
       const stored = await projectDB.getStoredHandle(getTabLastProjectHandleKey()) ?? await projectDB.getStoredHandle(LEGACY_LAST_PROJECT_HANDLE_KEY);
       if (!stored || stored.kind !== 'directory') return false;

@@ -167,7 +167,8 @@ export async function prepareArchive(source: RepositoryBackend, sourceDescriptor
     sourceRepositoryId: sourceDescriptor.repositoryId, sourceCommit: pin, targetCommit,
     history: { kind: selection.kind, name: 'name' in selection ? selection.name : undefined, roots: Object.keys(heads).filter(key => key === 'content' || key.startsWith('branch:')) },
     journals: Array.isArray(options.journals) ? 'selected' : options.journals, workspace: options.workspace, media: options.media,
-    selfContained: options.media === 'self-contained', sourceBindingsHead: bindingHead };
+    selfContained: options.media === 'self-contained', sourceBindingsHead: bindingHead,
+    ...(options.projectName?.trim() ? { projectName: options.projectName.trim().slice(0, 256) } : {}) };
   await writeJson(target, 'archive-manifest.json', manifest, options.signal);
   return manifest;
 }

@@ -51,7 +51,43 @@ export function startScheduledLinkedMediaConnection(): void {
   const job = scheduled; scheduled = null;
   if (!job || getEditorRepositorySession() !== job.session) { notify(); return; }
   stopDemand = observeDemand(job.session);
+  void openEmbeddedOriginals(job.session, job.items);
   notify();
+}
+
+/** Each embedded read verifies its full digest in the storage worker, so only a few run at once. */
+const EMBEDDED_CONCURRENCY = 2;
+/**
+ * Originals stored inside the repository (e.g. a restored self-contained .msproj) need no folder access or
+ * probing, so they open in the background right after activation instead of waiting until a clip uses them.
+ * Media outside the repository stay on demand.
+ */
+async function openEmbeddedOriginals(session: RepositorySession, items: readonly ProjectMedia[]): Promise<void> {
+  const current = () => getEditorRepositorySession() === session;
+  let next = 0, opened = 0, failed = 0;
+  await Promise.all(Array.from({ length: Math.min(EMBEDDED_CONCURRENCY, items.length) }, async () => {
+    while (next < items.length && current()) {
+      const item = items[next++];
+      const reference = embeddedOriginalReference(session, item);
+      if (!reference || !isLinkedMediaDeferred(item.id)) continue;
+      try {
+        if (!await session.client.hasStoredBlob(reference) || !current()) continue;
+        if (await requestLinkedMedia(item.id)) opened++; else failed++;
+      } catch (error) {
+        failed++; log.warn('Embedded original could not be opened; it is opened again when used', { id: item.id, name: item.name, error });
+      }
+    }
+  }));
+  if (opened || failed) log.info('Embedded originals opened after activation', { opened, failed, total: items.length });
+}
+/** The verified byte identity under which the repository may hold this media's original. */
+function embeddedOriginalReference(session: RepositorySession | null, item: ProjectMedia): { hash: string; length: number } | null {
+  const projection = session?.coordinator?.getProjection();
+  const key = entityKey('media', 'project', item.id);
+  const authored = projection?.entities.has(key) ? object(decodeOwnedAggregate(key, projection.entities)) : {};
+  const identity = object(authored.$sourceIdentity ?? projection?.entities.get(`source-identity:${item.id}`)?.value);
+  return identity.identityStatus === 'verified' && typeof identity.contentHash === 'string' && typeof identity.byteLength === 'number'
+    ? { hash: identity.contentHash, length: identity.byteLength } : null;
 }
 
 /** Export consumes the complete active composition, so await its deferred sources first. */
@@ -241,13 +277,10 @@ async function connect(item: ProjectMedia, current: () => boolean, stage: (file:
   if (existing.file) return true;
   // Automatic access trusts the exact saved location; explicit reconnects validate the replacement.
   const session = getEditorRepositorySession();
-  const projection = session?.coordinator?.getProjection();
-  const key = entityKey('media', 'project', item.id);
-  const authored = projection?.entities.has(key) ? object(decodeOwnedAggregate(key, projection.entities)) : {};
-  const identity = object(authored.$sourceIdentity ?? projection?.entities.get(`source-identity:${item.id}`)?.value);
-  if (session && identity.identityStatus === 'verified' && typeof identity.contentHash === 'string' && typeof identity.byteLength === 'number') {
-    const blob = await session.client.readBlob({ hash: identity.contentHash, length: identity.byteLength });
-    if (blob && blob.size === identity.byteLength && current()) {
+  const reference = embeddedOriginalReference(session, item);
+  if (session && reference) {
+    const blob = await session.client.readBlob(reference);
+    if (blob && blob.size === reference.length && current()) {
       const file = new File([blob], item.name, { type: blob.type });
       const url = await createRenderablePrimaryMediaObjectUrl(item.id, file);
       if (!current()) return false;

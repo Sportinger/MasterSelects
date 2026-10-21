@@ -10,7 +10,7 @@ import { readJson, writeJson } from '../archive/streamIO';
 import { findCompletedBackup, completedBackupSource } from '../archive/backupCompletion';
 import { prepareArchive } from '../archive/selectiveArchive';
 import { newRepositoryDescriptor } from './RepositoryLifecycle';
-import { assertLegacyImportComplete, hasResumableInPlaceImport, isLegacyProjectBackend, prepareLegacyImport } from './legacyImportPreparation';
+import { assertLegacyImportComplete, findLegacyPackage, hasResumableInPlaceImport, isLegacyProjectBackend, prepareLegacyImport } from './legacyImportPreparation';
 import type { ReadOnlyProjectSource } from '../import/legacySource';
 import { directorySource } from '../import/sourceReaders';
 import { createEditorRepositoryActivation } from '../transaction/editorProjectionActivation';
@@ -32,6 +32,20 @@ export async function directoryForOpfs(path: string, store?: BrowserStorageKind)
     root = await root.getDirectoryHandle(part, { create: true });
   }
   return root;
+}
+/** Opening must not create a browser-storage folder: a missing project is reported, not replaced by an empty one. */
+export async function opfsLocationExists(path: string, store?: BrowserStorageKind): Promise<boolean> {
+  let directory = await (store ? getBrowserStorageRootOf(store) : getBrowserStorageRoot());
+  try {
+    for (const part of path.split('/')) {
+      if (!part || part === '.' || part === '..') return false;
+      directory = await directory.getDirectoryHandle(part);
+    }
+    return true;
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === 'NotFoundError' || error.name === 'TypeMismatchError')) return false;
+    throw error;
+  }
 }
 /** Removes a nested browser-storage folder (staging, never a top-level project); a missing folder is already gone. */
 export async function removeOpfsLocation(path: string, store?: BrowserStorageKind): Promise<void> {
@@ -102,6 +116,10 @@ export async function prepareRepositoryOpen(location: RepositoryLocation, worksp
     }
     await assertLegacyImportComplete(backend);
     return { options: { descriptor, location, workspaceId, activation: createEditorRepositoryActivation(), nativeClient: NativeHelperClient } };
+  }
+  // Only old project files convert; anything else (e.g. an empty folder) is not a project to import.
+  if (!await backend.stat('project.json') && !await findLegacyPackage(backend)) {
+    throw new RepositoryError('unsupported', 'This folder does not contain a MasterSelects project (no project.msrepo.json, project.json or .msproj file).');
   }
   let source: ReadOnlyProjectSource;
   if (location.kind === 'native') source = { sourceId: backend.locationId, locationId: backend.locationId,
