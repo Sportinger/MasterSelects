@@ -49,6 +49,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 |---|---|
 | [Timeline](./Timeline.md) | Tracks, clips, nested comps, markers, selection, and editing flow |
 | [Transition Compositions](./Transition-Compositions.md) | Mapped-v3 transition source layout, templates, parity, and explicit legacy upgrades |
+| [Dissolve Transitions](./Transitions-Dissolve.md) | Crossfade with a filmstrip: how to apply it, its controls, and how picture and sound fade |
 | [Timeline Rulers](./Timeline-Rulers.md) | Stacked multi-ruler lanes (time/timecode/frames/bars/tempo) via the **Rulers** checklist, TempoMap-driven bars+beats, and per-composition persistence (#257) |
 | [Tempo And Metronome](./Tempo-And-Metronome.md) | Editable tempo track with BPM/meter flags and ramps, tempo-driven grid and snapping, MIDI content that follows tempo, and a metronome click (#299) |
 | [Score Tracks](./Score-Tracks.md) | Audio-section score tracks with pencil-drawn score clips and a detached score-editor window — scorewriter infrastructure (#366) |
@@ -78,6 +79,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Blur Effects](./Effects-Blur.md) | The five blurs with before/after pictures, their controls in the editor, the node graphs behind them, and technical notes |
 | [Distort Effects](./Effects-Distort.md) | Bulge & Pinch, Twirl, Wave, Fisheye Lens, Lens Correction, Guided Perspective and AI Edge Fill with before/after pictures, their controls, the read-position graph behind them, and technical notes |
 | [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md) | Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block Mosaic with before/after pictures, their controls, the graphs behind them, and technical notes |
+| [Color Effects](./Effects-Color.md) | Brightness, Contrast, Exposure, Levels, Saturation, Vibrance, Temperature, Hue Shift and Invert with split-screen pictures, their controls, the colour recipes behind them, and technical notes |
 | [Slit Scan 3D](./Slit-Scan-3D.md) | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
 | [Memory Leak](./Memory-Leak.md) | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
 | [Color Correction](./Color-Correction.md) | Node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
