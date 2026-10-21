@@ -422,6 +422,23 @@ describe('voice levels and elements', () => {
     syncWindow(sync, frameContext(differentSounds(), 3.8));
     expect(synced[0].element).toBe(handoff);
   });
+
+  it('plays a ready proxy, and keeps the voice silent instead of the original while that proxy is still loading', () => {
+    const elements = { a: mediaElement('a original', { paused: false }), b: mediaElement('b original', { paused: false }) };
+    const proxyA = mediaElement('a proxy');
+    const synced: AudioSyncTarget[] = [];
+    const sync = createSync(elements, synced, {
+      resolveAudioProxyForClip: (clip) => (clip.id === 'a'
+        ? { element: proxyA, pending: false }
+        : { element: null, pending: true }),
+    });
+    const frame = syncWindow(sync, frameContext(differentSounds(), 3.8));
+    expect(synced.map((target) => [target.clip.id, target.element])).toEqual([['a', proxyA]]);
+    // Neither original plays: a's voice is on its proxy, b's proxy is still loading.
+    expect(elements.a.pause).toHaveBeenCalled();
+    expect(elements.b.pause).toHaveBeenCalled();
+    expect(frame.handoffOverrides.get('a1')).toBeUndefined();
+  });
 });
 
 describe('one voice or two for a split recording', () => {
