@@ -28,7 +28,9 @@ export function TimelineSlotPanelHost({
   // every data write fed the mode back into itself and could loop (React #185),
   // so registration follows the panel id only and reads the latest initial mode.
   const initialModeRef = useRef(initialMode);
-  initialModeRef.current = initialMode;
+  useEffect(() => {
+    initialModeRef.current = initialMode;
+  }, [initialMode]);
 
   useEffect(() => {
     registerHost(panelId, initialModeRef.current);

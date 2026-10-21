@@ -58,8 +58,11 @@ export function whenPageVisible(callback: () => void): void {
 export class DeviceLossPolicy {
   private recentLosses: number[] = [];
   private reportedUnexpectedLoss = false;
+  private readonly now: () => number;
 
-  constructor(private readonly now: () => number = () => Date.now()) {}
+  constructor(now: () => number = () => Date.now()) {
+    this.now = now;
+  }
 
   classify(): DeviceLossDecision {
     installPageLifecycle();
