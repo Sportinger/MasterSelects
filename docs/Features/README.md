@@ -11,7 +11,7 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | Capability | Description |
 |---|---|
 | **Notebook** | [Write project notes, mark scenes and link passages](Documents.md), with document import, original views and screenplay layout |
-| **Time Stack** | [Blend delayed video instances](Time-Stack.md) in a compact editable node group with deterministic source sampling |
+| **Time Stack** | [Blend delayed video instances](./effects/time-stack.md) in a compact editable node group with deterministic source sampling |
 | **AI Depth Map** | [Local depth estimation](Depth-Estimation.md), live source preview and reusable depth-video baking |
 | **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, transitions, shortcuts, and keyframes |
@@ -119,11 +119,9 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | [Painterly, relief and particles](./Effects-Stylize-Art.md) | `stylize` | Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate with before/after pictures, their controls, how they are built, and technical notes |
 | [Overview](./Effects-Distort.md) | `distort` | Bulge & Pinch, Twirl, Wave, Fisheye Lens, Lens Correction, Guided Perspective and AI Edge Fill with before/after pictures, their controls, the read-position graph behind them, and technical notes |
 | [Mirror, split and pixel](./Effects-Mirror-Pixel.md) | `pixel` | Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block Mosaic with before/after pictures, their controls, the graphs behind them, and technical notes |
-| [Overview](./Effects-Analog.md) | `analog` | CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and Pixel Sort with before/after pictures, their controls, the recipes behind them, and technical notes |
+| [Overview](./Effects-Analog.md) | `analog` | Which analog or glitch effect to choose, the shared idea of the analog recipes, and group-wide technical notes |
 | [Memory Leak](./Memory-Leak.md) | `analog` | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
-| [Overview](./Effects-Keying-Time.md) | `keying` | Chroma Key, Time Stack and Slit Scan with before/after pictures, inspector, graph recipes and technical notes |
-| [Time Stack](./Time-Stack.md) | `time` | Delayed video instances blended in an editable node group: instance count, time offset, blend modes, and the GPU frame cache |
-| [Slit Scan 3D](./Slit-Scan-3D.md) | `time` | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
+| [Overview](./Effects-Keying-Time.md) | `keying` | Which keying or time effect to choose, how the time effects read the past, and group-wide technical notes |
 | [Overview](./Effects-Generate.md) | `generate` | Color Wheel, Perspective Grid and Stick Figure, plus the Flocking, Weave and Memory Leak generators, with before/after pictures, their controls, how they are built and technical notes |
 
 <!-- planned:

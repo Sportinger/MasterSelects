@@ -32,7 +32,7 @@ Group: [3D & Particles](./index.md#3d--particles) · [How to add an effect](../E
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), Crystal Glass, Glass Dispersion, Wave Lines, [Embroidery](./embroidery.md), [Outline](./outline.md).
+**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
 
 ## Technical details
 
