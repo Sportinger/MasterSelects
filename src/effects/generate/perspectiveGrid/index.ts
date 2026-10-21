@@ -21,14 +21,14 @@ export const PERSPECTIVE_GRID_PARAMS = {
   rows: number('Row Density', 6, 0.5, 60, 0.1, true, { group: 'Grid', renderMin: 0 }),
   // Shown as the full width; the line thins with distance like a painted floor line.
   lineWidth: number('Line Width', 1.5, 0, 8, 0.05, true, { group: 'Grid', displayScale: 2, unit: ' px', renderMin: 0 }),
-  speed: number('Speed (rows/s)', 1.5, -20, 20, 0.1, false, { group: 'Motion' }),
+  speed: number('Speed', 1.5, -20, 20, 0.1, false, { group: 'Motion', unit: ' rows/s' }),
   offset: number('Scroll Offset', 0, -1000, 1000, 0.01, true, { group: 'Motion' }),
   color: { type: 'color', label: 'Line Color', default: '#2ee6ff', group: 'Look' },
   opacity: number('Opacity', 0.8, 0, 1, 0.01, true, { group: 'Look', renderMin: 0, renderMax: 1 }),
   fade: number('Horizon Fade', 1.4, 0.05, 6, 0.05, true, { group: 'Look', renderMin: 0 }),
   blend: {
     type: 'select', label: 'Blend', default: 'add', group: 'Look',
-    options: [{ value: 'add', label: 'Add (glowing lines)' }, { value: 'normal', label: 'Normal (cover the image)' }],
+    options: [{ value: 'add', label: 'Add (glow)' }, { value: 'normal', label: 'Normal (solid)' }],
   },
 } satisfies Record<string, EffectParam>;
 
