@@ -15,7 +15,7 @@ import { BlurGraphBuilder, normalizeNodes, premultipliedSourceCache, unpremultip
  *   premultiplied rgba16float copy of the frame and is unpremultiplied, so transparent pixels
  *   never darken a cell.
  * - Blockify posterizes the cell colour to Levels steps per channel, with an ordered 4 × 4 Bayer
- *   dither per cell (Dither); Block Mosaic merges some 2 × 2 groups of tiles into one large tile
+ *   dither per cell (Dither) that fades out in the shadows; Block Mosaic merges some 2 × 2 groups of tiles into one large tile
  *   (re-drawn Speed times per second) and draws grout lines between tiles. Amount mixes the result
  *   with the original (premultiplied, so alpha follows).
  */
@@ -28,6 +28,8 @@ export const BLOCKIFY_MAX_LEVELS = 64;
 export const MOSAIC_LARGE_THRESHOLD = .68;
 /** Per shuffle step, the hash seed moves by these irrational fractions, so no step repeats or shifts the last one. */
 export const MOSAIC_SHUFFLE_RATE = [.6180339887, .7548776662] as const;
+/** Blockify's dither fades out below one level step, but never above this straight value (keeps Levels 2–3 dithered). */
+export const BLOCKIFY_DITHER_SHADOW = .25;
 /** Added to grid indices before the Bayer lookup, which reads nonnegative cells (a multiple of 4, exact in f32). */
 export const BAYER_INDEX_OFFSET = 65536;
 
@@ -162,8 +164,8 @@ export function createDefaultBlockifyGraph(): EffectOperatorGraph {
   cellGrid(g, cell);
   const { rgb, alpha } = straightColour(g, 'cell', cellAverage(g));
   // Levels steps per channel: floor(c × (L − 1) + 0.5 + d) / (L − 1). The ordered dither d is the
-  // cell's 4 × 4 Bayer threshold − 0.5 (within ±0.47 of a step) times Dither, so dark gradients
-  // break into a regular pattern instead of flat bands; black and white stay exact.
+  // cell's 4 × 4 Bayer threshold − 0.5 (within ±0.47 of a step) times Dither, so gradients break
+  // into a regular pattern instead of flat bands; black and white stay exact.
   g.bound('levels', 'levels');
   g.binary('levels-shifted', 'math.add.scalar', 'levels', 'half');
   g.unary('levels-rounded', 'math.floor.scalar', 'levels-shifted');
@@ -179,9 +181,21 @@ export function createDefaultBlockifyGraph(): EffectOperatorGraph {
   g.bound('dither', 'dither');
   g.add('dither-amount', 'math.clamp.scalar', { value: 'dither', min: 'zero', max: 'one' });
   g.binary('dither-offset', 'math.multiply.scalar', 'bayer-centred', 'dither-amount');
-  g.binary('dither-shift', 'math.add.scalar', 'dither-offset', 'half');
-  g.unary('poster-half', 'convert.scalar-to-rgb', 'dither-shift');
-  g.binary('poster-shifted', 'math.add.rgb', 'poster-scaled', ['poster-half', 'rgb']);
+  // Shadow guard: per channel the dither fades in as (c / w)², w = one level step but at most
+  // BLOCKIFY_DITHER_SHADOW, so stage black and dark haze stay flat instead of sparkling.
+  g.binary('poster-step', 'math.divide-ieee.scalar', 'one', 'poster-steps');
+  g.number('dither-shadow-limit', BLOCKIFY_DITHER_SHADOW);
+  g.binary('dither-shadow-width', 'math.min.scalar', 'poster-step', 'dither-shadow-limit');
+  g.add('dither-shadow-ratio', 'math.divide-ieee.rgb-scalar', { a: rgb, b: 'dither-shadow-width' });
+  g.unary('poster-zero-rgb', 'convert.scalar-to-rgb', 'zero');
+  g.unary('poster-one-rgb', 'convert.scalar-to-rgb', 'one');
+  g.add('dither-shadow-ramp', 'math.clamp.rgb', { value: 'dither-shadow-ratio', min: ['poster-zero-rgb', 'rgb'], max: ['poster-one-rgb', 'rgb'] });
+  g.binary('dither-shadow-guard', 'math.multiply.rgb', 'dither-shadow-ramp', 'dither-shadow-ramp');
+  g.unary('dither-rgb', 'convert.scalar-to-rgb', 'dither-offset');
+  g.binary('dither-guarded', 'math.multiply.rgb', ['dither-rgb', 'rgb'], 'dither-shadow-guard');
+  g.unary('poster-half-rgb', 'convert.scalar-to-rgb', 'half');
+  g.binary('poster-centred', 'math.add.rgb', 'poster-scaled', ['poster-half-rgb', 'rgb']);
+  g.binary('poster-shifted', 'math.add.rgb', 'poster-centred', 'dither-guarded');
   g.unary('poster-floor', 'math.floor.rgb', 'poster-shifted');
   g.add('poster', 'math.divide-ieee.rgb-scalar', { a: 'poster-floor', b: 'poster-steps' });
   mixWithOriginal(g, 'poster', alpha as string);

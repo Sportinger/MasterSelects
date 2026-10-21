@@ -222,11 +222,25 @@ describe('Blockify and Block Mosaic recipes', () => {
         const average = referenceAverage(texel, referenceCell(x, y, cell, width, height)), [r, g, b, a] = straight(average);
         if (a < .05) continue;
         const steps = clamp(Math.floor(levels + .5), 2, 64) - 1, t = clamp(amount, 0, 1);
-        const shift = .5 + (bayer(Math.floor((x + .5 - 6) / cell), Math.floor((y + .5 - 4) / cell)) - .5) * clamp(dither, 0, 1);
-        const poster = [r, g, b].map(value => Math.floor(value * steps + shift) / steps);
+        const offset = (bayer(Math.floor((x + .5 - 6) / cell), Math.floor((y + .5 - 4) / cell)) - .5) * clamp(dither, 0, 1);
+        // Shadow guard: the dither fades in as (c / w)², w = one step but at most 0.25.
+        const guard = (value: number) => clamp(value / Math.min(1 / steps, .25), 0, 1) ** 2;
+        const poster = [r, g, b].map(value => Math.floor(value * steps + .5 + offset * guard(value)) / steps);
         const original = premultiply(texel(x, y));
         const mixed = [...poster.map(value => value * a), a].map((value, channel) => original[channel] + (value - original[channel]) * t) as Pixel;
         expectClose(evaluate([(x + .5) / width, (y + .5) / height]), straight(mixed), 2);
+      }
+    }
+  });
+
+  it('Blockify dither keeps dark shades below one level step flat black at the default settings', () => {
+    const width = 16, height = 16, cell = 2, size = cell * 1080 / 16;
+    // Defaults (Levels 8, Dither 0.5) and full Dither: stage black and dark haze (up to a third of a step) stay 0 in every block.
+    for (const [level, dither] of [[.01, undefined], [.03, undefined], [.05, undefined], [.05, 1]] as const) {
+      const evaluate = createImagePassEvaluator(plan('blockify', { scale: size, ...(dither === undefined ? {} : { dither }) }), [width, height],
+        discreteImage(width, height, () => [level, level * .8, level * .6, 1]), { filterResources: true, float16: true });
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        expect(evaluate([(x + .5) / width, (y + .5) / height]).slice(0, 3)).toEqual([0, 0, 0]);
       }
     }
   });

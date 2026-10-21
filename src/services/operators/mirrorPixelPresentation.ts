@@ -14,7 +14,8 @@ const CELL_PORTS = { 'pixel-scale': 'Pixel Scale', 'cell-px': 'Cell (px)', 'tile
   'tile-coverage': 'Tile Coverage', mosaic: 'Tiles & Grout', 'mixed-image': 'Mixed', 'large-position': 'Large Grid Position', 'large-index': 'Large Tile Index',
   'hash-input': 'Shuffled Key', 'group-hash': 'Group Random', 'shuffle-seed': 'Shuffle Seed', 'large-cell': 'Large Tile Size', 'time-step-vec2': 'Shuffle Step',
   'shuffle-rate': 'Shuffle Rate', 'shuffle-scaled': 'Scaled Step', 'group-key': 'Group Key', bayer: 'Bayer Threshold',
-  'bayer-cell': 'Bayer Cell', 'dither-amount': 'Dither (0–1)', 'dither-shift': 'Rounding Offset', 'grid-index': 'Cell Index', 'grid-low-split:x': 'Cell Start X', 'grid-high-split:x': 'Cell End X', 'grid-low-split:y': 'Cell Start Y',
+  'bayer-cell': 'Bayer Cell', 'dither-amount': 'Dither (0–1)', 'poster-step': 'Level Step', 'dither-shadow-guard': 'Shadow Guard', 'dither-guarded': 'Guarded Dither',
+  'poster-centred': 'Scaled + 0.5', 'grid-index': 'Cell Index', 'grid-low-split:x': 'Cell Start X', 'grid-high-split:x': 'Cell End X', 'grid-low-split:y': 'Cell Start Y',
   'grid-high-split:y': 'Cell End Y', 'resolution-split:x': 'Frame Width', 'resolution-split:y': 'Frame Height', 'uv-split:x': 'UV X', 'uv-split:y': 'UV Y' };
 
 export function mirrorPixelPresentationPlan(type: string): EffectPresentationPlan | undefined {

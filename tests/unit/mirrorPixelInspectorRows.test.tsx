@@ -1,6 +1,6 @@
 // Inspector rows of the mirror, split and pixel effects (docs/Features/Effects-Mirror-Pixel.md):
-// values read with the decimals of their step, Angle dims in RGB Split's Lens mode, colour rows
-// show their hex value and reset, and value notes name parameters by their label.
+// values read with the decimals of their step, Angle dims in RGB Split's Lens mode with a visible
+// reason, colour rows show their hex value and reset, and value notes name parameters by their label.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ResolveEffectParamRow } from '../../src/components/panels/properties/ResolveEffectParamRow';
@@ -29,9 +29,18 @@ describe('mirror, split and pixel inspector rows', () => {
     const row = container.querySelector('.inspector-row')!;
     expect(row.classList.contains('is-disabled')).toBe(true);
     expect(row.getAttribute('title')).toContain('Offset mode only');
+    // The reason is also visible under the row (no hover on touch).
+    expect(container.querySelector('.resolve-effect-row-note')?.textContent).toBe('Offset mode only: Lens splits outwards from the centre.');
     rerender(<ResolveEffectParamRow paramName="angle" definition={angle} value={0}
       effect={{ id: 'split-1', params: { amount: .01, angle: 0, mode: 'offset' } }} onChange={vi.fn()} />);
     expect(container.querySelector('.inspector-row')!.classList.contains('is-disabled')).toBe(false);
+    expect(container.querySelector('.resolve-effect-row-note')).toBeNull();
+  });
+
+  it('keeps the grout controls together and lets Levels span the whole 2–64 range it renders', () => {
+    expect(Object.entries(getEffect('block-mosaic')!.params).filter(([, param]) => !param.deprecated).map(([id]) => id))
+      .toEqual(['scale', 'grout', 'colorA', 'speed', 'amount']);
+    expect(getEffect('blockify')!.params.levels).toMatchObject({ min: 2, max: 64 });
   });
 
   it('shows the hex value of a colour and resets it to the default', () => {

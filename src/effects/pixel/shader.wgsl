@@ -40,8 +40,11 @@ fn blockifyFragment(input: VertexOutput) -> @location(0) vec4f {
   let average = cellAveragePremultiplied(inputTex, cellBounds(pixel, cell, params.resolution), params.resolution);
   let steps = clamp(floor(params.levels + 0.5), 2.0, 64.0) - 1.0;
   let index = floor((pixel - floor(params.resolution * 0.5)) / cell);
-  let shift = 0.5 + (bayer4(index) - 0.5) * clamp(params.dither, 0.0, 1.0);
-  let poster = floor(average.rgb / max(average.a, 0.000001) * steps + shift) / steps;
+  let straight = average.rgb / max(average.a, 0.000001);
+  // The dither fades in as (c / w)^2 over the darkest level step (at most 0.25), so black stays flat.
+  let ramp = clamp(straight / min(1.0 / steps, 0.25), vec3f(0.0), vec3f(1.0));
+  let dither = (bayer4(index) - 0.5) * clamp(params.dither, 0.0, 1.0) * ramp * ramp;
+  let poster = floor(straight * steps + 0.5 + dither) / steps;
   return blockMix(input.uv, poster, average.a);
 }
 

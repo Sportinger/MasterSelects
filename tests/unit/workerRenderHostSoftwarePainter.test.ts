@@ -873,17 +873,20 @@ describe('worker software painter', () => {
 
     it('runs them first as one hand-written pass only when nothing that moves or mixes pixels comes before them', () => {
       expect(plan([kaleidoscope, twirl]).pixelEffects).toMatchObject({ mirrorPixelAdjustments: [{ type: 'kaleidoscope' }], uvDistortAdjustments: [{ kind: 'twirl' }] });
-      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, kaleidoscope]).pixelEffects.mirrorPixelAdjustments).toHaveLength(1);
+      // Pointwise effects in front join the pass as whole-frame steps in stack order (see workerSoftwareMirrorPixelStack.test.ts).
+      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, kaleidoscope]).pixelEffects).toMatchObject({
+        mirrorPixelAdjustments: [{ type: 'pointwise', step: { kind: 'exposure' } }, { type: 'kaleidoscope' }] });
+      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, kaleidoscope]).pixelEffects.exposureAdjustments).toBeUndefined();
       expect(plan([{ type: 'mirror', params: {} }, { type: 'pixelate', params: { size: 30 } }]).pixelEffects.mirrorPixelAdjustments).toHaveLength(2);
-      // A resampling or neighbourhood effect first, or anything before Pixelate's average or RGB Split's
-      // per-channel reads, would run after the hand-written pass: the layer runs as ordered graph plans.
+      // A resampling or neighbourhood effect first would run after the hand-written pass: the layer runs as ordered graph plans.
       for (const earlier of [twirl, { type: 'motion-blur', params: { amount: .05, angle: 0 } }, { type: 'zoom-blur', params: { amount: .3 } }]) {
         const stacked = plan([earlier, kaleidoscope]).pixelEffects;
         expect(stacked.mirrorPixelAdjustments).toBeUndefined();
         expect(stacked.imageOperatorPlanOwners?.map(owner => JSON.parse(owner.feedbackKey)[1])).toEqual([`fx-0-${earlier.type}`, 'fx-1-kaleidoscope']);
       }
-      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, { type: 'pixelate', params: { size: 30 } }]).pixelEffects.imageOperatorPlans).toHaveLength(2);
-      expect(plan([{ type: 'vibrance', params: { amount: .5 } }, { type: 'rgb-split', params: { amount: .05 } }]).pixelEffects.imageOperatorPlans).toHaveLength(2);
+      for (const earlier of [{ type: 'gaussian-blur', params: { radius: 4 } }, { type: 'sharpen', params: { amount: 1 } }, { type: 'glow', params: {} }]) {
+        expect(plan([earlier, { type: 'pixelate', params: { size: 30 } }]).pixelEffects.mirrorPixelAdjustments).toBeUndefined();
+      }
     });
 
     it('renders Twirl then Kaleidoscope differently from Kaleidoscope then Twirl, each as its effects one after the other', () => {

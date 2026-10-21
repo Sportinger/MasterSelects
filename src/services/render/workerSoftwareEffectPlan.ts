@@ -11,25 +11,27 @@ import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraph
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
 import { workerSoftwareUvDistortAdjustment, type WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
 import { workerSoftwareMirrorPixelAdjustment, type WorkerSoftwareMirrorPixelAdjustment } from './workerSoftwareMirrorPixelEffects';
+import { isWorkerSoftwarePointwiseEffect, workerSoftwarePointwiseStep, type WorkerSoftwarePointwiseStep } from './workerSoftwarePointwiseEffects';
 
 /** Built-in recipes with a hand-written worker CPU pass (edited graphs run through the graph interpreter). */
 const HAND_WRITTEN_MIRROR_PIXEL = new Set(['kaleidoscope', 'mirror', 'pixelate', 'rgb-split']);
-/** Spatially uniform colour adjustments: they give the same picture before or after a pure resampling. */
-const UNIFORM_COLOUR_EFFECTS = new Set(['brightness', 'exposure', 'temperature', 'vibrance', 'levels', 'threshold', 'posterize',
-  'chroma-key', 'contrast', 'saturation', 'hue-shift', 'invert']);
+
+/** Index of the last active built-in mirror/pixel effect in `effects`, -1 without one. */
+function lastHandWrittenMirrorPixelIndex(effects: readonly Pick<Effect, 'type' | 'enabled'>[]): number {
+  return effects.findLastIndex(effect => effect.enabled !== false && HAND_WRITTEN_MIRROR_PIXEL.has(effect.type));
+}
 
 /**
- * The hand-written mirror/pixel pass runs on the whole frame before every other worker CPU effect,
- * so it may only follow effects it commutes with: other built-in mirror/pixel effects (applied in
- * stack order) and, for the pure resampling of Kaleidoscope and Mirror, uniform colour adjustments.
- * Anything else earlier in the stack (a distort, blur, glow, vignette, grain, or any effect before
- * Pixelate's average or RGB Split's per-channel reads) would run after it on the CPU; such layers
- * run as ordered graph plans instead (see workerSoftwareEffectPlanForLayer).
+ * The hand-written mirror/pixel pass runs on the whole frame before the per-pixel loop and the
+ * canvas filter, in stack order together with the pointwise effects in front of it (a grade, a
+ * key, a vignette: exact as whole-frame steps). Anything else in front of a built-in mirror/pixel
+ * effect (a distort, blur, glow, sharpen or feedback effect) would run after it on the CPU; such
+ * layers run as ordered graph plans instead (see workerSoftwareEffectPlanForLayer).
  */
-export function handWrittenMirrorPixelOutOfOrder(activeEffects: readonly Pick<Effect, 'type'>[]): boolean {
-  return activeEffects.some((effect, index) => HAND_WRITTEN_MIRROR_PIXEL.has(effect.type)
-    && activeEffects.slice(0, index).some(earlier => !HAND_WRITTEN_MIRROR_PIXEL.has(earlier.type)
-      && !((effect.type === 'kaleidoscope' || effect.type === 'mirror') && UNIFORM_COLOUR_EFFECTS.has(earlier.type))));
+export function handWrittenMirrorPixelOutOfOrder(activeEffects: readonly Effect[]): boolean {
+  const last = lastHandWrittenMirrorPixelIndex(activeEffects);
+  return activeEffects.slice(0, Math.max(0, last)).some(effect => !HAND_WRITTEN_MIRROR_PIXEL.has(effect.type)
+    && !isWorkerSoftwarePointwiseEffect(effect.type) && workerSoftwareUvDistortAdjustment(effect) !== null);
 }
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
@@ -89,7 +91,7 @@ interface MutableWorkerSoftwarePixelEffects {
     reset: boolean;
     historyLoop?: 'reset' | 'continuous';
   }[];
-  /** Built-in Kaleidoscope, Mirror, RGB Split and Pixelate, in stack order. */
+  /** Built-in Kaleidoscope, Mirror, RGB Split and Pixelate with the pointwise effects in front of them, in stack order. */
   mirrorPixelAdjustments?: WorkerSoftwareMirrorPixelAdjustment[];
   exposureAdjustments?: { exposure: number; offset: number; gamma: number }[];
   temperatureAdjustments?: { temperature: number; tint: number }[];
@@ -192,14 +194,42 @@ export function canvasBlurSigmaPx(type: 'gaussian-blur' | 'box-blur', radius: nu
 
 const DEFAULT_OUTPUT_SIZE = { width: 1920, height: 1080 } as const;
 
+/** A pointwise effect behind the mirror/pixel pass: the per-pixel loop, or a canvas filter (Contrast, Saturation, Hue Shift, Invert). */
+function addPointwiseEffect(pixelEffects: MutableWorkerSoftwarePixelEffects, step: WorkerSoftwarePointwiseStep): string {
+  switch (step.kind) {
+    case 'brightness': pixelEffects.brightness += step.amount; return '';
+    case 'contrast': return `contrast(${Math.max(0, step.amount)})`;
+    case 'saturation': return `saturate(${Math.max(0, step.amount)})`;
+    case 'hue-shift': return `hue-rotate(${step.amount * 360}deg)`;
+    case 'invert': return 'invert(1)';
+    case 'exposure': (pixelEffects.exposureAdjustments ??= []).push(step.adjustment); return '';
+    case 'temperature': (pixelEffects.temperatureAdjustments ??= []).push(step.adjustment); return '';
+    case 'vibrance': (pixelEffects.vibranceAdjustments ??= []).push(step.adjustment); return '';
+    case 'levels': (pixelEffects.levelsAdjustments ??= []).push(step.adjustment); return '';
+    case 'threshold': (pixelEffects.thresholdAdjustments ??= []).push(step.adjustment); return '';
+    case 'posterize': (pixelEffects.posterizeAdjustments ??= []).push(step.adjustment); return '';
+    case 'vignette': (pixelEffects.vignetteAdjustments ??= []).push(step.adjustment); return '';
+    case 'chroma-key': (pixelEffects.chromaKeyAdjustments ??= []).push(step.adjustment); return '';
+    case 'scanlines': (pixelEffects.scanlineAdjustments ??= []).push(step.adjustment); return '';
+    case 'grain': (pixelEffects.grainAdjustments ??= []).push(step.adjustment); return '';
+  }
+}
+
 function effectFilterPart(
   effect: Effect,
   pixelEffects: MutableWorkerSoftwarePixelEffects,
   layerId: string,
-  outputSize?: { readonly width: number; readonly height: number },
+  outputSize: { readonly width: number; readonly height: number } | undefined,
+  beforeMirrorPixel: boolean,
 ): string | null {
   if (effect.enabled === false || effect.type.startsWith('audio-')) return '';
   const effectType = effect.type as string;
+  const pointwise = workerSoftwarePointwiseStep(effectType, effect.params);
+  if (pointwise && beforeMirrorPixel) {
+    (pixelEffects.mirrorPixelAdjustments ??= []).push({ type: 'pointwise', step: pointwise });
+    return '';
+  }
+  if (pointwise) return addPointwiseEffect(pixelEffects, pointwise);
   switch (effectType) {
     case 'acuarela':
       if (!canAddFeedbackEffect(pixelEffects)) return null;
@@ -233,64 +263,6 @@ function effectFilterPart(
         historyLoop: resolveFeedbackHistoryLoop(effect.params),
       });
       return '';
-    case 'brightness':
-      pixelEffects.brightness += finiteEffectNumber(effect.params.amount, 0);
-      return '';
-    case 'exposure':
-      (pixelEffects.exposureAdjustments ??= []).push({
-        exposure: finiteEffectNumber(effect.params.exposure, 0),
-        offset: finiteEffectNumber(effect.params.offset, 0),
-        gamma: Math.max(0.001, finiteEffectNumber(effect.params.gamma, 1)),
-      });
-      return '';
-    case 'temperature':
-      (pixelEffects.temperatureAdjustments ??= []).push({
-        temperature: finiteEffectNumber(effect.params.temperature, 0),
-        tint: finiteEffectNumber(effect.params.tint, 0),
-      });
-      return '';
-    case 'vibrance':
-      (pixelEffects.vibranceAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 0),
-      });
-      return '';
-    case 'levels':
-      (pixelEffects.levelsAdjustments ??= []).push({
-        inputBlack: finiteEffectNumber(effect.params.inputBlack, 0),
-        inputWhite: finiteEffectNumber(effect.params.inputWhite, 1),
-        gamma: Math.max(0.001, finiteEffectNumber(effect.params.gamma, 1)),
-        outputBlack: finiteEffectNumber(effect.params.outputBlack, 0),
-        outputWhite: finiteEffectNumber(effect.params.outputWhite, 1),
-      });
-      return '';
-    case 'threshold':
-      (pixelEffects.thresholdAdjustments ??= []).push({
-        level: finiteEffectNumber(effect.params.level, 0.5),
-      });
-      return '';
-    case 'posterize':
-      (pixelEffects.posterizeAdjustments ??= []).push({
-        levels: Math.max(2, finiteEffectNumber(effect.params.levels, 6)),
-      });
-      return '';
-    case 'vignette':
-      (pixelEffects.vignetteAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 0.5),
-        size: finiteEffectNumber(effect.params.size, 0.5),
-        softness: finiteEffectNumber(effect.params.softness, 0.5),
-        roundness: finiteEffectNumber(effect.params.roundness, 1),
-      });
-      return '';
-    case 'chroma-key': {
-      const keyColor = effect.params.keyColor === 'blue' ? 'blue' : 'green';
-      (pixelEffects.chromaKeyAdjustments ??= []).push({
-        keyColor,
-        tolerance: finiteEffectNumber(effect.params.tolerance, 0.2),
-        softness: finiteEffectNumber(effect.params.softness, 0.1),
-        spillSuppression: finiteEffectNumber(effect.params.spillSuppression, 0.5),
-      });
-      return '';
-    }
     case 'edge-detect':
       (pixelEffects.edgeDetectAdjustments ??= []).push({
         strength: finiteEffectNumber(effect.params.strength, 1),
@@ -312,20 +284,6 @@ function effectFilterPart(
         // Clamped and truncated by the shared Glow sampling contract, like the GPU graph.
         rings: finiteEffectNumber(effect.params.rings, 6.85),
         samplesPerRing: finiteEffectNumber(effect.params.samplesPerRing, 17.95),
-      });
-      return '';
-    case 'scanlines':
-      (pixelEffects.scanlineAdjustments ??= []).push({
-        density: finiteEffectNumber(effect.params.density, 5),
-        opacity: finiteEffectNumber(effect.params.opacity, 0.3),
-        speed: finiteEffectNumber(effect.params.speed, 0),
-      });
-      return '';
-    case 'grain':
-      (pixelEffects.grainAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 0.1),
-        size: Math.max(0.001, finiteEffectNumber(effect.params.size, 1)),
-        speed: finiteEffectNumber(effect.params.speed, 1),
       });
       return '';
     case 'wave':
@@ -418,14 +376,6 @@ function effectFilterPart(
       const sigma = canvasBlurSigmaPx(effectType, finiteEffectNumber(effect.params.radius, effectType === 'box-blur' ? 5 : 10), outputSize);
       return sigma > 0 ? `blur(${Math.round(sigma * 1000) / 1000}px)` : '';
     }
-    case 'contrast':
-      return `contrast(${Math.max(0, finiteEffectNumber(effect.params.amount, 1))})`;
-    case 'saturation':
-      return `saturate(${Math.max(0, finiteEffectNumber(effect.params.amount, 1))})`;
-    case 'hue-shift':
-      return `hue-rotate(${finiteEffectNumber(effect.params.shift, 0) * 360}deg)`;
-    case 'invert':
-      return 'invert(1)';
     default:
       return null;
   }
@@ -466,11 +416,13 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
     ? graphPlans() : null;
   const parts: string[] = [];
   let activeVisualEffectCount = 0;
-  for (const effect of layer.effects) {
+  // Pointwise effects in front of the last built-in mirror/pixel effect join its stack-ordered pass.
+  const lastMirrorPixel = lastHandWrittenMirrorPixelIndex(layer.effects);
+  for (const [index, effect] of layer.effects.entries()) {
     if (effect.enabled !== false && !effect.type.startsWith('audio-')) {
       activeVisualEffectCount += 1;
     }
-    const part = effectFilterPart(effect, pixelEffects, layer.id, outputSize);
+    const part = effectFilterPart(effect, pixelEffects, layer.id, outputSize, index < lastMirrorPixel);
     if (part === null) return stackedFallback();
     if (part) parts.push(part);
   }

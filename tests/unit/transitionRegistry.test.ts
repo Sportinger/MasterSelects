@@ -314,7 +314,7 @@ describe('transition registry', () => {
       effectType: 'pixelate',
       effectName: 'Pixelate',
       params: {
-        size: { from: 1, to: 44 },
+        size: { from: 0, to: 44 },
       },
       startProgress: 0,
       endProgress: 0.66,

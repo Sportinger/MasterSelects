@@ -32,8 +32,9 @@ export const mosaicGlitch: TransitionDefinition = {
       target: 'outgoing',
       effectType: 'pixelate',
       effectName: 'Pixelate',
+      // Pixel Size is in 1080p pixels: 0 (not 1, which is 2 px cells at 4K) keeps both cuts clean at any size.
       params: {
-        size: { from: 1, to: 44 },
+        size: { from: 0, to: 44 },
       },
       startProgress: 0,
       endProgress: 0.66,
@@ -45,7 +46,7 @@ export const mosaicGlitch: TransitionDefinition = {
       effectType: 'pixelate',
       effectName: 'Pixelate',
       params: {
-        size: { from: 44, to: 1 },
+        size: { from: 44, to: 0 },
       },
       startProgress: 0.34,
       endProgress: 1,

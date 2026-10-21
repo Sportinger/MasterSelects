@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { mosaicGlitch } from '../../src/transitions/mosaicGlitch';
+import { isNeutralMirrorPixelEffect } from '../../src/services/operators/mirrorPixelGraphUpgrade';
 import { rgbSplitGlitch } from '../../src/transitions/rgbSplitGlitch';
 import { scanlineGlitch } from '../../src/transitions/scanlineGlitch';
 
@@ -63,12 +64,22 @@ describe('effect-driven glitch transition definitions', () => {
       effectType: 'pixelate',
       effectName: 'Pixelate',
       params: {
-        size: { from: 1, to: 44 },
+        size: { from: 0, to: 44 },
       },
       startProgress: 0,
       endProgress: 0.66,
       curve: 'ease-in',
     });
+  });
+
+  it('starts and ends Mosaic Glitch on the clean picture at any composition size', () => {
+    const sizes = mosaicGlitch.recipe.flatMap(step => step.kind === 'effect' && step.effectType === 'pixelate' ? [step.params.size] : []);
+    expect(sizes).toEqual([{ from: 0, to: 44 }, { from: 44, to: 0 }]);
+    // Pixel Size is in 1080p pixels: the cut ends are neutral (skipped) even at 4K, where size 1 would be 2-pixel cells.
+    for (const [width, height] of [[3840, 2160], [1920, 1080], [1280, 720]]) {
+      expect(isNeutralMirrorPixelEffect({ type: 'pixelate', params: { size: 0 } }, width, height)).toBe(true);
+    }
+    expect(isNeutralMirrorPixelEffect({ type: 'pixelate', params: { size: 1 } }, 3840, 2160)).toBe(false);
   });
 
   it('defines Scanline Glitch with static registered Scanlines effects', () => {

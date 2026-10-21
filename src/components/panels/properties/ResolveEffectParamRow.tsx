@@ -29,8 +29,20 @@ interface ResolveEffectParamRowProps {
     inputMethod: 'click' | 'drag' | 'keyboard' | 'reset' | 'select' | 'type') => void;
 }
 
-/** One parameter row for the types `hasResolveEffectParamRow` accepts (callers check it first). */
-export function ResolveEffectParamRow({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit }: ResolveEffectParamRowProps) {
+/**
+ * One parameter row for the types `hasResolveEffectParamRow` accepts (callers check it first). A
+ * parameter that acts only in another parameter's mode is dimmed (still keyframeable), with the
+ * reason as a small line under it, so touch users see it too.
+ */
+export function ResolveEffectParamRow(props: ResolveEffectParamRowProps) {
+  const when = props.definition.activeWhen, controller = when ? props.effect.params[when.param] : undefined;
+  const inactive = !!when && controller !== undefined && !when.values.includes(controller);
+  const row = <ResolveEffectParamControl {...props} inactive={inactive} />;
+  return inactive && when ? <>{row}<div className="resolve-effect-row-note">{when.note}</div></> : row;
+}
+
+function ResolveEffectParamControl({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit, inactive }:
+  ResolveEffectParamRowProps & { inactive: boolean }) {
   const property = `effect.${effect.id}.${paramName}`;
   // A parameter that can take a node source gets the source-aware row.
   const sourceTarget = useTimelineStore(state => {
@@ -38,10 +50,7 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
     return !!clip && !!getParameterSourceTarget(clip, property);
   });
   const set = (next: Value) => onChange({ ...effect.params, [paramName]: next });
-  // A parameter that acts only in another parameter's mode is dimmed (still keyframeable) with the reason.
-  const when = definition.activeWhen, controller = when ? effect.params[when.param] : undefined;
-  const inactive = !!when && controller !== undefined && !when.values.includes(controller);
-  const title = inactive ? when?.note : undefined;
+  const title = inactive ? definition.activeWhen?.note : undefined;
   if (definition.type === 'select') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title}>
     <InspectorSelect ariaLabel={definition.label} value={String(value)} options={definition.options ?? []}
       onChange={next => { set(next); onParamCommit?.(paramName, 'select', 'select'); }} />
@@ -54,7 +63,7 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
   if (definition.type === 'color') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title} actions={
     <ResolveInspectorIconButton ariaLabel={`Reset ${definition.label}`} className="resolve-inspector-reset-button"
       onClick={() => { set(String(definition.default)); onParamCommit?.(paramName, 'select', 'reset'); }}><ResolveResetIcon /></ResolveInspectorIconButton>}>
-    <span className="resolve-effect-color">
+    <span className="resolve-inspector-slider-value resolve-effect-color">
       <OperatorColorInput ariaLabel={definition.label} value={String(value)} onChange={next => { set(next); onParamCommit?.(paramName, 'select', 'select'); }} />
       <span className="resolve-effect-color-hex">{String(value).replace(/^#?/, '#').toUpperCase()}</span>
     </span>
