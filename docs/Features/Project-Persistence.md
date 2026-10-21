@@ -143,6 +143,15 @@ offers only the destinations this device supports, best first:
 - **Download .msproj archive** named after the project (full history); on
   iPhone/iPad it lands in the Files app. The open project stays temporary.
 
+Moving between the stores never locks a project read-only: the writer registry
+(`ms-repository-identity-locations`) treats `opfs:<origin>:<path>` and
+`indexeddb:<origin>:<path>` of one repository as the same project changing
+store, and a moved temporary project that gets a new folder name takes over the
+writer registration from its verified source. Copies at any other location still
+open read-only (Copy/Restore). Renaming (also inside Save As and Keep in this
+browser) rewrites only the project root, so media carrying repository-internal
+source-identity proofs no longer abort these moves.
+
 A temporary copy is removed only after its permanent copy is open, writable and
 contains the last confirmed revision; on any failure it stays and the dialog
 says so. The scratch browser recovery is never deleted. The dialog also shows
@@ -269,6 +278,19 @@ Chromium uses directory handles when available. Folder upload remains a
 session-level fallback on browsers without those handles. Project-local or
 imported retained bytes can be read from the repository before requesting an
 external source again.
+
+Linking only survives a reload where the browser can keep the file's handle in
+IndexedDB. The editor measures this with a real handle (an aborted probe write,
+never the user agent): WebKit (Safari on iPhone, iPad and Mac) refuses handles
+with `DataCloneError`, so there - and for every file without a reopenable
+location, such as `<input>` picks - imports and relinks are copied into the
+project's `Raw/` folder by default. This works in named projects and in the
+browser recovery project, in OPFS and in the IndexedDB fallback, and the copies
+move along with **Save permanently**. A notice shows the copied size and the
+browser storage left, reports copies that fail (the media stay usable until the
+next reload) and offers **Link future imports**; **Preferences > Import > Copy
+media that cannot stay linked** holds that per-device choice
+(`ms.media.linkWhenNotDurable`). Chromium keeps linking as before.
 
 The old size-plus-file-prefix fingerprint is a lookup hint. Historical source
 identity requires a full content hash: equal filenames, sizes or the first

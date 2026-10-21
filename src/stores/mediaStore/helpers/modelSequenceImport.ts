@@ -10,6 +10,11 @@ import {
   type ModelSequenceImportEntry,
 } from '../../../utils/modelSequence';
 import { useSettingsStore } from '../../settingsStore';
+import {
+  decideProjectMediaCopy,
+  runProjectMediaCopy,
+  type ProjectMediaCopyDecision,
+} from '../../../services/project/mediaCopy/projectMediaCopyPolicy';
 import type { MediaFile } from '../types';
 import {
   createMediaObjectUrl,
@@ -18,18 +23,21 @@ import {
 
 const log = Logger.create('ModelSequenceImport');
 
-function shouldCopyFramesToProject(
+/**
+ * Multi-frame sequences are always stored with the project; a single frame
+ * follows the import rule (copied when its link would not survive a reload).
+ */
+function decideFrameCopy(
   entries: ModelSequenceImportEntry[],
   forceCopyToProject = false,
-): boolean {
+): Promise<ProjectMediaCopyDecision> {
   const { copyMediaToProject } = useSettingsStore.getState();
   const hasVolatileFrames = entries.some((entry) => !entry.handle);
-  return projectFileService.isProjectOpen() && (
-    copyMediaToProject ||
-    forceCopyToProject ||
-    hasVolatileFrames ||
-    entries.length > 1
-  );
+  return decideProjectMediaCopy({
+    copySetting: copyMediaToProject,
+    force: forceCopyToProject || entries.length > 1,
+    handle: hasVolatileFrames ? undefined : entries[0]?.handle,
+  });
 }
 
 function buildSequenceRawFolderName(sequenceName: string): string {
@@ -48,10 +56,10 @@ function getSequenceFrameHandleCacheKey(id: string, index: number): string {
 async function maybeCopyFramesToProject(
   sequenceName: string,
   entries: ModelSequenceImportEntry[],
-  forceCopyToProject = false,
+  decision: ProjectMediaCopyDecision,
   onFrameCopied?: () => void,
 ): Promise<Array<{ handle?: FileSystemFileHandle; relativePath?: string }>> {
-  if (!shouldCopyFramesToProject(entries, forceCopyToProject)) {
+  if (!decision.copy) {
     return entries.map(() => ({}));
   }
 
@@ -60,10 +68,10 @@ async function maybeCopyFramesToProject(
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
-    const copied = await projectFileService.copyToRawFolder(
+    const copied = await runProjectMediaCopy(entry.file, decision, () => projectFileService.copyToRawFolder(
       entry.file,
       `${folderName}/${entry.file.name}`,
-    );
+    ));
     copies.push({
       handle: copied?.handle,
       relativePath: copied?.relativePath,
@@ -94,7 +102,8 @@ export async function processModelSequenceImport<T extends ModelSequenceImportEn
   const reportProgress = (value: number) => {
     onProgress?.(Math.max(0, Math.min(100, Math.round(value))));
   };
-  const willCopyFrames = shouldCopyFramesToProject(sequence.entries, forceCopyToProject === true);
+  const copyDecision = await decideFrameCopy(sequence.entries, forceCopyToProject === true);
+  const willCopyFrames = copyDecision.copy;
   const totalWorkUnits = Math.max(1, sequence.entries.length * (willCopyFrames ? 2 : 1));
   let completedWorkUnits = 0;
   const advanceProgress = () => {
@@ -107,7 +116,7 @@ export async function processModelSequenceImport<T extends ModelSequenceImportEn
   const copiedFrames = await maybeCopyFramesToProject(
     sequence.sequenceName,
     sequence.entries,
-    forceCopyToProject === true,
+    copyDecision,
     advanceProgress,
   );
 

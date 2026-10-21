@@ -8,6 +8,7 @@ import {
   getStoredProjectFileHandle,
 } from '../mediaSourceResolver';
 import { readProjectMediaSourceFile } from '../mediaSourceRoots';
+import { canStoreProjectMedia } from '../mediaCopy/projectMediaCopyPolicy';
 import { isRestoredMediaSourceCompatible } from '../mediaSourceValidation';
 import {
   createMediaObjectUrl,
@@ -106,7 +107,7 @@ async function hydrateModelSequence(
     const frameFileUrl = resolveProjectRawFileUrl(frame.projectPath);
     if (!hydrateFiles && !modelUrl && frameFileUrl) modelUrl = frameFileUrl;
 
-    if (hydrateFiles && !frameFile && frame.projectPath && projectFileService.isProjectOpen()) {
+    if (hydrateFiles && !frameFile && frame.projectPath && canStoreProjectMedia()) {
       try {
         const result = await projectFileService.getFileFromRaw(frame.projectPath);
         if (result?.file) {
@@ -161,7 +162,7 @@ async function hydrateGaussianSplatSequence(
     const frameFileUrl = resolveProjectRawFileUrl(frame.projectPath);
     if (!hydrateFiles && !splatUrl && frameFileUrl) splatUrl = frameFileUrl;
 
-    if (hydrateFiles && !frameFile && frame.projectPath && projectFileService.isProjectOpen()) {
+    if (hydrateFiles && !frameFile && frame.projectPath && canStoreProjectMedia()) {
       try {
         const result = await projectFileService.getFileFromRaw(frame.projectPath);
         if (result?.file) {
@@ -239,7 +240,7 @@ export async function hydrateProjectMediaRuntimeSources(
   const modelSequence = await hydrateModelSequence(pm, hydrateFiles);
   const gaussianSplatSequence = await hydrateGaussianSplatSequence(pm, hydrateFiles);
 
-  if (hydrateFiles && !file && projectFileService.isProjectOpen()) {
+  if (hydrateFiles && !file && canStoreProjectMedia()) {
     const candidates = trustSavedLocation ? (pm.projectPath ? [pm.projectPath] : []) : getProjectRawPathCandidates({
       mediaFileId: pm.id,
       projectPath: pm.projectPath,

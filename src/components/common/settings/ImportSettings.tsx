@@ -5,6 +5,7 @@ import {
   connectCurrentProjectMediaSourceRoot,
 } from '../../../services/project/mediaSourceRootConnection';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { UndurableMediaCopySetting } from './UndurableMediaCopySetting';
 
 type SourceFolderPickerWindow = Window & typeof globalThis & {
   showDirectoryPicker?: (options?: object) => Promise<FileSystemDirectoryHandle>;
@@ -107,6 +108,7 @@ export function ImportSettings() {
         <p className="settings-hint">
           When importing clips, copy them to the project's Raw folder for easier relinking.
         </p>
+        <UndurableMediaCopySetting />
 
         <div className="settings-row">
           <span className="settings-label">External source folders</span>

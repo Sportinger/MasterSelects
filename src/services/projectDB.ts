@@ -375,6 +375,11 @@ class ProjectDatabase {
     return this.withConnection(db => handleStores.storeHandle(db, log, key, handle));
   }
 
+  /** Whether this browser can keep the handle across reloads; nothing is written. */
+  async canStoreHandle(handle: FileSystemHandle): Promise<boolean> {
+    return this.withConnection(async db => handleStores.canStoreHandle(db, handle));
+  }
+
   async getStoredHandle(key: string): Promise<FileSystemHandle | null> {
     return this.withConnection(db => handleStores.getStoredHandle(db, key));
   }

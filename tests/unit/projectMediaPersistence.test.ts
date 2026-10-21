@@ -173,6 +173,7 @@ vi.mock('../../src/services/projectFileService', () => ({
     scanRawFolder: mocks.scanRawFolder,
     scanProjectFolder: mocks.scanProjectFolder,
     isProjectOpen: mocks.isProjectOpen,
+    requiresProjectLocalMediaCopies: () => false,
     saveProject: mocks.saveProject,
   },
 }));
