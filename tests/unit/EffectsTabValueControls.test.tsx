@@ -4,8 +4,6 @@ import { useTimelineStore } from '../../src/stores/timeline';
 
 import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
 import { hasResolveEffectParamRow } from '../../src/components/panels/properties/resolveEffectRows';
-import { getEffect } from '../../src/effects';
-import type { EffectParam } from '../../src/effects/types';
 import type { Effect } from '../../src/types/effects';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
@@ -52,19 +50,24 @@ describe('EffectsTab numeric controls', () => {
     expect(screen.queryByText('Quality')).toBeNull();
   });
 
-  it('keeps the generic control for parameter types without a Resolve row in a Resolve-row effect', () => {
-    const params = getEffect('gaussian-blur')!.params as Record<string, EffectParam>;
-    params.previewNote = { type: 'text', label: 'Preview Note', default: 'a' };
-    try {
-      const effect: Effect = { id: 'gaussian-text', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewNote: 'b' } };
-      render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
-      expect(screen.getByText('Preview Note')).toBeInTheDocument();
-      expect(screen.getByLabelText('Radius slider')).toBeInTheDocument();
-      expect(hasResolveEffectParamRow({ type: 'text' })).toBe(false);
-      expect(hasResolveEffectParamRow({ type: 'select' })).toBe(true);
-    } finally {
-      delete params.previewNote;
-    }
+  it('shows a glyph card in Resolve rows only: Custom Ramp is a text row with a reset, one undo step from focus to blur', () => {
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
+    const ascii: Effect = { id: 'ascii-ramp', type: 'ascii', name: 'ASCII', enabled: true,
+      params: { cellSize: 14, amount: 1, rampPreset: 'standard', customRamp: ' .:-=+*#', fontFamily: 'monospace', fontWeight: 600 } };
+    const { container } = render(<EffectsTab clipId="clip:effects-controls" effects={[ascii]} />);
+    // No row of the older generic design is left in the card.
+    expect(container.querySelectorAll('.control-row')).toHaveLength(0);
+    expect(hasResolveEffectParamRow({ type: 'text' })).toBe(true);
+    const field = screen.getByLabelText('Custom Ramp');
+    expect(field).toHaveAttribute('type', 'text');
+    expect(field).toHaveClass('resolve-inspector-text-input');
+    expect(field.closest('.resolve-inspector-row')).not.toBeNull();
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: ' .#' } });
+    fireEvent.blur(field);
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'ascii-ramp', expect.objectContaining({ customRamp: ' .#' }));
+    fireEvent.click(screen.getByLabelText('Reset Custom Ramp'));
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'ascii-ramp', expect.objectContaining({ customRamp: '' }));
   });
 
   it('renders switches and colours as Resolve rows: Mirror axes as checkboxes, the Block Mosaic grout as a colour well', () => {

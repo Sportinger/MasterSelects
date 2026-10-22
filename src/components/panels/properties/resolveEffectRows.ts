@@ -26,9 +26,9 @@ export function usesResolveEffectRows(type: string, params: Readonly<Record<stri
   return RESOLVE_ROW_EFFECTS.has(type) || effectEngine(type) !== undefined || Object.values(params).some(param => param.type === 'color');
 }
 
-/** Parameter types that have a Resolve row (ResolveEffectParamRow); others keep the generic control. */
+/** Parameter types that have a Resolve row (ResolveEffectParamRow): every type a card shows, typed text included. */
 export function hasResolveEffectParamRow(definition: { type: string }): boolean {
-  return definition.type === 'number' || definition.type === 'select' || definition.type === 'boolean' || definition.type === 'color';
+  return definition.type === 'number' || definition.type === 'select' || definition.type === 'boolean' || definition.type === 'color' || definition.type === 'text';
 }
 
 /** Decimals a step implies; the shared display rules live in effects/paramDisplay.ts. */
