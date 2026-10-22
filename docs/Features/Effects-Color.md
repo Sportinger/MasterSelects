@@ -35,12 +35,22 @@ Every colour effect is a small node graph of the same shape:
 - **Split RGB + Alpha** separates the colour from the transparency.
 - **Parameters** holds the controls. A control gets a limit where a typed-in extreme value could
   break the picture (Brightness, Contrast or a Gamma); a control where every value has a clear
-  result, such as Exposure's Offset or the points of Levels, goes out as it is.
+  result, such as Exposure's Offset, the points of Levels or Hue Shift's Shift (past a full turn either way it
+  simply goes round again), goes out as it is.
 - One or more working stages do the actual work: one folder in Brightness (**Brightness Curve**)
   and Contrast (**Contrast Curve**), several in a row in Exposure (**Exposure (Stops)**, then
   **Offset & Gamma**) or Levels. Each effect page shows its stages under *Node setup*.
 - **Combine RGB + Alpha** puts the untouched transparency back, in some effects after a
   **Clamp & Alpha** folder that keeps the colour between black and white.
+
+[Invert](./effects/invert.md) is the smallest of them: it has no controls, one working folder
+(**Invert RGB**) and needs no clamp, so its last folder is called **Alpha & Image**.
+
+[Posterize](./effects/posterize.md) has the longest path: **Step Input**, **Hard Steps**, **Soft Steps**,
+**Spread to 0–1** and **Colour & Alpha**, from what gets stepped to the colour it keeps.
+
+[Threshold](./effects/threshold.md) splits after its **Brightness** folder: a **Hard Edge** and a
+**Soft Edge** work side by side, and **Black & White** picks one of them.
 
 Black stays black and white stays white unless you ask for it, and colours keep their shade when you
 push them. The blocks **Brightness Curve**, **Contrast Curve**, **Exposure (Stops)**, **White

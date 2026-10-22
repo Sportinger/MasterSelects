@@ -231,7 +231,9 @@ describe('EffectsTab numeric controls', () => {
       const numeric = vi.spyOn(useTimelineStore.getState(), 'setPropertyValue').mockImplementation(() => {});
       render(<EffectsTab clipId="clip:hue" effects={[hue]} />);
       expect(screen.getByLabelText('Shift')).toHaveTextContent('90°');
-      expect(screen.getByLabelText('Shift slider')).toHaveAttribute('aria-valuemax', '360');
+      // The slider runs −180° to 180° (2026-10-22): a small shift either way is a small value.
+      expect(screen.getByLabelText('Shift slider')).toHaveAttribute('aria-valuemin', '-180');
+      expect(screen.getByLabelText('Shift slider')).toHaveAttribute('aria-valuemax', '180');
       // One keyboard step is one degree: 91° is stored as 91/360 of a turn.
       fireEvent.keyDown(screen.getByLabelText('Shift slider'), { key: 'ArrowRight' });
       expect(numeric).toHaveBeenCalledTimes(1);

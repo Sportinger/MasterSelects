@@ -49,6 +49,8 @@ export interface KeyframeNodeParameter {
   step?: number;
   unit: string;
   discrete?: boolean;
+  /** Cyclic value (Hue Shift): min/max are one turn of the slider, not a limit. */
+  wraps?: boolean;
 }
 
 /** Only expose channels that the existing timeline/render path actually animates. */
@@ -66,6 +68,7 @@ export function keyframeNodeParameters(clip: TimelineClip): KeyframeNodeParamete
       unit: descriptor.authoring?.storageUnit ?? descriptor.ui?.unit ??
         (property.startsWith('position.') ? 'position' : property.startsWith('rotation.') ? 'degrees' : 'number'),
       discrete: descriptor.valueType === 'boolean',
+      ...(descriptor.ui?.wraps ? { wraps: true } : {}),
     });
   }
   const add = (property: string, label: string, group: string, value: number, min?: number, max?: number, unit = 'number') => {
@@ -157,7 +160,7 @@ export function validateKeyframeNodeTarget(source: KeyframeNodeParameter, target
   if (getKeyframeTimeBasis(source.property) !== getKeyframeTimeBasis(target.property)) throw new Error('These parameters use different time bases. Use a separate channel.');
   if (Boolean(source.discrete) !== Boolean(target.discrete)) throw new Error('Continuous curves and discrete states require separate channels.');
   if (source.discrete && mapped) throw new Error('Discrete states use the same values without range mapping.');
-  if (!mapped && (source.unit !== target.unit || source.min !== target.min || source.max !== target.max)) {
+  if (!mapped && (source.unit !== target.unit || source.min !== target.min || source.max !== target.max || Boolean(source.wraps) !== Boolean(target.wraps))) {
     throw new Error('Different units or ranges: enable explicit range mapping or use a separate channel.');
   }
 }

@@ -59,7 +59,7 @@ export const STARTER_LOOKS: LookDefinition[] = [
   ]),
   look('mosaic-motion', 'Mosaic Motion', 'motion', ['mosaic', 'kinetic', 'block'], [
     fx('scatter-mosaic', { amount: 0.62, scale: 16, speed: 0.65 }),
-    fx('posterize', { levels: 7 }),
+    fx('posterize', { levels: 7, brightnessOnly: false }),
   ]),
   look('pal-broadcast', 'PAL Broadcast', 'analog', ['pal', 'tv', 'crt', 'signal'], [
     fx('analog-signal-lab', { rfNoise: 0.06, impulseNoise: 0.02, ghostLevel: 0.08, syncInstability: 0.06, ycCrosstalk: 0.1,

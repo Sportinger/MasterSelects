@@ -192,10 +192,11 @@ export function validatePropertyAuthoringValue(
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       throw new Error(`${descriptor.path} must be a finite number`);
     }
-    if (descriptor.ui?.min !== undefined && value < descriptor.ui.min) {
+    // A cyclic value (ui.wraps) takes any finite number: min/max are only one turn of its slider.
+    if (!descriptor.ui?.wraps && descriptor.ui?.min !== undefined && value < descriptor.ui.min) {
       throw new Error(`${descriptor.path} must be at least ${descriptor.ui.min}`);
     }
-    if (descriptor.ui?.max !== undefined && value > descriptor.ui.max) {
+    if (!descriptor.ui?.wraps && descriptor.ui?.max !== undefined && value > descriptor.ui.max) {
       throw new Error(`${descriptor.path} must be at most ${descriptor.ui.max}`);
     }
     if (descriptor.ui?.minMagnitude !== undefined && Math.abs(value) < descriptor.ui.minMagnitude) {
@@ -291,6 +292,7 @@ export function describePropertyAuthoringDescriptor(
         ...(descriptor.ui.minMagnitude !== undefined
           ? { minMagnitude: descriptor.ui.minMagnitude }
           : {}),
+        ...(descriptor.ui.wraps ? { wraps: true } : {}),
       }
     : undefined;
 

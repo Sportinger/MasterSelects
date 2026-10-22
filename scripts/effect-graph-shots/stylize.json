@@ -1,6 +1,5 @@
 {
   "shots": [
-    "threshold?focus=color-processing&only=luma,compare,hard&rows=1&layout=float@threshold-step",
     "glow?focus=glow-resolve-and-alpha&only=resolve-premultiplied,resolve-room,resolve-falloff,resolve-remaining,resolve-result&rows=1&layout=float@glow-resolve",
     "grain?focus=film-response-midtones&only=response-luma,response-bell,response-inverse,response-midtone,response&rows=1@grain-film-response",
     "vignette?plumbing=hide&omit=output@vignette",

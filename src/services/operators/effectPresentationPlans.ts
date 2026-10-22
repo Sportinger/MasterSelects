@@ -14,6 +14,8 @@ export interface EffectPresentationPlan {
   inputLabels?: Record<string, string>;
   /** Port labels apply only to graphs this accepts (an effect id can carry more than one recipe). */
   portLabelsApply?: (graph: Pick<EffectOperatorGraph, 'nodes'>) => boolean;
+  /** Stages that get their folder even with a single card (a lone control still sits in Parameters). */
+  singleCardStages?: readonly string[];
 }
 const includes = (list: string, id: string) => list.split(' ').includes(id);
 /** A clamped parameter's output carries the parameter, not "Clamp: Value". */
@@ -103,6 +105,54 @@ const GLOW_PORTS: Record<string, string> = { 'source-split:rgb': 'Source Color',
     [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`]]).flat()) };
 // Threshold and Posterize: the hard step and the soft ramp that Softness blends in.
 const POINTWISE_PORTS = { compare: 'Above Level', hard: 'Hard Step', ramp: 'Soft Ramp', soft: 'Softness On', smooth: 'Soft Steps', steps: 'Steps' };
+/** Invert has no clamp (1 − x stays within 0 to 1), so its folders name what they do, and its three
+ * Subtract outputs say which channel they carry instead of reading "Subtract: Value" three times. */
+/** The Invert recipe's White Level and its three Subtract cards, under their recipe ids and operators. */
+function isInvertRecipeNodes(nodes: Pick<EffectOperatorGraph, 'nodes'>['nodes']): boolean {
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const one = byId.get('one');
+  return one?.operator === 'values.number' && one.constants?.value === 1
+    && ['invert-r', 'invert-g', 'invert-b'].every(id => byId.get(id)?.operator === 'math.subtract.scalar');
+}
+const INVERT_PRESENTATION: EffectPresentationPlan = {
+  labels: { processing: 'Invert RGB', finish: 'Alpha & Image' },
+  stage: ORIGINAL_COLOR_PRESENTATION.stage,
+  portLabels: { one: 'White Level', 'invert-r': 'Inverted R', 'invert-g': 'Inverted G', 'invert-b': 'Inverted B' },
+  // Free Node Graphs share the 'invert' type and take node ids the agent picks: label only the recipe's own cards.
+  portLabelsApply: graph => isInvertRecipeNodes(graph.nodes),
+};
+
+/** Posterize (v2 recipe): its 30-odd cards read as a path of stages instead of one Color Processing
+ * folder: the Levels/Softness/Brightness Only guards sit with their controls, then what gets stepped,
+ * the hard staircase, the Softness ramp, the spread back to 0-1 and the colour kept by Brightness Only. */
+const POSTERIZE_STAGES: readonly [RegExp, string][] = [
+  [/^(effective-levels|ramp-width|brightness-only-share)$/, 'controls'], [/^(brightness|brightness-rgb|posterize-input)$/, 'input'],
+  [/^(scaled|hard)$/, 'hard'], [/^(denominator|divide|clamped)$/, 'spread'],
+  [/^(posterized-brightness|brightness-safe|brightness-gain|kept-colour(-raw)?|result-rgb|combine)$/, 'finish'],
+];
+const POSTERIZE_PRESENTATION: EffectPresentationPlan = {
+  labels: { input: 'Step Input', hard: 'Hard Steps', soft: 'Soft Steps', spread: 'Spread to 0–1', finish: 'Colour & Alpha' },
+  stage: ({ id }) => POSTERIZE_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'soft',
+  portLabels: { ...POINTWISE_PORTS, 'effective-levels': 'Levels', 'ramp-width': 'Ramp Width', 'brightness-only-share': 'Brightness Only',
+    brightness: 'Brightness', 'posterize-input': 'Step Input', scaled: 'Scaled', clamped: 'Posterized RGB', 'brightness-gain': 'Brightness Gain',
+    'kept-colour': 'Kept Colour', 'half-rgb': 'Half', 'two-rgb': 'Two', 'three-rgb': 'Three', base: 'Lower Step', within: 'Within Step', 'ramp-clamped': 'Ramp Position' },
+};
+
+/** Threshold (v2 recipe): instead of one Color Processing folder and a "Clamp & Alpha" it has no Clamp
+ * for, its cards read as stages: the brightness, the hard cut at Level, the Softness ramp around it,
+ * and the pick between them turned back into a black-and-white picture with the transparency. */
+const THRESHOLD_STAGES: readonly [RegExp, string][] = [
+  [/^ramp-width$/, 'controls'], [/^luma$/, 'brightness'], [/^(compare|hard)$/, 'hard'],
+  [/^(value|result-rgb|combine)$/, 'finish'],
+];
+const THRESHOLD_PRESENTATION: EffectPresentationPlan = {
+  labels: { brightness: 'Brightness', hard: 'Hard Edge', soft: 'Soft Edge', finish: 'Black & White' },
+  stage: ({ id }) => THRESHOLD_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'soft',
+  // The brightness is one card, but it is the stage both edges read.
+  singleCardStages: ['brightness'],
+  portLabels: { ...POINTWISE_PORTS, luma: 'Brightness', 'ramp-width': 'Ramp Width', 'ramp-distance': 'Distance',
+    'ramp-clamped': 'Ramp Position', value: 'Black & White', 'result-rgb': 'Threshold RGB' },
+};
 
 /** The CRT Screen graph saved before the 2026-10 rebuild keeps the stage folders it opened with. */
 const LEGACY_CRT_PLAN: EffectPresentationPlan = {
@@ -311,10 +361,15 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     labels: { processing: 'Color Processing', ...Object.fromEntries(COLOR_STAGES.map(([, stage, label]) => [stage, label])) },
     portLabels: COLOR_PORTS,
     inputLabels: { 'hue-lch-combine:x': 'Lightness', 'hue-lch-combine:y': 'Chroma', 'hue-lch-combine:z': 'Hue' },
+    // Hue Shift's only control (it wraps instead of clamping) sits in Parameters like every colour recipe's.
+    singleCardStages: ['controls'],
     stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
-  // Threshold and Posterize name their hard step and soft ramp (Softness, 2026-10-21).
-  if (COLORS.has(type)) return type === 'threshold' || type === 'posterize' ? { ...ORIGINAL_COLOR_PRESENTATION, portLabels: POINTWISE_PORTS } : ORIGINAL_COLOR_PRESENTATION;
+  // Threshold and Posterize (Softness, 2026-10-21) have stage folders; Invert names its own.
+  if (type === 'invert') return INVERT_PRESENTATION;
+  if (type === 'posterize') return POSTERIZE_PRESENTATION;
+  if (type === 'threshold') return THRESHOLD_PRESENTATION;
+  if (COLORS.has(type)) return ORIGINAL_COLOR_PRESENTATION;
   // The moving looks split the glyph choice into Glyph Offset (how far each cell has moved on through
   // the ramp right now) and Roll Window (the part of the ramp it may move through, Roll); Symbol Matrix's
   // brightness pulse has a folder of its own (Pulse).

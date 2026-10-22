@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { getDefaultParams } from '../../src/effects';
+import { getDefaultParams, getEffect } from '../../src/effects';
 import StylizeRecipeNote from '../../src/effects/stylize/StylizeRecipeNote';
 import { applyLookToClip, stackFromClipEffects } from '../../src/effects/looks/applyLook';
 import { migratePersistedLooks } from '../../src/effects/looks/lookStore';
@@ -92,8 +92,9 @@ describe('Custom Looks keep the recipe their stylize effects were saved with', (
     const clipId = withClip([]);
     useTimelineStore.getState().addClipEffect(clipId, 'posterize');
     expect(useTimelineStore.getState().clips[0].effects[0].params.brightnessOnly).toBe(true);
-    // The parameter default stays what saved effects without the value mean.
-    expect(getDefaultParams('posterize').brightnessOnly).toBe(false);
+    // The declared default is what a new effect starts with (docs, listEffects); a stored effect without the key renders its legacy value.
+    expect(getDefaultParams('posterize').brightnessOnly).toBe(true);
+    expect(getEffect('posterize')!.params.brightnessOnly.legacyDefault).toBe(false);
     const look: LookDefinition = { id: 'custom-poster', name: 'Poster', category: 'custom', thumbnail: { kind: 'generated' }, tags: [], builtIn: false,
       stack: [{ effectId: 'posterize', params: { levels: 4 }, enabled: true }, { effectId: 'posterize', params: { levels: 4, brightnessOnly: true }, enabled: true }] };
     applyLookToClip(look, clipId);

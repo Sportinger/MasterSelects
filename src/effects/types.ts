@@ -55,6 +55,9 @@ export interface EffectParam {
   // parameter's own unit.
   displayScale?: number;
   unit?: string;
+  // Cyclic: values past min/max go round again (Hue Shift: 1.25 turns = 0.25), so nothing clamps
+  // them. min/max are only the slider; typed values, keyframes and nodes may go beyond on both sides.
+  wraps?: boolean;
   // Value an instance saved before this parameter existed renders with (its params lack the key).
   // New effects store `default` explicitly (getDefaultParams), so only old saves and presets get this.
   legacyDefault?: number | boolean | string;

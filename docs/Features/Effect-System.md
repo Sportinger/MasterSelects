@@ -783,16 +783,20 @@ strict greater-than comparison (equality is black). Posterize uses
 0–1 (the earlier graph let white overflow to `L / (L - 1)` until the render target
 clamped it). Since 2026-10-21 both have a **Softness** (default 0): Threshold ramps
 smoothly from Level − Softness/2 to Level + Softness/2 (a brightness width, 0–0.5);
-Posterize rounds each step edge into a smooth ramp of that share of a step (0–1).
+Posterize rounds each step edge into a smooth ramp of that share of a step (0–1;
+above 1 renders as 1 and is reported, since a wider ramp would overlap the next and
+draw hard edges mid-step; graphs saved with the unlimited ramp are capped on load by
+`capPosterizeRampWidth`).
 Posterize also has **Brightness Only**: the staircase runs on the brightest channel
 and the colour is scaled with it, so hue and saturation stay and light neutral areas
-cannot split into false colours where their channels cross a step apart. New
-Posterize effects start with it on (`stylizeNewInstanceParams`); the parameter
-default stays off, which is what saved effects and Custom Look entries without the
-value mean, so they keep stepping each channel. Softness 0 without Brightness Only
+cannot split into false colours where their channels cross a step apart.
+Brightness Only defaults to on; its `legacyDefault` off keeps saved effects and
+Custom Look entries without the value stepping each channel (through
+`effectGraphOwner`, the worker step and `withLegacyDefaultParams`). Softness 0 without Brightness Only
 renders exactly the earlier math, so untouched saved graphs simply read as the
 current recipe. Both preserve source alpha and the original ranges, defaults and
-keyframe IDs; Levels below 2 and negative Softness are reported, not silently clamped.
+keyframe IDs; Levels below 2, negative Softness and Posterize Softness above 1 are
+reported, not silently clamped.
 
 Vignette (contract `src/effects/stylize/vignette/vignetteModel.ts`) measures the
 distance from the centre in pixels, normalized so every corner is at 1 on any

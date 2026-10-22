@@ -90,7 +90,9 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     const binding = node.bindings[name];
     const ownerSpec = typeof binding === 'string' && effectType && (isImageGraphEffectType(effectType) || effectType === 'splat-exploration') ? getEffect(effectType)?.params[binding] : undefined;
     const range = ownerSpec?.type === 'number' ? ownerSpec : name === 'value' && node.exposed ? { min: node.exposed.min ?? spec.min, max: node.exposed.max ?? spec.max } : spec;
-    const min = range.min, max = range.max;
+    // A cyclic owner parameter (Hue Shift) takes any number: its min/max are one turn of the slider.
+    const wraps = ownerSpec?.type === 'number' && ownerSpec.wraps === true;
+    const min = wraps ? undefined : range.min, max = wraps ? undefined : range.max;
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
     if (spec.type === 'color' && (typeof value !== 'string' || !/^#[\da-f]{6}([\da-f]{2})?$/i.test(value))) throw new Error('Parameter requires a hex color.');

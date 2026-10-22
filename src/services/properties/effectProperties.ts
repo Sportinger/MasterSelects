@@ -59,6 +59,7 @@ function createEffectDescriptor(
       min: param.min,
       max: param.max,
       step: param.step,
+      ...(param.wraps ? { wraps: true } : {}),
       aliases: [effectDefinition.name, effectDefinition.id, paramName],
       options: param.options,
     },

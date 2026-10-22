@@ -84,8 +84,8 @@ describe('effect graph doc shots: graph selection', () => {
     const glow = doc('?effect=glow').graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
     expect(glow).toEqual(expect.arrayContaining(['Tap Weight', 'Up Read Position', 'Level Weight', 'Bright Light', 'Source Alpha']));
     expect(glow.some(label => /^(Multiply|Add|Smoothstep): Value$/.test(label))).toBe(false);
-    const step = doc('?effect=threshold&focus=color-processing&only=hard,value').graph.nodes.map(node => node.label);
-    expect(step).toEqual(expect.arrayContaining(['Above Level', 'Soft Ramp', 'Softness On']));
+    const step = doc('?effect=threshold&focus=black-and-white&only=value').graph.nodes.map(node => node.label);
+    expect(step).toEqual(expect.arrayContaining(['Hard Step', 'Soft Ramp', 'Softness On']));
   });
 
   it('names the folder ports of Twirl, Bulge & Pinch and Wave by what they carry', () => {

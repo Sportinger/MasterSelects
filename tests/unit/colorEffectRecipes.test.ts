@@ -4,8 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { COLOR_RECIPE, createDefaultColorEffectGraph, createFormerContrastGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
 import { flattenContrastGraph } from '../../src/services/operators/contrastFlattenUpgrade';
-import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
-import { effectPresentationPlan } from '../../src/services/operators/effectPresentationPlans';
+import { matchesEffectRecipe, organizeEffectFamilyGraph } from '../../src/services/operators/effectFamilyPresentation';
+import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
+import { HUE_SHIFT_PRESETS } from '../../src/effects/color/hue-shift';
+import { effectPortLabels, effectPresentationPlan } from '../../src/services/operators/effectPresentationPlans';
+import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
 import { effectOperatorGraph, migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { colorEffectGraphState } from '../../src/services/operators/colorEffectGraphState';
 import { createLegacyColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
@@ -19,6 +22,10 @@ import { COLOR_COMPOSITIONS } from '../../src/services/operators/colorCompositio
 import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { effectRecipeFingerprint } from '../../src/services/operators/recipeFingerprint';
 import { FORMER_CONTRAST_FINGERPRINT } from '../../src/services/operators/contrastFlattenUpgrade';
+import { getParameterSourceTarget } from '../../src/services/parameterSources/parameterSourceTargets';
+import { interpolateKeyframes } from '../../src/utils/keyframeInterpolation';
+import type { Keyframe } from '../../src/types/keyframes';
+import type { Effect } from '../../src/types/effects';
 
 /**
  * Independent CPU references for the rebuilt color effects (2026-10). The formulas below are
@@ -266,6 +273,25 @@ describe('rebuilt color effect recipes', () => {
     expect(tinted[0]).toBeCloseTo(tinted[2], 6);
   });
 
+  it('Temperature presets lean the way their names say on a neutral grey, and keep its luminance', () => {
+    const presets = getEffect('temperature')?.presets ?? [];
+    expect(presets.map(preset => preset.id)).toEqual(['golden-hour', 'candlelight', 'moonlight', 'fluorescent']);
+    const lean = (id: string) => {
+      const params = presets.find(preset => preset.id === id)!.params as Record<string, number>;
+      const [r, g, b] = render('temperature', params, [0.5, 0.5, 0.5, 1]).slice(0, 3).map(srgbToLinear);
+      expect(luma709([r, g, b])).toBeCloseTo(srgbToLinear(0.5), 5);
+      return { warm: r / b, green: g / ((r + b) / 2) };
+    };
+    const golden = lean('golden-hour'), candle = lean('candlelight'), moon = lean('moonlight'), tube = lean('fluorescent');
+    expect(golden.warm).toBeGreaterThan(1.4);
+    expect(candle.warm).toBeGreaterThan(golden.warm * 1.4);
+    expect(moon.warm).toBeLessThan(0.6);
+    // Moonlight stays blue rather than cyan; Fluorescent is the only green one.
+    expect(moon.green).toBeLessThan(1);
+    expect(tube.green).toBeGreaterThan(1.15);
+    for (const warmLook of [golden, candle]) expect(warmLook.green).toBeLessThan(1);
+  });
+
   it('Hue Shift turns hue in OkLCh and keeps lightness, chroma and neutral greys', () => {
     // Published Oklab of sRGB red (Ottosson 2020): L 0.62796, a 0.22486, b 0.12585.
     const redLch = [0.62796, Math.hypot(0.22486, 0.12585), Math.atan2(0.12585, 0.22486) / (2 * Math.PI)];
@@ -286,6 +312,68 @@ describe('rebuilt color effect recipes', () => {
       expect(after[1]).toBeCloseTo(before[1], 4);
       expect(((after[2] - before[2] - shift) % 1 + 1.5) % 1 - 0.5).toBeCloseTo(0, 4);
     }
+  });
+
+  it('Hue Shift presets turn by their named angles: Slight Shift makes orange rosier, Half Turn blue, Third Turn green, Third Turn Back violet', () => {
+    const presets = Object.fromEntries(HUE_SHIFT_PRESETS.map(preset => [preset.id, preset.params.shift as number]));
+    expect(Object.fromEntries(Object.entries(presets).map(([id, shift]) => [id, Math.round(shift * 360)])))
+      .toEqual({ 'slight-shift': -20, 'third-turn': 120, 'half-turn': 180, 'third-turn-back': -120 });
+    // Every preset lies on the -180° to 180° slider.
+    for (const shift of Object.values(presets)) expect(Math.abs(shift)).toBeLessThanOrEqual(0.5);
+    const orange: Pixel = [0.8, 0.5, 0.2, 1];
+    const [slight, third, half, back] = ['slight-shift', 'third-turn', 'half-turn', 'third-turn-back'].map(id => render('hue-shift', { shift: presets[id] }, orange));
+    expect(slight[1] / slight[0]).toBeLessThan(orange[1] / orange[0]);
+    expect(slight[2]).toBeGreaterThan(orange[2]);
+    expect(third[1]).toBeGreaterThan(Math.max(third[0], third[2]));
+    for (const cold of [half, back]) expect(cold[2]).toBeGreaterThan(Math.max(cold[0], cold[1]));
+    // Violet: the red comes back above the green.
+    expect(back[0]).toBeGreaterThan(back[1]);
+    // Saved projects keep their look: -20° renders exactly like the former 340°.
+    expectPixel(render('hue-shift', { shift: -1 / 18 }, orange), render('hue-shift', { shift: 17 / 18 }, orange), 5);
+  });
+
+  it('Hue Shift wraps: typed values beyond the slider are kept, and a keyframe from -20° to 20° passes through 0°', () => {
+    const shift = getEffect('hue-shift')!.params.shift;
+    expect([shift.min, shift.max, shift.wraps]).toEqual([-0.5, 0.5, true]);
+    const hue = { id: 'hue-1', name: 'Hue Shift', type: 'hue-shift', enabled: true, params: { shift: -1 / 18 } } as Effect;
+    const target = getParameterSourceTarget({ effects: [hue], startTime: 0 }, 'effect.hue-1.shift')!;
+    // No hard limit and no clamp note: -20° and 765° stay what they are.
+    expect([target.hardMin, target.hardMax, target.wraps, target.value]).toEqual([undefined, undefined, true, -1 / 18]);
+    expect(paramRangeNotes(getEffect('hue-shift')!.params, { shift: -1 / 18 })).toEqual([]);
+    expect(paramRangeNotes(getEffect('hue-shift')!.params, { shift: 765 / 360 })).toEqual([]);
+    // Halfway between keys at -20° and 20° the stored value is 0: the picture is the original, not a trip round the wheel.
+    const keys = [{ id: 'a', clipId: 'c', property: 'effect.hue-1.shift', time: 0, value: -1 / 18, easing: 'linear' },
+      { id: 'b', clipId: 'c', property: 'effect.hue-1.shift', time: 2, value: 1 / 18, easing: 'linear' }] as Keyframe[];
+    const middle = interpolateKeyframes(keys, 'effect.hue-1.shift' as never, 1, 0);
+    expect(middle).toBeCloseTo(0, 12);
+    const orange: Pixel = [0.8, 0.5, 0.2, 1];
+    expectPixel(render('hue-shift', { shift: middle }, orange), orange, 4);
+  });
+
+  it('keeps the single Hue Shift control in a Parameters folder like every colour recipe', () => {
+    const graph = createDefaultColorEffectGraph('hue-shift');
+    const organized = organizeEffectFamilyGraph(graph, recognizeOperatorCompositions(graph), 'hue-shift', () => createDefaultColorEffectGraph('hue-shift'));
+    const parameters = organized.groups?.find(group => group.label === 'Parameters');
+    expect(parameters?.nodeIds).toEqual(['shift']);
+    // Other single-card stages still stay loose (Hue Rotation is one block, not a folder around it).
+    expect(organized.groups?.map(group => group.label)).not.toContain('Hue Rotation');
+  });
+
+  it('names the Invert folders after what they do and tells its three Subtract outputs apart', () => {
+    const graph = createDefaultInvertImageGraph();
+    const organized = organizeEffectFamilyGraph(graph, recognizeOperatorCompositions(graph), 'invert', createDefaultInvertImageGraph);
+    const folders = Object.fromEntries((organized.groups ?? []).map(group => [group.label, group.nodeIds.toSorted()]));
+    // Invert has no clamp, so its last folder must not be called "Clamp & Alpha".
+    expect(folders).toEqual({ 'Invert RGB': ['invert-b', 'invert-g', 'invert-r'], 'Alpha & Image': ['combine', 'image'] });
+    expect(effectPortLabels('invert')).toMatchObject({ one: 'White Level', 'invert-r': 'Inverted R', 'invert-g': 'Inverted G', 'invert-b': 'Inverted B' });
+    // The free node graph shares the invert type: an edited graph is not the recipe and gets no Invert folders.
+    const free = { ...graph, nodes: graph.nodes.filter(node => node.id !== 'invert-b') };
+    expect(organizeEffectFamilyGraph(free, recognizeOperatorCompositions(free), 'invert', createDefaultInvertImageGraph).groups ?? []).toEqual([]);
+    // Its port labels name only the recipe's own cards: a free graph whose agent named a card 'one' keeps plain labels.
+    const plan = effectPresentationPlan('invert')!;
+    expect(plan.portLabelsApply?.(graph)).toBe(true);
+    expect(plan.portLabelsApply?.({ nodes: [{ id: 'one', operator: 'values.number', bindings: {}, constants: { value: 0.3 } }] })).toBe(false);
+    expect(plan.portLabelsApply?.({ nodes: graph.nodes.filter(node => node.id !== 'invert-g') })).toBe(false);
   });
 
   it('never produces NaN and clamps out-of-range values to the declared render range', () => {

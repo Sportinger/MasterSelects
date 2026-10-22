@@ -10,6 +10,7 @@ import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 import { ResolveInspectorColorRow } from './resolveInspector/ResolveInspectorColorRow';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
+import { ResolveWrappingNumberRow } from './ResolveWrappingNumberRow';
 import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
 import { EffectKeyframeToggle } from './shared';
 import { effectParamDisplay } from '../../../effects/paramDisplay';
@@ -80,13 +81,17 @@ function ResolveEffectParamControl({ paramName, definition, value, effect, clipI
   const display = effectParamDisplay(definition, number), scale = display.scale, shown = (stored: number) => stored * scale;
   const unitRow = definition.displayUnit !== undefined || definition.displayScale !== undefined || definition.unit !== undefined;
   if (sourceTarget && clipId) return <ParameterSourceNumberRow clipId={clipId} property={property} display={unitRow ? display : undefined} />;
-  return <ResolveInspectorNumberRow label={definition.label} value={shown(number)} defaultValue={shown(Number(definition.default))}
-    min={shown(min)} max={shown(max)} step={display.step ?? shown(definition.step ?? 0.01)} sensitivity={Math.max(0.5, shown(max - min) / 100)}
-    numberMin={shown(definition.renderMin ?? min)} numberMax={shown(definition.renderMax ?? max)} suffix={display.suffix}
-    decimals={display.decimals} disabled={inactive} title={title}
-    persistenceKey={`effect.${clipId ?? 'global'}.${effect.id}.${paramName}`}
-    midiTarget={clipId ? { clipId, property: createEffectProperty(effect.id, paramName), label: definition.label, currentValue: number, min, max } : null}
-    onChange={next => set(next / scale)} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={method => onParamCommit?.(paramName, 'number', method)}
-    keyframeToggle={definition.animatable && clipId
-      ? <EffectKeyframeToggle clipId={clipId} effectId={effect.id} paramName={paramName} value={number} /> : undefined} />;
+  const shared = { label: definition.label, value: shown(number), defaultValue: shown(Number(definition.default)),
+    min: shown(min), max: shown(max), step: display.step ?? shown(definition.step ?? 0.01), sensitivity: Math.max(0.5, shown(max - min) / 100),
+    suffix: display.suffix, decimals: display.decimals, disabled: inactive, title,
+    persistenceKey: `effect.${clipId ?? 'global'}.${effect.id}.${paramName}`,
+    midiTarget: clipId ? { clipId, property: createEffectProperty(effect.id, paramName), label: definition.label, currentValue: number, min, max } : null,
+    onChange: (next: number) => set(next / scale), onDragStart, onDragEnd,
+    onCommit: (method: Parameters<NonNullable<ResolveEffectParamRowProps['onParamCommit']>>[2]) => onParamCommit?.(paramName, 'number', method),
+    keyframeToggle: definition.animatable && clipId
+      ? <EffectKeyframeToggle clipId={clipId} effectId={effect.id} paramName={paramName} value={number} /> : undefined };
+  // A cyclic value (Hue Shift) puts its handle at its place on one turn and types without a limit.
+  if (definition.wraps) return <ResolveWrappingNumberRow {...shared} />;
+  return <ResolveInspectorNumberRow {...shared}
+    numberMin={shown(definition.renderMin ?? min)} numberMax={shown(definition.renderMax ?? max)} />;
 }
