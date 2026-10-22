@@ -26,8 +26,9 @@ describe('geometry pattern image graph lifecycle', () => {
     const params = effectOperatorParams(effect(type));
     expect(params).toMatchObject({ scale: 14, amount: .75, angle: 0, colorA: '#111827', colorB: '#f8fafc' });
     expect(definition.params).toMatchObject({
-      // Vector Engraving's Line Spacing starts at its 3 px floor, so the slider has no range that renders the same.
-      scale: { default: 14, min: type === 'vector-tiling' ? 3 : 2, max: 80 }, amount: { default: .75, min: 0, max: 1 }, angle: { default: 0, min: -180, max: 180 },
+      // Vector Engraving's Line Spacing starts at its 3 px floor and Contour Map's Band Density at 6 (2.1 bands),
+      // so neither slider has a range that renders the same.
+      scale: { default: 14, min: type === 'vector-tiling' ? 3 : type === 'contour-map' ? 6 : 2, max: 80 }, amount: { default: .75, min: 0, max: 1 }, angle: { default: 0, min: -180, max: 180 },
     });
 
     const canonical = effectOperatorGraph(effect(type));

@@ -13,7 +13,7 @@ Add one in **Properties → Effects → + Add Effect → Lines & Engraving**
 | pen hatching, more and heavier lines where it is darker | [Crosshatch](./effects/crosshatch.md) |
 | rows of engraved wavy lines, like a banknote | [Vector Engraving](./effects/vector-tiling.md) |
 | clean lines where the brightness crosses one level | [Contour](./effects/contour.md) |
-| banded zones with a line at each band, like a map | [Contour Map](./effects/contour-map.md) |
+| banded zones with a fine contour line on every band edge, like a hiking map | [Contour Map](./effects/contour-map.md) |
 | an edge drawing | [Outline](./effects/outline.md) |
 | wavy line art on a plain background | [Wave Lines](./effects/wave-lines.md) |
 | bands of the picture drifting sideways | [Drift Lines](./effects/drift-lines.md) |

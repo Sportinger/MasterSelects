@@ -30,5 +30,25 @@ export function linesLookPresentationPlan(type: string): EffectPresentationPlan 
       : /^(wave(-phase|-depth|-offset)?|waved-across|engraving-(fraction|offset|distance))$/.test(id) ? 'wave'
       : /^(weight(-clamped)?|darkness-width|heavy-width|line-width|engraving(-low|-high|-smooth)?)$/.test(id) ? 'width' : 'grid',
   };
+  // Contour Map: the averaged picture (Smoothing), its height and slope, the band colours (Band Density, Fill), the lines on
+  // the band edges (Line Width), ink and paper.
+  if (type === 'contour-map') return {
+    labels: { source: 'Picture & Tone', filter: 'Smoothing', height: 'Height & Slope (Band Density)', bands: 'Bands (Fill, Ink, Paper)',
+      lines: 'Lines (Line Width)', finish: 'Drawing (Amount)' },
+    portLabels: { levels: 'Bands', 'tap-0-tone': 'Tone', 'tap-1-tone': 'Tone Right', 'tap-2-tone': 'Tone Left', 'tap-3-tone': 'Tone Below',
+      'tap-4-tone': 'Tone Above', height: 'Height', 'safe-slope': 'Slope (bands/px)', 'nearest-edge': 'Nearest Edge', 'edge-distance': 'Distance to Edge (px)',
+      'line-coverage': 'Line Cover', 'inner-edge': 'Inner Edge', line: 'Line', quantized: 'Band Position', 'band-color': 'Band Colour',
+      'filled-band': 'Filled Band', 'source-color:rgb': 'Picture RGB', 'source-color:alpha': 'Picture Alpha', styled: 'Drawing',
+      'cell-filter': 'Smoothed Picture (cached)', 'cell-filter-rows': 'Row Average (cached)', 'cell-filter-width': 'Box Width (px)',
+      'cell-filter-taps': 'Reads per Row', 'cell-filter-srgb': 'Average Colour' },
+    // The 1080p frame scale sits with Smoothing (it also feeds Line Width), and Ink and Paper enter with the bands they
+    // tint, so no folder feeds one that feeds it back.
+    stage: ({ id }) => /^(cell-filter|smoothing|frame-)/.test(id) ? 'filter'
+      : /^(styled|mixed|combined)$/.test(id) ? 'finish'
+      : /^(source|source-color|clamped-uv|clamp-m(in|ax)-vec2|pixel-(step|left|up)(-components)?|one-vec2)$|^tap-\d/.test(id) ? 'source'
+      : /^(line|lineWidth)|^(edge-above-black|edge-below-white|half-edge|last-edge|half-step|inner-edge)$/.test(id) ? 'lines'
+      : /^(color-[ab]-rgb|band-(index|position|color|count|steps)|bands-minus-one|quantized|fill(-clamped)?|filled-band)$/.test(id) ? 'bands'
+        : 'height',
+  };
   return undefined;
 }

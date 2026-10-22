@@ -17,8 +17,8 @@ describe('geometry fragment effect graphs', () => {
       to: 'combined',
       input: 'alpha',
     }));
-    // One pass each, except Vector Engraving's cached Cell Filter (two passes before the look).
-    expect(graph.nodes.some(node => node.operator === 'image.materialize')).toBe(type === 'vector-tiling');
+    // One pass each, except the cached Cell Filter of Vector Engraving and Contour Map (two passes before the look).
+    expect(graph.nodes.some(node => node.operator === 'image.materialize')).toBe(type === 'vector-tiling' || type === 'contour-map');
     expect(graph.nodes.find(node => node.id === 'amount')?.bindings).toEqual({ value: 'amount' });
     if (type !== 'outline') expect(graph.nodes.find(node => node.id === 'scale')?.bindings).toEqual({ value: 'scale' });
     else expect(graph.nodes.some(node => node.id === 'scale')).toBe(false);
@@ -26,8 +26,11 @@ describe('geometry fragment effect graphs', () => {
 
   it('preserves each legacy formula as explicit generic operations', () => {
     const contour = createDefaultGeometryFragmentGraph('contour-map');
-    expect(contour.nodes.find(node => node.id === 'quantized')?.operator).toBe('math.divide-ieee.scalar');
-    expect(contour.nodes.find(node => node.id === 'band-distance')?.operator).toBe('math.abs.scalar');
+    // Contour Map: bands capped at Paper, lines at the band edges measured in pixels through the slope.
+    expect(contour.nodes.find(node => node.id === 'quantized')?.operator).toBe('math.min.scalar');
+    expect(contour.nodes.find(node => node.id === 'band-edge-distance')?.operator).toBe('math.abs.scalar');
+    expect(contour.nodes.find(node => node.id === 'edge-distance')?.operator).toBe('math.divide-ieee.scalar');
+    expect(contour.edges).toContainEqual(expect.objectContaining({ from: 'cell-filter', to: 'tap-0-sample', input: 'image' }));
     const hatch = createDefaultGeometryFragmentGraph('crosshatch');
     expect(hatch.nodes.filter(node => node.id.endsWith('-gate')).map(node => node.id)).toEqual(['first-gated-gate', 'second-gated-gate', 'third-gated-gate']);
     expect(hatch.nodes.find(node => node.id === 'hatch')?.operator).toBe('math.max.scalar');

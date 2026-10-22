@@ -42,14 +42,26 @@ fn contourFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(mix(color.rgb, mix(params.colorB.rgb, params.colorA.rgb, contourLine), params.amount), color.a);
 }
 
+// Contour Map (geometryFragmentEffectGraphs.ts CONTOUR_MAP). The graph reads the tone through Smoothing (patternCellFilter.ts);
+// this twin reads the pixel itself.
 @fragment
 fn contourMapFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
-  let levels = max(3.0, params.scale * 0.35);
-  let quantized = floor(luminance(color.rgb) * levels) / max(1.0, levels - 1.0);
-  let bandColor = mix(params.colorA.rgb, params.colorB.rgb, quantized);
-  let line = 1.0 - smoothstep(0.02, 0.09, abs(fract(luminance(color.rgb) * levels) - 0.5));
-  return vec4f(mix(color.rgb, bandColor * (0.72 + line * 0.28), params.amount), color.a);
+  let levels = max(params.scale, 6.0) * 0.35;
+  let texel = 1.0 / params.resolution;
+  let height = luminance(color.rgb) * levels;
+  let slope = max(length(vec2f(
+    luminance(source(input.uv + vec2f(texel.x, 0.0)).rgb) - luminance(source(input.uv - vec2f(texel.x, 0.0)).rgb),
+    luminance(source(input.uv + vec2f(0.0, texel.y)).rgb) - luminance(source(input.uv - vec2f(0.0, texel.y)).rgb)) * levels * 0.5), 1e-4);
+  let nearest = floor(height + 0.5);
+  // Line Width (variant slot) in 1080p pixels; a line under one pixel fades. No line at pure black or white.
+  let width = max(params.variant, 0.0) * min(params.resolution.x, params.resolution.y) / 1080.0;
+  let line = clamp(width * 0.5 + 0.5 - abs(height - nearest) / slope, 0.0, 1.0) * min(width, 1.0)
+    * step(0.5, nearest) * step(nearest, levels - 0.5);
+  let quantized = min(1.0, floor(height) / max(1.0, ceil(levels) - 1.0));
+  // Fill (Angle slot): bands tinted from Paper (0) to the full Ink-to-Paper range (1).
+  let band = mix(params.colorB.rgb, mix(params.colorA.rgb, params.colorB.rgb, quantized), clamp(params.angle, 0.0, 1.0));
+  return vec4f(mix(color.rgb, mix(band, params.colorA.rgb, line), params.amount), color.a);
 }
 
 // Pattern sizes count pixels of a 1080p frame (shorter side), as the graphs do (patternReferenceFrame.ts).

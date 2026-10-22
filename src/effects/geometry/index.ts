@@ -2,6 +2,7 @@ import shader from './shader.wgsl?raw';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { createGlyphEffect } from '../glyph/glyphEffectFactory';
 import { createComputeEffect } from './computeEffectFactory';
+import { CONTOUR_MAP_PARAMS, CONTOUR_MAP_PRESETS } from './contourMap';
 import { CROSSHATCH_PARAMS, CROSSHATCH_PRESETS } from './crosshatch';
 import { VECTOR_ENGRAVING_PARAMS, VECTOR_ENGRAVING_PRESETS } from './vectorEngraving';
 import type { ComputeEffectDefinition } from '../types';
@@ -56,10 +57,10 @@ export const contour = createComputeEffect({
     threshold: { type: 'number', label: 'Iso Level', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Structure' },
   },
 });
-// Scale counts the bands (contourMapFragment: levels = scale x 0.35), the reverse of a cell size: its own role.
+// Scale counts the bands (contourMapFragment: bands = scale x 0.35, from 6 = 2.1 bands), the reverse of a cell size: its own role.
 export const contourMap = createCatalogEffect({ id: 'contour-map', name: 'Contour Map', category: 'geometry', shader, entryPoint: 'contourMapFragment',
-  params: { scale: catalogBaseParam('scale', { label: 'Band Density', styleRole: 'band-count' }) },
-  retired: ignoredBaseParams('Contour Map', ['angle']) });
+  params: { scale: catalogBaseParam('scale', { label: 'Band Density', styleRole: 'band-count', min: 6, renderMin: 6 }), ...CONTOUR_MAP_PARAMS },
+  variantParam: 'lineWidth', angleSlotParam: 'fill', presets: CONTOUR_MAP_PRESETS, retired: ignoredBaseParams('Contour Map', ['angle']) });
 export const contourType = createGlyphEffect({ id: 'contour-type', name: 'Contour Type', category: 'geometry', entryPoint: 'contourTypeFragment', defaultRamp: 'numeric', defaultCellSize: 20 });
 export const vectorTiling = createCatalogEffect({ id: 'vector-tiling', name: 'Vector Engraving', category: 'geometry', shader, entryPoint: 'vectorTilingFragment', scaleFloor: 3,
   params: { scale: catalogBaseParam('scale', { label: 'Line Spacing', unit: ' px', min: 3 }), ...VECTOR_ENGRAVING_PARAMS }, variantParam: 'weight', presets: VECTOR_ENGRAVING_PRESETS });

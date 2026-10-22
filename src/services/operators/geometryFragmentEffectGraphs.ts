@@ -47,20 +47,58 @@ function finish(g: GraphBuilder, sourceColor: Ref, styled: Ref, amount: Ref, alp
   const output = g.node('output', 'image.output', 18); g.edge(combined, output, 'image');
 }
 
+/** Contour Map (shader twin: contourMapFragment). Band Density × `levelsPerDensity` bands; a value under `minimumDensity`
+ * renders it (2.1 bands) and the card says so. Lines sit on the band edges at a width in pixels, whatever the slope. */
+export const CONTOUR_MAP = { levelsPerDensity: .35, minimumDensity: 6, flatSlope: 1e-4 } as const;
+
 function contourMap(g: GraphBuilder, c: ReturnType<typeof common>) {
-  const scale = g.node('scale', 'values.number', 0, { value: 'scale' }), three = g.literal('three', 3), point35 = g.literal('point-35', .35);
-  const levels = g.binary('levels', 'math.max.scalar', three, g.binary('scaled-levels', 'math.multiply.scalar', scale, point35, 5), 6);
-  const toneLevels = g.binary('tone-levels', 'math.multiply.scalar', c.tone!, levels, 7);
-  const denominator = g.binary('level-denominator', 'math.max.scalar', c.one, g.binary('levels-minus-one', 'math.subtract.scalar', levels, c.one, 7), 8);
-  const quantized = g.binary('quantized', 'math.divide-ieee.scalar', g.unary('quantized-floor', 'math.floor.scalar', toneLevels, 8), denominator, 9);
-  const band = g.node('band-color', 'math.mix.rgb', 10); g.edge(c.colorA!, band, 'a'); g.edge(c.colorB!, band, 'b'); g.edge(quantized, band, 't');
-  const centered = g.binary('band-centered', 'math.subtract.scalar', g.unary('band-fraction', 'math.fract.scalar', toneLevels, 8), g.literal('half', .5), 9);
-  const distance = g.unary('band-distance', 'math.abs.scalar', centered, 10), smooth = g.node('line-smooth', 'math.smoothstep.scalar', 11);
-  g.edge(g.literal('line-low', .02), smooth, 'edge0'); g.edge(g.literal('line-high', .09), smooth, 'edge1'); g.edge(distance, smooth, 'value');
-  const line = g.binary('line', 'math.subtract.scalar', c.one, smooth, 12);
-  const brightness = g.binary('band-brightness', 'math.add.scalar', g.literal('brightness-base', .72),
-    g.binary('line-gain', 'math.multiply.scalar', line, g.literal('brightness-gain', .28), 12), 13);
-  const styled = g.node('styled', 'math.multiply.rgb-scalar', 14); g.edge(band, styled, 'a'); g.edge(brightness, styled, 'b'); finish(g, c.sourceColor, styled, c.amount);
+  const scale = g.binary('scale-clamped', 'math.max.scalar', g.node('scale', 'values.number', 0, { value: 'scale' }), g.literal('minimum-density', CONTOUR_MAP.minimumDensity), 5);
+  const levels = g.binary('levels', 'math.multiply.scalar', scale, g.literal('levels-per-density', CONTOUR_MAP.levelsPerDensity), 6);
+  // The tone at the pixel and one pixel to each side, read from the picture averaged over Smoothing (prefilterCellTaps).
+  const step = g.binary('pixel-step', 'math.divide-ieee.vec2', g.unary('one-vec2', 'convert.scalar-to-vec2', c.one, 5), c.resolution, 6);
+  const parts = g.unary('pixel-step-components', 'vector.split.vec2', step, 7), px = { node: parts.node, port: 'x' }, py = { node: parts.node, port: 'y' };
+  const negative = (id: string, value: Ref) => g.binary(id, 'math.subtract.scalar', c.zero, value, 8);
+  const offsets: [Ref, Ref][] = [[px, c.zero], [negative('pixel-left', px), c.zero], [c.zero, py], [c.zero, negative('pixel-up', py)]];
+  const toneAt = (index: number) => {
+    const at = index === 0 ? c.uv : g.binary(`tap-${index}-uv`, 'math.add.vec2', c.uv, g.vec2(`tap-${index}-offset`, offsets[index - 1][0], offsets[index - 1][1], 8), 9);
+    return g.unary(`tap-${index}-tone`, 'color.luminance-rec709.image', sampleAt(g, c, `tap-${index}-sample`, at, 10), 12, 'image');
+  };
+  const [tone, right, left, down, up] = [0, 1, 2, 3, 4].map(toneAt);
+  const height = g.binary('height', 'math.multiply.scalar', tone, levels, 13);
+  // Slope: bands per pixel (central differences); the distance to the nearest band edge in pixels is distance ÷ slope.
+  const halfLevels = g.binary('half-levels', 'math.multiply.scalar', levels, g.literal('half', .5), 7);
+  const slopeX = g.binary('slope-x', 'math.multiply.scalar', g.binary('tone-dx', 'math.subtract.scalar', right, left, 13), halfLevels, 14);
+  const slopeY = g.binary('slope-y', 'math.multiply.scalar', g.binary('tone-dy', 'math.subtract.scalar', down, up, 13), halfLevels, 14);
+  const slope = g.binary('safe-slope', 'math.max.scalar', g.unary('slope', 'vector.length.vec2', g.vec2('slope-vector', slopeX, slopeY, 15), 16, 'value'),
+    g.literal('flat-slope', CONTOUR_MAP.flatSlope), 17);
+  const nearest = g.unary('nearest-edge', 'math.floor.scalar', g.binary('height-rounding', 'math.add.scalar', height, g.literal('half-band', .5), 14), 15);
+  const distance = g.binary('edge-distance', 'math.divide-ieee.scalar',
+    g.unary('band-edge-distance', 'math.abs.scalar', g.binary('height-offset', 'math.subtract.scalar', height, nearest, 16), 17), slope, 18);
+  // Line Width in pixels of a 1080p frame (measured in the frame below); a line under one pixel fades instead of thinning.
+  const width = g.binary('lineWidth-clamped', 'math.max.scalar', g.node('line-width', 'values.number', 0, { value: 'lineWidth' }), c.zero, 5);
+  const coverage = g.node('line-coverage', 'math.clamp.scalar', 19);
+  g.edge(g.binary('line-reach', 'math.subtract.scalar', g.binary('line-outer', 'math.add.scalar',
+    g.binary('line-half', 'math.multiply.scalar', width, g.literal('line-half-share', .5), 17), g.literal('line-soft', .5), 18), distance, 19), coverage, 'value');
+  g.edge(c.zero, coverage, 'min'); g.edge(c.one, coverage, 'max');
+  const thin = g.binary('line-opacity', 'math.min.scalar', width, c.one, 18);
+  // Only edges between two bands: none at pure black (edge 0) or at the top of the last band (pure white).
+  const above = g.node('edge-above-black', 'math.step.scalar', 16); g.edge(g.literal('half-edge', .5), above, 'edge'); g.edge(nearest, above, 'value');
+  const below = g.node('edge-below-white', 'math.step.scalar', 16); g.edge(nearest, below, 'edge');
+  g.edge(g.binary('last-edge', 'math.subtract.scalar', levels, g.literal('half-step', .5), 15), below, 'value');
+  const line = g.binary('line', 'math.multiply.scalar', g.binary('line-shape', 'math.multiply.scalar', coverage, thin, 20),
+    g.binary('inner-edge', 'math.multiply.scalar', above, below, 17), 21);
+  // Bands from Ink (dark) to Paper (light); Fill tints them from Paper (0, lines only) to the full range (1).
+  const bandCount = g.binary('band-steps', 'math.max.scalar', c.one, g.binary('bands-minus-one', 'math.subtract.scalar', g.unary('band-count', 'math.ceil.scalar', levels, 7), c.one, 8), 9);
+  const quantized = g.binary('quantized', 'math.min.scalar', c.one, g.binary('band-position', 'math.divide-ieee.scalar', g.unary('band-index', 'math.floor.scalar', height, 14), bandCount, 15), 16);
+  const band = g.node('band-color', 'math.mix.rgb', 17); g.edge(c.colorA!, band, 'a'); g.edge(c.colorB!, band, 'b'); g.edge(quantized, band, 't');
+  const fill = g.node('fill-clamped', 'math.clamp.scalar', 5); g.edge(g.node('fill', 'values.number', 0, { value: 'fill' }), fill, 'value'); g.edge(c.zero, fill, 'min'); g.edge(c.one, fill, 'max');
+  const filled = g.node('filled-band', 'math.mix.rgb', 18); g.edge(c.colorB!, filled, 'a'); g.edge(band, filled, 'b'); g.edge(fill, filled, 't');
+  const styled = g.node('styled', 'math.mix.rgb', 22); g.edge(filled, styled, 'a'); g.edge(c.colorA!, styled, 'b'); g.edge(line, styled, 't');
+  // Smoothing: the box the taps read through, in pixels of a 1080p frame (the Cell Filter averages half a "cell").
+  const smoothing = g.node('smoothing-clamped', 'math.clamp.scalar', 5);
+  g.edge(g.node('smoothing', 'values.number', 0, { value: 'smoothing' }), smoothing, 'value'); g.edge(c.zero, smoothing, 'min'); g.edge(g.literal('smoothing-max', 32), smoothing, 'max');
+  g.binary('smoothing-cell', 'math.multiply.scalar', smoothing, g.literal('smoothing-cell-share', 2), 6);
+  finish(g, c.sourceColor, styled, c.amount);
 }
 
 /** Crosshatch's three line layers (shader twin: crosshatchFragment). Widths and edges are shares of the line spacing:
@@ -255,7 +293,7 @@ const REFERENCE_SIZE: Partial<Record<EditableGeometryFragmentEffectType, { node:
 
 export function createDefaultGeometryFragmentGraph(type: EditableGeometryFragmentEffectType): EffectOperatorGraph {
   const g = new GraphBuilder(), c = common(g, {
-    tone: type === 'contour-map' || type === 'crosshatch' || type === 'kilim',
+    tone: type === 'crosshatch' || type === 'kilim',
     colors: type === 'embroidery' ? 'a' : type === 'bricks' ? 'none' : 'both',
   });
   if (type === 'contour-map') contourMap(g, c);
@@ -267,6 +305,11 @@ export function createDefaultGeometryFragmentGraph(type: EditableGeometryFragmen
   else bricks(g, c);
   const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   // Pattern sizes and the Outline edge step count pixels of a 1080p frame (patternReferenceFrame.ts); Contour Map Scale is a level count.
+  if (type === 'contour-map') {
+    // Line Width and Smoothing count pixels of a 1080p frame; a line may stay under a pixel (it fades), Smoothing 0 reads the picture itself.
+    const measured = measureInReferenceFrame(measureInReferenceFrame(graph, 'lineWidth-clamped'), 'smoothing-clamped');
+    return prefilterCellTaps(measured, 'smoothing-cell');
+  }
   const size = REFERENCE_SIZE[type];
   const measured = size ? measureInReferenceFrame(graph, size.node, { minimumPixels: 1, ...(size.consumers ? { consumers: size.consumers } : {}) }) : graph;
   // Vector Engraving reads its tone from the picture averaged over half a line spacing (patternCellFilter.ts).

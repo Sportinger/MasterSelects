@@ -21,8 +21,8 @@ type Rgba = [number, number, number, number];
 type Params = Record<string, number | boolean | string>;
 const LOOKS = effectEngineMembers('two-tone-pattern');
 /** Looks whose pattern edges are one output pixel soft at every size (sharper on larger frames). Pattern Halftone
- * draws its marks with Halftone's half-pixel edge. */
-const SOFT_EDGE_IN_OUTPUT_PIXELS = new Set(['halftone', 'pattern-halftone', 'riso', 'riso-glow', 'paper-print']);
+ * draws its marks with Halftone's half-pixel edge; Contour Map's lines fade over one output pixel at each side. */
+const SOFT_EDGE_IN_OUTPUT_PIXELS = new Set(['halftone', 'pattern-halftone', 'riso', 'riso-glow', 'paper-print', 'contour-map']);
 /** Engine looks whose pattern still counts output pixels, with the reason. The 1080p test checks that they still
  * differ between sizes, so the look that gets a 1080p recipe has to leave this list. */
 const OUTPUT_PIXEL_LOOKS = new Map([
