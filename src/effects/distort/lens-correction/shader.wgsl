@@ -1,10 +1,12 @@
 struct LensCorrectionParams {
   distortion: f32, fineDistortion: f32, scale: f32, aspect: f32,
   centerX: f32, centerY: f32, redFringe: f32, blueFringe: f32,
-  vignette: f32, midpoint: f32, cropFactor: f32, foldRadius: f32,
+  vignette: f32, midpoint: f32, cropFactor: f32, kneeRadius: f32,
   distortionProfile: vec4f,
   tcaProfile: vec4f,
   vignetteProfile: vec4f,
+  // Source radius and slope at kneeRadius (lensFrameFit.lensKnee); unused when kneeRadius is huge.
+  knee: vec4f,
 };
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
@@ -34,15 +36,16 @@ fn lensCorrectionFragment(input: VertexOutput) -> @location(0) vec4f {
   let radiusScale = 2.0 / length(aspect);
   let delta = (input.uv - center) * aspect * radiusScale / params.scale;
   let r2 = dot(delta, delta);
-  // Beyond the fold radius (packUniforms) the correction would mirror the picture: leave it empty,
-  // with a one-pixel soft edge. foldRadius is huge when nothing folds.
   let outputRadius = length(delta);
-  let foldCoverage = clamp((params.foldRadius - outputRadius) / max(fwidth(outputRadius), 1e-6) + 0.5, 0.0, 1.0);
   // Full-frame 3:2 calibration uses half the short sensor side for PTLens/TCA.
-  let profileRadius = length(delta) * 1.80277564 / params.cropFactor;
+  let profileRadius = outputRadius * 1.80277564 / params.cropFactor;
   let terms = params.distortionProfile;
   let measured = 1.0 + terms.w * (terms.x * pow(profileRadius, 3.0) + terms.y * profileRadius * profileRadius + terms.z * profileRadius);
-  let radial = max(0.05, measured * (1.0 + params.distortion * r2 + params.fineDistortion * r2 * r2));
+  let polynomial = max(0.05, measured * (1.0 + params.distortion * r2 + params.fineDistortion * r2 * r2));
+  // Beyond the knee (strong barrel removal) the mapping continues in a straight line instead of folding back,
+  // so the outer picture stays visible and never mirrors (lensFrameFit.lensSourceRadius).
+  let line = (params.knee.x + params.knee.y * (outputRadius - params.kneeRadius)) / max(outputRadius, 1e-6);
+  let radial = select(polynomial, line, outputRadius > params.kneeRadius);
   let sourceDelta = delta * radial / (aspect * radiusScale);
   let uv = center + sourceDelta;
   let tcaRadius2 = profileRadius * profileRadius * radial * radial;
@@ -63,5 +66,5 @@ fn lensCorrectionFragment(input: VertexOutput) -> @location(0) vec4f {
   let v = params.vignetteProfile;
   let attenuation = max(0.05, 1.0 + v.x * vignetteR2 + v.y * vignetteR2 * vignetteR2 + v.z * pow(vignetteR2, 3.0));
   let corrected = select(rgb, lensSrgb(lensLinear(rgb) / attenuation), v.w > 0.5);
-  return vec4f(corrected * gain, base.a * lensInside(uv) * foldCoverage);
+  return vec4f(corrected * gain, base.a * lensInside(uv));
 }

@@ -1,7 +1,7 @@
 import type { EffectDefinition, EffectParam } from '../../types';
 import shader from './shader.wgsl?raw';
 import { LENS_PROFILE_OPTIONS, lensProfileUniforms } from './lensProfile';
-import { LENS_NO_FOLD, lensFoldRadius, lensFullImageScale } from './lensFrameFit';
+import { lensFullImageScale, lensKnee } from './lensFrameFit';
 
 const number = (label: string, value: number, min: number, max: number, step: number, group: string): EffectParam =>
   ({ type: 'number', label, default: value, min, max, step, animatable: true, group });
@@ -36,7 +36,7 @@ export function normalizeLensCorrection(params: Record<string, number | boolean 
 
 type LensParams = Record<string, number | boolean | string>;
 
-/** Geometry the shader sees: scale after Fit, and the fold radius in its normalized radius units. */
+/** Geometry the shader sees: scale after Fit, and the knee where the radius mapping turns into a straight line. */
 function lensGeometry(params: LensParams, width: number, height: number) {
   const p = normalizeLensCorrection(params);
   const vignetteEnabled = params.vignetteEnabled !== false;
@@ -45,16 +45,28 @@ function lensGeometry(params: LensParams, width: number, height: number) {
   const aspect = p.sourceAspect || Math.max(1,width)/Math.max(1,height);
   const geometry = { aspect, centerX: p.centerX, centerY: p.centerY, cropFactor: p.cropFactor,
     distortion: p.distortion / 100, fineDistortion: p.fineDistortion / 100, profile };
-  // Fit picks the scale itself (the card hides Scale meanwhile), so a hidden Scale never shrinks the picture further.
-  const scale = params.fitFullImage === true ? lensFullImageScale(geometry) : p.scale/100;
+  // Fit picks the scale itself (the card hides Scale meanwhile, and a warning names a Scale it ignores).
+  const fit = params.fitFullImage === true ? lensFullImageScale(geometry) : undefined;
+  const scale = fit ?? p.scale/100;
   // Largest output radius in the frame: the farthest corner from the optical centre, divided by scale.
   const radiusScale = 2 / Math.hypot(aspect, 1);
   const corner = Math.max(...[[0, 0], [1, 0], [0, 1], [1, 1]].map(([u, v]) =>
     Math.hypot((u - p.centerX) * aspect * radiusScale, (v - p.centerY) * radiusScale))) / Math.max(scale, 1e-4);
-  return { p, vignetteEnabled, profile, aspect, scale, fold: lensFoldRadius(geometry, corner * 1.01) };
+  return { p, vignetteEnabled, profile, aspect, scale, fit, corner, knee: lensKnee(geometry) };
 }
 
-/** Clamped values and folded corners, for tool results and the inspector (never silent). */
+/**
+ * Whether this setting draws differently from 3.2.7, where strong barrel removal folded (the outer ring
+ * stayed transparent) and Fit Entire Photo took the smaller of Scale and the fit. Saved AI Edge Fill
+ * results made on such a setting are marked for regeneration (edgeFillSource).
+ */
+export function lensGeometryChangedSince327(params: LensParams, width = 1920, height = 1080): boolean {
+  const { p, fit, corner, knee } = lensGeometry(params, width, height);
+  // A knee at the very corner (Distortion -25, centred) moves nothing visible.
+  return knee.radius < corner - 1e-4 || (fit !== undefined && p.scale / 100 < fit);
+}
+
+/** Clamped values and ignored controls, for tool results and the inspector (never silent). */
 export function lensCorrectionWarnings(params: LensParams, width = 1920, height = 1080): string[] {
   const warnings: string[] = [];
   for (const [key, definition] of Object.entries(LENS_CORRECTION_PARAMS)) {
@@ -65,29 +77,32 @@ export function lensCorrectionWarnings(params: LensParams, width = 1920, height 
       warnings.push(`${key}: ${value} is outside ${definition.min}..${definition.max}; using ${Math.min(definition.max!, Math.max(definition.min!, value))}.`);
     }
   }
-  const { fold } = lensGeometry(params, width, height);
-  if (fold < LENS_NO_FOLD) warnings.push('This much barrel correction would fold the outer picture back on itself, so the area beyond the fold stays transparent. Use less Distortion or Fine Distortion, or raise Scale to crop it.');
+  const { p, fit } = lensGeometry(params, width, height);
+  if (fit !== undefined && Math.abs(p.scale - 100) > 1e-6) {
+    warnings.push(`Scale ${Number(p.scale.toFixed(1))}% is ignored while Fit Entire Photo is on: Fit sets the scale itself. Turn Fit Entire Photo off to use Scale.`);
+  }
   return warnings;
 }
 
 export const lensCorrection: EffectDefinition = {
   id: 'lens-correction', name: 'Lens Correction', category: 'distort',
-  shader, entryPoint: 'lensCorrectionFragment', uniformSize: 96,
+  shader, entryPoint: 'lensCorrectionFragment', uniformSize: 112,
   params: LENS_CORRECTION_PARAMS,
   presets: [
     { id: 'wide-angle', name: 'Wide Angle', params: { distortion: -14 } },
     { id: 'action-cam', name: 'Action Cam', params: { distortion: -28, scale: 120 } },
-    { id: 'whole-photo', name: 'Whole Photo', params: { distortion: -14, fitFullImage: true } },
+    { id: 'whole-photo', name: 'Whole Photo', params: { distortion: -28, fitFullImage: true } },
     { id: 'even-corners', name: 'Even Corners', params: { vignette: 40, midpoint: 30 } },
   ],
   paramWarnings: (params, width, height) => lensCorrectionWarnings(params, width, height),
   packUniforms: (params, width, height) => {
-    const { p, vignetteEnabled, profile, aspect, scale, fold } = lensGeometry(params, width, height);
+    const { p, vignetteEnabled, profile, aspect, scale, knee } = lensGeometry(params, width, height);
     return new Float32Array([
       p.distortion / 100, p.fineDistortion / 100, scale, aspect,
       p.centerX, p.centerY, p.redFringe / 1000, p.blueFringe / 1000,
-      vignetteEnabled ? p.vignette / 100 : 0, p.midpoint / 100, p.cropFactor, fold,
+      vignetteEnabled ? p.vignette / 100 : 0, p.midpoint / 100, p.cropFactor, knee.radius,
       ...profile,
+      knee.source, knee.slope, 0, 0,
     ]);
   },
 };
