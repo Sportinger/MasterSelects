@@ -36,11 +36,19 @@ const imageHash2d = (value: number[]) => {
 };
 
 export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
-  const instructionsByScope = new Map<number, Array<[number, ImageOperatorPlan['instructions'][number]]>>();
+  // Per-pixel work stays in the scope loop: each instruction's pointwise operation and the plan-wide
+  // context requirements are resolved once here, not once per pixel, kernel tap or sequence step.
+  type Instruction = ImageOperatorPlan['instructions'][number];
+  const instructionsByScope = new Map<number, Array<[number, Instruction, ReturnType<typeof pointwiseOperation>]>>();
   plan.instructions.forEach((instruction, index) => {
     const scope = instruction.scope ?? 0, entries = instructionsByScope.get(scope) ?? [];
-    entries.push([index, instruction]); instructionsByScope.set(scope, entries);
+    entries.push([index, instruction, pointwiseOperation(instruction.operation)]); instructionsByScope.set(scope, entries);
   });
+  const usesOperation = (...operations: string[]) => plan.instructions.some(item => operations.includes(item.operation));
+  const needsResourceSampling = usesOperation('resource-input');
+  const needsResourceLoad = usesOperation('resource-load-input', 'field-load-nearest-seed');
+  const needsResourceMetadata = usesOperation('resource-metadata');
+  const needsUintMetadata = usesOperation('byte-pixel-decode');
   const sampleScopes = new Map(plan.sampleScopes.map(descriptor => [descriptor.id, descriptor]));
   const kernelScopes = new Map(plan.kernelScopes?.map(descriptor => [descriptor.id, descriptor]) ?? []);
   const rectScopes = new Map(plan.rectScopes?.map(descriptor => [descriptor.id, descriptor]) ?? []);
@@ -90,25 +98,26 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     }
     if (!context.sampleImage) throw new Error('Image derivative evaluation requires an image sampling callback.');
   }
-  if (plan.instructions.some(item => item.operation === 'resource-input') && !context.sampleResource) throw new Error('Image operator plan requires a materialized resource sampling callback.');
-  if (plan.instructions.some(item => item.operation === 'resource-load-input' || item.operation === 'field-load-nearest-seed') && !context.loadResource) {
+  if (needsResourceSampling && !context.sampleResource) throw new Error('Image operator plan requires a materialized resource sampling callback.');
+  if (needsResourceLoad && !context.loadResource) {
     throw new Error('Image operator plan requires a materialized resource load callback.');
   }
-  if (plan.instructions.some(item => item.operation === 'resource-metadata') && !context.readResourceMetadata) {
+  if (needsResourceMetadata && !context.readResourceMetadata) {
     throw new Error('Image operator plan requires a resource metadata callback.');
   }
-  if (plan.instructions.some(item => item.operation === 'byte-pixel-decode') && !context.readResourceMetadata) {
+  if (needsUintMetadata && !context.readResourceMetadata) {
     throw new Error('Image operator plan requires an unsigned resource metadata callback.');
   }
   function evaluateScope(scope: number, scopePixel: [number, number, number, number], scopeUv: [number, number] | undefined,
     kernelIndex?: [number, number], sequenceIndex?: number, sequenceT?: number, lexicalValues?: Array<number | boolean | number[]>, filter?: ReadonlySet<number>) {
    const values: Array<number | boolean | number[]> = lexicalValues ? [...lexicalValues] : [];
    const kernelResults = new Map<number, { sum: number[]; weightSum: number }>();
-   for (const [instructionIndex, item] of instructionsByScope.get(scope) ?? []) {
+   for (const [instructionIndex, item, pointwise] of instructionsByScope.get(scope) ?? []) {
     if (filter && !filter.has(instructionIndex)) continue;
-    values.length = instructionIndex;
-    const args = item.inputs.map(input => values[input]);
-    const pointwise = pointwiseOperation(item.operation);
+    // Setting an array length is a slow runtime call; inside one scope it is usually already right.
+    if (values.length !== instructionIndex) values.length = instructionIndex;
+    const inputs = item.inputs, args: Array<number | boolean | number[]> = new Array(inputs.length);
+    for (let slot = 0; slot < inputs.length; slot++) args[slot] = values[inputs[slot]];
     if (pointwise) values.push(pointwise.evaluate(args, item.value));
     else if (item.operation === 'input') values.push(scopePixel);
     else if (item.operation === 'uv') values.push(scopeUv!);

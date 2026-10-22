@@ -587,7 +587,10 @@ Processing, Clamp & Alpha); the recipe stages are only applied to the unedited r
 The worker software render modes evaluate the same graphs instead of their former
 shortcuts; programs that read only their own pixel (all color recipes) are evaluated
 once per distinct RGBA8 colour of the frame (about 0.2–0.4 s for a 1080p photo,
-`workerSoftwareImageGraphs.ts`). A layer that mixes them with the retired `blur`
+`workerSoftwareImageGraphs.ts`). The prepared CPU evaluator (`imageOperatorEvaluation.ts`)
+resolves each instruction's operation and the plan's context requirements once, not per
+pixel, kernel tap or sequence step, which made sampled multi-pass graphs such as the Chroma
+Key edge passes about 2.5× faster on this path. A layer that mixes them with the retired `blur`
 effect is skipped as `unsupported-effects`. Adjustment layers in the worker GPU
 modes still use the motion-adjustment 4×5 colour matrix for Brightness, Contrast and
 Saturation (linear offset, linear contrast, Rec.709 matrix saturation), which matches
