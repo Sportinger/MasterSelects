@@ -4,7 +4,10 @@ import { EXPOSURE_PARAMS, HUE_SHIFT_PARAMS, LEVELS_PARAMS, TEMPERATURE_PARAMS, V
 import { createDefaultColorEffectGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
 import { createLegacyColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
 import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
-import { setOperatorParameter } from '../../src/services/operators/effectGraphEditing';
+import { setAnimatedOperatorParameter, setOperatorParameter } from '../../src/services/operators/effectGraphEditing';
+import { propertyRegistry } from '../../src/services/properties';
+import { validatePropertyAuthoringValue } from '../../src/services/properties/propertyAuthoring';
+import { handleListEffects } from '../../src/services/aiTools/handlers/effects';
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -93,5 +96,29 @@ describe('remaining editable color effect graphs', () => {
     expect(saved.params.temperature).toBe(0.6);
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'temperature')).toMatchObject({ bindings: { value: 'temperature' } });
     expect(() => setOperatorParameter(clip.id, canonical.id, 'temperature', 'value', 1.1)).toThrow('outside its supported range');
+  });
+
+  it('takes Hue Shift past its -0.5..0.5 turn slider on every write path (Shift wraps), and still limits other params', async () => {
+    const canonical = migratePersistedEffectOperatorGraph(effect('hue-shift'));
+    const clip = createMockClip({ id: 'hue-clip', effects: [canonical] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
+    // The agent's keyframe tool validates through the property descriptor.
+    const descriptor = propertyRegistry.getAllDescriptors(clip).find(item => item.path === `effect.${canonical.id}.shift`)!;
+    expect(descriptor.ui?.wraps).toBe(true);
+    for (const turns of [1, 0.75, -0.6, 2.125]) expect(validatePropertyAuthoringValue(descriptor, turns)).toBe(turns);
+    const temperature = propertyRegistry.getAllDescriptors(createMockClip({ effects: [effect('temperature')] }))
+      .find(item => item.path === 'effect.temperature-fx.temperature')!;
+    expect(() => validatePropertyAuthoringValue(temperature, 1.1)).toThrow('must be at most 1');
+    // The Nodes-tab card value and the operator-graph tool.
+    for (const turns of [0.75, 2.125, -0.6]) {
+      setAnimatedOperatorParameter(clip.id, canonical.id, 'shift', 'value', turns);
+      expect(useTimelineStore.getState().clips[0].effects[0].params.shift).toBe(turns);
+    }
+    // listEffects tells the agent that Shift goes round instead of stopping at its slider ends.
+    const listed = await handleListEffects();
+    const categories = (listed.data as { categories: Array<{ effects: Array<{ id: string; params: Array<{ name: string; wraps?: boolean }> }> }> }).categories;
+    const params = categories.flatMap(category => category.effects).find(item => item.id === 'hue-shift')!.params;
+    expect(params.find(param => param.name === 'shift')).toMatchObject({ min: -0.5, max: 0.5, wraps: true });
+    expect(categories.flatMap(category => category.effects).find(item => item.id === 'temperature')!.params[0].wraps).toBeUndefined();
   });
 });

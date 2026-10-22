@@ -101,6 +101,8 @@ export async function handleListEffects(): Promise<ToolResult> {
         max: param.max,
         step: param.step,
         ...(param.renderMin !== undefined || param.renderMax !== undefined ? { renderRange: [param.renderMin ?? null, param.renderMax ?? null] } : {}),
+        // Cyclic: min/max are one turn of the slider, any value is accepted and goes round again.
+        ...(param.wraps ? { wraps: true } : {}),
         description: param.label || key,
       })),
     })),

@@ -90,7 +90,7 @@ Pick one in the **Preset** row of the effect card. It sets all three controls in
 <figcaption>Left: Brightness Only off. Right: Brightness Only on. Both Levels 4, Softness 0.2.</figcaption>
 </figure>
 
-**Brightness Only** – a new Posterize starts with it on; off is the original per-channel look, and older saves keep it off. On, it steps only the brightness and keeps every colour as it is: a blue sky stays blue, skin keeps its tone, and only how light it is falls into steps. Turn it off for pop-art colours: then red, green and blue are each stepped on their own, so light greys can tint lavender or green and coloured fringes appear where the channels cross a step at different places. A switch: on or off, default off (what Posterize effects saved before it existed mean, so they keep their look).
+**Brightness Only** – on, it steps only the brightness and keeps every colour as it is: a blue sky stays blue, skin keeps its tone, and only how light it is falls into steps. Turn it off for pop-art colours: then red, green and blue are each stepped on their own, so light greys can tint lavender or green and coloured fringes appear where the channels cross a step at different places. A switch: on or off, default on. A Posterize saved before the switch existed keeps its per-channel look (off).
 
 ## Node setup
 
@@ -119,7 +119,7 @@ Pick one in the **Preset** row of the effect card. It sets all three controls in
 <figcaption>Posterize opened in the Nodes tab (the Parameters and Constants folders left out). 1 — Step Input: the colour, or only its brightness. 2 — Hard Steps: the plain staircase. 3 — Soft Steps: rounds the stairs. 4 — Spread to 0–1: the steps back as tones. 5 — Colour & Alpha: the colour back on.</figcaption>
 </figure>
 
-Posterize works as a path of stages, one folder each: **Step Input** picks what gets stepped, **Hard Steps** cuts it into a staircase, **Soft Steps** rounds the stairs when Softness is on, **Spread to 0–1** turns the steps back into tones, and **Colour & Alpha** puts the colour and the transparency back. A sixth folder, **Parameters**, makes the three controls safe and plugs into the ports that show a plain dot in the picture: Levels, Softness and Ramp Width, and Brightness Only. It sits in the bottom left of the Nodes tab; the picture leaves it out, because its four cables would cross every stage. Click a folder's header to open it; the sections below show what is inside.
+Posterize works as a path of stages, one folder each: **Step Input** picks what gets stepped, **Hard Steps** cuts it into a staircase, **Soft Steps** rounds the stairs when Softness is on, **Spread to 0–1** turns the steps back into tones, and **Colour & Alpha** puts the colour and the transparency back. A sixth folder, **Parameters**, makes the three controls safe and plugs into the ports that show a plain dot in the picture: Levels, Softness and Ramp Width, and Brightness Only. In the Nodes tab it sits at the top left, beside the Constants folder, with a cable to every stage; the picture leaves it out so the path reads as one line. Click a folder's header to open it; the sections below show what is inside.
 
 ### Parameters
 
@@ -127,7 +127,7 @@ Posterize works as a path of stages, one folder each: **Step Input** picks what 
 
 <div class="docs-shot-stage">
 
-![Inside the Parameters folder: the Brightness Only card, here false, feeds a Switch; the Levels card at 6 feeds a Maximum whose output is Levels, and the Softness card at 0 feeds a Clamp whose output is Ramp Width](../assets/effects/graphs/posterize-parameters.webp)
+![Inside the Parameters folder: the Brightness Only card, here true (a new Posterize starts on), feeds a Switch; the Levels card at 6 feeds a Maximum whose output is Levels, and the Softness card at 0 feeds a Clamp whose output is Ramp Width](../assets/effects/graphs/posterize-parameters.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 590 1135" aria-hidden="true" focusable="false">
 <defs><marker id="posterize-parameters-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>

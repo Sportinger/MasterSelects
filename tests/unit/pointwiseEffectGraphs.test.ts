@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { getDefaultParams, getEffect } from '../../src/effects';
+import { getDefaultParams, getEffect, getRenderedDefaultParams } from '../../src/effects';
 import { POSTERIZE_PARAMS, THRESHOLD_PARAMS } from '../../src/effects/stylize/pointwiseParams';
 import { capPosterizeRampWidth, createDefaultPosterizeGraph, createDefaultThresholdGraph, createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
 import { posterizeParamNotes, posterizeValue } from '../../src/effects/stylize/pointwiseModel';
@@ -49,7 +49,8 @@ describe('pointwise effect graph ownership', () => {
 
   it.each(['threshold', 'posterize'] as const)('derives %s params{} defaults and round-trips its canonical graph', type => {
     const legacy = effect(type, {}), graph = effectOperatorGraph(legacy);
-    expect(effectOperatorParams(legacy)).toMatchObject(getDefaultParams(type));
+    // A stored effect without values renders its legacy ones (Posterize Brightness Only off, while new effects start on).
+    expect(effectOperatorParams(legacy)).toMatchObject(getRenderedDefaultParams(type));
     const canonical = migratePersistedEffectOperatorGraph(legacy);
     expect(effectOperatorGraph(JSON.parse(JSON.stringify(canonical)) as Effect)).toEqual(graph);
   });
@@ -70,10 +71,22 @@ describe('pointwise effect graph ownership', () => {
     expect(() => setOperatorParameter(clip.id, canonical.id, 'levels', 'value', 33)).toThrow('outside its supported range');
   });
 
+  it('declares Brightness Only on for new Posterize effects, while one stored without the key keeps stepping each channel (legacyDefault)', () => {
+    expect(getDefaultParams('posterize').brightnessOnly).toBe(true);
+    expect(POSTERIZE_PARAMS.brightnessOnly).toMatchObject({ default: true, legacyDefault: false });
+    const plan = (params: Record<string, unknown>) => compileImageOperatorGraph(createDefaultPosterizeGraph(), params);
+    const stored = effectOperatorParams({ ...effect('posterize', { levels: 2, softness: 0 }), operatorGraph: createDefaultPosterizeGraph() });
+    expect(stored.brightnessOnly).toBe(false);
+    // Per channel: orange [0.8, 0.6, 0.2] becomes yellow; a new effect keeps the orange hue at full brightness.
+    expect(evaluateImageOperatorPlan(plan(stored), [0.8, 0.6, 0.2, 1])).toEqual([1, 1, 0, 1]);
+    const fresh = evaluateImageOperatorPlan(plan({ ...getDefaultParams('posterize'), levels: 2 }), [0.8, 0.6, 0.2, 1]);
+    expect(fresh.map(value => +value.toFixed(3))).toEqual([1, 0.75, 0.25, 1]);
+  });
+
   it('gives Posterize four presets that each make the look their name promises', () => {
     const presets = Object.fromEntries(POSTERIZE_PRESETS.map(preset => [preset.name, preset.params]));
     expect(Object.keys(presets)).toEqual(['Stencil', 'Screen Print', 'Pop Art', 'Banded Light']);
-    // Every preset names Brightness Only: its stored default (off) is not what a new Posterize starts with.
+    // Every preset names Brightness Only, so it also holds on a Posterize saved before the switch existed (legacy off).
     for (const params of Object.values(presets)) expect(typeof params.brightnessOnly).toBe('boolean');
     const plan = (name: string) => compileImageOperatorGraph(createDefaultPosterizeGraph(), { ...getDefaultParams('posterize'), ...presets[name] });
     const greys = Array.from({ length: 101 }, (_, index) => index / 100);

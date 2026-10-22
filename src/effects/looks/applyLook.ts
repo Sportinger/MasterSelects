@@ -1,8 +1,8 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { COLOR_RECIPE_EFFECT_TYPES } from '../../services/operators/colorEffectGraphs';
-import { hasEarlierStylizeRecipe, isEarlierStylizeGraph, stylizeNewInstanceParams } from '../../services/operators/stylizeRecipes';
-import { getEffect, withLegacyDefaultParams, withoutRuntimeTravelParams } from '..';
+import { hasEarlierStylizeRecipe, isEarlierStylizeGraph } from '../../services/operators/stylizeRecipes';
+import { withLegacyDefaultParams, withoutRuntimeTravelParams } from '..';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { checkedLookEntryOperatorGraph, lookEntryOmittedParams, lookEntryParams } from './lookEntryGraph';
 import type { LookDefinition, LookStackEntry } from './types';
@@ -23,13 +23,8 @@ export function applyLookToClip(look: LookDefinition, clipId: string): string[] 
       const omitParams = lookEntryOmittedParams(look, entry, operatorGraph);
       const effectId = addClipEffect(clipId, entry.effectId, operatorGraph ? { operatorGraph, ...(omitParams.length ? { omitParams } : {}) } : undefined);
       // A custom Look saved before an effect gained controls or a new recipe lacks their values: give it the ones that keep its look.
-      const saved = lookEntryParams(look, entry);
-      // Values a new instance starts with differently (Posterize Brightness Only) keep what an entry
-      // saved without them meant: the parameter default.
-      const definitions = getEffect(entry.effectId)?.params ?? {};
-      const unsaved = Object.fromEntries(Object.keys(stylizeNewInstanceParams(entry.effectId)).filter(name => !(name in saved) && definitions[name])
-        .map(name => [name, definitions[name].default]));
-      const params = { ...unsaved, ...saved };
+      // (Its Posterize without Brightness Only gets the legacy per-channel steps from withLegacyDefaultParams.)
+      const params = lookEntryParams(look, entry);
       if (Object.keys(params).length > 0) updateClipEffect(clipId, effectId, params);
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }

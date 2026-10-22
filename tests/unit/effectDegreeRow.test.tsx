@@ -41,7 +41,8 @@ describe('effect rows with a degree display unit', () => {
     const definition = getEffect('hue-shift')!.params.shift, changed = vi.fn();
     render(<ResolveEffectParamRow paramName="shift" definition={definition} value={0} effect={{ id: 'hue-1', params: { shift: 0 } }} onChange={changed} />);
     const plain = screen.getByRole('textbox', { name: 'Shift' }) as HTMLInputElement;
-    expect([plain.dataset.min, plain.dataset.max]).toEqual(['-Infinity', 'Infinity']);
+    // No number limit at all: the field gets no min/max (not ±Infinity, which leaks into ARIA and the range popover).
+    expect([plain.dataset.min, plain.dataset.max]).toEqual(['undefined', 'undefined']);
     expect(Number(screen.getByRole('slider', { name: 'Shift slider' }).getAttribute('aria-valuemin'))).toBeCloseTo(-180, 6);
     fireEvent.change(plain, { target: { value: '-20' } });
     expect(changed).toHaveBeenLastCalledWith({ shift: expect.closeTo(-1 / 18, 12) });
@@ -52,11 +53,32 @@ describe('effect rows with a degree display unit', () => {
     useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 'track-1' })], clipKeyframes: new Map(), playheadPosition: clip.startTime, setPropertyValue });
     render(<ResolveEffectParamRow paramName="shift" definition={definition} value={0} effect={{ id: 'hue-1', params: { shift: 0 } }} clipId="clip-1" onChange={vi.fn()} />);
     const sourced = screen.getByRole('textbox', { name: 'Shift' }) as HTMLInputElement;
-    expect([sourced.dataset.min, sourced.dataset.max]).toEqual(['-Infinity', 'Infinity']);
+    expect([sourced.dataset.min, sourced.dataset.max]).toEqual(['undefined', 'undefined']);
     fireEvent.change(sourced, { target: { value: '-20' } });
     expect(setPropertyValue).toHaveBeenLastCalledWith('clip-1', 'effect.hue-1.shift', expect.closeTo(-1 / 18, 12));
     fireEvent.change(sourced, { target: { value: '765' } });
     expect(setPropertyValue).toHaveBeenLastCalledWith('clip-1', 'effect.hue-1.shift', expect.closeTo(765 / 360, 12));
+  });
+
+  it('puts a saved Hue Shift of 240° at −120° on the slider and keeps whole turns when it moves (plain and drivable row)', () => {
+    const definition = getEffect('hue-shift')!.params.shift, changed = vi.fn(), saved = 240 / 360;
+    render(<ResolveEffectParamRow paramName="shift" definition={definition} value={saved} effect={{ id: 'hue-1', params: { shift: saved } }} onChange={changed} />);
+    const slider = screen.getByRole('slider', { name: 'Shift slider' });
+    expect(Number(slider.getAttribute('aria-valuenow'))).toBeCloseTo(-120, 6);
+    expect(Number((screen.getByRole('textbox', { name: 'Shift' }) as HTMLInputElement).value)).toBeCloseTo(240, 6);
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(changed).toHaveBeenLastCalledWith({ shift: expect.closeTo(241 / 360, 9) });
+    cleanup();
+    // 2.125 turns (765°) sits at 45°; a step left stores 764°, not a jump onto the slider range.
+    const effect = { id: 'hue-1', name: 'Hue Shift', type: 'hue-shift', enabled: true, params: { shift: 2.125 } } as Effect;
+    const clip = createMockClip({ id: 'clip-1', trackId: 'track-1', effects: [effect] });
+    const setPropertyValue = vi.fn();
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 'track-1' })], clipKeyframes: new Map(), playheadPosition: clip.startTime, setPropertyValue });
+    render(<ResolveEffectParamRow paramName="shift" definition={definition} value={2.125} effect={{ id: 'hue-1', params: { shift: 2.125 } }} clipId="clip-1" onChange={vi.fn()} />);
+    const sourced = screen.getByRole('slider', { name: 'Shift slider' });
+    expect(Number(sourced.getAttribute('aria-valuenow'))).toBeCloseTo(45, 6);
+    fireEvent.keyDown(sourced, { key: 'ArrowLeft' });
+    expect(setPropertyValue).toHaveBeenLastCalledWith('clip-1', 'effect.hue-1.shift', expect.closeTo(764 / 360, 9));
   });
 
   it('keeps degrees when Twist can take a node source', () => {

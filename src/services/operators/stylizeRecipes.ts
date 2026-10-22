@@ -78,14 +78,6 @@ export function isCurrentStylizeGraph(type: string, graph: EffectOperatorGraph |
   return isRecipeType(type) && currentRecognizers[type](graph);
 }
 
-/**
- * Values a new instance starts with where they differ from the parameter defaults. The defaults
- * stay what saved effects without the value mean (Posterize saved before Brightness Only existed
- * steps each channel); a new Posterize steps the brightness, so skies keep their hue.
- */
-const NEW_INSTANCE_PARAMS: Partial<Record<StylizeRecipeEffectType, Record<string, number | boolean>>> = { posterize: { brightnessOnly: true } };
-export const stylizeNewInstanceParams = (type: string): Record<string, number | boolean> => (isRecipeType(type) && NEW_INSTANCE_PARAMS[type]) || {};
-
 /** True when `graph` is an untouched earlier recipe of this stylize effect (any presentation). */
 export function isEarlierStylizeGraph(type: string, graph: EffectOperatorGraph | undefined): boolean {
   return isRecipeType(type) && !!earlierRecognizers[type]?.(graph);

@@ -39,8 +39,8 @@
       "alt": "The dancer turning on a dark stage with Threshold while Level runs from 0.15 to 0.7 and back: at 0.15 she is a full white silhouette standing on a white-speckled floor, as Level rises the floor goes black and her figure thins out until at 0.7 only the brightest folds of her dress, her arms and her face are left, then she fills in again; the current value is shown at the bottom left",
       "caption": "Level from 0.15 to 0.7 and back (Softness 0)." },
     { "name": "hue-shift-shift", "effect": "hue-shift", "params": {}, "range": [0.5, 6], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
-      "sweep": { "param": "shift", "label": "Shift", "from": 0, "to": 1, "unit": " turn", "decimals": 2 }, "loop": 0.35, "poster": 1.4, "maxBytes": 650000, "float": "right",
-      "alt": "The dancer turning on a dark stage while Shift runs once round the colour wheel and back: the warm orange light, her skin and the dress turn yellow, then green, cyan and blue at half a turn, then violet and pink, and back again, while the brightness of every part stays the same; the current value in turns is shown at the bottom left",
-      "caption": "Shift from 0 to 1 turn (360°) and back." }
+      "sweep": { "param": "shift", "label": "Shift", "from": -0.5, "to": 0.5, "unit": " turn", "decimals": 2 }, "loop": 0.35, "poster": 1.4, "maxBytes": 650000, "float": "right",
+      "alt": "The dancer turning on a dark stage while Shift runs from half a turn back to half a turn forward and back: the warm orange light, her skin and the dress start ice blue, pass through violet and pink to their own colours in the middle, then turn yellow, green and cyan and end ice blue again, while the brightness of every part stays the same; the current value in turns is shown at the bottom left",
+      "caption": "Shift from −180° to 180° and back, through the original in the middle (the label counts turns: 0.5 = 180°)." }
   ]
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { getDefaultParams, getEffect } from '../../src/effects';
+import { getDefaultParams, getEffect, getRenderedDefaultParams } from '../../src/effects';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { effectOperatorGraph, effectOperatorParams, migrateLoadedEffectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
@@ -25,8 +25,9 @@ const initial = useTimelineStore.getState();
 afterEach(() => useTimelineStore.setState(initial));
 
 /** The plan the editor compiles for a new effect of this type (current recipe) with these values. */
+// A stored instance with these params: what it does not carry renders at its legacy value (Posterize Brightness Only off).
 function plan(type: string, params: Record<string, unknown> = {}, operatorGraph = createStylizeRecipeGraph(type)) {
-  const effect = { type, params: { ...getDefaultParams(type), ...params } as Effect['params'], operatorGraph };
+  const effect = { type, params: { ...getRenderedDefaultParams(type), ...params } as Effect['params'], operatorGraph };
   return compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
 }
 
