@@ -2,7 +2,12 @@
   "shots": [
     "gaussian-blur?plumbing=hide&omit=output",
     "gaussian-blur?focus=horizontal-pass&only=compound-shared-zero,horizontal-far-weight,horizontal-near-weight-raw,compound-shared-weight-floor,horizontal-sample,horizontal-reduce,compound-shared-horizontal-weight-vec4,horizontal-cache&rows=1@gaussian-blur-horizontal-pass",
-    "box-blur?focus=horizontal-pass&only=horizontal-far-weight-coverage,horizontal-far-weight&layout=float@box-blur-weight",
+    "box-blur?plumbing=hide&omit=output&marks=organized-box-blur-size,organized-box-blur-premultiply,organized-box-blur-horizontal,organized-box-blur-vertical,organized-box-blur-finish@box-blur",
+    "box-blur?focus=radius-and-tap-count&only=short-side,pixel-scale,radius-px,reach,reach-half,pairs-needed,pairs,stride-raw,stride,pairs-double,tap-count&cables=avoid&marks=short-side,reach,pairs,stride@box-blur-radius-tap-count",
+    "box-blur?focus=premultiplied-source-cached&only=source-premultiplied-split,source-premultiplied-alpha,source-premultiplied-rgb,source-premultiplied,source-cache&cables=avoid&marks=source-premultiplied-rgb,source-cache@box-blur-premultiplied-source",
+    "box-blur?focus=horizontal-pass&only=compound-shared-zero,horizontal-far-weight-coverage,horizontal-far-weight,horizontal-near-weight-raw-coverage,horizontal-near-weight-raw,compound-shared-weight-floor,horizontal-sample,horizontal-reduce,compound-shared-horizontal-weight-vec4,horizontal-cache&cables=avoid&marks=compound-shared-zero,horizontal-far-weight-coverage,horizontal-far-weight,horizontal-reduce,compound-shared-horizontal-weight-vec4@box-blur-horizontal-pass",
+    "box-blur?focus=vertical-pass&only=vertical-offset-texels,vertical-offset,vertical-sample-uv,vertical-sample&cables=avoid&marks=vertical-offset-texels,vertical-sample@box-blur-vertical-pass",
+    "box-blur?focus=straight-alpha-output&only=result-split,result-alpha,result-safe-alpha,result-rgb,result&cables=avoid&marks=result-safe-alpha,result-rgb,result@box-blur-straight-alpha",
     "motion-blur?plumbing=hide&omit=output",
     "motion-blur?focus=stage-b-coarse-taps&only=taper-double,taper-centered,taper-squared,taper-exponent,taper,coarse-weight&rows=1@motion-blur-taper",
     "radial-blur?focus=blur-range&only=is-spin,range-length&layout=float&marks=is-spin:above,range-length:above@radial-blur-type"

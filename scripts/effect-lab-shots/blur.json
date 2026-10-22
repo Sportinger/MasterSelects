@@ -1,13 +1,44 @@
 {
   "pairs": [
     {
+      "name": "box-blur",
+      "out": "docs/Features/assets/effects/box-blur.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        240,
+        0,
+        1440,
+        810
+      ],
+      "layout": "compare",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "box-blur",
+        "params": {
+          "radius": 16
+        }
+      },
+      "alt": "The rainy night street with neon signs, original left and with Box Blur at Radius 16 right: the signs, windows and the walker dissolve into soft blocks of colour, and small lights turn into flat squares instead of round glows",
+      "caption": "Left: original. Right: Radius 16."
+    },
+    {
       "name": "gaussian-blur",
       "out": "docs/Features/assets/effects/gaussian-blur.webp",
       "image": "harbor_town",
       "width": 1920,
       "layout": "compare",
-      "left": { "effect": "original" },
-      "right": { "effect": "gaussian-blur", "params": { "radius": 12 } },
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "gaussian-blur",
+        "params": {
+          "radius": 12
+        }
+      },
       "alt": "The harbour town, original left and with Gaussian Blur at Radius 12 right: boats, houses and the mountain go soft and their edges melt into the sky and the water",
       "caption": "Left: original. Right: Radius 12."
     },
@@ -16,11 +47,26 @@
       "out": "docs/Features/assets/effects/box-vs-gaussian-lights.webp",
       "image": "neon_rain_street",
       "width": 1920,
-      "crop": [630, 390, 240, 146],
+      "crop": [
+        630,
+        390,
+        240,
+        146
+      ],
       "zoom": 1.5,
       "gap": 6,
-      "left": { "effect": "gaussian-blur", "params": { "radius": 10 } },
-      "right": { "effect": "box-blur", "params": { "radius": 10 } }
+      "left": {
+        "effect": "gaussian-blur",
+        "params": {
+          "radius": 10
+        }
+      },
+      "right": {
+        "effect": "box-blur",
+        "params": {
+          "radius": 10
+        }
+      }
     }
   ]
 }

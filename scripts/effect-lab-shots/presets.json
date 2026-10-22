@@ -1,3 +1,15 @@
 {
-  "strips": []
+  "strips": [
+    {
+      "effect": "box-blur",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        320,
+        0,
+        960,
+        540
+      ]
+    }
+  ]
 }
