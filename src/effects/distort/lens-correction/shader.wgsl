@@ -42,10 +42,11 @@ fn lensCorrectionFragment(input: VertexOutput) -> @location(0) vec4f {
   let terms = params.distortionProfile;
   let measured = 1.0 + terms.w * (terms.x * pow(profileRadius, 3.0) + terms.y * profileRadius * profileRadius + terms.z * profileRadius);
   let polynomial = max(0.05, measured * (1.0 + params.distortion * r2 + params.fineDistortion * r2 * r2));
-  // Beyond the knee (strong barrel removal) the mapping continues in a straight line instead of folding back,
-  // so the outer picture stays visible and never mirrors (lensFrameFit.lensSourceRadius).
+  // Beyond the knee (strong barrel removal) the mapping follows the larger of a straight line and the polynomial
+  // instead of folding back, so the outer picture stays visible, never mirrors, and returns to the polynomial
+  // where it recovers (lensFrameFit.lensSourceRadius).
   let line = (params.knee.x + params.knee.y * (outputRadius - params.kneeRadius)) / max(outputRadius, 1e-6);
-  let radial = select(polynomial, line, outputRadius > params.kneeRadius);
+  let radial = select(polynomial, max(line, polynomial), outputRadius > params.kneeRadius);
   let sourceDelta = delta * radial / (aspect * radiusScale);
   let uv = center + sourceDelta;
   let tcaRadius2 = profileRadius * profileRadius * radial * radial;

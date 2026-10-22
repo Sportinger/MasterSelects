@@ -14,9 +14,10 @@ Derived from `neon_rain_street.jpg` with Pillow (2026-10-21) to show corrections
   Lens Correction's manual model at Distortion −28 and Scale 120 (radius 1 = frame corner)
   up to the radius that correction reads, continued smoothly beyond it, source cropped 1.62×; so
   Distortion −28 with Scale 120 straightens it exactly.
-- `neon_rain_street_lens.jpg` – `neon_rain_street_barrel.jpg` with dark lens corners as well (2026-10-22):
-  divided by Lens Correction's vignette gain at Amount 40 and Midpoint 30, so the Even Corners preset
-  lifts them exactly; the preset strip of Lens Correction uses it.
+- `harbor_town_lens.jpg` – `harbor_town.jpg` bent the same way (2026-10-22, sharp): Distortion −28 with Scale 120
+  straightens it exactly out to the frame corner that correction reads, eased beyond so every border reads just
+  inside the original, then dark corners that Amount 40 and Midpoint 30 lift exactly. The preset strip of Lens
+  Correction uses it, since the lifted corners show on daylight and not on the night street.
 - `neon_rain_street_tilted.jpg` – simulated upward camera tilt: the frame's top corners spread
   18 % outward (verticals lean in towards the top), cropped to 72 %.
 

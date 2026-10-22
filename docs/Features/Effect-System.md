@@ -2472,9 +2472,14 @@ corrections are nondestructive, saved with the effect, and applied during export
 Strong barrel correction never folds: where the radius polynomial would read less
 than a quarter source pixel per output pixel (it flattens and would turn back for
 strong negative Distortion or Fine Distortion, or less together with a profile), the
-mapping continues as a straight line at that slope (`lensKnee` in
-`lens-correction/lensFrameFit.ts`, packed into the shader and the software guide-photo
-path). A centred frame keeps the polynomial down to Distortion −25. The fringe channels repeat the border pixel instead of
+mapping follows the larger of that straight line and the polynomial (`lensKnee` and
+`lensSourceRadius` in `lens-correction/lensFrameFit.ts`, packed into the shader and the
+software guide-photo path). Taking the larger hands back to the polynomial where it
+recovers (negative Distortion with positive Fine Distortion), so the picture never jumps
+while a control crosses the point where the dip appears. Where in the frame the line takes
+over depends on Distortion, Fine Distortion, Scale, Fit and the optical centre (for a
+centred frame at Scale 100 from about Distortion −25, with Fit from about −14); whenever it
+does, the inspector and tool results name the stretched part of the frame. The fringe channels repeat the border pixel instead of
 turning black, so no coloured line runs along the frame.
 Selecting a profile is explicit; automatic matching and other lens variants are
 not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed

@@ -1,7 +1,7 @@
 import type { EffectDefinition, EffectParam } from '../../types';
 import shader from './shader.wgsl?raw';
 import { LENS_PROFILE_OPTIONS, lensProfileUniforms } from './lensProfile';
-import { lensFullImageScale, lensKnee } from './lensFrameFit';
+import { lensFullImageScale, lensKnee, lensStretchRange } from './lensFrameFit';
 
 const number = (label: string, value: number, min: number, max: number, step: number, group: string): EffectParam =>
   ({ type: 'number', label, default: value, min, max, step, animatable: true, group });
@@ -52,7 +52,7 @@ function lensGeometry(params: LensParams, width: number, height: number) {
   const radiusScale = 2 / Math.hypot(aspect, 1);
   const corner = Math.max(...[[0, 0], [1, 0], [0, 1], [1, 1]].map(([u, v]) =>
     Math.hypot((u - p.centerX) * aspect * radiusScale, (v - p.centerY) * radiusScale))) / Math.max(scale, 1e-4);
-  return { p, vignetteEnabled, profile, aspect, scale, fit, corner, knee: lensKnee(geometry) };
+  return { p, vignetteEnabled, profile, aspect, scale, fit, corner, geometry, knee: lensKnee(geometry) };
 }
 
 /**
@@ -77,9 +77,16 @@ export function lensCorrectionWarnings(params: LensParams, width = 1920, height 
       warnings.push(`${key}: ${value} is outside ${definition.min}..${definition.max}; using ${Math.min(definition.max!, Math.max(definition.min!, value))}.`);
     }
   }
-  const { p, fit } = lensGeometry(params, width, height);
+  const { p, fit, corner, geometry } = lensGeometry(params, width, height);
   if (fit !== undefined && Math.abs(p.scale - 100) > 1e-6) {
     warnings.push(`Scale ${Number(p.scale.toFixed(1))}% is ignored while Fit Entire Photo is on: Fit sets the scale itself. Turn Fit Entire Photo off to use Scale.`);
+  }
+  // Beyond the knee a straight line draws the picture instead of the lens model: say where, never silently.
+  const stretch = lensStretchRange(geometry, corner);
+  if (stretch) {
+    const share = (radius: number) => Math.round(radius / corner * 100);
+    const where = stretch.to < corner - 1e-4 ? `Between about ${share(stretch.from)} % and ${share(stretch.to)} %` : `Beyond about ${share(stretch.from)} %`;
+    warnings.push(`${where} of the way to the frame corner the correction is stronger than the lens model allows, so the picture there is stretched evenly and its lines are not straightened.`);
   }
   return warnings;
 }
@@ -91,7 +98,7 @@ export const lensCorrection: EffectDefinition = {
   presets: [
     { id: 'wide-angle', name: 'Wide Angle', params: { distortion: -14 } },
     { id: 'action-cam', name: 'Action Cam', params: { distortion: -28, scale: 120 } },
-    { id: 'whole-photo', name: 'Whole Photo', params: { distortion: -28, fitFullImage: true } },
+    { id: 'whole-photo', name: 'Whole Photo', params: { distortion: -14, fitFullImage: true } },
     { id: 'even-corners', name: 'Even Corners', params: { vignette: 40, midpoint: 30 } },
   ],
   paramWarnings: (params, width, height) => lensCorrectionWarnings(params, width, height),

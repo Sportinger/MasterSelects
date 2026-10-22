@@ -2,7 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { lensCorrection, lensCorrectionWarnings, lensGeometryChangedSince327, normalizeLensCorrection } from '../../src/effects/distort/lens-correction';
 import { getEffect, getDefaultParams, effectGroup } from '../../src/effects';
 import { CANON_24_105_PROFILE, lensProfileUniforms } from '../../src/effects/distort/lens-correction/lensProfile';
-import { LENS_KNEE_SLOPE, LENS_NO_KNEE, lensKnee, lensOutputRadius, lensSourceRadius } from '../../src/effects/distort/lens-correction/lensFrameFit';
+import { LENS_KNEE_SLOPE, LENS_NO_KNEE, lensKnee, lensOutputRadius, lensSourceRadius, lensStretchRange } from '../../src/effects/distort/lens-correction/lensFrameFit';
+
+const packedGeometry = (p: Float32Array) => ({ aspect: p[3], centerX: p[4], centerY: p[5], cropFactor: p[10], distortion: p[0], fineDistortion: p[1], profile: [...p.slice(12, 16)] });
+/** Output radius of the farthest frame corner (before scale is applied, as the shader measures it). */
+const cornerRadius = (p: Float32Array) => {
+  const radiusScale = 2 / Math.hypot(p[3], 1);
+  return Math.max(...[[0, 0], [1, 0], [0, 1], [1, 1]].map(([u, v]) => Math.hypot((u - p[4]) * p[3] * radiusScale, (v - p[5]) * radiusScale))) / p[2];
+};
 
 describe('Lens Correction', () => {
   it('keeps legacy framing and fits barrel-distorted corners rather than zooming into them', () => {
@@ -30,7 +37,36 @@ describe('Lens Correction', () => {
         if (typeof value === 'number') expect(value).toBe(Math.min(definition.max!, Math.max(definition.min!, value)));
       }
       expect(lensCorrectionWarnings(preset.params), preset.name).toEqual([]);
+      // The lens model draws the whole frame: the knee's straight line stays beyond the farthest corner.
+      for (const [width, height] of [[1920, 1080], [1500, 1000]]) {
+        const packed = lensCorrection.packUniforms({ ...getDefaultParams('lens-correction'), ...preset.params }, width, height)!;
+        expect(lensKnee(packedGeometry(packed)).radius, `${preset.name} ${width}x${height}`).toBeGreaterThan(cornerRadius(packed));
+      }
     }
+  });
+  it('stays continuous while Fine Distortion moves across the point where the knee appears or vanishes', () => {
+    // Distortion -40 with Fine 9 dips below the knee slope and recovers; by Fine 10 the dip is gone.
+    const sweep = (extra: Record<string, number | boolean>) => {
+      const rows: Array<{ scale: number; source: number }> = [];
+      for (let fine = 9; fine <= 10 + 1e-9; fine += .05) {
+        const packed = lensCorrection.packUniforms({ distortion: -40, fineDistortion: fine, sourceAspect: 1.5, ...extra }, 1500, 1000)!;
+        rows.push({ scale: packed[2], source: lensSourceRadius(cornerRadius(packed), packedGeometry(packed)) });
+      }
+      return rows;
+    };
+    for (const extra of [{ fitFullImage: true }, { scale: 60 }]) {
+      const rows = sweep(extra);
+      for (let i = 1; i < rows.length; i++) {
+        expect(Math.abs(rows[i].scale / rows[i - 1].scale - 1), `${JSON.stringify(extra)} step ${i} scale`).toBeLessThan(.01);
+        expect(Math.abs(rows[i].source / rows[i - 1].source - 1), `${JSON.stringify(extra)} step ${i} corner`).toBeLessThan(.01);
+      }
+    }
+    // Where the polynomial recovers, the mapping hands back to it.
+    const geometry = packedGeometry(lensCorrection.packUniforms({ distortion: -40, fineDistortion: 9, sourceAspect: 1.5 }, 1500, 1000)!);
+    const knee = lensKnee(geometry);
+    expect(knee.radius).toBeLessThan(knee.rejoin); expect(knee.rejoin).toBeLessThan(LENS_NO_KNEE);
+    const beyond = knee.rejoin + .2;
+    expect(lensSourceRadius(beyond, geometry)).toBeGreaterThan(knee.source + knee.slope * (beyond - knee.radius));
   });
   it.each([
     [24,1.5,.5,.5,1], [105,2/3,.37,.61,1], [35,1.5,.25,.75,1.6],
@@ -88,8 +124,10 @@ describe('Lens Correction', () => {
       const p = lensCorrection.packUniforms(all, 1920, 1080)!;
       expect([...p].every(Number.isFinite)).toBe(true);
       expect(p[2]).toBeGreaterThan(.05); expect(p[2]).toBeLessThan(1);
-      expect(lensCorrectionWarnings(all, 1920, 1080)).toEqual([]);
-      const geometry = { aspect: p[3], centerX: p[4], centerY: p[5], cropFactor: p[10], distortion: p[0], fineDistortion: p[1], profile: [...p.slice(12, 16)] };
+      // No fold to warn about, but the stretched outer ring is named.
+      const warnings = lensCorrectionWarnings(all, 1920, 1080);
+      expect(warnings).toHaveLength(1); expect(warnings[0]).toMatch(/^Beyond about \d+ % of the way to the frame corner .* stretched evenly/);
+      const geometry = packedGeometry(p);
       const radiusScale = 2 / Math.hypot(p[3], 1);
       // Every point of the source perimeter lands inside the frame, so no part of the photo is cut or folded away.
       for (let step = 0; step <= 256; step++) for (const [u, v] of [[step / 256, 0], [step / 256, 1], [0, step / 256], [1, step / 256]]) {
@@ -101,9 +139,20 @@ describe('Lens Correction', () => {
       }
     }
   });
+  it('names the outer ring a straight line stretches instead of straightening it, and nothing below that', () => {
+    expect(lensCorrectionWarnings({ distortion: -25 }, 1500, 1000)).toEqual([]);
+    expect(lensCorrectionWarnings({ distortion: -14, fitFullImage: true }, 1500, 1000)).toEqual([]);
+    // Distortion -28 with Fit: the knee lies about halfway to the corner.
+    const whole = lensCorrectionWarnings({ distortion: -28, fitFullImage: true }, 1500, 1000);
+    expect(whole).toHaveLength(1); expect(whole[0]).toMatch(/^Beyond about (4\d|5\d) % of the way/);
+    // Fine Distortion recovers the polynomial before the corner: the note names both ends.
+    const geometry = packedGeometry(lensCorrection.packUniforms({ distortion: -40, fineDistortion: 9, scale: 60, sourceAspect: 1.5 }, 1500, 1000)!);
+    expect(lensStretchRange(geometry, 4)).toBeDefined();
+    expect(lensCorrectionWarnings({ distortion: -40, fineDistortion: 9, scale: 60, sourceAspect: 1.5 }, 1500, 1000)[0]).toMatch(/^Between about \d+ % and \d+ %/);
+  });
   it('reports clamped values instead of applying them silently', () => {
     expect(lensCorrectionWarnings({ distortion: -10 })).toEqual([]);
-    expect(lensCorrectionWarnings({ distortion: -50 })).toEqual([]);
+    expect(lensCorrectionWarnings({ distortion: -50 })).toHaveLength(1);
     const clamped = lensCorrectionWarnings({ distortion: 250, vignette: NaN });
     expect(clamped).toEqual(expect.arrayContaining([expect.stringContaining('distortion: 250 is outside -100..100; using 100'), expect.stringContaining('vignette: NaN')]));
   });

@@ -61,12 +61,16 @@ describe('distort effects report values they clamp or cannot show', () => {
     const lens = getEffect('lens-correction') as EffectDefinition;
     const params = (distortion: number) => ({ ...Object.fromEntries(Object.entries(lens.params).map(([id, schema]) => [id, schema.default])), centerX: .15, distortion }) as Record<string, number | string | boolean>;
     for (const distortion of [-30, -60, -100]) for (const [width, height] of [[1920, 1080], [1080, 1920]]) {
-      expect(lens.paramWarnings!(params(distortion), width, height)).toEqual([]);
+      // Nothing folds; the only note names the outer ring a straight line stretches instead of straightening.
+      const notes = lens.paramWarnings!(params(distortion), width, height);
+      expect(notes).toHaveLength(1); expect(notes[0]).toContain('stretched evenly and its lines are not straightened');
+      expect(notes.join(' ')).not.toMatch(/fold/i);
     }
     const tall = { id: 'tall', name: 'Tall', width: 1080, height: 1920 } as never;
     vi.mocked(useMediaStore.getState).mockReturnValue({ ...initialMediaState, activeCompositionId: 'tall', compositions: [tall],
       getActiveComposition: () => tall } as ReturnType<typeof useMediaStore.getState>);
     const added = data(await handleAddEffect({ clipId: 'video-clip', effectType: 'lens-correction', params: { centerX: .15, distortion: -80 } }, useTimelineStore.getState()));
-    expect(added.warnings).toBeUndefined();
+    expect(added.warnings).toHaveLength(1);
+    expect(added.warnings![0]).toContain('of the way to the frame corner the correction is stronger than the lens model allows');
   });
 });

@@ -22,7 +22,12 @@ export const LENS_NO_KNEE = 1e6;
  */
 export const LENS_KNEE_SLOPE = .25;
 const KNEE_SCAN_RADIUS = 8, KNEE_SCAN_STEPS = 1024;
-export interface LensKnee { radius: number; source: number; slope: number }
+/**
+ * radius/source/slope: where the straight line starts. rejoin: the first radius beyond it where the
+ * polynomial catches up with the line again (Distortion below 0 with Fine Distortion above 0, the
+ * "moustache" fix), LENS_NO_KNEE when it never does. Between the two the line draws the picture.
+ */
+export interface LensKnee { radius: number; source: number; slope: number; rejoin: number }
 const knees = new Map<string, LensKnee>();
 const geometryKey = (geometry: Geometry) => JSON.stringify([geometry.aspect, geometry.centerX, geometry.centerY, geometry.cropFactor,
   geometry.distortion, geometry.fineDistortion, geometry.profile.slice(0, 4)]);
@@ -41,7 +46,7 @@ const polynomialSlope = (radius: number, geometry: Geometry) => {
 export function lensKnee(geometry: Geometry): LensKnee {
   const key = geometryKey(geometry), cached = knees.get(key);
   if (cached) return cached;
-  let knee: LensKnee = { radius: LENS_NO_KNEE, source: LENS_NO_KNEE, slope: 1 };
+  let knee: LensKnee = { radius: LENS_NO_KNEE, source: LENS_NO_KNEE, slope: 1, rejoin: LENS_NO_KNEE };
   for (let step = 1; step <= KNEE_SCAN_STEPS; step++) {
     const radius = KNEE_SCAN_RADIUS * step / KNEE_SCAN_STEPS;
     if (polynomialSlope(radius, geometry) > LENS_KNEE_SLOPE) continue;
@@ -50,7 +55,22 @@ export function lensKnee(geometry: Geometry): LensKnee {
       const middle = (lower + upper) / 2;
       if (polynomialSlope(middle, geometry) > LENS_KNEE_SLOPE) lower = middle; else upper = middle;
     }
-    knee = { radius: lower, source: polynomialSourceRadius(lower, geometry), slope: LENS_KNEE_SLOPE };
+    const source = polynomialSourceRadius(lower, geometry);
+    const behind = (r: number) => polynomialSourceRadius(r, geometry) < source + LENS_KNEE_SLOPE * (r - lower);
+    let rejoin = LENS_NO_KNEE;
+    for (let next = step; next <= KNEE_SCAN_STEPS; next++) {
+      const r = KNEE_SCAN_RADIUS * next / KNEE_SCAN_STEPS;
+      // Right at the knee line and polynomial agree to rounding; a real rejoin lies clearly beyond it.
+      if (r <= lower + 1e-3 || behind(r)) continue;
+      let low = Math.max(lower + 1e-3, KNEE_SCAN_RADIUS * (next - 1) / KNEE_SCAN_STEPS), high = r;
+      for (let iteration = 0; iteration < 40; iteration++) {
+        const middle = (low + high) / 2;
+        if (behind(middle)) low = middle; else high = middle;
+      }
+      rejoin = high;
+      break;
+    }
+    knee = { radius: lower, source, slope: LENS_KNEE_SLOPE, rejoin };
     break;
   }
   if (knees.size >= 64) knees.delete(knees.keys().next().value!);
@@ -58,12 +78,36 @@ export function lensKnee(geometry: Geometry): LensKnee {
   return knee;
 }
 
-/** Radius mapping shared with lens-correction/shader.wgsl (scale is applied separately): the polynomial, then the knee's line. */
+/**
+ * Radius mapping shared with lens-correction/shader.wgsl and lensPhotoSoftware (scale is applied
+ * separately): the polynomial, and beyond the knee the larger of the knee's line and the polynomial.
+ * Taking the larger hands back to the polynomial where it recovers, so the mapping stays continuous
+ * while Distortion or Fine Distortion move across the point where the dip appears or vanishes.
+ */
 export function lensSourceRadius(radius: number, geometry: Geometry, knee = lensKnee(geometry)): number {
-  return radius <= knee.radius ? polynomialSourceRadius(radius, geometry) : knee.source + knee.slope * (radius - knee.radius);
+  const polynomial = polynomialSourceRadius(radius, geometry);
+  return radius <= knee.radius ? polynomial : Math.max(polynomial, knee.source + knee.slope * (radius - knee.radius));
 }
 
-/** Output radius that shows `sourceRadius`: the mapping only moves outward (slope at least LENS_KNEE_SLOPE), so one answer exists. */
+/**
+ * Output radii where the knee's line, not the lens model, draws the picture and how much it differs
+ * there at most (share of the source radius), clipped to `limit` (the frame corner). Undefined when
+ * the line stays outside the frame or moves the picture by less than half a percent.
+ */
+export function lensStretchRange(geometry: Geometry, limit: number): { from: number; to: number; amount: number } | undefined {
+  const knee = lensKnee(geometry);
+  if (knee.radius >= limit) return undefined;
+  const to = Math.min(limit, knee.rejoin);
+  let amount = 0;
+  for (let step = 1; step <= 64; step++) {
+    const r = knee.radius + (to - knee.radius) * step / 64;
+    const line = knee.source + knee.slope * (r - knee.radius);
+    amount = Math.max(amount, (line - polynomialSourceRadius(r, geometry)) / line);
+  }
+  return amount < .005 ? undefined : { from: knee.radius, to, amount };
+}
+
+/** Output radius that shows `sourceRadius`: the mapping only moves outward (slope at least LENS_KNEE_SLOPE, then never below the rising line), so one answer exists. */
 export function lensOutputRadius(sourceRadius: number, geometry: Geometry): number {
   if (sourceRadius <= 0) return 0;
   const knee = lensKnee(geometry);
