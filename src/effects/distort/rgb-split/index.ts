@@ -18,7 +18,8 @@ export function rgbSplitWarnings(params: Params): string[] {
 }
 
 /**
- * Presets name the look-defining controls: Amount, Angle and Mode. Frame Edges stays with the shot.
+ * Presets name the look-defining controls: Amount, Angle and Mode. Frame Edges returns to
+ * its default (Mirror), like every control a preset does not name (resolveEffectPreset).
  * Angle is stored in radians, like the parameter.
  */
 export const RGB_SPLIT_PRESETS: readonly EffectPreset[] = [
@@ -43,7 +44,8 @@ export const rgbSplit: EffectDefinition = {
 
   params: {
     // Share of the picture width (of the height for vertical splits) red and blue move each way;
-    // negative values swap their sides. Lens: the split at the left and right edges.
+    // the slider stops at 0, but the graph uses a negative value from a node cable as it is, which
+    // swaps their sides (like Angle + 180°). Lens: the split at the left and right edges.
     amount: {
       type: 'number',
       label: 'Amount',
@@ -62,6 +64,7 @@ export const rgbSplit: EffectDefinition = {
       max: 2 * Math.PI,
       step: 0.01,
       animatable: true,
+      wraps: true,
       displayUnit: 'degrees',
       activeWhen: { param: 'mode', values: ['offset'], note: 'Offset mode only: Lens splits outwards from the centre.' },
     },

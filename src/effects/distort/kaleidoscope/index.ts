@@ -67,13 +67,18 @@ export const kaleidoscope: EffectDefinition = {
       max: 2 * Math.PI,
       step: 0.01,
       animatable: true,
+      wraps: true,
       displayUnit: 'degrees',
     },
     // Radians like Rotation (the inspector shows degrees): which slice of the picture the mirrors show (turning the tube).
     sourceAngle: {
       type: 'number',
       label: 'Source Angle',
-      default: 0,
+      // 75°: the slice straight below the centre at six pairs, where a figure in the middle of the
+      // frame stands (0° read the dark side of most shots). Instances saved before keep 0°.
+      default: 5 * Math.PI / 12,
+      legacyDefault: 0,
+      wraps: true,
       min: -Math.PI,
       max: Math.PI,
       step: 0.01,

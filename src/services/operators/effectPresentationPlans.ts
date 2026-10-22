@@ -66,7 +66,7 @@ const UV_DISTORT_PORTS = { 'source-cache': 'Premultiplied Source', 'edge-uv': 'S
   'bulge-scale': 'Lens Scale', 'bulge-moved': 'Moved Offset', 'twirl-angle': 'Turn Angle', 'twirl-moved': 'Moved Offset',
   'space-sample-uv': 'Read Position', 'wave-sample-uv': 'Read Position', phase: 'Phase' };
 // Twirl and Wave read plain words on their folder ports: '(1, 1)' said nothing, 'Distance / Radius' was cut off on the cards.
-const PLAIN_UV_DISTORT_PORTS = { ...UV_DISTORT_PORTS, 'space-r': 'Radius Share', 'one-vec2': 'One' };
+const PLAIN_UV_DISTORT_PORTS = { ...UV_DISTORT_PORTS, 'space-r': 'Radius Share', 'one-vec2': 'One Vector', phase: 'Wave Phase' };
 
 // What the outputs that cross into Chroma Key's Spill folder carry (the docs' Spill recipe shows the same names).
 const CHROMA_KEY_PORTS = { 'unmix-color': 'Color', 'screen-channel': 'Screen Channel', 'screen-other-channels': 'Other Channels',

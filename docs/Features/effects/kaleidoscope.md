@@ -15,7 +15,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 - **Source Angle** – which slice of the picture the mirrors show.
 - **Zoom** – how close that slice is.
 
-**Tip:** put the figure in the middle of the frame and set **Source Angle** to the slice straight below the centre (90° − 90° / Segments, 75° at six pairs): the mirrors then fold the whole body. Keyframe Source Angle slowly for the classic look of a turning kaleidoscope.
+**Tip:** **Source Angle** starts at 75°, the slice straight below the centre at six pairs, so a figure in the middle of the frame is folded whole. When you change **Segments**, set Source Angle to 90° − 90° / Segments to keep reading that slice. Keyframe Source Angle slowly for the classic look of a turning kaleidoscope.
 
 <div class="docs-float-end"></div>
 
@@ -28,7 +28,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 <figcaption>The four presets on the dancer.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. Every preset reads the slice straight below the centre, where a figure in the middle of the frame stands.
+Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. Every preset reads the slice straight below the centre, where a figure in the middle of the frame stands. **Center X / Center Y** go back to the middle of the frame.
 
 **Ink Blot** – two mirrored pairs, slightly enlarged: the figure is mirrored left to right and top to bottom, like a folded ink print. Still readable as a body, so it works for a dreamlike double.
 
@@ -75,14 +75,14 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-float-end"></div>
 
-**Rotation** – spins the whole pattern around its centre, without changing what it shows. Keyframe it for a slowly turning ornament. −360 to 360°, default 0°.
+**Rotation** – spins the whole pattern around its centre, without changing what it shows. Keyframe it for a slowly turning ornament. −360 to 360°, default 0°; a typed or keyframed angle may go further, because the pattern repeats every turn.
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
 <video src="../assets/effects/clips/kaleidoscope-source-angle.mp4" poster="../assets/effects/clips/kaleidoscope-source-angle.webp" width="600" height="600" autoplay muted loop playsinline preload="none" aria-label="The dancer with Kaleidoscope while Source Angle turns from 30° to 150° and back: the flower stays in place while its petals flow outwards and change, as if the tube of a kaleidoscope were turned"></video>
 <figcaption>Source Angle from 30° to 150° and back.</figcaption>
 </figure>
 
-**Source Angle** – which slice of the picture the mirrors show, as a direction from the centre: 0° is to the right, 90° straight down, 180° to the left. The slice is 180° / Segments wide (30° at six pairs) and starts at this angle. Turning it is like turning the tube of a real kaleidoscope: the pattern stays in place, while new parts of the picture flow through it. −180 to 180°, default 0°.
+**Source Angle** – which slice of the picture the mirrors show, as a direction from the centre: 0° is to the right, 90° straight down, 180° to the left. The slice is 180° / Segments wide (30° at six pairs) and starts at this angle. Turning it is like turning the tube of a real kaleidoscope: the pattern stays in place, while new parts of the picture flow through it. −180 to 180°, default 75°; a typed or keyframed angle may go further and simply goes round again. Effects saved before 75° became the default keep 0°.
 
 <div class="docs-float-end"></div>
 

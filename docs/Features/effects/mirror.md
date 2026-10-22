@@ -6,7 +6,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-compare">
 
-![The dancer on a dark stage, original left and with Mirror right: her left half is reflected onto the right across the middle of the frame, so she stands perfectly symmetric with both arms raised, and the stage lights on both sides are the same warm glow](../assets/effects/mirror.webp)
+![The harbour town, original left and with Mirror right: the left half of the bay is reflected onto the right across the middle, so the mountain becomes one symmetric peak above a round harbour, with the boats and quays mirrored on both sides](../assets/effects/mirror.webp)
 
 <figcaption>Left: original. Right: Mirror at its defaults, Left / Right on.</figcaption>
 </figure>
@@ -23,18 +23,18 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The harbour town four times, labelled: Still Lake with the sky, mountain and houses reflected upside down below the middle like a lake, Folded City with the harbour and its boats folded up into the sky, Face to Face with the right half of the town reflected onto the left so both slopes meet in the middle, Four Way with one quarter of the picture turned into a symmetric island floating in the sky](../assets/effects/presets/mirror.webp)
+![The harbour town four times, labelled: Still Lake with the sky, mountain and houses reflected upside down below the middle like a lake, Folded City with the harbour and its boats folded up into the sky, Diagonal Fold with the line turned to 45°, so the town and the sky fold along a diagonal and the houses lean into a slanted mirror seam, Four Way with one quarter of the picture turned into a symmetric island floating in the sky](../assets/effects/presets/mirror.webp)
 
 <figcaption>The four presets on the harbour.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. Each preset also sets **Angle** to 0°, so it straightens a turned line; **Center X / Center Y** stay with your shot.
+Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. Each preset also sets **Angle**: three level the line, Diagonal Fold turns it to 45°. **Center X / Center Y** go back to the middle of the frame and **Frame Edges** to **Mirror**: move the line onto your subject after the preset.
 
 **Still Lake** – only **Top / Bottom**, keeping the top: the upper half lies upside down below it, as in still water. Move **Center Y** onto the horizon or the shoreline.
 
 **Folded City** – only **Top / Bottom**, keeping the bottom: the ground folds up into the sky and closes over the picture, as in a dream where the street bends upwards.
 
-**Face to Face** – only **Left / Right**, keeping the right half: a figure in the frame meets its own reflection in the middle. The default keeps the left half instead.
+**Diagonal Fold** – only **Left / Right**, with **Angle** at 45°: the line is turned, so the picture folds along a slant and the town meets its own mirror image at a tilted seam. The only preset that turns the line.
 
 **Four Way** – both lines, keeping the top-left quarter: the quarter appears four times around the centre, like an emblem or a coat of arms.
 
@@ -76,7 +76,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Center Y** – where the level line sits from top to bottom: 0 is the top edge, 1 the bottom edge. Put it on a horizon for a reflection in water. 0 to 1, default 0.5.
 
-**Angle** – turns both mirror lines around the centre, as an angle on screen. 45° gives a diagonal reflection; at 90° the two lines swap places, and at ±180° the kept sides swap. Keyframe it for a reflection that turns. −180 to 180°, default 0°.
+**Angle** – turns both mirror lines around the centre, as an angle on screen. 45° gives a diagonal reflection; at 90° the two lines swap places, and at ±180° the kept sides swap. Keyframe it for a reflection that turns. −180 to 180°, default 0°; a typed or keyframed angle may go further and goes round again.
 
 **Frame Edges** – what fills in where the reflection reads from beyond the frame, which happens when the line is off the middle or turned. **Mirror** reflects the picture again at the edge, so the picture keeps going; **Clamp** repeats the outermost pixels into streaks; **Transparent** leaves those places empty, so the layer below shows through. Mirror, Clamp, Transparent, default Mirror.
 
@@ -86,7 +86,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![The Mirror graph: Parameters feed Centre, which passes One, Centre, Shape Scale and Offset on to Mirror Lines; with Angle, Keep, Left / Right and Top / Bottom it makes the Read Position, which goes with the Frame Edges choice and the Premultiplied Source made from the Input Frame into Frame Edges & Read, and Straight Alpha Output turns the result back into a normal picture](../assets/effects/graphs/mirror.webp)
+![The Mirror graph: Parameters feed Centre, which passes One Vector, Centre, Shape Scale and Offset on to Mirror Lines; with Angle, Keep, Left / Right and Top / Bottom it makes the Read Position, which goes with the Frame Edges choice and the Premultiplied Source made from the Input Frame into Frame Edges & Read, and Straight Alpha Output turns the result back into a normal picture](../assets/effects/graphs/mirror.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 870" aria-hidden="true" focusable="false">
 <defs><marker id="mirror-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -122,8 +122,8 @@ Mirror does not paint anything: it moves where each pixel reads, like every effe
 <circle class="docs-shot-number" cx="509" cy="632" r="18" /><text x="509" y="632" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M509 22 L509 96" marker-end="url(#mirror-centre-arrow)" />
 <circle class="docs-shot-number" cx="509" cy="22" r="18" /><text x="509" y="22" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M538 587 L622 587" marker-end="url(#mirror-centre-arrow)" />
-<circle class="docs-shot-number" cx="538" cy="587" r="18" /><text x="538" y="587" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M703 408 L703 492" marker-end="url(#mirror-centre-arrow)" />
+<circle class="docs-shot-number" cx="703" cy="408" r="18" /><text x="703" y="408" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M897 408 L897 492" marker-end="url(#mirror-centre-arrow)" />
 <circle class="docs-shot-number" cx="897" cy="408" r="18" /><text x="897" y="408" class="docs-shot-number-text">4</text>
 </svg>

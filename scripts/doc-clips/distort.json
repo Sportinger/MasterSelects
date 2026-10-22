@@ -252,9 +252,7 @@
     {
       "name": "kaleidoscope",
       "effect": "kaleidoscope",
-      "params": {
-        "sourceAngle": 1.309
-      },
+      "params": {},
       "range": [
         0.4,
         3.0

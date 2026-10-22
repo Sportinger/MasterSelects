@@ -40,7 +40,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Wave card: the Preset menu showing Flag, Wave Height 0.035, Wave Count 1.2, Sway 0, Sway Count 4 and Frame Edges Mirror, then the Motion section with Speed 0.50 and Phase 0, beside a strip of the preview with the dancer](../assets/effects/editor/wave-inspector.webp)
+![Properties, Effects with a Wave card: the Preset menu showing Flag, Wave Height 0.035, Wave Count 1.2, Sway 0, Sway Count 4 and Frame Edges Mirror, then the Motion section with Speed 0.50 and Phase 0°, beside a strip of the preview with the dancer](../assets/effects/editor/wave-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 697" aria-hidden="true" focusable="false">
 <defs><marker id="wave-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -118,7 +118,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Phase from 0° to 360° and back, at Speed 0.</figcaption>
 </figure>
 
-**Phase** – shifts both sets of waves along by part of a wave: 180° swaps crests and troughs, 360° is one whole wave and looks like 0°. With Speed 0, keyframe Phase to move the waves exactly where and when you want, for example only during one musical phrase. 0 to 360, default 0.
+**Phase** – shifts both sets of waves along by part of a wave: 180° swaps crests and troughs, 360° is one whole wave and looks like 0°. With Speed 0, keyframe Phase to move the waves exactly where and when you want, for example only during one musical phrase. 0 to 360°, default 0°; a typed or keyframed value may go further, since the waves repeat every 360°.
 
 <div class="docs-float-end"></div>
 
@@ -128,7 +128,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![The Wave graph: Parameters feed Phase & Speed, whose Phase goes with the heights and counts into Wave Displacement; its Read Position, the Premultiplied Source made from the Input Frame and the Frame Edges choice go into Frame Edges & Sampling, and Straight Alpha Output turns the result back into a normal picture](../assets/effects/graphs/wave.webp)
+![The Wave graph: Parameters feed Phase & Speed, whose Wave Phase goes with the heights and counts into Wave Displacement; its Read Position, the Premultiplied Source made from the Input Frame and the Frame Edges choice go into Frame Edges & Sampling, and Straight Alpha Output turns the result back into a normal picture](../assets/effects/graphs/wave.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 663" aria-hidden="true" focusable="false">
 <defs><marker id="wave-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -156,7 +156,7 @@ Wave does not paint anything: it moves where each pixel reads, like every effect
 
 <div class="docs-shot-stage">
 
-![Inside the Phase and Speed folder: Speed times Seconds goes into a second Multiply whose other input is Tau; Phase goes through Degrees to Radians; Add joins both into the Phase that leaves the folder](../assets/effects/graphs/wave-phase-speed.webp)
+![Inside the Phase and Speed folder: Speed times Seconds goes into a second Multiply whose other input is Tau; Phase goes through Degrees to Radians; Add joins both into the Wave Phase that leaves the folder](../assets/effects/graphs/wave-phase-speed.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 546" aria-hidden="true" focusable="false">
 <defs><marker id="wave-phase-speed-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -180,7 +180,7 @@ Wave does not paint anything: it moves where each pixel reads, like every effect
 
 **Multiply** – the waves that have passed, times Tau (2π, one whole wave as an angle; its card sits in the Constants folder, so the input shows a free dot here).
 
-**Add** – both together: the Phase that goes on to Wave Displacement and moves every wave along.
+**Add** – both together: the Wave Phase that goes on to Wave Displacement and moves every wave along.
 
 ### Wave Displacement
 
@@ -188,25 +188,25 @@ Wave does not paint anything: it moves where each pixel reads, like every effect
 
 <div class="docs-shot-stage">
 
-![Inside the Wave Displacement folder, the up-and-down strand in two rows. Top row: X times Wave Count times Tau, plus Phase, goes into Sine; Wave Height sits under it. Bottom row: Multiply scales the Sine by Wave Height, and Add adds the result to Y](../assets/effects/graphs/wave-displacement.webp)
+![Inside the Wave Displacement folder, the up-and-down strand in one row, left to right: X times Wave Count times Tau, plus Wave Phase, goes into Sine; Multiply scales the Sine by Wave Height, and Add adds the result to Y, which comes in from above](../assets/effects/graphs/wave-displacement.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 940" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 490" aria-hidden="true" focusable="false">
 <defs><marker id="wave-displacement-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M134 427 L134 511" marker-end="url(#wave-displacement-arrow)" />
-<circle class="docs-shot-number" cx="134" cy="427" r="18" /><text x="134" y="427" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M882 23 L882 107" marker-end="url(#wave-displacement-arrow)" />
-<circle class="docs-shot-number" cx="882" cy="23" r="18" /><text x="882" y="23" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M134 918 L134 854" marker-end="url(#wave-displacement-arrow)" />
-<circle class="docs-shot-number" cx="134" cy="918" r="18" /><text x="134" y="918" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M321 585 L321 669" marker-end="url(#wave-displacement-arrow)" />
-<circle class="docs-shot-number" cx="321" cy="585" r="18" /><text x="321" y="585" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M787 22 L787 79" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="22" r="18" /><text x="787" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M648 113 L648 197" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="113" r="18" /><text x="648" y="113" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M787 401 L787 337" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="401" r="18" /><text x="787" y="401" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M926 113 L926 197" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="926" cy="113" r="18" /><text x="926" y="113" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
 <figcaption>Inside Wave Displacement, the strand that lifts the picture; the sideways strand and Combine Vector are left out. Green cards bring values in from outside the folder; Tau is 2π, one whole wave. 1 — Y: the pixel's height. 2 — Sine: one smooth wave. 3 — Multiply: the wave times Wave Height. 4 — Add: the shifted height.</figcaption>
 </figure>
 
-**Y** – the pixel's height in the picture, from 0 at the top to 1 at the bottom. **Split Vector** at the start of the folder splits the pixel's place (UV) into **X** and Y. X times **Wave Count** times Tau, plus Phase, says where along the waves this pixel lies.
+**Y** – the pixel's height in the picture, from 0 at the top to 1 at the bottom. **Split Vector** at the start of the folder splits the pixel's place (UV) into **X** and Y. X times **Wave Count** times Tau, plus the Wave Phase, says where along the waves this pixel lies.
 
 **Sine** – turns that place into a smooth swing between −1 and 1: up, back, down, back, Wave Count times across the picture.
 
@@ -307,7 +307,7 @@ Wave does not paint anything: it moves where each pixel reads, like every effect
 ## Technical details
 
 - **Formula.** Wave adds sin(2π × Wave Count × x + φ) × Wave Height to y, then sin(2π × Sway Count × y′ + φ) × Sway to x, where y′ is the shifted y and φ = Phase (in radians) + 2π × Speed × time in seconds.
-- **Time.** The waves follow the timeline time: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. Speed multiplies that time, so a keyframed Speed makes the waves jump, the further into the clip the more. To start the motion on a cue, keyframe Wave Height and Sway, or Phase at Speed 0.
+- **Time.** The waves follow the timeline time: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. Speed multiplies that time, so a keyframed Speed makes the waves jump, the further along the timeline the more. To start the motion on a cue, keyframe Wave Height and Sway, or Phase at Speed 0.
 - **Units.** Wave Height is a share of the picture height, Sway a share of the width, so a 4K export, a portrait frame and the thumbnails show the same waves.
 - **Both heights 0** skip the effect, so the picture passes through exactly.
 - **Limits.** Each pixel is read once, so many small waves (a high count at a small height) shimmer on fine detail.

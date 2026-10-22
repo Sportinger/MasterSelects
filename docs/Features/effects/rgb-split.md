@@ -28,7 +28,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 <figcaption>The four presets on the night street.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. Each preset sets **Amount**, **Angle** and **Mode**; **Frame Edges** stays as it is.
+Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. Each preset sets **Amount**, **Angle** and **Mode**; **Frame Edges** goes back to its default, **Mirror**, so choose another edge mode after the preset.
 
 **Misprint** – Amount 0.004 at 30°: a fine diagonal edge of colour, like a poster printed with slightly shifted plates. Best seen on sharp lines and lettering.
 
@@ -68,7 +68,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Amount** – how far red and blue move, each in its own direction, while green stays in place. It is a share of the picture width for a sideways split and of the height for an upright one, so a 4K export and the preview look the same. 0.005 (the default) is a fine fringe, 0.01 to 0.02 a clear glitch, and from 0.05 the picture falls apart into three copies. At 0 the picture is unchanged. In Lens mode it is the split at the left and right edges. 0 to 0.1, default 0.005.
 
-**Angle** – the direction of the split, as an angle on screen: 0° sideways, 90° up and down, 45° diagonal. Red moves one way and blue the other, so 180° swaps their sides. Only in Offset mode; in Lens mode the card dims it, because the lens splits outwards from the centre. 0 to 360°, default 0°.
+**Angle** – the direction of the split, as an angle on screen: 0° sideways, 90° up and down, 45° diagonal. Red moves one way and blue the other, so 180° swaps their sides. Only in Offset mode; in Lens mode the card dims it, because the lens splits outwards from the centre. 0 to 360°, default 0°; a typed or keyframed angle may go further and goes round again.
 
 **Mode** – **Offset** shifts the whole picture by the same amount; **Lens** leaves the middle clean and lets the split grow towards the edges, like the colour fringes of a cheap lens. Offset, Lens, default Offset.
 
@@ -80,7 +80,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![The RGB Split graph: Parameters feed Split Offset with Angle, Amount and Mode, which hands the Red Read and Blue Read positions on; Channel Reads & Frame Edges takes them with the Frame Edges choice and the Premultiplied Source made from the Input Frame, reads the picture three times and passes three images to Channel Merge & Straight Alpha, which gives the Result](../assets/effects/graphs/rgb-split.webp)
+![The RGB Split graph: Parameters feed Split Offset with Angle, Amount and Mode, which hands the Red Read and Blue Read positions on; Channel Reads & Frame Edges takes them with the Frame Edges choice and the Premultiplied Source made from the Input Frame, reads the picture three times and passes the Red Plate, Green Plate and Blue Plate to Channel Merge & Straight Alpha, which gives the Result](../assets/effects/graphs/rgb-split.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 825" aria-hidden="true" focusable="false">
 <defs><marker id="rgb-split-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -110,8 +110,8 @@ RGB Split does not paint anything: it reads the picture three times at slightly 
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 1082" aria-hidden="true" focusable="false">
 <defs><marker id="rgb-split-offset-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M569 677 L485 677" marker-end="url(#rgb-split-offset-arrow)" />
-<circle class="docs-shot-number" cx="569" cy="677" r="18" /><text x="569" y="677" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M386 475 L386 559" marker-end="url(#rgb-split-offset-arrow)" />
+<circle class="docs-shot-number" cx="386" cy="475" r="18" /><text x="386" y="475" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M386 194 L386 278" marker-end="url(#rgb-split-offset-arrow)" />
 <circle class="docs-shot-number" cx="386" cy="194" r="18" /><text x="386" y="194" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M629 589 L629 505" marker-end="url(#rgb-split-offset-arrow)" />
@@ -228,7 +228,7 @@ RGB Split does not paint anything: it reads the picture three times at slightly 
 
 ## Technical details
 
-- **Offset mode** moves red and blue Amount × |(cos × width, sin × height)| pixels along the on-screen Angle, in opposite directions; green stays in place.
+- **Offset mode** moves red and blue Amount × |(cos × width, sin × height)| pixels along the on-screen Angle, in opposite directions; green stays in place. The slider stops at 0; a negative Amount from a node cable is used as it is and swaps the sides of red and blue, like Angle + 180°.
 - **Lens mode** offsets their reads by ∓2 × Amount × the distance from the centre: no split in the middle, Amount × width at the left and right edges. Angle is dimmed there.
 - **Alpha** is the largest of the three reads, so a split logo on transparency shows its fringes. The picture is read premultiplied, so cut-out figures keep clean edges; the preview and the export match.
 - **Units.** Angle is stored in radians and shown in degrees; keyframe lanes, MIDI and tools use radians. Amount is a share of the frame, so a 4K export, a portrait frame and the thumbnails show the same split. RGB Split does not move with time: a still frame stays still.

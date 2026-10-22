@@ -3,12 +3,12 @@
     {
       "name": "mirror",
       "out": "docs/Features/assets/effects/mirror.webp",
-      "image": "dancer_stage",
+      "image": "harbor_town",
       "width": 1920,
       "layout": "compare",
       "left": { "effect": "original" },
       "right": { "effect": "mirror" },
-      "alt": "The dancer on a dark stage, original left and with Mirror right: her left half is reflected onto the right across the middle of the frame, so she stands perfectly symmetric with both arms raised, and the stage lights on both sides are the same warm glow",
+      "alt": "The harbour town, original left and with Mirror right: the left half of the bay is reflected onto the right across the middle, so the mountain becomes one symmetric peak above a round harbour, with the boats and quays mirrored on both sides",
       "caption": "Left: original. Right: Mirror at its defaults, Left / Right on."
     },
     {

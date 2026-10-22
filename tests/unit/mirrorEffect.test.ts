@@ -4,7 +4,7 @@ import { MIRROR_KEEP_OPTIONS } from '../../src/services/operators/mirrorRecipes'
 
 describe('Mirror presets', () => {
   it('name only the mirror lines, the kept side and a level Angle, with valid values', () => {
-    expect(MIRROR_PRESETS.map(preset => preset.name)).toEqual(['Still Lake', 'Folded City', 'Face to Face', 'Four Way']);
+    expect(MIRROR_PRESETS.map(preset => preset.name)).toEqual(['Still Lake', 'Folded City', 'Diagonal Fold', 'Four Way']);
     for (const preset of MIRROR_PRESETS) {
       expect(Object.keys(preset.params).toSorted()).toEqual(['angle', 'horizontal', 'keep', 'vertical']);
       expect(typeof preset.params.horizontal).toBe('boolean');
@@ -12,7 +12,8 @@ describe('Mirror presets', () => {
       // At least one line mirrors: a preset never leaves the picture unchanged.
       expect(preset.params.horizontal || preset.params.vertical).toBe(true);
       expect(MIRROR_KEEP_OPTIONS.map(option => option.value)).toContain(preset.params.keep);
-      expect(preset.params.angle).toBe(0);
+      // Only Diagonal Fold turns the line; the others set it level.
+      expect(preset.params.angle).toBe(preset.id === 'diagonal-fold' ? Math.PI / 4 : 0);
     }
     expect(mirror.presets).toBe(MIRROR_PRESETS);
   });

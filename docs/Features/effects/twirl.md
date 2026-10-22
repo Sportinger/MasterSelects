@@ -28,11 +28,11 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 <figcaption>The four presets on the dancer.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
+Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. **Center X / Center Y** go back to the middle of the frame, so place the spiral after the preset.
 
 **Soft Stir** – Twist 80°, Radius 0.8: the picture bends gently over a wide area and stays easy to read, as if seen through moving water. Good for unease or a memory.
 
-**Knot** – Twist 540°, Radius 0.25: a small, tight spiral in the middle, the rest of the frame untouched. Put **Center X / Center Y** on a body or a face to twist just that.
+**Knot** – Twist 540°, Radius 0.25: a small, tight spiral in the middle, the rest of the frame untouched. After picking it, put **Center X / Center Y** on a body or a face to twist just that.
 
 **Whirlpool** – Twist 360°, Radius 0.6: one full turn that draws the middle of the picture into a clear spiral, while the edges still show the scene.
 

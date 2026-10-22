@@ -87,6 +87,8 @@ export const wave: EffectDefinition = {
       max: 360,
       step: 1,
       animatable: true,
+      wraps: true,
+      unit: '°',
       group: 'motion',
       graphOnly: true,
     },
