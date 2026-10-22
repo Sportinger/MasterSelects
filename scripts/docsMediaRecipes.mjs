@@ -164,21 +164,25 @@ export function basicStillRecipe(effect, { size, settings = docShotSettings() } 
     name: effect.id, spec, effects: [effect.id], outputs: [spec.out], inputs: [image(spec.image, settings)] };
 }
 
-/** Clip layouts that show the effect in their right half (original | effect, or crop | detail). */
-const HALF_LAYOUTS = new Set(['pair', 'compare', 'split', 'detail']);
+/** Clip layouts that show the effect in their right half (original | effect). */
+const HALF_LAYOUTS = new Set(['pair', 'compare', 'split']);
 
 /**
  * A gallery thumbnail cut from `source` (asset path relative to docs/Features). The region is thumb.region of
  * effectDocsExtras.mjs, else the effect half of a still or of a two-part clip poster; a single picture (layout
- * "single": a generator's still, or a single-picture clip poster) is taken whole. `layout`: the layout of the
- * clip whose poster is the source, or "single" / "still" for a still.
+ * "single": a generator's still, or a single-picture clip poster) is taken whole. A "detail" poster (whole frame
+ * | enlargement) gives its left half: the whole frame reads as the effect, the enlargement as a blurred fragment.
+ * `layout`: the layout of the clip whose poster is the source, or "single" / "still" for a still.
  */
 export function thumbRecipe(id, { source, root = REPO_ROOT, layout }) {
   const extra = EFFECT_DOC_EXTRAS[id]?.thumb;
-  const whole = layout === 'single' || (source === effectAssets(id).poster && !HALF_LAYOUTS.has(layout));
-  const region = extra?.region ?? (whole ? [0, 0, 1, 1] : undefined);
+  const poster = source === effectAssets(id).poster;
+  const whole = layout === 'single' || (poster && layout !== 'detail' && !HALF_LAYOUTS.has(layout));
+  const region = extra?.region ?? (poster && layout === 'detail' ? [0, 0, 0.5, 1] : whole ? [0, 0, 1, 1] : undefined);
+  // The effect half of a loop's poster (the dancer, head to feet) is fitted whole when it is narrow; a still is cropped.
+  const fit = poster && !extra?.region && HALF_LAYOUTS.has(layout) ? 'whole' : undefined;
   return { id: `thumb scripts/effect-docs.mjs#${id}`, kind: 'thumb', file: 'scripts/effect-docs.mjs', group: 'thumbs', name: id,
-    spec: { source, ...(region ? { region } : {}) }, effects: [], outputs: [`${FEATURES}/${effectAssets(id).thumb}`],
+    spec: { source, ...(region ? { region } : {}), ...(fit ? { fit } : {}) }, effects: [], outputs: [`${FEATURES}/${effectAssets(id).thumb}`],
     inputs: [path.join(root, FEATURES, source)] };
 }
 

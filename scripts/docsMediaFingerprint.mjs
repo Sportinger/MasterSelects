@@ -1,13 +1,17 @@
 // Fingerprints of the docs pictures and clips: what an asset was made from, so a changed recipe,
 // effect or footage marks it stale. A fingerprint hashes
 //   - the recipe (its shot-list entry, or the generated basic still, as JSON),
-//   - the effect's own code: the file that defines it, the operator-graph files that test an effect type
-//     against its id, the graph a catalog hub registers for it, and the files these import (shader,
-//     parameters, limits). Left out: the shared engine (files more than six files import), catalog hubs
-//     (files that name more than three effect ids, such as the graph owner), registries (files that import
-//     more than eight), and another effect's code (a file that names other effects but not this one). In a
-//     family file that defines several effects, only the imports its own definition uses count. So an edit to
-//     one effect marks only its own pictures stale (and its family's, for a shared family shader),
+//   - the effect's own code: the file that defines it, every file in a folder of its own (a folder named after
+//     the id, or the definition's folder when no other effect is defined there), files named after it in the
+//     effects and the engine (faceCables.wgsl, PixelParticleDisintegrateRenderer.ts), the operator-graph files
+//     that test an effect type against its id or export its graph creator (createDefaultKaleidoscopeGraph), the
+//     creator a catalog hub calls for it (followed into the file that exports it, across line breaks and into a
+//     dispatcher), and the files these import (shader, parameters, limits). Left out of the import walk: the
+//     shared engine (files more than six files import), catalog hubs (files that name more than three effect
+//     ids, such as the graph owner), registries (files that import more than eight), and another effect's code
+//     (a file that names other effects but not this one). In a family file that defines several effects, only
+//     the imports its own definition uses count. Where the rules are unsure they lean toward a file too many:
+//     that costs one extra render, a file too few a stale picture that reads as current,
 //   - the media it reads: the footage, test image or (for a thumbnail) the still it is cut from,
 //   - the editor theme, for pictures of the editor.
 // scripts/docs-media-manifest.json keeps the fingerprint of every asset as it was rendered, one line
@@ -20,6 +24,8 @@ import { REPO_ROOT, scratchRun } from './docShotSettings.mjs';
 export const MANIFEST_FILE = 'scripts/docs-media-manifest.json';
 /** Where effect code lives: the effects, their operator graphs and shaders, and the services of one effect family. */
 const CODE_SCOPES = ['src/effects', 'src/services/operators', 'src/shaders', 'src/services/faceCables', 'src/services/planarTracking'];
+/** Where an effect's own runtime may also live, found by its file name only (never walked into). */
+const NAME_SCOPES = ['src/engine'];
 /** A file imported by more than this many files is shared engine code, not one effect's. */
 const SHARED_IMPORTERS = 6;
 /** A file that names more effect ids than this is a catalog hub (graph owner, presentation plans), not one effect's code. */
@@ -50,20 +56,33 @@ export function effectCodeIndex(root = REPO_ROOT) {
   };
   CODE_SCOPES.forEach(walk);
   const known = new Set(files);
-  const texts = new Map(files.map((file) => [file, fs.readFileSync(path.join(root, file), 'utf8')]));
-  const resolve = (from, spec) => {
+  const engineStart = files.length;
+  NAME_SCOPES.forEach(walk);
+  const engineFiles = files.splice(engineStart);
+  const allKnown = new Set([...files, ...engineFiles]);
+  const texts = new Map([...files, ...engineFiles].map((file) => [file, fs.readFileSync(path.join(root, file), 'utf8')]));
+  const resolveIn = (set) => (from, spec) => {
     const base = (spec.startsWith('.') ? path.posix.join(path.posix.dirname(from), spec) : spec.startsWith('@/') ? `src/${spec.slice(2)}` : '')
       .replace(/\?[a-z]+$/u, '');
-    return base ? [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}.js`, `${base}.mjs`].find((file) => known.has(file)) : undefined;
+    return base ? [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}.js`, `${base}.mjs`].find((file) => set.has(file)) : undefined;
   };
+  const resolve = resolveIn(known);
+  const resolveAll = resolveIn(allKnown);
+  const specsOf = (text) => [...text.matchAll(/(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)|import\s*['"]([^'"]+)['"]/gu)]
+    .map((match) => match[1] ?? match[2] ?? match[3]);
   const imports = new Map();
   const importers = new Map();
-  for (const [file, text] of texts) {
-    const specs = [...text.matchAll(/(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)|import\s*['"]([^'"]+)['"]/gu)]
-      .map((match) => match[1] ?? match[2] ?? match[3]);
-    const targets = [...new Set(specs.map((spec) => resolve(file, spec)).filter(Boolean))];
+  for (const file of files) {
+    const targets = [...new Set(specsOf(texts.get(file)).map((spec) => resolve(file, spec)).filter(Boolean))];
     imports.set(file, targets);
     for (const target of targets) importers.set(target, (importers.get(target) ?? 0) + 1);
+  }
+  // Importers of the engine files too, so an engine file many others use counts as shared engine.
+  const allImporters = new Map();
+  for (const file of [...files, ...engineFiles]) {
+    for (const target of new Set(specsOf(texts.get(file)).map((spec) => resolveAll(file, spec)).filter(Boolean))) {
+      allImporters.set(target, (allImporters.get(target) ?? 0) + 1);
+    }
   }
   // Which effect ids each file names as an effect (defines, compares a type to, lists in a set or union),
   // to tell one effect's code from a hub or another effect's code. A plain value ('wave' as an option, a node
@@ -72,8 +91,18 @@ export function effectCodeIndex(root = REPO_ROOT) {
   const effectIds = new Set([...groupsText.matchAll(/effects:\s*\[([^\]]*)\]/gu)]
     .flatMap((match) => [...match[1].matchAll(/['"]([a-z0-9-]+)['"]/gu)].map((id) => id[1])));
   const asEffect = /(?:\bid:\s*|_ID\s*=\s*|[=!]==\s*|\bcase\s+|\|\s*|\[\s*|,\s*)['"]([a-z0-9][a-z0-9-]*)['"]|['"]([a-z0-9][a-z0-9-]*)['"]\s*(?:\||[=!]==)/gu;
-  const named = new Map([...texts].map(([file, text]) => [file,
-    new Set([...text.matchAll(asEffect)].map((match) => match[1] ?? match[2]).filter((id) => effectIds.has(id)))]));
+  const named = new Map(files.map((file) => [file,
+    new Set([...texts.get(file).matchAll(asEffect)].map((match) => match[1] ?? match[2]).filter((id) => effectIds.has(id)))]));
+  // Which effect ids each file defines (`id: 'wave'`, `WAVE_ID = 'wave'`), to tell a folder of one effect from a family folder.
+  const defined = new Map(files.map((file) => [file,
+    new Set([...texts.get(file).matchAll(/(?:\bid:\s*|_ID\s*=\s*)['"]([a-z0-9][a-z0-9-]*)['"]/gu)].map((match) => match[1]).filter((id) => effectIds.has(id)))]));
+  // The exported names of each code file, to follow a creator a hub calls into the file that exports it.
+  const exported = new Map(files.map((file) => [file,
+    new Set([...texts.get(file).matchAll(/export\s+(?:async\s+)?(?:function\*?|const|let|class)\s+([A-Za-z_$][\w$]*)/gu)].map((match) => match[1]))]));
+  const pascal = (id) => id.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join('');
+  // A file named after an effect: its basename starts with the id's words and the next character starts a new
+  // word (faceCables.wgsl, SlitScanSurfacePass.ts), so 'wave' does not own WaveformRenderer.ts.
+  const nameRule = (id) => new RegExp(`^${id.split('-').map((part) => `[${part[0].toLowerCase()}${part[0].toUpperCase()}]${part.slice(1)}`).join('[-_]?')}(?=[A-Z0-9._-]|$)`, 'u');
   const compact = (text) => text.toLowerCase().replace(/[^a-z0-9]/gu, '');
   const byLength = [...effectIds].toSorted((a, b) => b.length - a.length);
   const nameOwner = (file) => {
@@ -108,6 +137,23 @@ export function effectCodeIndex(root = REPO_ROOT) {
       return !locals.length || locals.some((local) => uses(own, local) || !uses(others, local));
     });
   };
+  /**
+   * The code a hub runs for an id, from the text right after it: the `?` branch of a ternary up to its `:`
+   * (`'id' ? createGraph : other`), else the statement up to its end (`if (type === 'id') return graph(params);`).
+   */
+  const branchText = (after) => {
+    const statement = after.split(/;|\n\s*(?:if|const|let|return|export|function)\b/u)[0];
+    const ask = statement.search(/\?(?![.?])/u);
+    if (ask < 0) return statement;
+    let depth = 0;
+    for (let at = ask + 1; at < statement.length; at += 1) {
+      const char = statement[at];
+      if ('([{'.includes(char)) depth += 1;
+      else if (')]}'.includes(char)) { if (depth === 0) return statement.slice(ask + 1, at); depth -= 1; }
+      else if (char === ':' && depth === 0) return statement.slice(ask + 1, at);
+    }
+    return statement.slice(ask + 1);
+  };
   const cache = new Map();
   /** The files of one effect's own code, sorted. */
   const codeFiles = (id) => {
@@ -116,30 +162,65 @@ export function effectCodeIndex(root = REPO_ROOT) {
     const defines = new RegExp(`(?:\\bid:\\s*|_ID\\s*=\\s*)['"]${literal}['"]`, 'u');
     // An operator file is the effect's when it tests an effect type against the id (`type === 'wave'`), declares
     // it in a type (`type X = 'wave' | ...`) or keys a graph by it; a bare `case 'wave'` of a curve shape is not.
-    const typeRef = new RegExp(`(?:[Tt]ype\\s*[=!]==\\s*|\\btype:\\s*)['"]${literal}['"]|['"]${literal}['"]\\s*[=!]==\\s*[\\w.]*[Tt]ype\\b|^(?:export\\s+)?type\\s+\\w+\\s*=.*['"]${literal}['"]`, 'mu');
+    const typeRef = new RegExp(`(?:[Tt]ype\\s*[=!]==\\s*|\\btype:\\s*)['"]${literal}['"]|['"]${literal}['"]\\s*[=!]==\\s*[\\w.]*[Tt]ype\\b|^(?:export\\s+)?type\\s+\\w*(?:Effect|Type)\\w*\\s*=.*['"]${literal}['"]`, 'mu');
     // Roots: the definition (always, even in a family file that defines several effects), and the operator
     // files that name the effect, unless they are shared engine or a catalog hub.
-    const roots = files.filter((file) => !CODE_HUBS.has(file) && (
-      (file.startsWith('src/effects/') && defines.test(texts.get(file)))
-      || (file.startsWith('src/services/operators/') && typeRef.test(texts.get(file)) && !shared(file))));
-    // A catalog hub (the graph owner) registers the effect's graph next to its id: `type === 'id' ? createGraph`.
-    // The imported names right after the id, up to the next quote, are the effect's own code too.
+    const definitions = files.filter((file) => file.startsWith('src/effects/') && !CODE_HUBS.has(file) && defines.test(texts.get(file)));
+    const roots = [...definitions, ...files.filter((file) => !CODE_HUBS.has(file)
+      && file.startsWith('src/services/operators/') && typeRef.test(texts.get(file)) && !shared(file))];
+    // A folder of its own: a folder named after the id, or the definition's folder when nothing in it defines
+    // another effect. All its code counts, however many files import it (an effect's parameters.ts).
+    const family = (dir) => files.filter((file) => file.startsWith(`${dir}/`)).find((file) => [...defined.get(file)].some((other) => other !== id)
+      || ![undefined, id].includes(nameOwner(file)));
+    const ownFolders = new Set([
+      ...files.filter((file) => file.startsWith('src/effects/') && file.split('/').slice(0, -1).includes(id)).map((file) => file.slice(0, file.lastIndexOf(`/${id}/`) + id.length + 1)),
+      ...definitions.map((file) => path.posix.dirname(file)).filter((dir) => dir.split('/').length > 3),
+    ].filter((dir) => !family(dir)));
+    roots.push(...files.filter((file) => [...ownFolders].some((dir) => file.startsWith(`${dir}/`))));
+    // In a family folder (several effects defined side by side, src/effects/tracking), the files beside the
+    // definition that no single effect owns by name, definition or mention (DenseTerrainPipeline.ts) count for
+    // every effect defined there.
+    const familyDirs = new Set(definitions.map((file) => path.posix.dirname(file)).filter((dir) => dir.split('/').length > 2 && family(dir)));
+    roots.push(...files.filter((file) => familyDirs.has(path.posix.dirname(file)) && !CODE_HUBS.has(file)
+      && [undefined, id].includes(nameOwner(file)) && [...defined.get(file)].every((other) => other === id)
+      && (named.get(file).size === 0 || named.get(file).has(id))));
+    // The operator file that exports the effect's graph creator (createDefaultKaleidoscopeGraph), even in a
+    // file of several graphs or one named after a sibling (mirrorRecipes.ts).
+    const creator = new RegExp(`^create(?:Default)?${pascal(id)}(?:Effect|Image)?Graph$`, 'u');
+    // Such a file of several effects' graphs, and a dispatcher a hub calls, count as they are; the walk enters
+    // them only when they are not shared, so one effect does not collect the code of all its siblings.
+    const graphFiles = files.filter((file) => !CODE_HUBS.has(file) && [...exported.get(file)].some((name) => creator.test(name)));
+    // A catalog hub (the graph owner) registers the effect's graph next to its id, over line breaks and after
+    // sibling ids of the same branch: `type === 'id' || type === 'other'\n  ? () => createGraph(type)`. The
+    // imported names of that branch, up to the next quote or the next `:` branch, lead to the files that export
+    // them, also when such a file is itself a dispatcher of several effects (uvDistortEffectGraphs.ts).
+    const branch = new RegExp(`['"]${literal}['"](?:\\s*\\|\\|\\s*[\\w.]+\\s*[=!]==\\s*['"][a-z0-9-]+['"])*([^'"]{0,240})`, 'gu');
     for (const file of files.filter((candidate) => candidate.startsWith('src/services/operators/') && shared(candidate) && !CODE_HUBS.has(candidate) && named.get(candidate).has(id))) {
       const names = importNames(file);
-      const near = [...texts.get(file).matchAll(new RegExp(`['"]${literal}['"]([^'"\\n]{0,160})`, 'gu'))].map((match) => match[1]).join(' ');
+      const near = [...texts.get(file).matchAll(branch)].map((match) => branchText(match[1])).join(' ');
       const words = new Set(near.match(/[A-Za-z_$][\w$]*/gu) ?? []);
-      for (const [target, locals] of names) if (locals.some((local) => words.has(local)) && !shared(target)) roots.push(target);
+      for (const [target, locals] of names) if (locals.some((local) => words.has(local)) && !CODE_HUBS.has(target)) graphFiles.push(target);
     }
     // The walk does not enter another effect's code: a file that names other effects but not this one.
     // So is a file named after another effect (driftLines.ts, glowSampling.ts), by the longest effect id it starts with.
     const otherEffect = (file) => (named.get(file).size > 0 && !named.get(file).has(id)) || ![undefined, id].includes(nameOwner(file));
-    const seen = new Set();
+    roots.push(...graphFiles.filter((file) => !shared(file)));
+    const seen = new Set(graphFiles);
+    const walked = new Set();
     const stack = [...roots];
     while (stack.length) {
       const file = stack.pop();
-      if (seen.has(file)) continue;
+      if (walked.has(file)) continue;
+      walked.add(file);
       seen.add(file);
       stack.push(...followed(file, id, defines).filter((target) => !shared(target) && !registry(target) && !otherEffect(target)));
+    }
+    // Files named after the effect in the effects and the engine (SlitScanSurfacePass.ts, faceCables.wgsl),
+    // unless the engine shares them; they are added as they are, not walked into.
+    const own = nameRule(id);
+    for (const file of [...files, ...engineFiles]) {
+      if (own.test(path.posix.basename(file)) && (file.startsWith('src/effects/') || NAME_SCOPES.some((scope) => file.startsWith(`${scope}/`)))
+        && (allImporters.get(file) ?? 0) <= SHARED_IMPORTERS) seen.add(file);
     }
     const result = [...seen].toSorted();
     cache.set(id, result);
@@ -180,7 +261,7 @@ export function readManifest(root = REPO_ROOT) {
 
 /** One line per asset, sorted, so parallel branches merge cleanly. */
 export function manifestText(assets) {
-  const about = 'Written by the docs media tools (node scripts/docs-media.mjs and the shot scripts) after each render: the fingerprint of every docs picture and clip, so node scripts/docs-media.mjs --stale rebuilds what changed. On a merge conflict, take either side and run node scripts/docs-media.mjs --adopt.';
+  const about = 'Written by the docs media tools (node scripts/docs-media.mjs and the shot scripts) after each render: the fingerprint of every docs picture and clip, so node scripts/docs-media.mjs --stale rebuilds what changed. On a merge conflict, take either side, then run node scripts/docs-media.mjs --adopt <effect ids the other side re-rendered> (plain --adopt records only assets without a fingerprint and leaves those stale).';
   const lines = Object.keys(assets).toSorted().map((asset) => `    ${JSON.stringify(asset)}: ${JSON.stringify(assets[asset])}`);
   return `{\n  "about": ${JSON.stringify(about)},\n  "assets": {\n${lines.join(',\n')}\n  }\n}\n`;
 }
@@ -207,6 +288,14 @@ export function recordFingerprints(recipes, { code, root = REPO_ROOT, env = proc
     for (const output of recipe.outputs) assets[output] = { recipe: recipe.id, fingerprint };
   }
   fs.writeFileSync(path.join(root, MANIFEST_FILE), manifestText(assets));
+}
+
+/**
+ * The recipes --adopt records as they are: with effect ids named, every one that exists (stale ones too); without,
+ * only those that have no fingerprint yet. A stale recipe stays stale, so a plain --adopt never hides a change.
+ */
+export function adoptable(recipes, status, { named }) {
+  return recipes.filter((recipe) => status.get(recipe) !== 'missing' && (named || status.get(recipe) === 'unknown'));
 }
 
 /**

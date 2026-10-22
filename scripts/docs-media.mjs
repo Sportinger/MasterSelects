@@ -8,7 +8,8 @@
 //   node scripts/docs-media.mjs --list [ids]         # what would run, with each recipe's status
 //   node scripts/docs-media.mjs --check              # stale assets as warnings (exit 0)
 //   node scripts/docs-media.mjs --adopt [ids]        # record fingerprints without rendering: all assets that have
-//                                                    # none, or every asset of the named recipes
+//                                                    # none, or every asset of the named recipes (stale ones too;
+//                                                    # after a manifest merge conflict name the other side's ids)
 //   options: --kinds still,basic-still,strip,graph,editor,clip,screenshot,thumb
 //            --out <folder>   write under this folder instead of the repository (a scratch run; records nothing)
 //            --url <vite>     reuse this Vite of the checkout (else DOCS_MEDIA_URL, else one is started and stopped)
@@ -26,8 +27,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { REPO_ROOT, docOutput } from './docShotSettings.mjs';
 import { KINDS, collectRecipes, selectRecipes } from './docsMediaRecipes.mjs';
-import { effectCodeIndex, readManifest, recipeStatus, recordFingerprints } from './docsMediaFingerprint.mjs';
+import { adoptable, effectCodeIndex, readManifest, recipeStatus, recordFingerprints } from './docsMediaFingerprint.mjs';
 import { writeContactSheet } from './docsMediaSheet.mjs';
+import { oldModules } from './docsMediaVite.mjs';
 import { makeThumb } from './docShotThumb.mjs';
 import { loadEffectSnapshot } from './effectDocsRegistry.mjs';
 
@@ -78,7 +80,7 @@ if (flag('--list') || flag('--check')) {
 }
 
 if (flag('--adopt')) {
-  const adopt = selected.filter((recipe) => status.get(recipe) !== 'missing' && (ids.length || status.get(recipe) === 'unknown'));
+  const adopt = adoptable(selected, status, { named: ids.length > 0 });
   recordFingerprints(adopt, { code });
   console.log(scratch ? 'A scratch run records nothing.' : `Recorded the fingerprints of ${adopt.length} recipes (${adopt.flatMap((recipe) => recipe.outputs).length} assets).`);
   process.exit(0);
@@ -113,6 +115,14 @@ async function ensureVite() {
     // Vite serves /@fs/ only inside its own workspace: another checkout's Vite answers 403 here.
     const own = await fetch(`${url}/@fs${REPO_ROOT}/package.json`).then((response) => response.ok).catch(() => false);
     if (!own) console.warn(`warning: ${url} does not serve this checkout (${REPO_ROOT}); the pictures show that checkout's code.`);
+    else {
+      const old = await oldModules(url, REPO_ROOT, [...new Set(selected.flatMap((recipe) => recipe.effects))].flatMap((id) => code.codeFiles(id)));
+      if (old.length) {
+        throw new Error(`The Vite at ${url} serves older code than the files on disk (${old.slice(0, 5).join(', ')}${old.length > 5 ? ` and ${old.length - 5} more` : ''}): `
+          + 'its file watcher missed edits (inotify watches used up?). Restart that Vite, or leave --url out so the runner starts a fresh one. '
+          + 'Otherwise the pictures would show the old code under the fingerprint of the new.');
+      }
+    }
     return { url, stop: () => {} };
   }
   const port = await freePort();
@@ -167,7 +177,7 @@ try {
         try {
           // A still this run rebuilt (in the scratch folder too) is the source; else the committed one.
           const source = [docOutput(`docs/Features/${recipe.spec.source}`), path.join(REPO_ROOT, 'docs/Features', recipe.spec.source)].find((file) => fs.existsSync(file));
-          await makeThumb({ source, out: docOutput(recipe.outputs[0]), region: recipe.spec.region });
+          await makeThumb({ source, out: docOutput(recipe.outputs[0]), region: recipe.spec.region, fit: recipe.spec.fit });
           recordFingerprints([recipe], { code });
           results.push({ recipe, ok: true, ms: Date.now() - begin });
         } catch (error) {

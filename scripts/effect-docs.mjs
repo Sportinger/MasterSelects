@@ -85,7 +85,7 @@ if (args.includes('--thumbs') && !check) {
     if (!recipe || (exists(assets.thumb) && !forced(effect))) continue;
     const thumb = EFFECT_DOC_EXTRAS[effect.id]?.thumb;
     if (thumb?.shot) { notes.push(`${assets.thumb}: made by node scripts/effect-lab.mjs --pairs ${thumb.shot} --only ${effect.id}; left alone.`); continue; }
-    const bytes = await makeThumb({ source: feature(recipe.spec.source), out: feature(assets.thumb), region: recipe.spec.region });
+    const bytes = await makeThumb({ source: feature(recipe.spec.source), out: feature(assets.thumb), region: recipe.spec.region, fit: recipe.spec.fit });
     recordFingerprints([recipe]);
     console.log(`${assets.thumb}: ${bytes} bytes from ${recipe.spec.source}`);
   }

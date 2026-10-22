@@ -2,6 +2,7 @@
 // (node scripts/docs-media.mjs), and every recipe points to a file and an effect that exist. Stale assets
 // (recipe, effect code or footage changed since the render) are reported as a warning, not a failure.
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -15,7 +16,9 @@ import { docLogicalPath, docOutput, findMedia } from '../../scripts/docShotSetti
 import {
   HAND_MADE, RECIPE_PENDING, assetFiles, collectRecipes, handMadeReason, parseGraphShot, recipeProblems, recordShotList, selectRecipes, shotListRecipes, thumbRecipe,
 } from '../../scripts/docsMediaRecipes.mjs';
-import { effectCodeIndex, fingerprintParts, manifestText, readManifest, recipeFingerprint, recipeStatus } from '../../scripts/docsMediaFingerprint.mjs';
+import { adoptable, effectCodeIndex, fingerprintParts, manifestText, readManifest, recipeFingerprint, recipeStatus } from '../../scripts/docsMediaFingerprint.mjs';
+import { oldModules } from '../../scripts/docsMediaVite.mjs';
+import { thumbRegion, trimDividers } from '../../scripts/docShotThumb.mjs';
 import { effectAssets, labPair, labShot, thumbSource } from '../../scripts/effectDocsCatalog.mjs';
 import { sheetPages } from '../../scripts/docsMediaSheet.mjs';
 
@@ -95,8 +98,58 @@ describe('the fingerprint covers one effect\'s own code', () => {
   });
 
   it('keeps every effect\'s code small: no effect reaches the operator library', () => {
-    const largest = ids.map((id) => [id, code.codeFiles(id).length] as const).toSorted((a, b) => b[1] - a[1])[0];
+    // Outside a folder of its own (slit-scan/ holds 30 files of its runtime), no effect collects more than 40 files.
+    const outside = (id: string) => code.codeFiles(id).filter((file) => !file.split('/').slice(0, -1).includes(id));
+    const largest = ids.map((id) => [id, outside(id).length] as const).toSorted((a, b) => b[1] - a[1])[0];
     expect(largest[1], `${largest[0]} fingerprints ${largest[1]} files`).toBeLessThanOrEqual(40);
+  });
+
+  it('misses no code an effect renders with (a file too many costs a render, a file too few a stale picture)', () => {
+    // The graph a dispatcher or a sibling's recipe file creates (createDefaultKaleidoscopeGraph in mirrorRecipes.ts).
+    expect(touched('src/services/operators/mirrorRecipes.ts')).toContain('kaleidoscope');
+    expect(touched('src/services/operators/colorEffectGraphs.ts')).toEqual(expect.arrayContaining(['brightness', 'contrast']));
+    // Mirror counts too: its Edges choice reads DISTORT_EDGE_OPTIONS from there (through uvDistortParams.ts).
+    expect(touched('src/services/operators/uvDistortRecipes.ts')).toEqual(expect.arrayContaining(['bulge', 'twirl', 'wave', 'mirror']));
+    // A folder of its own counts whole, however many files import a file in it.
+    expect(touched('src/effects/time/slit-scan/parameters.ts')).toEqual(['slit-scan']);
+    expect(code.codeFiles('slit-scan')).toContain('src/effects/time/slit-scan/ShapeTimeRuntime.ts');
+    expect(code.codeFiles('analog-signal-lab')).toContain('src/effects/analog/signal-lab/analogImageResolveShader.ts');
+    expect(code.codeFiles('pixel-particle-disintegrate')).toContain('src/effects/stylize/pixel-particle-disintegrate/releaseTiming.ts');
+    expect(code.codeFiles('time-stack')).toContain('src/effects/time/time-stack/TimeStackResources.ts');
+    // Files named after the effect in the engine and in a family folder; files a family folder shares with no owner.
+    expect(code.codeFiles('pixel-particle-disintegrate')).toContain('src/engine/particles/PixelParticleDisintegrateRenderer.ts');
+    expect(code.codeFiles('slit-scan')).toContain('src/engine/native3d/sceneRenderer/SlitScanSceneSurfaces.ts');
+    expect(code.codeFiles('face-cables')).toContain('src/effects/tracking/faceCables.wgsl');
+    expect(code.codeFiles('cctv')).toContain('src/effects/tracking/DenseTerrainPipeline.ts');
+    expect(code.codeFiles('wave').some((file) => /Waveform/u.test(file)), 'wave does not own WaveformRenderer').toBe(false);
+  });
+
+  it('follows the graph owner to the creator of every effect with a graph picture', () => {
+    const operators = path.join(root, 'src/services/operators');
+    const exporter = new Map<string, string>();
+    for (const name of fs.readdirSync(operators).filter((entry) => entry.endsWith('.ts'))) {
+      for (const match of fs.readFileSync(path.join(operators, name), 'utf8').matchAll(/export\s+(?:function|const)\s+(\w+)/gu)) exporter.set(match[1], `src/services/operators/${name}`);
+    }
+    const owner = fs.readFileSync(path.join(operators, 'effectGraphOwner.ts'), 'utf8');
+    const start = owner.indexOf('const fallback = effectType');
+    const chain = owner.slice(start, owner.indexOf(';', start));
+    const lastCreator = [...chain.matchAll(/create\w+/gu)].at(-1)?.[0] ?? '';
+    const colorIds = (fs.readFileSync(path.join(operators, 'colorEffectGraphs.ts'), 'utf8').match(/type EditableColorEffectType = ([^;]+);/u)?.[1] ?? '')
+      .match(/[a-z-]+/gu) ?? [];
+    const shotIds = new Set(fs.readdirSync(path.join(root, 'scripts/effect-graph-shots')).flatMap((name) =>
+      (JSON.parse(fs.readFileSync(path.join(root, 'scripts/effect-graph-shots', name), 'utf8')).shots as string[]).map((spec) => parseGraphShot(spec).effect)));
+    const missing: string[] = [];
+    let checked = 0;
+    for (const id of shotIds) {
+      const at = chain.indexOf(`'${id}'`);
+      const creatorName = at >= 0 ? chain.slice(at).match(/create\w+/u)?.[0] : colorIds.includes(id) ? lastCreator : undefined;
+      if (!creatorName) continue;
+      checked += 1;
+      const file = exporter.get(creatorName);
+      if (file && !code.codeFiles(id).includes(file)) missing.push(`${id}: ${file} (${creatorName})`);
+    }
+    expect(checked).toBeGreaterThan(20);
+    expect(missing).toEqual([]);
   });
 });
 
@@ -180,8 +233,63 @@ describe('docs media recipe helpers', () => {
     const states = recipeStatus([recipe, { ...recipe, spec: { radius: 9 } }, { ...recipe, outputs: ['b.webp'] }, { ...recipe, outputs: ['gone.webp'] }],
       { code, manifest: { ...manifest, 'b.webp': undefined }, exists: (file: string) => file !== 'gone.webp' });
     expect([...states.values()]).toEqual(['current', 'stale', 'unknown', 'missing']);
+    // A plain --adopt records only the unknown one and leaves the stale one stale; named ids adopt the stale one too.
+    expect(adoptable([...states.keys()], states, { named: false }).map((entry) => states.get(entry))).toEqual(['unknown']);
+    expect(adoptable([...states.keys()], states, { named: true }).map((entry) => states.get(entry))).toEqual(['current', 'stale', 'unknown']);
     expect(manifestText({ 'b.webp': { recipe: 'r', fingerprint: '1' }, 'a.webp': { recipe: 'r', fingerprint: '2' } }).split('\n').filter((line) => line.startsWith('    ')))
       .toEqual(['    "a.webp": {"recipe":"r","fingerprint":"2"},', '    "b.webp": {"recipe":"r","fingerprint":"1"}']);
+  });
+
+  it('cuts a thumbnail past the light divider of a split still, and only at inner edges', async () => {
+    // 200 × 100: dark left half, a 5 px white band at columns 98-102, a mid-grey right half with noise.
+    const width = 200, height = 100;
+    const image = new Uint8Array(width * height);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) image[y * width + x] = x >= 98 && x <= 102 ? 252 : x < 100 ? 30 : 90 + ((x * 7 + y * 13) % 40);
+    }
+    const pixels = async (strip: { left: number; top: number; width: number; height: number }) => {
+      const out = new Uint8Array(strip.width * strip.height);
+      for (let y = 0; y < strip.height; y += 1) for (let x = 0; x < strip.width; x += 1) out[y * strip.width + x] = image[(strip.top + y) * width + strip.left + x];
+      return out;
+    };
+    const right = await trimDividers(thumbRegion({ width, height }), { width, height }, pixels);
+    expect(right.left).toBeGreaterThan(102);
+    expect(right.left + right.width).toBe(width);
+    expect(right.top).toBe(0);
+    expect(right.height).toBe(height);
+    // The left half of a detail poster: trimmed at its right (inner) edge only.
+    const left = await trimDividers(thumbRegion({ width, height }, [0, 0, 0.5, 1]), { width, height }, pixels);
+    expect(left.left).toBe(0);
+    expect(left.left + left.width).toBeLessThanOrEqual(98);
+    // A whole picture keeps every pixel.
+    expect(await trimDividers(thumbRegion({ width, height }, [0, 0, 1, 1]), { width, height }, pixels)).toEqual({ left: 0, top: 0, width, height });
+  });
+
+  it('notices a reused Vite that serves older code than the disk holds', async () => {
+    write('src/effects/demo/fresh.ts', 'export const a = 1;\n');
+    write('src/effects/demo/old.ts', 'export const a = 2;\n');
+    write('src/effects/demo/old.wgsl', 'fn b() {}\n');
+    const served: Record<string, string> = {
+      '/src/effects/demo/fresh.ts': 'export const a = 1;\n',
+      '/src/effects/demo/old.ts': 'export const a = 1;\n',
+    };
+    const server = http.createServer((request, response) => {
+      const url = request.url ?? '';
+      if (url.endsWith('?import&raw')) { response.end(`export default ${JSON.stringify('fn a() {}\n')}`); return; }
+      const source = served[url];
+      if (source === undefined) { response.statusCode = 404; response.end(); return; }
+      const map = Buffer.from(JSON.stringify({ version: 3, sources: [url], sourcesContent: [source], mappings: '' })).toString('base64');
+      response.end(`export const a = 0;\n//# sourceMappingURL=data:application/json;base64,${map}\n`);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as { port: number };
+      const files = ['src/effects/demo/fresh.ts', 'src/effects/demo/old.ts', 'src/effects/demo/old.wgsl', 'src/effects/demo/demo.wgsl'];
+      write('src/effects/demo/demo.wgsl', 'fn a() {}\n');
+      expect(await oldModules(`http://127.0.0.1:${port}`, scratch, files)).toEqual(['src/effects/demo/old.ts', 'src/effects/demo/old.wgsl']);
+    } finally {
+      server.close();
+    }
   });
 
   it('records a shot only for the file it wrote, and keeps the code and footage of a kept export', () => {
@@ -219,10 +327,12 @@ describe('docs media recipe helpers', () => {
     expect(thumbSource('demo', { exists: has(still, poster), page: 'text' })).toBe(poster);
     expect(thumbSource('demo', { exists: has(still, poster), page: `![x](../${still}) <video src="../assets/effects/clips/other.mp4">` })).toBe(still);
     expect(thumbSource('demo', { exists: has(still, poster), page: undefined, override: poster })).toBe(poster);
-    expect(thumbRecipe('demo', { source: poster, layout: 'compare' }).spec.region).toBeUndefined();
+    expect(thumbRecipe('demo', { source: poster, layout: 'compare' }).spec).toEqual({ source: poster, fit: 'whole' });
     expect(thumbRecipe('demo', { source: poster, layout: 'single' }).spec.region).toEqual([0, 0, 1, 1]);
     expect(thumbRecipe('demo', { source: still, layout: 'single' }).spec.region).toEqual([0, 0, 1, 1]);
     expect(thumbRecipe('demo', { source: still, layout: 'still' }).spec.region).toBeUndefined();
+    // A detail poster (whole frame | enlargement): the whole frame, not the blurred enlargement.
+    expect(thumbRecipe('demo', { source: poster, layout: 'detail' }).spec.region).toEqual([0, 0, 0.5, 1]);
     // The model page Drift Lines: its card comes from the loop's poster.
     expect(collectRecipes({ root, snapshot }).find((recipe) => recipe.id === 'thumb scripts/effect-docs.mjs#drift-lines')?.spec.source)
       .toBe('assets/effects/clips/drift-lines.webp');
@@ -250,7 +360,8 @@ describe('docs media recipe helpers', () => {
     expect(docLogicalPath(written, env)).toBe(path.join(root, 'docs/Features/assets/effects/x.webp'));
     expect(docOutput('docs/Features/assets/effects/x.webp', {})).toBe(path.join(root, 'docs/Features/assets/effects/x.webp'));
     expect(findMedia('dancer_stage_motion.mp4', { env: {} })).toBe(path.join(root, 'tests/browser/effect-lab/footage/dancer_stage_motion.mp4'));
-    expect(fs.statSync(path.join(root, 'tests/browser/effect-lab/footage/dancer_stage_motion.mp4')).size).toBeLessThanOrEqual(2_000_000);
+    // CRF 21 keeps the pleats and the dark curtain for the 2× detail loops; the repository copy stays under 4 MB.
+    expect(fs.statSync(path.join(root, 'tests/browser/effect-lab/footage/dancer_stage_motion.mp4')).size).toBeLessThanOrEqual(4_000_000);
     expect(findMedia('greenscreen_dancer.jpg', { env: {} })).toBe(path.join(root, 'tests/browser/effect-lab/images/greenscreen_dancer.jpg'));
   });
 });
