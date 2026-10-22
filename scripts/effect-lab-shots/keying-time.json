@@ -1,0 +1,41 @@
+{
+  "about": "Keying & Time page stills: compare pairs (--pairs) and preset strips (--presets). node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/keying-time.json --only <name>; node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/keying-time.json --only <effect id>",
+  "pairs": [
+    {
+      "name": "chroma-key",
+      "out": "docs/Features/assets/effects/chroma-key.webp",
+      "image": "greenscreen_dancer",
+      "width": 1920,
+      "layout": "compare",
+      "backdrop": "#2a3f78",
+      "outWidth": 1600,
+      "left": { "effect": "original" },
+      "right": { "effect": "chroma-key", "params": {} },
+      "alt": "A dancer leaping in front of an unevenly lit green screen, with curly hair and a chiffon scarf, original left and keyed with Chroma Key right over a dark blue background: the green is gone, the flyaway hair keeps its detail without a green rim and the scarf stays see-through",
+      "caption": "Left: original. Right: Chroma Key at its default settings, over dark blue."
+    },
+    {
+      "name": "chroma-key-matte",
+      "out": "docs/Features/assets/effects/chroma-key-matte.webp",
+      "image": "greenscreen_dancer",
+      "width": 1920,
+      "layout": "single",
+      "outWidth": 960,
+      "left": { "effect": "original" },
+      "right": { "effect": "chroma-key", "params": { "view": "matte" } },
+      "alt": "The green-screen frame in View Matte at default settings: the screen is black, the leaping dancer white with a grey see-through scarf; thin white curtain edges stand at the left and right and white specks sit in the lower corners",
+      "caption": "View → Matte: black is keyed away, white stays, grey is see-through. The curtain edges are no screen colour, so they stay."
+    }
+  ],
+  "strips": [
+    {
+      "effect": "chroma-key",
+      "image": "greenscreen_dancer",
+      "width": 1920,
+      "crop": [420, 80, 720, 720],
+      "cellWidth": 400,
+      "columns": 4,
+      "backdrop": "#2a3f78"
+    }
+  ]
+}

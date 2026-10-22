@@ -4,11 +4,26 @@
 // colour (no automatic estimate, no screen subtraction, no edge kernel) and documents the matte maths.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import {
   CHROMA_KEY_BLUE_PRIOR, CHROMA_KEY_DEFAULT_SCREEN_COLOR, CHROMA_KEY_GREEN_PRIOR, CHROMA_KEY_MAX_EDGE_PX,
   chromaKeyHexColor, chromaKeyNumbers, chromaKeyPrimaryChannel, chromaKeyScreen, chromaKeySpillMethod,
 } from './keyerContract';
+
+/**
+ * Practical keys for common screens. They name only matte, edge and spill values and leave Screen at
+ * Green (the shared preset rule resets unnamed controls): on a blue screen choose Blue after the preset.
+ */
+export const CHROMA_KEY_PRESETS: readonly EffectPreset[] = [
+  // Wisps of hair and see-through fabric stay: a lower Clip Black keeps faint detail, a higher Clip White keeps it soft.
+  { id: 'fine-hair', name: 'Fine Hair', params: { clipBlack: 0.15, clipWhite: 0.95 } },
+  // A solid body with a clean, slightly tightened edge, for a figure that must not show the background through it.
+  { id: 'firm-figure', name: 'Firm Figure', params: { clipBlack: 0.4, clipWhite: 0.7, edgeShrink: 1.5, edgeSoftness: 1 } },
+  // Dark corners, creases and shadows on the screen are taken out; the finest wisps go with them.
+  { id: 'uneven-screen', name: 'Uneven Screen', params: { clipBlack: 0.5, clipWhite: 0.9, edgeShrink: 0.5 } },
+  // A soft edge that melts into a projected or painted background instead of a cut-out line.
+  { id: 'soft-blend', name: 'Soft Blend', params: { edgeShrink: 1, edgeSoftness: 3 } },
+];
 
 const RETIRED = 'Retired with the screen-matte keyer; use Clip Black and Clip White. Only Chroma Key graphs edited before the rebuild still read it.';
 
@@ -59,6 +74,8 @@ export const chromaKey: EffectDefinition = {
     tolerance: { type: 'number', label: 'Tolerance', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true, hidden: true, deprecated: RETIRED },
     softness: { type: 'number', label: 'Edge Softness (retired)', default: 0.1, min: 0, max: 0.5, step: 0.01, animatable: true, hidden: true, deprecated: RETIRED },
   },
+
+  presets: CHROMA_KEY_PRESETS,
 
   packUniforms: (params) => {
     const screen = chromaKeyScreen(params.keyColor);

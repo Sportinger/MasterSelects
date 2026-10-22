@@ -38,6 +38,16 @@ export const EFFECT_DOC_EXTRAS = {
   // A current Sharpen's card has only these rows: its own control (a note with Use the new Sharpen)
   // shows on Sharpens saved with 3.2.7 alone, and the page's Saved projects note describes it.
   sharpen: { rows: ['amount', 'radius'] },
+  // Chroma Key's own card: four sections, View under Screen, short labels inside Edge and Spill.
+  'chroma-key': {
+    sections: ['Key', 'Matte', 'Edge', 'Spill'],
+    rows: [
+      { key: 'keyColor', section: 'Key' }, { key: 'screenColor', section: 'Key' }, { key: 'view', section: 'Key' },
+      { key: 'clipBlack', section: 'Matte' }, { key: 'clipWhite', section: 'Matte' },
+      { key: 'edgeShrink', section: 'Edge' }, { key: 'edgeSoftness', section: 'Edge', label: 'Softness' },
+      { key: 'spillSuppression', section: 'Spill', label: 'Suppression' }, { key: 'spillMethod', section: 'Spill', label: 'Method' },
+    ],
+  },
   'ai-edge-fill': {
     rows: [
       'resolution',

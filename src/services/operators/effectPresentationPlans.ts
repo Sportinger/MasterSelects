@@ -67,7 +67,12 @@ const UV_DISTORT_PORTS = { 'source-cache': 'Premultiplied Source', 'edge-uv': 'S
 // What the outputs that cross into Chroma Key's Spill folder carry (the docs' Spill recipe shows the same names).
 const CHROMA_KEY_PORTS = { 'unmix-color': 'Color', 'screen-channel': 'Screen Channel', 'screen-other-channels': 'Other Channels',
   'screen-found': 'Screen Found', 'spill-primary': 'Screen Level', 'spill-other': 'Stronger Other', 'spill-other-sum': 'Other Sum',
-  'spill-other-mean': 'Other Mean', 'spill-is-gentle': 'Is Gentle', 'spill-limit': 'Limit', 'spill-strength': 'Strength', 'spill-excess': 'Excess' };
+  'spill-other-mean': 'Other Mean', 'spill-is-gentle': 'Is Gentle', 'spill-limit': 'Limit', 'spill-strength': 'Strength', 'spill-excess': 'Excess',
+  // What crosses between the keyer's folders, so its overview reads as one path.
+  'screen-rgb': 'Screen Color', 'screen-key-primary': 'Screen Level', 'screen-safe-difference': 'Screen Difference', 'screen-purity': 'Screen Purity',
+  'matte-source-split:alpha': 'Source Alpha', 'matte-source-positive': 'Source Color', 'matte-source-primary': 'Source Level', 'matte-clipped': 'Matte',
+  'edge-source-alpha': 'Source Alpha', 'edge-negative-sharpness': 'Erode Sharpness', 'edge-key-cache': 'Keyed Matte', 'edge-shrunk-cache': 'Shrunk Matte',
+  'edge-matte': 'Edge Matte', 'spill-despilled': 'Despilled Color', 'spill-alpha': 'Alpha' };
 // What crosses between the glyph engine's folders: the cell, its colour and tone, the glyph and its coverage.
 const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels (XY)', 'safe-cell-frame-scale': 'Frame Scale', grid: 'Cells Across',
   'scaled-uv': 'Grid Position', 'cell-id': 'Cell Number', 'local-uv': 'Position in Cell', luminance: 'Luminance', 'blackLevel-clamped': 'Black Level', 'sample-uv': 'Cell Center', 'source-split:rgb': 'Cell Color',
