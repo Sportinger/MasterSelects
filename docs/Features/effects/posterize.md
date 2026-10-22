@@ -46,16 +46,16 @@ Pick one in the **Preset** row of the effect card. It sets all three controls in
 
 ![Properties, Effects with a Posterize card: the Preset menu showing Screen Print, Levels at 4, Softness at 0.35 and Brightness Only switched on, beside a strip of the preview with the posterized dancer](../assets/effects/editor/posterize-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 468" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 309" aria-hidden="true" focusable="false">
 <defs><marker id="posterize-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#posterize-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M565 344 L649 344" marker-end="url(#posterize-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="344" r="18" /><text x="565" y="344" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M548 382 L632 382" marker-end="url(#posterize-inspector-arrow)" />
-<circle class="docs-shot-number" cx="548" cy="382" r="18" /><text x="548" y="382" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M503 419 L587 419" marker-end="url(#posterize-inspector-arrow)" />
-<circle class="docs-shot-number" cx="503" cy="419" r="18" /><text x="503" y="419" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M631 186 L715 186" marker-end="url(#posterize-inspector-arrow)" />
+<circle class="docs-shot-number" cx="631" cy="186" r="18" /><text x="631" y="186" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M631 227 L715 227" marker-end="url(#posterize-inspector-arrow)" />
+<circle class="docs-shot-number" cx="631" cy="227" r="18" /><text x="631" y="227" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M620 252 L704 252" marker-end="url(#posterize-inspector-arrow)" />
+<circle class="docs-shot-number" cx="620" cy="252" r="18" /><text x="620" y="252" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M583 277 L667 277" marker-end="url(#posterize-inspector-arrow)" />
+<circle class="docs-shot-number" cx="583" cy="277" r="18" /><text x="583" y="277" class="docs-shot-number-text">4</text>
 </svg>
 
 </div>
@@ -81,7 +81,7 @@ Pick one in the **Preset** row of the effect card. It sets all three controls in
 <figcaption>Left: Softness 0. Right: Softness 0.5. Both Levels 4, Brightness Only on.</figcaption>
 </figure>
 
-**Softness** – rounds the jump from one tone to the next into a short, smooth ramp. At 0 the edges are hard, and where the picture is noisy they break up into ragged, flickering borders. 0.2–0.4 keeps the flat tones but smooths their edges; around 0.5 the tones start to flow into each other, and at 1 the steps are fully rounded, a gentle banding over a smooth picture. It counts in steps, so it looks the same at every **Levels**. 0 to 1, default 0. A value below 0 is used as 0, and the card says so.
+**Softness** – rounds the jump from one tone to the next into a short, smooth ramp. At 0 the edges are hard, and where the picture is noisy they break up into ragged, flickering borders. 0.2–0.4 keeps the flat tones but smooths their edges; around 0.5 the tones start to flow into each other, and at 1 the steps are fully rounded, a gentle banding over a smooth picture. It counts in steps, so it looks the same at every **Levels**. 0 to 1, default 0. A value below 0 is used as 0; a keyframe, a node or the AI agent may send more than 1, which is used as 1 (a wider ramp would overlap the next one and draw new hard edges in the middle of a tone). The card says so in both cases.
 
 <figure class="docs-shot docs-compare" data-before="Brightness Only off" data-after="Brightness Only on">
 
@@ -90,7 +90,7 @@ Pick one in the **Preset** row of the effect card. It sets all three controls in
 <figcaption>Left: Brightness Only off. Right: Brightness Only on. Both Levels 4, Softness 0.2.</figcaption>
 </figure>
 
-**Brightness Only** – steps only the brightness and keeps every colour as it is: a blue sky stays blue, skin keeps its tone, and only how light it is falls into steps. Turn it off for pop-art colours: then red, green and blue are each stepped on their own, so light greys can tint lavender or green and coloured fringes appear where the channels cross a step at different places. A switch: on or off, default off. A Posterize you add now starts with it on; Posterize effects saved before it existed keep it off, and with it their look.
+**Brightness Only** – a new Posterize starts with it on; off is the original per-channel look, and older saves keep it off. On, it steps only the brightness and keeps every colour as it is: a blue sky stays blue, skin keeps its tone, and only how light it is falls into steps. Turn it off for pop-art colours: then red, green and blue are each stepped on their own, so light greys can tint lavender or green and coloured fringes appear where the channels cross a step at different places. A switch: on or off, default off (what Posterize effects saved before it existed mean, so they keep their look).
 
 ## Node setup
 
@@ -98,30 +98,28 @@ Pick one in the **Preset** row of the effect card. It sets all three controls in
 
 <div class="docs-shot-stage">
 
-![The Posterize graph: Input Frame and Split RGB + Alpha feed Step Input, Hard Steps, Soft Steps, Spread to 0–1 and Colour & Alpha in a row, and the image goes on to Output; the Parameters folder below feeds Levels, Softness, Brightness Only and Ramp Width into the stages; the Constants folder is hidden](../assets/effects/graphs/posterize.webp)
+![The Posterize graph: Input Frame and Split RGB + Alpha feed Step Input; Hard Steps, Soft Steps and Spread to 0–1 follow in one row along the top, and Colour & Alpha below takes the Posterized RGB, the Brightness, the RGB and the Alpha and hands the image to Output; the Levels, Softness, Ramp Width and Brightness Only inputs show a plain dot, because the Parameters and Constants folders are left out](../assets/effects/graphs/posterize.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 618" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 419" aria-hidden="true" focusable="false">
 <defs><marker id="posterize-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M204 595 L204 511" marker-end="url(#posterize-arrow)" />
-<circle class="docs-shot-number" cx="204" cy="595" r="18" /><text x="204" y="595" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M326 22 L326 75" marker-end="url(#posterize-arrow)" />
-<circle class="docs-shot-number" cx="326" cy="22" r="18" /><text x="326" y="22" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M448 76 L448 160" marker-end="url(#posterize-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="76" r="18" /><text x="448" y="76" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M569 583 L569 499" marker-end="url(#posterize-arrow)" />
-<circle class="docs-shot-number" cx="569" cy="583" r="18" /><text x="569" y="583" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M691 36 L691 120" marker-end="url(#posterize-arrow)" />
-<circle class="docs-shot-number" cx="691" cy="36" r="18" /><text x="691" y="36" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M813 85 L813 169" marker-end="url(#posterize-arrow)" />
-<circle class="docs-shot-number" cx="813" cy="85" r="18" /><text x="813" y="85" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M326 364 L326 280" marker-end="url(#posterize-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="364" r="18" /><text x="326" y="364" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 22 L448 75" marker-end="url(#posterize-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M569 22 L569 75" marker-end="url(#posterize-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="22" r="18" /><text x="569" y="22" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M691 22 L691 75" marker-end="url(#posterize-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="22" r="18" /><text x="691" y="22" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M813 154 L813 238" marker-end="url(#posterize-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="154" r="18" /><text x="813" y="154" class="docs-shot-number-text">5</text>
 </svg>
 
 </div>
 
-<figcaption>Posterize opened in the Nodes tab (the Constants folder left out). 1 — Parameters: the three controls, made safe. 2 — Step Input: the colour, or only its brightness. 3 — Hard Steps: the plain staircase. 4 — Soft Steps: rounds the stairs. 5 — Spread to 0–1: the steps back as tones. 6 — Colour & Alpha: the colour back on.</figcaption>
+<figcaption>Posterize opened in the Nodes tab (the Parameters and Constants folders left out). 1 — Step Input: the colour, or only its brightness. 2 — Hard Steps: the plain staircase. 3 — Soft Steps: rounds the stairs. 4 — Spread to 0–1: the steps back as tones. 5 — Colour & Alpha: the colour back on.</figcaption>
 </figure>
 
-Posterize works as a path of stages, one folder each: **Parameters** makes the three controls safe, **Step Input** picks what gets stepped, **Hard Steps** cuts it into a staircase, **Soft Steps** rounds the stairs when Softness is on, **Spread to 0–1** turns the steps back into tones, and **Colour & Alpha** puts the colour and the transparency back. Click a folder's header to open it; the sections below show what is inside.
+Posterize works as a path of stages, one folder each: **Step Input** picks what gets stepped, **Hard Steps** cuts it into a staircase, **Soft Steps** rounds the stairs when Softness is on, **Spread to 0–1** turns the steps back into tones, and **Colour & Alpha** puts the colour and the transparency back. A sixth folder, **Parameters**, makes the three controls safe and plugs into the ports that show a plain dot in the picture: Levels, Softness and Ramp Width, and Brightness Only. It sits in the bottom left of the Nodes tab; the picture leaves it out, because its four cables would cross every stage. Click a folder's header to open it; the sections below show what is inside.
 
 ### Parameters
 
@@ -129,28 +127,28 @@ Posterize works as a path of stages, one folder each: **Parameters** makes the t
 
 <div class="docs-shot-stage">
 
-![Inside the Parameters folder: the Brightness Only card, here false, feeds a Switch; the Levels card at 6 feeds a Maximum whose output is Levels, and the Softness card at 0 feeds a second Maximum whose output is Ramp Width](../assets/effects/graphs/posterize-parameters.webp)
+![Inside the Parameters folder: the Brightness Only card, here false, feeds a Switch; the Levels card at 6 feeds a Maximum whose output is Levels, and the Softness card at 0 feeds a Clamp whose output is Ramp Width](../assets/effects/graphs/posterize-parameters.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 1039" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 1135" aria-hidden="true" focusable="false">
 <defs><marker id="posterize-parameters-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M432 327 L432 411" marker-end="url(#posterize-parameters-arrow)" />
-<circle class="docs-shot-number" cx="432" cy="327" r="18" /><text x="432" y="327" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M432 643 L432 727" marker-end="url(#posterize-parameters-arrow)" />
-<circle class="docs-shot-number" cx="432" cy="643" r="18" /><text x="432" y="643" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M432 22 L432 106" marker-end="url(#posterize-parameters-arrow)" />
-<circle class="docs-shot-number" cx="432" cy="22" r="18" /><text x="432" y="22" class="docs-shot-number-text">3</text>
+<circle class="docs-shot-number" cx="432" cy="22" r="18" /><text x="432" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M432 327 L432 411" marker-end="url(#posterize-parameters-arrow)" />
+<circle class="docs-shot-number" cx="432" cy="327" r="18" /><text x="432" y="327" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M432 643 L432 727" marker-end="url(#posterize-parameters-arrow)" />
+<circle class="docs-shot-number" cx="432" cy="643" r="18" /><text x="432" y="643" class="docs-shot-number-text">3</text>
 </svg>
 
 </div>
 
-<figcaption>Inside Parameters (the limits left out). 1 — Maximum: keeps Levels at 2 or more. 2 — Ramp Width: Softness, never quite 0. 3 — Switch: Brightness Only as 0 or 1.</figcaption>
+<figcaption>Inside Parameters (the limits left out). 1 — Switch: Brightness Only as 0 or 1. 2 — Maximum: keeps Levels at 2 or more. 3 — Ramp Width: Softness, kept within one step.</figcaption>
 </figure>
+
+**Switch** – turns the Brightness Only switch into a number: 1 when it is on, 0 when it is off. Two **Mix** cards further on use it to choose between the two ways of stepping.
 
 **Maximum** – keeps Levels at 2 or more (its **Minimum Levels** card in Constants). With fewer than two tones there would be nothing to step between; the card reports a lower value.
 
-**Ramp Width** – a second Maximum: Softness, but never below 0.0001 (the **Ramp Floor**). The ramp divides by this width, so it must not be 0; at Softness 0 the ramp is switched off anyway (see Soft Steps).
-
-**Switch** – turns the Brightness Only switch into a number: 1 when it is on, 0 when it is off. Two **Mix** cards further on use it to choose between the two ways of stepping.
+**Ramp Width** – a **Clamp**: Softness, kept between 0.0001 (the **Ramp Floor**) and 1 (the **Ramp Ceiling**). The ramp divides by this width, so it must not be 0; at Softness 0 the ramp is switched off anyway (see Soft Steps). Above one step the ramps of two neighbouring edges would overlap, so the ceiling keeps each ramp one step wide at most.
 
 <div class="docs-float-end"></div>
 
@@ -222,22 +220,18 @@ Soft Steps rounds every stair edge into a short ramp. Its first part works out h
 <defs><marker id="posterize-soft-edge-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M326 300 L326 384" marker-end="url(#posterize-soft-edge-arrow)" />
 <circle class="docs-shot-number" cx="326" cy="300" r="18" /><text x="326" y="300" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M448 361 L448 445" marker-end="url(#posterize-soft-edge-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="361" r="18" /><text x="448" y="361" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M691 320 L691 404" marker-end="url(#posterize-soft-edge-arrow)" />
-<circle class="docs-shot-number" cx="691" cy="320" r="18" /><text x="691" y="320" class="docs-shot-number-text">3</text>
+<circle class="docs-shot-number" cx="691" cy="320" r="18" /><text x="691" y="320" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M935 320 L935 404" marker-end="url(#posterize-soft-edge-arrow)" />
-<circle class="docs-shot-number" cx="935" cy="320" r="18" /><text x="935" y="320" class="docs-shot-number-text">4</text>
+<circle class="docs-shot-number" cx="935" cy="320" r="18" /><text x="935" y="320" class="docs-shot-number-text">3</text>
 </svg>
 
 </div>
 
-<figcaption>Inside Soft Steps, the edge. 1 — Floor: the step below the edge. 2 — Subtract: the place within the step. 3 — Divide: in ramp widths. 4 — Clamp: 0 to 1 across the ramp.</figcaption>
+<figcaption>Inside Soft Steps, the edge. 1 — Floor: the step below the edge. 2 — Divide: the distance in ramp widths. 3 — Clamp: 0 to 1 across the ramp.</figcaption>
 </figure>
 
-**Floor** – the stretched value moved back by half a step, without its fraction: the **Lower Step**, the step just below the nearest edge.
-
-**Subtract** – the second of three: the moved value minus that step. It runs from 0 to 1 between the middles of two steps, with the edge at 0.5. The third Subtract takes Half away, so the edge sits at 0.
+**Floor** – the stretched value moved back by half a step, without its fraction: the **Lower Step**, the step just below the nearest edge. The Subtract cards around it only shift by half a step and back, so that the result counts from the edge: 0 right on the edge, −0.5 and 0.5 in the middles of the two steps beside it.
 
 **Divide** – divides that distance by the **Ramp Width**: at Softness 0.35 the ramp is 0.35 of a step wide, and the distance now counts in ramp widths.
 
@@ -340,8 +334,8 @@ Soft Steps rounds every stair edge into a short ramp. Its first part works out h
 
 ## Technical details
 
-- **Formula.** Each value `v` becomes `floor(v · L) / (L − 1)`, limited to 0–1, with `L` = Levels (at least 2). With Brightness Only the value is the largest channel `m`, and the colour is multiplied by `posterize(m) / m`. Softness `s` replaces each jump with a smoothstep ramp `s` steps wide, centred on the edge; Softness 0 without Brightness Only is exactly the earlier staircase.
-- **Limits.** Levels below 2 renders as 2, negative Softness as 0; a fractional Levels makes the top step narrower. The card and the tool result say so.
+- **Formula.** Each value `v` becomes `floor(v · L) / (L − 1)`, limited to 0–1, with `L` = Levels (at least 2). With Brightness Only the value is the largest channel `m`, and the colour is multiplied by `posterize(m) / m`. Softness `s` replaces each jump with a smoothstep ramp `min(s, 1)` steps wide, centred on the edge; Softness 0 without Brightness Only is exactly the earlier staircase.
+- **Limits.** Levels below 2 renders as 2, negative Softness as 0 and Softness above 1 as 1 (wider ramps would overlap and jump in the middle of a tone; graphs saved before 2026-10-22 get the same limit when they load, which changes only Softness above 1); a fractional Levels makes the top step narrower. The card and the tool result say so.
 - **Transparency.** Only the colour is stepped; the transparency passes through untouched.
 - **Saved projects.** Brightness Only defaults to off, which is what saved effects and Look entries without the value mean, so a saved Posterize keeps stepping each channel; a new one starts with it on. Untouched earlier Posterize graphs become the current recipe; edited ones stay as saved. A saved graph that already has its folders keeps them (an older one: one Color Processing folder); a newly added Posterize opens with the stage folders above.
 - What all colour effects share (8-bit range, adjustment layers): [Color & Tone](../Effect-System.md#color--tone-notes). Formulas and history: [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks: [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

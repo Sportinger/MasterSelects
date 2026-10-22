@@ -72,7 +72,7 @@ function ResolveEffectParamControl({ paramName, definition, value, effect, clipI
   if (sourceTarget && clipId) return <ParameterSourceNumberRow clipId={clipId} property={property} display={unitRow ? display : undefined} />;
   return <ResolveInspectorNumberRow label={definition.label} value={shown(number)} defaultValue={shown(Number(definition.default))}
     min={shown(min)} max={shown(max)} step={display.step ?? shown(definition.step ?? 0.01)} sensitivity={Math.max(0.5, shown(max - min) / 100)}
-    numberMin={shown(definition.renderMin ?? min)} numberMax={shown(definition.renderMax ?? max)} suffix={display.suffix}
+    numberMin={definition.wraps ? -Infinity : shown(definition.renderMin ?? min)} numberMax={definition.wraps ? Infinity : shown(definition.renderMax ?? max)} suffix={display.suffix}
     decimals={display.decimals} disabled={inactive} title={title}
     persistenceKey={`effect.${clipId ?? 'global'}.${effect.id}.${paramName}`}
     midiTarget={clipId ? { clipId, property: createEffectProperty(effect.id, paramName), label: definition.label, currentValue: number, min, max } : null}

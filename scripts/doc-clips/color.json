@@ -35,7 +35,7 @@
       "alt": "The dancer turning on a dark stage with Posterize while Levels steps through 2, 3, 4, 6, 10 and 16: at 2 only her dress and the stage light stand out of a black stage, at 3 and 4 the light and the floor come back as flat patches, from 6 the haze returns as flat brown and blue bands, and at 10 and 16 the bands grow finer until the stage comes close to the original; the current value is shown at the bottom left",
       "caption": "Levels 2, 3, 4, 6, 10 and 16, about 0.8 s each (Brightness Only on)." },
     { "name": "threshold-level", "effect": "threshold", "params": { "softness": 0 }, "range": [0.5, 6], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
-      "sweep": { "param": "level", "label": "Level", "from": 0.15, "to": 0.7, "decimals": 2 }, "loop": 0.35, "poster": 1.2, "maxBytes": 650000, "float": "right",
+      "sweep": { "param": "level", "label": "Level", "from": 0.15, "to": 0.7, "decimals": 2 }, "loop": 0, "poster": 1.2, "maxBytes": 650000, "float": "right",
       "alt": "The dancer turning on a dark stage with Threshold while Level runs from 0.15 to 0.7 and back: at 0.15 she is a full white silhouette standing on a white-speckled floor, as Level rises the floor goes black and her figure thins out until at 0.7 only the brightest folds of her dress, her arms and her face are left, then she fills in again; the current value is shown at the bottom left",
       "caption": "Level from 0.15 to 0.7 and back (Softness 0)." },
     { "name": "hue-shift-shift", "effect": "hue-shift", "params": {}, "range": [0.5, 6], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,

@@ -35,7 +35,7 @@ Every colour effect is a small node graph of the same shape:
 - **Split RGB + Alpha** separates the colour from the transparency.
 - **Parameters** holds the controls. A control gets a limit where a typed-in extreme value could
   break the picture (Brightness, Contrast or a Gamma); a control where every value has a clear
-  result, such as Exposure's Offset, the points of Levels or Hue Shift's Shift (past a full turn it
+  result, such as Exposure's Offset, the points of Levels or Hue Shift's Shift (past a full turn either way it
   simply goes round again), goes out as it is.
 - One or more working stages do the actual work: one folder in Brightness (**Brightness Curve**)
   and Contrast (**Contrast Curve**), several in a row in Exposure (**Exposure (Stops)**, then

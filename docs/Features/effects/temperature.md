@@ -6,9 +6,9 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot docs-compare">
 
-![The harbour town on the coast, original left and with Temperature 0.5 and Tint 0.08 right: the white house fronts and boats take on a warm, golden cream, the pink and ochre walls glow warmer and the sky and the sea turn a softer blue, while the brightness stays the same](../assets/effects/temperature.webp)
+![The dancer on a dark stage, original left and with Temperature 1 and Tint 0.12 right: the haze, the floor and her skin glow a deep orange like firelight, the cream dress turns warm gold and the blue backlight on the right fades to a dull grey-blue, while the brightness stays the same](../assets/effects/temperature.webp)
 
-<figcaption>Left: original. Right: Temperature 0.5, Tint 0.08 (the Golden Hour preset).</figcaption>
+<figcaption>Left: original. Right: Temperature 1, Tint 0.12 (the Candlelight preset).</figcaption>
 </figure>
 
 **Use it for:** footage shot under the wrong white balance · matching two cameras · a warm or cold mood of light, from late sun to moonlight.
@@ -22,9 +22,9 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot docs-shot--detail">
 
-![The harbour town four times, each with one preset: Golden Hour top left with warmer, golden house fronts, Candlelight top right in a deep orange-gold, Moonlight bottom left cold and blue, Fluorescent bottom right with a pale green cast over the houses and the sea](../assets/effects/presets/temperature.webp)
+![The dancer on stage four times, each with one preset: Golden Hour top left in a warm, golden light; Candlelight top right, where the haze and her dress glow a deeper orange; Moonlight bottom left, where the dress turns a cold silvery white and the haze blue-grey; Fluorescent bottom right, with a pale yellow-green cast over the dress, the haze and the floor](../assets/effects/presets/temperature.webp)
 
-<figcaption>The four presets on the harbour town.</figcaption>
+<figcaption>The four presets on the dancer.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets Temperature and Tint in one undo step, and the row then shows its name until you change a value. A keyframed control keeps its keyframes, and the card says so.
@@ -43,21 +43,21 @@ Pick one in the **Preset** row of the effect card. It sets Temperature and Tint 
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Temperature card: the Preset menu showing Golden Hour, Temperature at 0.50 and Tint at 0.08, beside a strip of the preview with the warm, golden harbour town](../assets/effects/editor/temperature-inspector.webp)
+![Properties, Effects with a Temperature card: the Preset menu showing Candlelight, Temperature at 1.00 and Tint at 0.12, beside a strip of the preview with the dancer glowing orange like firelight](../assets/effects/editor/temperature-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 431" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 377" aria-hidden="true" focusable="false">
 <defs><marker id="temperature-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#temperature-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M518 344 L602 344" marker-end="url(#temperature-inspector-arrow)" />
-<circle class="docs-shot-number" cx="518" cy="344" r="18" /><text x="518" y="344" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M587 382 L671 382" marker-end="url(#temperature-inspector-arrow)" />
-<circle class="docs-shot-number" cx="587" cy="382" r="18" /><text x="587" y="382" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M610 247 L694 247" marker-end="url(#temperature-inspector-arrow)" />
+<circle class="docs-shot-number" cx="610" cy="247" r="18" /><text x="610" y="247" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M569 301 L653 301" marker-end="url(#temperature-inspector-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="301" r="18" /><text x="569" y="301" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M629 334 L713 334" marker-end="url(#temperature-inspector-arrow)" />
+<circle class="docs-shot-number" cx="629" cy="334" r="18" /><text x="629" y="334" class="docs-shot-number-text">3</text>
 </svg>
 
 </div>
 
-<figcaption>Temperature with the Golden Hour preset. 1 — Preset: pick a starting point. 2 — Temperature: warmer or cooler light. 3 — Tint: towards magenta or green.</figcaption>
+<figcaption>Temperature with the Candlelight preset. 1 — Preset: pick a starting point. 2 — Temperature: warmer or cooler light. 3 — Tint: towards magenta or green.</figcaption>
 </figure>
 
 **Preset** – one of the four starting points above; it sets both controls.
@@ -71,16 +71,14 @@ Pick one in the **Preset** row of the effect card. It sets Temperature and Tint 
 
 <div class="docs-float-end"></div>
 
-<figure class="docs-shot docs-shot--float-right">
+<figure class="docs-shot docs-compare" data-before="Tint −0.6" data-after="Tint 0.6">
 
-![The hillside of the harbour town and the water in front of it, split down the middle: the left half with Tint −0.6, where the houses, rocks and sea lean towards a yellowish green, the right half with Tint 0.6, where the house fronts turn pink, the sky lilac and the water a cooler blue](../assets/effects/temperature-tint.webp)
+![The dancer on the dark stage with Tint on both sides: left with Tint −0.6, where the haze, her skin and the dress lean towards a yellowish green and the blue backlight turns teal, right with Tint 0.6, where the dress and her skin turn pink, the haze a dusky rose and the backlight a cooler violet-blue](../assets/effects/temperature-tint.webp)
 
-<figcaption>Left half: Tint −0.6. Right half: Tint 0.6.</figcaption>
+<figcaption>Left: Tint −0.6. Right: Tint 0.6.</figcaption>
 </figure>
 
 **Tint** – the second axis of white balance, between green and magenta. Above 0 green shrinks and the picture turns pinker; below 0 it turns greener. Use it to remove the green cast of fluorescent or cheap LED light (a little above 0), or to give a scene a sickly green. Small values do a lot: 0.1–0.2 is a correction, 0.5 a strong colour. It works together with **Temperature**: warm light usually wants a touch of magenta, so skin does not turn yellow. −1 to 1, default 0. In the number field you can type up to ±4.
-
-<div class="docs-float-end"></div>
 
 ## Node setup
 

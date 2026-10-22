@@ -13,7 +13,7 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 **Use it for:** a photo-negative or X-ray look · a flash frame on a hit in the music · a dark stage turned into a bright, ghostly one.
 
-**Tip:** for light and dark swapped but colours roughly as they were, put [Hue Shift](./hue-shift.md) at 180° (the Opposite preset) after Invert. Skin and warm light come back close to their own colour; strong colours land within about 20° of where they were.
+**Tip:** for light and dark swapped but colours roughly as they were, put [Hue Shift](./hue-shift.md) at 180° (the Half Turn preset) after Invert. Skin and warm light come back close to their own colour; strong colours land within about 20° of where they were.
 
 ## Controls
 
@@ -120,5 +120,5 @@ This folder has no Clamp: 1 − x of a value between 0 and 1 stays between 0 and
 - **Formula.** Per channel `1 − x` on the screen colours (sRGB, not linear light), alpha untouched. Applied twice, Invert gives back the original exactly.
 - **Transparency.** Effects work on straight (not premultiplied) colour, so a half-transparent edge keeps its alpha and gets the inverted colour.
 - **Adjustment layers.** On an adjustment layer Invert turns everything below it into a negative.
-- **Folder names.** Before 2026-10-22 the folders were called Color Processing and Clamp & Alpha. Only the names changed; an Invert saved before then looks the same, and a graph you had already edited keeps its own folders.
+- **Folder names.** A saved graph that already has its folders keeps them (an older one: Color Processing and Clamp & Alpha); only the names differ, the picture is the same. A newly added Invert opens with the folders above, and a graph you had already edited keeps its own.
 - What all colour effects share (8-bit range, saved projects, adjustment layers): [Color & Tone](../Effect-System.md#color--tone-notes); blocks: [Node Catalog](../Node-Catalog.md).

@@ -15,26 +15,26 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 - **Shift** – how far every colour turns round the colour wheel.
 
-**Tip:** for a colour cycle, keyframe **Shift** from 0° to 360°. Since 360° looks exactly like 0°, a looped clip cycles without a jump.
+**Tip:** for a colour cycle, keyframe **Shift** from 0° to 360° (type 360 in the field; the slider stops at 180°). Since 360° looks exactly like 0°, a looped clip cycles without a jump. For a gentle wobble, keyframe −20° and 20°: the colours swing a little either way through the original.
 
 ## Presets
 
 <figure class="docs-shot docs-shot--detail">
 
-![The harbour town four times, each with one preset: Nudge top left with a turquoise sky and sea and rosier houses, Third Turn top right with a pink sky, a magenta sea and mint-green houses, Opposite bottom left with an orange sky, a rust-red sea and pale blue houses, Two Thirds bottom right with an olive-green sky and sea and lilac houses](../assets/effects/presets/hue-shift.webp)
+![The dancer on stage four times, each with one preset: Slight Shift top left, where the warm stage light and her dress turn rosy; Third Turn top right, where the light, the haze and her skin turn a cool mint green; Half Turn bottom left, where the warm light turns ice blue and her skin pale blue; Third Turn Back bottom right, where everything warm turns lilac and violet](../assets/effects/presets/hue-shift.webp)
 
-<figcaption>The four presets on the harbour town.</figcaption>
+<figcaption>The four presets on the dancer.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets Shift in one undo step, and the row then shows its name until you change the value. A keyframed Shift keeps its keyframes, and the card says so.
 
-**Nudge** – a small step back round the wheel (340°). Orange light turns rosier, a blue sky and the sea lean towards turquoise. Close enough to the original to pass for real light, for a scene that should feel slightly off.
+**Slight Shift** – a small step back round the wheel (−20°). Warm stage light and skin turn rosier, a blue sky and the sea lean towards turquoise. Close enough to the original to pass for real light, for a scene that should feel slightly off.
 
-**Third Turn** – a third of the way round (120°): red turns towards green, green towards blue and blue towards red. Neon and stage light take on colours they never had.
+**Third Turn** – a third of the way round (120°): warm light, skin and wood turn a cool mint green, and blue turns red. Neon and stage light take on colours they never had.
 
-**Opposite** – half the way round (180°): every colour becomes its opposite. Warm stage light turns a cold blue, a blue sky orange. Skin turns blue as well, so it suits a dream or a nightmare more than a portrait.
+**Half Turn** – half the way round (180°): every colour becomes its opposite. Warm stage light turns an icy blue, a blue sky orange. Skin turns blue as well, so it suits a dream or a nightmare more than a portrait.
 
-**Two Thirds** – two thirds of the way round (240°), the other third: red turns towards blue, blue towards green.
+**Third Turn Back** – a third of the way back (−120°): warm light and skin turn lilac and violet, blue turns green. Softer and stranger than Half Turn, like light through coloured glass.
 
 ## Controls
 
@@ -61,10 +61,10 @@ Pick one in the **Preset** row of the effect card. It sets Shift in one undo ste
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
 <video src="../assets/effects/clips/hue-shift-shift.mp4" poster="../assets/effects/clips/hue-shift-shift.webp" width="720" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage while Shift runs once round the colour wheel and back: the warm orange light, her skin and the dress turn yellow, then green, cyan and blue at half a turn, then violet and pink, and back again, while the brightness of every part stays the same; the current value in turns is shown at the bottom left"></video>
-<figcaption>Shift from 0 to 1 turn (360°) and back.</figcaption>
+<figcaption>Shift from 0 to 1 turn (360°) and back (the label counts turns: 0.5 = 180°).</figcaption>
 </figure>
 
-**Shift** – how far every colour turns round the colour wheel. Going up, red turns orange, then yellow, green, cyan, blue, violet and back to red. 10–30° changes the mood but still looks like real light; 120° and 240° give each colour another one; 180° gives the opposite colours. Greys, black and white have no colour, so they stay as they are, and each colour keeps its brightness and its strength. 0 to 360°, default 0°. 360° looks the same as 0°, so the slider has no end where the picture would stop changing. A keyframe, a node or the AI agent may send a value past a full turn (stored in turns, so 1.25 is 450°): it simply goes round again and looks like 90°.
+**Shift** – how far every colour turns round the colour wheel. Going up, red turns orange, then yellow, green, cyan, blue, violet and back to red; going down, the other way. 10–30° either way changes the mood but still looks like real light; 120° and −120° give each colour another one; 180° gives the opposite colours. Greys, black and white have no colour, so they stay as they are, and each colour keeps its brightness and its strength. −180 to 180°, default 0°. The ends meet: 180° and −180° look the same, so the slider covers every colour, and a small shift either way is a small value. In the number field, keyframes, nodes and the AI agent any value works and nothing is cut off: 360° looks like 0°, 450° like 90° (stored in turns, so 1.25 is 450°). The line under the row (**Fixed · Source**) shows where Shift comes from, a fixed value, keyframes or a node, and lets you drive it from a node such as an LFO for a running colour cycle.
 
 <div class="docs-float-end"></div>
 
@@ -95,16 +95,7 @@ Hue Shift works in three stages ([Color & Tone](../Effects-Color.md#the-shared-i
 
 ### Parameters
 
-<figure class="docs-shot docs-shot--graph docs-shot--float-right">
-
-![Inside the Parameters folder: a single Shift card at 0](../assets/effects/graphs/hue-shift-parameters.webp)
-
-<figcaption>Inside Parameters: the Shift card alone.</figcaption>
-</figure>
-
-**Shift** – the control's value, in turns (0.5 is 180°). It has no Clamp: every value has a clear result, because the hue wraps round the wheel further on. So a long keyframed spin never stops at a limit.
-
-<div class="docs-float-end"></div>
+The folder holds a single **Shift** card: the control's value, in turns (0.5 is 180°). It has no Clamp: every value has a clear result, because the hue wraps round the wheel further on. So a long keyframed spin never stops at a limit.
 
 ### Hue Rotate (OkLCh)
 
@@ -177,6 +168,6 @@ Hue Shift works in three stages ([Color & Tone](../Effects-Color.md#the-shared-i
 ## Technical details
 
 - **Colour space.** The rotation happens in OkLCh (Björn Ottosson's Oklab in polar form): lightness and chroma stay exactly, only the hue angle moves. Colours that leave the screen's range are clamped per channel (no gamut mapping), so a very saturated colour turned into a hue the screen shows less strongly may shift slightly in hue and brightness.
-- **Units.** Shift is stored in turns: 0.25 is 90°. Keyframes and agent tools use turns; the inspector shows degrees. Values past 0 to 1 wrap round, there is no limit to report.
+- **Units.** Shift is stored in turns: 0.25 is 90°. Keyframes and agent tools use turns; the inspector shows degrees. The slider runs from −180° to 180° (before 2026-10-22: 0° to 360°; the same colours, since the ends meet); typed values, keyframes and nodes may go further on both sides and wrap round, so there is no limit to report.
 - **Transparency.** Only the colour is changed; the transparency passes through untouched.
 - What all colour effects share (8-bit range, saved projects, adjustment layers): [Color & Tone](../Effect-System.md#color--tone-notes). Formulas: [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks: [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

@@ -89,10 +89,19 @@ const GLOW_PORTS: Record<string, string> = { 'source-split:rgb': 'Source Color',
 const POINTWISE_PORTS = { compare: 'Above Level', hard: 'Hard Step', ramp: 'Soft Ramp', soft: 'Softness On', smooth: 'Soft Steps', steps: 'Steps' };
 /** Invert has no clamp (1 − x stays within 0 to 1), so its folders name what they do, and its three
  * Subtract outputs say which channel they carry instead of reading "Subtract: Value" three times. */
+/** The Invert recipe's White Level and its three Subtract cards, under their recipe ids and operators. */
+function isInvertRecipeNodes(nodes: Pick<EffectOperatorGraph, 'nodes'>['nodes']): boolean {
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const one = byId.get('one');
+  return one?.operator === 'values.number' && one.constants?.value === 1
+    && ['invert-r', 'invert-g', 'invert-b'].every(id => byId.get(id)?.operator === 'math.subtract.scalar');
+}
 const INVERT_PRESENTATION: EffectPresentationPlan = {
   labels: { processing: 'Invert RGB', finish: 'Alpha & Image' },
   stage: ORIGINAL_COLOR_PRESENTATION.stage,
   portLabels: { one: 'White Level', 'invert-r': 'Inverted R', 'invert-g': 'Inverted G', 'invert-b': 'Inverted B' },
+  // Free Node Graphs share the 'invert' type and take node ids the agent picks: label only the recipe's own cards.
+  portLabelsApply: graph => isInvertRecipeNodes(graph.nodes),
 };
 
 /** Posterize (v2 recipe): its 30-odd cards read as a path of stages instead of one Color Processing

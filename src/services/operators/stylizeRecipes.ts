@@ -11,7 +11,7 @@ import { createDefaultGrainGraph } from './grainEffectGraph';
 import { createDefaultScanlinesGraph } from './scanlinesEffectGraph';
 import { createDefaultSharpenGraph } from './sharpenEffectGraph';
 import { createDefaultVignetteGraph } from './vignetteEffectGraph';
-import { createDefaultPointwiseEffectGraph, createEarlierPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
+import { capPosterizeRampWidth, createDefaultPointwiseEffectGraph, createEarlierPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
 import { GLOW_DEFAULTS } from '../../effects/stylize/glow/glowBloom';
 
 /**
@@ -96,10 +96,12 @@ export function stylizePresentation(type: string, graph: EffectOperatorGraph): {
   return isRecipeType(type) && isEarlierStylizeGraph(type, graph) ? { key: `${type}-earlier`, createDefault: EARLIER[type] } : undefined;
 }
 
-/** Untouched earlier Threshold/Posterize graphs read as the current recipe (identical at Softness 0). */
+/** Untouched earlier Threshold/Posterize graphs read as the current recipe (identical at Softness 0); Posterize ramps are capped at one step. */
 export function upgradePointwiseStylizeGraph(type: string, graph: EffectOperatorGraph): EffectOperatorGraph {
-  if ((type !== 'threshold' && type !== 'posterize') || graph.groups?.some(group => group.bypassed)) return graph;
-  return isEarlierStylizeGraph(type, graph) ? CURRENT[type]() : graph;
+  if (type !== 'threshold' && type !== 'posterize') return graph;
+  if (!graph.groups?.some(group => group.bypassed) && isEarlierStylizeGraph(type, graph)) return CURRENT[type]();
+  // Posterize saved with the unlimited ramp: cap it at one step (a bug fix only above Softness 1).
+  return type === 'posterize' ? capPosterizeRampWidth(graph) : graph;
 }
 
 export interface StylizeRecipeUpdate {

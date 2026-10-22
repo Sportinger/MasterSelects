@@ -23,6 +23,8 @@ export interface ParameterSourceTarget {
   hardMax?: number;
   /** Display only: rows show value × display.scale with its suffix (Hue Shift: turns as degrees). */
   display?: ParamDisplay;
+  /** Cyclic value (Hue Shift): min/max are only the slider; typed values are never limited. */
+  wraps?: boolean;
 }
 
 export type ParameterSourceClip = Pick<TimelineClip, 'effects' | 'colorCorrection' | 'nodeGraph' | 'startTime'>
@@ -66,6 +68,7 @@ export function parameterSourceTargets(clip: ParameterSourceClip): ParameterSour
       value: typeof stored === 'number' ? stored : Number(def.default), defaultValue: Number(def.default),
       min: def.min ?? 0, max: def.max ?? 1, step: def.step ?? 0.01, unit,
       ...(def.displayScale || def.displayUnit ? { display: effectParamDisplay(def, typeof stored === 'number' ? stored : Number(def.default)) } : {}),
+      ...(def.wraps ? { wraps: true } : {}),
       ...(effect.type === 'gaussian-blur' ? { hardMin: 0 } : {}) });
   }
   return targets;

@@ -9,8 +9,8 @@ import { createMockClip, createMockTrack } from '../helpers/mockData';
 import type { Effect } from '../../src/types/effects';
 
 vi.mock('../../src/components/panels/properties/LabeledValue', () => ({
-  LabeledValue: ({ value, suffix, ariaLabel, onChange }: { value: number; suffix?: string; ariaLabel: string; onChange: (value: number) => void }) =>
-    <input aria-label={ariaLabel} data-suffix={suffix} value={String(value)} onChange={event => onChange(Number(event.target.value))} />,
+  LabeledValue: ({ value, suffix, ariaLabel, min, max, onChange }: { value: number; suffix?: string; ariaLabel: string; min?: number; max?: number; onChange: (value: number) => void }) =>
+    <input aria-label={ariaLabel} data-suffix={suffix} data-min={String(min)} data-max={String(max)} value={String(value)} onChange={event => onChange(Number(event.target.value))} />,
 }));
 const initialTimeline = useTimelineStore.getState();
 afterEach(() => { cleanup(); localStorage.clear(); useTimelineStore.setState(initialTimeline); });
@@ -37,6 +37,28 @@ describe('effect rows with a degree display unit', () => {
     const field = screen.getByRole('textbox', { name: 'Radius' }) as HTMLInputElement;
     expect(field.value).toBe('0.5'); expect(field.dataset.suffix).toBeUndefined();
   });
+  it('lets Hue Shift take any typed angle: −20° stays −20° in both the plain and the drivable row (Shift wraps)', () => {
+    const definition = getEffect('hue-shift')!.params.shift, changed = vi.fn();
+    render(<ResolveEffectParamRow paramName="shift" definition={definition} value={0} effect={{ id: 'hue-1', params: { shift: 0 } }} onChange={changed} />);
+    const plain = screen.getByRole('textbox', { name: 'Shift' }) as HTMLInputElement;
+    expect([plain.dataset.min, plain.dataset.max]).toEqual(['-Infinity', 'Infinity']);
+    expect(Number(screen.getByRole('slider', { name: 'Shift slider' }).getAttribute('aria-valuemin'))).toBeCloseTo(-180, 6);
+    fireEvent.change(plain, { target: { value: '-20' } });
+    expect(changed).toHaveBeenLastCalledWith({ shift: expect.closeTo(-1 / 18, 12) });
+    cleanup();
+    const effect = { id: 'hue-1', name: 'Hue Shift', type: 'hue-shift', enabled: true, params: { shift: 0 } } as Effect;
+    const clip = createMockClip({ id: 'clip-1', trackId: 'track-1', effects: [effect] });
+    const setPropertyValue = vi.fn();
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 'track-1' })], clipKeyframes: new Map(), playheadPosition: clip.startTime, setPropertyValue });
+    render(<ResolveEffectParamRow paramName="shift" definition={definition} value={0} effect={{ id: 'hue-1', params: { shift: 0 } }} clipId="clip-1" onChange={vi.fn()} />);
+    const sourced = screen.getByRole('textbox', { name: 'Shift' }) as HTMLInputElement;
+    expect([sourced.dataset.min, sourced.dataset.max]).toEqual(['-Infinity', 'Infinity']);
+    fireEvent.change(sourced, { target: { value: '-20' } });
+    expect(setPropertyValue).toHaveBeenLastCalledWith('clip-1', 'effect.hue-1.shift', expect.closeTo(-1 / 18, 12));
+    fireEvent.change(sourced, { target: { value: '765' } });
+    expect(setPropertyValue).toHaveBeenLastCalledWith('clip-1', 'effect.hue-1.shift', expect.closeTo(765 / 360, 12));
+  });
+
   it('keeps degrees when Twist can take a node source', () => {
     const operatorGraph = createDefaultUvDistortGraph('twirl');
     operatorGraph.nodes.find(node => node.id === 'twirl-amount')!.exposed = { label: 'Twist', min: -4 * Math.PI, max: 4 * Math.PI, step: .01 };

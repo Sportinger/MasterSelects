@@ -22,14 +22,14 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot docs-shot--detail">
 
-![The harbour town four times, each with one preset: Photocopy top left with a white sky, black sea and a hard black-and-white town; Charcoal top right, the same picture with grey clouds, grey water and soft edges; Highlights bottom left, almost all black, with only a few clouds, house fronts and boats left white; Shadow Matte bottom right, almost all white, with only the dark water between the boats and a few shadows in the town left black](../assets/effects/presets/threshold.webp)
+![The harbour town four times, each with one preset: Photocopy top left, set a little dark, with a black sky and sea, white clouds and only the lighter houses left white; Charcoal top right, the same picture with grey clouds, grey water and soft edges; Highlights bottom left, almost all black, with only a few clouds, house fronts and boats left white; Shadow Matte bottom right, almost all white, with only the dark water between the boats and a few shadows in the town left black](../assets/effects/presets/threshold.webp)
 
 <figcaption>The four presets on the harbour.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets both controls in one undo step, and the row then shows its name until you change a value. A keyframed control keeps its keyframes, and the card says so.
 
-**Photocopy** – the plain hard cut at middle grey (Level 0.5, Softness 0), like a copy machine turned up too far. Clear shapes, no grey at all.
+**Photocopy** – a hard cut set a little dark (Level 0.6, Softness 0), like a copy machine turned up too far: the mid-tones drop into black and only the lighter half of the picture stays white. Clear shapes, no grey at all.
 
 **Charcoal** – a wide soft edge (Level 0.45, Softness 0.35): the bright and dark parts are still black and white, but everything in between keeps grey half-tones, like a charcoal drawing. Faces and folds stay readable.
 
@@ -45,14 +45,14 @@ Pick one in the **Preset** row of the effect card. It sets both controls in one 
 
 ![Properties, Effects with a Threshold card: the Preset menu showing Charcoal, Level at 0.45 and Softness at 0.35, beside a strip of the preview with the dancer in soft black and white](../assets/effects/editor/threshold-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 431" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 377" aria-hidden="true" focusable="false">
 <defs><marker id="threshold-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#threshold-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M574 344 L658 344" marker-end="url(#threshold-inspector-arrow)" />
-<circle class="docs-shot-number" cx="574" cy="344" r="18" /><text x="574" y="344" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M548 382 L632 382" marker-end="url(#threshold-inspector-arrow)" />
-<circle class="docs-shot-number" cx="548" cy="382" r="18" /><text x="548" y="382" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M610 247 L694 247" marker-end="url(#threshold-inspector-arrow)" />
+<circle class="docs-shot-number" cx="610" cy="247" r="18" /><text x="610" y="247" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M618 301 L702 301" marker-end="url(#threshold-inspector-arrow)" />
+<circle class="docs-shot-number" cx="618" cy="301" r="18" /><text x="618" y="301" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M595 334 L679 334" marker-end="url(#threshold-inspector-arrow)" />
+<circle class="docs-shot-number" cx="595" cy="334" r="18" /><text x="595" y="334" class="docs-shot-number-text">3</text>
 </svg>
 
 </div>

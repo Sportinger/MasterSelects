@@ -7,8 +7,9 @@ import { thresholdParamNotes } from '../pointwiseModel';
 
 /** From a hard photocopy to a soft charcoal look, and two mattes: the lights alone, or all but the shadows. */
 export const THRESHOLD_PRESETS: readonly EffectPreset[] = [
-  // The plain hard cut at middle grey, like a copy machine turned up too far.
-  { id: 'photocopy', name: 'Photocopy', params: { level: 0.5, softness: 0 } },
+  // A hard cut set a little dark, like a copy machine turned up too far: mid-tones drop into black.
+  // (Not the defaults, Level 0.5: a fresh Threshold would otherwise already read "Photocopy".)
+  { id: 'photocopy', name: 'Photocopy', params: { level: 0.6, softness: 0 } },
   // A wide soft edge: the cut keeps grey half-tones, like a charcoal drawing.
   { id: 'charcoal', name: 'Charcoal', params: { level: 0.45, softness: 0.35 } },
   // Only the brightest lights stay white: lamps, neon, highlights on skin and water.

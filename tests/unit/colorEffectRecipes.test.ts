@@ -22,6 +22,10 @@ import { COLOR_COMPOSITIONS } from '../../src/services/operators/colorCompositio
 import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { effectRecipeFingerprint } from '../../src/services/operators/recipeFingerprint';
 import { FORMER_CONTRAST_FINGERPRINT } from '../../src/services/operators/contrastFlattenUpgrade';
+import { getParameterSourceTarget } from '../../src/services/parameterSources/parameterSourceTargets';
+import { interpolateKeyframes } from '../../src/utils/keyframeInterpolation';
+import type { Keyframe } from '../../src/types/keyframes';
+import type { Effect } from '../../src/types/effects';
 
 /**
  * Independent CPU references for the rebuilt color effects (2026-10). The formulas below are
@@ -310,16 +314,40 @@ describe('rebuilt color effect recipes', () => {
     }
   });
 
-  it('Hue Shift presets turn by their named angles: Nudge makes orange rosier, Opposite and Two Thirds make it blue, Third Turn green', () => {
+  it('Hue Shift presets turn by their named angles: Slight Shift makes orange rosier, Half Turn blue, Third Turn green, Third Turn Back violet', () => {
     const presets = Object.fromEntries(HUE_SHIFT_PRESETS.map(preset => [preset.id, preset.params.shift as number]));
     expect(Object.fromEntries(Object.entries(presets).map(([id, shift]) => [id, Math.round(shift * 360)])))
-      .toEqual({ nudge: 340, 'third-turn': 120, opposite: 180, 'two-thirds': 240 });
+      .toEqual({ 'slight-shift': -20, 'third-turn': 120, 'half-turn': 180, 'third-turn-back': -120 });
+    // Every preset lies on the -180° to 180° slider.
+    for (const shift of Object.values(presets)) expect(Math.abs(shift)).toBeLessThanOrEqual(0.5);
     const orange: Pixel = [0.8, 0.5, 0.2, 1];
-    const [nudge, third, opposite, twoThirds] = ['nudge', 'third-turn', 'opposite', 'two-thirds'].map(id => render('hue-shift', { shift: presets[id] }, orange));
-    expect(nudge[1] / nudge[0]).toBeLessThan(orange[1] / orange[0]);
-    expect(nudge[2]).toBeGreaterThan(orange[2]);
+    const [slight, third, half, back] = ['slight-shift', 'third-turn', 'half-turn', 'third-turn-back'].map(id => render('hue-shift', { shift: presets[id] }, orange));
+    expect(slight[1] / slight[0]).toBeLessThan(orange[1] / orange[0]);
+    expect(slight[2]).toBeGreaterThan(orange[2]);
     expect(third[1]).toBeGreaterThan(Math.max(third[0], third[2]));
-    for (const cold of [opposite, twoThirds]) expect(cold[2]).toBeGreaterThan(Math.max(cold[0], cold[1]));
+    for (const cold of [half, back]) expect(cold[2]).toBeGreaterThan(Math.max(cold[0], cold[1]));
+    // Violet: the red comes back above the green.
+    expect(back[0]).toBeGreaterThan(back[1]);
+    // Saved projects keep their look: -20° renders exactly like the former 340°.
+    expectPixel(render('hue-shift', { shift: -1 / 18 }, orange), render('hue-shift', { shift: 17 / 18 }, orange), 5);
+  });
+
+  it('Hue Shift wraps: typed values beyond the slider are kept, and a keyframe from -20° to 20° passes through 0°', () => {
+    const shift = getEffect('hue-shift')!.params.shift;
+    expect([shift.min, shift.max, shift.wraps]).toEqual([-0.5, 0.5, true]);
+    const hue = { id: 'hue-1', name: 'Hue Shift', type: 'hue-shift', enabled: true, params: { shift: -1 / 18 } } as Effect;
+    const target = getParameterSourceTarget({ effects: [hue], startTime: 0 }, 'effect.hue-1.shift')!;
+    // No hard limit and no clamp note: -20° and 765° stay what they are.
+    expect([target.hardMin, target.hardMax, target.wraps, target.value]).toEqual([undefined, undefined, true, -1 / 18]);
+    expect(paramRangeNotes(getEffect('hue-shift')!.params, { shift: -1 / 18 })).toEqual([]);
+    expect(paramRangeNotes(getEffect('hue-shift')!.params, { shift: 765 / 360 })).toEqual([]);
+    // Halfway between keys at -20° and 20° the stored value is 0: the picture is the original, not a trip round the wheel.
+    const keys = [{ id: 'a', clipId: 'c', property: 'effect.hue-1.shift', time: 0, value: -1 / 18, easing: 'linear' },
+      { id: 'b', clipId: 'c', property: 'effect.hue-1.shift', time: 2, value: 1 / 18, easing: 'linear' }] as Keyframe[];
+    const middle = interpolateKeyframes(keys, 'effect.hue-1.shift' as never, 1, 0);
+    expect(middle).toBeCloseTo(0, 12);
+    const orange: Pixel = [0.8, 0.5, 0.2, 1];
+    expectPixel(render('hue-shift', { shift: middle }, orange), orange, 4);
   });
 
   it('keeps the single Hue Shift control in a Parameters folder like every colour recipe', () => {
@@ -341,6 +369,11 @@ describe('rebuilt color effect recipes', () => {
     // The free node graph shares the invert type: an edited graph is not the recipe and gets no Invert folders.
     const free = { ...graph, nodes: graph.nodes.filter(node => node.id !== 'invert-b') };
     expect(organizeEffectFamilyGraph(free, recognizeOperatorCompositions(free), 'invert', createDefaultInvertImageGraph).groups ?? []).toEqual([]);
+    // Its port labels name only the recipe's own cards: a free graph whose agent named a card 'one' keeps plain labels.
+    const plan = effectPresentationPlan('invert')!;
+    expect(plan.portLabelsApply?.(graph)).toBe(true);
+    expect(plan.portLabelsApply?.({ nodes: [{ id: 'one', operator: 'values.number', bindings: {}, constants: { value: 0.3 } }] })).toBe(false);
+    expect(plan.portLabelsApply?.({ nodes: graph.nodes.filter(node => node.id !== 'invert-g') })).toBe(false);
   });
 
   it('never produces NaN and clamps out-of-range values to the declared render range', () => {

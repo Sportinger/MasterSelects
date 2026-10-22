@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { POSTERIZE_PARAMS, THRESHOLD_PARAMS } from '../../src/effects/stylize/pointwiseParams';
-import { createDefaultPosterizeGraph, createDefaultThresholdGraph, createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { capPosterizeRampWidth, createDefaultPosterizeGraph, createDefaultThresholdGraph, createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { posterizeParamNotes, posterizeValue } from '../../src/effects/stylize/pointwiseModel';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { POSTERIZE_PRESETS } from '../../src/effects/stylize/posterize';
 import { THRESHOLD_PRESETS } from '../../src/effects/stylize/threshold';
 import { organizeEffectFamilyGraph } from '../../src/services/operators/effectFamilyPresentation';
@@ -89,6 +91,44 @@ describe('pointwise effect graph ownership', () => {
     expect(print).toBeGreaterThan(1 / 3); expect(print).toBeLessThan(2 / 3);
   });
 
+  it('keeps every Posterize ramp at most one step wide, so Softness above 1 draws no new edges mid-step, and says so (2026-10-22 fix)', () => {
+    // Before the fix the ramp widened without limit: neighbouring ramps overlapped and jumped mid-step.
+    const former = (graph: EffectOperatorGraph): EffectOperatorGraph => ({ ...graph,
+      nodes: graph.nodes.filter(item => item.id !== 'ramp-ceiling').map(item => item.id === 'ramp-width' ? { ...item, operator: 'math.max.scalar' } : item),
+      edges: [...graph.edges.filter(item => item.to !== 'ramp-width' && item.from !== 'ramp-ceiling'),
+        { id: 'softness-value-ramp-width-a', from: 'softness', output: 'value', to: 'ramp-width', input: 'a' },
+        { id: 'ramp-floor-value-ramp-width-b', from: 'ramp-floor', output: 'value', to: 'ramp-width', input: 'b' }],
+      layout: Object.fromEntries(Object.entries(graph.layout).filter(([id]) => id !== 'ramp-ceiling')),
+      ...(graph.groups ? { groups: graph.groups.map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => id !== 'ramp-ceiling') })) } : {}) });
+    const params = { ...getDefaultParams('posterize'), levels: 4, brightnessOnly: false };
+    const sweep = (graph: EffectOperatorGraph, softness: number) => {
+      const plan = compileImageOperatorGraph(graph, { ...params, softness });
+      return Array.from({ length: 401 }, (_, index) => evaluateImageOperatorPlan(plan, [index / 400, index / 400, index / 400, 1])[0]);
+    };
+    const largestJump = (values: number[]) => Math.max(...values.slice(1).map((value, index) => Math.abs(value - values[index])));
+    // The former graph really jumped (about a third of a step at Softness 2); the current one is smooth.
+    expect(largestJump(sweep(former(createDefaultPosterizeGraph()), 2))).toBeGreaterThan(0.05);
+    for (const softness of [1.5, 2, 4]) {
+      const values = sweep(createDefaultPosterizeGraph(), softness);
+      expect(largestJump(values)).toBeLessThan(0.02);
+      expect(values).toEqual(sweep(createDefaultPosterizeGraph(), 1));
+      // The worker twin gives the same numbers.
+      values.forEach((value, index) => expect(posterizeValue(index / 400, 4, softness)).toBeCloseTo(value, 5));
+    }
+    expect(posterizeParamNotes({ levels: 4, softness: 2 })).toEqual(['Softness 2 is above 1; it is used as 1 (each ramp spans one whole step).']);
+    expect(posterizeParamNotes({ levels: 4, softness: 1 })).toEqual([]);
+    // A saved graph with the unlimited ramp is capped in place on load: same cards, the new limit in the floor's folder.
+    const saved = former(organizeEffectFamilyGraph(createDefaultPosterizeGraph(), recognizeOperatorCompositions(createDefaultPosterizeGraph()), 'posterize', createDefaultPosterizeGraph));
+    const capped = capPosterizeRampWidth(saved);
+    expect(capped.nodes.find(item => item.id === 'ramp-width')?.operator).toBe('math.clamp.scalar');
+    expect(capped.groups?.find(group => group.nodeIds.includes('ramp-floor'))?.nodeIds).toContain('ramp-ceiling');
+    expect(capPosterizeRampWidth(capped)).toBe(capped);
+    const loaded = effectOperatorGraph({ ...effect('posterize', { ...params, softness: 2 }), operatorGraph: saved });
+    expect(largestJump(sweep(loaded, 2))).toBeLessThan(0.02);
+    // Softness up to 1 renders exactly as before.
+    expect(sweep(loaded, 0.6)).toEqual(sweep(former(createDefaultPosterizeGraph()), 0.6));
+  });
+
   it('opens the Posterize recipe as a path of named stage folders instead of one Color Processing folder', () => {
     const graph = createDefaultPosterizeGraph();
     const organized = organizeEffectFamilyGraph(graph, recognizeOperatorCompositions(graph), 'posterize', createDefaultPosterizeGraph);
@@ -118,9 +158,12 @@ describe('pointwise effect graph ownership', () => {
       evaluateImageOperatorPlan(compileImageOperatorGraph(createDefaultThresholdGraph(), { ...getDefaultParams('threshold'), ...presets[name] }), [grey, grey, grey, alpha]);
     const greys = Array.from({ length: 101 }, (_, index) => index / 100);
     const between = (name: string) => greys.filter(grey => { const value = cut(name, grey)[0]; return value > 0.001 && value < 0.999; }).length;
-    // Photocopy: a hard cut at middle grey, nothing in between; the transparency stays.
+    // Photocopy: a hard cut set a little dark, nothing in between; the transparency stays.
     expect(between('Photocopy')).toBe(0);
-    expect([cut('Photocopy', 0.49, 0.4), cut('Photocopy', 0.51, 0.4)]).toEqual([[0, 0, 0, 0.4], [1, 1, 1, 0.4]]);
+    expect([cut('Photocopy', 0.59, 0.4), cut('Photocopy', 0.61, 0.4)]).toEqual([[0, 0, 0, 0.4], [1, 1, 1, 0.4]]);
+    // No preset is the defaults: a fresh Threshold must not already read as one of them.
+    const defaults = getDefaultParams('threshold');
+    for (const preset of THRESHOLD_PRESETS) expect(Object.entries(preset.params).some(([key, value]) => defaults[key] !== value)).toBe(true);
     // Charcoal: a wide soft edge keeps a band of greys around its Level.
     expect(between('Charcoal')).toBeGreaterThanOrEqual(30);
     expect(cut('Charcoal', 0.45)[0]).toBeCloseTo(0.5, 5);

@@ -44,6 +44,7 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false, d
   }}>
     <ResolveInspectorNumberRow label={target.label} ariaLabel={target.label} value={value * scale} defaultValue={target.defaultValue * scale}
       min={target.min * scale} max={target.max * scale} hardMin={scaled(target.hardMin)} hardMax={scaled(target.hardMax)}
+      {...(target.wraps ? { numberMin: -Infinity, numberMax: Infinity } : {})}
       step={shownAs?.step ?? target.step * scale} suffix={shownAs?.suffix} decimals={shownAs?.decimals}
       disabled={readOnly || driven || !!error} persistenceKey={`parameter.${property}`}
       onReset={next => safely(() => { if (!readOnly && !driven) setParameterBaseValue(clipId, property, next / scale); })}
