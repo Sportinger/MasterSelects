@@ -1,0 +1,11 @@
+{
+ "pairs": [
+  {"name": "halftone", "out": "docs/Features/assets/effects/halftone.webp", "image": "dancer_stage", "width": 1920, "crop": [500, 60, 900, 960],
+   "layout": "compare", "outWidth": 1600, "left": {"effect": "original"}, "right": {"effect": "halftone", "params": {}},
+   "alt": "The dancer on a dark stage, original left and with Halftone right: her dress and arms turn into a grid of round dark dots on pale paper, large in the shadows and small in the light, and the stage becomes almost solid dark ink",
+   "caption": "Left: original. Right: Halftone at its default settings."}
+ ],
+ "strips": [
+  {"effect": "halftone", "image": "dancer_stage", "width": 1920, "crop": [660, 120, 560, 560], "cellWidth": 400, "columns": 3}
+ ]
+}

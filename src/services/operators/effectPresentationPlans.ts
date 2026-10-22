@@ -216,6 +216,17 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : /^(line|sample-split|darkened|combine)(-|$)/.test(id) ? 'lines'
         : /^(time-|row-phase$|shift|resolution-split$|along$|offset|back-radians$|sample-uv$)/.test(id) ? 'drift' : 'bands',
   };
+  // Halftone (createDefaultHalftoneGraph): the turned dot screen, the light of each cell, the round dot, ink and paper.
+  if (type === 'halftone') return {
+    labels: { screen: 'Screen (Dot Size, Angle)', tone: 'Cell Tone', dot: 'Dot', finish: 'Ink & Paper (Amount)' },
+    portLabels: { 'screen-pixel': 'Screen Position (px)', cell: 'Place in Cell', 'edge-width': 'Half Edge (cells)', 'cell-center-uv': 'Cell Centre',
+      'tap-diagonal': 'Quarter Diagonal', 'tap-anti-diagonal': 'Quarter Anti-diagonal', tone: 'Cell Light', darkness: 'Ink Share', radius: 'Radius',
+      'dot-radius': 'Dot Radius', mark: 'Dot Mask', 'ink-color': 'Print', 'safe-scale-pixels': 'Dot Size (px)', 'angle-radians': 'Angle (rad)',
+      'half-vec2': 'Half (0.5, 0.5)', 'frame-center': 'Frame Centre (px)', 'cell-divided': 'Position in Cells', 'sample-split:rgb': 'Pixel RGB', 'sample-split:alpha': 'Pixel Alpha' },
+    stage: ({ id }) => /^(cell-index|cell-center|back-radians|tap-|own-|cell-alpha$|tone$|sample$|sample-split$|clamped-uv$|min-uv$|max-uv$|shared-)/.test(id) ? 'tone'
+      : /^(darkness|inverse-tone|dot-|paper-|dots-touch$|radius|edge-low$|edge-high$|distance$|edge$|mark$)/.test(id) ? 'dot'
+        : /^(color-a-rgb|color-b-rgb|ink-color|mixed-color|combine)$/.test(id) ? 'finish' : 'screen',
+  };
   if (type === 'vignette') return {
     labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
     portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither' },

@@ -1,6 +1,7 @@
 import shader from './shader.wgsl?raw';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { DRIFT_LINES_PRESETS, driftLinesWarnings } from './driftLines';
+import { HALFTONE_PRESETS } from './halftonePresets';
 
 /** Dither cells are whole output pixels (patternReferenceFrame.ts wholePixels): say when Pixel Size rounds on this frame. */
 function ditherWholePixelNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080): string[] {
@@ -31,6 +32,14 @@ export const ditherStudio = createCatalogEffect({
 });
 export const halftone = createCatalogEffect({
   id: 'halftone', name: 'Halftone', category: 'halftone', shader, entryPoint: 'halftoneFragment', scaleFloor: 2,
+  // Same parameter ids as the other looks of the engine (the Style menu keeps values); labels of its own.
+  params: {
+    scale: catalogBaseParam('scale', { label: 'Dot Size', unit: ' px' }),
+    angle: catalogBaseParam('angle', { unit: '°' }),
+    amount: catalogBaseParam('amount', { group: 'Color' }),
+  },
+  cardEnd: ['colorA', 'colorB', 'amount'],
+  presets: HALFTONE_PRESETS,
 });
 export const patternHalftone = createCatalogEffect({
   id: 'pattern-halftone', name: 'Pattern Halftone', category: 'halftone', shader, entryPoint: 'patternHalftoneFragment', scaleFloor: 2,

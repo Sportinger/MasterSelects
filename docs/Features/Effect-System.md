@@ -1922,6 +1922,19 @@ now on (at 1080p it is the old size). The shared base controls (Scale, Amount, A
 Speed) are read by every look that shows them or retired with a reason; Film Prism's Prism Angle
 acts in the Prism shape only, which its card says.
 
+**Halftone and Pattern Halftone** share `createDefaultHalftoneGraph`
+(`src/services/operators/halftoneEffectGraphs.ts`, WGSL twins `halftoneFragment` and
+`patternHalftoneFragment`). Their screen turns pixel positions around the frame centre (round dots at
+every Angle on any frame shape; the earlier recipe turned 0–1 UVs and stretched dots into ovals on a
+wide frame), and a dot edge is half a pixel on each side (`0.5 / dot size in pixels`) at every size.
+Halftone reads each cell's tone at four points a quarter cell from its centre (`HALFTONE_TAPS`),
+averaged in linear light and weighted by alpha, with the pixel's own light at 5 %
+(`HALFTONE_OWN_WEIGHT`, so a cell outside a cut-out still has a tone); its round dot covers that share
+of the cell exactly up to π/4 and then closes the corners (`HALFTONE_DOT`, within 1.3 %), shifted by up
+to half an edge so black prints solid and white clean. `createCatalogEffect({ cardEnd })` puts Ink,
+Paper and Amount last in its card. `tests/unit/imageHalftoneGraphs.test.ts` checks the reference, round
+dots at 45° on 16:9, solid black and clean white, coverage, the one-pixel edge and cut-out edges.
+
 ### Drift Lines
 
 `createDriftLinesGraph` (`src/services/operators/motionHalftoneEffectGraphs.ts`) and its shader twin

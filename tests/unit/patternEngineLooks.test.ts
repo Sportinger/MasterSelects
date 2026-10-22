@@ -19,6 +19,8 @@ import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 type Rgba = [number, number, number, number];
 type Params = Record<string, number | boolean | string>;
 const LOOKS = effectEngineMembers('two-tone-pattern');
+/** Looks whose pattern edges are one output pixel soft at every size (sharper on larger frames). */
+const SOFT_EDGE_IN_OUTPUT_PIXELS = new Set(['halftone']);
 /** A picture with soft gradients and hard edges, sampled by position (the same at every resolution). */
 const picture = ([u, v]: [number, number]): Rgba => {
   const x = Math.min(Math.max(u, 0), 1), y = Math.min(Math.max(v, 0), 1), disc = Math.hypot(x - .45, y - .55) < .28 ? 1 : 0;
@@ -81,7 +83,9 @@ describe('two-tone-pattern engine', () => {
       // Dithering draws whole pixels: at half quality its default 3 px cells would be 1.5 pixels, so compare at 720p (2 pixels).
       const hd = render(plan, [1920, 1080], 1.25);
       const uhd = render(plan, [3840, 2160], 1.25), preview = render(plan, type === 'dither' ? [1280, 720] : [960, 540], 1.25);
-      if (agreement(hd, uhd) < .98 || agreement(hd, preview) < .98) differing.push(`${type} (4K ${agreement(hd, uhd).toFixed(2)}, half ${agreement(hd, preview).toFixed(2)})`);
+      // Halftone smooths its dot edges over one output pixel: a 4K edge is sharper, but no point turns from ink to paper.
+      const tolerance = SOFT_EDGE_IN_OUTPUT_PIXELS.has(type) ? .5 : .03;
+      if (agreement(hd, uhd, tolerance) < .98 || agreement(hd, preview, tolerance) < .98) differing.push(`${type} (4K ${agreement(hd, uhd).toFixed(2)}, half ${agreement(hd, preview).toFixed(2)})`);
     }
     expect(differing).toEqual([]);
   });
@@ -122,7 +126,7 @@ describe('two-tone-pattern engine', () => {
   it('says when a pattern size is thinner than one pixel of a small frame', () => {
     const notes = (type: string, params: Params, width: number, height: number) => getEffect(type)!.paramWarnings?.({ ...getDefaultParams(type), ...params }, width, height) ?? [];
     expect(notes('halftone', { scale: 2 }, 1920, 1080)).toEqual([]);
-    expect(notes('halftone', { scale: 2 }, 640, 360)).toEqual(['Scale 2 px is thinner than one pixel on this 640×360 frame; it renders 1 pixel.']);
+    expect(notes('halftone', { scale: 2 }, 640, 360)).toEqual(['Dot Size 2 px is thinner than one pixel on this 640×360 frame; it renders 1 pixel.']);
     expect(notes('dither', { scale: 1 }, 1280, 720).join(' ')).toMatch(/^Pixel Size 1 px is thinner than one pixel on this 1280×720 frame/u);
     expect(notes('bricks', { scale: 1 }, 640, 360)).toEqual([]); // the floor of 5 px is 1.7 px there
     // Dither cells are whole pixels: 3 px of a 1080p frame are 1.5 pixels at 540p and render as 2.

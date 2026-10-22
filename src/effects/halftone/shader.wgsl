@@ -68,27 +68,69 @@ fn ditherStudioFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(mix(color.rgb, mix(params.colorA.rgb, params.colorB.rgb, bit), params.amount), color.a);
 }
 
+// The dot screen in pixels, turned by Angle around the frame centre: cells stay square on every frame shape.
+fn screenPixel(uv: vec2f) -> vec2f {
+  let a = params.angle * PI / 180.0;
+  let center = params.resolution * 0.5;
+  let p = uv * params.resolution - center;
+  return vec2f(p.x * cos(a) - p.y * sin(a), p.x * sin(a) + p.y * cos(a)) + center;
+}
+
+fn srgbToLinear(c: vec3f) -> vec3f {
+  let s = abs(c);
+  return sign(c) * select(pow((s + 0.055) / 1.055, vec3f(2.4)), s / 12.92, s <= vec3f(0.04045));
+}
+
+// Radius of a round dot that covers `darkness` of its cell (HALFTONE_DOT in halftoneEffectGraphs.ts).
+fn halftoneDotRadius(darkness: f32) -> f32 {
+  if (darkness > PI / 4.0) { return 0.70710678 - sqrt(1.0 - darkness) * 0.44710; }
+  return sqrt(darkness / PI);
+}
+
+// Cell Tone (cellLight in halftoneEffectGraphs.ts): linear light at four points a quarter cell from the centre,
+// weighted by alpha, plus the pixel itself at 5 % so a cell whose points are all transparent still has a tone.
+fn halftoneCellLight(uv: vec2f, cells: f32) -> f32 {
+  let a = -params.angle * PI / 180.0;
+  let center = params.resolution * 0.5;
+  let relative = (floor(screenPixel(uv) / cells) + 0.5) * cells - center;
+  let centerUv = (vec2f(relative.x * cos(a) - relative.y * sin(a), relative.x * sin(a) + relative.y * cos(a)) + center) / params.resolution;
+  let stepX = vec2f(cos(a), sin(a)) * cells * 0.25 / params.resolution;
+  let stepY = vec2f(-sin(a), cos(a)) * cells * 0.25 / params.resolution;
+  let own = source(uv);
+  var light = luminance(srgbToLinear(own.rgb)) * own.a * 0.05;
+  var alpha = own.a * 0.05;
+  for (var tap = 0; tap < 4; tap++) {
+    let side = vec2f(select(-1.0, 1.0, (tap & 1) == 1), select(-1.0, 1.0, tap >= 2));
+    let point = source(centerUv + stepX * side.x + stepY * side.y);
+    light += luminance(srgbToLinear(point.rgb)) * point.a;
+    alpha += point.a;
+  }
+  return light / max(alpha, 1e-6);
+}
+
 @fragment
 fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
-  let uv = rotated(input.uv);
   let cells = referencePixels(max(params.scale, 2.0));
-  let cell = fract(uv * params.resolution / cells) - 0.5;
-  let tone = luminance(source(input.uv).rgb);
-  let dotRadius = sqrt(max(0.0, 1.0 - tone)) * 0.68;
-  let ink = 1.0 - smoothstep(dotRadius - 0.06, dotRadius + 0.06, length(cell));
+  let cell = fract(screenPixel(input.uv) / cells) - 0.5;
   let original = source(input.uv);
+  let darkness = clamp(1.0 - halftoneCellLight(input.uv, cells), 0.0, 1.0);
+  let edge = 0.5 / cells;
+  let dotRadius = halftoneDotRadius(darkness) + (darkness * 2.0 - 1.0) * edge;
+  let ink = 1.0 - smoothstep(dotRadius - edge, dotRadius + edge, length(cell));
   return vec4f(mix(original.rgb, mix(params.colorB.rgb, params.colorA.rgb, ink), params.amount), original.a);
 }
 
 @fragment
 fn patternHalftoneFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = fract(rotated(input.uv) * params.resolution / referencePixels(max(params.scale, 2.0))) - 0.5;
+  let cells = referencePixels(max(params.scale, 2.0));
+  let cell = fract(screenPixel(input.uv) / cells) - 0.5;
   let color = source(input.uv);
   let radius = (1.0 - luminance(color.rgb)) * 0.72;
   var distance = length(cell);
   if (params.variant > 0.5 && params.variant < 1.5) { distance = abs(cell.x) + abs(cell.y); }
   if (params.variant > 1.5) { distance = abs(cell.y); }
-  let mark = 1.0 - smoothstep(radius - 0.04, radius + 0.04, distance);
+  let edge = 0.5 / cells;
+  let mark = 1.0 - smoothstep(radius - edge, radius + edge, distance);
   return vec4f(mix(color.rgb, mix(params.colorB.rgb, params.colorA.rgb, mark), params.amount), color.a);
 }
 

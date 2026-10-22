@@ -1,0 +1,9 @@
+{
+ "shots": [
+  "halftone?plumbing=hide&omit=output,frame&marks=organized-halftone-screen:below,organized-halftone-tone:above,organized-halftone-dot:below,organized-halftone-finish:below",
+  "halftone?focus=screen-dot-size-angle&only=centered-pixel,rotated-center,screen-pixel,safe-scale-frame-pixels,safe-scale-pixels,safe-scale-vec2,cell-divided,cell-fract,cell,edge-width&cables=avoid&name.pixel=Pixel (px)&name.safe-scale=Dot Size&name.frame-scale=Frame Scale&marks=rotated-center:above,safe-scale-pixels:below,cell-fract:above,half-pixel:above@halftone-screen",
+  "halftone?focus=cell-tone&only=cell-index,cell-center,cell-center-pixels,cell-center-turned,cell-center-frame,cell-center-uv,tap-1-uv,compound-shared-tap-1-clamped-uv,tap-1-split,tap-1-linear,tap-1-light,tap-1-light-alpha,tone&rows=2&cables=avoid&name.cell-center-relative=Centre − Frame Centre&name.back-radians=Minus Angle&name.tap-4-light-sum=Light of All Points&name.cell-alpha=Alpha of All Points&name.min-uv=Tiny&name.max-uv=Almost One&name.tap-1-alpha=Point Alpha&marks=cell-center-turned:above,tap-1-uv:below,tap-1-linear:above,tone:below@halftone-cell-tone",
+  "halftone?focus=dot&only=darkness,dot-area,dot-radius-small,paper-left,paper-root,paper-gap,dot-radius-large,dots-touch,radius,dot-radius,edge,mark&cables=avoid&name.inverse-tone=1 − Cell Light&name.edge-low=Dot Radius − Half Edge&name.edge-high=Dot Radius + Half Edge&name.distance=Distance from Centre&name.radius-bias=Edge Shift&marks=darkness:below,dot-radius-small:above,dot-radius-large:below,radius:above,edge:below@halftone-dot",
+  "halftone?focus=ink-and-paper-amount&only=color-a-rgb,color-b-rgb,ink-color,mixed-color,combine&cables=avoid&marks=ink-color:below,mixed-color:above,combine:below@halftone-ink-paper"
+ ]
+}

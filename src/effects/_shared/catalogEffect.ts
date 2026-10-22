@@ -30,6 +30,8 @@ export interface CatalogEffectOptions {
   /** Scale counts pixels of a 1080p frame and renders at least one output pixel (patternReferenceFrame.ts):
    * the floor its recipe clamps Scale to first. A frame too small for one pixel gets a card note. */
   scaleFloor?: number;
+  /** Parameter ids the card shows last, in this order (Halftone: Ink, Paper, then Amount). */
+  cardEnd?: readonly string[];
 }
 /** Runtime-only distance a keyframed Speed has travelled (EffectParam.integratedAs); never stored. */
 export const CATALOG_SPEED_TRAVEL = 'speedTravel';
@@ -83,8 +85,9 @@ function numberParam(params: Record<string, Primitive>, key: string, fallback: n
 }
 
 export function createCatalogEffect(options: CatalogEffectOptions): EffectDefinition {
+  const merged = Object.entries({ ...BASE_PARAMS, ...options.params }), end = options.cardEnd ?? [];
   const params = Object.fromEntries(
-    Object.entries({ ...BASE_PARAMS, ...options.params }).map(([name, param]) => {
+    [...merged.filter(([name]) => !end.includes(name)), ...end.flatMap(name => merged.filter(([key]) => key === name))].map(([name, param]) => {
       const animatable = param.type === 'number' && param.animatable === undefined ? { ...param, animatable: true } : param;
       return [name, options.retired?.[name] ? { ...animatable, deprecated: options.retired[name] } : animatable];
     }),

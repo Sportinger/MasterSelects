@@ -13,7 +13,9 @@ export const RESOLVE_ROW_EFFECTS: ReadonlySet<string> = new Set(['gaussian-blur'
   'acuarela', 'rom1', 'sheen', 'pixel-particle-disintegrate',
   'color-wheel', 'perspective-grid', 'stick-figure',
   // The pilot of the effect standard (presets, docs paragraphs): Documentation-Site.md "Effect pages".
-  'drift-lines']);
+  'drift-lines',
+  // Print & Halftone looks reviewed to that standard (their Ink and Paper colour rows included).
+  'halftone']);
 
 /** Parameter types that have a Resolve row (ResolveEffectParamRow); others keep the generic control. */
 export function hasResolveEffectParamRow(definition: { type: string }): boolean {
