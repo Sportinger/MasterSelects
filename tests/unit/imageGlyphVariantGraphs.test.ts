@@ -4,7 +4,8 @@ import { createDefaultBrandGeneratorGraph, createDefaultCapsuleCloudGraph, creat
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
 type Rgba = [number, number, number, number];
-const uv: [number, number] = [.3, .7], resolution: [number, number] = [40, 20];
+// Cell Size counts pixels of a 1080p frame: at 2160 × 1080 a Cell Size of 10 is a 10-pixel cell (grid 216 × 108).
+const uv: [number, number] = [.3, .7], resolution: [number, number] = [2160, 1080];
 const sourceAt = ([u, v]: [number, number]): Rgba => [u, v, .25, .6];
 const atlasAt = (_id: string, [u, v]: [number, number]): Rgba => [0, 0, 0, u * .4 + v * .3];
 const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t;
@@ -15,7 +16,8 @@ function params(effect: GlyphEffect, overrides: Record<string, unknown> = {}) {
   const definition = getEffect(effect)!;
   return {
     definition,
-    values: { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.default])), ...overrides },
+    // The recipe as instances saved before Background existed render it (Background 0, the dark ground).
+    values: { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.legacyDefault ?? spec.default])), ...overrides },
   };
 }
 
@@ -32,11 +34,11 @@ function evaluate(effect: GlyphEffect, graph: ReturnType<typeof createDefaultNum
 }
 
 function cell(coords = uv, offset = 0) {
-  const grid: [number, number] = [4, 2], id: [number, number] = [Math.floor(coords[0] * 4), Math.floor(coords[1] * 2)];
+  const grid: [number, number] = [resolution[0] / 10, resolution[1] / 10], id: [number, number] = [Math.floor(coords[0] * grid[0]), Math.floor(coords[1] * grid[1])];
   const local: [number, number] = [coords[0] * grid[0] - id[0], coords[1] * grid[1] - id[1]];
   const sourceUv: [number, number] = [(id[0] + .5) / grid[0], (id[1] + .5) / grid[1]];
   const source = sourceAt(sourceUv), tone = source[0] * .2126 + source[1] * .7152 + source[2] * .0722;
-  const baseIndex = Math.floor(Math.max(0, Math.min(.99999, tone)) * 4), index = (baseIndex + offset) % 4;
+  const baseIndex = Math.floor(Math.max(0, Math.min(.99999, tone)) * 4), index = ((baseIndex + offset) % 4 + 4) % 4;
   const atlasUv: [number, number] = [(index % 2 + local[0]) / 2, (Math.floor(index / 2) + local[1]) / 2];
   return { source, tone, local, id, atlasUv, alpha: atlasAt('', atlasUv)[3] };
 }

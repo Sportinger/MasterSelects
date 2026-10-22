@@ -1,6 +1,6 @@
 # Contour Type
 
-<!-- effect-docs: basic page sha=cdef0d27e53e, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=bccbd1b10757, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Places numeric characters along brightness contour bands and edges, like a typographic topographic map; Cell Size sets character size.
 
@@ -21,9 +21,10 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Control | Range | Default |
 |---|---|---|
 | **Grid** | | |
-| Cell Size | 4 to 72 | 20 |
+| Cell Size | 4 to 72 px | 20 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
+| Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
 | Ramp | standard, detailed, blocks, binary, numeric, symbols | numeric |

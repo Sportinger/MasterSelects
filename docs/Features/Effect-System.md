@@ -372,6 +372,40 @@ ASCII Ghost combines the current result with explicit previous-frame history usi
 component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
 
+**Glyph engine pass (2026-10-22).** All 19 looks come from `createGlyphEffect`
+(`src/effects/glyph/glyphEffectFactory.ts`) and `createDefaultGlyphGraph`
+(`src/services/operators/asciiEffectGraph.ts`); cell geometry and clock constants live in
+`src/effects/glyph/glyphGrid.ts`, and `shader.wgsl` is the WGSL twin. A look passes `id`, `name`,
+`entryPoint`, and optionally `animated`, `feedback`, `defaultRamp`, `defaultCellSize`,
+`defaultBackground`, `ignoresColors` and `presets`.
+
+- **Background** (`background`, 0–1, Style group): the ground behind each character is mixed from
+  the look's dark ground (source × 0.08, Dark × 0.15, or its own paper/black) towards the
+  character colour of the cell. Looks with their own palette (Matrix Rain, Retro Matrix, Pixel Code,
+  Number Field, Dither Glow) colour the whole cell with their ink at Background strength (Matrix Rain
+  × the cell tone). New instances start at 0.3 (Stitch Poster at 0, it has its paper), so cards and
+  stills keep about 40 % of the picture's brightness instead of about 10 %. `legacyDefault: 0` keeps
+  instances saved before it on the dark ground; it is `graphOnly`, so a node setup saved before it
+  hides the row; outside 0–1 it renders clamped (`background-clamped`, reported by `paramRangeNotes`).
+- **Cell Size** counts pixels of a 1080p frame (shorter side, `GLYPH_REFERENCE_HEIGHT`), at least
+  2 output pixels: preview qualities, thumbnails and 4K exports show the same grid. A Cell Size below 2
+  renders as 2 (`cellSize-clamped`); cells under 2 output pixels on small frames are reported by
+  `glyphCellWarnings`. This is a fix: on a 1080p composition nothing changes, on other sizes the
+  export now matches the preview. Projects saved with their node setup keep the earlier grid.
+- **Clock.** The moving looks read timeline time (`timelineAnimated`, no continuous rendering while
+  paused). Speed is `integratedAs: 'speedTravel'`: with keyframes the graph reads the travelled
+  distance (`index-speed-travel`), otherwise timeline time × Speed (the sentinel `GLYPH_NO_TRAVEL`,
+  −1e20, selects that), so a Speed ramp no longer makes the characters race.
+- **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light;
+  Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
+  load and the Style menu keeps them).
+- **Transparency.** Input and output are straight alpha; the output keeps the source alpha per pixel,
+  so characters and Background appear only where the layer is opaque.
+
+Tests: `tests/unit/glyphEngine.test.ts` (every shown control reaches the output, Background,
+1080p cells, Speed travel, timeline clock, WGSL literals), `tests/unit/imageAsciiGraph.test.ts` and
+`tests/unit/imageGlyphVariantGraphs.test.ts` (each look's recipe at Background 0).
+
 Acuarela is a four-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
 premultiplied source cache, two edge-aware 7 x 7 washes with per-pixel jittered taps
 (each pixel turns and shifts its tap grid at random, so thin lines become fine grain

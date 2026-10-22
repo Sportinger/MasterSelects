@@ -1,6 +1,6 @@
 # ASCII
 
-<!-- effect-docs: basic page sha=62fd06de7f96, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=d7933da0035b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Rebuilds the image from text characters chosen by brightness on a dark background; Cell Size sets character size, Ramp the character set.
 
@@ -21,9 +21,10 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Control | Range | Default |
 |---|---|---|
 | **Grid** | | |
-| Cell Size | 4 to 72 | 14 |
+| Cell Size | 4 to 72 px | 14 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
+| Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
 | Ramp | standard, detailed, blocks, binary, numeric, symbols | standard |

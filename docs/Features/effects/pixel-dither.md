@@ -1,6 +1,6 @@
 # Dither Glow
 
-<!-- effect-docs: basic page sha=4068a2cda045, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=df341922fc8c, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Renders glowing neon characters with soft cell halos, colored from Dark to Light by brightness; Cell Size sets character size.
 
@@ -21,9 +21,10 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Control | Range | Default |
 |---|---|---|
 | **Grid** | | |
-| Cell Size | 4 to 72 | 9 |
+| Cell Size | 4 to 72 px | 9 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
+| Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
 | Ramp | standard, detailed, blocks, binary, numeric, symbols | standard |
@@ -31,7 +32,6 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |
 | **Color** | | |
-| Color Source | Source, Duotone | Source |
 | Dark | a colour | `#081018` |
 | Light | a colour | `#e8fff5` |
 | **Motion** | | |
@@ -42,4 +42,4 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 
 ## Technical details
 
-Dither Glow is one look of the glyph engine; its looks share one node setup. It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+Dither Glow is one look of the glyph engine; its looks share one node setup. It changes over time: its picture depends on the playback time or on earlier frames. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).

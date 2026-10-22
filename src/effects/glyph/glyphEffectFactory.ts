@@ -1,12 +1,24 @@
+// The shared glyph-mosaic engine: every Text & Glyph look (plus Stitch Poster and Contour Type) is one
+// call of createGlyphEffect. The runtime is the editable graph in
+// src/services/operators/asciiEffectGraph.ts (createDefaultGlyphGraph); shader.wgsl is its WGSL twin.
+// Cell geometry and the Speed clock: glyphGrid.ts.
 import { resolveAsciiRamp } from '../_shared/asciiRamps';
 import { planGlyphAtlas } from '../_shared/glyphAtlas';
-import type { EffectCategory, EffectDefinition, EffectParam } from '../types';
+import type { EffectCategory, EffectDefinition, EffectParam, EffectPreset } from '../types';
 import glyphInclude from '../_shared/glyph.wgsl?raw';
 import familyShader from './shader.wgsl?raw';
 import { FEEDBACK_PARAMETERS } from '../_shared/feedbackParameters';
 import { GLYPH_FONT_OPTIONS } from '../_shared/glyphFonts';
+import { GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_SPEED_TRAVEL, glyphCellPixels, glyphCellWarnings } from './glyphGrid';
 
-interface GlyphEffectOptions {
+/** Background of new instances: how much of the picture fills the cells behind the characters. */
+export const GLYPH_DEFAULT_BACKGROUND = 0.3;
+
+/** Shared colour controls a look can ignore because it draws in its own palette. */
+export type GlyphColorControl = 'colorMode' | 'colorA' | 'colorB';
+const COLOR_CONTROL_LABELS: Record<GlyphColorControl, string> = { colorMode: 'Color Source', colorA: 'Dark', colorB: 'Light' };
+
+export interface GlyphEffectOptions {
   id: string;
   name: string;
   entryPoint: string;
@@ -15,7 +27,12 @@ interface GlyphEffectOptions {
   variant?: number;
   defaultRamp?: string;
   defaultCellSize?: number;
+  /** Background of new instances (0 = the look's own dark ground, 1 = the picture fills each cell). */
+  defaultBackground?: number;
+  /** Shared colour controls this look never reads: hidden in the card, kept in saved projects. */
+  ignoresColors?: readonly GlyphColorControl[];
   params?: Record<string, EffectParam>;
+  presets?: readonly EffectPreset[];
   category?: EffectCategory;
 }
 
@@ -38,9 +55,19 @@ function numeric(value: unknown, fallback: number): number {
 export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition {
   const defaultRamp = options.defaultRamp ?? 'standard';
   const defaultCellSize = options.defaultCellSize ?? 14;
+  const moving = Boolean(options.animated || options.feedback);
   const rawParams: Record<string, EffectParam> = {
-    cellSize: { type: 'number', label: 'Cell Size', default: defaultCellSize, min: 4, max: 72, step: 1, animatable: true, group: 'Grid' },
+    cellSize: {
+      type: 'number', label: 'Cell Size', default: defaultCellSize, min: 4, max: 72, step: 1, animatable: true, group: 'Grid',
+      unit: ' px', renderMin: GLYPH_MIN_CELL_PIXELS,
+    },
     amount: { type: 'number', label: 'Amount', default: 1, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
+    // New instances keep part of the picture behind the characters; instances saved before it existed
+    // render the dark ground (0). A node setup saved before it existed does not read it (graphOnly).
+    background: {
+      type: 'number', label: 'Background', default: options.defaultBackground ?? GLYPH_DEFAULT_BACKGROUND, legacyDefault: 0,
+      min: 0, max: 1, step: 0.01, animatable: true, group: 'Style', renderMin: 0, renderMax: 1, graphOnly: true,
+    },
     rampPreset: {
       type: 'select', label: 'Ramp', default: defaultRamp, group: 'Glyphs',
       options: ['standard', 'detailed', 'blocks', 'binary', 'numeric', 'symbols'].map((value) => ({ value, label: value })),
@@ -56,7 +83,11 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
     colorA: { type: 'color', label: 'Dark', default: '#081018', group: 'Color' },
     colorB: { type: 'color', label: 'Light', default: '#e8fff5', group: 'Color' },
     ...(options.animated ? {
-      speed: { type: 'number' as const, label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion' },
+      // Keyframeable: a keyed ramp moves by the distance travelled (integratedAs), not Speed × time.
+      speed: {
+        type: 'number' as const, label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion',
+        integratedAs: GLYPH_SPEED_TRAVEL,
+      },
     } : {}),
     ...(options.feedback ? {
       ...FEEDBACK_PARAMETERS,
@@ -64,6 +95,9 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
     } : {}),
     ...options.params,
   };
+  for (const key of options.ignoresColors ?? []) {
+    rawParams[key] = { ...rawParams[key], deprecated: `${options.name} draws in its own colours: ${COLOR_CONTROL_LABELS[key]} is ignored.` };
+  }
   const params = Object.fromEntries(
     Object.entries(rawParams).map(([name, param]) => [
       name,
@@ -83,10 +117,15 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
     category: options.category ?? 'glyph',
     shader: `${glyphInclude}\n${familyShader}`,
     entryPoint: options.entryPoint,
-    uniformSize: 80,
+    uniformSize: 96,
     params,
     usesFeedback: options.feedback,
-    requiresContinuousRender: options.animated || options.feedback,
+    // Timeline clock: the looks move with the playhead and hold still while paused, so a paused
+    // frame is never re-rendered; the docs still show them as loops.
+    requiresContinuousRender: false,
+    ...(moving ? { timelineAnimated: true } : {}),
+    paramWarnings: (values, width, height) => glyphCellWarnings(values, width, height, defaultCellSize),
+    ...(options.presets ? { presets: options.presets } : {}),
     glyphAtlas: (values) => ({
       fontFamily: String(values.fontFamily ?? FONT_OPTIONS[0].value),
       fontWeight: numeric(values.fontWeight, 600),
@@ -105,7 +144,7 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
       const colorB = parseColor(values.colorB, '#e8fff5');
       return new Float32Array([
         width, height,
-        numeric(values.cellSize, defaultCellSize),
+        glyphCellPixels(numeric(values.cellSize, defaultCellSize), width, height),
         numeric(values.amount, 1),
         Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,
         numeric(values.speed, 0),
@@ -117,6 +156,9 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
         values.colorMode === 'duotone' ? 1 : 0,
         ...colorA,
         ...colorB,
+        Math.min(Math.max(numeric(values.background, 0), 0), 1),
+        numeric(values[GLYPH_SPEED_TRAVEL], GLYPH_NO_TRAVEL),
+        0, 0,
       ]);
     },
   };

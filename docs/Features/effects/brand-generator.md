@@ -1,6 +1,6 @@
 # Brand Generator
 
-<!-- effect-docs: basic page sha=a5217fdba479, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=ddd07bc4f6a6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Block-glyph art whose characters shift in concentric rings around the center, framed by a border, for a logo-like pattern; Cell Size sets glyph size.
 
@@ -21,9 +21,10 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Control | Range | Default |
 |---|---|---|
 | **Grid** | | |
-| Cell Size | 4 to 72 | 24 |
+| Cell Size | 4 to 72 px | 24 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
+| Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
 | Ramp | standard, detailed, blocks, binary, numeric, symbols | blocks |

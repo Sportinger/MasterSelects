@@ -37,17 +37,23 @@ The engine cuts the picture into a grid of cells. Each cell's brightness picks a
 **ramp**, a row of characters from light to dense, and the style decides how the character is
 drawn and coloured.
 
-- **Cell Size** – the size of one character, in pixels. At the default 14 the characters are small on
-  a 1080p frame; 24 or more reads well on a projection.
+- **Cell Size** – the size of one character, in pixels of a 1080p frame, so the preview, the
+  thumbnails and a 4K export show the same characters. At the default 14 they are small; 24 or more
+  reads well on a projection.
+- **Background** – how much of the picture fills each cell behind its character: 0 is the dark
+  ground of classic ASCII art, 1 the full colour. New effects start at 0.3, so the picture stays
+  readable; effects saved earlier keep their dark ground.
 - **Ramp** – the set of characters (standard, detailed, blocks, binary, numeric, symbols), or your own
   in **Custom Ramp**. **Font** and **Weight** change the lettering.
 - **Color Source** – **Source** takes the picture's colours; **Duotone** draws between **Dark** and
-  **Light**.
+  **Light**. Matrix Rain, Retro Matrix and Pixel Code use their own colours, Number Field and Dither
+  Glow always draw between Dark and Light; their cards hide what they do not use.
 - **Invert Ramp** swaps light and dense characters; **Amount** mixes back towards the original;
-  **Speed** sets how fast the moving styles change.
+  **Speed** sets how fast the moving styles change; they move with the playhead and stand still
+  when it stops, and a keyframed Speed speeds up smoothly.
 
-**Tip:** the styles draw characters on a dark ground, so bright, contrasty footage reads best; for a
-projection, raise **Cell Size** to 24 or more. The **Style** menu in the card switches to another look
+**Tip:** bright, contrasty footage reads best. For pure characters on black, set **Background** to 0;
+for a projection, raise **Cell Size** to 24 or more. The **Style** menu in the card switches to another look
 of the engine and keeps your values and keyframes.
 
 ## Technical details

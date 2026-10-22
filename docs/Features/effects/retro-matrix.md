@@ -1,6 +1,6 @@
 # Retro Matrix
 
-<!-- effect-docs: basic page sha=848c36e0a6ac, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=8f15b7421c13, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Scrolls amber monochrome terminal characters vertically with scanlines, like an old phosphor display; Speed sets the scroll rate.
 
@@ -21,19 +21,16 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Control | Range | Default |
 |---|---|---|
 | **Grid** | | |
-| Cell Size | 4 to 72 | 14 |
+| Cell Size | 4 to 72 px | 14 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
+| Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
 | Ramp | standard, detailed, blocks, binary, numeric, symbols | numeric |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |
-| **Color** | | |
-| Color Source | Source, Duotone | Source |
-| Dark | a colour | `#081018` |
-| Light | a colour | `#e8fff5` |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
@@ -42,4 +39,4 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 
 ## Technical details
 
-Retro Matrix is one look of the glyph engine; its looks share one node setup. It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+Retro Matrix is one look of the glyph engine; its looks share one node setup. It changes over time: its picture depends on the playback time or on earlier frames. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).

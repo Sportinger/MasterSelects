@@ -1,3 +1,6 @@
+// WGSL twin of the glyph graph (src/services/operators/asciiEffectGraph.ts). cellSize arrives in
+// rendered pixels (Cell Size × shorter side / 1080, glyphCellPixels); travel is the distance a
+// keyframed Speed has travelled, or -1e20 without keys.
 struct GlyphParams {
   resolution: vec2f,
   cellSize: f32,
@@ -12,6 +15,10 @@ struct GlyphParams {
   colorMode: f32,
   colorA: vec4f,
   colorB: vec4f,
+  background: f32,
+  travel: f32,
+  pad0: f32,
+  pad1: f32,
 };
 
 struct GlyphCell {
@@ -41,10 +48,21 @@ fn glyphCell(uv: vec2f, indexOffset: f32) -> GlyphCell {
   return GlyphCell(sourceColor, local, id, tone, index, alpha);
 }
 
+// Timeline time × Speed, or the travel of a keyframed Speed.
+fn motionTime() -> f32 {
+  return select(params.time * params.speed, params.travel, params.travel > -5e19);
+}
+
+// Coverage of a look that colours every cell in its own palette: full under the character, Background around it.
+fn inkCoverage(alpha: f32, ground: f32) -> f32 {
+  return mix(ground, 1.0, alpha);
+}
+
 fn glyphInk(cell: GlyphCell, alpha: f32, background: vec3f) -> vec4f {
   let duotone = mix(params.colorA.rgb, params.colorB.rgb, cell.tone);
   let ink = select(duotone, cell.source.rgb, params.colorMode < 0.5);
-  let result = mix(background, ink, clamp(alpha, 0.0, 1.0));
+  let ground = mix(background, ink, params.background);
+  let result = mix(ground, ink, clamp(alpha, 0.0, 1.0));
   return vec4f(mix(cell.source.rgb, result, params.amount), cell.source.a);
 }
 
@@ -60,7 +78,7 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn asciiGhostFragment(input: VertexOutput) -> @location(0) vec4f {
-  let offset = floor(params.time * params.speed * 5.0);
+  let offset = floor(motionTime() * 5.0);
   let cell = glyphCell(input.uv, offset);
   let current = glyphInk(cell, cell.alpha, darkBackground(cell));
   let previous = textureSample(feedbackTex, texSampler, input.uv);
@@ -69,7 +87,7 @@ fn asciiGhostFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn ditherTextFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = glyphCell(input.uv, floor(params.time * params.speed * 2.0));
+  let cell = glyphCell(input.uv, floor(motionTime() * 2.0));
   let checker = step(0.5, fract((cell.id.x + cell.id.y) * 0.5));
   let threshold = mix(0.28, 0.72, checker);
   let alpha = cell.alpha * step(threshold, cell.tone + hash(cell.id + params.time) * 0.18);
@@ -87,25 +105,25 @@ fn wordMosaicFragment(input: VertexOutput) -> @location(0) vec4f {
 @fragment
 fn matrixFragment(input: VertexOutput) -> @location(0) vec4f {
   let base = glyphCell(input.uv, 0.0);
-  let rain = floor(params.time * params.speed * 8.0 + hash(vec2f(base.id.x, 0.0)) * params.glyphCount - base.id.y);
+  let rain = floor(motionTime() * 8.0 + hash(vec2f(base.id.x, 0.0)) * params.glyphCount - base.id.y);
   let cell = glyphCell(input.uv, rain);
-  let head = pow(0.5 + 0.5 * sin(base.id.y * 0.43 - params.time * params.speed * 5.0 + hash(base.id.xx) * TAU), 4.0);
+  let head = pow(0.5 + 0.5 * sin(base.id.y * 0.43 - motionTime() * 5.0 + hash(base.id.xx) * TAU), 4.0);
   let green = vec3f(0.04, 0.35 + head * 0.65, 0.13);
-  return vec4f(mix(base.source.rgb, green * cell.alpha, params.amount), base.source.a);
+  return vec4f(mix(base.source.rgb, green * inkCoverage(cell.alpha, params.background * base.tone), params.amount), base.source.a);
 }
 
 @fragment
 fn pixelCodeFragment(input: VertexOutput) -> @location(0) vec4f {
   let cell = glyphCell(input.uv, floor(hash(floor(input.uv * params.resolution / params.cellSize)) * params.glyphCount));
   let codeColor = mix(vec3f(0.08, 0.3, 0.48), vec3f(0.28, 0.95, 0.72), cell.tone);
-  return vec4f(mix(cell.source.rgb, codeColor * cell.alpha, params.amount), cell.source.a);
+  return vec4f(mix(cell.source.rgb, codeColor * inkCoverage(cell.alpha, params.background), params.amount), cell.source.a);
 }
 
 @fragment
 fn numberFieldFragment(input: VertexOutput) -> @location(0) vec4f {
   let cell = glyphCell(input.uv, 0.0);
   let ink = mix(params.colorA.rgb, params.colorB.rgb, floor(cell.tone * 5.0) / 4.0);
-  return vec4f(mix(cell.source.rgb, ink * cell.alpha, params.amount), cell.source.a);
+  return vec4f(mix(cell.source.rgb, ink * inkCoverage(cell.alpha, params.background), params.amount), cell.source.a);
 }
 
 @fragment
@@ -118,7 +136,7 @@ fn gridGlyphFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn capsuleCloudFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = glyphCell(input.uv, floor(params.time * params.speed + hash(floor(input.uv * 12.0)) * params.glyphCount));
+  let cell = glyphCell(input.uv, floor(motionTime() + hash(floor(input.uv * 12.0)) * params.glyphCount));
   let p = abs(cell.local - 0.5) - vec2f(0.43, 0.26);
   let pillDistance = length(max(p, vec2f(0.0))) + min(max(p.x, p.y), 0.0) - 0.18;
   let pill = 1.0 - smoothstep(-0.02, 0.03, pillDistance);
@@ -135,7 +153,7 @@ fn inscribeFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn dataHatchFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = glyphCell(input.uv, floor(params.time * params.speed * 2.0));
+  let cell = glyphCell(input.uv, floor(motionTime() * 2.0));
   let hatch = 1.0 - smoothstep(0.04, 0.13, abs(fract((cell.local.x + cell.local.y) * 4.0) - 0.5));
   return glyphInk(cell, max(cell.alpha, hatch * (1.0 - cell.tone) * 0.55), darkBackground(cell));
 }
@@ -143,7 +161,7 @@ fn dataHatchFragment(input: VertexOutput) -> @location(0) vec4f {
 @fragment
 fn glyphMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
   let base = glyphCell(input.uv, 0.0);
-  let sweep = floor(params.time * params.speed * 6.0 + base.id.x + base.id.y * 0.35);
+  let sweep = floor(motionTime() * 6.0 + base.id.x + base.id.y * 0.35);
   let cell = glyphCell(input.uv, sweep);
   return glyphInk(cell, cell.alpha, darkBackground(cell));
 }
@@ -151,25 +169,25 @@ fn glyphMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
 @fragment
 fn symbolMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
   let base = glyphCell(input.uv, 0.0);
-  let jitter = floor(hash(base.id + floor(params.time * params.speed * 4.0)) * params.glyphCount);
+  let jitter = floor(hash(base.id + floor(motionTime() * 4.0)) * params.glyphCount);
   let cell = glyphCell(input.uv, jitter);
-  let pulse = 0.65 + 0.35 * sin(params.time * params.speed * 2.0 + hash(base.id) * TAU);
+  let pulse = 0.65 + 0.35 * sin(motionTime() * 2.0 + hash(base.id) * TAU);
   return glyphInk(cell, cell.alpha * pulse, darkBackground(cell));
 }
 
 @fragment
 fn retroMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
-  let base = glyphCell(input.uv, floor(params.time * params.speed * 3.0 - input.uv.y * params.glyphCount));
-  let amber = vec3f(1.0, 0.52, 0.08) * base.alpha * (0.55 + base.tone * 0.7);
+  let base = glyphCell(input.uv, floor(motionTime() * 3.0 - input.uv.y * params.glyphCount));
+  let amber = vec3f(1.0, 0.52, 0.08) * inkCoverage(base.alpha, params.background) * (0.55 + base.tone * 0.7);
   let scan = 0.82 + 0.18 * sin(input.uv.y * params.resolution.y * PI);
   return vec4f(mix(base.source.rgb, amber * scan, params.amount), base.source.a);
 }
 
 @fragment
 fn pixelDitherFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = glyphCell(input.uv, floor(params.time * params.speed));
+  let cell = glyphCell(input.uv, floor(motionTime()));
   let glow = smoothstep(0.05, 0.65, cell.alpha + (1.0 - length(cell.local - 0.5)) * 0.18);
-  let neon = mix(params.colorA.rgb, params.colorB.rgb, cell.tone) * glow * 1.25;
+  let neon = mix(params.colorA.rgb, params.colorB.rgb, cell.tone) * inkCoverage(glow, params.background) * 1.25;
   return vec4f(mix(cell.source.rgb, neon, params.amount), cell.source.a);
 }
 
@@ -182,7 +200,7 @@ fn brandGeneratorFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn uiCollageFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = glyphCell(input.uv, floor(params.time * params.speed + hash(floor(input.uv * 7.0)) * params.glyphCount));
+  let cell = glyphCell(input.uv, floor(motionTime() + hash(floor(input.uv * 7.0)) * params.glyphCount));
   let border = 1.0 - smoothstep(0.03, 0.09, min(min(cell.local.x, 1.0 - cell.local.x), min(cell.local.y, 1.0 - cell.local.y)));
   let cursor = step(length(cell.local - vec2f(0.72, 0.28)), 0.07);
   return glyphInk(cell, max(cell.alpha, max(border * 0.42, cursor)), darkBackground(cell));
