@@ -1,52 +1,130 @@
 import { getEffect } from '../../effects';
-import { effectEngine, effectEngineMembers } from '../../effects/effectCatalogGroups';
+import { EFFECT_GROUPS, effectEngine, effectEngineMembers, effectGroup } from '../../effects/effectCatalogGroups';
 import type { Effect } from '../../types/effects';
+import type { EffectParam } from '../../effects/types';
 import { useTimelineStore } from '../../stores/timeline';
 import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { EFFECT_GRAPH_PARAM } from '../operators/effectGraph';
+import { createEffectProperty } from '../../types/animationProperties';
 import { startBatch, endBatch } from '../../stores/historyStore';
 
-const paramsOf = (type: string) => getEffect(type)?.params ?? {};
+const paramsOf = (type: string): Record<string, EffectParam> => getEffect(type)?.params ?? {};
+const nameOf = (type: string) => getEffect(type)?.name ?? type;
+const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label);
+
+export interface EffectStyleOption { value: string; label: string }
+export interface EffectStyleGroup { label: string; options: EffectStyleOption[] }
 
 /**
- * Other looks of the same engine. Every look of an engine has the engine's base parameters, and a
- * parameter two looks both have must be of the same kind, so switching keeps those values and
- * keyframes. A look's own controls (a Speed, a Shape) keep their stored value for a switch back.
+ * Other looks of the same engine, as Style menu groups: the effect's own picker group first, then
+ * the other groups in picker order, each alphabetical. A parameter two looks both have must be of
+ * the same kind; what carries over on a switch is decided by changeEffectStyle.
  */
-export function effectStyleOptions(type: string): Array<{ value: string; label: string }> {
+export function effectStyleGroups(type: string): EffectStyleGroup[] {
   const engine = effectEngine(type);
   const own = paramsOf(type);
   if (!engine || !getEffect(type)) return [];
-  return effectEngineMembers(engine).filter((member) => {
+  const members = effectEngineMembers(engine).filter((member) => {
     const other = getEffect(member)?.params;
     return !!other && Object.entries(own).every(([key, param]) => !other[key] || other[key].type === param.type);
-  }).map(member => ({ value: member, label: getEffect(member)!.name }));
+  });
+  const ownGroup = effectGroup(type).id;
+  const order = [ownGroup, ...EFFECT_GROUPS.map(group => group.id).filter(id => id !== ownGroup), 'other'];
+  return order.map(groupId => ({
+    label: groupId === 'other' ? 'Other' : EFFECT_GROUPS.find(group => group.id === groupId)?.label ?? groupId,
+    options: members.filter(member => effectGroup(member).id === groupId).map(member => ({ value: member, label: nameOf(member) })).toSorted(byLabel),
+  })).filter(group => group.options.length > 0);
+}
+
+/** The Style menu entries in menu order (see effectStyleGroups). */
+export function effectStyleOptions(type: string): EffectStyleOption[] {
+  return effectStyleGroups(type).flatMap(group => group.options);
 }
 
 /**
- * Replaces the look in place: same effect ID, stack position, parameters and keyframes; one undo
- * step. Controls only the new look has start at its defaults (not a saved-project fallback), and a
- * choice the new look does not offer falls back to its default.
+ * A parameter another look of the same engine has but this look does not: a value kept from an
+ * earlier style for a switch back. Its keyframe lane is hidden while this look is active.
  */
-export function changeEffectStyle(clipId: string, effectId: string, type: string): void {
+export function isOtherStyleParam(type: string | undefined, key: string): boolean {
+  const engine = type ? effectEngine(type) : undefined;
+  if (!engine || !getEffect(type!) || paramsOf(type!)[key]) return false;
+  return effectEngineMembers(engine).some(member => !!paramsOf(member)[key]);
+}
+
+/** Drops the keyframe lanes of controls kept from another style (isOtherStyleParam) from a lane set. */
+export function hideOtherStyleLanes(properties: Set<string>, effects: ReadonlyArray<{ id: string; type?: string }> | undefined): void {
+  for (const property of properties) {
+    const [prefix, effectId, key, ...rest] = property.split('.');
+    if (prefix !== 'effect' || !key || rest.length) continue;
+    const effect = effects?.find(candidate => candidate.id === effectId);
+    if (effect && isOtherStyleParam(effect.type, key)) properties.delete(property);
+  }
+}
+
+const formatValue = (value: unknown) => typeof value === 'number' ? String(Math.round(value * 1000) / 1000) : String(value);
+const clampTo = (param: EffectParam, value: number) => Math.min(param.max ?? Infinity, Math.max(param.min ?? -Infinity, value));
+const listText = (items: string[]) => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
+/**
+ * Replaces the look in place: same effect ID, stack position and one undo step. A control both
+ * looks have under the same name keeps its value and keyframes, brought into the new look's range.
+ * A control with another name in the new look (Halftone's Scale is CRT Screen's Mask Density) is
+ * another control: it starts at the new look's default and the old keyframes on it are removed.
+ * Controls only the new look has start at their defaults, a choice the new look does not offer
+ * falls back to its default, and controls only the old look has keep their value and keyframes for
+ * a switch back. Returns one short sentence per change the user cannot see in the card.
+ */
+export function changeEffectStyle(clipId: string, effectId: string, type: string): string[] {
   assertExclusiveTimelineMutationAllowed();
   const state = readTimelineRuntimeState(useTimelineStore);
   const clip = state.clips.find(candidate => candidate.id === clipId), effect = clip?.effects.find(candidate => candidate.id === effectId);
   if (!clip || !effect || state.isExporting || state.tracks.find(track => track.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
-  if (effect.type === type) return;
+  if (effect.type === type) return [];
   if (!effectStyleOptions(effect.type).some(option => option.value === type)) throw new Error(`${type} is not a style of ${effect.type}.`);
+  const oldParams = paramsOf(effect.type), newParams = paramsOf(type), newName = nameOf(type);
+  const keyframes = state.clipKeyframes.get(clipId) ?? [];
+  const keyed = (key: string) => keyframes.filter(keyframe => keyframe.property === createEffectProperty(effectId, key));
+  const notes: string[] = [], renamed: Array<{ from: string; to: string }> = [];
+  const clampKeys: Array<{ id: string; value: number }> = [], removeKeys: string[] = [];
   // A customized node graph belongs to the previous look; the new style starts from its own default graph.
   const params = Object.fromEntries(Object.entries(effect.params).filter(([key]) => key !== EFFECT_GRAPH_PARAM));
-  for (const [key, param] of Object.entries(paramsOf(type))) {
-    const stored = params[key];
+  for (const [key, param] of Object.entries(newParams)) {
+    const stored = params[key], old = oldParams[key];
+    if (old && old.label !== param.label) {
+      params[key] = param.default;
+      renamed.push({ from: old.label, to: param.label });
+      removeKeys.push(...keyed(key).map(keyframe => keyframe.id));
+      continue;
+    }
     const offered = param.type !== 'select' || param.options?.some(option => option.value === stored);
-    if (stored === undefined || !offered) params[key] = param.default;
+    if (stored === undefined || !offered) { params[key] = param.default; continue; }
+    if (param.type !== 'number') continue;
+    if (typeof stored === 'number' && clampTo(param, stored) !== stored) {
+      params[key] = clampTo(param, stored);
+      notes.push(`${param.label} ${formatValue(stored)} → ${formatValue(params[key])} (${newName} range).`);
+    }
+    const outside = keyed(key).filter(keyframe => clampTo(param, keyframe.value) !== keyframe.value);
+    if (outside.length) {
+      clampKeys.push(...outside.map(keyframe => ({ id: keyframe.id, value: clampTo(param, keyframe.value) })));
+      notes.push(`${param.label} keyframes brought into ${formatValue(param.min ?? -Infinity)}–${formatValue(param.max ?? Infinity)}.`);
+    }
   }
+  if (renamed.length) {
+    const removed = removeKeys.length ? ' Their keyframes were removed (Undo brings them back).' : '';
+    const one = renamed.length === 1;
+    notes.unshift(`${listText(renamed.map(entry => entry.to))} ${one ? 'starts' : 'start'} at ${newName}'s ${one ? 'default' : 'defaults'} (${one ? 'another control' : 'other controls'} than ${listText(renamed.map(entry => entry.from))}).${removed}`);
+  }
+  const kept = Object.entries(oldParams).filter(([key]) => !newParams[key] && keyed(key).length > 0).map(([, param]) => param.label);
+  if (kept.length) notes.push(`${listText(kept)} ${kept.length === 1 ? 'keeps its' : 'keep their'} keyframes for a switch back; ${newName} has no ${listText(kept)}.`);
   const next: Effect = { ...effect, type: type as Effect['type'], params, operatorGraph: undefined,
     name: effect.name === effect.type || effect.name === getEffect(effect.type)?.name ? type : effect.name };
   const batch = startBatch('Change effect style');
   try {
     state.updateClip(clip.id, { effects: clip.effects.map(candidate => candidate.id === effectId ? next : candidate) });
+    const store = useTimelineStore.getState();
+    for (const { id, value } of clampKeys) store.updateKeyframe(id, { value });
+    for (const id of removeKeys) store.removeKeyframe(id);
   } finally { if (batch.opened) endBatch(); }
+  return notes;
 }

@@ -59,7 +59,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Drift Lines with the Rain Curtain preset. 1 — Preset: pick a starting point. 2 — Band Size. 3 — Angle: 90° stands the bands upright. 4 — Drift.</figcaption>
 </figure>
 
-**Style** – switches to another look of the same engine and keeps your values and keyframes, for example [Glitch Grid](./glitch-grid.md), [Scatter Mosaic](./scatter-mosaic.md) or [Wave Lines](./wave-lines.md).
+**Style** – switches to another look of the same engine; controls with the same name keep their values and keyframes, for example [Glitch Grid](./glitch-grid.md), [Scatter Mosaic](./scatter-mosaic.md) or [Wave Lines](./wave-lines.md).
 
 ### Pattern
 

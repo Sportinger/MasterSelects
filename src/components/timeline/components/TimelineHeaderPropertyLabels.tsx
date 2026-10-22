@@ -3,6 +3,7 @@ import {
   createEffectProperty,
   type AnimatableProperty,
 } from '../../../types/animationProperties';
+import { hideOtherStyleLanes } from '../../../services/effects/effectStyles';
 import type { ClipTransform } from '../../../types/timelineCore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { TimelineHeaderPropertyRow } from './TimelineHeaderPropertyRow';
@@ -88,6 +89,7 @@ export function TimelineHeaderPropertyLabels({
   const keyframeProperties = useMemo(() => {
     const props = new Set<string>();
     keyframes.forEach((kf) => props.add(kf.property));
+    hideOtherStyleLanes(props, selectedClip?.effects);
     if (shouldHide3DOnlyProperties(selectedClip)) {
       props.delete('rotation.x');
       props.delete('rotation.y');
