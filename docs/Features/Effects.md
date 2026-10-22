@@ -142,8 +142,9 @@ something you set.
 named starting point: it sets the controls of the card at once, and one undo takes it back. What
 belongs to your shot stays as it is: the screen colour of a key, a measured lens, where a figure
 stands, and quality settings. A control with keyframes keeps them, and the card says so. An effect
-saved by an earlier version may lack some controls a preset sets; the card names them and offers
-**Use current graph** to bring the effect up to date. Each effect page shows its presets.
+saved by an earlier version, or one you changed in the Nodes tab, may lack some controls a preset
+sets; the card names them and offers **Update node setup** to bring the effect up to date. That also
+replaces your own changes in the Nodes tab; **Undo** brings them back. Each effect page shows its presets.
 
 **Your own effects.** To reuse an effect you have set up, open the **Nodes** tab, click **Effect
 presets**, give it a name and click **Save effect copy**. Under **Saved effects**, **Add copy** adds

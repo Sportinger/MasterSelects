@@ -91,8 +91,9 @@ and source. Other effects and structural settings are not implicitly enabled.
   ("Heat Haze: Drift kept its keyframes."). A preset that changes nothing says so, and one that names
   controls the effect's saved node graph lacks (a setup saved by an earlier version, or an edited graph)
   names them and never shows as the current preset; when the effect's current graph has them, the note
-  offers **Use current graph**, which swaps that graph in and applies the preset in the same undo
-  step. The row shows the preset the values match. AI tools do not
+  offers **Update node setup**, which swaps that graph in and applies the preset in the same undo
+  step, and says that it replaces edits made in the Nodes tab. The note disappears once the effect
+  changes (a value, Undo, a graph edit). The row shows the preset the values match. AI tools do not
   list presets yet. Three to five presets per effect; the docs check names them
   ([Effect pages](./Documentation-Site.md#effect-pages)).
 - **Animated looks keep time with the playhead.** A look rendered by its node graph reads `image.timeline-time`,

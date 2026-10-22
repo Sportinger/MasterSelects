@@ -76,7 +76,7 @@ describe('presets that cannot do what they say', () => {
     const result = applyEffectPreset('preset-clip', 'fx', 'green-terminal');
     expect(result.kept.filter(item => item.reason === 'missing').map(item => item.key)).toEqual(['background', 'blackLevel']);
     expect(result.upgradable).toBe(true);
-    expect(effectPresetNotice(result)).toBe("Green Terminal: Background and Black Level are not in this effect's saved node graph.");
+    expect(effectPresetNotice(result)).toBe("Green Terminal: Background and Black Level are not in this effect's saved node setup.");
     expect(effect().operatorGraph).toBeDefined();
     expect(matchingEffectPreset(effect())).toBeUndefined();
   });
@@ -87,7 +87,7 @@ describe('presets that cannot do what they say', () => {
     const result = applyEffectPreset('preset-clip', 'fx', 'green-terminal', { currentGraph: true });
     expect(result.graphReplaced).toBe(true);
     expect(result.kept).toEqual([]);
-    expect(effectPresetNotice(result)).toBe('Green Terminal: the node graph is now the current one (Undo brings back the old one).');
+    expect(effectPresetNotice(result)).toBe('Green Terminal: the node setup is updated (Undo brings back the old one).');
     expect(effect().operatorGraph).toBeUndefined();
     expect(effect().params).toMatchObject({ background: 0.1, blackLevel: 0.2, colorMode: 'duotone' });
     expect(matchingEffectPreset(effect())?.id).toBe('green-terminal');
@@ -101,6 +101,6 @@ describe('presets that cannot do what they say', () => {
     applyEffectPreset('preset-clip', 'fx', 'green-terminal', { currentGraph: true });
     expect(effectPresetNotice(applyEffectPreset('preset-clip', 'fx', 'green-terminal'))).toBe('Green Terminal: the card already has these values.');
     expect(effectPresetNotice({ preset: { id: 'p', name: 'Smoke', params: {} }, changed: [], kept: [{ key: 'flow', label: 'Flow', reason: 'missing' }], graphEdited: true }))
-      .toBe("Smoke changed nothing: Flow is not in this effect's saved node graph.");
+      .toBe("Smoke changed nothing: Flow is not in this effect's saved node setup.");
   });
 });

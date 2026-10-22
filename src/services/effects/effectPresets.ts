@@ -179,7 +179,7 @@ export interface EffectPresetResult {
  * animation or are missing from the stored graph, and when nothing changed at all, that it did not.
  */
 export function effectPresetNotice(result: EffectPresetResult): string | undefined {
-  const replaced = result.graphReplaced ? 'the node graph is now the current one (Undo brings back the old one)' : '';
+  const replaced = result.graphReplaced ? 'the node setup is updated (Undo brings back the old one)' : '';
   if (!result.kept.length) {
     if (replaced) return `${result.preset.name}: ${replaced}.`;
     return result.changed.length ? undefined : `${result.preset.name}: the card already has these values.`;
@@ -191,8 +191,8 @@ export function effectPresetNotice(result: EffectPresetResult): string | undefin
     replaced,
     names('keyframes').length ? `${join(names('keyframes'))} kept ${names('keyframes').length > 1 ? 'their' : 'its'} keyframes` : '',
     names('node').length ? `${join(names('node'))} stayed driven by ${names('node').length > 1 ? 'their nodes' : 'its node'}` : '',
-    // When `upgradable`, the card puts its Use current graph button right after this line.
-    missing.length ? `${join(missing)} ${missing.length > 1 ? 'are' : 'is'} not in this effect's ${result.graphEdited ? 'saved node ' : ''}graph` : '',
+    // When `upgradable`, the card puts its Update node setup button right after this line.
+    missing.length ? `${join(missing)} ${missing.length > 1 ? 'are' : 'is'} not in this effect's ${result.graphEdited ? 'saved node setup' : 'graph'}` : '',
   ].filter(Boolean);
   return `${result.preset.name}${result.changed.length || replaced ? '' : ' changed nothing'}: ${parts.join('; ')}.`;
 }
