@@ -105,8 +105,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 ### Motion
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/wave-speed.mp4" poster="../assets/effects/clips/wave-speed.webp" width="720" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Wave at three speeds, about two seconds each: at Speed 0 the waves stand still while she moves through them, at 0.5 they travel slowly, at 2 they wobble quickly; the speed is shown at the bottom left"></video>
-<figcaption>Speed 0, 0.5 and 2, about two seconds each.</figcaption>
+<video src="../assets/effects/clips/wave-speed.mp4" poster="../assets/effects/clips/wave-speed.webp" width="720" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer, held still, with Wave at three speeds, 1.6 seconds each: at Speed 0 the waves stand still, at 0.5 they travel slowly through her dress and the floor, at 2 they wobble quickly; the speed is shown at the bottom left"></video>
+<figcaption>Speed 0, 0.5 and 2, 1.6 seconds each, on a held frame.</figcaption>
 </figure>
 
 **Speed** – how fast the waves travel, in waves per second: at 0.5 every wave moves on by its own length in two seconds. Positive values run them to the left and upwards, negative values the other way, 0 holds them still. It follows the playhead, so a paused picture stands still and the export matches the preview. −4 to 4, default 0.5.
