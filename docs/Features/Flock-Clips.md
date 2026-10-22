@@ -66,8 +66,28 @@ See [Node Workspace](Node-Workspace.md) for graph editing and shared controls.
 
 ### Presets
 
+The **Preset** row of the Flocking card offers the effect's five presets first (Free Swarm,
+Krill Cloud, Follow Path, Technical Network, Violet Filaments; `FLOCKING_CARD_PRESET_IDS`) and the
+other swarms under **More swarms**. Picking one replaces the graph in one undo step; when the clip
+has `flock.node.*` keyframes, the card asks first because they are removed. The row always names
+the graph's `presetId`, so it follows tools, the Nodes tab and undo. A flock preset replaces the
+whole graph, so it is not an `EffectPreset` of the effect definition. Pictures and descriptions:
+[Flocking](./effects/flocking.md#presets).
+
 | Preset | Content |
 |---|---|
+| Free Swarm | Boids + turbulence inside a soft sphere sized to the default frame, soft points |
+| Krill Cloud | Aligned krill instances in drifting clusters, faint neighbor links |
+| Follow Path | School following a figure-eight that fits the frame, with tapered trails |
+| Technical Network | Points, neighbor links and square trail-head markers inside a reflecting box |
+| Violet Filaments | 20 000 clustered particles with a positional violet palette, long curved filaments, wire-cube heads and dot tails |
+| Vortex (more) | Swirling shell, speed-colored points, velocity strokes |
+| Shrimp Pullback (more) | One large hero animal inside a 24 000-animal structured swarm with links, trails and ring markers |
+| Terracotta / Lilac Sculpture (more) | A settling APIC sheet with pigment in a lit gallery box |
+
+Saved clips store their whole graph, so retuned presets change only swarms built afterwards.
+
+---|---|
 | Free Swarm | Boids + turbulence inside a soft sphere, soft points |
 | Krill Cloud | Aligned krill instances in drifting clusters, faint neighbor links |
 | Vortex | Swirling shell, speed-colored points, velocity strokes |

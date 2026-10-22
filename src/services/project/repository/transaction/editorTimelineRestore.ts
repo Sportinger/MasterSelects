@@ -12,6 +12,7 @@ import { RepositoryError } from '../contracts';
 import { releaseClipTreeRuntimeBindings } from '../../../mediaRuntime/clipBindings';
 import { isLinkedMediaDeferred } from '../../linkedMediaDemand';
 import type { TimelineClip } from '../../../../types/timeline';
+import { restoredFlockDefinitionOf } from '../../../../stores/timeline/serialization/flockDefinitionRestore';
 
 export interface StagedTimeline { state: Partial<TimelineStore>; activate(): void; abandon(): void; }
 /** Fields derived from the clip's media only (source waveform, projected transcript, analysis, scenes). */
@@ -59,6 +60,15 @@ export async function stageEditorTimeline(current: TimelineStore, media: MediaSt
     if (active) publishRuntimePatch(patch);
   };
   const buffer = createLoadStateRestoreBuffer(set);
+  // Any clip may carry a Flocking effect; its swarm graph comes back with it, as in loadState. Without
+  // this, undo and redo in a project dropped the swarm of a video, image or solid clip (only legacy
+  // flock host clips kept theirs).
+  const serializedById = new Map((data?.clips ?? []).map(clip => [clip.id, clip]));
+  const pushClip = (clip: TimelineClip) => {
+    const serialized = serializedById.get(clip.id);
+    const flock = clip.flock ?? (serialized ? restoredFlockDefinitionOf(serialized) : undefined);
+    buffer.push(flock && !clip.flock ? { ...clip, flock } : clip);
+  };
   // Cycle detection must start at the destination, not the previously open child.
   const mediaContext = { ...media, activeCompositionId: composition?.id ?? null,
     getActiveComposition: () => composition } as Parameters<typeof createLoadStateGeneratedClip>[0]['mediaStore'];
@@ -77,15 +87,15 @@ export async function stageEditorTimeline(current: TimelineStore, media: MediaSt
         (clip.mediaFileId ?? clip.source?.mediaFileId) === serializedClip.mediaFileId && clip.source?.type === serializedClip.sourceType);
     };
     const compositionResult = await restoreLoadStateCompositionClip({ serializedClip, mediaStore: mediaContext,
-      get, set, pushRestoredClip: buffer.push, flushRestoredClipBuffer: buffer.flush, patchRestoredClip: buffer.patch,
+      get, set, pushRestoredClip: pushClip, flushRestoredClipBuffer: buffer.flush, patchRestoredClip: buffer.patch,
       pushRestoredNestedKeyframes: buffer.pushNestedKeyframes, isCurrentTimelineSession: clipIsCurrent,
       wakePreviewAfterRestore: () => {}, restoreSourceThumbnails: () => {} });
     if (compositionResult === 'stale') throw new RepositoryError('cancelled', 'Composition runtime staging became stale');
     if (compositionResult === 'handled') continue;
     const generated = await createLoadStateGeneratedClip({ serializedClip, mediaStore: mediaContext });
-    if (generated) { buffer.push(generated); continue; }
+    if (generated) { pushClip(generated); continue; }
     const result = await restoreLoadStateMediaClip({ serializedClip, mediaStore: mediaContext, set,
-      pushRestoredClip: buffer.push, patchRestoredClip: buffer.patch, updateMediaFile: (id, patch) => {
+      pushRestoredClip: pushClip, patchRestoredClip: buffer.patch, updateMediaFile: (id, patch) => {
         mediaContext.files = mediaContext.files.map(file => file.id === id ? { ...file, ...patch } : file);
       }, restoreSourceThumbnails: () => {}, isCurrentTimelineSession: clipIsCurrent, wakePreviewAfterRestore: () => {} });
     if (result === 'stale') throw new RepositoryError('cancelled', 'Media runtime staging became stale');

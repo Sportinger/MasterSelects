@@ -70,8 +70,25 @@ export const EFFECT_DOC_EXTRAS = {
         .map((key) => ({ key, section: 'Light & face shadows' })),
     ],
   },
+  // The card of the default swarm (Free Swarm): its rows come from the swarm graph (clip.flock), not
+  // from effect parameters, and other presets expose other rows (FLOCKING_CARD_PRESET_IDS).
   flocking: {
-    note: 'The card shows a **Preset** menu and the values that preset exposes, grouped as Population, Behavior, Guidance, Appearance and Lines; they change with the preset. **Open Nodes** shows the whole swarm graph.',
+    thumb: { region: [0, 0, 1, 1] },
+    sections: ['Population', 'Behavior', 'Appearance', 'More controls', 'Time & Quality'],
+    rows: [
+      cableRow('Population', 'Population', '1 to 4 194 304', '4000'),
+      cableRow('Behavior', 'Cohesion', '0 to 10', '1'),
+      cableRow('Behavior', 'Separation', '0 to 10', '1.6'),
+      cableRow('Behavior', 'Alignment', '0 to 10', '1.2'),
+      cableRow('Behavior', 'Speed', '0 and up', '45'),
+      cableRow('Behavior', 'Turbulence', '0 and up', '18'),
+      cableRow('Appearance', 'Size', '0 to 200 px', '6 px'),
+      cableRow('Appearance', 'Color', 'a colour', '`#b4e2ff`'),
+      cableRow('More controls', 'Add', 'any value of the swarm graph', 'none'),
+      cableRow('Time & Quality', 'Step rate', '30, 60 or 120 Hz', '60 Hz'),
+      cableRow('Time & Quality', 'Warm-up', '0 to 30 s', '0 s'),
+      cableRow('Time & Quality', 'Loop', 'Continuous, Reset each loop', 'Continuous'),
+    ],
   },
   'slit-scan': {
     sections: ['Time', 'Wave', 'Sampling', 'Motion compensation', 'Preview quality', '3D geometry', 'Space-time slice', 'Stabilization',

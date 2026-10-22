@@ -7,6 +7,9 @@ import { compileFlockDefinitionCached } from '../../../../services/flock/compile
 import { FLOCK_SIMULATION_OPERATOR_ID, getFlockParamDescriptor } from '../../../../services/flock/operators/flockOperatorRegistry';
 import { flockRuntime, type FlockRuntimeState } from '../../../../engine/flock/runtime/flockRuntimeApi';
 import { DraggableNumber } from '../shared';
+import { InspectorSelect } from '../../../inspector/InspectorSelect';
+import { ResolveInspectorNumberRow } from '../resolveInspector/ResolveInspectorNumberRow';
+import { ResolveInspectorRow, ResolveInspectorSection } from '../resolveInspector/ResolveInspectorPrimitives';
 import { formatFlockBytes } from './flockControlUtils';
 import { useFlockRuntimeStatus } from './useFlockRuntimeStatus';
 
@@ -186,73 +189,78 @@ export function FlockTimeQualitySection({ clip }: { clip: TimelineClip }) {
   const stepRate = String(simulation?.params.stepRate ?? stepRateDescriptor?.default ?? '60');
   const warmup = typeof simulation?.params.warmup === 'number' ? simulation.params.warmup : 0;
 
+  const loopOptions: Array<{ value: FlockLoopMode; label: string }> = [
+    { value: 'none', label: 'Continuous' },
+    { value: 'reset', label: 'Reset each loop' },
+  ];
+
   return (
-    <div className="properties-section flock-time-quality">
-      <h4>Time &amp; Quality</h4>
-      {simulation && (
-        <>
-          <div className="control-row">
-            <label className="prop-label" htmlFor={`flock-step-rate-${clip.id}`}>Step rate</label>
-            <select
-              id={`flock-step-rate-${clip.id}`}
-              value={stepRate}
-              onChange={(event) => withBatch('Set flock step rate', () => setFlockGraphParam(clip.id, simulation.id, 'stepRate', event.target.value))}
-            >
-              {stepRateDescriptor?.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-            <span className="flock-control-hint">Resimulates from start</span>
-          </div>
-          <div className="control-row">
-            <span className="prop-label">Warm-up</span>
-            <DraggableNumber
+    <div className="flock-time-quality">
+      <ResolveInspectorSection title="Time & Quality">
+        {simulation && (
+          <>
+            <ResolveInspectorRow label="Step rate" title="How often the swarm is simulated per second. Resimulates from the start.">
+              <InspectorSelect
+                ariaLabel="Step rate"
+                value={stepRate}
+                options={(stepRateDescriptor?.options ?? []).map((option) => ({ value: option.value, label: option.label }))}
+                onChange={(next) => withBatch('Set flock step rate', () => setFlockGraphParam(clip.id, simulation.id, 'stepRate', next))}
+              />
+            </ResolveInspectorRow>
+            <ResolveInspectorNumberRow
+              label="Warm-up"
+              title="Seconds simulated before the clip starts, so the swarm is already formed on its first frame."
               value={warmup}
-              onChange={(value) => setFlockGraphParam(clip.id, simulation.id, 'warmup', Math.max(0, Math.min(30, value)))}
+              defaultValue={0}
               min={0}
               max={30}
+              step={0.1}
               decimals={1}
               sensitivity={0.05}
               suffix=" s"
-              ariaLabel="Warm-up"
-              onDragStart={() => startBatch('Set flock warm-up')}
-              onDragEnd={() => endBatch()}
+              hardMin={0}
+              hardMax={30}
+              onChange={(value) => setFlockGraphParam(clip.id, simulation.id, 'warmup', value)}
             />
-          </div>
-        </>
-      )}
-      <div className="control-row">
-        <label className="prop-label" htmlFor={`flock-loop-${clip.id}`}>Loop</label>
-        <select
-          id={`flock-loop-${clip.id}`}
-          value={definition.time.loop}
-          onChange={(event) => withBatch('Set flock loop', () => setFlockTimeSettings(clip.id, { loop: event.target.value as FlockLoopMode }))}
-        >
-          <option value="none">Continuous</option>
-          <option value="reset">Reset each loop</option>
-        </select>
+          </>
+        )}
+        <ResolveInspectorRow label="Loop">
+          <InspectorSelect
+            ariaLabel="Loop"
+            value={definition.time.loop}
+            options={loopOptions}
+            onChange={(next) => withBatch('Set flock loop', () => setFlockTimeSettings(clip.id, { loop: next }))}
+          />
+        </ResolveInspectorRow>
         {definition.time.loop === 'reset' && (
-          <DraggableNumber
+          <ResolveInspectorNumberRow
+            label="Loop length"
             value={definition.time.loopSeconds}
-            onChange={(value) => setFlockTimeSettings(clip.id, { loopSeconds: Math.max(0.1, value) })}
+            defaultValue={10}
             min={0.1}
+            max={Math.max(30, definition.time.loopSeconds)}
+            step={0.1}
             decimals={2}
             sensitivity={0.05}
             suffix=" s"
-            ariaLabel="Loop length"
-            onDragStart={() => startBatch('Set flock loop length')}
-            onDragEnd={() => endBatch()}
+            hardMin={0.1}
+            numberMax={Number.POSITIVE_INFINITY}
+            onChange={(value) => setFlockTimeSettings(clip.id, { loopSeconds: value })}
           />
         )}
-      </div>
-      <div className="control-row">
-        <span className="prop-label">Memory</span>
-        <span className="flock-meta">
-          {compiled.program
-            ? `${compiled.program.capacity.toLocaleString()} capacity · est. ${formatFlockBytes(compiled.program.estimate.totalBytes)}`
-            : 'Unavailable while the graph is invalid'}
-        </span>
-      </div>
-      <RuntimeStatusBlock clipId={clip.id} />
-      <PrecomputeBlock clip={clip} />
+      </ResolveInspectorSection>
+      <ResolveInspectorSection title="Simulation status" defaultOpen={false}>
+        <div className="control-row">
+          <span className="prop-label">Memory</span>
+          <span className="flock-meta">
+            {compiled.program
+              ? `${compiled.program.capacity.toLocaleString()} capacity · est. ${formatFlockBytes(compiled.program.estimate.totalBytes)}`
+              : 'Unavailable while the graph is invalid'}
+          </span>
+        </div>
+        <RuntimeStatusBlock clipId={clip.id} />
+        <PrecomputeBlock clip={clip} />
+      </ResolveInspectorSection>
     </div>
   );
 }

@@ -2,6 +2,8 @@ import { useTimelineStore } from '../../../../stores/timeline';
 import { endBatch, startBatch } from '../../../../stores/historyStore';
 import type { TimelineClip } from '../../../../types/timeline';
 import { getFlockNodeLabel, listFlockNodeParams } from './flockControlUtils';
+import { InspectorSelect, type InspectorSelectGroup } from '../../../inspector/InspectorSelect';
+import { ResolveInspectorRow, ResolveInspectorSection } from '../resolveInspector/ResolveInspectorPrimitives';
 
 const KEY_SEPARATOR = '::';
 
@@ -37,37 +39,30 @@ export function FlockAddControlPicker({ clip }: { clip: TimelineClip }) {
       exposeFlockGraphParam(clip.id, nodeId, key, {
         label: entry.innerLabel ? `${entry.innerLabel} ${entry.descriptor.label}` : entry.descriptor.label,
         group: group.label,
-        ...(entry.descriptor.min !== undefined ? { min: entry.descriptor.min } : {}),
-        ...(entry.descriptor.max !== undefined ? { max: entry.descriptor.max } : {}),
       });
     } finally {
       endBatch();
     }
   };
 
+  const options: InspectorSelectGroup[] = [
+    { options: [{ value: '', label: 'Expose a node parameter…', disabled: true }] },
+    ...groups.map((group) => ({
+      label: group.label,
+      options: group.params.map((entry) => ({
+        value: `${group.node.id}${KEY_SEPARATOR}${entry.key}`,
+        label: `${entry.innerLabel ? `${entry.innerLabel} · ` : ''}${entry.descriptor.label}${entry.descriptor.animatable && entry.descriptor.type !== 'integer' ? '' : ' (structural)'}`,
+      })),
+    })),
+  ];
+
   return (
-    <div className="properties-section flock-add-control">
-      <div className="control-row">
-        <label className="prop-label" htmlFor={`flock-add-control-${clip.id}`}>Add</label>
-        <select
-          id={`flock-add-control-${clip.id}`}
-          aria-label="Add flock control"
-          value=""
-          onChange={(event) => handleChange(event.target.value)}
-        >
-          <option value="">Expose a node parameter…</option>
-          {groups.map((group) => (
-            <optgroup key={group.node.id} label={group.label}>
-              {group.params.map((entry) => (
-                <option key={entry.key} value={`${group.node.id}${KEY_SEPARATOR}${entry.key}`}>
-                  {entry.innerLabel ? `${entry.innerLabel} · ` : ''}{entry.descriptor.label}
-                  {entry.descriptor.animatable && entry.descriptor.type !== 'integer' ? '' : ' (structural)'}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
+    <div className="flock-add-control">
+      <ResolveInspectorSection title="More controls" defaultOpen={false}>
+        <ResolveInspectorRow label="Add">
+          <InspectorSelect ariaLabel="Add flock control" value="" groups={options} onChange={handleChange} />
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
     </div>
   );
 }

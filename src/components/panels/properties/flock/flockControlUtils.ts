@@ -75,6 +75,30 @@ export function getFlockNumberSensitivity(descriptor: FlockParamDescriptor, min?
   return descriptor.step ?? 0.5;
 }
 
+/**
+ * Slider and typed-value limits of a promoted number: the slider spans the declared range unless it
+ * is open or far wider than the value's scale (Size 0–200 at 6), then about four times the default;
+ * typing reaches the declared limits. The slider always includes the current value.
+ */
+export function flockSliderRange(
+  exposed: { min?: number; max?: number },
+  descriptor: FlockParamDescriptor,
+  value: number,
+): { min: number; max: number; step: number; hardMin: number; hardMax: number } {
+  const fallback = typeof descriptor.default === 'number' ? descriptor.default : 0;
+  const hardMin = exposed.min ?? descriptor.min ?? Number.NEGATIVE_INFINITY;
+  const hardMax = exposed.max ?? descriptor.max ?? Number.POSITIVE_INFINITY;
+  // Earlier Add pickers copied the descriptor's limits onto the control: only a narrower max is its own.
+  const ownMax = exposed.max !== undefined && exposed.max !== descriptor.max ? exposed.max : undefined;
+  const scale = Math.max(1, Math.abs(fallback) * 4);
+  // An open lower limit starts the slider at 0 for a positive default (Turbulence), typing goes below.
+  const low = Number.isFinite(hardMin) ? hardMin : fallback >= 0 ? 0 : -scale;
+  const declared = ownMax ?? (descriptor.max !== undefined && descriptor.max - low <= Math.max(1, Math.abs(fallback) * 20) ? descriptor.max : undefined);
+  const high = declared ?? Math.min(hardMax, Math.max(low + scale, scale));
+  const step = descriptor.step ?? (high - low <= 2 ? 0.01 : high - low <= 20 ? 0.1 : 1);
+  return { min: Math.min(low, value), max: Math.max(high, value), step, hardMin, hardMax };
+}
+
 export function clampFlockNumber(value: number, min?: number, max?: number): number {
   return Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(min ?? Number.NEGATIVE_INFINITY, value));
 }

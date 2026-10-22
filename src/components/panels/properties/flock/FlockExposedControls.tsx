@@ -10,9 +10,13 @@ import type { SourceOffsetResolver } from '../../../../services/flock/time/flock
 import type { FlockParamDescriptor } from '../../../../services/flock/operators/flockOperatorTypes';
 import { hexColorToRgb, normalizeHexColor, rgbColorToHex } from '../../../../utils/colorParam';
 import { DraggableNumber, KeyframeToggle, MultiKeyframeToggle } from '../shared';
+import { InspectorSelect } from '../../../inspector/InspectorSelect';
+import { ResolveInspectorNumberRow } from '../resolveInspector/ResolveInspectorNumberRow';
+import { ResolveInspectorRow, ResolveInspectorSection } from '../resolveInspector/ResolveInspectorPrimitives';
 import {
   FLOCK_POPULATION_HINT,
   clampFlockNumber,
+  flockSliderRange,
   getFlockInvalidationHint,
   getFlockNodeLabel,
   getFlockNumberDecimals,
@@ -68,28 +72,31 @@ function FlockNumberControl({ ctx, exposed, descriptor }: ControlProps) {
   const property = createFlockProperty(exposed.nodeId, exposed.param);
   const fallback = typeof descriptor.default === 'number' ? descriptor.default : 0;
   const value = readAnimated(ctx, property) ?? fallback;
-  const min = exposed.min ?? descriptor.min;
-  const max = exposed.max ?? descriptor.max;
+  const range = flockSliderRange(exposed, descriptor, value);
 
   return (
-    <div className="labeled-value with-keyframe-toggle flock-control-row" data-flock-control={exposed.id}>
-      <KeyframeToggle clipId={ctx.clip.id} property={property} value={value} />
-      <span className="labeled-value-label" title={descriptor.description}>{exposed.label}</span>
-      <DraggableNumber
-        value={value}
-        onChange={(nextValue) => setPropertyValue(ctx.clip.id, property, clampFlockNumber(nextValue, min, max))}
-        defaultValue={fallback}
-        min={min}
-        max={max}
-        decimals={getFlockNumberDecimals(descriptor.step)}
-        sensitivity={getFlockNumberSensitivity(descriptor, min, max)}
-        suffix={descriptor.unit ? ` ${descriptor.unit}` : ''}
+    <div data-flock-control={exposed.id}>
+      <ResolveInspectorNumberRow
+        label={exposed.label}
         ariaLabel={exposed.label}
+        title={descriptor.description}
+        value={value}
+        defaultValue={fallback}
+        min={range.min}
+        max={range.max}
+        step={range.step}
+        numberMin={range.hardMin}
+        numberMax={range.hardMax}
+        hardMin={range.hardMin}
+        hardMax={range.hardMax}
+        decimals={getFlockNumberDecimals(descriptor.step)}
+        sensitivity={getFlockNumberSensitivity(descriptor, range.min, range.max)}
+        suffix={descriptor.unit ? ` ${descriptor.unit}` : ''}
         persistenceKey={`flock.${ctx.clip.id}.${exposed.id}`}
-        onDragStart={() => startBatch(`Adjust ${exposed.label}`)}
-        onDragEnd={() => endBatch()}
+        keyframeToggle={<KeyframeToggle clipId={ctx.clip.id} property={property} value={value} />}
+        actions={<RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />}
+        onChange={(nextValue) => setPropertyValue(ctx.clip.id, property, nextValue)}
       />
-      <RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />
     </div>
   );
 }
@@ -163,24 +170,31 @@ function FlockColorControl({ ctx, exposed, descriptor }: ControlProps) {
   };
 
   return (
-    <div className="labeled-value with-keyframe-toggle flock-control-row flock-control-color" data-flock-control={exposed.id}>
-      <MultiKeyframeToggle
-        clipId={ctx.clip.id}
-        entries={entries}
-        dragId={`${ctx.clip.id}:flock:${exposed.nodeId}:${exposed.param}:color`}
-        title="Add color keyframes"
-      />
-      <span className="labeled-value-label" title={descriptor.description}>{exposed.label}</span>
-      <span className="flock-color-value">
-        <input
-          type="color"
-          aria-label={exposed.label}
-          value={colorValue}
-          onChange={(event) => updateColor(event.target.value)}
-        />
-        <span>{colorValue}</span>
-      </span>
-      <RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />
+    <div data-flock-control={exposed.id}>
+      <ResolveInspectorRow
+        label={exposed.label}
+        title={descriptor.description}
+        className="resolve-inspector-row--extra-action"
+        actions={<>
+          <RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />
+          <MultiKeyframeToggle
+            clipId={ctx.clip.id}
+            entries={entries}
+            dragId={`${ctx.clip.id}:flock:${exposed.nodeId}:${exposed.param}:color`}
+            title="Add color keyframes"
+          />
+        </>}
+      >
+        <span className="flock-color-value">
+          <input
+            type="color"
+            aria-label={exposed.label}
+            value={colorValue}
+            onChange={(event) => updateColor(event.target.value)}
+          />
+          <span>{colorValue}</span>
+        </span>
+      </ResolveInspectorRow>
     </div>
   );
 }
@@ -252,9 +266,12 @@ function FlockStructuralControl({ ctx, exposed, descriptor }: ControlProps) {
   switch (descriptor.type) {
     case 'enum':
       control = (
-        <select aria-label={exposed.label} value={String(rawValue)} onChange={(event) => commit(event.target.value)}>
-          {descriptor.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
+        <InspectorSelect
+          ariaLabel={exposed.label}
+          value={String(rawValue)}
+          options={(descriptor.options ?? []).map((option) => ({ value: option.value, label: option.label }))}
+          onChange={(next) => commit(next)}
+        />
       );
       break;
     case 'boolean':
@@ -278,14 +295,16 @@ function FlockStructuralControl({ ctx, exposed, descriptor }: ControlProps) {
       );
   }
   return (
-    <div className="labeled-value flock-control-row flock-control-structural" data-flock-control={exposed.id}>
-      <span className="flock-control-static-marker" aria-hidden="true" title="Not keyframeable" />
-      <span className="labeled-value-label" title={isPopulation ? FLOCK_POPULATION_HINT : descriptor.description}>
-        {exposed.label}
-        <span className="flock-control-hint">{hint}</span>
-      </span>
-      {control}
-      <RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />
+    <div data-flock-control={exposed.id} className="flock-control-structural">
+      <ResolveInspectorRow
+        label={exposed.label}
+        title={isPopulation ? FLOCK_POPULATION_HINT : descriptor.description}
+        className="resolve-inspector-row--extra-action"
+        actions={<RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />}
+      >
+        {control}
+      </ResolveInspectorRow>
+      <span className="flock-control-hint">{hint}</span>
     </div>
   );
 }
@@ -329,14 +348,15 @@ export function FlockExposedControls({ ctx }: { ctx: FlockControlContext }) {
   return (
     <>
       {[...groups.entries()].map(([group, controls]) => (
-        <div key={group} className="properties-section flock-control-group" data-flock-group={group}>
-          <h4>{group}</h4>
-          {controls.map((exposed) => (
-            <FlockExposedControl key={exposed.id} ctx={ctx} exposed={exposed} />
-          ))}
-          <span className="flock-control-group-nodes" aria-hidden="true">
-            {[...new Set(controls.map((exposed) => getFlockNodeLabel(definition, exposed.nodeId)))].join(' · ')}
-          </span>
+        <div key={group} className="flock-control-group" data-flock-group={group}>
+          <ResolveInspectorSection title={group}>
+            {controls.map((exposed) => (
+              <FlockExposedControl key={exposed.id} ctx={ctx} exposed={exposed} />
+            ))}
+            <span className="flock-control-group-nodes" aria-hidden="true">
+              {[...new Set(controls.map((exposed) => getFlockNodeLabel(definition, exposed.nodeId)))].join(' · ')}
+            </span>
+          </ResolveInspectorSection>
         </div>
       ))}
     </>

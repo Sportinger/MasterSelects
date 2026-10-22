@@ -62,12 +62,14 @@ describe('FlockTab', () => {
 
   it('renders exposed controls grouped as authored', async () => {
     await renderTab(clipId);
-    expect(screen.getByRole('heading', { name: 'Population' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Behavior' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Appearance' })).toBeInTheDocument();
+    // Sections of the shared inspector: a disclosure button per authored group.
+    expect(screen.getByRole('button', { name: 'Population' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Behavior' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Cohesion' })).toBeInTheDocument();
     expect(screen.getByLabelText('Color')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Time/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Time & Quality' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Step rate' })).toHaveTextContent('60 Hz');
   });
 
   it('writes animatable numbers through setPropertyValue with the flock property path', async () => {
@@ -125,23 +127,62 @@ describe('FlockTab', () => {
     expect(getDefinition(clipId).exposed.some((exposed) => exposed.id === 'fx-stale')).toBe(false);
   });
 
-  it('applies a preset only after inline confirmation', async () => {
+  const pickPreset = (label: string) => {
+    act(() => {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Flock preset' }));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('option', { name: label }));
+    });
+  };
+
+  it('lists the effect presets first and the other swarms under More swarms', async () => {
     await renderTab(clipId);
     act(() => {
-      fireEvent.change(screen.getByRole('combobox', { name: 'Flock preset' }), { target: { value: 'vortex' } });
+      fireEvent.click(screen.getByRole('combobox', { name: 'Flock preset' }));
     });
+    const names = screen.getAllByRole('option').map((option) => option.textContent);
+    expect(names.slice(0, 5)).toEqual(['Free Swarm', 'Krill Cloud', 'Follow Path', 'Technical Network', 'Violet Filaments']);
+    expect(names).toEqual(expect.arrayContaining(['Vortex', 'Shrimp Pullback', 'Terracotta Sculpture', 'Lilac Sculpture']));
+    expect(screen.getByText('More swarms')).toBeInTheDocument();
+  });
+
+  it('applies a picked preset at once, in one undo step', async () => {
+    await renderTab(clipId);
+    pickPreset('Krill Cloud');
+    expect(getDefinition(clipId).presetId).toBe('krill-cloud');
+    expect(screen.getByRole('combobox', { name: 'Flock preset' })).toHaveTextContent('Krill Cloud');
+  });
+
+  it('names the preset of the graph, also after a tool replaced it (the row used to stay on its first preset)', async () => {
+    await renderTab(clipId);
     act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      useTimelineStore.getState().applyFlockPreset(clipId, 'technical-network');
     });
+    expect(screen.getByRole('combobox', { name: 'Flock preset' })).toHaveTextContent('Technical Network');
+    expect(screen.getByText(/thin lines, with small square markers/)).toBeInTheDocument();
+  });
+
+  it('asks before a preset removes node keyframes', async () => {
+    const rulesId = nodeIdFor(clipId, 'flock.rules');
+    act(() => {
+      useTimelineStore.getState().addKeyframe(clipId, `flock.node.${rulesId}.cohesion`, 2, 1);
+    });
+    await renderTab(clipId);
+    pickPreset('Vortex');
     expect(getDefinition(clipId).presetId).toBe('free-swarm');
+    expect(screen.getByRole('group', { name: 'Confirm preset' })).toHaveTextContent('node keyframe is removed');
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
     });
     expect(getDefinition(clipId).presetId).toBe('vortex');
   });
 
-  it('shows runtime status published by the flock runtime', async () => {
+  it('shows runtime status published by the flock runtime in its folded section', async () => {
     await renderTab(clipId);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Simulation status' }));
+    });
     await act(async () => {
       flockRuntime.publishStatus({
         clipId,
