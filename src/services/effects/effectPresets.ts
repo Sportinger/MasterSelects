@@ -9,6 +9,8 @@ import { getEditorRepositorySession } from '../project/repository/transaction/ed
 import { finishEditorGesture, runEditorGesture } from '../project/repository/transaction/editorGestureOwnership';
 import { isParameterNodeDriven } from '../parameterSources/parameterSourceTargets';
 import { effectParamDefinitions, type EffectParamOwner } from '../operators/effectParamVisibility';
+import { exposedGraphValues } from '../operators/exposedGraphValueList';
+import { effectOperatorGraph, hasEffectOperatorGraph } from '../operators/effectGraphOwner';
 
 type Primitive = number | boolean | string;
 
@@ -24,13 +26,31 @@ function presetControls(effect: EffectParamOwner): Array<[string, EffectParam]> 
 
 /**
  * Values a preset gives this instance: its own values, the default for every other shown control.
- * Text controls (a typed word, a ramp) keep what the user wrote unless the preset names them.
+ * The shown controls are judged with the preset's values in place, so a preset that switches a mode
+ * (a Form) also resets the controls of that mode. Text controls (a typed word, a ramp) keep what the
+ * user wrote unless the preset names them. A value the preset names always applies, also a graph
+ * effect's exposed graph value (`<node>_value`, the card's graph value rows).
  */
 export function resolveEffectPreset(effect: EffectParamOwner, preset: EffectPreset): Record<string, Primitive> {
-  return Object.fromEntries(presetControls(effect).flatMap(([key, definition]): Array<[string, Primitive]> => {
-    if (key in preset.params) return [[key, preset.params[key]]];
-    return definition.type === 'text' ? [] : [[key, definition.default]];
-  }));
+  const definitions = getEffect(effect.type)?.params ?? {};
+  const withPreset = { ...effect, params: { ...effect.params, ...preset.params } };
+  const values: Record<string, Primitive> = Object.fromEntries(presetControls(withPreset)
+    .flatMap(([key, definition]): Array<[string, Primitive]> => key in preset.params || definition.type === 'text' ? [] : [[key, definition.default]]));
+  for (const [key, value] of Object.entries(preset.params)) if (!definitions[key]?.deprecated) values[key] = value;
+  return values;
+}
+
+/** The card label of a control a preset sets on this instance: the parameter's, or its exposed graph value's. */
+function presetControlLabel(effect: EffectParamOwner, key: string): string | undefined {
+  return getEffect(effect.type)?.params[key]?.label ?? exposedGraphValues(effect.operatorGraph).find(value => value.key === key)?.label;
+}
+
+/** The label a graph value has in the effect's default graph (for one an edited graph no longer exposes). */
+function defaultGraphValueLabel(type: string, key: string): string | undefined {
+  if (!hasEffectOperatorGraph(type)) return undefined;
+  try {
+    return exposedGraphValues(effectOperatorGraph({ type, params: {} }, { inspectionOnly: true })).find(value => value.key === key)?.label;
+  } catch { return undefined; }
 }
 
 const currentValue = (effect: EffectParamOwner, key: string, definition: EffectParam | undefined) =>
@@ -47,18 +67,22 @@ export interface EffectPresetResult {
   preset: EffectPreset;
   /** Controls the preset changed. */
   changed: string[];
-  /** Controls left as they were, with the reason the card shows ("Amount has keyframes"). */
-  kept: Array<{ key: string; label: string; reason: 'keyframes' | 'node' }>;
+  /**
+   * Controls left as they were, with the reason the card shows ("Amount has keyframes"); 'missing':
+   * a graph value the preset names that this instance's edited graph no longer exposes.
+   */
+  kept: Array<{ key: string; label: string; reason: 'keyframes' | 'node' | 'missing' }>;
 }
 
 /** One line for the card: which controls kept their animation, or undefined when none did. */
 export function effectPresetNotice(result: EffectPresetResult): string | undefined {
   if (!result.kept.length) return undefined;
-  const names = (reason: 'keyframes' | 'node') => result.kept.filter(item => item.reason === reason).map(item => item.label);
+  const names = (reason: EffectPresetResult['kept'][number]['reason']) => result.kept.filter(item => item.reason === reason).map(item => item.label);
   const join = (labels: string[]) => labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels[0];
   const parts = [
     names('keyframes').length ? `${join(names('keyframes'))} kept ${names('keyframes').length > 1 ? 'their' : 'its'} keyframes` : '',
     names('node').length ? `${join(names('node'))} stayed driven by ${names('node').length > 1 ? 'their nodes' : 'its node'}` : '',
+    names('missing').length ? `${join(names('missing'))} ${names('missing').length > 1 ? 'are' : 'is'} not in this effect's edited graph` : '',
   ].filter(Boolean);
   return `${result.preset.name}: ${parts.join('; ')}.`;
 }
@@ -78,7 +102,8 @@ export function applyEffectPreset(clipId: string, effectId: string, presetId: st
   const result: EffectPresetResult = { preset, changed: [], kept: [] };
   const numbers: Array<[string, number]> = [], others: Record<string, Primitive> = {};
   for (const [key, value] of Object.entries(resolveEffectPreset(effect, preset))) {
-    const property = `effect.${effect.id}.${key}` as AnimatableProperty, label = definitions[key]?.label ?? key;
+    const property = `effect.${effect.id}.${key}` as AnimatableProperty, label = presetControlLabel(effect, key);
+    if (label === undefined) { result.kept.push({ key, label: defaultGraphValueLabel(effect.type, key) ?? key, reason: 'missing' }); continue; }
     if (typeof value === 'number' && state.hasKeyframes(clip.id, property)) { result.kept.push({ key, label, reason: 'keyframes' }); continue; }
     if (typeof value === 'number' && isParameterNodeDriven(clip, property)) { result.kept.push({ key, label, reason: 'node' }); continue; }
     if (Object.is(currentValue(effect, key, definitions[key]), value)) continue;
