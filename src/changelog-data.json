@@ -31,7 +31,7 @@
     "date": "2026-10-20",
     "type": "fix",
     "title": "MasterSelects 3.2.5",
-    "description": "Projects whose saved Glow effects came from an earlier alpha-aware version open again instead of failing with “Unknown composition input”. When a project cannot be opened, the message now says why and which effect is affected, and the reason is logged.",
+    "description": "Projects whose saved Glow effects came from an earlier alpha-aware version open again instead of failing with \u201cUnknown composition input\u201d. When a project cannot be opened, the message now says why and which effect is affected, and the reason is logged.",
     "section": "Release"
   },
   {
@@ -292,15 +292,7 @@
     "title": "MasterSelects 2.2.1",
     "description": "Timeline interaction pass: the cut-tool indicator now sits exactly under the mouse at any zoom and horizontal scroll; erasing space between clips moves linked audio/video partners together (linked partners on locked tracks are skipped); locked tracks no longer receive dropped, pasted, or command-placed clips — content lands on the next unlocked compatible track or a new one; media drag ghosts clean up on every drag end path, including OS file drags that leave the media panel without dropping; and the timeline lane grid is now painted on a device-pixel-snapped canvas, eliminating moire, smeared bands, and missing lines at dense or fractional zoom levels (CSS repeating gradients could not snap individual lines to device pixels). Ruler and lane viewports also resize immediately via ResizeObserver instead of waiting for window resizes.",
     "section": "Release",
-    "commits": [
-      "93481deb",
-      "c6b44730",
-      "25be0e59",
-      "f3eaa328",
-      "fc4fd10c",
-      "933bc4eb",
-      "8e588898"
-    ]
+    "commits": ["93481deb", "c6b44730", "25be0e59", "f3eaa328", "fc4fd10c", "933bc4eb", "8e588898"]
   },
   {
     "date": "2026-06-10",
@@ -371,9 +363,7 @@
     "title": "MasterSelects 2.0.4",
     "description": "History capture is less aggressive during realtime editor interactions: dock resizing and floating panel moves are batched until release, debug history disabling is available for profiling, and locked preview tracks no longer spam transform updates.",
     "section": "Release",
-    "commits": [
-      "690e25fc"
-    ]
+    "commits": ["690e25fc"]
   },
   {
     "date": "2026-05-28",
@@ -395,9 +385,7 @@
     "title": "MasterSelects 2.0.1",
     "description": "Timeline editing now includes a Premiere-style tool palette with icon cursors and operation previews, source-monitor in/out controls with compact transport, target-layer highlighting, slot-view access in the toolbar, and cached high-detail audio waveforms generated during import.",
     "section": "Release",
-    "commits": [
-      "bac30754"
-    ]
+    "commits": ["bac30754"]
   },
   {
     "date": "2026-05-27",
@@ -412,10 +400,7 @@
     "title": "ElevenLabs Audio Generation",
     "description": "FlashBoard now supports ElevenLabs text-to-speech generation with encrypted API-key settings, compact voice/model/output controls, generated audio cards, media-board and timeline routing, project persistence, history support, pricing metadata, and focused test coverage.",
     "section": "AI / Audio",
-    "commits": [
-      "5ffc1774",
-      "a731f5fb"
-    ]
+    "commits": ["5ffc1774", "a731f5fb"]
   },
   {
     "date": "2026-05-26",
@@ -423,11 +408,7 @@
     "title": "Advanced Audio Workstation",
     "description": "The audio mixer now uses workstation-style vertical strips, independent track/master routing, live stereo meters, tail-aware reverb export, bridge audio diagnostics, and compact timeline audio controls that scale down to video-layer heights.",
     "section": "Audio / Timeline",
-    "commits": [
-      "3dd9beac",
-      "9d22361e",
-      "4724c577"
-    ]
+    "commits": ["3dd9beac", "9d22361e", "4724c577"]
   },
   {
     "date": "2026-05-25",
@@ -435,10 +416,7 @@
     "title": "Wasm/WIT Signal Runtime Foundation",
     "description": "Signal IR, capability-gated runtime policies, content-addressed artifact storage, worker/Wasm host adapters, universal CSV and binary SignalAsset imports, and Signal timeline render adapters now form the foundation for all-media support.",
     "section": "Architecture / Universal Media",
-    "commits": [
-      "2398e373",
-      "ca793a24"
-    ]
+    "commits": ["2398e373", "ca793a24"]
   },
   {
     "date": "2026-05-25",
@@ -446,9 +424,7 @@
     "title": "Voxel Relief Effect",
     "description": "A voxel relief effect is available as part of the GPU effect stack for dimensional stylization work.",
     "section": "Effects",
-    "commits": [
-      "8be580c5"
-    ]
+    "commits": ["8be580c5"]
   },
   {
     "date": "2026-05-25",
@@ -456,10 +432,7 @@
     "title": "Project Save and Bridge Stress Test Reliability",
     "description": "Project save/load guardrails and AI Bridge stress test diagnostics now better protect active timelines and make browser export smoke tests easier to run from automation.",
     "section": "Reliability / Debugging",
-    "commits": [
-      "d8139c8c",
-      "b8a8a899"
-    ]
+    "commits": ["d8139c8c", "b8a8a899"]
   },
   {
     "date": "2026-05-22",
@@ -467,9 +440,7 @@
     "title": "AI Preview Tool Context Sanitization",
     "description": "AI chat tool history now keeps preview image payloads out of model-visible text context while preserving full preview results for the UI.",
     "section": "AI / Reliability",
-    "commits": [
-      "ee7f0da9"
-    ]
+    "commits": ["ee7f0da9"]
   },
   {
     "date": "2026-05-20",
@@ -477,10 +448,7 @@
     "title": "Rive Runtime WASM",
     "description": "Rive .riv files now import as first-class vector animation clips with WASM runtime rendering, timeline playback, export support, thumbnails, persistence, state-machine controls, events, asset-loading hooks, and keyframeable Data Binding values.",
     "section": "Vector Animation",
-    "commits": [
-      "237294e6",
-      "d0829640"
-    ]
+    "commits": ["237294e6", "d0829640"]
   },
   {
     "date": "2026-05-19",
@@ -488,9 +456,7 @@
     "title": "WAV Export and Runtime Updates",
     "description": "Audio export now includes WAV output support alongside runtime updates that keep export behavior aligned with the current media pipeline.",
     "section": "Export / Runtime",
-    "commits": [
-      "69db7f5a"
-    ]
+    "commits": ["69db7f5a"]
   },
   {
     "date": "2026-05-19",
@@ -498,10 +464,7 @@
     "title": "Export Preview and Fast Decode Reliability",
     "description": "Export previews, timeline locking, and fast export frame lookup now coordinate more reliably across parallel decode and locked-track scenarios.",
     "section": "Export / Timeline",
-    "commits": [
-      "d7f74a59",
-      "291a303b"
-    ]
+    "commits": ["d7f74a59", "291a303b"]
   },
   {
     "date": "2026-05-19",
@@ -509,10 +472,7 @@
     "title": "Playback Recovery and Board Organization",
     "description": "Playback recovery, warmup feedback, media board organization, and track lock UI have been tightened for clearer editing feedback.",
     "section": "Playback / Project Board",
-    "commits": [
-      "aa6f6587",
-      "f6f51528"
-    ]
+    "commits": ["aa6f6587", "f6f51528"]
   },
   {
     "date": "2026-05-19",
@@ -520,9 +480,7 @@
     "title": "Property-Based Editor Invariants",
     "description": "The test suite now stress-tests timeline ranges, clip slicing, keyframes, transforms, easing, speed integration, stop markers, camera lenses, export ranges, and file type helpers with randomized property tests.",
     "section": "Testing / Reliability",
-    "commits": [
-      "a3961981"
-    ]
+    "commits": ["a3961981"]
   },
   {
     "date": "2026-05-12",
@@ -530,9 +488,7 @@
     "title": "AI Node Workspace",
     "description": "Clip node graphs now support custom AI-authored nodes with chat memory, active code activation, manual connections, bypass controls, exposed keyframeable parameters, color params, and dev-bridge debugging tools.",
     "section": "Node Workspace / AI",
-    "commits": [
-      "597acd24"
-    ]
+    "commits": ["597acd24"]
   },
   {
     "date": "2026-05-12",
@@ -540,9 +496,7 @@
     "title": "Text Runtime Context for AI Nodes",
     "description": "Text clips now provide structured layout, typography, color, text box bounds, and per-character rectangles to AI node runtime code so generated text effects can target exact letters and lines.",
     "section": "Text / Runtime",
-    "commits": [
-      "597acd24"
-    ]
+    "commits": ["597acd24"]
   },
   {
     "date": "2026-05-12",
@@ -550,9 +504,7 @@
     "title": "Timeline and Preview Editing Polish",
     "description": "Timeline interaction, drag placement, subcomposition rendering, paused preview invalidation, text preview editing, and export layer handling were tightened to support the new node workspace flows.",
     "section": "Timeline / Preview",
-    "commits": [
-      "597acd24"
-    ]
+    "commits": ["597acd24"]
   },
   {
     "date": "2026-05-12",
@@ -560,9 +512,7 @@
     "title": "Modular Editor CSS",
     "description": "The former App.css monolith has been split into owner-focused CSS files for the timeline, media panel, properties panel, preview, export, common dialogs, and shared app foundations while preserving the final bundled CSS output.",
     "section": "Architecture / CSS",
-    "commits": [
-      "6edc4570"
-    ]
+    "commits": ["6edc4570"]
   },
   {
     "date": "2026-05-09",
@@ -577,9 +527,7 @@
     "title": "Timeline Cache Indicators and Slider Ranges",
     "description": "Proxy and scrub cache range indicators now render directly in the timeline ruler, while persisted custom ranges update matching color, effect, and blendshape sliders immediately.",
     "section": "Timeline / Controls",
-    "commits": [
-      "103c205e"
-    ]
+    "commits": ["103c205e"]
   },
   {
     "date": "2026-05-08",
@@ -587,9 +535,7 @@
     "title": "Browser Export Diagnostics and Audio Skip",
     "description": "Browser exports now expose dev-bridge diagnostics with per-frame phase timing, cancelable runtime limits, cut-boundary stats, and correct audio skipping for video-only timelines.",
     "section": "Export / Diagnostics",
-    "commits": [
-      "cd439044"
-    ]
+    "commits": ["cd439044"]
   },
   {
     "date": "2026-05-08",
@@ -597,9 +543,7 @@
     "title": "Scrub Cache Preloading Improvements",
     "description": "Scrubbing and preview cache handling now preload nearby frames, report cached ranges, and coordinate cache updates with the render loop for smoother timeline feedback.",
     "section": "Playback / Scrubbing",
-    "commits": [
-      "b0826aaa"
-    ]
+    "commits": ["b0826aaa"]
   },
   {
     "date": "2026-05-06",
@@ -1348,9 +1292,7 @@
     "title": "User Activity Tracking",
     "description": "Track app version, AI model, and last login time per user. The frontend now sends X-App-Version on all API requests. User records are updated on login and each AI chat interaction.",
     "section": "Backend",
-    "commits": [
-      "2224bb4d"
-    ]
+    "commits": ["2224bb4d"]
   },
   {
     "date": "2026-03-23",
@@ -1358,9 +1300,7 @@
     "title": "Model-Weighted Credit Costs",
     "description": "AI chat credits now scale with model cost. Cheap models (GPT-4.1 Mini/Nano) cost 1 credit, mid-tier reasoning (o4-mini) costs 3, flagship models (GPT-4.1, GPT-5, o3) cost 5, and premium models (GPT-5.2 Pro, o3-pro) cost 8-50 credits per request. Credit costs are shown in the model dropdown.",
     "section": "AI & Billing",
-    "commits": [
-      "6c852a9b"
-    ]
+    "commits": ["6c852a9b"]
   },
   {
     "date": "2026-03-23",
@@ -1368,9 +1308,7 @@
     "title": "Updated Pricing Plans",
     "description": "Stripe prices updated to 4.90 €/mo (Starter), 14.90 €/mo (Pro), 29.90 €/mo (Studio). Monthly credits adjusted to break-even amounts: 4,500 / 13,500 / 27,000 credits. Prices now displayed in the pricing dialog.",
     "section": "AI & Billing",
-    "commits": [
-      "33ccf3e6"
-    ]
+    "commits": ["33ccf3e6"]
   },
   {
     "date": "2026-03-23",
@@ -1407,9 +1345,7 @@
     "title": "Faster Play Resume After Pause With Larger Preroll Buffer",
     "description": "Increased the paused preroll buffer from 2 to 6 frames and widened the decoder feed position tolerance so advanceToTime can skip heavyweight decoder resets when the pipeline is already near the target. Reduces play-after-pause startup from ~300ms to ~60ms in warm sessions.",
     "section": "WebCodecs Playback",
-    "commits": [
-      "6ec1ca15"
-    ]
+    "commits": ["6ec1ca15"]
   },
   {
     "date": "2026-03-22",
@@ -1417,9 +1353,7 @@
     "title": "Bridge Scrub Frame Into Playback to Reduce Black Gap",
     "description": "When the main provider has no frame during scrub-to-play settle, the LayerCollector now falls back to the clip's own WebCodecs player frame as a visual placeholder. Also warms up the playback decoder in the background during settle. Reduces max preview update gap by ~47%.",
     "section": "WebCodecs Playback",
-    "commits": [
-      "884acaba"
-    ]
+    "commits": ["884acaba"]
   },
   {
     "date": "2026-03-22",
@@ -1427,9 +1361,7 @@
     "title": "Hold Scrub Frame During Scrub-to-Play Transition",
     "description": "After scrubbing stops, the scrub provider's frame was immediately discarded while the playback decoder worked through the GOP (up to 2s for long-GOP H.264 4K). Now checks the actual playback provider readiness before releasing the hold, and begins a scrub settle state in the WebCodecs path so the playing path can keep the scrub frame visible.",
     "section": "WebCodecs Playback",
-    "commits": [
-      "0d26b7ff"
-    ]
+    "commits": ["0d26b7ff"]
   },
   {
     "date": "2026-03-22",
@@ -1437,9 +1369,7 @@
     "title": "reloadApp AI Tool for Scripted Hard/Soft Reloads",
     "description": "Added reloadApp tool to the AI bridge, enabling scripted hard and soft page reloads during automated playback testing without manual browser interaction.",
     "section": "AI / Debug Tools",
-    "commits": [
-      "884acaba"
-    ]
+    "commits": ["884acaba"]
   },
   {
     "date": "2026-03-17",
