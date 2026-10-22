@@ -36,6 +36,9 @@
     "temperature?focus=parameters&only=temperature,temperature-clamped,tint,tint-clamped&constants=hide&cables=avoid&layout=float&marks=temperature-clamped:above@temperature-parameters",
     "temperature?focus=white-balance&only=gain-temperature-stops,gain-warmth,gain-tint-half-stops,gain-magenta,gain-tint-stops,gain-green-stops,gain-red-stops,gain-red,gain-green,gain-blue-stops,gain-blue,gain-vector,gain-rgb,gain-luma,gain-balanced&cables=avoid&marks=gain-warmth:above,gain-blue:above,gain-luma:below,gain-balanced:above@temperature-gains",
     "temperature?focus=white-balance&only=light-linear,light-balanced,light-encoded&cables=avoid&layout=float&marks=light-linear:above,light-balanced:above,light-encoded:above@temperature-light",
-    "temperature?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@temperature-finish"
+    "temperature?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@temperature-finish",
+    "invert?plumbing=hide&marks=one:above,organized-invert-processing:above,organized-invert-finish:above@invert",
+    "invert?focus=invert-rgb&only=invert-r&cables=avoid&layout=float&marks=invert-r:above@invert-rgb",
+    "invert?focus=alpha-and-image&only=combine,image&cables=avoid&layout=float&marks=combine:above,image:above@invert-finish"
   ]
 }

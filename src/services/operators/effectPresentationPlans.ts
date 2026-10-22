@@ -87,6 +87,13 @@ const GLOW_PORTS: Record<string, string> = { 'source-split:rgb': 'Source Color',
     [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`]]).flat()) };
 // Threshold and Posterize: the hard step and the soft ramp that Softness blends in.
 const POINTWISE_PORTS = { compare: 'Above Level', hard: 'Hard Step', ramp: 'Soft Ramp', soft: 'Softness On', smooth: 'Soft Steps', steps: 'Steps' };
+/** Invert has no clamp (1 − x stays within 0 to 1), so its folders name what they do, and its three
+ * Subtract outputs say which channel they carry instead of reading "Subtract: Value" three times. */
+const INVERT_PRESENTATION: EffectPresentationPlan = {
+  labels: { processing: 'Invert RGB', finish: 'Alpha & Image' },
+  stage: ORIGINAL_COLOR_PRESENTATION.stage,
+  portLabels: { one: 'White Level', 'invert-r': 'Inverted R', 'invert-g': 'Inverted G', 'invert-b': 'Inverted B' },
+};
 
 /** The CRT Screen graph saved before the 2026-10 rebuild keeps the stage folders it opened with. */
 const LEGACY_CRT_PLAN: EffectPresentationPlan = {
@@ -292,6 +299,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
   // Threshold and Posterize name their hard step and soft ramp (Softness, 2026-10-21).
+  if (type === 'invert') return INVERT_PRESENTATION;
   if (COLORS.has(type)) return type === 'threshold' || type === 'posterize' ? { ...ORIGINAL_COLOR_PRESENTATION, portLabels: POINTWISE_PORTS } : ORIGINAL_COLOR_PRESENTATION;
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
     labels: { grid: 'Cell Grid', source: 'Cell Sampling & Tone', index: 'Glyph Selection', atlas: 'Atlas Sampling', appearance: 'Ink & Appearance', feedback: 'Feedback Resolve' },

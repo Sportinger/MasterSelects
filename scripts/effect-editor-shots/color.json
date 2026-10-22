@@ -230,6 +230,25 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "invert-inspector",
+      "effect": "invert",
+      "params": {},
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with an Invert card that has no rows, only its title bar with the switch to turn it off and on, beside a strip of the preview with the harbour town as a negative, its sky orange and its houses pale blue",
+      "caption": "Invert has no controls. 1 — Switch: turns Invert off and on, to compare with the original.",
+      "marks": [
+        {
+          "target": "bypass",
+          "label": "Switch"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

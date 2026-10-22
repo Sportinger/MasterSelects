@@ -7,7 +7,8 @@ import { flattenContrastGraph } from '../../src/services/operators/contrastFlatt
 import { matchesEffectRecipe, organizeEffectFamilyGraph } from '../../src/services/operators/effectFamilyPresentation';
 import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
 import { HUE_SHIFT_PRESETS } from '../../src/effects/color/hue-shift';
-import { effectPresentationPlan } from '../../src/services/operators/effectPresentationPlans';
+import { effectPortLabels, effectPresentationPlan } from '../../src/services/operators/effectPresentationPlans';
+import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
 import { effectOperatorGraph, migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { colorEffectGraphState } from '../../src/services/operators/colorEffectGraphState';
 import { createLegacyColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
@@ -328,6 +329,18 @@ describe('rebuilt color effect recipes', () => {
     expect(parameters?.nodeIds).toEqual(['shift']);
     // Other single-card stages still stay loose (Hue Rotation is one block, not a folder around it).
     expect(organized.groups?.map(group => group.label)).not.toContain('Hue Rotation');
+  });
+
+  it('names the Invert folders after what they do and tells its three Subtract outputs apart', () => {
+    const graph = createDefaultInvertImageGraph();
+    const organized = organizeEffectFamilyGraph(graph, recognizeOperatorCompositions(graph), 'invert', createDefaultInvertImageGraph);
+    const folders = Object.fromEntries((organized.groups ?? []).map(group => [group.label, group.nodeIds.toSorted()]));
+    // Invert has no clamp, so its last folder must not be called "Clamp & Alpha".
+    expect(folders).toEqual({ 'Invert RGB': ['invert-b', 'invert-g', 'invert-r'], 'Alpha & Image': ['combine', 'image'] });
+    expect(effectPortLabels('invert')).toMatchObject({ one: 'White Level', 'invert-r': 'Inverted R', 'invert-g': 'Inverted G', 'invert-b': 'Inverted B' });
+    // The free node graph shares the invert type: an edited graph is not the recipe and gets no Invert folders.
+    const free = { ...graph, nodes: graph.nodes.filter(node => node.id !== 'invert-b') };
+    expect(organizeEffectFamilyGraph(free, recognizeOperatorCompositions(free), 'invert', createDefaultInvertImageGraph).groups ?? []).toEqual([]);
   });
 
   it('never produces NaN and clamps out-of-range values to the declared render range', () => {

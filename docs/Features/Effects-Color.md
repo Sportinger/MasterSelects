@@ -43,6 +43,9 @@ Every colour effect is a small node graph of the same shape:
 - **Combine RGB + Alpha** puts the untouched transparency back, in some effects after a
   **Clamp & Alpha** folder that keeps the colour between black and white.
 
+[Invert](./effects/invert.md) is the smallest of them: it has no controls, one working folder
+(**Invert RGB**) and needs no clamp, so its last folder is called **Alpha & Image**.
+
 Black stays black and white stays white unless you ask for it, and colours keep their shade when you
 push them. The blocks **Brightness Curve**, **Contrast Curve**, **Exposure (Stops)**, **White
 Balance**, **Saturation (Gamut-Safe)** and **Hue Rotate (OkLCh)** are also in **right-click →
