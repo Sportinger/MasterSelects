@@ -242,8 +242,7 @@ SAM 2 inference runs locally in the browser using ONNX Runtime with WebGPU accel
 The ONNX Runtime WASM is fetched as a gzip file only when the build had to compress it for the 25 MiB Cloudflare Pages asset limit; otherwise (dev server, smaller runtime) the SAM 2 worker, like the Roto worker, lets ONNX Runtime load its own WASM instead of fetching the unreplaced build placeholder.
 
 ### Location
-- Tab in dock panels alongside AI Chat and Scene Description
-- View menu -> AI Segment
+- **View → Panels → AI → AI Segment**, or a tab bar's **+ → AI → AI Segment**
 
 ### One-Time Model Download
 On first use, the panel prompts for a one-time model download:
@@ -691,8 +690,9 @@ from overwriting a newer run.
 
 ## Scene Description
 
-AI Scene Description is available for selected video clips in the Scene
-Description panel and the Properties analysis tab. It uses the local
+AI Scene Description is available for selected video clips in the Properties
+analysis tab. A separate Scene Description panel loads only from older saved
+layouts; no menu offers it. It uses the local
 Qwen3-VL Python server at `http://localhost:5555`, not a hosted chat provider.
 The service analyzes the selected source range, stores scene segments with the
 project's media artifacts when a project is open, and supports cancellation and
