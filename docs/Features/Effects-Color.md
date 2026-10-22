@@ -49,6 +49,9 @@ Every colour effect is a small node graph of the same shape:
 [Posterize](./effects/posterize.md) has the longest path: **Step Input**, **Hard Steps**, **Soft Steps**,
 **Spread to 0–1** and **Colour & Alpha**, from what gets stepped to the colour it keeps.
 
+[Threshold](./effects/threshold.md) splits after its **Brightness** folder: a **Hard Edge** and a
+**Soft Edge** work side by side, and **Black & White** picks one of them.
+
 Black stays black and white stays white unless you ask for it, and colours keep their shade when you
 push them. The blocks **Brightness Curve**, **Contrast Curve**, **Exposure (Stops)**, **White
 Balance**, **Saturation (Gamut-Safe)** and **Hue Rotate (OkLCh)** are also in **right-click →

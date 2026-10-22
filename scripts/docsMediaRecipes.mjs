@@ -73,7 +73,6 @@ export const RECIPE_PENDING = {
     'saturation.webp',
     'scanlines.webp',
     'slit-scan.webp',
-    'threshold.webp',
     'time-stack.webp',
     'twirl.webp',
     'vibrance.webp',

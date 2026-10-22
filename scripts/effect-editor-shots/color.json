@@ -284,6 +284,36 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "threshold-inspector",
+      "effect": "threshold",
+      "params": {
+        "level": 0.45,
+        "softness": 0.35
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Threshold card: the Preset menu showing Charcoal, Level at 0.45 and Softness at 0.35, beside a strip of the preview with the dancer in soft black and white",
+      "caption": "Threshold with the Charcoal preset. 1 — Preset: pick a starting point. 2 — Level: where black turns white. 3 — Softness: a grey edge instead of a hard cut.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Level",
+          "label": "Level"
+        },
+        {
+          "target": "Softness",
+          "label": "Softness"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

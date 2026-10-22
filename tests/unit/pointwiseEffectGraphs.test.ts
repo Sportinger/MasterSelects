@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { POSTERIZE_PARAMS, THRESHOLD_PARAMS } from '../../src/effects/stylize/pointwiseParams';
-import { createDefaultPosterizeGraph, createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { createDefaultPosterizeGraph, createDefaultThresholdGraph, createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
 import { POSTERIZE_PRESETS } from '../../src/effects/stylize/posterize';
+import { THRESHOLD_PRESETS } from '../../src/effects/stylize/threshold';
 import { organizeEffectFamilyGraph } from '../../src/services/operators/effectFamilyPresentation';
 import { effectPortLabels } from '../../src/services/operators/effectPresentationPlans';
 import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
@@ -108,5 +109,43 @@ describe('pointwise effect graph ownership', () => {
     expect(effectPortLabels('threshold')).not.toHaveProperty('effective-levels');
     const edited = { ...graph, nodes: graph.nodes.filter(node => node.id !== 'kept-colour') };
     expect(organizeEffectFamilyGraph(edited, recognizeOperatorCompositions(edited), 'posterize', createDefaultPosterizeGraph).groups ?? []).toEqual([]);
+  });
+
+  it('gives Threshold four presets that each cut where their name says', () => {
+    const presets = Object.fromEntries(THRESHOLD_PRESETS.map(preset => [preset.name, preset.params]));
+    expect(Object.keys(presets)).toEqual(['Photocopy', 'Charcoal', 'Highlights', 'Shadow Matte']);
+    const cut = (name: string, grey: number, alpha = 1) =>
+      evaluateImageOperatorPlan(compileImageOperatorGraph(createDefaultThresholdGraph(), { ...getDefaultParams('threshold'), ...presets[name] }), [grey, grey, grey, alpha]);
+    const greys = Array.from({ length: 101 }, (_, index) => index / 100);
+    const between = (name: string) => greys.filter(grey => { const value = cut(name, grey)[0]; return value > 0.001 && value < 0.999; }).length;
+    // Photocopy: a hard cut at middle grey, nothing in between; the transparency stays.
+    expect(between('Photocopy')).toBe(0);
+    expect([cut('Photocopy', 0.49, 0.4), cut('Photocopy', 0.51, 0.4)]).toEqual([[0, 0, 0, 0.4], [1, 1, 1, 0.4]]);
+    // Charcoal: a wide soft edge keeps a band of greys around its Level.
+    expect(between('Charcoal')).toBeGreaterThanOrEqual(30);
+    expect(cut('Charcoal', 0.45)[0]).toBeCloseTo(0.5, 5);
+    // Highlights: only the brightest values turn white; Shadow Matte: all but the deepest shadows.
+    expect([cut('Highlights', 0.65)[0], cut('Highlights', 0.85)[0]]).toEqual([0, 1]);
+    expect([cut('Shadow Matte', 0.1)[0], cut('Shadow Matte', 0.3)[0]]).toEqual([0, 1]);
+  });
+
+  it('opens the Threshold recipe as named stage folders instead of Color Processing and a Clamp & Alpha without a Clamp', () => {
+    const graph = createDefaultThresholdGraph();
+    const organized = organizeEffectFamilyGraph(graph, recognizeOperatorCompositions(graph), 'threshold', createDefaultThresholdGraph);
+    const folders = Object.fromEntries((organized.groups ?? []).map(group => [group.label, group.nodeIds.toSorted()]));
+    expect(Object.keys(folders).toSorted()).toEqual(['Black & White', 'Brightness', 'Constants', 'Hard Edge', 'Parameters', 'Soft Edge']);
+    expect(folders.Parameters).toEqual(['level', 'ramp-width', 'softness']);
+    expect(folders.Brightness).toEqual(['luma']);
+    expect(folders['Hard Edge']).toEqual(['compare', 'hard']);
+    expect(folders['Soft Edge']).toEqual(expect.arrayContaining(['ramp-distance', 'ramp-clamped', 'ramp', 'soft-active', 'soft']));
+    expect(folders['Black & White']).toEqual(['combine', 'result-rgb', 'value']);
+    // Every computing card sits in a folder: the overview reads Input → stages → Output.
+    const grouped = new Set(Object.values(folders).flat());
+    expect(graph.nodes.filter(node => !['frame', 'split', 'output'].includes(node.id) && !grouped.has(node.id)).map(node => node.id)).toEqual([]);
+    expect(effectPortLabels('threshold')).toMatchObject({ luma: 'Brightness', compare: 'Above Level', 'ramp-width': 'Ramp Width',
+      'ramp-clamped': 'Ramp Position', value: 'Black & White' });
+    // An edited Threshold is not the recipe and gets no folders.
+    const edited = { ...graph, nodes: graph.nodes.filter(node => node.id !== 'soft') };
+    expect(organizeEffectFamilyGraph(edited, recognizeOperatorCompositions(edited), 'threshold', createDefaultThresholdGraph).groups ?? []).toEqual([]);
   });
 });

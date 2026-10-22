@@ -111,6 +111,22 @@ const POSTERIZE_PRESENTATION: EffectPresentationPlan = {
     'kept-colour': 'Kept Colour', 'half-rgb': 'Half', 'two-rgb': 'Two', 'three-rgb': 'Three', base: 'Lower Step', within: 'Within Step', 'ramp-clamped': 'Ramp Position' },
 };
 
+/** Threshold (v2 recipe): instead of one Color Processing folder and a "Clamp & Alpha" it has no Clamp
+ * for, its cards read as stages: the brightness, the hard cut at Level, the Softness ramp around it,
+ * and the pick between them turned back into a black-and-white picture with the transparency. */
+const THRESHOLD_STAGES: readonly [RegExp, string][] = [
+  [/^ramp-width$/, 'controls'], [/^luma$/, 'brightness'], [/^(compare|hard)$/, 'hard'],
+  [/^(value|result-rgb|combine)$/, 'finish'],
+];
+const THRESHOLD_PRESENTATION: EffectPresentationPlan = {
+  labels: { brightness: 'Brightness', hard: 'Hard Edge', soft: 'Soft Edge', finish: 'Black & White' },
+  stage: ({ id }) => THRESHOLD_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'soft',
+  // The brightness is one card, but it is the stage both edges read.
+  singleCardStages: ['brightness'],
+  portLabels: { ...POINTWISE_PORTS, luma: 'Brightness', 'ramp-width': 'Ramp Width', 'ramp-distance': 'Distance',
+    'ramp-clamped': 'Ramp Position', value: 'Black & White', 'result-rgb': 'Threshold RGB' },
+};
+
 /** The CRT Screen graph saved before the 2026-10 rebuild keeps the stage folders it opened with. */
 const LEGACY_CRT_PLAN: EffectPresentationPlan = {
   labels: { curvature: 'Screen Curvature', sampling: 'Clamped Image Sampling', scan: 'Scanlines',
@@ -314,10 +330,11 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     singleCardStages: ['controls'],
     stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
-  // Threshold names its hard step and soft ramp (Softness, 2026-10-21); Posterize has stage folders.
+  // Threshold and Posterize (Softness, 2026-10-21) have stage folders; Invert names its own.
   if (type === 'invert') return INVERT_PRESENTATION;
   if (type === 'posterize') return POSTERIZE_PRESENTATION;
-  if (COLORS.has(type)) return type === 'threshold' ? { ...ORIGINAL_COLOR_PRESENTATION, portLabels: POINTWISE_PORTS } : ORIGINAL_COLOR_PRESENTATION;
+  if (type === 'threshold') return THRESHOLD_PRESENTATION;
+  if (COLORS.has(type)) return ORIGINAL_COLOR_PRESENTATION;
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
     labels: { grid: 'Cell Grid', source: 'Cell Sampling & Tone', index: 'Glyph Selection', atlas: 'Atlas Sampling', appearance: 'Ink & Appearance', feedback: 'Feedback Resolve' },
     stage: ({ id }) => /^(tiny-vec2|almost-vec2)$/.test(id) ? 'sources'

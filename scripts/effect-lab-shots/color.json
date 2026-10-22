@@ -45,6 +45,14 @@
       "left": { "effect": "posterize", "params": { "levels": 4, "softness": 0.2, "brightnessOnly": false } }, "right": { "effect": "posterize", "params": { "levels": 4, "softness": 0.2, "brightnessOnly": true } },
       "alt": "The harbour town posterized at Levels 4 on both sides: left with Brightness Only off, where the sky breaks into bands of blue and lavender, the clouds turn lilac and the sea gets turquoise and violet patches, right with Brightness Only on, where the sky stays blue, the clouds white and every house keeps its own colour in a few flat tones",
       "caption": "Left: Brightness Only off. Right: Brightness Only on. Both Levels 4, Softness 0.2." },
+    { "name": "threshold", "out": "docs/Features/assets/effects/threshold.webp", "image": "neon_rain_street", "width": 1920, "layout": "compare", "outWidth": 1600, "maxBytes": 190000,
+      "left": { "effect": "original" }, "right": { "effect": "threshold", "params": { "level": 0.2, "softness": 0.06 } },
+      "alt": "The rainy neon street at night, original left and with Threshold right: the wet street, the shop lights and the bright sky between the houses turn white, while the house fronts, the shutters and the man with his umbrella walking away stand as black shapes against it",
+      "caption": "Left: original. Right: Level 0.2, Softness 0.06 (the Shadow Matte preset)." },
+    { "name": "threshold-softness", "out": "docs/Features/assets/effects/threshold-softness.webp", "image": "greenscreen_dancer", "width": 1920, "layout": "compare", "outWidth": 1600, "maxBytes": 160000,
+      "left": { "effect": "threshold", "params": { "level": 0.4, "softness": 0 } }, "right": { "effect": "threshold", "params": { "level": 0.4, "softness": 0.4 } },
+      "alt": "The dancer leaping in front of the green screen at Level 0.4 on both sides: left with Softness 0, where the light pool on the screen becomes one hard white cloud with ragged, grainy borders and her dress a flat white cut-out, right with Softness 0.4, where the same cloud fades softly into black and her dress and skin keep grey shading and folds",
+      "caption": "Left: Softness 0. Right: Softness 0.4. Both Level 0.4." },
     { "name": "saturation", "out": "docs/Features/assets/effects/saturation.webp", "image": "harbor_town", "width": 1920, "layout": "compare", "outWidth": 1600, "maxBytes": 190000,
       "left": { "effect": "original" }, "right": { "effect": "saturation", "params": { "amount": 1.8 } },
       "alt": "The harbour town on the coast, original left and with Saturation at Amount 1.8 right: the sky turns a deep blue, the sea a strong turquoise and the house fronts glow in orange, pink and yellow, while the white clouds and the white boats stay white",
@@ -74,6 +82,7 @@
     { "effect": "hue-shift", "image": "harbor_town", "width": 1920, "cellWidth": 400, "columns": 2, "maxBytes": 120000 },
     { "effect": "posterize", "image": "dancer_stage", "width": 1920, "cellWidth": 400, "columns": 2, "maxBytes": 120000 },
     { "effect": "saturation", "image": "harbor_town", "width": 1920, "cellWidth": 400, "columns": 2, "maxBytes": 120000 },
+    { "effect": "threshold", "image": "harbor_town", "width": 1920, "cellWidth": 400, "columns": 2, "maxBytes": 120000 },
     { "effect": "temperature", "image": "harbor_town", "width": 1920, "cellWidth": 400, "columns": 2, "maxBytes": 120000 },
     { "effect": "vibrance", "image": "dancer_stage", "width": 1920, "cellWidth": 400, "columns": 3, "maxBytes": 130000 }
   ]

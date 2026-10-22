@@ -47,6 +47,12 @@
     "posterize?focus=soft-steps&only=shifted,base,within,ramp-distance,ramp-offset,ramp-position,ramp-clamped&cables=avoid&marks=base:above,within:above,ramp-offset:above,ramp-clamped:above@posterize-soft-edge",
     "posterize?focus=soft-steps&only=ramp-square,ramp-double,ramp-falloff,ramp,smooth,soft-active,soft,steps&constants=hide&cables=avoid&marks=ramp:above:32,smooth:above:32,soft:below,steps:above@posterize-soft-ramp",
     "posterize?focus=spread-to-0-1&only=denominator,divide,clamped&cables=avoid&layout=float&marks=denominator:below,clamped:above@posterize-spread",
-    "posterize?focus=colour-and-alpha&only=posterized-brightness,brightness-safe,brightness-gain,kept-colour-raw,kept-colour,result-rgb,combine&constants=hide&cables=avoid&marks=brightness-gain:above,kept-colour-raw:above,result-rgb:above,combine:above@posterize-finish"
+    "posterize?focus=colour-and-alpha&only=posterized-brightness,brightness-safe,brightness-gain,kept-colour-raw,kept-colour,result-rgb,combine&constants=hide&cables=avoid&marks=brightness-gain:above,kept-colour-raw:above,result-rgb:above,combine:above@posterize-finish",
+    "threshold?plumbing=hide&marks=organized-threshold-controls:below,organized-threshold-brightness:above,organized-threshold-hard:above,organized-threshold-soft:below,organized-threshold-finish:above@threshold",
+    "threshold?focus=parameters&only=level,softness,ramp-width&constants=hide&cables=avoid&layout=float&marks=ramp-width:above@threshold-parameters",
+    "threshold?focus=brightness&only=luma&cables=avoid&layout=float&marks=luma:above@threshold-brightness",
+    "threshold?focus=hard-edge&only=compare,hard&cables=avoid&layout=float&marks=compare:below,hard:above@threshold-hard",
+    "threshold?focus=soft-edge&only=ramp-distance,ramp-offset,ramp-position,ramp-clamped,ramp-square,ramp-double,ramp-falloff,ramp,soft-active,soft&constants=hide&cables=avoid&marks=ramp-distance:above,ramp-offset:above,ramp-clamped:above,ramp:above,soft:below@threshold-soft",
+    "threshold?focus=black-and-white&only=value,result-rgb,combine&cables=avoid&layout=float&marks=value:above,result-rgb:above,combine:above@threshold-finish"
   ]
 }
