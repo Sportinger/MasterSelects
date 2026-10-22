@@ -6,10 +6,10 @@
       "image": "dancer_stage",
       "width": 1920,
       "crop": [
-        700,
+        760,
         150,
-        720,
-        540
+        480,
+        360
       ],
       "layout": "compare",
       "outWidth": 1600,
@@ -29,10 +29,10 @@
       "image": "dancer_stage",
       "width": 1920,
       "crop": [
-        760,
+        800,
         170,
-        600,
-        450
+        420,
+        315
       ],
       "cellWidth": 600,
       "columns": 2

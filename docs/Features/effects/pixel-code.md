@@ -1,6 +1,6 @@
 # Pixel Code
 
-<!-- effect-docs: basic page sha=7483ac01d10d, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=81506aca0554, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Replaces the image with random code characters (binary by default) tinted from deep blue to mint green by brightness; Cell Size sets character size.
 
@@ -24,10 +24,11 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Cell Size | 4 to 72 px | 10 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
-| Background | 0 to 1 | 0.3 |
+| Background | 0 to 1 | 0.2 |
+| Black Level | 0 to 0.9 | 0 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Binary |
+| Ramp (Used while Custom Ramp is empty) | Standard, Detailed, Blocks, Bars, Binary and 2 more | Binary |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

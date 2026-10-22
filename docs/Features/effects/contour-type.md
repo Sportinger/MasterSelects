@@ -1,6 +1,6 @@
 # Contour Type
 
-<!-- effect-docs: basic page sha=33c5fad38c06, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=d9bf50365004, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Places numeric characters along brightness contour bands and edges, like a typographic topographic map; Cell Size sets character size.
 
@@ -24,17 +24,18 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Cell Size | 4 to 72 px | 20 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
-| Background | 0 to 1 | 0.3 |
+| Background | 0 to 1 | 0.2 |
+| Black Level | 0 to 0.9 | 0 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Numeric |
+| Ramp (Used while Custom Ramp is empty) | Standard, Detailed, Blocks, Bars, Binary and 2 more | Numeric |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |
 | **Color** | | |
 | Color Source | Source, Duotone | Source |
-| Dark | a colour | `#081018` |
-| Light | a colour | `#e8fff5` |
+| Dark (Used with Color Source Duotone) | a colour | `#081018` |
+| Light (Used with Color Source Duotone) | a colour | `#e8fff5` |
 <!-- generated:controls end -->
 
 **Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [ASCII](./ascii.md), [Brand Generator](./brand-generator.md), [Grid Glyph](./grid-glyph.md), [Inscribe](./inscribe.md), [Number Field](./number-field.md), [Pixel Code](./pixel-code.md), [Stitch Poster](./stitch-poster.md), [Word Mosaic](./word-mosaic.md).

@@ -15,6 +15,13 @@ export const GLYPH_SPEED_TRAVEL = 'speedTravel';
  */
 export const GLYPH_NO_TRAVEL = -1e20;
 
+/** Highest Black Level that renders (above it the tone would be stretched from almost nothing). */
+export const GLYPH_MAX_BLACK_LEVEL = 0.9;
+/** Pixels per side of one glyph atlas tile (glyphEffectFactory's atlas cellSize). */
+export const GLYPH_ATLAS_TILE = 64;
+/** The atlas is read half a texel inside each tile, so linear filtering never reaches the neighbouring tile. */
+export const GLYPH_ATLAS_TEXEL_INSET = 0.5 / GLYPH_ATLAS_TILE;
+
 const finite = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
 
 /** Rendered cell in output pixels: Cell Size (at least 2) × shorter side / 1080, at least 2 pixels. */

@@ -9,10 +9,10 @@ import glyphInclude from '../_shared/glyph.wgsl?raw';
 import familyShader from './shader.wgsl?raw';
 import { FEEDBACK_PARAMETERS } from '../_shared/feedbackParameters';
 import { GLYPH_FONT_OPTIONS } from '../_shared/glyphFonts';
-import { GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_SPEED_TRAVEL, glyphCellPixels, glyphCellWarnings } from './glyphGrid';
+import { GLYPH_MAX_BLACK_LEVEL, GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_SPEED_TRAVEL, glyphCellPixels, glyphCellWarnings } from './glyphGrid';
 
 /** Background of new instances: how much of the picture fills the cells behind the characters. */
-export const GLYPH_DEFAULT_BACKGROUND = 0.3;
+export const GLYPH_DEFAULT_BACKGROUND = 0.2;
 
 /** Shared colour controls a look can ignore because it draws in its own palette. */
 export type GlyphColorControl = 'colorMode' | 'colorA' | 'colorB';
@@ -31,6 +31,8 @@ export interface GlyphEffectOptions {
   defaultBackground?: number;
   /** Roll of new instances of a moving look (1 = the whole ramp, the look before Roll existed). */
   defaultRoll?: number;
+  /** Moving looks whose clock only steps the characters through the Roll window: Roll 0 holds them still. */
+  motionOnlyByRoll?: boolean;
   /** Shared colour controls this look never reads: hidden in the card, kept in saved projects. */
   ignoresColors?: readonly GlyphColorControl[];
   params?: Record<string, EffectParam>;
@@ -39,6 +41,13 @@ export interface GlyphEffectOptions {
 }
 
 const FONT_OPTIONS = GLYPH_FONT_OPTIONS;
+const DUOTONE_ONLY = { param: 'colorMode', values: ['duotone'], note: 'Used with Color Source Duotone.' } as const;
+
+/** Roll 0 holds every character on the one of its brightness: in a look that moves only by rolling, Speed then does nothing. */
+export function rollHoldWarnings(values: Record<string, number | boolean | string>): string[] {
+  const roll = numeric(values.roll, 1), speed = numeric(values.speed, 1);
+  return roll <= 0 && speed !== 0 ? ['Roll 0 holds every character still, so Speed has no effect; raise Roll to let them move.'] : [];
+}
 
 function parseColor(value: unknown, fallback: string): [number, number, number, number] {
   const hex = typeof value === 'string' && /^#[\da-f]{6}$/i.test(value) ? value : fallback;
@@ -63,6 +72,8 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
   const defaultRamp = options.defaultRamp ?? 'standard';
   const defaultCellSize = options.defaultCellSize ?? 14;
   const moving = Boolean(options.animated || options.feedback);
+  // Looks that keep Color Source read Dark and Light only in Duotone; Number Field and Dither Glow always do.
+  const duotoneOnly = !options.ignoresColors?.includes('colorMode');
   const rawParams: Record<string, EffectParam> = {
     cellSize: {
       type: 'number', label: 'Cell Size', default: defaultCellSize, min: 4, max: 72, step: 1, animatable: true, group: 'Grid',
@@ -75,21 +86,29 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
       type: 'number', label: 'Background', default: options.defaultBackground ?? GLYPH_DEFAULT_BACKGROUND, legacyDefault: 0,
       min: 0, max: 1, step: 0.01, animatable: true, group: 'Style', renderMin: 0, renderMax: 1, graphOnly: true,
     },
+    // Tones at or below it become the darkest character (a space in most ramps): a grey stage drops out
+    // and the rest of the picture spreads over the whole ramp. 0 (also for saved effects) = the tone as it is.
+    blackLevel: {
+      type: 'number', label: 'Black Level', default: 0, min: 0, max: GLYPH_MAX_BLACK_LEVEL, step: 0.01, animatable: true, group: 'Style',
+      renderMin: 0, renderMax: GLYPH_MAX_BLACK_LEVEL, graphOnly: true,
+    },
     rampPreset: {
       type: 'select', label: 'Ramp', default: defaultRamp, group: 'Glyphs',
+      activeWhen: { param: 'customRamp', values: [''], note: 'Used while Custom Ramp is empty.' },
       options: (Object.keys(ASCII_RAMP_PRESETS) as AsciiRampPreset[]).map((value) => ({ value, label: ASCII_RAMP_LABELS[value] })),
     },
     customRamp: { type: 'text', label: 'Custom Ramp', default: '', group: 'Glyphs' },
     fontFamily: { type: 'select', label: 'Font', default: FONT_OPTIONS[0].value, options: FONT_OPTIONS, group: 'Glyphs' },
-    // Not keyframeable: every weight is its own glyph atlas (atlasWeight keeps them to the nine font weights).
-    fontWeight: { type: 'number', label: 'Weight', default: 600, min: 200, max: 900, step: 100, group: 'Glyphs', animatable: false },
+    // Keyframeable in steps: every weight draws its own glyph atlas, and atlasWeight keeps them to the nine font weights.
+    fontWeight: { type: 'number', label: 'Weight', default: 600, min: 200, max: 900, step: 100, group: 'Glyphs', animatable: true },
     invert: { type: 'boolean', label: 'Invert Ramp', default: false, group: 'Style' },
     colorMode: {
       type: 'select', label: 'Color Source', default: 'source', group: 'Color',
       options: [{ value: 'source', label: 'Source' }, { value: 'duotone', label: 'Duotone' }],
     },
-    colorA: { type: 'color', label: 'Dark', default: '#081018', group: 'Color' },
-    colorB: { type: 'color', label: 'Light', default: '#e8fff5', group: 'Color' },
+    // With Color Source = Source the characters take the picture's colours: Dark and Light rest (dimmed in the card).
+    colorA: { type: 'color', label: 'Dark', default: '#081018', group: 'Color', ...(duotoneOnly ? { activeWhen: DUOTONE_ONLY } : {}) },
+    colorB: { type: 'color', label: 'Light', default: '#e8fff5', group: 'Color', ...(duotoneOnly ? { activeWhen: DUOTONE_ONLY } : {}) },
     ...(options.animated ? {
       // Keyframeable: a keyed ramp moves by the distance travelled (integratedAs), not Speed × time.
       speed: {
@@ -148,6 +167,7 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
     paramWarnings: (values, width, height) => [
       ...glyphCellWarnings(values, width, height, defaultCellSize),
       ...asciiRampWarnings(values.rampPreset ?? defaultRamp, values.customRamp),
+      ...(options.motionOnlyByRoll ? rollHoldWarnings(values) : []),
     ],
     ...(options.presets ? { presets: options.presets } : {}),
     glyphAtlas: (values) => ({

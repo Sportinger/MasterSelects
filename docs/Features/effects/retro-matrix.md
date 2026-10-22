@@ -5,7 +5,7 @@ Turns the picture into glowing text on an old computer screen that slowly scroll
 Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot docs-clip docs-compare">
-<video src="../assets/effects/clips/retro-matrix.mp4" poster="../assets/effects/clips/retro-matrix.webp" width="1200" height="584" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Retro Matrix right: she is rebuilt from glowing amber digits on a dark screen with fine scanlines, bright digits 5 to 9 in her dress and dim 1, 2 and 3 on the stage, and the whole text scrolls slowly upwards while the picture stays in place"></video>
+<video src="../assets/effects/clips/retro-matrix.mp4" poster="../assets/effects/clips/retro-matrix.webp" width="1280" height="608" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Retro Matrix right: she is rebuilt from glowing amber digits on a dark screen with fine scanlines, bright digits 5 to 9 in her dress and dim 1, 2 and 3 on the stage, and the whole text scrolls slowly upwards while the picture stays in place"></video>
 <figcaption>Left: original. Right: Retro Matrix at its default settings.</figcaption>
 </figure>
 
@@ -20,7 +20,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/retro-matrix-presets.mp4" poster="../assets/effects/clips/retro-matrix-presets.webp" width="742" height="778" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Green Screen top left with fine green text, Paper White top right with crisp white text without scanlines, Teletype bottom left with large amber digits that crawl up slowly behind deep scanlines, Binary Stream bottom right with zeros and ones in cold cyan racing upwards"></video>
+<video src="../assets/effects/clips/retro-matrix-presets.mp4" poster="../assets/effects/clips/retro-matrix-presets.webp" width="902" height="954" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Green Screen top left with fine green text, Paper White top right with crisp white text without scanlines, Teletype bottom left with large amber digits that crawl up slowly, Binary Stream bottom right with zeros and ones in cold cyan racing upwards"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
@@ -28,11 +28,11 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Green Screen** – fine green text on a dark screen, the classic computer terminal. For control rooms, old films and anything that should look like a computer at work.
 
-**Paper White** – crisp white text without scanlines, like the paper-white monitors of the eighties. Cool and clean; it sits well next to black-and-white footage.
+**Paper White** – crisp white text without scanlines, like the paper-white monitors of the eighties; Black Level 0.15 keeps the dark stage a dark screen. Cool and clean; it sits well next to black-and-white footage.
 
-**Teletype** – large amber digits behind deep scanlines that crawl up slowly. Reads from far away on a projection and gives a scene a calm, heavy rhythm.
+**Teletype** – large amber digits that crawl up slowly. Reads from far away on a projection and gives a scene a calm, heavy rhythm.
 
-**Binary Stream** – zeros and ones in cold cyan that race upwards. Restless and technical: data flowing, a system under load.
+**Binary Stream** – zeros and ones in cold cyan that race upwards; Black Level 0.15 keeps them to the figure. Restless and technical: data flowing, a system under load.
 
 ## Controls
 
@@ -40,24 +40,24 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Retro Matrix card: Style menu, Preset menu showing Green Screen, Cell Size, Amount, Background, Invert Ramp and Scanlines, then Ramp, Custom Ramp, Font and Weight, then Phosphor with a green swatch and #33ff66, then Speed and Roll, beside a narrow strip of the preview with faint green text on a dark screen](../assets/effects/editor/retro-matrix-inspector.webp)
+![Properties, Effects with a Retro Matrix card: Style menu, Preset menu showing Teletype, Cell Size, Amount, Background, Black Level, Invert Ramp and Scanlines, then Ramp, Custom Ramp, Font and Weight, then Phosphor with an amber swatch, then Speed and Roll, beside a strip of the preview where the dancer's arm is drawn in large amber digits](../assets/effects/editor/retro-matrix-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1510" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1247" aria-hidden="true" focusable="false">
 <defs><marker id="retro-matrix-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M475 399 L559 399" marker-end="url(#retro-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="475" cy="399" r="18" /><text x="475" y="399" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M497 530 L581 530" marker-end="url(#retro-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="497" cy="530" r="18" /><text x="497" y="530" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M489 815 L573 815" marker-end="url(#retro-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="489" cy="815" r="18" /><text x="489" y="815" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M490 1245 L574 1245" marker-end="url(#retro-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="490" cy="1245" r="18" /><text x="490" y="1245" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M520 1389 L604 1389" marker-end="url(#retro-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="520" cy="1389" r="18" /><text x="520" y="1389" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M565 319 L649 319" marker-end="url(#retro-matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="565" cy="319" r="18" /><text x="565" y="319" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M583 425 L667 425" marker-end="url(#retro-matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="583" cy="425" r="18" /><text x="583" y="425" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M576 691 L660 691" marker-end="url(#retro-matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="576" cy="691" r="18" /><text x="576" y="691" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M577 1035 L661 1035" marker-end="url(#retro-matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="577" cy="1035" r="18" /><text x="577" y="1035" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M601 1150 L685 1150" marker-end="url(#retro-matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="601" cy="1150" r="18" /><text x="601" y="1150" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Retro Matrix with the Green Screen preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Scanlines: the lines of the screen. 4 — Phosphor: the colour of the text. 5 — Speed: how fast it scrolls.</figcaption>
+<figcaption>Retro Matrix with the Teletype preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Scanlines: the lines of the screen. 4 — Phosphor: the colour of the text. 5 — Speed: how fast it scrolls.</figcaption>
 </figure>
 
 The Style menu at the top of the card switches to another look of the same engine and keeps your values and keyframes, for example [Glyph Matrix](./glyph-matrix.md), [Symbol Matrix](./symbol-matrix.md) or [Matrix Rain](./matrix.md). Phosphor and Scanlines belong to Retro Matrix: the other looks keep their values for when you switch back.
@@ -65,7 +65,7 @@ The Style menu at the top of the card switches to another look of the same engin
 ### Grid
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/retro-matrix-cell-size.mp4" poster="../assets/effects/clips/retro-matrix-cell-size.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Cell Size runs from 8 to 40 px and back: fine scrolling text grows into a few large digits and shrinks again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/retro-matrix-cell-size.mp4" poster="../assets/effects/clips/retro-matrix-cell-size.webp" width="540" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Cell Size runs from 8 to 40 px and back: fine scrolling text grows into a few large digits and shrinks again; the current value is shown at the bottom left"></video>
 <figcaption>Cell Size from 8 to 40 px and back.</figcaption>
 </figure>
 
@@ -76,7 +76,7 @@ The Style menu at the top of the card switches to another look of the same engin
 ### Style
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/retro-matrix-amount.mp4" poster="../assets/effects/clips/retro-matrix-amount.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Amount runs from 0 to 1 and back: the plain picture fades into glowing amber text and back; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/retro-matrix-amount.mp4" poster="../assets/effects/clips/retro-matrix-amount.webp" width="540" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Amount runs from 0 to 1 and back: the plain picture fades into glowing amber text and back; the current value is shown at the bottom left"></video>
 <figcaption>Amount from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -85,7 +85,7 @@ The Style menu at the top of the card switches to another look of the same engin
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/retro-matrix-background.mp4" poster="../assets/effects/clips/retro-matrix-background.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Background runs from 0 to 1 and back: the digits glow on black, then amber fills the cells until the figure is a bright amber mosaic, and back; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/retro-matrix-background.mp4" poster="../assets/effects/clips/retro-matrix-background.webp" width="540" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Background runs from 0 to 1 and back: the digits glow on black, then amber fills the cells until the figure is a bright amber mosaic, and back; the current value is shown at the bottom left"></video>
 <figcaption>Background from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -93,11 +93,20 @@ The Style menu at the top of the card switches to another look of the same engin
 
 <div class="docs-float-end"></div>
 
+<figure class="docs-shot docs-clip docs-shot--float-right">
+<video src="../assets/effects/clips/retro-matrix-black-level.mp4" poster="../assets/effects/clips/retro-matrix-black-level.webp" width="540" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Black Level runs from 0 to 0.5 and back: the faint characters on the dark stage go out first, then the shadows on her, until only her bright dress is drawn, and back; the current value is shown at the bottom left"></video>
+<figcaption>Black Level from 0 to 0.5 and back.</figcaption>
+</figure>
+
+**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the dimmest glow and the first character of the ramp, the space in most ramps, so a grey stage turns into a dark screen and the lit figure stands out; the rest of the picture spreads over the whole ramp and the glow. With Roll above 0 the dark cells still show sparse text. 0 to 0.9, default 0.
+
+<div class="docs-float-end"></div>
+
 **Invert Ramp** – swaps the ends of the ramp: dark parts get the dense characters and bright parts the sparse ones, like a negative. The glow still follows the picture, so bright parts stay bright. The higher Roll, the less it shows. Either on or off, default off.
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/retro-matrix-scanlines.mp4" poster="../assets/effects/clips/retro-matrix-scanlines.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Scanlines runs from 0 to 1 and back: the clean digits get dark horizontal lines that deepen until every character is drawn in separate strokes, and back; the current value is shown at the bottom left"></video>
-<figcaption>Scanlines from 0 to 1 and back.</figcaption>
+<video src="../assets/effects/clips/retro-matrix-scanlines.mp4" poster="../assets/effects/clips/retro-matrix-scanlines.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="A close-up of Retro Matrix at twice the size while Scanlines runs from 0 to 1 and back: at 0 the amber characters are solid, then dark lines three pixels apart cut through every row until each character is drawn in separate strokes, and back; the current value is shown at the bottom left"></video>
+<figcaption>Scanlines from 0 to 1 and back, in a close-up at twice the size.</figcaption>
 </figure>
 
 **Scanlines** – how dark the gaps between the lines of the screen get. At 0 the text is clean; 0.5 gives the soft lines of a monitor; at 1 the gaps turn black and every character is drawn in separate strokes, like an old tube up close. There is one line every 3 pixels of a 1080p frame, and the lines move with the text. On smaller frames, such as a reduced Preview Quality or the thumbnails, they fade into an even dimming instead of flickering; a 1080p or 4K export shows them in full. 0 to 1, default 0.5.
@@ -106,13 +115,13 @@ The Style menu at the top of the card switches to another look of the same engin
 
 ### Glyphs
 
-**Ramp** – the row of characters the picture is built from, from the darkest to the brightest part; each character of the text is drawn from the neighbours of its own one in this row (see Roll). **Numeric** (` 123456789` after a space) gives a screen of digits, dim 1, 2 and 3 in the dark and dense 7, 8 and 9 in the light; **Standard** and **Detailed** use punctuation and letters, like text; **Binary** zeros and ones; **Blocks** and **Bars** shaded blocks and bars. In the menu: Standard, Detailed, Blocks, Bars, Binary and 2 more, default Numeric.
+**Ramp** – the row of characters the picture is built from, from the darkest to the brightest part; each character of the text is drawn from the neighbours of its own one in this row (see Roll). **Numeric** (` 123456789` after a space) gives a screen of digits, dim 1, 2 and 3 in the dark and dense 7, 8 and 9 in the light; **Standard** and **Detailed** use punctuation and letters, like text; **Binary** zeros and ones; **Blocks** and **Bars** shaded blocks and bars. While a Custom Ramp is typed, the row rests and the card dims it. In the menu: Standard, Detailed, Blocks, Bars, Binary and 2 more, default Numeric.
 
 **Custom Ramp** – your own characters, from dark to bright, instead of the Ramp: letters such as ` ilmwMW`, or a single character that fills every cell. Spaces at the end are ignored, and a ramp longer than 256 characters is thinned to 256, spread from its first to its last (the card says so). Clear it to use the Ramp again. Any text, default empty.
 
 **Font** – the lettering. **Monospace** draws the even characters of a terminal; **Serif** and **Sans Serif** give rounder ones, each narrowed to fit its cell. Monospace, Serif, Sans Serif, default Monospace.
 
-**Weight** – how heavy the strokes are. Heavier characters carry more light, so the screen gets brighter. How many steps you see depends on the font: the built-in monospace font of many systems only has regular (up to 500) and bold (600 and more). It is not keyframeable. 200 to 900, default 600.
+**Weight** – how heavy the strokes are. Heavier characters carry more light, so the screen gets brighter. How many steps you see depends on the font: the built-in monospace font of many systems only has regular (up to 500) and bold (600 and more). Keyframes step from one weight to the next. 200 to 900, default 600.
 
 ### Color
 
@@ -121,7 +130,7 @@ The Style menu at the top of the card switches to another look of the same engin
 ### Motion
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/retro-matrix-speed.mp4" poster="../assets/effects/clips/retro-matrix-speed.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix at three speeds, about two seconds each: at Speed 0 the text stands still and changes only where she moves, at 1 it scrolls up three rows a second, at 3 it races upwards; the speed is shown at the bottom left"></video>
+<video src="../assets/effects/clips/retro-matrix-speed.mp4" poster="../assets/effects/clips/retro-matrix-speed.webp" width="540" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix at three speeds, about two seconds each: at Speed 0 the text stands still and changes only where she moves, at 1 it scrolls up three rows a second, at 3 it races upwards; the speed is shown at the bottom left"></video>
 <figcaption>Speed 0, 1 and 3, about two seconds each.</figcaption>
 </figure>
 
@@ -130,7 +139,7 @@ The Style menu at the top of the card switches to another look of the same engin
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/retro-matrix-roll.mp4" poster="../assets/effects/clips/retro-matrix-roll.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Roll runs from 0 to 1 and back: at 0 each digit follows the brightness, from blank on the stage to 9 in her dress, then the text gets more and more random until any digit can stand anywhere and the figure shows only in the brightness, and back; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/retro-matrix-roll.mp4" poster="../assets/effects/clips/retro-matrix-roll.webp" width="540" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Retro Matrix while Roll runs from 0 to 1 and back: at 0 each digit follows the brightness, from blank on the stage to 9 in her dress, then the text gets more and more random until any digit can stand anywhere and the figure shows only in the brightness, and back; the current value is shown at the bottom left"></video>
 <figcaption>Roll from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -146,26 +155,26 @@ The Style menu at the top of the card switches to another look of the same engin
 
 ![The Retro Matrix graph in nine stages: Parameters feed Scroll (Speed), whose Scroll Offset moves Cell Grid (Cell Size); Cell Grid passes the cell centre to Cell Sampling & Tone, the line cell to Glyph Offset, the position in the cell to Atlas Alpha and the scrolled grid to Scanlines; Tone to Glyph turns the tone into the cell's own character, Glyph Offset gives each cell of the text its random character, Roll Window (Roll) keeps it near the Tone Glyph and passes the glyph index to Atlas Alpha; Scanlines (Scanlines) and Ink & Appearance (Phosphor, Background, Amount) light the coverage and draw the picture](../assets/effects/graphs/retro-matrix.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 730" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 748" aria-hidden="true" focusable="false">
 <defs><marker id="retro-matrix-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M184 183 L184 267" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="184" cy="183" r="18" /><text x="184" y="183" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M292 708 L292 624" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="292" cy="708" r="18" /><text x="292" y="708" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M400 129 L400 213" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="400" cy="129" r="18" /><text x="400" y="129" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M509 498 L509 414" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="498" r="18" /><text x="509" y="498" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M184 194 L184 278" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="184" cy="194" r="18" /><text x="184" y="194" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M292 726 L292 642" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="292" cy="726" r="18" /><text x="292" y="726" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M400 136 L400 220" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="400" cy="136" r="18" /><text x="400" y="136" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M509 506 L509 422" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="506" r="18" /><text x="509" y="506" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M617 22 L617 72" marker-end="url(#retro-matrix-arrow)" />
 <circle class="docs-shot-number" cx="617" cy="22" r="18" /><text x="617" y="22" class="docs-shot-number-text">5</text>
 <path class="docs-shot-arrow" d="M725 423 L725 339" marker-end="url(#retro-matrix-arrow)" />
 <circle class="docs-shot-number" cx="725" cy="423" r="18" /><text x="725" y="423" class="docs-shot-number-text">6</text>
-<path class="docs-shot-arrow" d="M833 237 L833 321" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="833" cy="237" r="18" /><text x="833" y="237" class="docs-shot-number-text">7</text>
-<path class="docs-shot-arrow" d="M833 663 L833 579" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="833" cy="663" r="18" /><text x="833" y="663" class="docs-shot-number-text">8</text>
-<path class="docs-shot-arrow" d="M941 432 L941 516" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="432" r="18" /><text x="941" y="432" class="docs-shot-number-text">9</text>
+<path class="docs-shot-arrow" d="M833 244 L833 328" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="833" cy="244" r="18" /><text x="833" y="244" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M833 670 L833 586" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="833" cy="670" r="18" /><text x="833" y="670" class="docs-shot-number-text">8</text>
+<path class="docs-shot-arrow" d="M941 439 L941 523" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="941" cy="439" r="18" /><text x="941" y="439" class="docs-shot-number-text">9</text>
 </svg>
 </div>
 
@@ -240,33 +249,40 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 
 ### Cell Sampling & Tone
 
-<figure class="docs-shot docs-shot--float-right">
+<figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![Inside the Cell Sampling and Tone folder: Cell Center, Tiny, Almost One and Frame feed Clamped Image Sample, which feeds Split RGB + Alpha, whose colour goes into Luminance](../assets/effects/graphs/ascii-cell-sampling.webp)
+![Inside the Cell Sampling and Tone folder: Cell Center, Tiny, Almost One and Frame feed Clamped Image Sample, which feeds Split RGB + Alpha, whose colour goes into Luminance; Black Level, clamped between Zero and Black Level Max 0.9, is subtracted from the luminance and from One, a Divide stretches the rest, and a last Clamp between Zero and One gives the Tone](../assets/effects/graphs/ascii-cell-sampling.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 565" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 813" aria-hidden="true" focusable="false">
 <defs><marker id="ascii-cell-sampling-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M227 316 L227 232" marker-end="url(#ascii-cell-sampling-arrow)" />
-<circle class="docs-shot-number" cx="227" cy="316" r="18" /><text x="227" y="316" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M363 22 L363 81" marker-end="url(#ascii-cell-sampling-arrow)" />
-<circle class="docs-shot-number" cx="363" cy="22" r="18" /><text x="363" y="22" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M500 261 L500 177" marker-end="url(#ascii-cell-sampling-arrow)" />
-<circle class="docs-shot-number" cx="500" cy="261" r="18" /><text x="500" y="261" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M230 558 L230 474" marker-end="url(#ascii-cell-sampling-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="558" r="18" /><text x="230" y="558" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M369 236 L369 320" marker-end="url(#ascii-cell-sampling-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="236" r="18" /><text x="369" y="236" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M508 502 L508 418" marker-end="url(#ascii-cell-sampling-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="502" r="18" /><text x="508" y="502" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M787 129 L787 213" marker-end="url(#ascii-cell-sampling-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="129" r="18" /><text x="787" y="129" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M926 593 L926 509" marker-end="url(#ascii-cell-sampling-arrow)" />
+<circle class="docs-shot-number" cx="926" cy="593" r="18" /><text x="926" y="593" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Cell Sampling & Tone. 1 — Clamped Image Sample: reads the picture at the cell centre. 2 — Split RGB + Alpha: colour and transparency. 3 — Luminance: the brightness.</figcaption>
+<figcaption>Inside Cell Sampling & Tone (Black Level). 1 — Clamped Image Sample: reads the picture at the cell centre. 2 — Split RGB + Alpha: colour and transparency. 3 — Luminance: the brightness. 4 — Divide: Black Level. 5 — Clamp: the tone.</figcaption>
 </figure>
 
 **Clamped Image Sample** – reads the input picture at the cell centre, never outside the frame.
 
 **Split RGB + Alpha** – the cell's colour and its transparency. Retro Matrix uses only the brightness and the transparency: the colour comes from Phosphor.
 
-**Luminance** – the brightness of the cell, weighted the way the eye sees it. It picks the character and sets how strongly it glows.
+**Luminance** – the brightness of the cell colour, weighted the way the eye sees it (green counts most).
 
-<div class="docs-float-end"></div>
+**Divide** – applies **Black Level**: the luminance minus Black Level (Subtract), divided by what is left above it (the other Subtract: One minus Black Level). The Clamp next to Black Level keeps it between 0 and Black Level Max 0.9.
+
+**Clamp** – keeps the result between 0 and 1, so everything darker than Black Level becomes 0: the Tone. It picks the character and sets how strongly it glows.
+
 
 ### Tone to Glyph
 
@@ -396,7 +412,7 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 
 <div class="docs-shot-stage">
 
-![Inside the Atlas Alpha folder, in two rows: Glyph Index divided by Atlas Columns, Floor, Multiply and Subtract give the row and column of the character in the atlas, Combine Vector joins them; Position in Cell is clamped between Tiny and Almost One; Add, Divide by the atlas size, Sample Image of the Glyph Atlas, Image to RGBA and Split Vector give the glyph coverage](../assets/effects/graphs/ascii-atlas-alpha.webp)
+![Inside the Atlas Alpha folder, in two rows: Glyph Index divided by Atlas Columns, Floor, Multiply and Subtract give the row and column of the character in the atlas, Combine Vector joins them; Position in Cell is clamped between Half Texel and One Minus Half Texel; Add, Divide by the atlas size, Sample Image of the Glyph Atlas, Image to RGBA and Split Vector give the glyph coverage](../assets/effects/graphs/ascii-atlas-alpha.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 1448" aria-hidden="true" focusable="false">
 <defs><marker id="ascii-atlas-alpha-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -413,14 +429,14 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 </svg>
 </div>
 
-<figcaption>Inside Atlas Alpha. The atlas is a sheet of all characters of the ramp, drawn in the chosen Font and Weight. 1 — Floor: the row of the character on the sheet. 2 — Subtract: its column. 3 — Clamp: keeps the read inside the character's square. 4 — Sample Image: reads the sheet. 5 — Split Vector: the coverage.</figcaption>
+<figcaption>Inside Atlas Alpha. The atlas is a sheet of all characters of the ramp, drawn in the chosen Font and Weight. 1 — Floor: the row of the character on the sheet. 2 — Subtract: its column. 3 — Clamp: keeps the read half a pixel inside the character's square. 4 — Sample Image: reads the sheet. 5 — Split Vector: the coverage.</figcaption>
 </figure>
 
 **Floor** – the row of the character on the atlas, a sheet of all characters of the ramp drawn in the chosen Font and Weight.
 
 **Subtract** – its column on the sheet.
 
-**Clamp** – keeps the read inside the character's own square on the sheet.
+**Clamp** – keeps the place inside the cell half a pixel of the sheet away from the edges of the character's square (Half Texel, 0.5 of the 64 pixels of a square, and One Minus Half Texel). The sheet is read with smoothing, so a read any closer would mix in a little of the neighbouring character: blocks and bars would show thin seams wherever a cell is not a whole number of pixels.
 
 **Sample Image** – reads the sheet at the character's square plus the place inside the cell.
 
@@ -470,24 +486,26 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 
 <div class="docs-shot-stage">
 
-![Inside the Ink and Appearance folder: Background, One and the Glyph Coverage go into the Mix that gives the Coverage; the Phosphor through Vector 4 to RGB times the Coverage gives the Ink; Tone Base 0.15 plus Tone Factor 1.6 times the Tone gives the Brightness; Ink times Brightness gives the Lit Ink, times the Scanline the Glyph Cell; a last Mix by Amount fades from the Original Color to the Faded Color](../assets/effects/graphs/retro-matrix-ink-and-appearance.webp)
+![Inside the Ink and Appearance folder: Background, One and the Glyph Coverage go into the Mix that gives the Coverage; the Phosphor through Vector 4 to RGB times the Coverage gives the Ink; Tone Base 0.15 plus Tone Factor 1.6 times the Tone gives the Brightness; Ink times Brightness gives the Lit Ink, times the Scanline the Glyph Cell; Original Color and the glyph cell, each times its alpha, are mixed by Amount into Faded Premultiplied, and a Divide by Faded Alpha gives the Faded Color](../assets/effects/graphs/retro-matrix-ink-and-appearance.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1005" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 761" aria-hidden="true" focusable="false">
 <defs><marker id="retro-matrix-ink-and-appearance-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M427 105 L427 189" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
-<circle class="docs-shot-number" cx="427" cy="105" r="18" /><text x="427" y="105" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M264 492 L264 408" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
-<circle class="docs-shot-number" cx="264" cy="492" r="18" /><text x="264" y="492" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M427 488 L427 572" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
-<circle class="docs-shot-number" cx="427" cy="488" r="18" /><text x="427" y="488" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M752 105 L752 189" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
-<circle class="docs-shot-number" cx="752" cy="105" r="18" /><text x="752" y="105" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M914 492 L914 408" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
-<circle class="docs-shot-number" cx="914" cy="492" r="18" /><text x="914" y="492" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M326 58 L326 142" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="58" r="18" /><text x="326" y="58" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M204 392 L204 308" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="392" r="18" /><text x="204" y="392" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M326 344 L326 428" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="344" r="18" /><text x="326" y="344" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M569 58 L569 142" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="58" r="18" /><text x="569" y="58" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M813 58 L813 142" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="58" r="18" /><text x="813" y="58" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M935 350 L935 266" marker-end="url(#retro-matrix-ink-and-appearance-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="350" r="18" /><text x="935" y="350" class="docs-shot-number-text">6</text>
 </svg>
 </div>
 
-<figcaption>Inside Ink & Appearance (Phosphor, Background, Amount). Each card is named by its output. 1 — Ink: the phosphor colour on its ground. 2 — Coverage: the strokes, lifted by Background. 3 — Brightness: the glow of the tone. 4 — Glyph Cell: lit and scanned. 5 — Faded Color: Amount.</figcaption>
+<figcaption>Inside Ink & Appearance (Phosphor, Background, Amount). Each card is named by its output. 1 — Ink: the phosphor colour on its ground. 2 — Coverage: the strokes, lifted by Background. 3 — Brightness: the glow of the tone. 4 — Glyph Cell: lit and scanned. 5 — Faded Premultiplied: Amount. 6 — Faded Color: back to plain colour.</figcaption>
 </figure>
 
 **Ink** – the Phosphor colour (Vector 4 to RGB) times the Coverage: the Glyph Coverage from Atlas Alpha, lifted to **Background** around the strokes (the Mix with One). The character glows at full colour, the cell around it at Background.
@@ -498,13 +516,16 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 
 **Glyph Cell** – the Lit Ink times the Scanline from Scanlines: the finished screen.
 
-**Faded Color** – the untouched picture faded towards the screen by **Amount**, pixel by pixel, transparency included.
+**Faded Premultiplied** – fades the untouched picture, pixel by pixel, towards the screen by **Amount**. Both are first multiplied by their transparency (Original Alpha, Cell Alpha), and the transparency fades the same way (Faded Alpha).
+
+**Faded Color** – divides by Faded Alpha (at least a millionth) to get back to plain colour. Mixed this way, the colour a transparent pixel hides never shows as a dark or green fringe around a cut-out figure while Amount fades.
 
 ## Technical details
 
 - **Size.** Cell Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same grid. A cell is never smaller than 2 pixels of the frame; below 2 px Cell Size renders as 2, and the card says so. The scanlines lie 3 pixels of a 1080p frame apart and fade into an even dimming of 1 − Scanlines / 2 where they would be closer than about 3 pixels of the output.
 - **Time.** The text scrolls up 3 × Speed rows a second with the timeline time: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. With keyframes on Speed it moves by the distance Speed has travelled, so it never jumps.
 - **Text.** Each cell of the scrolled grid keeps one random character for its column and line of text, drawn from a window of 1 + Roll × (ramp − 1) characters, rounded up, around the character of its brightness and kept inside the ramp. It glows at Phosphor × (0.15 + 1.6 × brightness). Scanlines and Roll outside 0 to 1 render as 0 or 1, and the card and the tools say so.
-- **Transparency.** Each cell takes the transparency of the picture at its centre, so a cut-out figure keeps its outline in whole cells; as the text scrolls, its top and bottom edges move in steps of a cell. Amount fades the transparency back to the original's, pixel by pixel.
-- **Saved projects.** A Retro Matrix stores its node setup and keeps its look. Effects saved without a stored setup now scroll their text; before, the frame was cut into bands of the ramp's length whose borders cut characters in half, the text did not scroll, and the scanlines were one pixel of the output wide, so the preview and an export at another size differed, a bug. They load with amber, Roll 1, Background 0 and Scanlines 0.36, the values they had; their text now glows more strongly with the picture's brightness.
+- **Characters.** The whole ramp is drawn in one font size, so its tallest character spans 88 % of the cell height. Blocks and Bars are exact shapes, read half a pixel inside each character, so they join without seams at any cell size.
+- **Transparency.** Each cell takes the transparency of the picture at its centre, so a cut-out figure keeps its outline in whole cells; as the text scrolls, its top and bottom edges move in steps of a cell. Amount fades the transparency back to the original's, pixel by pixel, and mixes the colours weighted by their transparency, so the hidden colour of a transparent pixel never shows as a fringe around a cut-out figure.
+- **Saved projects.** A Retro Matrix stores its node setup and keeps its look. Effects saved without a stored setup now scroll their text; before, the frame was cut into bands of the ramp's length whose borders cut characters in half, the text did not scroll, and the scanlines were one pixel of the output wide, so the preview and an export at another size differed, a bug. They load with amber, Roll 1, Background 0 and Scanlines 0.36, the values they had; their text now glows more strongly with the picture's brightness. A stored setup keeps its smaller characters, which cover about half of a cell, and the way it read the character sheet, so saved Blocks or Bars can show thin seam lines on frames whose cells are not a whole number of pixels; Black Level is 0 there.
 - **More:** [Effect system](../Effect-System.md#glyph-cell-and-compute-effects) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

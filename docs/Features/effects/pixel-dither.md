@@ -1,6 +1,6 @@
 # Dither Glow
 
-<!-- effect-docs: basic page sha=a2dd72dcc147, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=f41c00ed873f, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Renders glowing neon characters with soft cell halos, colored from Dark to Light by brightness; Cell Size sets character size.
 
@@ -24,10 +24,11 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Cell Size | 4 to 72 px | 9 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
-| Background | 0 to 1 | 0.3 |
+| Background | 0 to 1 | 0.2 |
+| Black Level | 0 to 0.9 | 0 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Standard |
+| Ramp (Used while Custom Ramp is empty) | Standard, Detailed, Blocks, Bars, Binary and 2 more | Standard |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

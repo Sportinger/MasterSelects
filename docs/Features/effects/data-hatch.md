@@ -1,6 +1,6 @@
 # Data Hatching
 
-<!-- effect-docs: basic page sha=db9d935fca85, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=5ef050ade9f3, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Mixes cycling characters with diagonal hatching that thickens in darker areas; Cell Size sets character size, Speed the cycling.
 
@@ -24,17 +24,18 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Cell Size | 4 to 72 px | 14 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
-| Background | 0 to 1 | 0.3 |
+| Background | 0 to 1 | 0.2 |
+| Black Level | 0 to 0.9 | 0 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Binary |
+| Ramp (Used while Custom Ramp is empty) | Standard, Detailed, Blocks, Bars, Binary and 2 more | Binary |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |
 | **Color** | | |
 | Color Source | Source, Duotone | Source |
-| Dark | a colour | `#081018` |
-| Light | a colour | `#e8fff5` |
+| Dark (Used with Color Source Duotone) | a colour | `#081018` |
+| Light (Used with Color Source Duotone) | a colour | `#e8fff5` |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |
 | Roll | 0 to 1 | 1 |

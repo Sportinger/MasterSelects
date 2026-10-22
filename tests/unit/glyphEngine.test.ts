@@ -84,7 +84,7 @@ describe('glyph engine', () => {
     for (const type of GLYPH_LOOKS) {
       const background = getEffect(type)!.params.background;
       expect(background).toMatchObject({ legacyDefault: 0, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true });
-      expect(background.default).toBe(type === 'stitch-poster' ? 0 : type === 'retro-matrix' ? .2 : .3);
+      expect(background.default).toBe(type === 'stitch-poster' ? 0 : .2);
     }
     // ASCII, no character in the cell: the ground is the source colour × .08, lifted towards the ink.
     const dark = render('ascii', { background: 0 }).output, lifted = render('ascii', { background: .5 }).output;
@@ -292,13 +292,83 @@ describe('glyph engine', () => {
     expect(green[1]).toBeGreaterThan(.9);
   });
 
-  it('Weight is not keyframeable and draws one of the nine font weights, so no value builds an atlas of its own', () => {
+  it('Weight is keyframeable in steps: it draws one of the nine font weights, so no value builds an atlas of its own', () => {
     for (const type of GLYPH_LOOKS) {
       const definition = getEffect(type)!;
-      expect(definition.params.fontWeight.animatable, type).toBe(false);
+      expect(definition.params.fontWeight.animatable, type).toBe(true);
       const atlas = (fontWeight: number) => definition.glyphAtlas!({ ...getDefaultParams(type), fontWeight } as Record<string, number | boolean | string>).fontWeight;
       expect([atlas(612.5), atlas(649), atlas(651), atlas(2000), atlas(-5)], type).toEqual([600, 600, 700, 900, 100]);
     }
   });
-});
 
+  it('Amount mixes premultiplied, so the hidden colour of a transparent pixel never leaks into the fade (every look)', () => {
+    const uv: [number, number] = [602.5 / 1920, 508.5 / 1080], pixelCoordinate: [number, number] = [602, 508];
+    const hiddenGreen: Rgba = [0, 1, 0, 0], opaque: Rgba = [.8, .6, .4, 1];
+    const at = (type: string, amount: number, pixel: Rgba, cell: Rgba) => evaluateImageOperatorPlan(compile(type, { ...getDefaultParams(type), amount }), [0, 0, 0, 0], {
+      uv, pixelCoordinate, derivativeAutoMode: 'fine', resolution: [1920, 1080], timelineTimeSeconds: 1,
+      sampleImage: (coords: [number, number]) => (Math.abs(coords[0] - uv[0]) < 1e-9 && Math.abs(coords[1] - uv[1]) < 1e-9 ? pixel : cell),
+      sampleResource: () => [0, 0, 0, 1] }) as number[];
+    const round = (values: number[]) => values.map(value => Number(value.toFixed(4)));
+    for (const type of GLYPH_LOOKS.filter(look => look !== 'ascii-ghost')) {
+      // A transparent pixel inside an opaque cell: half the look's colour at half alpha, no green.
+      const look = at(type, 1, hiddenGreen, opaque);
+      expect(round(at(type, .5, hiddenGreen, opaque)), type).toEqual(round([look[0], look[1], look[2], .5]));
+      // An opaque pixel inside a transparent cell: the original colour at half alpha.
+      expect(round(at(type, .5, opaque, hiddenGreen)), type).toEqual(round([.8, .6, .4, .5]));
+    }
+  });
+
+  it('reads the atlas half a texel inside each tile, so blocks join without seams at fractional cell sizes', () => {
+    // 1000×563: a 14 px cell is 7.298 output pixels; this pixel sits just before a cell edge.
+    const cell = glyphCellPixels(14, 1000, 563), x = cell * 5 - .001;
+    for (const type of ['ascii', 'glyph-matrix', 'symbol-matrix', 'retro-matrix']) {
+      const { atlas } = render(type, {}, { uv: [x / 1000, .5], resolution: [1000, 563] });
+      // The ' .#@' test atlas is 2 × 2 tiles of 64 pixels.
+      for (const [u, v] of atlas) for (const texel of [u * 128 % 64, v * 128 % 64]) {
+        expect(texel, type).toBeGreaterThanOrEqual(.5 - 1e-6);
+        expect(texel, type).toBeLessThanOrEqual(63.5 + 1e-6);
+      }
+    }
+  });
+
+  it('Black Level drops dark tones to the first character and spreads the rest over the ramp; 0 keeps the tone', () => {
+    const glyphAt = (grey: number, blackLevel?: number) => {
+      const params: Record<string, unknown> = { ...getDefaultParams('ascii'), ...(blackLevel === undefined ? {} : { blackLevel }) };
+      const coords: Array<[number, number]> = [];
+      evaluateImageOperatorPlan(compile('ascii', params), [0, 0, 0, 0], { uv: [.31, .47], resolution: [1920, 1080], timelineTimeSeconds: 0,
+        sampleImage: () => [grey, grey, grey, 1], sampleResource: (_id, at) => { coords.push(at); return [0, 0, 0, 1]; } });
+      const [u, v] = coords[0];
+      return Math.floor(v * 2) * 2 + Math.floor(u * 2);
+    };
+    expect([glyphAt(.3), glyphAt(.55)]).toEqual([1, 2]);
+    expect([glyphAt(.3, 0), glyphAt(.55, 0)]).toEqual([1, 2]);
+    // (0.3 − 0.3) / 0.7 = 0 → the space; (0.55 − 0.3) / 0.7 = 0.36 → '.'.
+    expect([glyphAt(.3, .3), glyphAt(.55, .3), glyphAt(.98, .3)]).toEqual([0, 1, 3]);
+    const definition = getEffect('ascii')!;
+    expect(definition.params.blackLevel).toMatchObject({ default: 0, renderMin: 0, renderMax: .9, graphOnly: true });
+    expect(paramRangeNotes(definition.params, { blackLevel: .95 }, effectOperatorGraph({ type: 'ascii', params: getDefaultParams('ascii') }))[0]?.message)
+      .toBe('Black Level 0.95 is above the rendered range (0 to 0.9) and renders as 0.9.');
+  });
+
+  it('warns that Speed does nothing at Roll 0 in the looks that move only by rolling', () => {
+    const warnings = (type: string, values: Record<string, unknown>) => getEffect(type)!.paramWarnings!({ ...getDefaultParams(type), ...values } as Record<string, number | boolean | string>, 1920, 1080);
+    for (const type of ['glyph-matrix', 'data-hatch', 'pixel-dither', 'capsule-cloud', 'ui-collage', 'ascii-ghost']) {
+      expect(warnings(type, { roll: 0, speed: 2 }).join(' '), type).toMatch(/Roll 0 holds every character still, so Speed has no effect/u);
+      expect(warnings(type, { roll: 0, speed: 0 }), type).toEqual([]);
+      expect(warnings(type, { roll: .2, speed: 2 }), type).toEqual([]);
+    }
+    // Their rain head, pulse or scroll keeps moving at Roll 0.
+    for (const type of ['matrix', 'symbol-matrix', 'retro-matrix']) expect(warnings(type, { roll: 0, speed: 2 }), type).toEqual([]);
+  });
+
+  it('dims Dark and Light while Color Source is Source and Ramp while a Custom Ramp is typed', () => {
+    for (const type of ['ascii', 'glyph-matrix', 'symbol-matrix']) {
+      const params = getEffect(type)!.params;
+      expect(params.colorA.activeWhen, type).toMatchObject({ param: 'colorMode', values: ['duotone'] });
+      expect(params.colorB.activeWhen, type).toMatchObject({ param: 'colorMode', values: ['duotone'] });
+      expect(params.rampPreset.activeWhen, type).toMatchObject({ param: 'customRamp', values: [''] });
+    }
+    // Number Field and Dither Glow always colour between Dark and Light.
+    for (const type of ['number-field', 'pixel-dither']) expect(getEffect(type)!.params.colorA.activeWhen, type).toBeUndefined();
+  });
+});

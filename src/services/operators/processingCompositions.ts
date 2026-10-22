@@ -75,19 +75,24 @@ export const PROCESSING_COMPOSITIONS = [
     description: 'Pixel-sized glyph grid, cell indices, local coordinates and cell-center UV. Shares the existing minimum cell size and half-cell placement.',
     members: ['safe-cell', 'safe-cell-vec2', 'grid', 'scaled-uv', 'cell-id', 'local-uv', 'half-vec2', 'sample-pixel', 'sample-uv'],
     additionalOutputs: ['safe-cell', 'safe-cell-vec2', 'grid', 'cell-id', 'half-vec2'].map(nodeId => ({ nodeId, portId: 'value' })), consumers: glyphConsumers,
+    outputLabels: { 'safe-cell-value': 'Cell Pixels', 'safe-cell-vec2-value': 'Cell Pixels (XY)', 'grid-value': 'Cells Across', 'cell-id-value': 'Cell Number',
+      'half-vec2-value': 'Half', 'local-uv-value': 'Position in Cell', 'sample-uv-value': 'Cell Center' },
   }),
   extractImageComposition(ascii, {
     id: 'glyph.tone-index', label: 'Tone to Glyph',
     description: 'Optionally invert luminance, clamp below one and map into the glyph count. The tone, invert choice and glyph count are explicit inputs.',
     members: ['inverse-tone', 'mapped-tone', 'clamped-tone', 'safe-count', 'glyph-scaled', 'glyph-index'],
     additionalOutputs: [{ nodeId: 'safe-count', portId: 'value' }], consumers: glyphConsumers,
+    outputLabels: { 'glyph-index-value': 'Glyph Index', 'safe-count-value': 'Glyph Count' },
   }),
   extractImageComposition(ascii, {
     id: 'glyph.atlas-alpha', label: 'Atlas Alpha',
     description: 'Map a glyph index and local cell coordinates into an explicitly supplied atlas. Returns glyph coverage; font loading stays with the atlas source.',
     members: ['safe-columns', 'safe-rows', 'column-ratio', 'atlas-row', 'row-width', 'atlas-column', 'atlas-tile',
-      'clamped-local-uv', 'atlas-pixel', 'atlas-size', 'atlas-uv', 'atlas-sample', 'atlas-vec4', 'atlas-split'],
-    consumers: glyphConsumers,
+      'atlas-inset-vec2', 'atlas-inset-end-vec2', 'clamped-local-uv', 'atlas-pixel', 'atlas-size', 'atlas-uv', 'atlas-sample', 'atlas-vec4', 'atlas-split'],
+    inputLabels: { 'local-uv-value': 'Position in Cell' }, consumers: glyphConsumers,
+    // Saved before 2026-10-22 the tile was read .001–.999 (Tiny / Almost One inputs); those instances keep it.
+    legacyInputs: { 'tiny-vec2-value': [{ nodeId: 'clamped-local-uv', portId: 'min' }], 'almost-vec2-value': [{ nodeId: 'clamped-local-uv', portId: 'max' }] },
   }),
   extractImageComposition(createDefaultAsciiGhostGraph(), {
     id: 'feedback.decay-max-rgba', label: 'Decay Trail',

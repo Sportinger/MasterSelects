@@ -1,6 +1,6 @@
 # Number Field
 
-<!-- effect-docs: basic page sha=23403b00d4fb, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=06721499796c, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Renders the image as a field of digits chosen by brightness, colored in five steps between Dark and Light; Cell Size sets digit size.
 
@@ -24,10 +24,11 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Cell Size | 4 to 72 px | 14 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
-| Background | 0 to 1 | 0.3 |
+| Background | 0 to 1 | 0.2 |
+| Black Level | 0 to 0.9 | 0 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Numeric |
+| Ramp (Used while Custom Ramp is empty) | Standard, Detailed, Blocks, Bars, Binary and 2 more | Numeric |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

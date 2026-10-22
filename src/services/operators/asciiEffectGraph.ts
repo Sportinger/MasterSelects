@@ -1,5 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
-import { GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
+import { GLYPH_ATLAS_TEXEL_INSET, GLYPH_MAX_BLACK_LEVEL, GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
 import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
 type Ref = { node: string; port: string };
 class Builder {
@@ -34,7 +34,8 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   const colorA = g.node('color-a', 'values.color', 'value', { value: 'colorA' }), colorB = g.node('color-b', 'values.color', 'value', { value: 'colorB' });
   // Without a stored value (an instance saved before Background existed) the ground stays dark (0).
   const backgroundValue = g.node('background-value', 'values.number', 'value', { value: 'background' }, { value: 0 });
-  const atlas = g.node('atlas', 'glyph.atlas', 'image', { rampPreset: 'rampPreset', customRamp: 'customRamp', fontFamily: 'fontFamily', fontWeight: 'fontWeight' });
+  // fill: the characters fill their cell (graphs saved before it keep the smaller type, glyphAtlasRaster.ts).
+  const atlas = g.node('atlas', 'glyph.atlas', 'image', { rampPreset: 'rampPreset', customRamp: 'customRamp', fontFamily: 'fontFamily', fontWeight: 'fontWeight' }, { fill: true });
   const glyphCount = { node: atlas.node, port: 'glyphCount' }, columns = { node: atlas.node, port: 'columns' }, rows = { node: atlas.node, port: 'rows' };
   const zero = g.number('zero', 0), one = g.number('one', 1), two = g.number('two', 2), half = g.number('half', .5), almost = g.number('almost', .999), indexMax = g.number('index-max', .99999);
   // Cell Size below 2 renders as 2 (renderMin; paramRangeNotes reports it through this node's id).
@@ -72,16 +73,31 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   // Amount fades from the untouched picture (each pixel, not the cell's colour) to the look, transparency included.
   const original = g.node('original-sample', 'image.sample', 'image'); g.edge(frame, original, 'image'); g.edge(uv, original, 'uv');
   const originalSplit = g.node('original-split', 'vector.split.rgba', 'rgb'); g.edge(original, originalSplit, 'image');
+  // Mixed premultiplied (colour × its alpha), then divided by the mixed alpha, so the hidden colour of a
+  // transparent pixel never leaks into the fade around a cut-out figure; fully transparent stays black.
   const blend = (look: Ref) => {
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge({ node: originalSplit.node, port: 'rgb' }, mixed, 'a'); g.edge(look, mixed, 'b'); g.edge(amount, mixed, 't');
     const originalAlpha = g.node('original-alpha', 'convert.alpha-to-scalar'); g.edge({ node: originalSplit.node, port: 'alpha' }, originalAlpha, 'alpha');
     const cellAlpha = g.node('cell-alpha', 'convert.alpha-to-scalar'); g.edge({ node: sourceSplit.node, port: 'alpha' }, cellAlpha, 'alpha');
+    const originalPremultiplied = g.binary('original-premultiplied', 'math.multiply.rgb-scalar', { node: originalSplit.node, port: 'rgb' }, originalAlpha);
+    const lookPremultiplied = g.binary('look-premultiplied', 'math.multiply.rgb-scalar', look, cellAlpha);
+    const mixedPremultiplied = g.node('mixed-premultiplied', 'math.mix.rgb'); g.edge(originalPremultiplied, mixedPremultiplied, 'a'); g.edge(lookPremultiplied, mixedPremultiplied, 'b'); g.edge(amount, mixedPremultiplied, 't');
     const mixedAlpha = g.node('mixed-alpha', 'math.mix.scalar'); g.edge(originalAlpha, mixedAlpha, 'a'); g.edge(cellAlpha, mixedAlpha, 'b'); g.edge(amount, mixedAlpha, 't');
+    const safeAlpha = g.binary('mixed-safe-alpha', 'math.max.scalar', mixedAlpha, g.number('mixed-alpha-floor', 1e-6));
+    const mixed = g.binary('mixed', 'math.divide-ieee.rgb-scalar', mixedPremultiplied, safeAlpha);
     const alphaChannel = g.node('mixed-alpha-channel', 'convert.scalar-to-alpha', 'alpha'); g.edge(mixedAlpha, alphaChannel, 'value');
     const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge(alphaChannel, combine, 'alpha');
     return combine;
   };
-  const tone = g.node('tone', 'color.luminance-rec709.rgb'); g.edge(sourceRgb, tone, 'rgb'); const inverseTone = g.binary('inverse-tone', 'math.subtract.scalar', one, tone);
+  const luminance = g.node('luminance', 'color.luminance-rec709.rgb'); g.edge(sourceRgb, luminance, 'rgb');
+  // Black Level: tones at or below it become the darkest character, the rest spread over the whole ramp
+  // ((tone − level) / (1 − level)). Without a stored value (saved before it existed) it is 0: the tone as before.
+  // Outside 0..0.9 it renders clamped (renderMin/renderMax; paramRangeNotes reports it through this node's id).
+  const blackValue = g.node('black-level', 'values.number', 'value', { value: 'blackLevel' }, { value: 0 });
+  const blackLevel = g.node('blackLevel-clamped', 'math.clamp.scalar'); g.edge(blackValue, blackLevel, 'value'); g.edge(zero, blackLevel, 'min'); g.edge(g.number('black-level-max', GLYPH_MAX_BLACK_LEVEL), blackLevel, 'max');
+  const lowered = g.binary('black-lowered', 'math.subtract.scalar', luminance, blackLevel);
+  const stretched = g.binary('black-stretched', 'math.divide-ieee.scalar', lowered, g.binary('black-span', 'math.subtract.scalar', one, blackLevel));
+  const tone = g.node('tone', 'math.clamp.scalar'); g.edge(stretched, tone, 'value'); g.edge(zero, tone, 'min'); g.edge(one, tone, 'max');
+  const inverseTone = g.binary('inverse-tone', 'math.subtract.scalar', one, tone);
   const mapped = g.node('mapped-tone', 'select.scalar'); g.edge(tone, mapped, 'falseValue'); g.edge(inverseTone, mapped, 'trueValue'); g.edge(invert, mapped, 'condition');
   const clampedTone = g.node('clamped-tone', 'math.clamp.scalar'); g.edge(mapped, clampedTone, 'value'); g.edge(zero, clampedTone, 'min'); g.edge(indexMax, clampedTone, 'max');
   const safeCount = g.binary('safe-count', 'math.max.scalar', glyphCount, one), glyphScaled = g.binary('glyph-scaled', 'math.multiply.scalar', clampedTone, safeCount);
@@ -170,7 +186,11 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   const columnRatio = g.binary('column-ratio', 'math.divide-ieee.scalar', glyphIndex, safeColumns), atlasRow = g.unary('atlas-row', 'math.floor.scalar', columnRatio);
   const rowWidth = g.binary('row-width', 'math.multiply.scalar', atlasRow, safeColumns), atlasColumn = g.binary('atlas-column', 'math.subtract.scalar', glyphIndex, rowWidth);
   const tile = g.node('atlas-tile', 'vector.combine.vec2'); g.edge(atlasColumn, tile, 'x'); g.edge(atlasRow, tile, 'y');
-  const clampedLocal = g.node('clamped-local-uv', 'math.clamp.vec2'); g.edge(localUv, clampedLocal, 'value'); g.edge(tiny2, clampedLocal, 'min'); g.edge(almost2, clampedLocal, 'max');
+  // Half an atlas texel inside the tile: linear filtering never mixes in the neighbouring character, so blocks
+  // that fill their tile join without seams at any cell size (graphs saved before it keep .001–.999).
+  const inset = g.number('atlas-texel-inset', GLYPH_ATLAS_TEXEL_INSET), insetEnd = g.number('atlas-texel-inset-end', 1 - GLYPH_ATLAS_TEXEL_INSET);
+  const clampedLocal = g.node('clamped-local-uv', 'math.clamp.vec2'); g.edge(localUv, clampedLocal, 'value');
+  g.edge(g.unary('atlas-inset-vec2', 'convert.scalar-to-vec2', inset), clampedLocal, 'min'); g.edge(g.unary('atlas-inset-end-vec2', 'convert.scalar-to-vec2', insetEnd), clampedLocal, 'max');
   const atlasPixel = g.binary('atlas-pixel', 'math.add.vec2', tile, clampedLocal), atlasSize = g.node('atlas-size', 'vector.combine.vec2'); g.edge(safeColumns, atlasSize, 'x'); g.edge(safeRows, atlasSize, 'y');
   const atlasUv = g.binary('atlas-uv', 'math.divide-ieee.vec2', atlasPixel, atlasSize), atlasSample = g.node('atlas-sample', 'image.sample', 'image'); g.edge(atlas, atlasSample, 'image'); g.edge(atlasUv, atlasSample, 'uv');
   const atlasVec4 = g.node('atlas-vec4', 'convert.image-to-vec4'); g.edge(atlasSample, atlasVec4, 'image');

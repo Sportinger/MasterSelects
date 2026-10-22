@@ -386,7 +386,7 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   the look's dark ground (source × 0.08, Dark × 0.15, or its own paper/black) towards the
   character colour of the cell. Looks with their own palette (Matrix Rain, Retro Matrix, Pixel Code,
   Number Field, Dither Glow) colour the whole cell with their ink at Background strength (Matrix Rain
-  × the cell tone). New instances start at 0.3 (Stitch Poster at 0, it has its paper; Retro Matrix at 0.2), so cards and
+  × the cell tone). New instances start at 0.2 (0.3 before the characters filled their cells; Stitch Poster at 0, it has its paper), so cards and
   stills keep about 40 % of the picture's brightness instead of about 10 %. `legacyDefault: 0` keeps
   instances saved before it on the dark ground; it is `graphOnly`, so a node setup saved before it
   hides the row; outside 0–1 it renders clamped (`background-clamped`, reported by `paramRangeNotes`).
@@ -435,10 +435,28 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
 - **Transparency.** Input and output are straight alpha. Each cell takes the alpha of its centre
   sample, so a cut-out keeps its outline in whole cells and no character is cut in half.
 - **Amount** fades from the untouched picture (`original-sample` at the pixel's own UV) to the look,
-  alpha included (`mixed`, `mixed-alpha`); it used to fade towards the cell colour, so Amount 0 showed a
-  mosaic. A fix for new instances; saved node setups keep the earlier fade.
+  alpha included; it used to fade towards the cell colour, so Amount 0 showed a mosaic. The fade mixes
+  premultiplied colour (`original-premultiplied`, `look-premultiplied`, `mixed-premultiplied`) and divides
+  by the mixed alpha (`mixed`, floor 1e-6), so the hidden colour of a transparent pixel never leaks into
+  a fade around a cut-out figure. A fix for new instances; saved node setups keep the earlier fade.
+- **Black Level** (`blackLevel`, 0–0.9, default 0, `graphOnly`): the tone becomes
+  clamp((luminance − level) / (1 − level), 0, 1) before the ramp (`luminance` → `black-*` → `tone`, in the
+  Cell Sampling & Tone folder), so a grey stage drops to the first character and the rest spreads over the
+  ramp; Duotone colours and every look's own tone use the levelled tone. Above 0.9 it renders clamped
+  (`blackLevel-clamped`, reported). 0 is the tone as before.
+- **Atlas.** The glyph graph marks its atlas `fill` (`constants: { fill: true }` on the `atlas` node):
+  the rasterizer picks one font size for the whole ramp, so its tallest character spans 88 % of the tile
+  (`GLYPH_ATLAS_FILL`) and the characters keep their relative sizes; before, the font was 0.76 × the
+  tile and most characters covered only about 40 % of the cell height. The tile is read half a texel
+  inside (`atlas-texel-inset`, 0.5 / 64), so linear filtering never mixes in the neighbouring tile and
+  Blocks and Bars join without seams at fractional cell sizes (1920×1200, 2.39:1, a keyed Cell Size,
+  Retro Matrix's scroll). Saved node setups keep the smaller type and the .001–.999 read (the Atlas
+  Alpha block takes its old Tiny / Almost One inputs as `legacyInputs`), so saved Blocks or Bars can still
+  show thin seams there. The atlas cache keeps at most `GLYPH_ATLAS_CACHE_LIMIT` (24) atlases per device,
+  least recently used first out (typing a Custom Ramp builds one per keystroke); dropped atlases are left
+  to the browser, not destroyed, since a bind group may still hold them.
 - **Ramps** (`src/effects/_shared/asciiRamps.ts`): the menu shows names (Standard … Symbols) and has
-  **Bars** (` ▁▂▃▄▅▆▇█`). A Custom Ramp of one character draws it (it used to fall back silently);
+  **Bars** (` ▁▂▃▄▅▆▇`, the tallest seven eighths high so rows stay apart). A Custom Ramp of one character draws it (it used to fall back silently);
   one longer than `ASCII_RAMP_MAX_CHARACTERS` (256) keeps 256 spread from its first to its last
   character, and `asciiRampWarnings` reports it and an unknown Ramp (a 20 000-character ramp used to
   exceed the GPU texture size and leave the layer empty).
@@ -446,19 +464,25 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   tile (`src/effects/_shared/blockElementGlyphs.ts`; ░ ▒ ▓ as a 4 × 4 ordered dither), so Blocks and
   Bars join without gaps in any font. This changes saved projects that use them (a fix: the font drew
   them as narrow striped bars).
-- **Weight** is not keyframeable, and atlases are drawn at the nearest of the nine CSS weights
+- **Weight** is keyframeable in steps: atlases are drawn at the nearest of the nine CSS weights
   (`atlasWeight`), so no value builds and caches an atlas of its own.
+- **Roll 0.** In the looks whose clock only steps the characters through the Roll window
+  (`motionOnlyByRoll`: Glyph Matrix, Data Hatching, Dither Glow, Tag Pills, Creative UI Collage, ASCII
+  Ghost), Roll 0 holds them still; the card and tools then say that Speed has no effect.
 - **Card.** The looks use the shared inspector rows (`RESOLVE_ROW_EFFECTS`); Custom Ramp is a text row
-  with a reset. Folder ports are named by `GLYPH_PORTS` in `effectPresentationPlans.ts` (Cell Center,
+  with a reset. Rows that rest are dimmed with a note (`activeWhen`): Dark and Light while Color Source is
+  Source (not in Number Field and Dither Glow, which always use them), Ramp while a Custom Ramp is typed. Folder ports are named by `GLYPH_PORTS` in `effectPresentationPlans.ts` (Cell Center,
   Tone, Glyph Index, Glyph Coverage, Ink, Ground, …). ASCII's presets live in
   `src/effects/glyph/glyphPresets.ts`.
 
 Tests: `tests/unit/glyphEngine.test.ts` (every shown control reaches the output, Background,
 1080p cells, Speed travel, timeline clock, WGSL literals, Amount 0 gives the original, Ramp menu and
-warnings, Weight, Roll window and its legacy full-ramp sweep, Symbol Matrix's staggered swaps), `tests/unit/cellGrid.test.ts` (ramps), `tests/unit/glyphAtlasRaster.test.ts` (Block
-Elements), `tests/unit/imageAsciiGraph.test.ts`, `tests/unit/imageGlyphVariantGraphs.test.ts`,
+warnings, Weight, Roll window and its legacy full-ramp sweep, Symbol Matrix's staggered swaps, the
+premultiplied Amount fade, the half-texel atlas read, Black Level, the Roll 0 warning, the dimmed rows),
+`tests/unit/cellGrid.test.ts` (ramps), `tests/unit/glyphAtlasRaster.test.ts` (Block
+Elements, the fill atlas, the atlas cache limit), `tests/unit/imageAsciiGraph.test.ts`, `tests/unit/imageGlyphVariantGraphs.test.ts`,
 `tests/unit/imageInscribeGraph.test.ts` and `tests/unit/imageContourTypeGraph.test.ts` (each look's
-recipe at Background 0), `tests/unit/EffectsTabValueControls.test.tsx` (the text row).
+recipe at Background 0), `tests/unit/EffectsTabValueControls.test.tsx` (the text row, the dimmed rows).
 
 Acuarela is a four-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
 premultiplied source cache, two edge-aware 7 x 7 washes with per-pixel jittered taps

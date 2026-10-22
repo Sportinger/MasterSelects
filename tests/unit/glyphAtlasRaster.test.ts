@@ -80,4 +80,52 @@ describe('block element shapes', () => {
       }
     }
   });
+
+  it('a fill atlas sizes one font for the whole ramp so its tallest character spans 88 % of the tile; saved graphs keep the small type', () => {
+    // At the 100 px probe, '#' reaches 70 px above the baseline and 'g' 20 px below it.
+    const bounds: Record<string, [number, number]> = { '.': [10, 0], '#': [70, 0], g: [40, 20] };
+    const drawing = { ...context(), measureText: vi.fn((glyph: string) => ({ width: 10, actualBoundingBoxAscent: bounds[glyph]?.[0] ?? 0, actualBoundingBoxDescent: bounds[glyph]?.[1] ?? 0 })) };
+    const canvas = { width: 0, height: 0, getContext: vi.fn(() => drawing) };
+    vi.stubGlobal('document', { createElement: vi.fn(() => canvas) });
+    rasterizeGlyphAtlas({ fontFamily: 'mono', charset: ' .#g', cellSize: 64, fill: true });
+    // Ink 90 px at 100 px → font 64 × 0.88 / 0.9 = 62.58 px; the ink box is centred, the baseline 4.48 + 70 × 0.6258 below the tile top.
+    expect(drawing.font).toBe(`600 ${100 * 64 * .88 / 90}px mono`);
+    expect(drawing.textBaseline).toBe('alphabetic');
+    expect(drawing.translate.mock.calls[0][1]).toBeCloseTo((64 - 90 * .6258) / 2 + 70 * .6258, 2);
+    // Without fill (graphs saved before it): 0.76 × the tile, centred on the middle line.
+    const legacy = context();
+    vi.stubGlobal('document', { createElement: vi.fn(() => ({ width: 0, height: 0, getContext: vi.fn(() => legacy) })) });
+    rasterizeGlyphAtlas({ fontFamily: 'mono', charset: ' .#g', cellSize: 64 });
+    expect(legacy.font).toBe('600 48px mono');
+    expect(legacy.textBaseline).toBe('middle');
+  });
+
+  it('the glyph graph asks for a fill atlas; the cache keeps fill and saved atlases apart', async () => {
+    const { createDefaultAsciiGraph } = await import('../../src/services/operators/asciiEffectGraph');
+    const { glyphAtlasCacheKey } = await import('../../src/effects/_shared/glyphAtlasPlan');
+    expect(createDefaultAsciiGraph().nodes.find(node => node.id === 'atlas')?.constants).toEqual({ fill: true });
+    const options = { fontFamily: 'mono', charset: ' .#', cellSize: 64 };
+    expect(glyphAtlasCacheKey({ ...options, fill: true })).not.toBe(glyphAtlasCacheKey(options));
+  });
+
+  it('keeps at most GLYPH_ATLAS_CACHE_LIMIT atlases per device, so typing a Custom Ramp does not pile up textures', async () => {
+    const { GLYPH_ATLAS_CACHE_LIMIT, cachedGlyphAtlasCount, getGlyphAtlas, releaseGlyphAtlasesForDevice } = await import('../../src/effects/_shared/glyphAtlas');
+    vi.stubGlobal('document', { createElement: vi.fn(() => ({ width: 0, height: 0, getContext: vi.fn(() => context()) })) });
+    vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 4, COPY_DST: 2, RENDER_ATTACHMENT: 16 });
+    const destroy = vi.fn();
+    const device = { createTexture: vi.fn(() => ({ destroy, createView: () => ({}) })), queue: { copyExternalImageToTexture: vi.fn() } } as unknown as GPUDevice;
+    // One atlas per keystroke of a 40-character ramp.
+    const typed = Array.from({ length: 40 }, (_, index) => ' .:-=+*#%@abcdefghijklmnopqrstuvwxyzABCD'.slice(0, index + 1));
+    const first = getGlyphAtlas(device, { fontFamily: 'mono', charset: typed[0], cellSize: 64 });
+    for (const charset of typed.slice(1)) {
+      getGlyphAtlas(device, { fontFamily: 'mono', charset, cellSize: 64 });
+      // The first atlas is in use on another clip the whole time: it stays cached.
+      expect(getGlyphAtlas(device, { fontFamily: 'mono', charset: typed[0], cellSize: 64 })).toBe(first);
+    }
+    expect(cachedGlyphAtlasCount(device)).toBe(GLYPH_ATLAS_CACHE_LIMIT);
+    // Dropped atlases are left to the browser (a bind group may still hold them), not destroyed.
+    expect(destroy).not.toHaveBeenCalled();
+    releaseGlyphAtlasesForDevice(device);
+    expect(cachedGlyphAtlasCount(device)).toBe(0);
+  });
 });

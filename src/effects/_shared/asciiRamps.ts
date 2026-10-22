@@ -4,7 +4,8 @@ export const ASCII_RAMP_PRESETS = {
   standard: ' .:-=+*#%@',
   detailed: ' .\'`^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
   blocks: ' ░▒▓█',
-  bars: ' ▁▂▃▄▅▆▇█',
+  // Up to seven eighths: the tallest bar keeps a gap above it, so the rows read as separate bars.
+  bars: ' ▁▂▃▄▅▆▇',
   binary: ' 01',
   numeric: ' 123456789',
   symbols: ' ·×+*#@',

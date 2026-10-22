@@ -14,9 +14,9 @@
       "top": "tabs",
       "viewport": {
         "width": 1600,
-        "height": 1300
+        "height": 1450
       },
-      "alt": "Properties, Effects with an ASCII card: Style menu, Preset menu showing Shade Blocks, Cell Size, Amount, Background and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Color Source, beside a strip of the preview where the dancer is built from shaded blocks",
+      "alt": "Properties, Effects with an ASCII card: Style menu, Preset menu showing Shade Blocks, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Color Source with Dark and Light dimmed under the note Used with Color Source Duotone, beside a strip of the preview where the dancer is built from shaded blocks",
       "caption": "ASCII with the Shade Blocks preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Background. 4 — Ramp: the characters, here Blocks. 5 — Color Source.",
       "marks": [
         {
@@ -59,9 +59,9 @@
       "top": "tabs",
       "viewport": {
         "width": 1600,
-        "height": 1450
+        "height": 1650
       },
-      "alt": "Properties, Effects with a Glyph Matrix card: Style menu, Preset menu showing Data Wave, Cell Size, Amount, Background and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Color Source, Dark and Light, then Speed and Roll, beside a strip of the preview where the dancer is built from rising bars in diagonal stripes",
+      "alt": "Properties, Effects with a Glyph Matrix card: Style menu, Preset menu showing Data Wave, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Color Source with Dark and Light dimmed under the note Used with Color Source Duotone, then Speed and Roll, beside a strip of the preview where the dancer is built from rising bars in diagonal stripes",
       "caption": "Glyph Matrix with the Data Wave preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Background. 4 — Ramp: the characters, here Bars. 5 — Roll: how far they roll through the ramp.",
       "marks": [
         {
@@ -104,9 +104,9 @@
       "top": "tabs",
       "viewport": {
         "width": 1600,
-        "height": 1450
+        "height": 1650
       },
-      "alt": "Properties, Effects with a Symbol Matrix card: Style menu, Preset menu showing Shape Shift, Cell Size, Amount, Background and Invert Ramp, then Ramp, Custom Ramp with a row of shapes, Font and Weight, then Color Source, Dark and Light, then Speed and Roll, beside a strip of the preview where the dancer is built from circles, diamonds, triangles and squares",
+      "alt": "Properties, Effects with a Symbol Matrix card: Style menu, Preset menu showing Shape Shift, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp dimmed under the note Used while Custom Ramp is empty, Custom Ramp with a row of shapes, Font and Weight, then Color Source with Dark and Light dimmed under the note Used with Color Source Duotone, then Speed and Roll, beside a strip of the preview where the dancer is built from circles, diamonds, triangles and squares",
       "caption": "Symbol Matrix with the Shape Shift preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Custom Ramp: the signs, here shapes. 4 — Speed: how often they swap. 5 — Roll: how far they may swap.",
       "marks": [
         {
@@ -138,22 +138,25 @@
       "name": "retro-matrix-inspector",
       "effect": "retro-matrix",
       "params": {
-        "cellSize": 12,
-        "rampPreset": "standard",
+        "cellSize": 28,
+        "rampPreset": "numeric",
         "customRamp": "",
-        "roll": 0.3,
-        "background": 0.2,
-        "phosphor": "#33ff66"
+        "roll": 0.2,
+        "background": 0.15,
+        "blackLevel": 0,
+        "scanlines": 0.8,
+        "speed": 0.4,
+        "fontWeight": 700
       },
       "image": "dancer_stage.jpg",
-      "preview": 240,
+      "preview": 380,
       "top": "tabs",
       "viewport": {
         "width": 1600,
-        "height": 1450
+        "height": 1500
       },
-      "alt": "Properties, Effects with a Retro Matrix card: Style menu, Preset menu showing Green Screen, Cell Size, Amount, Background, Invert Ramp and Scanlines, then Ramp, Custom Ramp, Font and Weight, then Phosphor with a green swatch and #33ff66, then Speed and Roll, beside a narrow strip of the preview with faint green text on a dark screen",
-      "caption": "Retro Matrix with the Green Screen preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Scanlines: the lines of the screen. 4 — Phosphor: the colour of the text. 5 — Speed: how fast it scrolls.",
+      "alt": "Properties, Effects with a Retro Matrix card: Style menu, Preset menu showing Teletype, Cell Size, Amount, Background, Black Level, Invert Ramp and Scanlines, then Ramp, Custom Ramp, Font and Weight, then Phosphor with an amber swatch, then Speed and Roll, beside a strip of the preview where the dancer's arm is drawn in large amber digits",
+      "caption": "Retro Matrix with the Teletype preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Scanlines: the lines of the screen. 4 — Phosphor: the colour of the text. 5 — Speed: how fast it scrolls.",
       "marks": [
         {
           "target": "Preset",

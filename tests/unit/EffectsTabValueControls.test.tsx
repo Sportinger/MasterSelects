@@ -75,6 +75,17 @@ describe('EffectsTab numeric controls', () => {
     }
   });
 
+  it('dims the glyph rows that rest: Dark and Light with Color Source Source, Ramp while a Custom Ramp is typed', () => {
+    const typed: Effect = { id: 'ascii-rest', type: 'ascii', name: 'ASCII', enabled: true, params: { colorMode: 'source', customRamp: ' .:#' } };
+    const view = render(<EffectsTab clipId="clip:effects-controls" effects={[typed]} />);
+    expect(screen.getAllByText('Used with Color Source Duotone.', { selector: '.resolve-effect-row-note' })).toHaveLength(2);
+    expect(screen.getByText('Used while Custom Ramp is empty.', { selector: '.resolve-effect-row-note' })).toBeInTheDocument();
+    const duotone: Effect = { ...typed, params: { colorMode: 'duotone', customRamp: '' } };
+    view.rerender(<EffectsTab clipId="clip:effects-controls" effects={[duotone]} />);
+    expect(screen.queryByText('Used with Color Source Duotone.', { selector: '.resolve-effect-row-note' })).toBeNull();
+    expect(screen.queryByText('Used while Custom Ramp is empty.', { selector: '.resolve-effect-row-note' })).toBeNull();
+  });
+
   it('renders switches and colours as Resolve rows: Mirror axes as checkboxes, the Block Mosaic grout as a colour well', () => {
     expect(hasResolveEffectParamRow({ type: 'boolean' })).toBe(true);
     expect(hasResolveEffectParamRow({ type: 'color' })).toBe(true);

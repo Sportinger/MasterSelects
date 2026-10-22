@@ -68,10 +68,12 @@ const CHROMA_KEY_PORTS = { 'unmix-color': 'Color', 'screen-channel': 'Screen Cha
   'screen-found': 'Screen Found', 'spill-primary': 'Screen Level', 'spill-other': 'Stronger Other', 'spill-other-sum': 'Other Sum',
   'spill-other-mean': 'Other Mean', 'spill-is-gentle': 'Is Gentle', 'spill-limit': 'Limit', 'spill-strength': 'Strength', 'spill-excess': 'Excess' };
 // What crosses between the glyph engine's folders: the cell, its colour and tone, the glyph and its coverage.
-const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'local-uv': 'Position in Cell', 'sample-uv': 'Cell Center', 'source-split:rgb': 'Cell Color',
+const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels (XY)', 'safe-cell-frame-scale': 'Frame Scale', grid: 'Cells Across',
+  'scaled-uv': 'Grid Position', 'cell-id': 'Cell Number', 'local-uv': 'Position in Cell', luminance: 'Luminance', 'blackLevel-clamped': 'Black Level', 'sample-uv': 'Cell Center', 'source-split:rgb': 'Cell Color',
   'source-split:alpha': 'Cell Alpha', tone: 'Tone', 'glyph-index': 'Glyph Index', 'wrapped-index': 'Glyph Index', 'rolled-index': 'Glyph Index', 'safe-count': 'Glyph Count', 'atlas-split:w': 'Glyph Coverage',
   duotone: 'Duotone', ink: 'Ink', background: 'Dark Ground', 'background-lift': 'Ground', 'glyph-result': 'Glyph Cell', mixed: 'Faded Color',
-  'mixed-alpha': 'Faded Alpha', 'original-split:rgb': 'Original Color', 'original-split:alpha': 'Original Alpha' };
+  'mixed-alpha': 'Faded Alpha', 'original-premultiplied': 'Original Premultiplied', 'look-premultiplied': 'Glyph Premultiplied',
+  'mixed-premultiplied': 'Faded Premultiplied', 'mixed-safe-alpha': 'Faded Alpha', 'original-alpha': 'Original Alpha', 'cell-alpha': 'Cell Alpha', 'original-split:rgb': 'Original Color', 'original-split:alpha': 'Original Alpha' };
 /** Retro Matrix: its scroll, text, Phosphor ink and scanlines. */
 const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-vector': 'Scroll Offset', 'scrolled-uv': 'Scrolled Grid', 'index-text-random': 'Text Random',
   'retro-phosphor-rgb': 'Phosphor', 'background-coverage': 'Coverage', 'retro-ink': 'Ink', 'retro-tone-amount': 'Brightness', 'retro-lit': 'Lit Ink', 'retro-scan-pixel': 'Row Pixel',
@@ -329,7 +331,7 @@ function glyphPresentation(): EffectPresentationPlan {
     stage: ({ id }) => /^(tiny-vec2|almost-vec2)$/.test(id) ? 'sources'
       : /^(ghost-current|ghost-history|ghost-resolved|ghost-faded|ghost-max|ghost-image|ghost-decay)/.test(id) ? 'feedback'
       : /^(cellSize-clamped$|safe-cell|grid$|scaled-uv|cell-id$|local-uv|half-vec2|sample-pixel|sample-uv$)/.test(id) ? 'grid'
-        : /^(clamped-source|source-sample|source-split|tone$)/.test(id) ? 'source'
+        : /^(clamped-source|source-sample|source-split|tone$|luminance$|black-|blackLevel-clamped$)/.test(id) ? 'source'
           : /^(inverse-tone|mapped-tone|clamped-tone|safe-count|glyph-scaled|glyph-index|index-|shifted-index|wrapped-index|rolled-index$|roll-clamped$|cell-id-split|word-phase|word-index|brand-centered|brand-radius|brand-index|uv-split|contour-current|contour-index)/.test(id) ? 'index'
             : /^(safe-columns|safe-rows|column-ratio|atlas-|row-width|clamped-local)/.test(id) ? 'atlas' : 'appearance',
   };
