@@ -499,6 +499,14 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   (max): at half Preview Quality the line vanished, where a cell was not a whole number of pixels it came and went,
   and full blocks hid it. A fix for new instances and setups saved without a graph; stored setups keep the old line.
   Presets: `GRID_GLYPH_PRESETS`. Test: `tests/unit/gridGlyph.test.ts`.
+- **Number Field steps** (`src/effects/glyph/numberField.ts`, the **Color Steps** folder, `tone-steps*`, `quantized-tone*`).
+  **Steps** (`steps`, 2–16, default and `legacyDefault` 5, `graphOnly`, `lookOwn`) is rounded to a whole count
+  (floor(x + ½): a keyframed ramp steps) and clamped by `steps-clamped`; the step is min(floor(tone × n), n − 1) / (n − 1)
+  (`quantized-tone`), the ink mix(Dark, Light, step) (`number-ink`). The earlier fixed floor(tone × 5) / 4 put pure white
+  at 1.25, past Light (a sixth step, out of range for some Dark/Light pairs): a fix for new instances and setups saved
+  without a graph; stored setups keep it. Its graph leaves out the unread Color Source node, so the card no longer shows
+  it (it used to, doing nothing). Presets: `NUMBER_FIELD_PRESETS`; with the Numeric ramp and 10 steps, or a ramp of n
+  characters and n steps (Paint by Numbers), the character index equals the step. Test: `tests/unit/numberField.test.ts`.
 - **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light (Matrix Rain draws in its Rain Color);
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).

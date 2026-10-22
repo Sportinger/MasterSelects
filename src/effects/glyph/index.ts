@@ -2,6 +2,7 @@ import { createGlyphEffect, type GlyphColorControl } from './glyphEffectFactory'
 import { ASCII_PRESETS, GLYPH_MATRIX_PRESETS, RETRO_MATRIX_PRESETS, SYMBOL_MATRIX_PRESETS } from './glyphPresets';
 import { GRID_DEFAULT_CELL_SIZE, GRID_GLYPH_PARAMS, GRID_GLYPH_PRESETS } from './gridGlyph';
 import { MATRIX_RAIN_PARAMS, MATRIX_RAIN_PRESETS } from './matrixRain';
+import { NUMBER_FIELD_PARAMS, NUMBER_FIELD_PRESETS } from './numberField';
 import { RETRO_MATRIX_PARAMS } from './retroMatrix';
 import { SYMBOL_MATRIX_PARAMS } from './symbolMatrix';
 
@@ -19,7 +20,9 @@ export const wordMosaic = createGlyphEffect({ id: 'word-mosaic', name: 'Word Mos
 // each character near the one of its brightness, so the figure also reads in the code.
 export const matrix = createGlyphEffect({ id: 'matrix', name: 'Matrix Rain', entryPoint: 'matrixFragment', animated: true, defaultRamp: 'numeric', defaultRoll: 0.5, ignoresColors: OWN_PALETTE, params: MATRIX_RAIN_PARAMS, presets: MATRIX_RAIN_PRESETS });
 export const pixelCode = createGlyphEffect({ id: 'pixel-code', name: 'Pixel Code', entryPoint: 'pixelCodeFragment', defaultRamp: 'binary', defaultCellSize: 10, ignoresColors: OWN_PALETTE });
-export const numberField = createGlyphEffect({ id: 'number-field', name: 'Number Field', entryPoint: 'numberFieldFragment', defaultRamp: 'numeric', ignoresColors: ['colorMode'] });
+// Number Field colours every cell in one of Steps flat colours from Dark to Light (numberField.ts).
+export const numberField = createGlyphEffect({ id: 'number-field', name: 'Number Field', entryPoint: 'numberFieldFragment', defaultRamp: 'numeric', ignoresColors: ['colorMode'],
+  params: NUMBER_FIELD_PARAMS, presets: NUMBER_FIELD_PRESETS });
 // Grid Glyph rules a line around every cell (Line Width, Line Glow: gridGlyph.ts) in the colour of its cell.
 export const gridGlyph = createGlyphEffect({ id: 'grid-glyph', name: 'Grid Glyph', entryPoint: 'gridGlyphFragment', defaultCellSize: GRID_DEFAULT_CELL_SIZE, params: GRID_GLYPH_PARAMS, presets: GRID_GLYPH_PRESETS });
 export const capsuleCloud = createGlyphEffect({ id: 'capsule-cloud', name: 'Tag Pills', entryPoint: 'capsuleCloudFragment', animated: true, motionOnlyByRoll: true, defaultCellSize: 28, defaultRamp: 'detailed' });

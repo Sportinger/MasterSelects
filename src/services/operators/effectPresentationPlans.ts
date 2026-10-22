@@ -79,6 +79,9 @@ const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels
 const GRID_LINE_PORTS = { 'grid-line-pixels': 'Line Pixels', 'grid-half-width': 'Half Line', 'grid-line-reach': 'Line Reach', 'grid-line-most': 'Most Coverage',
   'grid-local-pixels': 'Pixel in Cell', 'grid-from-line-x': 'From Line', 'grid-from-line-y': 'From Line', 'grid-line-distance-x': 'Distance Across', 'grid-line-distance-y': 'Distance Down', 'grid-cover-x': 'Column Line', 'grid-cover-y': 'Row Line',
   'grid-line': 'Line Coverage', 'grid-alpha': 'Ruled Coverage' };
+/** Number Field: the colour step of every cell (Steps) and the flat colour it gives. */
+const NUMBER_FIELD_PORTS = { 'tone-steps-rounded': 'Whole Steps', 'steps-clamped': 'Step Count', 'tone-steps-last': 'Last Step', 'quantized-tone-scaled': 'Tone × Steps',
+  'quantized-tone-floor': 'Band', 'quantized-tone-band': 'Step Number', 'quantized-tone': 'Step Tone', 'number-ink': 'Step Color', 'background-coverage': 'Coverage', 'number-mark': 'Glyph Cell' };
 /** Retro Matrix: its scroll, text, Phosphor ink and scanlines. */
 const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-wrapped': 'Wrapped Scroll', 'scroll-vector': 'Scroll Offset', 'scrolled-uv': 'Scrolled Grid',
   'index-text-turns': 'Text Turns', 'index-text-line': 'Text Line', 'index-text-cell': 'Text Cell', 'index-text-random': 'Text Random',
@@ -350,6 +353,12 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     const glyph = glyphPresentation();
     return { ...glyph, labels: { ...glyph.labels, lines: 'Grid Lines' }, portLabels: { ...GLYPH_PORTS, ...GRID_LINE_PORTS },
       stage: (node) => /^(grid-|lineWidth-clamped$|lineGlow-clamped$)/.test(node.id) ? 'lines' : glyph.stage(node) };
+  }
+  // Number Field: its colour steps (Steps) have a folder of their own, Color Steps.
+  if (type === 'number-field') {
+    const glyph = glyphPresentation();
+    return { ...glyph, labels: { ...glyph.labels, steps: 'Color Steps' }, portLabels: { ...GLYPH_PORTS, ...NUMBER_FIELD_PORTS },
+      stage: (node) => /^(tone-steps|steps-clamped$|quantized-tone)/.test(node.id) ? 'steps' : glyph.stage(node) };
   }
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return glyphPresentation();
   return undefined;

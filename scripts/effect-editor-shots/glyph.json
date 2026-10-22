@@ -282,6 +282,56 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "number-field-inspector",
+      "effect": "number-field",
+      "params": {
+        "cellSize": 18,
+        "rampPreset": "numeric",
+        "customRamp": "12345",
+        "steps": 5,
+        "background": 0.6,
+        "blackLevel": 0.05,
+        "fontFamily": "system-ui, sans-serif",
+        "fontWeight": 600,
+        "colorA": "#1e2f5c",
+        "colorB": "#ffd166"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1500
+      },
+      "alt": "Properties, Effects with a Number Field card: Style menu, Preset menu showing Paint by Numbers, Cell Size, then Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp holding 12345, Font and Weight, then Dark in navy, Light in gold and Steps at 5, beside a strip of the preview where the dancer is drawn in gold and grey numbers 1 to 5 on a navy field",
+      "caption": "Number Field with the Paint by Numbers preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Background: how much colour fills each cell. 4 — Custom Ramp: here the figures 1 to 5. 5 — Steps: how many colours.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Background",
+          "label": "Background"
+        },
+        {
+          "target": "Custom Ramp",
+          "label": "Custom Ramp"
+        },
+        {
+          "target": "Steps",
+          "label": "Steps"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

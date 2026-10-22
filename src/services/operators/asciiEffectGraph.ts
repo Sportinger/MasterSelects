@@ -2,6 +2,7 @@ import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../..
 import { GLYPH_ATLAS_TEXEL_INSET, GLYPH_MAX_BLACK_LEVEL, GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
 import { GRID_LEGACY_LINE_GLOW, GRID_LINE_WIDTH, GRID_MAX_LINE_WIDTH } from '../../effects/glyph/gridGlyph';
 import { SYMBOL_LEGACY_TWINKLE } from '../../effects/glyph/symbolMatrix';
+import { NUMBER_FIELD_MAX_STEPS, NUMBER_FIELD_MIN_STEPS, NUMBER_FIELD_STEPS } from '../../effects/glyph/numberField';
 import { MATRIX_DEFAULT_TRAIL, MATRIX_DROP_SPACING, MATRIX_FALL_RATE, MATRIX_GAP_MIN, MATRIX_GAP_SPAN, MATRIX_GROUND_FLOOR, MATRIX_HEAD_WHITE, MATRIX_PACE_MIN, MATRIX_PACE_SPAN, MATRIX_RAIN_COLOR,
   MATRIX_SWAP_RATE, MATRIX_TONE_BASE, MATRIX_TONE_FACTOR } from '../../effects/glyph/matrixRain';
 import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_PERIOD, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
@@ -13,7 +14,15 @@ class Builder {
   edge(from: Ref, to: Ref, input: string) { this.edges.push({ id: `${from.node}-${from.port}-${to.node}-${input}`, from: from.node, output: from.port, to: to.node, input }); }
   unary(id: string, operator: string, value: Ref) { const out = this.node(id, operator); this.edge(value, out, 'value'); return out; }
   binary(id: string, operator: string, a: Ref, b: Ref) { const out = this.node(id, operator); this.edge(a, out, 'a'); this.edge(b, out, 'b'); return out; }
+  /** The graph without the shared nodes a look never reads, so their retired controls stay hidden in its card. */
+  graphWithout(unused: ReadonlySet<string>): EffectOperatorGraph {
+    for (const id of unused) delete this.layout[id];
+    return { version: 1, schemaVersion: 1, domain: 'image', nodes: this.nodes.filter(node => !unused.has(node.id)),
+      edges: this.edges.filter(edge => !unused.has(edge.from) && !unused.has(edge.to)), layout: this.layout };
+  }
 }
+/** Shared colour nodes of the looks that draw in a palette of their own (retired Color Source, Dark, Light). */
+const OWN_PALETTE_NODES: ReadonlySet<string> = new Set(['color-mode', 'color-a', 'color-b', 'color-a-rgb', 'color-b-rgb']);
 
 type GlyphGraphVariant = 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' | 'word-mosaic' | 'glyph-matrix' | 'data-hatch' | 'brand-generator' | 'stitch-poster' | 'dither-text' | 'symbol-matrix' | 'pixel-dither' | 'retro-matrix' | 'capsule-cloud' | 'ui-collage' | 'matrix' | 'ascii-ghost' | 'inscribe' | 'contour-type';
 
@@ -222,13 +231,22 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     return lifted;
   };
   if (variant === 'number-field') {
-    const five = g.number('tone-levels', 5), four = g.number('tone-divisor', 4);
-    const scaled = g.binary('quantized-tone-scaled', 'math.multiply.scalar', tone, five), floored = g.unary('quantized-tone-floor', 'math.floor.scalar', scaled);
-    const quantized = g.binary('quantized-tone', 'math.divide-ieee.scalar', floored, four), numberInk = g.node('number-ink', 'math.mix.rgb');
+    // Steps flat colours from Dark to Light: the tone falls into one of Steps equal bands (pure white into the last
+    // one, not one past it). Steps is rounded to a whole count (a keyframed ramp steps from one count to the next)
+    // and renders clamped to 2..16 (paramRangeNotes reports it through 'steps-clamped'). Saved without it: 5.
+    const stepsValue = g.node('tone-steps', 'values.number', 'value', { value: 'steps' }, { value: NUMBER_FIELD_STEPS });
+    const stepsRounded = g.unary('tone-steps-rounded', 'math.floor.scalar', g.binary('tone-steps-shifted', 'math.add.scalar', stepsValue, half));
+    const steps = g.node('steps-clamped', 'math.clamp.scalar'); g.edge(stepsRounded, steps, 'value');
+    g.edge(g.number('fewest-steps', NUMBER_FIELD_MIN_STEPS), steps, 'min'); g.edge(g.number('most-steps', NUMBER_FIELD_MAX_STEPS), steps, 'max');
+    const lastStep = g.binary('tone-steps-last', 'math.subtract.scalar', steps, one);
+    const scaled = g.binary('quantized-tone-scaled', 'math.multiply.scalar', tone, steps), floored = g.unary('quantized-tone-floor', 'math.floor.scalar', scaled);
+    const band = g.binary('quantized-tone-band', 'math.min.scalar', floored, lastStep);
+    const quantized = g.binary('quantized-tone', 'math.divide-ieee.scalar', band, lastStep), numberInk = g.node('number-ink', 'math.mix.rgb');
     g.edge(aRgb, numberInk, 'a'); g.edge(bRgb, numberInk, 'b'); g.edge(quantized, numberInk, 't');
     const marked = g.node('number-mark', 'math.multiply.rgb-scalar'); g.edge(numberInk, marked, 'a'); g.edge(inkCoverage(glyphAlpha), marked, 'b');
     const combine = blend(marked); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
-    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+    // It always colours between Dark and Light: the retired Color Source stays out of its setup (and so out of its card).
+    return g.graphWithout(new Set(['color-mode']));
   }
   if (variant === 'pixel-code') {
     const dark = g.node('code-dark', 'vector.combine.vec3'); g.edge(g.number('code-dark-r', .08), dark, 'x'); g.edge(g.number('code-dark-g', .3), dark, 'y'); g.edge(g.number('code-dark-b', .48), dark, 'z');
@@ -281,10 +299,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const scanned = g.node('retro-scanned', 'math.multiply.rgb-scalar'); g.edge(lit, scanned, 'a'); g.edge(scan, scanned, 'b');
     const combine = blend(scanned); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     // It draws only in its Phosphor colour: the shared colour nodes (retired Color Source, Dark, Light) stay out of its setup.
-    const unused = new Set(['color-mode', 'color-a', 'color-b', 'color-a-rgb', 'color-b-rgb']);
-    for (const id of unused) delete g.layout[id];
-    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes.filter(node => !unused.has(node.id)),
-      edges: g.edges.filter(edge => !unused.has(edge.from) && !unused.has(edge.to)), layout: g.layout };
+    return g.graphWithout(OWN_PALETTE_NODES);
   }
   if (variant === 'matrix') {
     // Rain: every column has drops that fall at its own pace and spacing (Random (Cell) of the column and a seed).
@@ -332,10 +347,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const lit = g.binary('rain-lit', 'math.add.rgb', ground, glyph);
     const combine = blend(lit); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     // It draws only in its Rain Color: the shared colour nodes (retired Color Source, Dark, Light) stay out of its setup.
-    const unused = new Set(['color-mode', 'color-a', 'color-b', 'color-a-rgb', 'color-b-rgb']);
-    for (const id of unused) delete g.layout[id];
-    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes.filter(node => !unused.has(node.id)),
-      edges: g.edges.filter(edge => !unused.has(edge.from) && !unused.has(edge.to)), layout: g.layout };
+    return g.graphWithout(OWN_PALETTE_NODES);
   }
   const duotone = g.node('duotone', 'math.mix.rgb'); g.edge(aRgb, duotone, 'a'); g.edge(bRgb, duotone, 'b'); g.edge(tone, duotone, 't');
   const sourceMode = g.binary('source-mode', 'math.subtract.scalar', one, colorMode), ink = g.node('ink', 'math.mix.rgb'); g.edge(duotone, ink, 'a'); g.edge(sourceRgb, ink, 'b'); g.edge(sourceMode, ink, 't');

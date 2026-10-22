@@ -43,6 +43,28 @@
       },
       "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with Grid Glyph right: the picture is rebuilt from characters, each in its own square cell ruled by a thin line in the colour of the cell, so her dress becomes a lit table of # and % signs while the lines fade into the dark stage",
       "caption": "Left: original. Right: Grid Glyph at its default settings."
+    },
+    {
+      "name": "number-field",
+      "out": "docs/Features/assets/effects/number-field.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        760,
+        150,
+        480,
+        360
+      ],
+      "layout": "compare",
+      "outWidth": 1600,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "number-field"
+      },
+      "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with Number Field right: the picture is rebuilt from the digits 1 to 9, the brighter the part the higher the digit, coloured in five flat steps from near-black to pale mint, so her dress becomes a block of bright 7s and 8s on stepped grey ground while the dark stage holds faint 1s",
+      "caption": "Left: original. Right: Number Field at its default settings."
     }
   ],
   "strips": [
@@ -61,6 +83,19 @@
     },
     {
       "effect": "grid-glyph",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        800,
+        170,
+        420,
+        315
+      ],
+      "cellWidth": 600,
+      "columns": 2
+    },
+    {
+      "effect": "number-field",
       "image": "dancer_stage",
       "width": 1920,
       "crop": [
