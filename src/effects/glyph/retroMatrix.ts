@@ -1,11 +1,17 @@
 // Retro Matrix: the glyph engine as an old phosphor terminal. Its text scrolls up row by row while the
 // picture stays put, glows in one Phosphor colour, brighter where the picture is bright, and is drawn
 // in scanlines. Shared by the effect definition (index.ts) and the runtime graph
-// (src/services/operators/asciiEffectGraph.ts, its 'retro-matrix' branches); shader.wgsl is its twin.
+// (src/services/operators/asciiEffectGraph.ts, its 'retro-matrix' branches, the reference). shader.wgsl is not compiled
+// for the glyph looks and is out of date; do not copy its maths.
 import type { EffectParam } from '../types';
 
 /** Rows the text scrolls up per second at Speed 1 (a terminal's line rate, at every Cell Size). */
 export const RETRO_SCROLL_RATE = 3;
+/**
+ * Rows after which the scroll wraps and the text repeats (68 min at Speed 1), so the per-pixel grid stays small in
+ * f32. A multiple of RETRO_LINE_SPACING × 4096: at a whole Cell Size the scanlines also continue across the wrap.
+ */
+export const RETRO_SCROLL_PERIOD = 12288;
 /** Character colour of new instances and of instances saved before Phosphor existed: amber. */
 export const RETRO_PHOSPHOR = '#ff8514';
 /** Brightness of a character: base + factor × the picture's tone (dim in the dark, overdriven in the light). */

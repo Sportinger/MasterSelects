@@ -75,8 +75,10 @@ const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels
   'mixed-alpha': 'Faded Alpha', 'original-premultiplied': 'Original Premultiplied', 'look-premultiplied': 'Glyph Premultiplied',
   'mixed-premultiplied': 'Faded Premultiplied', 'mixed-safe-alpha': 'Faded Alpha', 'original-alpha': 'Original Alpha', 'cell-alpha': 'Cell Alpha', 'original-split:rgb': 'Original Color', 'original-split:alpha': 'Original Alpha' };
 /** Retro Matrix: its scroll, text, Phosphor ink and scanlines. */
-const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-vector': 'Scroll Offset', 'scrolled-uv': 'Scrolled Grid', 'index-text-random': 'Text Random',
-  'retro-phosphor-rgb': 'Phosphor', 'background-coverage': 'Coverage', 'retro-ink': 'Ink', 'retro-tone-amount': 'Brightness', 'retro-lit': 'Lit Ink', 'retro-scan-pixel': 'Row Pixel',
+const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-wrapped': 'Wrapped Scroll', 'scroll-vector': 'Scroll Offset', 'scrolled-uv': 'Scrolled Grid',
+  'index-text-turns': 'Text Turns', 'index-text-line': 'Text Line', 'index-text-cell': 'Text Cell', 'index-text-random': 'Text Random',
+  'retro-scan-scroll': 'Scroll Lines', 'retro-scan-scroll-phase': 'Scroll Phase', 'retro-scan-phase': 'Line Phase',
+  'retro-phosphor-rgb': 'Phosphor', 'background-coverage': 'Coverage', 'retro-ink': 'Ink', 'retro-tone-amount': 'Brightness', 'retro-lit': 'Lit Ink', 'retro-scan-ratio': 'Lines per Row',
   'retro-scan-pitch': 'Line Pitch', 'retro-scan-lines': 'Lines', 'retro-scan-dip': 'Line Dip', 'retro-scan-fade': 'Line Fade', 'retro-scan-faded': 'Faded Dip',
   'retro-scan': 'Scanline', 'retro-scanned': 'Glyph Cell' };
 /** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */

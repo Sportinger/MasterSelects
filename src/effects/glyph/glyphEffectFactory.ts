@@ -1,6 +1,6 @@
 // The shared glyph-mosaic engine: every Text & Glyph look (plus Stitch Poster and Contour Type) is one
 // call of createGlyphEffect. The runtime is the editable graph in
-// src/services/operators/asciiEffectGraph.ts (createDefaultGlyphGraph); shader.wgsl is its WGSL twin.
+// src/services/operators/asciiEffectGraph.ts (createDefaultGlyphGraph); shader.wgsl is not compiled for these looks and is out of date (no Black Level, straight Amount fade): the graph is the reference.
 // Cell geometry and the Speed clock: glyphGrid.ts.
 import { ASCII_RAMP_LABELS, ASCII_RAMP_PRESETS, asciiRampWarnings, resolveAsciiRamp, type AsciiRampPreset } from '../_shared/asciiRamps';
 import { planGlyphAtlas } from '../_shared/glyphAtlas';

@@ -1,7 +1,7 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { GLYPH_ATLAS_TEXEL_INSET, GLYPH_MAX_BLACK_LEVEL, GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
 import { SYMBOL_LEGACY_TWINKLE } from '../../effects/glyph/symbolMatrix';
-import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
+import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_PERIOD, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
 type Ref = { node: string; port: string };
 class Builder {
   nodes: BoundOperatorNode[] = []; edges: OperatorEdge[] = []; layout: EffectOperatorGraph['layout'] = {};
@@ -59,10 +59,16 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   })();
   // Retro Matrix scrolls its text up like a terminal: the rows move on by the clock × Scroll Rate (3 rows a second at
   // Speed 1), so a character stays whole while it moves, and every cell reads the picture where it is now.
-  let scroll: Ref | undefined;
+  let scroll: Ref | undefined, scrollRows: Ref | undefined;
   if (variant === 'retro-matrix') {
     const rows = g.binary('scroll-rows', 'math.multiply.scalar', clock(), g.number('scroll-rate', RETRO_SCROLL_RATE));
-    scroll = g.node('scroll-vector', 'vector.combine.vec2'); g.edge(zero, scroll, 'x'); g.edge(rows, scroll, 'y');
+    // The rows wrap every RETRO_SCROLL_PERIOD rows (the text repeats with the same period, below), so the per-pixel
+    // grid stays small in f32 hours into a show: unwrapped, a 3 h timeline at Speed 5 sheared the characters.
+    const period = g.number('scroll-period', RETRO_SCROLL_PERIOD);
+    const turns = g.unary('scroll-turns', 'math.floor.scalar', g.binary('scroll-cycles', 'math.divide-ieee.scalar', rows, period));
+    const wrapped = g.binary('scroll-wrapped', 'math.subtract.scalar', rows, g.binary('scroll-turn-rows', 'math.multiply.scalar', turns, period));
+    scrollRows = wrapped;
+    scroll = g.node('scroll-vector', 'vector.combine.vec2'); g.edge(zero, scroll, 'x'); g.edge(wrapped, scroll, 'y');
   }
   const gridUv = scroll ? g.binary('scrolled-uv', 'math.add.vec2', scaledUv, scroll) : scaledUv;
   const cellId = g.unary('cell-id', 'math.floor.vec2', gridUv), localUv = g.unary('local-uv', 'math.fract.vec2', gridUv);
@@ -131,7 +137,14 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
       const phase = variant === 'retro-matrix' ? zero : g.binary('index-time-phase', 'math.multiply.scalar', timeSpeed, g.number('index-time-scale', variant === 'matrix' ? 8 : variant === 'glyph-matrix' ? 6 : variant === 'ascii-ghost' ? 5 : variant === 'symbol-matrix' ? 4 : variant === 'pixel-dither' ? 1 : 2));
       if (variant === 'retro-matrix') {
         // The text: one fixed random character per cell of the scrolled grid (column, line), so it moves with the scroll.
-        const textRandom = g.unary('index-text-random', 'noise.cell-hash.vec2', cellId);
+        // The line number repeats every RETRO_SCROLL_PERIOD rows, as the scroll wraps: y − period × floor((y + ½) / period).
+        const textId = g.node('index-text-id', 'vector.split.vec2', 'x'); g.edge(cellId, textId, 'value');
+        const textY = { node: textId.node, port: 'y' }, textPeriod = g.number('text-period', RETRO_SCROLL_PERIOD);
+        const textTurns = g.unary('index-text-turns', 'math.floor.scalar', g.binary('index-text-cycles', 'math.divide-ieee.scalar',
+          g.binary('index-text-centred', 'math.add.scalar', textY, half), textPeriod));
+        const textLine = g.binary('index-text-line', 'math.subtract.scalar', textY, g.binary('index-text-turn-rows', 'math.multiply.scalar', textTurns, textPeriod));
+        const textCell = g.node('index-text-cell', 'vector.combine.vec2'); g.edge({ node: textId.node, port: 'x' }, textCell, 'x'); g.edge(textLine, textCell, 'y');
+        const textRandom = g.unary('index-text-random', 'noise.cell-hash.vec2', textCell);
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-text-scaled', 'math.multiply.scalar', textRandom, safeCount));
       } else if (variant === 'glyph-matrix') {
         const idSplit = g.node('cell-id-split', 'vector.split.vec2', 'x'); g.edge(cellId, idSplit, 'value');
@@ -253,12 +266,17 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     // dimming instead of a moiré. Scanlines outside 0..1 render clamped (scanlines-clamped, paramRangeNotes).
     const strengthValue = g.node('scanlines', 'values.number', 'value', { value: 'scanlines' }, { value: RETRO_LEGACY_SCANLINES });
     const strength = g.node('scanlines-clamped', 'math.clamp.scalar'); g.edge(strengthValue, strength, 'value'); g.edge(zero, strength, 'min'); g.edge(one, strength, 'max');
-    const rowParts = g.node('retro-scan-row', 'vector.split.vec2', 'y'); g.edge(gridUv, rowParts, 'value');
-    const rowPixel = g.binary('retro-scan-pixel', 'math.multiply.scalar', { node: rowParts.node, port: 'y' }, safeCell);
+    // The line phase is built from small parts: the lines down the screen plus the fraction of a line the (wrapped)
+    // scroll has moved, then only its fraction feeds sin, so it stays exact far into a long timeline.
+    const rowParts = g.node('retro-scan-row', 'vector.split.vec2', 'y'); g.edge(scaledUv, rowParts, 'value');
     const pitch = g.binary('retro-scan-pitch', 'math.multiply.scalar', frameScale, g.number('line-spacing', RETRO_LINE_SPACING));
-    const lines = g.binary('retro-scan-lines', 'math.divide-ieee.scalar', rowPixel, pitch);
+    const linesPerRow = g.binary('retro-scan-ratio', 'math.divide-ieee.scalar', safeCell, pitch);
+    const lines = g.binary('retro-scan-lines', 'math.multiply.scalar', { node: rowParts.node, port: 'y' }, linesPerRow);
+    const scrollLines = g.binary('retro-scan-scroll', 'math.multiply.scalar', scrollRows!, linesPerRow);
+    const scrollPhase = g.unary('retro-scan-scroll-phase', 'math.fract.scalar', scrollLines);
+    const phase = g.unary('retro-scan-phase', 'math.fract.scalar', g.binary('retro-scan-sum', 'math.add.scalar', lines, scrollPhase));
     // sin² (π × lines): 0 on a line, 1 between two lines.
-    const sine = g.unary('retro-scan-sine', 'math.sin.scalar', g.binary('retro-scan-angle', 'math.multiply.scalar', lines, g.number('pi', Math.PI)));
+    const sine = g.unary('retro-scan-sine', 'math.sin.scalar', g.binary('retro-scan-angle', 'math.multiply.scalar', phase, g.number('pi', Math.PI)));
     const dip = g.binary('retro-scan-dip', 'math.power.scalar', sine, two);
     const fade = g.node('retro-scan-fade', 'math.smoothstep.scalar'); g.edge(g.number('fade-from', 1.5), fade, 'edge0'); g.edge(g.number('fade-to', 3), fade, 'edge1'); g.edge(pitch, fade, 'value');
     const fadedDip = g.node('retro-scan-faded', 'math.mix.scalar'); g.edge(half, fadedDip, 'a'); g.edge(dip, fadedDip, 'b'); g.edge(fade, fadedDip, 't');

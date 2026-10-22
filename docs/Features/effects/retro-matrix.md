@@ -98,7 +98,7 @@ The Style menu at the top of the card switches to another look of the same engin
 <figcaption>Black Level from 0 to 0.5 and back.</figcaption>
 </figure>
 
-**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the dimmest glow and the first character of the ramp, the space in most ramps, and keeps it, even at Roll 1, so a grey stage turns into an empty dark screen and the lit figure stands out; the rest of the picture spreads over the whole ramp and the glow. 0 to 0.9, default 0.
+**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the dimmest glow and the first character of the ramp, the space in most ramps (with Invert Ramp the last, densest one), and keeps it, even at Roll 1, so a grey stage turns into an empty dark screen and the lit figure stands out; the rest of the picture spreads over the whole ramp and the glow. 0 to 0.9, default 0.
 
 <div class="docs-float-end"></div>
 
@@ -153,28 +153,28 @@ The Style menu at the top of the card switches to another look of the same engin
 
 <div class="docs-shot-stage">
 
-![The Retro Matrix graph in nine stages: Parameters feed Scroll (Speed), whose Scroll Offset moves Cell Grid (Cell Size); Cell Grid passes the cell centre to Cell Sampling & Tone, the line cell to Glyph Offset, the position in the cell to Atlas Alpha and the scrolled grid to Scanlines; Tone to Glyph turns the tone into the cell's own character, Glyph Offset gives each cell of the text its random character, Roll Window (Roll) keeps it near the Tone Glyph, holds cells below Black Level still and passes the glyph index to Atlas Alpha; Scanlines (Scanlines) and Ink & Appearance (Phosphor, Background, Amount) light the coverage and draw the picture](../assets/effects/graphs/retro-matrix.webp)
+![The Retro Matrix graph in nine stages: Parameters feed Scroll (Speed), whose Scroll Offset moves Cell Grid (Cell Size); Cell Grid passes the cell centre to Cell Sampling & Tone, the line cell to Glyph Offset, the position in the cell to Atlas Alpha and the grid position to Scanlines, which also reads the Wrapped Scroll; Tone to Glyph turns the tone into the cell's own character, Glyph Offset gives each cell of the text its random character, Roll Window (Roll) keeps it near the Tone Glyph, holds cells below Black Level still and passes the glyph index to Atlas Alpha; Scanlines (Scanlines) and Ink & Appearance (Phosphor, Background, Amount) light the coverage and draw the picture](../assets/effects/graphs/retro-matrix.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 876" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 887" aria-hidden="true" focusable="false">
 <defs><marker id="retro-matrix-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M184 194 L184 278" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="184" cy="194" r="18" /><text x="184" y="194" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M292 726 L292 642" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="292" cy="726" r="18" /><text x="292" y="726" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M400 656 L400 740" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="400" cy="656" r="18" /><text x="400" y="656" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M509 506 L509 422" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="506" r="18" /><text x="509" y="506" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M184 198 L184 282" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="184" cy="198" r="18" /><text x="184" y="198" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M292 733 L292 649" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="292" cy="733" r="18" /><text x="292" y="733" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M400 666 L400 750" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="400" cy="666" r="18" /><text x="400" y="666" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M509 509 L509 425" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="509" r="18" /><text x="509" y="509" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M617 22 L617 72" marker-end="url(#retro-matrix-arrow)" />
 <circle class="docs-shot-number" cx="617" cy="22" r="18" /><text x="617" y="22" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M725 452 L725 368" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="725" cy="452" r="18" /><text x="725" y="452" class="docs-shot-number-text">6</text>
-<path class="docs-shot-arrow" d="M833 244 L833 328" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="833" cy="244" r="18" /><text x="833" y="244" class="docs-shot-number-text">7</text>
-<path class="docs-shot-arrow" d="M833 670 L833 586" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="833" cy="670" r="18" /><text x="833" y="670" class="docs-shot-number-text">8</text>
-<path class="docs-shot-arrow" d="M941 439 L941 523" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="439" r="18" /><text x="941" y="439" class="docs-shot-number-text">9</text>
+<path class="docs-shot-arrow" d="M725 455 L725 371" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="725" cy="455" r="18" /><text x="725" y="455" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M833 248 L833 332" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="833" cy="248" r="18" /><text x="833" y="248" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M833 688 L833 604" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="833" cy="688" r="18" /><text x="833" y="688" class="docs-shot-number-text">8</text>
+<path class="docs-shot-arrow" d="M941 457 L941 541" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="941" cy="457" r="18" /><text x="941" y="457" class="docs-shot-number-text">9</text>
 </svg>
 </div>
 
@@ -189,27 +189,35 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 
 <div class="docs-shot-stage">
 
-![Inside the Scroll folder: Seconds times Speed, or Speed Travel when Greater Than finds keyframes, goes through Switch into the clock; Multiply by Scroll Rate 3 gives the scroll in rows; Combine Vector with Zero sideways gives the Scroll Offset](../assets/effects/graphs/retro-matrix-scroll.webp)
+![Inside the Scroll folder in two rows: Seconds times Speed, or Speed Travel when Greater Than finds keyframes, goes through Switch into the clock; Multiply by Scroll Rate 3 gives the scroll in rows; below, Divide by Scroll Period 12288 and Floor give the Turns, Multiply by the period and Subtract give the Wrapped Scroll; Combine Vector with Zero sideways gives the Scroll Offset](../assets/effects/graphs/retro-matrix-scroll.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 755" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1289" aria-hidden="true" focusable="false">
 <defs><marker id="retro-matrix-scroll-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M509 248 L509 332" marker-end="url(#retro-matrix-scroll-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="248" r="18" /><text x="509" y="248" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M703 248 L703 332" marker-end="url(#retro-matrix-scroll-arrow)" />
-<circle class="docs-shot-number" cx="703" cy="248" r="18" /><text x="703" y="248" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M897 574 L897 490" marker-end="url(#retro-matrix-scroll-arrow)" />
-<circle class="docs-shot-number" cx="897" cy="574" r="18" /><text x="897" y="574" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M518 242 L518 326" marker-end="url(#retro-matrix-scroll-arrow)" />
+<circle class="docs-shot-number" cx="518" cy="242" r="18" /><text x="518" y="242" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M709 242 L709 326" marker-end="url(#retro-matrix-scroll-arrow)" />
+<circle class="docs-shot-number" cx="709" cy="242" r="18" /><text x="709" y="242" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M327 1139 L327 1055" marker-end="url(#retro-matrix-scroll-arrow)" />
+<circle class="docs-shot-number" cx="327" cy="1139" r="18" /><text x="327" y="1139" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M709 980 L709 1064" marker-end="url(#retro-matrix-scroll-arrow)" />
+<circle class="docs-shot-number" cx="709" cy="980" r="18" /><text x="709" y="980" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M900 1157 L900 1073" marker-end="url(#retro-matrix-scroll-arrow)" />
+<circle class="docs-shot-number" cx="900" cy="1157" r="18" /><text x="900" y="1157" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Scroll (Speed). The number cards are values from the Constants folder, shown where they plug in. 1 — Clock: the playhead time × Speed. 2 — Scroll: the rows the text has moved. 3 — Scroll Offset: the scroll as an upward shift.</figcaption>
+<figcaption>Inside Scroll (Speed). The number cards are values from the Constants folder, shown where they plug in. 1 — Clock: the playhead time × Speed. 2 — Scroll: the rows the text has moved. 3 — Turns: whole periods of 12 288 rows. 4 — Wrapped Scroll: the scroll within one period. 5 — Scroll Offset: the scroll as an upward shift.</figcaption>
 </figure>
 
 **Clock** – how far the clock has run: Seconds × Speed (the Multiply above it), or Speed Travel, the distance a keyframed Speed has covered, when Speed has keyframes (Greater Than checks for that).
 
-**Scroll** – the clock times Scroll Rate 3: how many rows the text has moved up, three a second at Speed 1. It keeps growing; the text never jumps back.
+**Scroll** – the clock times Scroll Rate 3: how many rows the text has moved up, three a second at Speed 1.
 
-**Scroll Offset** – the scroll as a shift of the grid, upwards only (Combine Vector with 0 sideways). Cell Grid adds it.
+**Turns** – how many whole periods of Scroll Period 12 288 rows the text has passed (Divide, Floor): one every 68 minutes at Speed 1.
+
+**Wrapped Scroll** – the scroll minus the whole periods (Multiply, Subtract), so it starts again at 0 after each period. The text repeats with the same period (Glyph Offset), so you never see the jump; it keeps the numbers small, so the characters stay sharp even hours into a show.
+
+**Scroll Offset** – the wrapped scroll as a shift of the grid, upwards only (Combine Vector with 0 sideways). Cell Grid adds it.
 
 ### Cell Grid
 
@@ -326,21 +334,29 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 
 <div class="docs-shot-stage">
 
-![Inside the Glyph Offset folder: Random (Cell) of the Line Cell gives the Text Random; Multiply by the Glyph Count and Floor give the Glyph Offset](../assets/effects/graphs/retro-matrix-glyph-offset.webp)
+![Inside the Glyph Offset folder in two rows: Split Vector takes the line of the Line Cell; Add Half, Divide by Text Period 12288 and Floor give the Text Turns, Multiply by the period and Subtract give the Text Line; Combine Vector puts the column and the Text Line back together, Random (Cell) of it gives the Text Random; Multiply by the Glyph Count and Floor give the Glyph Offset](../assets/effects/graphs/retro-matrix-glyph-offset.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 328" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 941" aria-hidden="true" focusable="false">
 <defs><marker id="retro-matrix-glyph-offset-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M227 22 L227 81" marker-end="url(#retro-matrix-glyph-offset-arrow)" />
-<circle class="docs-shot-number" cx="227" cy="22" r="18" /><text x="227" y="22" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M500 267 L500 183" marker-end="url(#retro-matrix-glyph-offset-arrow)" />
-<circle class="docs-shot-number" cx="500" cy="267" r="18" /><text x="500" y="267" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M744 23 L744 107" marker-end="url(#retro-matrix-glyph-offset-arrow)" />
+<circle class="docs-shot-number" cx="744" cy="23" r="18" /><text x="744" y="23" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M115 918 L115 834" marker-end="url(#retro-matrix-glyph-offset-arrow)" />
+<circle class="docs-shot-number" cx="115" cy="918" r="18" /><text x="115" y="918" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M430 399 L430 483" marker-end="url(#retro-matrix-glyph-offset-arrow)" />
+<circle class="docs-shot-number" cx="430" cy="399" r="18" /><text x="430" y="399" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M744 683 L744 599" marker-end="url(#retro-matrix-glyph-offset-arrow)" />
+<circle class="docs-shot-number" cx="744" cy="683" r="18" /><text x="744" y="683" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Glyph Offset. 1 — Text Random: the cell's own random number. 2 — Glyph Offset: how far its character sits from the one of its brightness.</figcaption>
+<figcaption>Inside Glyph Offset. The number cards are values from the Constants folder, shown where they plug in. 1 — Text Turns: whole periods of lines. 2 — Text Line: the line within one period. 3 — Text Random: the cell's own random number. 4 — Glyph Offset: how far its character sits from the one of its brightness.</figcaption>
 </figure>
 
-**Text Random** – a random number from 0 to 1 for each cell of the moving text (Random (Cell) of the Line Cell from Cell Grid). It belongs to the cell's column and line of text, so it travels up with the scroll and never changes on the way: that is what makes it read as text, not as noise.
+**Text Turns** – how many whole periods of Text Period 12 288 lines lie above this line of text (Split Vector takes the line from the Line Cell; Add Half, Divide, Floor). The half keeps the count exact at the border of a period.
+
+**Text Line** – the line within its period (Multiply, Subtract): the same number the line had one period earlier, so the text repeats exactly when Scroll wraps.
+
+**Text Random** – a random number from 0 to 1 for each cell of the moving text (Random (Cell) of the column and the Text Line, put together by Combine Vector). It belongs to the cell's column and line of text, so it travels up with the scroll and never changes on the way: that is what makes it read as text, not as noise.
 
 **Glyph Offset** – the random number times the number of characters, rounded down (Multiply, Floor): how far this character of the text sits from the character of its brightness. Roll Window folds it into the window around it.
 
@@ -474,31 +490,39 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 
 <div class="docs-shot-stage">
 
-![Inside the Scanlines folder in two rows: the scrolled grid's row times the Cell Pixels gives the Row Pixel; the Frame Scale times Line Spacing 3 gives the Line Pitch; Divide gives the Lines, times Pi through Sine and Power with Two gives the Line Dip; Smoothstep from Fade From 1.5 to Fade To 3 over the Line Pitch gives the Line Fade, and a Mix with Half fades the dip; the clamped Scanlines times it, subtracted from One, gives the Scanline](../assets/effects/graphs/retro-matrix-scanlines.webp)
+![Inside the Scanlines folder in two rows: the Frame Scale times Line Spacing 3 gives the Line Pitch; the Cell Pixels divided by it give the Lines per Row; the grid position's row times that gives the Lines, the Wrapped Scroll times it the Scroll Lines, whose Fraction is the Scroll Phase; Add and Fraction give the Line Phase, times Pi through Sine and Power with Two the Line Dip; Smoothstep from Fade From 1.5 to Fade To 3 over the Line Pitch gives the Line Fade, and a Mix with Half fades the dip; the clamped Scanlines times it, subtracted from One, gives the Scanline](../assets/effects/graphs/retro-matrix-scanlines.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1892" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1654" aria-hidden="true" focusable="false">
 <defs><marker id="retro-matrix-scanlines-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M507 582 L507 498" marker-end="url(#retro-matrix-scanlines-arrow)" />
-<circle class="docs-shot-number" cx="507" cy="582" r="18" /><text x="507" y="582" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M690 24 L690 108" marker-end="url(#retro-matrix-scanlines-arrow)" />
-<circle class="docs-shot-number" cx="690" cy="24" r="18" /><text x="690" y="24" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M325 847 L325 931" marker-end="url(#retro-matrix-scanlines-arrow)" />
-<circle class="docs-shot-number" cx="325" cy="847" r="18" /><text x="325" y="847" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M325 1469 L325 1385" marker-end="url(#retro-matrix-scanlines-arrow)" />
-<circle class="docs-shot-number" cx="325" cy="1469" r="18" /><text x="325" y="1469" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M872 932 L872 1016" marker-end="url(#retro-matrix-scanlines-arrow)" />
-<circle class="docs-shot-number" cx="872" cy="932" r="18" /><text x="872" y="932" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M244 387 L244 303" marker-end="url(#retro-matrix-scanlines-arrow)" />
+<circle class="docs-shot-number" cx="244" cy="387" r="18" /><text x="244" y="387" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M641 203 L641 287" marker-end="url(#retro-matrix-scanlines-arrow)" />
+<circle class="docs-shot-number" cx="641" cy="203" r="18" /><text x="641" y="203" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M641 352 L641 268" marker-end="url(#retro-matrix-scanlines-arrow)" />
+<circle class="docs-shot-number" cx="641" cy="352" r="18" /><text x="641" y="352" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M905 85 L905 169" marker-end="url(#retro-matrix-scanlines-arrow)" />
+<circle class="docs-shot-number" cx="905" cy="85" r="18" /><text x="905" y="85" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M376 1061 L376 1145" marker-end="url(#retro-matrix-scanlines-arrow)" />
+<circle class="docs-shot-number" cx="376" cy="1061" r="18" /><text x="376" y="1061" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M376 787 L376 703" marker-end="url(#retro-matrix-scanlines-arrow)" />
+<circle class="docs-shot-number" cx="376" cy="787" r="18" /><text x="376" y="787" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M773 924 L773 1008" marker-end="url(#retro-matrix-scanlines-arrow)" />
+<circle class="docs-shot-number" cx="773" cy="924" r="18" /><text x="773" y="924" class="docs-shot-number-text">7</text>
 </svg>
 </div>
 
-<figcaption>Inside Scanlines (Scanlines). The number cards are values from the Constants folder, shown where they plug in. 1 — Line Pitch: the distance of two lines. 2 — Lines: lines above the pixel. 3 — Line Dip: dark between lines. 4 — Line Fade: fades lines that are too fine. 5 — Scanline: the factor the text is lit with.</figcaption>
+<figcaption>Inside Scanlines (Scanlines). The number cards are values from the Constants folder, shown where they plug in. 1 — Line Pitch: the distance of two lines. 2 — Lines: lines above the pixel on the screen. 3 — Scroll Phase: how far the scroll has moved the lines. 4 — Line Phase: where the pixel sits between two lines. 5 — Line Dip: dark between lines. 6 — Line Fade: fades lines that are too fine. 7 — Scanline: the factor the text is lit with.</figcaption>
 </figure>
 
 **Line Pitch** – how far apart the lines are on this frame: Line Spacing 3 times the Frame Scale (the shorter side of the frame divided by 1080, from Cell Grid). 3 pixels at 1080p, 6 at 4K.
 
-**Lines** – how many lines lie above the pixel: its row in the moving text times the Cell Pixels (the Row Pixel, Multiply), divided by the Line Pitch (Divide). Because it counts from the scrolled grid, the lines move with the text.
+**Lines** – how many lines lie above the pixel on the screen: its row in the grid (Split Vector of the Grid Position) times the Lines per Row, the Cell Pixels divided by the Line Pitch (Divide, Multiply).
 
-**Line Dip** – the sine of Lines × Pi, squared (Sine, Power with Two): 0 on a line, 1 halfway between two lines.
+**Scroll Phase** – the Wrapped Scroll times the Lines per Row (Multiply), and only its Fraction: how far between two lines the scroll has moved them. It moves the lines with the text.
+
+**Line Phase** – Lines plus Scroll Phase, and again only the Fraction (Add, Fraction): where the pixel sits between two lines, 0 on a line. Only this small number goes on to the sine, so the lines stay even hours into a show.
+
+**Line Dip** – the sine of Line Phase × Pi, squared (Sine, Power with Two): 0 on a line, 1 halfway between two lines.
 
 **Line Fade** – a Smoothstep from Fade From 1.5 to Fade To 3 over the Line Pitch: 1 when the lines are at least 3 pixels apart, 0 at 1.5 and closer. A Mix with Half fades the Line Dip towards an even 0.5 there, so small frames show an even dimming instead of a flickering pattern.
 
@@ -549,9 +573,9 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 ## Technical details
 
 - **Size.** Cell Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same grid. A cell is never smaller than 2 pixels of the frame; below 2 px Cell Size renders as 2, and the card says so. The scanlines lie 3 pixels of a 1080p frame apart and fade into an even dimming of 1 − Scanlines / 2 where they would be closer than about 3 pixels of the output.
-- **Time.** The text scrolls up 3 × Speed rows a second with the timeline time: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. With keyframes on Speed it moves by the distance Speed has travelled, so it never jumps.
+- **Time.** The text scrolls up 3 × Speed rows a second with the timeline time; after 12 288 rows (68 minutes at Speed 1) the scroll wraps and the text repeats, so you never see a jump and the characters and lines stay sharp hours into a show. Scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. With keyframes on Speed it moves by the distance Speed has travelled, so it never jumps.
 - **Text.** Each cell of the scrolled grid keeps one random character for its column and line of text, drawn from a window of 1 + Roll × (ramp − 1) characters, rounded up, around the character of its brightness and kept inside the ramp. It glows at Phosphor × (0.15 + 1.6 × brightness). Scanlines and Roll outside 0 to 1 render as 0 or 1, and the card and the tools say so.
 - **Characters.** The whole ramp is drawn in one font size, so its tallest character spans 88 % of the cell height. Blocks and Bars are exact shapes, read half a pixel inside each character, so they join without seams at any cell size.
 - **Transparency.** Each cell takes the transparency of the picture at its centre, so a cut-out figure keeps its outline in whole cells; as the text scrolls, its top and bottom edges move in steps of a cell. Amount fades the transparency back to the original's, pixel by pixel, and mixes the colours weighted by their transparency, so the hidden colour of a transparent pixel never shows as a fringe around a cut-out figure.
-- **Saved projects.** A Retro Matrix stores its node setup and keeps its look. Effects saved without a stored setup now scroll their text; before, the frame was cut into bands of the ramp's length whose borders cut characters in half, the text did not scroll, and the scanlines were one pixel of the output wide, so the preview and an export at another size differed, a bug. They load with amber, Roll 1, Background 0 and Scanlines 0.36, the values they had; their text now glows more strongly with the picture's brightness. A stored setup keeps its smaller characters, which cover about half of a cell, and the way it read the character sheet, so saved Blocks or Bars can show thin seam lines on frames whose cells are not a whole number of pixels; Black Level is 0 there.
+- **Saved projects.** A Retro Matrix stores its node setup and keeps its look. Effects saved without a stored setup now scroll their text; before, the frame was cut into bands of the ramp's length whose borders cut characters in half, the text did not scroll, and the scanlines were one pixel of the output wide, so the preview and an export at another size differed, a bug. They load with amber, Roll 1, Background 0 and Scanlines 0.36, the values they had; their text now glows more strongly with the picture's brightness. A stored setup keeps its smaller characters, which cover about half of a cell, and the way it read the character sheet, so saved Blocks or Bars can show thin seam lines on frames whose cells are not a whole number of pixels; Black Level is 0 there. A stored setup also keeps the earlier Cell Size in pixels of the output, so its preview at another quality and an export at another size show different grids; add the effect again for the 1080p grid. Presets fully apply only to effects added in this version: on a stored setup from before, the card has no Background, Black Level, Roll, Scanlines or Phosphor row, so a preset leaves those values out.
 - **More:** [Effect system](../Effect-System.md#glyph-cell-and-compute-effects) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

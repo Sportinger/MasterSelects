@@ -23,14 +23,14 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot">
 
-![The dancer's head and arms four times in a grid, one preset each: Green Terminal top left with green letters on black, the brightest almost white, Shade Blocks top right with fine dotted shading blocks in the picture's colours, Level Bars bottom left with a bar in every cell that rises with its brightness over the dimmed figure, LED Wall bottom right with one round coloured dot per cell](../assets/effects/presets/ascii.webp)
+![The dancer's head and arms four times in a grid, one preset each: Green Terminal top left with bold green letters on black, the brightest a paler green, Shade Blocks top right with fine dotted shading blocks in the picture's colours, Level Bars bottom left with a bar in every cell that rises with its brightness over the dimmed figure, LED Wall bottom right with one round coloured dot per cell](../assets/effects/presets/ascii.webp)
 
 <figcaption>The four presets on the dancer, each named under its picture.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Green Terminal** – green letters and signs on black, like the screen of an old computer. Black Level 0.2 turns the grey stage black, so only the lit figure is typed, and its brightest letters glow almost white. For a hacker scene, a surveillance feed or a machine that thinks.
+**Green Terminal** – green letters and signs on black, like the screen of an old computer. Black Level 0.2 turns the grey stage black, so only the lit figure is typed, and its brightest letters glow pale. For a hacker scene, a surveillance feed or a machine that thinks.
 
 **Shade Blocks** – small cells filled with the shading blocks ░ ▒ ▓ █, in the picture's colours. The figure stays easy to read and turns into the coarse dotted mosaic of early computer art.
 
@@ -76,7 +76,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Background** – how much of the picture fills each cell behind its character. At 0 the characters stand on a near-black ground, like classic ASCII art; 0.2–0.4 lets the picture glow through, so it stays readable; towards 1 the cells take the full colour of their character and the signs disappear into a mosaic. 0 to 1, default 0.2.
 
-**Black Level** – the brightness up to which the picture counts as black. Everything darker becomes the first character of the ramp, the space in most ramps, so a grey stage drops out and only the lit figure is typed; the rest of the picture spreads over the whole ramp, so the figure gets more different characters. Try 0.15–0.25 on stage footage, above all with Duotone. 0 to 0.9, default 0.
+**Black Level** – the brightness up to which the picture counts as black. Everything darker becomes the first character of the ramp, the space in most ramps (with Invert Ramp the last, densest one), so a grey stage drops out and only the lit figure is typed; the rest of the picture spreads over the whole ramp, so the figure gets more different characters. Try 0.15–0.25 on stage footage, above all with Duotone. 0 to 0.9, default 0.
 
 **Invert Ramp** – swaps the ends of the ramp: dark parts get the dense characters and bright parts the light ones, like a negative typed on paper. The colours stay. Either on or off, default off.
 
@@ -319,5 +319,5 @@ ASCII works in five stages, one folder each in the Nodes tab: **Cell Grid** cuts
 - **Characters.** The characters come from an atlas, a sheet the engine draws for the Ramp, Font and Weight and keeps. It draws the whole ramp in one font size, so its tallest character spans 88 % of the cell height and a '.' stays small next to a '#'. The Block Elements (█ ▀ ▄ ▌ ▐ ░ ▒ ▓, the bars ▁ to ▇ and the quarter blocks) are drawn as exact shapes that fill their cell in any font, and the sheet is read half a pixel inside each character, so blocks join without seams at any cell size. Weight is drawn in steps of 100. The engine keeps the 24 sheets used last, so typing a long Custom Ramp does not pile up memory.
 - **Time.** ASCII does not move by itself: on footage it changes with every frame of the clip, and a paused picture needs no extra rendering.
 - **Transparency.** Each cell takes the transparency of its centre, so a cut-out figure keeps its outline in whole cells and no character is cut in half. Amount fades the transparency back to the original's, pixel by pixel, and mixes the colours weighted by their transparency, so the hidden colour of a transparent pixel never shows as a fringe around a cut-out figure.
-- **Saved projects.** An ASCII effect stores its node setup and keeps its look. Effects saved before Background existed show the dark ground (Background 0), and their Amount fades towards the colour of each cell instead of the original picture. A Blocks ramp, a one-character Custom Ramp and a Custom Ramp longer than 256 characters draw as described above in saved projects too. A stored setup keeps its smaller characters, which cover about half of a cell, and the way it read the character sheet, so saved Blocks or Bars can show thin seam lines on frames whose cells are not a whole number of pixels; Black Level is 0 there.
+- **Saved projects.** An ASCII effect stores its node setup and keeps its look. Effects saved before Background existed show the dark ground (Background 0), and their Amount fades towards the colour of each cell instead of the original picture. A Blocks ramp, a one-character Custom Ramp and a Custom Ramp longer than 256 characters draw as described above in saved projects too. A stored setup keeps its smaller characters, which cover about half of a cell, and the way it read the character sheet, so saved Blocks or Bars can show thin seam lines on frames whose cells are not a whole number of pixels; Black Level is 0 there. A stored setup also keeps the earlier Cell Size in pixels of the output, so its preview at another quality and an export at another size show different grids; add the effect again for the 1080p grid. Presets fully apply only to effects added in this version: on a stored setup from before, the card has no Background, Black Level row, so a preset leaves those values out.
 - **More:** [Effect system](../Effect-System.md#glyph-cell-and-compute-effects) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

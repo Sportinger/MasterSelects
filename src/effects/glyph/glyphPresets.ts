@@ -3,10 +3,10 @@
 import type { EffectPreset } from '../types';
 
 export const ASCII_PRESETS: readonly EffectPreset[] = [
-  // Green letters and signs on black, like the screen of an old computer; the brightest glow nearly white.
+  // Green letters and signs on black, like the screen of an old computer; the brightest glow pale.
   // Black Level drops the grey stage to black.
   { id: 'green-terminal', name: 'Green Terminal', params: {
-    cellSize: 12, rampPreset: 'detailed', customRamp: '', background: 0.1, blackLevel: 0.2, colorMode: 'duotone', colorA: '#001a08', colorB: '#d8ffe0', fontWeight: 700,
+    cellSize: 12, rampPreset: 'detailed', customRamp: '', background: 0.1, blackLevel: 0.2, colorMode: 'duotone', colorA: '#001a08', colorB: '#8cffaa', fontWeight: 800,
   } },
   // Shaded blocks that join into a coarse mosaic, like early computer art.
   { id: 'shade-blocks', name: 'Shade Blocks', params: { cellSize: 10, rampPreset: 'blocks', customRamp: '', background: 0.2, blackLevel: 0 } },
@@ -37,12 +37,12 @@ export const SYMBOL_MATRIX_PRESETS: readonly EffectPreset[] = [
   } },
   // Large circles, diamonds, triangles and squares in the picture's colours that keep turning into one another.
   { id: 'shape-shift', name: 'Shape Shift', params: { cellSize: 24, rampPreset: 'symbols', customRamp: ' ·○◇△□●◆■', roll: 0.35, twinkle: 0.25, background: 0.3, blackLevel: 0 } },
-  // Random digits that change quickly in every cell; the figure shows in their colours.
-  { id: 'number-storm', name: 'Number Storm', params: { cellSize: 12, rampPreset: 'numeric', customRamp: '', roll: 1, twinkle: 0.2, background: 0.35, blackLevel: 0, speed: 2 } },
+  // Random digits that change quickly on the figure, in its colours; Black Level thins out the dark stage.
+  { id: 'number-storm', name: 'Number Storm', params: { cellSize: 14, rampPreset: 'numeric', customRamp: '', roll: 1, twinkle: 0.2, background: 0.35, blackLevel: 0.2, speed: 2 } },
   // Glowing orange signs on a dark red ground that flare up and fade slowly, like sparks over a fire.
   { id: 'embers', name: 'Embers', params: {
-    cellSize: 16, rampPreset: 'symbols', customRamp: '', roll: 0.6, twinkle: 0.7, background: 0.15, blackLevel: 0.2, speed: 0.7,
-    colorMode: 'duotone', colorA: '#1a0500', colorB: '#ffb347', fontWeight: 800,
+    cellSize: 18, rampPreset: 'symbols', customRamp: '', roll: 0.6, twinkle: 0.6, background: 0.3, blackLevel: 0.2, speed: 0.7,
+    colorMode: 'duotone', colorA: '#1a0500', colorB: '#ffd27a', fontWeight: 900,
   } },
 ];
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { getAllEffects, getDefaultParams, getEffect } from '../../src/effects';
 import { GLYPH_NO_TRAVEL, GLYPH_SPEED_TRAVEL, glyphCellPixels, glyphCellWarnings } from '../../src/effects/glyph/glyphGrid';
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
+import { RETRO_LINE_SPACING, RETRO_SCROLL_PERIOD, RETRO_SCROLL_RATE } from '../../src/effects/glyph/retroMatrix';
 import { effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { effectParamDefinitions } from '../../src/services/operators/effectParamVisibility';
 import { effectStyleOptions } from '../../src/services/effects/effectStyles';
@@ -273,6 +274,20 @@ describe('glyph engine', () => {
     }
     // Speed 0 holds the text still.
     expect(at(cellUv(9, 9), 2.5, undefined, { speed: 0 }).glyph).toBe(at(cellUv(9, 9), 0, undefined, { speed: 0 }).glyph);
+    // The scroll wraps every RETRO_SCROLL_PERIOD rows and the text repeats with it, so hours into a show the grid
+    // stays small (f32 on the GPU): 4096 s on (12 288 rows) shows the same characters and scanlines, also across a wrap.
+    const period = RETRO_SCROLL_PERIOD / RETRO_SCROLL_RATE;
+    expect(period).toBe(4096);
+    for (const [uv, time] of [[cellUv(3, 10, .3), .4], [cellUv(30, 60, .8), 1.37], [[.2, .13], period - .1], [[.7, .9], 2 * period - .05]] as Array<[[number, number], number]>) {
+      const later = at(uv, time + period, undefined, { scanlines: .8 }), now = at(uv, time, undefined, { scanlines: .8 });
+      expect(later.glyph, `t ${time}`).toBe(now.glyph);
+      expect(later.red, `t ${time}`).toBeCloseTo(now.red, 6);
+    }
+    // At 10 h (36 000 s) the scanline factor still equals 1 − Scanlines × sin²(π × scrolled row pixel / pitch).
+    const flat = { scanlines: .8, roll: 0, background: 0 };
+    const v = .4507, unlit = at([.4, v], 36000, undefined, { ...flat, scanlines: 0 }).red, scanned = at([.4, v], 36000, undefined, flat).red;
+    const rowPixel = (v * 1080 / 14 + 36000 * RETRO_SCROLL_RATE) * 14;
+    expect(scanned / unlit).toBeCloseTo(1 - .8 * Math.sin(Math.PI * rowPixel / RETRO_LINE_SPACING) ** 2, 4);
     // Scanlines count pixels of a 1080p frame: a 4K frame shows the same lines at the same place as 1080p ...
     for (const v of [.3011, .4507, .62]) expect(at([.4, v], .4, [3840, 2160], { scanlines: .8 }).red).toBeCloseTo(at([.4, v], .4, [1920, 1080], { scanlines: .8 }).red, 9);
     // ... and lines closer than 3 output pixels fade into an even dimming of 1 − Scanlines / 2 instead of a moiré.
@@ -332,8 +347,8 @@ describe('glyph engine', () => {
   });
 
   it('Black Level drops dark tones to the first character and spreads the rest over the ramp; 0 keeps the tone', () => {
-    const glyphAt = (grey: number, blackLevel?: number) => {
-      const params: Record<string, unknown> = { ...getDefaultParams('ascii'), ...(blackLevel === undefined ? {} : { blackLevel }) };
+    const glyphAt = (grey: number, blackLevel?: number, invert = false) => {
+      const params: Record<string, unknown> = { ...getDefaultParams('ascii'), invert, ...(blackLevel === undefined ? {} : { blackLevel }) };
       const coords: Array<[number, number]> = [];
       evaluateImageOperatorPlan(compile('ascii', params), [0, 0, 0, 0], { uv: [.31, .47], resolution: [1920, 1080], timelineTimeSeconds: 0,
         sampleImage: () => [grey, grey, grey, 1], sampleResource: (_id, at) => { coords.push(at); return [0, 0, 0, 1]; } });
@@ -344,6 +359,8 @@ describe('glyph engine', () => {
     expect([glyphAt(.3, 0), glyphAt(.55, 0)]).toEqual([1, 2]);
     // (0.3 − 0.3) / 0.7 = 0 → the space; (0.55 − 0.3) / 0.7 = 0.36 → '.'.
     expect([glyphAt(.3, .3), glyphAt(.55, .3), glyphAt(.98, .3)]).toEqual([0, 1, 3]);
+    // Black Level works on the tone before Invert Ramp: with it, the dark stage gets the last, densest character.
+    expect([glyphAt(.1, .3, true), glyphAt(.98, .3, true)]).toEqual([3, 0]);
     const definition = getEffect('ascii')!;
     expect(definition.params.blackLevel).toMatchObject({ default: 0, renderMin: 0, renderMax: .9, graphOnly: true });
     expect(paramRangeNotes(definition.params, { blackLevel: .95 }, effectOperatorGraph({ type: 'ascii', params: getDefaultParams('ascii') }))[0]?.message)
@@ -352,8 +369,8 @@ describe('glyph engine', () => {
 
   it('with Black Level above 0 a moving look holds cells at or below it still, so the dark stage drops out', () => {
     // Grey 0.1 under Black Level 0.3 is tone 0: the first character ('space'), at every moment, even at Roll 1.
-    const glyphsOf = (type: string, grey: number, blackLevel: number) => {
-      const plan = compile(type, { ...getDefaultParams(type), roll: 1, speed: 1, blackLevel });
+    const glyphsOf = (type: string, grey: number, blackLevel: number, invert = false) => {
+      const plan = compile(type, { ...getDefaultParams(type), roll: 1, speed: 1, blackLevel, invert });
       return new Set(Array.from({ length: 30 }, (_, frame) => {
         let glyph = -1;
         evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv: [.31, .47], resolution: [1920, 1080], timelineTimeSeconds: frame / 12,
@@ -363,6 +380,8 @@ describe('glyph engine', () => {
     };
     for (const type of ['glyph-matrix', 'symbol-matrix', 'retro-matrix', 'matrix']) {
       expect(glyphsOf(type, .1, .3), type).toEqual(new Set([0]));
+      // With Invert Ramp the held character is the last, densest one (the pages say so).
+      expect(glyphsOf(type, .1, .3, true), type).toEqual(new Set([3]));
       // Above the level the cell still rolls; at Black Level 0 (also saved effects) every cell rolls, as before.
       expect(glyphsOf(type, .7, .3).size, type).toBeGreaterThan(1);
       expect(glyphsOf(type, .1, 0).size, type).toBeGreaterThan(1);

@@ -20,7 +20,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/symbol-matrix-presets.mp4" poster="../assets/effects/clips/symbol-matrix-presets.webp" width="1002" height="1058" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Night Sky top left with her figure as a constellation of warm white stars on a night-blue ground of faint dots, Shape Shift top right with large circles, diamonds, triangles and squares in her colours, Number Storm bottom left with digits that change quickly, Embers bottom right with glowing orange signs on dark red"></video>
+<video src="../assets/effects/clips/symbol-matrix-presets.mp4" poster="../assets/effects/clips/symbol-matrix-presets.webp" width="1002" height="1058" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Night Sky top left with her figure as a constellation of warm white stars on a night-blue ground of faint dots, Shape Shift top right with large circles, diamonds, triangles and squares in her colours, Number Storm bottom left with digits that change quickly on her figure over an empty stage, Embers bottom right with glowing yellow-orange signs on her figure, on dark red"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
@@ -30,9 +30,9 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Shape Shift** – large circles, diamonds, triangles and squares in the picture's colours that keep turning into one another. Playful and graphic, and it reads from far away on a projection.
 
-**Number Storm** – digits and gaps that change quickly in every cell, drawn at random; the figure shows in their colours. Restless, like a counter running wild: data, chance, pressure.
+**Number Storm** – digits and gaps that change quickly, drawn at random; the figure shows in their colours, and Black Level 0.2 empties the dark stage, so the storm stays on her. Restless, like a counter running wild: data, chance, pressure.
 
-**Embers** – glowing orange signs on a dark red ground that flare up and fade slowly, like sparks over a fire; Black Level 0.2 keeps the dark stage free of sparks. Warm and dramatic.
+**Embers** – glowing yellow-orange signs on a dark red ground that flare up and fade slowly, like sparks over a fire; Black Level 0.2 keeps the dark stage free of sparks. Warm and dramatic.
 
 ## Controls
 
@@ -98,7 +98,7 @@ The Style menu at the top of the card switches to another look of the same engin
 <figcaption>Black Level from 0 to 0.5 and back.</figcaption>
 </figure>
 
-**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the first sign of the ramp, the space in most ramps, and stops swapping, even at Roll 1, so a grey stage drops out and only the lit figure sparkles; the rest of the picture spreads over the whole ramp. Try 0.15–0.25 on stage footage, above all with Duotone. 0 to 0.9, default 0.
+**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the first sign of the ramp, the space in most ramps (with Invert Ramp the last, densest one, a still carpet of it), and stops swapping, even at Roll 1, so a grey stage drops out and only the lit figure sparkles; the rest of the picture spreads over the whole ramp. Try 0.15–0.25 on stage footage, above all with Duotone. 0 to 0.9, default 0.
 
 <div class="docs-float-end"></div>
 
@@ -536,8 +536,8 @@ Symbol Matrix works in eight stages, one folder each in the Nodes tab: **Cell Gr
 
 - **Size.** Cell Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same grid. A cell is never smaller than 2 pixels of the frame; below 2 px Cell Size renders as 2, and the card says so.
 - **Time.** The swaps and the breathing follow the timeline time: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. With keyframes on Speed both move by the distance Speed has travelled, so they never jump.
-- **Swaps.** Each cell swaps 4 × Speed times a second, shifted by its own random share of a swap, to a random sign of its window: 1 + Roll × (ramp − 1) signs, rounded up, around its own one and kept inside the ramp. Its coverage breathes as 0.65 + 0.35 × sin(2 × clock + its own phase). A Roll outside 0 to 1 renders as 0 or 1, and the card and the tools say so.
+- **Swaps.** Each cell swaps 4 × Speed times a second, shifted by its own random share of a swap, to a random sign of its window: 1 + Roll × (ramp − 1) signs, rounded up, around its own one and kept inside the ramp. Its coverage breathes as (1 − Twinkle / 2) + Twinkle / 2 × sin(2 × clock + its own phase): 0.65 to 1 at the default Twinkle 0.35, and 0.3 to 1 for effects saved before Twinkle existed. A Roll outside 0 to 1 renders as 0 or 1, and the card and the tools say so.
 - **Characters.** The whole ramp is drawn in one font size, so its tallest character spans 88 % of the cell height. Blocks and Bars are exact shapes, read half a pixel inside each character, so they join without seams at any cell size.
 - **Transparency.** Each cell takes the transparency of its centre, so a cut-out figure keeps its outline in whole cells. Amount fades the transparency back to the original's, pixel by pixel, and mixes the colours weighted by their transparency, so the hidden colour of a transparent pixel never shows as a fringe around a cut-out figure.
-- **Saved projects.** A Symbol Matrix stores its node setup and keeps its look. Effects saved without a stored setup now swap each cell at its own moment; before, every cell swapped on the same frame and the random signs slid diagonally across the frame, a bug. They load with Roll 1, the whole ramp they had, and those saved before Background existed with Background 0. A stored setup keeps its smaller characters, which cover about half of a cell, and the way it read the character sheet, so saved Blocks or Bars can show thin seam lines on frames whose cells are not a whole number of pixels; Black Level is 0 there.
+- **Saved projects.** A Symbol Matrix stores its node setup and keeps its look. Effects saved without a stored setup now swap each cell at its own moment; before, every cell swapped on the same frame and the random signs slid diagonally across the frame, a bug. They load with Roll 1, the whole ramp they had, and those saved before Background existed with Background 0. A stored setup keeps its smaller characters, which cover about half of a cell, and the way it read the character sheet, so saved Blocks or Bars can show thin seam lines on frames whose cells are not a whole number of pixels; Black Level is 0 there. A stored setup also keeps the earlier Cell Size in pixels of the output, so its preview at another quality and an export at another size show different grids; add the effect again for the 1080p grid. Presets fully apply only to effects added in this version: on a stored setup from before, the card has no Background, Black Level, Roll or Twinkle row, so a preset leaves those values out.
 - **More:** [Effect system](../Effect-System.md#glyph-cell-and-compute-effects) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

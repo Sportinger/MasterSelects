@@ -376,7 +376,7 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
 **Glyph engine pass (2026-10-22).** All 19 looks come from `createGlyphEffect`
 (`src/effects/glyph/glyphEffectFactory.ts`) and `createDefaultGlyphGraph`
 (`src/services/operators/asciiEffectGraph.ts`); cell geometry and clock constants live in
-`src/effects/glyph/glyphGrid.ts`, and `shader.wgsl` is the WGSL twin. A look passes `id`, `name`,
+`src/effects/glyph/glyphGrid.ts`, and the graph is the reference: `shader.wgsl` is not compiled for these looks (graph-owned effects skip their shader) and is out of date, so do not copy its maths. A look passes `id`, `name`,
 `entryPoint`, and optionally `animated`, `feedback`, `defaultRamp`, `defaultCellSize`,
 `defaultBackground`, `defaultRoll`, `ignoresColors`, `presets` and `params` (controls of its own, placed at
 the end of their card section and flagged `lookOwn`, so the Style menu still matches the look with the
@@ -434,11 +434,15 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
 - **Retro Matrix scroll** (`src/effects/glyph/retroMatrix.ts`). Its cell grid moves up by
   `clock × 3` rows (`scroll-rows`, the **Scroll** folder), added to the grid position (`scrolled-uv`) and
   taken off again for the cell centre (`sample-unscrolled`), so characters stay whole and each reads the
-  picture where it is now. Its text is a fixed Random (Cell) per scrolled cell (`index-text-random`),
-  folded into the Roll window (default 0.3). It glows at Phosphor (`phosphor`, own colour control, amber
+  picture where it is now. The rows wrap every `RETRO_SCROLL_PERIOD` (12 288) rows (`scroll-wrapped`) and
+  its text is a fixed Random (Cell) per scrolled cell whose line number repeats with the same period
+  (`index-text-line`, `index-text-random`), so the text never jumps and the per-pixel grid stays small in
+  f32 (unwrapped, a 3 h timeline at Speed 5 sheared the characters); it is folded into the Roll window
+  (default 0.3). It glows at Phosphor (`phosphor`, own colour control, amber
   `#ff8514`) × (0.15 + 1.6 × tone); **Scanlines** (`scanlines`, 0–1, default 0.5, `legacyDefault` 0.36)
   dims sin²(π × rows / pitch) between lines 3 px of a 1080p frame apart (`retro-scan-*`, the
-  **Scanlines** folder), fading to an even 1 − Scanlines / 2 where the pitch drops below 3 output pixels.
+  **Scanlines** folder; the phase is fract(screen lines + fract(scroll lines)), so sin only sees 0–π and
+  a whole Cell Size keeps the lines continuous across the wrap; test `glyphEngine`), fading to an even 1 − Scanlines / 2 where the pitch drops below 3 output pixels.
   This replaces `floor(3 × clock − uv.y × ramp)` with per-pixel `sin(π × pixel row)` scanlines: band
   borders cut characters in half, nothing scrolled, and the 1-pixel lines differed between preview and
   export sizes. A fix for new instances and setups saved without a graph; stored setups keep the old
