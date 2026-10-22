@@ -127,6 +127,26 @@ describe('Wave, Twirl and Bulge & Pinch graphs', () => {
     }
   });
 
+  it('gives every Bulge preset a visible bump that matches the reference and never folds', () => {
+    const presets = getEffect('bulge')?.presets ?? [];
+    expect(presets.map(preset => preset.name)).toEqual(['Magnifying Glass', 'Soft Swell', 'Fishbowl', 'Pinch']);
+    for (const preset of presets) {
+      const params = { centerX: .5, centerY: .5, ...preset.params } as Record<string, number | string>;
+      // A point a third of the radius out moves visibly, as the reference says, and the mapping keeps its order.
+      let previous = -1;
+      for (let step = 1; step <= 60; step++) {
+        const uv: UV = [.5 + step / 60 * Number(params.radius) * .5, .5];
+        const { sampled, params: resolved } = run('bulge', params, uv);
+        const expected = edgeReference(radialReference('bulge', uv, resolved), resolved.edges);
+        expect(sampled[0][0]).toBeCloseTo(expected[0], 12);
+        expect(sampled[0][0]).toBeGreaterThan(previous);
+        previous = sampled[0][0];
+      }
+      const third: UV = [.5 + Number(params.radius) / 3 * .5, .5];
+      expect(Math.abs(run('bulge', params, third).sampled[0][0] - third[0])).toBeGreaterThan(.01);
+    }
+  });
+
   it('treats a zero or negative radius as no area instead of producing NaN', () => {
     for (const type of ['bulge', 'twirl'] as const) for (const radius of [0, -2, 1e-12]) {
       const uv: UV = [.3, .7], { sampled, output } = run(type, { amount: type === 'bulge' ? 3 : 8, radius }, uv);

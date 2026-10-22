@@ -57,7 +57,6 @@ const BEFORE_RECIPES = 'a custom pair from before recipes were kept: the page re
 export const RECIPE_PENDING = {
   ...Object.fromEntries([
     'box-blur.webp',
-    'bulge.webp',
     'chroma-key-matte.webp',
     'chroma-key.webp',
     'contrast.webp',
