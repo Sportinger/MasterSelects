@@ -132,6 +132,9 @@ describe('two-tone-pattern engine', () => {
     expect(notes('bricks', { scale: 1 }, 640, 360)).toEqual([]); // the floor of 5 px is 1.7 px there
     // Dither cells are whole pixels: 3 px of a 1080p frame are 1.5 pixels at 540p and render as 2.
     expect(notes('dither', { scale: 3 }, 960, 540)).toEqual(['Pixel Size 3 px is 1.5 pixels on this 960×540 frame; dither cells are whole pixels, so it renders 2.']);
+    // Half to even, as the render: 2.5 pixels render 2, 4.5 render 4.
+    expect(notes('dither', { scale: 3 }, 1600, 900).join(' ')).toMatch(/is 2\.5 pixels .* so it renders 2\./u);
+    expect(notes('dither', { scale: 9 }, 960, 540).join(' ')).toMatch(/is 4\.5 pixels .* so it renders 4\./u);
     expect(notes('dither', { scale: 3 }, 1280, 720)).toEqual([]);
     const cells = (resolution: [number, number]) => render(compile('dither', { scale: 3, amount: 1 }).plan, resolution, 0);
     expect(agreement(cells([960, 540]), render(compile('dither', { scale: 4, amount: 1 }).plan, [960, 540], 0), 0)).toBe(1); // 1.5 → 2, like 4 px

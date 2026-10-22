@@ -26,20 +26,20 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The dancer's face and raised arms four times in a grid, once per preset: Photogravure as a fine cream grain out of dark brown, Mezzotint as a coarser cream grain out of black, Blueprint as white grain on deep blue, and Red Poster as large cream specks on signal red](../assets/effects/presets/paper-print.webp)
+![The whole dancer four times in a grid, once per preset: Photogravure as a fine cream grain out of an even dark brown, Mezzotint as a coarser cream grain out of black with a few light specks on the stage, Blueprint as white grain on deep blue, and Red Poster as a cream figure in a medium grain on signal red](../assets/effects/presets/paper-print.webp)
 
-<figcaption>The four presets on the dancer, at full size.</figcaption>
+<figcaption>The four presets on the whole figure.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Photogravure** – a fine grain in brown-black on warm paper, like an old photogravure in a book. The quietest preset: from a few metres away it reads as a soft sepia photo.
+**Photogravure** – a fine grain in brown-black on warm, smooth paper, like an old photogravure in a book. The quietest preset: the stage stays an even brown and from a few metres away the figure reads as a soft sepia photo.
 
 **Mezzotint** – warm black on cream with a clearly visible grain, like the velvety grain of a mezzotint. Made for portraits and memories.
 
 **Blueprint** – white ink on deep blue paper. The light parts of the picture are printed, so a dark stage turns into clean blue around the lit figure.
 
-**Red Poster** – signal red on off-white with a big grain, like a screen-printed poster. Loud and graphic; it needs a clear, well-lit figure.
+**Red Poster** – signal red on off-white with a medium grain on smooth paper, like a screen-printed poster. Loud and graphic: the figure stands out of the red as a clean, grainy silhouette.
 
 ## Controls
 
@@ -47,20 +47,20 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Paper Print card: Preset menu showing Photogravure, Grain Size and Texture under Pattern, Ink, Paper and Amount under Color, beside a strip of the preview printed in a fine brown grain on warm paper](../assets/effects/editor/paper-print-inspector.webp)
+![Properties, Effects with a Paper Print card: Preset menu showing Photogravure, Grain Size and Texture under Pattern, Ink, Paper and Amount under Color, beside the preview of the dancer printed in a fine cream grain out of an even dark brown](../assets/effects/editor/paper-print-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 675" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 493" aria-hidden="true" focusable="false">
 <defs><marker id="paper-print-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#paper-print-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M570 387 L654 387" marker-end="url(#paper-print-inspector-arrow)" />
-<circle class="docs-shot-number" cx="570" cy="387" r="18" /><text x="570" y="387" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M594 425 L678 425" marker-end="url(#paper-print-inspector-arrow)" />
-<circle class="docs-shot-number" cx="594" cy="425" r="18" /><text x="594" y="425" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M628 540 L712 540" marker-end="url(#paper-print-inspector-arrow)" />
-<circle class="docs-shot-number" cx="628" cy="540" r="18" /><text x="628" y="540" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M605 578 L689 578" marker-end="url(#paper-print-inspector-arrow)" />
-<circle class="docs-shot-number" cx="605" cy="578" r="18" /><text x="605" y="578" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M663 206 L747 206" marker-end="url(#paper-print-inspector-arrow)" />
+<circle class="docs-shot-number" cx="663" cy="206" r="18" /><text x="663" y="206" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M667 283 L751 283" marker-end="url(#paper-print-inspector-arrow)" />
+<circle class="docs-shot-number" cx="667" cy="283" r="18" /><text x="667" y="283" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M684 310 L768 310" marker-end="url(#paper-print-inspector-arrow)" />
+<circle class="docs-shot-number" cx="684" cy="310" r="18" /><text x="684" y="310" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M709 395 L793 395" marker-end="url(#paper-print-inspector-arrow)" />
+<circle class="docs-shot-number" cx="709" cy="395" r="18" /><text x="709" y="395" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M692 422 L776 422" marker-end="url(#paper-print-inspector-arrow)" />
+<circle class="docs-shot-number" cx="692" cy="422" r="18" /><text x="692" y="422" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -71,7 +71,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Grain Size** – how large one grain is. 1–2 px gives a fine grain that reads as a photo from a few metres away, 4–6 px a clearly visible grain like a mezzotint, 10 px and more coarse specks for a poster; the coarser the grain, the less detail survives. It counts pixels of a 1080p picture, so a 4K export shows the same grain, only sharper. A grain is never smaller than one pixel of the frame, and the card says when it renders larger. 1 to 80 px, default 2 px.
 
-**Texture** – how much of the paper's surface shows. Real paper has fine bumps, and the ink does not reach their valleys: tiny specks of paper appear in solid ink, and the paper itself looks a little uneven. At 0 the ink lies flat and the print keeps the picture's brightness exactly; the default 0.5 leaves about one point in 25 of solid ink as paper; at 1 one in 12, and the print gets slightly lighter. White parts never get ink. Below 0 it renders 0, and the card says so. 0 to 1, default 0.5.
+**Texture** – how much of the paper's surface shows. Real paper has fine bumps, and the ink does not reach their valleys: tiny specks of paper appear in the mid tones, and the paper itself looks a little uneven. The specks fade out the more ink a part needs, so a black stage stays solid ink and white parts never get ink. At 0 the ink lies flat and the print keeps the picture's brightness exactly; 0.15 is a quiet paper; the default 0.5 a clearly felt one; at 1 the mid tones get slightly lighter. Below 0 it renders 0, and the card says so. 0 to 1, default 0.5.
 
 ### Color
 
@@ -89,22 +89,22 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![The Paper Print graph in seven stages: Parameters feed Grain (Grain Size), which passes the grain noise to Even Out and the pixel and frame scale to Paper Surface (Texture); Ink Share turns the picture, the ink and the paper into the Ink Share; Ink Edge works out the Edge Width; Print takes the threshold, the valley lift, the share and the colours and gives the Print; Mix (Amount) lays it over the picture with its alpha](../assets/effects/graphs/paper-print.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 999" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1050" aria-hidden="true" focusable="false">
 <defs><marker id="paper-print-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M314 354 L314 270" marker-end="url(#paper-print-arrow)" />
 <circle class="docs-shot-number" cx="314" cy="354" r="18" /><text x="314" y="354" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M509 568 L509 484" marker-end="url(#paper-print-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="568" r="18" /><text x="509" y="568" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M314 869 L314 785" marker-end="url(#paper-print-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="869" r="18" /><text x="314" y="869" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M509 594 L509 510" marker-end="url(#paper-print-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="594" r="18" /><text x="509" y="594" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M314 927 L314 843" marker-end="url(#paper-print-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="927" r="18" /><text x="314" y="927" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M509 51 L509 135" marker-end="url(#paper-print-arrow)" />
 <circle class="docs-shot-number" cx="509" cy="51" r="18" /><text x="509" y="51" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M509 976 L509 892" marker-end="url(#paper-print-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="976" r="18" /><text x="509" y="976" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M703 268 L703 352" marker-end="url(#paper-print-arrow)" />
-<circle class="docs-shot-number" cx="703" cy="268" r="18" /><text x="703" y="268" class="docs-shot-number-text">6</text>
-<path class="docs-shot-arrow" d="M897 840 L897 756" marker-end="url(#paper-print-arrow)" />
-<circle class="docs-shot-number" cx="897" cy="840" r="18" /><text x="897" y="840" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M509 1028 L509 944" marker-end="url(#paper-print-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="1028" r="18" /><text x="509" y="1028" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M703 294 L703 378" marker-end="url(#paper-print-arrow)" />
+<circle class="docs-shot-number" cx="703" cy="294" r="18" /><text x="703" y="294" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M897 866 L897 782" marker-end="url(#paper-print-arrow)" />
+<circle class="docs-shot-number" cx="897" cy="866" r="18" /><text x="897" y="866" class="docs-shot-number-text">7</text>
 </svg>
 </div>
 
@@ -217,29 +217,33 @@ Paper Print works in seven stages, one folder each in the Nodes tab: **Grain** l
 
 <div class="docs-shot-stage">
 
-![Inside the Paper Surface folder: Texture Size 3 times the Frame Scale gives the bump size; the Pixel divided by it plus an Offset goes into Fractal Noise with three octaves, the paper's height; Subtract Half centres it; Zero minus it through Maximum gives the valley depth, times Salt Gain 2 and the clamped Texture gives the Valley Lift; the height times Fibre Gain 0.4 and Texture, plus One, gives the Paper Shade](../assets/effects/graphs/paper-print-surface.webp)
+![Inside the Paper Surface folder: Texture Size 3 times the Frame Scale gives the bump size; the Pixel divided by it plus an Offset goes into Fractal Noise with three octaves, the paper's height; Subtract Half centres it; Zero minus it through Maximum gives the valley depth, times Salt Gain 2 and the clamped Texture gives the Valley Lift; the Valley Lift times One minus the Ink Share fades it out in deep ink; the height times Fibre Gain 0.4 and Texture, plus One, gives the Paper Shade](../assets/effects/graphs/paper-print-surface.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 649" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 638" aria-hidden="true" focusable="false">
 <defs><marker id="paper-print-surface-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M460 87 L460 171" marker-end="url(#paper-print-surface-arrow)" />
-<circle class="docs-shot-number" cx="460" cy="87" r="18" /><text x="460" y="87" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M752 356 L752 272" marker-end="url(#paper-print-surface-arrow)" />
-<circle class="docs-shot-number" cx="752" cy="356" r="18" /><text x="752" y="356" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M946 106 L946 190" marker-end="url(#paper-print-surface-arrow)" />
-<circle class="docs-shot-number" cx="946" cy="106" r="18" /><text x="946" y="106" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M976 396 L892 396" marker-end="url(#paper-print-surface-arrow)" />
-<circle class="docs-shot-number" cx="976" cy="396" r="18" /><text x="976" y="396" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M420 73 L420 157" marker-end="url(#paper-print-surface-arrow)" />
+<circle class="docs-shot-number" cx="420" cy="73" r="18" /><text x="420" y="73" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M774 73 L774 157" marker-end="url(#paper-print-surface-arrow)" />
+<circle class="docs-shot-number" cx="774" cy="73" r="18" /><text x="774" y="73" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M986 416 L902 416" marker-end="url(#paper-print-surface-arrow)" />
+<circle class="docs-shot-number" cx="986" cy="416" r="18" /><text x="986" y="416" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M951 334 L951 250" marker-end="url(#paper-print-surface-arrow)" />
+<circle class="docs-shot-number" cx="951" cy="334" r="18" /><text x="951" y="334" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M774 616 L774 532" marker-end="url(#paper-print-surface-arrow)" />
+<circle class="docs-shot-number" cx="774" cy="616" r="18" /><text x="774" y="616" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Paper Surface (Texture). 1 — Fractal Noise: the paper's height. 2 — Maximum: how deep a valley is. 3 — Multiply: lifts the threshold there. 4 — Add: the paper's shade.</figcaption>
+<figcaption>Inside Paper Surface (Texture). 1 — Fractal Noise: the paper's height. 2 — Multiply: the valley depth times Salt Gain. 3 — Multiply: the Valley Lift, by Texture. 4 — Multiply: fades the lift out in deep ink. 5 — Add: the paper's shade.</figcaption>
 </figure>
 
 **Fractal Noise** – the height of the paper: fine bumps 3 pixels of a 1080p frame across, in three layers. It is moved by an Offset, so it never repeats the grain.
 
-**Maximum** – how deep a point lies below the middle height: 0 on the bumps, larger in the valleys. The Maximum below it keeps Texture at 0 or more.
+**Multiply** – a Maximum first gives how deep a point lies below the middle height (0 on the bumps, larger in the valleys); this Multiply takes it times 2 (Salt Gain).
 
-**Multiply** – the valley depth times 2 (Salt Gain) times Texture: how much the grain's threshold is lifted there. Where it rises above the share, the ink misses: a speck of paper in solid ink. Nothing lowers the threshold, so white paper never gets ink.
+**Multiply** – that times Texture (kept at 0 or more by the Maximum beside it): the Valley Lift, how much the grain's threshold is lifted in the valleys. Where it rises above the share, the ink misses: a speck of paper in the ink. Nothing lowers the threshold, so white paper never gets ink.
+
+**Multiply** – the Valley Lift times one minus the Ink Share: the specks fade out where the picture needs much ink. Mid tones show the paper's bumps, a dark stage stays solid ink instead of filling with white specks.
 
 **Add** – 1 plus the height times 0.4 times Texture: the paper's shade, a little darker in the valleys and lighter on the bumps.
 
@@ -338,7 +342,7 @@ Paper Print works in seven stages, one folder each in the Nodes tab: **Grain** l
 ## Technical details
 
 - **Size.** Grain Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same grain. A grain is never smaller than one pixel of the frame; below 1 px Grain Size renders as 1. The card says when either happens. The paper's bumps are 3 pixels of a 1080p frame.
-- **Tone.** The share of ink is worked out in linear light. Over an area the print keeps the picture's brightness within 2 % at Texture 0; Texture lifts it by up to 8 % at 1. Pure white prints clean paper, pure black solid ink.
+- **Tone.** The share of ink is worked out in linear light. Over an area the print keeps the picture's brightness within 2 % at Texture 0; Texture lifts the mid tones a little (the most at 1), and the lift fades out towards full ink. Pure white prints clean paper and pure black solid ink at every Texture.
 - **Time.** Paper Print does not move: the grain stays in place on the frame, so moving footage slides under it like a picture under a screen. A paused picture needs no extra rendering.
 - **Transparency.** Every pixel is printed by itself and keeps its own alpha, so cut-out edges get no dark rim.
 - **Saved projects.** A Paper Print saved before Texture keeps its earlier look (a soft two-colour print under a blocky grain); its card hides Texture and says so. Values saved without Grain Size, Ink, Paper or Amount keep 18 px, `#111827`, `#f8fafc` and 0.75. A node setup you edited keeps its own recipe.

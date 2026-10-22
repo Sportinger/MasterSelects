@@ -24,9 +24,9 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The dancer's upper body five times, once per preset: Newsprint with fine black dots on greyish paper, Pop Art with large navy dots on yellow, Cyanotype in blue on pale paper, Big Dots with a few very large black circles on white, and Magazine with fine dots over her own colours](../assets/effects/presets/halftone.webp)
+![The whole dancer five times, once per preset: Newsprint as fine light dots on a near-black stage, Pop Art as large yellow dots on navy, Cyanotype as pale dots on Prussian blue, Big Dots as a figure of large white circles on black, and Magazine with fine dots over her own colours](../assets/effects/presets/halftone.webp)
 
-<figcaption>The five presets on the dancer.</figcaption>
+<figcaption>The five presets on the whole figure.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -47,24 +47,26 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Halftone card: Style menu, Preset menu showing Newsprint, then Dot Size and Angle under Pattern, Ink, Paper and Amount under Color, beside a strip of the preview printed in fine black dots](../assets/effects/editor/halftone-inspector.webp)
+![Properties, Effects with a Halftone card: Style menu, Preset menu showing Newsprint, then Dot Size and Angle under Pattern, Ink, Paper and Amount under Color, beside the preview of the dancer printed in fine dots of near-black ink on cream paper](../assets/effects/editor/halftone-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 712" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 520" aria-hidden="true" focusable="false">
 <defs><marker id="halftone-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 319 L649 319" marker-end="url(#halftone-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="319" r="18" /><text x="565" y="319" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M586 425 L670 425" marker-end="url(#halftone-inspector-arrow)" />
-<circle class="docs-shot-number" cx="586" cy="425" r="18" /><text x="586" y="425" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M607 462 L691 462" marker-end="url(#halftone-inspector-arrow)" />
-<circle class="docs-shot-number" cx="607" cy="462" r="18" /><text x="607" y="462" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M628 578 L712 578" marker-end="url(#halftone-inspector-arrow)" />
-<circle class="docs-shot-number" cx="628" cy="578" r="18" /><text x="628" y="578" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M592 653 L676 653" marker-end="url(#halftone-inspector-arrow)" />
-<circle class="docs-shot-number" cx="592" cy="653" r="18" /><text x="592" y="653" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M663 233 L747 233" marker-end="url(#halftone-inspector-arrow)" />
+<circle class="docs-shot-number" cx="663" cy="233" r="18" /><text x="663" y="233" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M678 310 L762 310" marker-end="url(#halftone-inspector-arrow)" />
+<circle class="docs-shot-number" cx="678" cy="310" r="18" /><text x="678" y="310" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M693 338 L777 338" marker-end="url(#halftone-inspector-arrow)" />
+<circle class="docs-shot-number" cx="693" cy="338" r="18" /><text x="693" y="338" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M709 422 L793 422" marker-end="url(#halftone-inspector-arrow)" />
+<circle class="docs-shot-number" cx="709" cy="422" r="18" /><text x="709" y="422" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M692 450 L776 450" marker-end="url(#halftone-inspector-arrow)" />
+<circle class="docs-shot-number" cx="692" cy="450" r="18" /><text x="692" y="450" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M682 477 L766 477" marker-end="url(#halftone-inspector-arrow)" />
+<circle class="docs-shot-number" cx="682" cy="477" r="18" /><text x="682" y="477" class="docs-shot-number-text">6</text>
 </svg>
 </div>
 
-<figcaption>Halftone with the Newsprint preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Angle: 45° turns the screen like a newspaper's. 4 — Ink. 5 — Amount.</figcaption>
+<figcaption>Halftone with the Newsprint preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Angle: 45° turns the screen like a newspaper's. 4 — Ink: the colour of the dots. 5 — Paper: the colour between them. 6 — Amount.</figcaption>
 </figure>
 
 **Style** – switches to another look of the same engine and keeps your values and keyframes, for example [Pixel Poster](./pixel-poster.md), [Cross Stitch](./cross-stitch.md) or [Crosshatch](./crosshatch.md).
@@ -89,25 +91,27 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![The Halftone graph in four stages: Parameters feed Screen (Dot Size, Angle), which passes the place in the cell, the dot size and the half edge on; Cell Tone reads the picture at four points of the cell and gives the Cell Light; Dot turns it into the Dot Mask; Ink & Paper (Amount) colours it and mixes it with the picture](../assets/effects/graphs/halftone.webp)
+![The Halftone graph in five stages: Parameters feed Screen (Dot Size, Angle), which passes the place in the cell, the dot size and the half edge on; Cell Filter averages the picture over boxes of half a cell; Cell Tone reads that at four points of the cell and gives the Cell Light; Dot turns it into the Dot Mask; Ink & Paper (Amount) colours it and mixes it with the picture](../assets/effects/graphs/halftone.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 745" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 664" aria-hidden="true" focusable="false">
 <defs><marker id="halftone-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M314 432 L314 348" marker-end="url(#halftone-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="432" r="18" /><text x="314" y="432" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M509 359 L509 443" marker-end="url(#halftone-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="359" r="18" /><text x="509" y="359" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M703 458 L703 374" marker-end="url(#halftone-arrow)" />
-<circle class="docs-shot-number" cx="703" cy="458" r="18" /><text x="703" y="458" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M897 626 L897 542" marker-end="url(#halftone-arrow)" />
-<circle class="docs-shot-number" cx="897" cy="626" r="18" /><text x="897" y="626" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M264 610 L264 526" marker-end="url(#halftone-arrow)" />
+<circle class="docs-shot-number" cx="264" cy="610" r="18" /><text x="264" y="610" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M427 22 L427 105" marker-end="url(#halftone-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="22" r="18" /><text x="427" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M589 642 L589 558" marker-end="url(#halftone-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="642" r="18" /><text x="589" y="642" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M752 22 L752 83" marker-end="url(#halftone-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="22" r="18" /><text x="752" y="22" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M914 464 L914 380" marker-end="url(#halftone-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="464" r="18" /><text x="914" y="464" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Halftone opened in the Nodes tab (input frame and output left out). 1 — Screen: the turned grid of cells. 2 — Cell Tone: how light each cell is. 3 — Dot: the round dot of that cell. 4 — Ink & Paper: the print, mixed with the picture.</figcaption>
+<figcaption>Halftone opened in the Nodes tab (input frame and output left out). 1 — Screen: the turned grid of cells. 2 — Cell Filter: the picture averaged over half a cell. 3 — Cell Tone: how light each cell is. 4 — Dot: the round dot of that cell. 5 — Ink & Paper: the print, mixed with the picture.</figcaption>
 </figure>
 
-Halftone works in four stages, one folder each in the Nodes tab: **Screen** turns the grid by Angle and cuts the frame into cells of Dot Size, **Cell Tone** measures how light each cell is, **Dot** draws the round dot that covers just that much of its cell, and **Ink & Paper** colours it and mixes it with the picture by Amount. Click a folder's header to open it; the sections below show what is inside. Halftone is one look of the pattern engine that the [Print & Halftone](../Effects-Print.md) looks share; its **Style** menu switches between them.
+Halftone works in five stages, one folder each in the Nodes tab: **Screen** turns the grid by Angle and cuts the frame into cells of Dot Size, **Cell Filter** averages the picture over boxes of half a cell, **Cell Tone** measures how light each cell is from four points of that average, **Dot** draws the round dot that covers just that much of its cell, and **Ink & Paper** colours it and mixes it with the picture by Amount. Click a folder's header to open it; the sections below show what is inside. Halftone is one look of the pattern engine that the [Print & Halftone](../Effects-Print.md) looks share; its **Style** menu switches between them.
 
 ### Screen
 
@@ -143,37 +147,81 @@ Halftone works in four stages, one folder each in the Nodes tab: **Screen** turn
 
 **Remix:** open the **Constants** folder and set **Half Pixel** from **0.5** to **4**: every dot edge now fades over eight pixels, and the print looks like a soft, out-of-focus screen.
 
+### Cell Filter
+
+<figure class="docs-shot docs-shot--graph">
+
+<div class="docs-shot-stage">
+
+![Inside the Cell Filter folder: Maximum gives the Box Width, half a cell in whole pixels, and Minimum the Reads per Row, at most 32; top: Clamped Image Sample reads the frame at one Read Position of a row, Split RGB + Alpha, sRGB to Linear and Multiply give its light weighted by alpha, Combine RGB + Alpha packs it; middle: Sequence Reduce adds up the reads of a row, each weighing 1 ÷ Reads, RGBA to Image and Cache Image keep the row average; a second Clamped Image Sample and Sequence Reduce average those down a column; bottom: Divide by the Average Alpha and Linear to sRGB give the average colour, Combine RGB + Alpha puts the alpha back and Cache Image keeps the Cell Filter](../assets/effects/graphs/halftone-cell-filter.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1468" aria-hidden="true" focusable="false">
+<defs><marker id="halftone-cell-filter-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M895 326 L895 410" marker-end="url(#halftone-cell-filter-arrow)" />
+<circle class="docs-shot-number" cx="895" cy="326" r="18" /><text x="895" y="326" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M276 147 L276 231" marker-end="url(#halftone-cell-filter-arrow)" />
+<circle class="docs-shot-number" cx="276" cy="147" r="18" /><text x="276" y="147" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M121 831 L121 915" marker-end="url(#halftone-cell-filter-arrow)" />
+<circle class="docs-shot-number" cx="121" cy="831" r="18" /><text x="121" y="831" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M430 1106 L430 1022" marker-end="url(#halftone-cell-filter-arrow)" />
+<circle class="docs-shot-number" cx="430" cy="1106" r="18" /><text x="430" y="1106" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M430 1358 L430 1274" marker-end="url(#halftone-cell-filter-arrow)" />
+<circle class="docs-shot-number" cx="430" cy="1358" r="18" /><text x="430" y="1358" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M740 1083 L740 1167" marker-end="url(#halftone-cell-filter-arrow)" />
+<circle class="docs-shot-number" cx="740" cy="1083" r="18" /><text x="740" y="1083" class="docs-shot-number-text">6</text>
+</svg>
+</div>
+
+<figcaption>Inside Cell Filter, with one read of a row. 1 — Minimum: how many reads a row takes. 2 — Clamped Image Sample: one read of the frame. 3 — Sequence Reduce: the average of a row. 4 — Cache Image: keeps the row averages. 5 — Linear to sRGB: the box's average colour. 6 — Cache Image: keeps the Cell Filter for Cell Tone.</figcaption>
+</figure>
+
+Four points can miss what lies between them, and on moving footage a dot would jump each time an edge crosses one. So Cell Tone does not read the picture itself but this copy of it, in which every pixel holds the average of a box half a cell wide around it. The four points of a cell then lie in the middle of four such boxes, which together cover the whole cell: the tone is the cell's own average light, and it changes smoothly as the picture moves.
+
+**Minimum** – Maximum first gives the Box Width: Dot Size in pixels times 0.5 (Cell Filter Share), rounded to whole pixels and never less than one. Minimum takes that, but at most 32 (Cell Filter Max Taps): how many reads a row takes. Wider boxes spread their 32 reads evenly.
+
+**Clamped Image Sample** – reads the frame at one point of the row around the pixel (Read Position), kept inside the frame. sRGB to Linear turns it into light and Multiply weights it with its alpha, so a transparent pixel adds nothing.
+
+**Sequence Reduce** – runs that read for every point of the row and adds them up, each weighing 1 ÷ Reads: the row's average.
+
+**Cache Image** – keeps the row averages as a picture, so the second Clamped Image Sample and Sequence Reduce can average them down a column: together the average of the whole box.
+
+**Linear to sRGB** – Divide by the average alpha turns the weighted light back into a colour, and Linear to sRGB stores it the way Cell Tone reads a picture. Combine RGB + Alpha puts the average alpha back on.
+
+**Cache Image** – keeps the finished Cell Filter, worked out once per pixel per frame, for the four reads of Cell Tone. At a Dot Size of one or two pixels the box is a single pixel and the filter is the picture itself.
+
+**Remix:** open the **Constants** folder and set **Cell Filter Share** from **0.5** to **0.1**: each point reads only a small spot again, thin bright details drop out of the cells and the dots flicker on moving footage. That is how the four points behaved without the filter.
+
 ### Cell Tone
 
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![Inside the Cell Tone folder, top: Position in Cells goes through Floor and Add Half to the cell's middle, Multiply turns it into pixels, Rotate UV turns it back by Minus Angle, Add and Divide by Resolution give the Cell Centre, and Subtract takes the Quarter Diagonal off it; bottom: Clamped Image Sample reads the picture there, Split RGB + Alpha, sRGB to Linear and Luminance give its light, and Multiply weights it with the Point Alpha; Divide splits the Light of All Points by their Alpha](../assets/effects/graphs/halftone-cell-tone.webp)
+![Inside the Cell Tone folder, top: Position in Cells goes through Floor and Add Half to the cell's middle, Multiply turns it into pixels, Rotate UV turns it back by Minus Angle, Add and Divide by Resolution give the Cell Centre, and Subtract takes the Quarter Diagonal off it; bottom: Clamped Image Sample reads the Cell Filter there, Split RGB + Alpha, sRGB to Linear and Luminance give its light, and Multiply weights it with the Point Alpha; Divide splits the Light of All Points by their Alpha](../assets/effects/graphs/halftone-cell-tone.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1347" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1356" aria-hidden="true" focusable="false">
 <defs><marker id="halftone-cell-tone-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M322 162 L322 246" marker-end="url(#halftone-cell-tone-arrow)" />
-<circle class="docs-shot-number" cx="322" cy="162" r="18" /><text x="322" y="162" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M880 563 L880 479" marker-end="url(#halftone-cell-tone-arrow)" />
-<circle class="docs-shot-number" cx="880" cy="563" r="18" /><text x="880" y="563" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M508 936 L508 1020" marker-end="url(#halftone-cell-tone-arrow)" />
-<circle class="docs-shot-number" cx="508" cy="936" r="18" /><text x="508" y="936" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M322 697 L322 613" marker-end="url(#halftone-cell-tone-arrow)" />
-<circle class="docs-shot-number" cx="322" cy="697" r="18" /><text x="322" y="697" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M317 23 L317 107" marker-end="url(#halftone-cell-tone-arrow)" />
+<circle class="docs-shot-number" cx="317" cy="23" r="18" /><text x="317" y="23" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M995 410 L943 410" marker-end="url(#halftone-cell-tone-arrow)" />
+<circle class="docs-shot-number" cx="995" cy="410" r="18" /><text x="995" y="410" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M500 949 L500 1033" marker-end="url(#halftone-cell-tone-arrow)" />
+<circle class="docs-shot-number" cx="500" cy="949" r="18" /><text x="500" y="949" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M995 1123 L943 1123" marker-end="url(#halftone-cell-tone-arrow)" />
+<circle class="docs-shot-number" cx="995" cy="1123" r="18" /><text x="995" y="1123" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Cell Tone, with one of its four reading points. 1 — Rotate UV: turns the cell's middle back into the picture. 2 — Subtract: one reading point. 3 — sRGB to Linear: light as it adds up. 4 — Divide: the light of the cell.</figcaption>
+<figcaption>Inside Cell Tone, with one of its four reading points. 1 — Floor: which cell the pixel is in. 2 — Subtract: one reading point. 3 — sRGB to Linear: light as it adds up. 4 — Multiply: the point's light, weighted by its alpha.</figcaption>
 </figure>
 
-**Rotate UV** – Floor and Add find the middle of the pixel's cell, Multiply turns it into pixels, and Rotate UV turns it back by minus Angle into the picture; Add and Divide by Resolution give the place to read.
+**Floor** – which cell the pixel is in. Add takes it to the middle of that cell, Multiply turns it into pixels, and Rotate UV turns it back by minus Angle into the picture; Add and Divide by Resolution give the place to read.
 
 **Subtract** – one of four reading points, a quarter cell from the middle along the cell's diagonals (Quarter Diagonal). The other three points, in the folder, are built the same way.
 
-**sRGB to Linear** – turns the colour read there into light as it adds up on a screen, and Luminance takes its brightness. Multiply weights it with the point's alpha, so a transparent point does not count.
+**sRGB to Linear** – turns the colour the Cell Filter holds there into light as it adds up on a screen, and Luminance takes its brightness.
 
-**Divide** – the light of all four points divided by their alpha: the cell's average light. The pixel's own light joins in at 5 %, so a cell whose points all lie outside a cut-out figure still has a tone. Every pixel of a cell reads the same value, which is why each cell prints one clean dot.
+**Multiply** – weights that light with the point's alpha, so a transparent point does not count. Divide then splits the light of all four points by their alpha: the cell's average light, because the four boxes of the Cell Filter cover the whole cell. The pixel's own light joins in at 5 %, so a cell whose points all lie outside a cut-out figure still has a tone. Every pixel of a cell reads the same value, which is why each cell prints one clean dot.
 
 ### Dot
 
@@ -185,8 +233,8 @@ Halftone works in four stages, one folder each in the Nodes tab: **Screen** turn
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 784" aria-hidden="true" focusable="false">
 <defs><marker id="halftone-dot-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M204 500 L204 416" marker-end="url(#halftone-dot-arrow)" />
-<circle class="docs-shot-number" cx="204" cy="500" r="18" /><text x="204" y="500" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M204 165 L204 249" marker-end="url(#halftone-dot-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="165" r="18" /><text x="204" y="165" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M691 165 L691 249" marker-end="url(#halftone-dot-arrow)" />
 <circle class="docs-shot-number" cx="691" cy="165" r="18" /><text x="691" y="165" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M691 686 L691 602" marker-end="url(#halftone-dot-arrow)" />
@@ -242,9 +290,9 @@ Halftone works in four stages, one folder each in the Nodes tab: **Screen** turn
 ## Technical details
 
 - **Size.** Dot Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same dots. A cell is never smaller than one pixel of the frame; on a frame that small the card says so.
-- **Tone.** Each cell's light is averaged in linear light over four points, and its dot covers exactly that share of the cell (to about 1 %). Seen from a distance, ink and paper mix back to the picture's brightness; black prints solid, white stays clean paper.
+- **Tone.** Each cell's light is the average of the whole cell in linear light (four reads of the Cell Filter, each the average of a quarter of the cell), and its dot covers exactly that share of the cell (to about 1 %). On moving footage a dot grows and shrinks smoothly as edges cross the cell. Seen from a distance, ink and paper mix back to the picture's brightness; black prints solid, white stays clean paper.
 - **Edges.** Dot edges are one output pixel soft at every Dot Size. A 4K export is sharper than the preview, not different.
 - **Transparency.** The print keeps each pixel's own alpha, and transparent reading points do not count towards a cell's tone, so a cut-out figure gets no dark rim.
 - **Time.** Halftone does not move by itself: a paused picture needs no extra rendering. On moving footage the grid stays in place and the dots grow and shrink with the picture.
-- **Saved projects.** A Halftone saved with an earlier node setup keeps it and its look: dots that follow the picture inside each cell, softer edges at large sizes, and dots stretched into ovals when Angle is not 0° on a wide frame. Add the effect again for the round dots described here.
+- **Saved projects.** A project stores each effect's node setup, so a Halftone saved before this recipe keeps its own look: dots that follow the picture inside each cell, softer edges at large sizes, sizes in pixels of the frame, and dots stretched into ovals when Angle is not 0° on a wide frame. A Halftone from a project saved without node setups (before September 2026) or in a custom Look saved without one gets that same earlier setup. Add the effect again for the round dots described here.
 - **More:** [Effect system](../Effect-System.md#two-tone-pattern-engine) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

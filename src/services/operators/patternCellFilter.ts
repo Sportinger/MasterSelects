@@ -37,7 +37,7 @@ export function prefilterCellTaps(graph: EffectOperatorGraph, cellPixels: string
   const binary = (id: string, operator: string, a: string, b: string, out = 'value') => { add(id, operator); edge(a, out, id, 'a'); edge(b, 'value', id, 'b'); return id; };
 
   // The graph's own coordinates and constants where it has them (fewer nodes under the 512-node budget).
-  const existing = (operator: string, id?: string) => graph.nodes.find(node => node.operator === operator && (!id || node.id === id))?.id;
+  const existing = (operator: string) => graph.nodes.find(node => node.operator === operator)?.id;
   const uv = existing('image.normalized-uv') ?? add('cell-filter-uv', 'image.normalized-uv');
   const resolution = existing('image.resolution') ?? add('cell-filter-resolution', 'image.resolution');
   const resolutionSplit = add('cell-filter-resolution-split', 'vector.split.vec2'); edge(resolution, 'value', resolutionSplit, 'value');
@@ -51,13 +51,12 @@ export function prefilterCellTaps(graph: EffectOperatorGraph, cellPixels: string
   const width = binary('cell-filter-width', 'math.max.scalar', rounded, one);
   const count = binary('cell-filter-taps', 'math.min.scalar', width, number('cell-filter-max-taps', CELL_FILTER_MAX_TAPS));
   const spacing = binary('cell-filter-spacing', 'math.divide-ieee.scalar', width, count);
+  // Each read weighs 1 / reads, so a pass's weighted sum is its average.
+  const tapWeight = binary('cell-filter-tap-weight', 'math.divide-ieee.scalar', one, count);
   const halfWidth = binary('cell-filter-half-width', 'math.multiply.scalar', width, half);
-  // The frame clamp the taps use (0.001…0.999).
-  let minUv = existing('convert.scalar-to-vec2', 'min-uv'), maxUv = existing('convert.scalar-to-vec2', 'max-uv');
-  if (!minUv || !maxUv) {
-    minUv = add('cell-filter-min-uv', 'convert.scalar-to-vec2'); edge(number('cell-filter-tiny', .001), 'value', minUv, 'value');
-    maxUv = add('cell-filter-max-uv', 'convert.scalar-to-vec2'); edge(number('cell-filter-almost-one', .999), 'value', maxUv, 'value');
-  }
+  // The frame clamp the taps use (0.001…0.999), its own so the Cell Filter folder reads nothing from a later folder.
+  const minUv = add('cell-filter-min-uv', 'convert.scalar-to-vec2'); edge(number('cell-filter-tiny', .001), 'value', minUv, 'value');
+  const maxUv = add('cell-filter-max-uv', 'convert.scalar-to-vec2'); edge(number('cell-filter-almost-one', .999), 'value', maxUv, 'value');
 
   /** One pass along `axis`: the average of `count` reads of `image` across `width` pixels, centred on the pixel. */
   const pass = (prefix: string, axis: 'x' | 'y', image: string, imagePort: string, premultiply: boolean) => {
@@ -82,10 +81,8 @@ export function prefilterCellTaps(graph: EffectOperatorGraph, cellPixels: string
       read = combined; readPort = 'image';
     }
     const reduce = add(id('reduce'), 'image.sequence-reduce');
-    edge(read, readPort, reduce, 'sample'); edge(one, 'value', reduce, 'weight'); edge(count, 'value', reduce, 'count');
-    const weight = add(id('weight-vec4'), 'convert.scalar-to-vec4'); edge(reduce, 'weightSum', weight, 'value');
-    const average = add(id('average'), 'math.divide-ieee.vec4'); edge(reduce, 'sum', average, 'a'); edge(weight, 'value', average, 'b');
-    const result = add(id('image'), 'convert.vec4-to-image'); edge(average, 'value', result, 'value');
+    edge(read, readPort, reduce, 'sample'); edge(tapWeight, 'value', reduce, 'weight'); edge(count, 'value', reduce, 'count');
+    const result = add(id('average'), 'convert.vec4-to-image'); edge(reduce, 'sum', result, 'value');
     return result;
   };
   const rows = pass('cell-filter-row', 'x', frame, 'image', true);

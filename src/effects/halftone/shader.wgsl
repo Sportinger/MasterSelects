@@ -290,7 +290,9 @@ fn risoGlowSourceAt(at: vec2f, slip: vec2f, size: f32, paper: vec3f) -> f32 {
   for (var index = 0; index < 4; index++) {
     let texel = clamp(corner + vec2f(f32(index & 1), f32(index >> 1)), vec2f(0.0), params.resolution - vec2f(1.0)) + vec2f(0.5);
     let warm = risoInkDot(texel - slip, 75.0, size, paper, false);
-    corners[index] = warm.y * (1.0 - warm.z);
+    // RISO_GLOW_PAPER (0.6) of the paper's light glows too: mix(0.6, 1, glow coverage) where the shadow ink leaves paper,
+    // on opaque pixels only.
+    corners[index] = mix(0.6, 1.0, warm.y) * (1.0 - warm.z) * source(texel / params.resolution).a;
   }
   return mix(mix(corners[0], corners[1], blend.x), mix(corners[2], corners[3], blend.x), blend.y);
 }
@@ -361,7 +363,7 @@ fn paperPrintFragment(input: VertexOutput) -> @location(0) vec4f {
   let share = clamp((luminance(paperLinear) - luminance(srgbToLinear(color.rgb))) / safeSpan, 0.0, 1.0);
   let texture = max(params.variant, 0.0);
   let surface = imageGraphFractalNoise(pixel / (3.0 * frameScale()) + vec2f(37.17, 11.83), 3.0, 0.5) - 0.5;
-  let lifted = threshold + max(0.0 - surface, 0.0) * 2.0 * texture;
+  let lifted = threshold + max(0.0 - surface, 0.0) * 2.0 * texture * (1.0 - share);
   let width = max(min(1.8 / grain, min(share, 1.0 - share) * 2.0), 1e-6);
   let coverage = clamp((share - lifted) / width + 0.5, 0.0, 1.0);
   let printed = mix(paperLinear, inkLinear, coverage) * (1.0 + surface * 0.4 * texture);

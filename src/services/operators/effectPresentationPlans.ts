@@ -105,14 +105,14 @@ export function legacyEffectPresentationPlans(type: string): Array<{ create: () 
 
 /** Riso's folders (createRisoPrintGraph), shared by Riso Glow's print. */
 const RISO_PLAN: EffectPresentationPlan = {
-  labels: { inks: 'Paper & Inks', screen: 'Screens (Dot Size, Registration)', cell: 'Cell Colour', separation: 'Separation',
+  labels: { inks: 'Paper & Inks', screen: 'Screens (Dot Size, Registration)', filter: 'Cell Filter', cell: 'Cell Colour', separation: 'Separation',
     tone: 'Tone', dot: 'Dots', finish: 'Print & Mix (Amount)' },
-  portLabels: { 'registration-frame-pixels': 'Registration (px)', slip: 'Slip (px)', 'dark-layer': 'Dark Drum (px)', 'warm-layer': 'Warm Drum (px)',
+  portLabels: { 'scale-clamped': 'Registration', 'scale-clamped-frame-pixels': 'Registration (px)', 'dotSize-clamped': 'Dot Size', slip: 'Slip (px)', 'dark-layer': 'Dark Drum (px)', 'warm-layer': 'Warm Drum (px)',
     'frame-center': 'Frame Centre (px)', 'paper-linear': 'Paper Light', 'paper-luma': 'Paper Brightness', 'dark-ink-linear': 'Dark Ink Light',
     'warm-ink-linear': 'Warm Ink Light', 'dark-ink-absorbs': 'Dark Ink Takes', 'warm-ink-absorbs': 'Warm Ink Takes',
     'dark-ink-absorbed': 'Dark Ink Takes (brightness)', 'warm-ink-absorbed': 'Warm Ink Takes (brightness)', 'both-absorbed': 'Both Inks Take (brightness)',
     'fit-dark-dark': 'Dark · Dark', 'fit-warm-warm': 'Warm · Warm', 'fit-dark-warm': 'Dark · Warm', 'fit-determinant': 'Determinant',
-    'safe-dot-size-pixels': 'Dot Size (px)', 'edge-width': 'Half Edge (cells)', 'tap-reach': 'Quarter Cell (px)', 'half-vec2': 'Half (0.5, 0.5)',
+    'dotSize-clamped-pixels': 'Dot Size (px)', 'edge-width': 'Half Edge (cells)', 'tap-reach': 'Quarter Cell (px)', 'half-vec2': 'Half (0.5, 0.5)',
     'dark-cells': 'Dark Position in Cells', 'warm-cells': 'Warm Position in Cells', 'dark-place': 'Dark Place in Cell', 'warm-place': 'Warm Place in Cell',
     'dark-cell-center': 'Dark Cell Centre (px)', 'warm-cell-center': 'Warm Cell Centre (px)', 'dark-cell-colour': 'Dark Cell Colour', 'warm-cell-colour': 'Warm Cell Colour',
     'dark-cell-absorbs': 'Dark Cell Takes', 'warm-cell-absorbs': 'Warm Cell Takes', 'dark-towards-dark': 'Cell · Dark Ink', 'dark-towards-warm': 'Cell · Warm Ink',
@@ -123,9 +123,10 @@ const RISO_PLAN: EffectPresentationPlan = {
     'warm-other-coverage': 'Dark Coverage (Warm Cell)', 'dark-coverage': 'Dark Coverage', 'warm-coverage': 'Warm Coverage',
     'dark-mark': 'Dark Dots', 'warm-mark': 'Warm Dots', printed: 'Print', 'sample-split:rgb': 'Pixel RGB', 'sample-split:alpha': 'Pixel Alpha',
     'min-uv': 'Lowest UV', 'max-uv': 'Highest UV', 'one-rgb': 'One (RGB)', 'zero-rgb': 'Zero (RGB)', 'dark-radians': 'Dark Angle (rad)', 'warm-radians': 'Warm Angle (rad)',
-    'dark-ink-absorbed-rgb': 'Dark Ink Takes from Paper', 'warm-ink-absorbed-rgb': 'Warm Ink Takes from Paper' },
+    'dark-ink-absorbed-rgb': 'Dark Ink Takes from Paper', 'warm-ink-absorbed-rgb': 'Warm Ink Takes from Paper', 'cell-filter': 'Cell Filter (cached)', 'cell-filter-rows': 'Row Average (cached)', 'cell-filter-width': 'Box Width (px)', 'cell-filter-taps': 'Reads per Row', 'cell-filter-srgb': 'Average Colour' },
   portLabelsApply: graph => graph.nodes.some(node => node.id === 'dark-share'),
-  stage: ({ id }) => /^(paper|paper-vector|paper-linear|paper-luma|paper-dark-absorbs|one-rgb|zero-rgb|color-[ab]-rgb)$|^both-absorbed|^(dark|warm)-ink-/.test(id) ? 'inks'
+  stage: ({ id }) => /^cell-filter/.test(id) ? 'filter'
+    : /^(paper|paper-vector|paper-linear|paper-luma|paper-dark-absorbs|one-rgb|zero-rgb|color-[ab]-rgb)$|^both-absorbed|^(dark|warm)-ink-/.test(id) ? 'inks'
       : /^fit-|^(dark|warm)-(paper-ratio|cell-absorbs|towards-|free|first$|other-share|share)/.test(id) ? 'separation'
         : /^(dark|warm)-(cell-luma$|tone-|other-coverage|other-takes$|other-overlap$|coverage$|coverage-(raw|left|reach)$)/.test(id) ? 'tone'
           : /^(dark|warm)-(dot-|paper-left$|paper-root$|paper-gap$|dots-touch$|radius|coverage-(twice|signed)$|edge|distance$|mark$)/.test(id) ? 'dot'
@@ -248,12 +249,13 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   };
   // Halftone (createDefaultHalftoneGraph): the turned dot screen, the light of each cell, the round dot, ink and paper.
   if (type === 'halftone') return {
-    labels: { screen: 'Screen (Dot Size, Angle)', tone: 'Cell Tone', dot: 'Dot', finish: 'Ink & Paper (Amount)' },
+    labels: { screen: 'Screen (Dot Size, Angle)', filter: 'Cell Filter', tone: 'Cell Tone', dot: 'Dot', finish: 'Ink & Paper (Amount)' },
     portLabels: { 'screen-pixel': 'Screen Position (px)', cell: 'Place in Cell', 'edge-width': 'Half Edge (cells)', 'cell-center-uv': 'Cell Centre',
       'tap-diagonal': 'Quarter Diagonal', 'tap-anti-diagonal': 'Quarter Anti-diagonal', tone: 'Cell Light', darkness: 'Ink Share', radius: 'Radius',
       'dot-radius': 'Dot Radius', mark: 'Dot Mask', 'ink-color': 'Print', 'safe-scale-pixels': 'Dot Size (px)', 'angle-radians': 'Angle (rad)',
-      'half-vec2': 'Half (0.5, 0.5)', 'frame-center': 'Frame Centre (px)', 'cell-divided': 'Position in Cells', 'sample-split:rgb': 'Pixel RGB', 'sample-split:alpha': 'Pixel Alpha' },
-    stage: ({ id }) => /^(cell-index|cell-center|back-radians|tap-|own-|cell-alpha$|tone$|sample$|sample-split$|clamped-uv$|min-uv$|max-uv$|shared-)/.test(id) ? 'tone'
+      'half-vec2': 'Half (0.5, 0.5)', 'frame-center': 'Frame Centre (px)', 'cell-divided': 'Position in Cells', 'sample-split:rgb': 'Pixel RGB', 'sample-split:alpha': 'Pixel Alpha',
+      'cell-filter': 'Cell Filter (cached)', 'cell-filter-rows': 'Row Average (cached)', 'cell-filter-width': 'Box Width (px)', 'cell-filter-taps': 'Reads per Row', 'cell-filter-srgb': 'Average Colour' },
+    stage: ({ id }) => /^cell-filter/.test(id) ? 'filter' : /^(cell-index|cell-center|back-radians|tap-|own-|cell-alpha$|tone$|sample$|sample-split$|clamped-uv$|min-uv$|max-uv$|shared-)/.test(id) ? 'tone'
       : /^(darkness|inverse-tone|dot-|paper-|dots-touch$|radius|edge-low$|edge-high$|distance$|edge$|mark$)/.test(id) ? 'dot'
         : /^(color-a-rgb|color-b-rgb|ink-color|mixed-color|combine)$/.test(id) ? 'finish' : 'screen',
   };
@@ -267,12 +269,12 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     labels: { ...RISO_PLAN.labels, print: 'Print & Glow Share', spill: 'Glow Spill', pulse: 'Pulse (Glow, Speed)', finish: 'Glow & Mix (Amount)' },
     // Its inks are the Shadow Ink and the Glow Ink (Riso's Dark and Warm Ink).
     portLabels: { ...Object.fromEntries(Object.entries(RISO_PLAN.portLabels ?? {}).map(([id, label]) => [id, label.replace(/\bDark\b/gu, 'Shadow').replace(/\bWarm\b/gu, 'Glow')])),
-      pixel: 'Pixel (px)', 'glow-visible': 'Glow Share', 'glow-cache': 'Print + Glow Share (cached)', 'glow-cached-split:rgb': 'Print',
+      pixel: 'Pixel (px)', 'glow-visible': 'Glow Share', 'glow-share': 'Glowing Part', 'glow-cache': 'Print + Glow Share (cached)', 'glow-cached-split:rgb': 'Print',
       'glow-tap': 'Tap (taps)', 'glow-tap-weight': 'Tap Weight', 'glow-step': 'Tap Step (px)', 'glow-tap-pixels': 'Tap Position (px)',
       'glow-field': 'Gathered Share', 'glow-light': 'Glow Light', pulse: 'Pulse', 'glow-strength': 'Strength', 'glow-keep': 'Dark Kept',
       'glowing-linear': 'Glowing Print', ...clampLabels({ glow: 'Glow' }) },
     portLabelsApply: graph => graph.nodes.some(node => node.id === 'glow-cache'),
-    stage: node => /^(dark-filter|warm-filter|paper-dark|printed-linear|glow-visible|glow-uncovered|glow-visible-alpha|glow-print|glow-cache)$/.test(node.id) ? 'print'
+    stage: node => /^(dark-filter|warm-filter|paper-dark|printed-linear|glow-visible|glow-uncovered|glow-visible-alpha|glow-print|glow-cache|glow-share|glow-paper-share|glow-own-alpha|glow-open|sample|sample-split|clamped-uv)$/.test(node.id) ? 'print'
       : /^(glow-window|glow-centre-tap|glow-index|glow-kernel|glow-tap|glow-step|glow-last-centre|glow-gather|glow-sums|glow-field|glow-light)/.test(node.id) ? 'spill'
         : /^(time|speed|pulse|glow|glow-clamped|glow-strength|glow-pulse-gain|glow-gain)$|^pulse-/.test(node.id) ? 'pulse'
           : /^(glow-cached|glow-fade|glow-negative|glow-keep|glow-print-dark|glow-dark-kept|glowing-linear)/.test(node.id) ? 'finish'
@@ -280,15 +282,16 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   };
   // Dithering (createDefaultDitheringGraph): the big pixels, each cell's colour, its two nearest steps, the Bayer step, the mix.
   if (type === 'dither') return {
-    labels: { grid: 'Pixel Grid (Pixel Size)', cell: 'Cell Colour', levels: 'Levels', dither: 'Dither', finish: 'Mix (Amount)' },
+    labels: { grid: 'Pixel Grid (Pixel Size)', filter: 'Cell Filter', cell: 'Cell Colour', levels: 'Levels', dither: 'Dither', finish: 'Mix (Amount)' },
     portLabels: { cells: 'Cell Position', 'cell-center-pixels': 'Cell Centre (px)', 'tap-reach': 'Reach (px)', 'safe-scale-pixels': 'Pixel Size (px)',
       'tap-diagonal': 'Diagonal', 'tap-anti-diagonal': 'Anti-diagonal', 'cell-light': 'Cell Light', 'sample-split:rgb': 'Pixel RGB',
       'sample-split:alpha': 'Pixel Alpha', 'levels-clamped': 'Levels', steps: 'Steps', 'level-lower': 'Lower Step', 'step-lower': 'Lower Step (sRGB)',
       'step-upper': 'Upper Step (sRGB)', 'step-lower-linear': 'Lower Light', 'step-upper-linear': 'Upper Light', 'step-span': 'Step Span',
       share: 'Upper Share', threshold: 'Bayer Threshold', 'step-up': 'Step Up', 'level-index': 'Step', dithered: 'Dithered RGB',
-      'tap-4-alpha-sum': 'Alpha of All Points', 'tap-4-light-sum': 'Light of All Points', 'cell-average': 'Average Light', 'no-reads': 'All Transparent' },
+      'tap-4-alpha-sum': 'Alpha of All Points', 'tap-4-light-sum': 'Light of All Points', 'cell-average': 'Average Light', 'no-reads': 'All Transparent',
+      'cell-filter': 'Cell Filter (cached)', 'cell-filter-rows': 'Row Average (cached)', 'cell-filter-width': 'Box Width (px)', 'cell-filter-taps': 'Reads per Row', 'cell-filter-srgb': 'Average Colour' },
     portLabelsApply: graph => graph.nodes.some(node => node.id === 'share'),
-    stage: ({ id }) => /^(sample|sample-split|clamped-uv|min-uv|max-uv|cell-size-less-one|cell-average|cell-alpha|no-reads|own-linear|cell-picked|cell-light)$|^tap-/.test(id) ? 'cell'
+    stage: ({ id }) => /^cell-filter/.test(id) ? 'filter' : /^(sample|sample-split|clamped-uv|min-uv|max-uv|cell-size-less-one|cell-average|cell-alpha|no-reads|own-linear|cell-picked|cell-light)$|^tap-/.test(id) ? 'cell'
       : /^(levels-clamped|steps|cell-srgb|level-position|level-lower|level-upper|one-rgb|span-floor|above-lower|share)$|^step-(lower|upper|span)/.test(id) ? 'levels'
         : /^(threshold|threshold-rgb|share-raised|step-up|level-index|dithered-raw|dithered)$/.test(id) ? 'dither'
           : /^(mixed-color|combine)$/.test(id) ? 'finish' : 'grid',

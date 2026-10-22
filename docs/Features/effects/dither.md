@@ -23,22 +23,21 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The dancer's face and raised arm five times, once per preset: Eight Colours in fine red, yellow and white dots on black, Web GIF almost like the photo with a fine grain, Game Screen in chunky pixels of a few colours, Big Pixels as a coarse mosaic, and Soft Grain as the photo with a fine pattern over it](../assets/effects/presets/dither.webp)
+![The whole dancer four times, once per preset: Eight Colours as a light figure in fine coloured dots on black, Poster in hard steps of few colours with a coarse checker on the stage, Game Screen in chunky pixels of a few colours, and Big Pixels as a coarse mosaic in which the figure still reads](../assets/effects/presets/dither.webp)
 
-<figcaption>The five presets on the dancer.</figcaption>
+<figcaption>The four presets on the whole figure.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
 **Eight Colours** – fine two-pixel dots in just black, white and the six pure colours, like an early colour printer. Loud and graphic; a light figure on a dark stage glows out of the black.
 
-**Web GIF** – one-pixel grain with 216 colours, like a picture saved for the early web. The picture stays, and soft gradients break into faint bands up close.
+**Poster** – three steps per channel (27 colours) on 4 px pixels: a flat, posterised print with hard colour steps. The dark stage turns into a coarse coloured checker, the figure into a few flat tones.
 
 **Game Screen** – chunky pixels in 64 colours: a game console screen. The figure stays easy to read, its details turn into blocks.
 
 **Big Pixels** – very large pixels in 125 colours: the figure becomes a mosaic that reads from the back row. Made for large projection surfaces.
 
-**Soft Grain** – a fine pattern of many colours laid over the picture at 0.6. The quietest preset: a texture you feel more than see.
 
 ## Controls
 
@@ -70,7 +69,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Color
 
-**Levels** – how many steps each colour channel has, and so how many colours the picture may use: 2 gives black, white and six pure colours, 4 gives 64 colours, 6 the 216 of the early web. Few levels look loud and graphic, many levels quiet and close to the picture. The pattern mixes neighbouring steps so that, from a distance, every part keeps its brightness. Below 2 it renders 2, and the card says so. 2 to 16, default 4.
+**Levels** – how many steps each colour channel has, and so how many colours the picture may use: 2 gives black, white and six pure colours, 4 gives 64 colours, 6 the 216 of the early web. Few levels look loud and graphic, many levels quiet and close to the picture. The pattern mixes neighbouring steps so that, from a distance, every part keeps its brightness. On a dark stage that is not quite black this shows as a sparse, coloured checker; more Levels make it finer and calmer. Below 2 it renders 2, and the card says so. 2 to 16, default 4.
 
 **Amount** – how much of the dithered picture covers the original. At 1 there are only the few colours; 0.5 lays the pattern softly over the picture's own colours; 0 switches it off. Keyframe it to let a scene turn into pixels on a cue. 0 to 1, default 1.
 
@@ -82,25 +81,27 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![The Dithering graph in five stages: Parameters feed Pixel Grid (Pixel Size), which passes the cell position, the cell centre and the pixel size on; Cell Colour reads the picture there and gives the Cell Light; Levels finds the Lower Step and the Upper Share; Dither turns them into the Dithered RGB; Mix (Amount) lays it over the picture with the pixel's alpha](../assets/effects/graphs/dither.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 600" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 710" aria-hidden="true" focusable="false">
 <defs><marker id="dither-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M264 578 L264 494" marker-end="url(#dither-arrow)" />
-<circle class="docs-shot-number" cx="264" cy="578" r="18" /><text x="264" y="578" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M427 324 L427 408" marker-end="url(#dither-arrow)" />
-<circle class="docs-shot-number" cx="427" cy="324" r="18" /><text x="427" y="324" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M589 290 L589 206" marker-end="url(#dither-arrow)" />
-<circle class="docs-shot-number" cx="589" cy="290" r="18" /><text x="589" y="290" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M752 37 L752 121" marker-end="url(#dither-arrow)" />
-<circle class="docs-shot-number" cx="752" cy="37" r="18" /><text x="752" y="37" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M914 475 L914 391" marker-end="url(#dither-arrow)" />
-<circle class="docs-shot-number" cx="914" cy="475" r="18" /><text x="914" y="475" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M230 660 L230 576" marker-end="url(#dither-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="660" r="18" /><text x="230" y="660" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M369 241 L369 325" marker-end="url(#dither-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="241" r="18" /><text x="369" y="241" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M508 688 L508 604" marker-end="url(#dither-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="688" r="18" /><text x="508" y="688" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M648 265 L648 181" marker-end="url(#dither-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="265" r="18" /><text x="648" y="265" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M787 167 L787 251" marker-end="url(#dither-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="167" r="18" /><text x="787" y="167" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M926 572 L926 488" marker-end="url(#dither-arrow)" />
+<circle class="docs-shot-number" cx="926" cy="572" r="18" /><text x="926" y="572" class="docs-shot-number-text">6</text>
 </svg>
 </div>
 
-<figcaption>Dithering opened in the Nodes tab (input frame and output left out). 1 — Pixel Grid: the cells of Pixel Size. 2 — Cell Colour: one colour per cell. 3 — Levels: the two nearest steps. 4 — Dither: the pattern picks one. 5 — Mix: over the picture by Amount.</figcaption>
+<figcaption>Dithering opened in the Nodes tab (input frame and output left out). 1 — Pixel Grid: the cells of Pixel Size. 2 — Cell Filter: the picture averaged over half a cell. 3 — Cell Colour: one colour per cell. 4 — Levels: the two nearest steps. 5 — Dither: the pattern picks one. 6 — Mix: over the picture by Amount.</figcaption>
 </figure>
 
-Dithering works in five stages, one folder each in the Nodes tab: **Pixel Grid** cuts the frame into cells of Pixel Size, **Cell Colour** reads one colour for each cell, **Levels** finds the two steps of Levels that colour lies between, **Dither** lets the cell's place in a 4 × 4 pattern decide which of the two it shows, and **Mix** lays the result over the picture by Amount. Click a folder's header to open it; the sections below show what is inside.
+Dithering works in six stages, one folder each in the Nodes tab: **Pixel Grid** cuts the frame into cells of Pixel Size, **Cell Filter** averages the picture over boxes of half a cell, **Cell Colour** reads one colour for each cell from four points of that average, **Levels** finds the two steps of Levels that colour lies between, **Dither** lets the cell's place in a 4 × 4 pattern decide which of the two it shows, and **Mix** lays the result over the picture by Amount. Click a folder's header to open it; the sections below show what is inside.
 
 ### Pixel Grid
 
@@ -134,22 +135,26 @@ Dithering works in five stages, one folder each in the Nodes tab: **Pixel Grid**
 
 **Multiply** – Add moves to the middle of the cell (Half), and Multiply turns it back into pixels: the Cell Centre, where Cell Colour reads the picture.
 
+### Cell Filter
+
+The picture averaged over boxes of half a cell, in linear light and weighted by alpha. The four reads of Cell Colour lie in the middle of four such boxes, which together cover the cell, so each cell shows the average colour of all its pixels and changes smoothly on moving footage. The same as [Halftone › Cell Filter](./halftone.md#cell-filter), sized by Pixel Size instead of Dot Size.
+
 ### Cell Colour
 
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![Inside the Cell Colour folder, one of its four reading points: Minimum takes the smaller of Quarter Cell and Inside the Cell as the reach, Scalar to Vector 2 makes the Diagonal, Subtract takes it off the Cell Centre, Divide by Resolution gives the place to read; Clamped Image Sample reads the Frame there, Split RGB + Alpha splits it, sRGB to Linear and Alpha to Scalar feed Multiply](../assets/effects/graphs/dither-cell-colour.webp)
+![Inside the Cell Colour folder, one of its four reading points: Minimum takes the smaller of Quarter Cell and Inside the Cell as the reach, Scalar to Vector 2 makes the Diagonal, Subtract takes it off the Cell Centre, Divide by Resolution gives the place to read; Clamped Image Sample reads the Cell Filter there, Split RGB + Alpha splits it, sRGB to Linear and Alpha to Scalar feed Multiply](../assets/effects/graphs/dither-cell-colour.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 943" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1011" aria-hidden="true" focusable="false">
 <defs><marker id="dither-cell-colour-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M322 132 L322 216" marker-end="url(#dither-cell-colour-arrow)" />
 <circle class="docs-shot-number" cx="322" cy="132" r="18" /><text x="322" y="132" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M695 484 L695 400" marker-end="url(#dither-cell-colour-arrow)" />
-<circle class="docs-shot-number" cx="695" cy="484" r="18" /><text x="695" y="484" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M509 694 L509 778" marker-end="url(#dither-cell-colour-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="694" r="18" /><text x="509" y="694" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M695 132 L695 216" marker-end="url(#dither-cell-colour-arrow)" />
+<circle class="docs-shot-number" cx="695" cy="132" r="18" /><text x="695" y="132" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M509 989 L509 905" marker-end="url(#dither-cell-colour-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="989" r="18" /><text x="509" y="989" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M695 887 L695 803" marker-end="url(#dither-cell-colour-arrow)" />
 <circle class="docs-shot-number" cx="695" cy="887" r="18" /><text x="695" y="887" class="docs-shot-number-text">4</text>
 </svg>
@@ -158,11 +163,11 @@ Dithering works in five stages, one folder each in the Nodes tab: **Pixel Grid**
 <figcaption>Inside Cell Colour, with one of its four reading points. 1 — Minimum: how far from the centre to read. 2 — Subtract: one reading point. 3 — sRGB to Linear: colour as light. 4 — Multiply: weighted by alpha.</figcaption>
 </figure>
 
-**Minimum** – how far from the centre the four points lie: a quarter cell, but never further than the cell's own pixels reach (Inside the Cell), so a one-pixel cell reads exactly its pixel. On cells of 2 and 4 pixels the four reads are the exact average of the cell.
+**Minimum** – how far from the centre the four points lie: a quarter cell, but never further than the cell's own pixels reach (Inside the Cell), so a one-pixel cell reads exactly its pixel. Each point reads the Cell Filter, the average of a quarter of the cell, so the four together give the average of the whole cell.
 
 **Subtract** – one reading point: the Cell Centre minus the Diagonal, divided by Resolution. The other three points, in the folder, sit on the other corners of the same square.
 
-**sRGB to Linear** – turns the colour read there into light as it adds up on a screen, so the average of a cell is as bright as its pixels together.
+**sRGB to Linear** – turns the colour the Cell Filter holds there into light as it adds up on a screen, so the average of a cell is as bright as its pixels together.
 
 **Multiply** – weights that light with the point's alpha, so a transparent point does not darken the cell. Add sums the four points (Light of All Points) and their alpha (Alpha of All Points).
 
@@ -238,7 +243,7 @@ Dithering works in five stages, one folder each in the Nodes tab: **Pixel Grid**
 
 **sRGB to Linear** – the lower step (Divide by the Steps) as light; the upper step is built the same way, in the folder.
 
-**Divide** – the cell's light above the lower step, divided by the light between the two steps (Step Span): the Upper Share, from 0 to 1. Measured in light, not in screen values, so the pattern keeps the picture's brightness: a dark stage stays dark and gets only a few lighter pixels.
+**Divide** – the cell's light above the lower step, divided by the light between the two steps (Step Span): the Upper Share, from 0 to 1. Measured in light, not in screen values, so the pattern keeps the picture's brightness. Because the steps are equal in screen values, the first step above black is already fairly bright in light: a dark, not quite black stage becomes a sparse checker of coloured pixels on black instead of a flat dark tone.
 
 ### Dither
 
@@ -303,9 +308,9 @@ Dithering works in five stages, one folder each in the Nodes tab: **Pixel Grid**
 ## Technical details
 
 - **Size.** Pixel Size counts pixels of a frame whose shorter side is 1080, rounded to whole pixels of the frame being drawn: a 4K export shows the same pattern twice as large in pixels, a portrait 1080 × 1920 frame the same as a landscape one. On a frame where the size is not whole (3 px at half Preview Quality are 1.5 pixels), it renders the nearest whole size and the card says so.
-- **Tone.** Each cell's colour is the average of four reads in linear light, and the share of the upper step is measured in light: over one 4 × 4 tile of cells, the dithered light matches the cell's light to a 32nd of a step. Black stays black and white stays white at every Levels.
-- **Colour reads.** Cells of 1, 2 and 4 pixels are averaged exactly; larger cells read four points and the pixels next to them, so very fine detail inside a large cell can come and go on moving footage.
+- **Tone.** Each cell's colour is the average of all its pixels in linear light (four reads of the Cell Filter), and the share of the upper step is measured in light: over one 4 × 4 tile of cells, the dithered light matches the cell's light to a 32nd of a step. Black stays black and white stays white at every Levels.
+- **Colour reads.** Every cell is averaged over all its pixels: four reads of the Cell Filter, each the average of a box half a cell wide (up to 32 reads per row and column, spread evenly in wider boxes). On moving footage a cell's colour changes smoothly as an edge crosses it.
 - **Transparency.** Transparent reads do not count towards a cell's colour, so a cut-out figure gets no dark rim; every pixel keeps its own alpha.
 - **Time.** Dithering does not move by itself: a paused picture needs no extra rendering. On moving footage the grid stays in place and the cells change colour with the picture.
-- **Saved projects.** A Dithering saved before Levels existed keeps its earlier look: the pattern stepped each pixel's own colour, black areas showed a few grey pixels. Its card hides Levels and says so; add the effect again for the version described here. An edited node setup keeps its own recipe.
+- **Saved projects.** A project stores each effect's node setup, so a saved Dithering keeps the look it was saved with. One saved before Levels existed, without a node setup, keeps its earlier look exactly (Pixel Size in pixels of the frame): the pattern stepped each pixel's own colour, black areas showed a few grey pixels. Its card hides Levels and says so; add the effect again for the version described here. A custom Look keeps the node setup it was saved with in the same way.
 - **More:** [Effect system](../Effect-System.md#dithering) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

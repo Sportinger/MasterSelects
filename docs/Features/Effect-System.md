@@ -1918,8 +1918,30 @@ The 25 looks of the `two-tone-pattern` engine (`effectEngineMembers('two-tone-pa
   adding or removing keys only rebinds values. The graphs still read Time × Speed; saved graphs get
   the smooth ramp too (a bug fix; unkeyed Speed renders exactly as before).
 
-Saved projects store their graph and keep their look: the 1080p measure applies to looks added from
-now on (at 1080p it is the old size). The shared base controls (Scale, Amount, Angle, Ink, Paper,
+- **Cell Filter.** Looks that read a cell's colour at four points a quarter cell from its centre
+  (`HALFTONE_TAPS`: Halftone, Riso, Riso Glow, Dithering) read them from a box-filtered copy of the frame,
+  `prefilterCellTaps(graph, cellPixelsNode)` (`src/services/operators/patternCellFilter.ts`): two cached
+  passes average rows and then columns over round(cell × `CELL_FILTER_SHARE` 0.5) whole pixels (at least
+  1, at most `CELL_FILTER_MAX_TAPS` 32 evenly spread reads per pass) in linear light weighted by alpha, and
+  store the result as straight sRGB with the average alpha. It rewires every image sample named
+  `tap-<n>-sample` that reads `frame`, so the four reads together give the whole cell's alpha-weighted
+  average and a dot changes smoothly as an edge crosses its cell (four point reads made it jump by a
+  quarter of its coverage on moving footage). The nodes sit in their own **Cell Filter** folder;
+  `tests/unit/patternCellFilter.test.ts` moves an edge across a cell in one-pixel steps.
+
+Saved effects keep their look. A project stores every effect's graph (the project save runs
+`migratePersistedEffectOperatorGraph`), and a stored graph renders as saved. Old data that carries only
+parameters gets the graph it rendered with in 3.2.7 (`src/services/operators/patternLegacyGraphs.ts`):
+Riso, Riso Glow, Dithering and Paper Print without their new parameter (Dot Size, Levels, Texture) at
+every persisted entry (`pinEarlierPrintGraph`, as the analog looks do), and a graph-less Halftone or
+Pattern Halftone from a project file (`migrateLoadedEffectOperatorGraph`) gets the frozen 3.2.7 graph
+`createLegacyHalftoneGraph` (`legacyHalftoneGraph.ts`). These earlier recipes keep sizes in output pixels
+(no 1080p measure). A custom Look stores the graph of these looks with its entry
+(`stackFromClipEffects`); an entry saved without one is from before 2026-10-22 and gets the 3.2.7 graph
+(`lookEntryOriginalGraph`), with the new recipe's own parameters left out, in its thumbnail and on the
+clip. A graph-less look in the running editor is new and renders the current recipe, also for
+`effectOperatorGraph({ type, params: {} })`. Other pattern looks without a stored graph (projects from
+before 2026-09-21) get their current recipe, whose sizes match the old ones at 1080p. The shared base controls (Scale, Amount, Angle, Ink, Paper,
 Speed) are read by every look that shows them or retired with a reason; Film Prism's Prism Angle
 acts in the Prism shape only, which its card says.
 
@@ -1928,8 +1950,8 @@ acts in the Prism shape only, which its card says.
 `patternHalftoneFragment`). Their screen turns pixel positions around the frame centre (round dots at
 every Angle on any frame shape; the earlier recipe turned 0–1 UVs and stretched dots into ovals on a
 wide frame), and a dot edge is half a pixel on each side (`0.5 / dot size in pixels`) at every size.
-Halftone reads each cell's tone at four points a quarter cell from its centre (`HALFTONE_TAPS`),
-averaged in linear light and weighted by alpha, with the pixel's own light at 5 %
+Halftone reads each cell's tone at four points a quarter cell from its centre (`HALFTONE_TAPS`) of its
+Cell Filter (the whole cell's average), in linear light and weighted by alpha, with the pixel's own light at 5 %
 (`HALFTONE_OWN_WEIGHT`, so a cell outside a cut-out still has a tone); its round dot covers that share
 of the cell exactly up to π/4 and then closes the corners (`HALFTONE_DOT`, within 1.3 %), shifted by up
 to half an edge so black prints solid and white clean. `createCatalogEffect({ cardEnd })` puts Ink,
@@ -1940,9 +1962,9 @@ dots at 45° on 16:9, solid black and clean white, coverage, the one-pixel edge 
 
 `createDefaultDitheringGraph` (`src/services/operators/ditheringEffectGraph.ts`, WGSL twin
 `ditherFragment`) cuts the frame into cells of **Pixel Size** (`scale`, 1080p pixels rounded to whole
-pixels, at least one) and gives each cell one colour: four bilinear reads on its diagonals,
-min(size / 4, (size − 1) / 2) pixels from the centre (`DITHER_TAPS`; the exact average for cells of
-1, 2 and 4 pixels), averaged in linear light and weighted by alpha; where the four reads are all
+pixels, at least one) and gives each cell one colour: four reads of its Cell Filter on its diagonals,
+min(size / 4, (size − 1) / 2) pixels from the centre (`DITHER_TAPS`), together the cell's average in
+linear light weighted by alpha; where the four reads are all
 transparent (summed alpha at most `DITHER_ALPHA_FLOOR`, 0.001) the pixel's own colour is used. Each
 channel is then stepped to **Levels** (`levels`, at least 2: `levels-clamped`, reported by
 `paramRangeNotes`) equal sRGB steps: index = floor(sRGB × steps) + floor(share + Bayer), where the share
@@ -1952,9 +1974,9 @@ stay pure. Amount (default 1) mixes with the pixel's own colour; the pixel's alp
 twin reads Levels from the variant slot (`createCatalogEffect({ variantParam })`). Levels is
 `graphOnly`, and its own parameter takes Dithering out of the Style menu of the other looks (styles
 share every parameter). A graph-less Dithering saved before Levels (`hasEarlierDitheringParams`: its
-params lack `levels`) keeps the earlier recipe, `createDefaultDitherGraph('dither')` in
-`ditherEffectGraphs.ts`: each pixel's own colour stepped to four levels by floor(4 × (c + Bayer − 0.5))
-/ 3, which lifts black and clips white; its card hides Levels and says so (`paramWarnings`). Five presets live in `src/effects/halftone/ditherPresets.ts`.
+params lack `levels`) is given the earlier recipe, `createDefaultDitherGraph('dither')` in
+`ditherEffectGraphs.ts`, exactly as 3.2.7 drew it (Pixel Size in output pixels): each pixel's own colour stepped to four levels by floor(4 × (c + Bayer − 0.5))
+/ 3, which lifts black and clips white; its card hides Levels and says so (`paramWarnings`). Four presets live in `src/effects/halftone/ditherPresets.ts`. The card note on a non-whole Pixel Size rounds half to even, as the graph does.
 Tests: `tests/unit/imageDitheringGraph.test.ts` (reference, pure black and white, tone, one colour per
 cell, cut-out edges, Levels limits, the earlier recipe), the GPU parity suite
 `tests/browser/image-graph-probe.html?suite=dither-graphs`.
@@ -1986,8 +2008,8 @@ twin through the variant slot). **Registration** (`scale`, 1080p pixels, no pixe
 drums apart along `RISO_SLIP` (0.8, 0.6): the dark ink's layer reads the picture at pixel + slip, the warm
 ink's at pixel − slip, half the distance each. Per ink and cell:
 
-- **Cell Colour:** four reads a quarter cell from the cell's centre (`HALFTONE_TAPS`, turned back onto
-  the picture), in linear light and weighted by alpha, plus the paper at weight `RISO_PAPER_WEIGHT`
+- **Cell Colour:** four reads of the Cell Filter (shared by both inks) a quarter cell from the cell's
+  centre (`HALFTONE_TAPS`, turned back onto the picture), in linear light and weighted by alpha, plus the paper at weight `RISO_PAPER_WEIGHT`
   (0.001), so a cell whose reads are all transparent prints no ink.
 - **Separation:** the light the cell takes from the paper per channel, `max(1 − cell / paper, 0)`,
   fitted by least squares with what a full layer of each ink takes (`1 − ink`, linear), ridge
@@ -2007,12 +2029,14 @@ ink's at pixel − slip, half the distance each. Per ink and cell:
 The print is `paper × mix(1, inkA, dotA) × mix(1, inkB, dotB)` in linear light, back to sRGB, mixed over
 the picture by **Amount** (default 1; effects saved without one keep 0.75) with the pixel's own alpha.
 Over an area the dots keep a colour's light within a few percent; colours outside the two inks' range
-keep their brightness and take the nearest mix. Stage folders: Paper & Inks, Screens (Dot Size,
-Registration), Cell Colour, Separation, Tone, Dots, Print & Mix (Amount). Presets in
+keep their brightness and take the nearest mix. Dot Size below 2 and Registration below 0 are clamped by
+`dotSize-clamped` and `scale-clamped` (`renderMin`), so `paramRangeNotes` reports them also on a stored
+graph. Stage folders: Paper & Inks, Screens (Dot Size, Registration), Cell Filter, Cell Colour, Separation, Tone, Dots, Print & Mix (Amount). Presets in
 `src/effects/halftone/risoPresets.ts`.
 
-A graph-less Riso saved before Dot Size (`hasEarlierRisoParams`: its params lack `dotSize`) keeps the
-earlier recipe, `createEarlierRisoGraph('riso')` in `risoEffectGraphs.ts`; its card hides Dot Size
+A graph-less Riso saved before Dot Size (`hasEarlierRisoParams`: its params lack `dotSize`) is given the
+earlier recipe, `createEarlierRisoGraph('riso')` in `risoEffectGraphs.ts`, exactly as 3.2.7 drew it
+(Registration in output pixels); its card hides Dot Size
 (`graphOnly`) and says so, and Registration keeps 8 when it was saved without one (`legacyDefault`).
 Tests: `tests/unit/imageRisoGraphs.test.ts` (white, black and single-ink colours, area tone, the
 registration fringe, transparency, any ink pair, Amount, the earlier recipe), GPU parity
@@ -2026,10 +2050,11 @@ Riso's print ([Riso](#riso): same builder, same node ids, same parameters `scale
 `colorB`, `amount`) with a fluorescent second ink (`colorB`, the Glow Ink) in two passes:
 
 - **Print & Glow Share** (pass 1): the print in linear light goes into the colour and the glow share into
-  the alpha of an `image.materialize` cache (`glow-cache`, full size). The share is the glow ink's coverage
-  of its cell × (1 − the shadow ink's coverage there), both from Tone (`warm-coverage`,
-  `warm-other-coverage`): 1 where only the glow ink prints, 0 on paper and where both inks print in full
-  (black), so the glow never lifts the darkest colour.
+  the alpha of an `image.materialize` cache (`glow-cache`, full size). The share is mix(`RISO_GLOW_PAPER` 0.6, 1, the
+  glow ink's coverage of its cell) × (1 − the shadow ink's coverage there) × the pixel's alpha, from Tone
+  (`warm-coverage`, `warm-other-coverage`): 1 where only the glow ink prints, 0.6 on paper (light parts
+  such as a white costume bloom in the glow ink), 0 where both inks print in full (black, so the glow never
+  lifts the darkest colour) and on transparent pixels (a cut-out's surround adds no glow).
 - **Glow Spill** (pass 2): an `image.kernel-rect-reduce` over `RISO_GLOW_KERNEL` (9) × 9 taps
   `RISO_GLOW_STEP` (0.75) cells apart around the pixel, kept within the frame's outer pixel centres, with
   `math.gaussian.scalar` weights (sigma `RISO_GLOW_SIGMA`, 2 taps), reads the cached share: the gathered
@@ -2042,21 +2067,22 @@ Riso's print ([Riso](#riso): same builder, same node ids, same parameters `scale
   e^(−strength × light) (`math.exp.scalar`, `math.power.rgb`), back to sRGB and mixed over the pixel by
   **Amount** (default 1; saves without one keep 0.75) with the pixel's own alpha.
 
-At Glow 0 it renders exactly Riso's print with the same inks. The graph has 434 nodes (Riso 384), leaving
-room under the 512-node budget for a remix. The twin computes the cached share at the four pixel centres
+At Glow 0 it renders exactly Riso's print with the same inks. The graph stays under 495 nodes (with the
+Cell Filter), leaving room under the 512-node budget for a remix. Default Shadow Ink `#1b1f4a` (deep
+indigo, so the stage stays near black; saves without one keep `#4f46e5`: `legacyDefault`). The twin computes the cached share at the four pixel centres
 around each tap (as the hardware's bilinear read of the cache does) and matches the graph within one 8-bit
 step on at most 3 % of bytes (the cache is rgba16float). Registration and Glow below 0 render 0 and the
 card says so (`renderMin`). Glow reaches the twin through the Angle slot, which Riso Glow does not use
 (`createCatalogEffect({ angleSlotParam })`). Card: Pattern (Dot Size, Registration), Glow & Pulse (Glow,
-Speed), Color (Shadow Ink, Glow Ink, Amount). Stage folders: Riso's six print folders, then Print & Glow
+Speed), Color (Shadow Ink, Glow Ink, Amount). Stage folders: Riso's seven print folders, then Print & Glow
 Share, Glow Spill, Pulse (Glow, Speed), Glow & Mix (Amount). Presets in
 `src/effects/halftone/risoGlowPresets.ts`. Its own parameters (Dot Size, Glow) take it out of the Style
 menu of the other looks.
 
-A graph-less Riso Glow saved before Dot Size (`hasEarlierRisoParams`) keeps the earlier recipe,
-`createEarlierRisoGraph('riso-glow')`: each ink filters the paper towards its own colour where it prints,
+A graph-less Riso Glow saved before Dot Size (`hasEarlierRisoParams`) is given the earlier recipe,
+`createEarlierRisoGraph('riso-glow')`, exactly as 3.2.7 drew it: each ink filters the paper towards its own colour where it prints,
 `paper × mix(1, inkA, a) × mix(1, inkB, b)`, with `a` and `b` the coverage of the shadow and the glow ink
-(1 − luminance, read 0.35 × Registration pixels of a 1080p frame to the left and to the right), plus
+(1 − luminance, read 0.35 × Registration output pixels to the left and to the right), plus
 `pulse × (a·inkA + b·inkB) × 0.3` with the pulse 0.55 + 0.45 × sin(2 × seconds × Speed). Its card hides
 Dot Size and Glow (`graphOnly`) and says so; Registration keeps 14 when it was saved without one
 (`legacyDefault`). Tests: `tests/unit/imageRisoGraphs.test.ts` (Glow 0 equals Riso, black and white
@@ -2082,9 +2108,9 @@ earlier recipe and the card notes, the node budget), `tests/unit/patternEngineLo
   works the other way round.
 - **Paper Surface:** **Texture** (`texture`, `graphOnly`, below 0 renders 0: `texture-clamped`) scales a
   three-octave Fractal Noise with bumps of `PAPER_PRINT_TEXTURE.size` (3) 1080p pixels, moved by an offset
-  so it never repeats the grain. Its valleys lift the threshold by up to 2 × their depth × Texture (white
-  specks in solid ink, about 4 % of it at the default 0.5; mid-tones print that much lighter), and its height
-  shades the print by ±0.2 × Texture in linear light. White never gets ink.
+  so it never repeats the grain. Its valleys lift the threshold by up to 2 × their depth × Texture × (1 − c)
+  (`valley-lift-faded`: specks of paper in the mid-tones, fading out towards full ink, so a black stage stays
+  solid), and its height shades the print by ±0.2 × Texture in linear light. White never gets ink.
 - **Ink Edge:** one output pixel in threshold units is `PAPER_PRINT_EDGE` (1.8, the measured slope of the
   evened threshold per grain) / grain pixels; the width used is min(that, 2 × min(c, 1 − c)), at least 1e−6,
   so the edge is hard at shares of 0 and 1 and the average coverage over an area is exactly c.
@@ -2102,8 +2128,8 @@ Even Out, Ink Share, Paper Surface (Texture), Ink Edge, Print, Mix (Amount). Tex
 of the Style menu of the other looks. Presets in `src/effects/halftone/paperPrint.ts`.
 
 A graph-less Paper Print saved before Texture (`hasEarlierPaperPrintParams`: its params lack `texture`)
-keeps the earlier recipe, `createEarlierPaperPrintGraph` in `paperPrintEffectGraph.ts` (WGSL
-`paperPrintEarlierFragment`): luminance plus a sine-hash value noise on Press Grain cells, pressed through
+is given the earlier recipe, `createEarlierPaperPrintGraph` in `paperPrintEffectGraph.ts` (WGSL
+`paperPrintEarlierFragment`), exactly as 3.2.7 drew it (Press Grain in output pixels): luminance plus a sine-hash value noise on Press Grain cells, pressed through
 smoothstep(0.15, 0.85) between Ink and Paper and darkened by the same grain; its card hides Texture and says
 so. Tests: `tests/unit/imagePaperPrintGraph.test.ts` (even threshold, tone at whole-pixel grains, clean
 white and solid black, Texture specks, the one-pixel edge, 4K against 1080p, light ink on dark paper and

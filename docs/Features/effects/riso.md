@@ -23,9 +23,9 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The dancer's face and raised arm five times, once per preset: Zine in blue and pink dots with pink fringes on a violet stage, Postcard in teal and red on a dark teal stage, Art Print in fine green and pink dots on a dark aubergine stage, Gig Poster in bold black and red dots, and Off Register in large burgundy dots with aqua fringes beside every edge on navy](../assets/effects/presets/riso.webp)
+![The whole dancer five times, once per preset: Zine in blue and pink dots with pink fringes on a violet stage, Postcard in teal and red on a dark teal stage, Art Print in fine green and pink dots on a dark aubergine stage, Gig Poster in bold black and red dots, and Off Register in large burgundy dots with aqua fringes beside every edge on navy](../assets/effects/presets/riso.webp)
 
-<figcaption>The five presets on the dancer.</figcaption>
+<figcaption>The five presets on the whole figure.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -46,22 +46,22 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Riso card: Preset menu showing Postcard, Dot Size and Registration under Pattern, Dark Ink, Warm Ink and Amount under Color, beside a strip of the preview printed in teal and red dots on cream paper](../assets/effects/editor/riso-inspector.webp)
+![Properties, Effects with a Riso card: Preset menu showing Postcard, Dot Size and Registration under Pattern, Dark Ink, Warm Ink and Amount under Color, beside the preview of the dancer printed in teal and red dots, her dress light, the stage a dark teal](../assets/effects/editor/riso-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 814" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 493" aria-hidden="true" focusable="false">
 <defs><marker id="riso-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M491 340 L575 340" marker-end="url(#riso-inspector-arrow)" />
-<circle class="docs-shot-number" cx="491" cy="340" r="18" /><text x="491" y="340" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M516 467 L600 467" marker-end="url(#riso-inspector-arrow)" />
-<circle class="docs-shot-number" cx="516" cy="467" r="18" /><text x="516" y="467" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M483 512 L567 512" marker-end="url(#riso-inspector-arrow)" />
-<circle class="docs-shot-number" cx="483" cy="512" r="18" /><text x="483" y="512" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M517 652 L601 652" marker-end="url(#riso-inspector-arrow)" />
-<circle class="docs-shot-number" cx="517" cy="652" r="18" /><text x="517" y="652" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M506 697 L590 697" marker-end="url(#riso-inspector-arrow)" />
-<circle class="docs-shot-number" cx="506" cy="697" r="18" /><text x="506" y="697" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M523 742 L607 742" marker-end="url(#riso-inspector-arrow)" />
-<circle class="docs-shot-number" cx="523" cy="742" r="18" /><text x="523" y="742" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M663 206 L747 206" marker-end="url(#riso-inspector-arrow)" />
+<circle class="docs-shot-number" cx="663" cy="206" r="18" /><text x="663" y="206" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M678 283 L762 283" marker-end="url(#riso-inspector-arrow)" />
+<circle class="docs-shot-number" cx="678" cy="283" r="18" /><text x="678" y="283" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M658 310 L742 310" marker-end="url(#riso-inspector-arrow)" />
+<circle class="docs-shot-number" cx="658" cy="310" r="18" /><text x="658" y="310" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M679 395 L763 395" marker-end="url(#riso-inspector-arrow)" />
+<circle class="docs-shot-number" cx="679" cy="395" r="18" /><text x="679" y="395" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M672 422 L756 422" marker-end="url(#riso-inspector-arrow)" />
+<circle class="docs-shot-number" cx="672" cy="422" r="18" /><text x="672" y="422" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M682 450 L766 450" marker-end="url(#riso-inspector-arrow)" />
+<circle class="docs-shot-number" cx="682" cy="450" r="18" /><text x="682" y="450" class="docs-shot-number-text">6</text>
 </svg>
 </div>
 
@@ -80,6 +80,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Warm Ink** – the second ink, printed through a grid turned 75°. A bright colour gives the print its light: pink, red, orange, aqua or yellow. Each part of the picture is printed with whatever mix of the two inks comes closest to its colour, and every part keeps its brightness. It takes a colour, default `#ef476f`.
 
+The paper is a fixed cream. To print on another paper, open the Nodes tab and change **Paper R**, **Paper G** and **Paper B** in the **Constants** folder (see the Remix under [Paper & Inks](#paper--inks)).
+
 **Amount** – how much of the print covers the picture. At 1 there is only ink on paper; 0.5 lays the dots softly over the picture's own colours; 0 switches it off. Keyframe it to let a scene turn into print on a cue. 0 to 1, default 1.
 
 ## Node setup
@@ -88,31 +90,33 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![The Riso graph in seven stages: Parameters feed Screens (Dot Size, Registration) and Paper & Inks; Cell Colour reads the picture for every cell of both screens; Separation splits each cell's colour between the two inks; Tone sets how much ink each cell gets; Dots turns that into round dots; Print & Mix (Amount) prints them on the paper and lays the print over the picture](../assets/effects/graphs/riso.webp)
+![The Riso graph in eight stages: Parameters feed Screens (Dot Size, Registration) and Paper & Inks; Cell Filter averages the picture over boxes of half a cell; Cell Colour reads that for every cell of both screens; Separation splits each cell's colour between the two inks; Tone sets how much ink each cell gets; Dots turns that into round dots; Print & Mix (Amount) prints them on the paper and lays the print over the picture](../assets/effects/graphs/riso.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1091" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1099" aria-hidden="true" focusable="false">
 <defs><marker id="riso-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M230 834 L230 750" marker-end="url(#riso-arrow)" />
-<circle class="docs-shot-number" cx="230" cy="834" r="18" /><text x="230" y="834" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M230 60 L230 144" marker-end="url(#riso-arrow)" />
-<circle class="docs-shot-number" cx="230" cy="60" r="18" /><text x="230" y="60" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M369 1069 L369 985" marker-end="url(#riso-arrow)" />
-<circle class="docs-shot-number" cx="369" cy="1069" r="18" /><text x="369" y="1069" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M508 340 L508 256" marker-end="url(#riso-arrow)" />
-<circle class="docs-shot-number" cx="508" cy="340" r="18" /><text x="508" y="340" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M648 343 L648 427" marker-end="url(#riso-arrow)" />
-<circle class="docs-shot-number" cx="648" cy="343" r="18" /><text x="648" y="343" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M787 967 L787 883" marker-end="url(#riso-arrow)" />
-<circle class="docs-shot-number" cx="787" cy="967" r="18" /><text x="787" y="967" class="docs-shot-number-text">6</text>
-<path class="docs-shot-arrow" d="M926 60 L926 144" marker-end="url(#riso-arrow)" />
-<circle class="docs-shot-number" cx="926" cy="60" r="18" /><text x="926" y="60" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M326 22 L326 75" marker-end="url(#riso-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="22" r="18" /><text x="326" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M204 716 L204 800" marker-end="url(#riso-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="716" r="18" /><text x="204" y="716" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M326 581 L326 497" marker-end="url(#riso-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="581" r="18" /><text x="326" y="581" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M448 448 L448 532" marker-end="url(#riso-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="448" r="18" /><text x="448" y="448" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M569 614 L569 530" marker-end="url(#riso-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="614" r="18" /><text x="569" y="614" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M691 602 L691 686" marker-end="url(#riso-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="602" r="18" /><text x="691" y="602" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M813 1077 L813 993" marker-end="url(#riso-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="1077" r="18" /><text x="813" y="1077" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M935 314 L935 398" marker-end="url(#riso-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="314" r="18" /><text x="935" y="314" class="docs-shot-number-text">8</text>
 </svg>
 </div>
 
-<figcaption>Riso opened in the Nodes tab (input frame and output left out). 1 — Paper & Inks: the paper and the two inks as light. 2 — Screens: where each ink's dots lie. 3 — Cell Colour: one colour per cell. 4 — Separation: which ink prints what. 5 — Tone: how much ink. 6 — Dots: round dots. 7 — Print & Mix: ink on paper, over the picture.</figcaption>
+<figcaption>Riso opened in the Nodes tab (input frame and output left out). 1 — Paper & Inks: the paper and the two inks as light. 2 — Screens: where each ink's dots lie. 3 — Cell Filter: the picture averaged over half a cell. 4 — Cell Colour: one colour per cell. 5 — Separation: which ink prints what. 6 — Tone: how much ink. 7 — Dots: round dots. 8 — Print & Mix: ink on paper, over the picture.</figcaption>
 </figure>
 
-Riso works in seven stages, one folder each in the Nodes tab. **Paper & Inks** turns the paper and the two ink colours into light. **Screens** places each ink's grid of dots: slipped by Registration, turned to its own angle, cut into cells of Dot Size. **Cell Colour** reads one colour of the picture for every cell. **Separation** splits that colour between the two inks, **Tone** sets how much ink the cell gets so that it keeps its brightness, and **Dots** draws the round dot that covers that share of the cell. **Print & Mix** prints both inks on the paper and lays the print over the picture by Amount. Every folder holds the same nodes twice, once for each ink; the pictures below show the dark ink's.
+Riso works in eight stages, one folder each in the Nodes tab. **Paper & Inks** turns the paper and the two ink colours into light. **Screens** places each ink's grid of dots: slipped by Registration, turned to its own angle, cut into cells of Dot Size. **Cell Filter** averages the picture over boxes of half a cell, and **Cell Colour** reads one colour of that for every cell. **Separation** splits that colour between the two inks, **Tone** sets how much ink the cell gets so that it keeps its brightness, and **Dots** draws the round dot that covers that share of the cell. **Print & Mix** prints both inks on the paper and lays the print over the picture by Amount. Every folder holds the same nodes twice, once for each ink; the pictures below show the dark ink's.
 
 ### Paper & Inks
 
@@ -184,13 +188,17 @@ Riso works in seven stages, one folder each in the Nodes tab. **Paper & Inks** t
 
 **Subtract** – Fraction and Subtract Half give the place inside the cell, from −0.5 to 0.5: Dots measures the distance from the cell's centre with it.
 
+### Cell Filter
+
+The picture averaged over boxes of half a cell, in linear light and weighted by alpha, once for both inks (they share Dot Size). The four reads of a cell lie in the middle of four such boxes, which together cover the cell, so each cell prints the average colour of all its pixels and its dots change smoothly on moving footage. The same as [Halftone › Cell Filter](./halftone.md#cell-filter), sized by Dot Size.
+
 ### Cell Colour
 
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![Inside the Cell Colour folder, with one of its four reading points: Floor and Add give the middle of the cell, Multiply turns it into pixels, Rotate UV turns it back by Minus Dark Angle and Add puts it on the frame: the Dark Cell Centre; Subtract takes the Quarter Diagonal off it, Divide by Resolution gives the place to read, Clamped Image Sample reads the Frame there, Split RGB + Alpha splits it, sRGB to Linear and Alpha to Scalar feed Multiply; Divide splits the Light of All Points by their alpha: the Dark Cell Colour](../assets/effects/graphs/riso-cell-colour.webp)
+![Inside the Cell Colour folder, with one of its four reading points: Floor and Add give the middle of the cell, Multiply turns it into pixels, Rotate UV turns it back by Minus Dark Angle and Add puts it on the frame: the Dark Cell Centre; Subtract takes the Quarter Diagonal off it, Divide by Resolution gives the place to read, Clamped Image Sample reads the Cell Filter there, Split RGB + Alpha splits it, sRGB to Linear and Alpha to Scalar feed Multiply; Divide splits the Light of All Points by their alpha: the Dark Cell Colour](../assets/effects/graphs/riso-cell-colour.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 929" aria-hidden="true" focusable="false">
 <defs><marker id="riso-cell-colour-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -210,9 +218,9 @@ Riso works in seven stages, one folder each in the Nodes tab. **Paper & Inks** t
 
 **Rotate UV** – turns the middle of the cell back by the screen angle and puts it on the picture: the Dark Cell Centre. Every pixel of a cell finds the same centre, so the whole cell gets one colour and one clean dot.
 
-**Subtract** – one reading point: the centre minus a quarter of the cell along its diagonal (Quarter Diagonal). The other three points sit on the other corners of the same small square, and together they average the cell.
+**Subtract** – one reading point: the centre minus a quarter of the cell along its diagonal (Quarter Diagonal). The other three points sit on the other corners of the same small square. Each reads the Cell Filter, the average of a quarter of the cell, so together they give the average of the whole cell.
 
-**sRGB to Linear** – turns the colour read there into light, as it adds up on a screen.
+**sRGB to Linear** – turns the colour the Cell Filter holds there into light, as it adds up on a screen.
 
 **Multiply** – weights that light with the point's alpha, so a transparent point does not darken the cell. Divide splits the light of all four points by their alpha: the cell's colour (Dark Cell Colour). A little paper is added to both sums, so a cell whose points are all transparent prints no ink at all.
 
@@ -341,9 +349,9 @@ From these numbers the folder solves for the two shares: first the dark ink's sh
 ## Technical details
 
 - **Size.** Dot Size and Registration count pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same dots and the same slip. A cell is never smaller than one pixel of the frame, and the card says so on a frame that small; Registration may stay below a pixel.
-- **Colour.** Each cell's colour is averaged over four points in linear light and split between the two inks by a least-squares fit of the light it takes from the paper. The inks multiply where they overlap, and over an area the dots keep the colour's brightness within a few percent. A colour the two inks cannot make (green with blue and pink ink) keeps its brightness and takes the nearest mix; black prints both inks in full, white stays paper.
+- **Colour.** Each cell's colour is the average of all its pixels in linear light (four reads of the Cell Filter) and split between the two inks by a least-squares fit of the light it takes from the paper. The inks multiply where they overlap, and over an area the dots keep the colour's brightness within a few percent. A colour the two inks cannot make (green with blue and pink ink) keeps its brightness and takes the nearest mix; black prints both inks in full, white stays paper.
 - **Screens.** The dark ink's dots lie on a grid turned 15°, the warm ink's on one turned 75°; dot edges are one output pixel soft, so a 4K export is sharper than the preview, not different.
 - **Transparency.** Transparent reading points do not count towards a cell's colour, and a cell whose points are all transparent prints no ink. Each pixel keeps its own alpha, so the inks slip inside a cut-out figure's outline.
 - **Time.** Riso does not move by itself: a paused picture needs no extra rendering. On moving footage the grids stay in place and the dots change with the picture.
-- **Saved projects.** A Riso saved before Dot Size existed keeps its earlier look: both inks printed the same darkness, a little apart, without dots, mixed over the picture at Amount 0.75. Its card hides Dot Size and says so; add the effect again for the print described here. An edited node setup keeps its own recipe.
+- **Saved projects.** A project stores each effect's node setup, so a saved Riso keeps the look it was saved with. One saved before Dot Size existed, without a node setup, keeps its earlier look exactly: both inks printed the same darkness, a little apart (Registration in pixels of the frame), without dots, mixed over the picture at Amount 0.75. Its card hides Dot Size and says so; add the effect again for the print described here. A custom Look keeps the node setup it was saved with in the same way. A Dot Size or Registration below its limit renders at the limit, and the card says so, also on a saved node setup.
 - **More:** [Effect system](../Effect-System.md#riso) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

@@ -45,7 +45,7 @@ describe('Riso image graphs', () => {
       expect(print.nodes.find(node => node.id === nodeId)?.bindings).toEqual({ value: parameterId });
     }
     // Dot Size and Registration count pixels of a 1080p frame.
-    expect(print.nodes.map(node => node.id)).toEqual(expect.arrayContaining(['safe-dot-size-pixels', 'registration-frame-pixels', 'frame-scale']));
+    expect(print.nodes.map(node => node.id)).toEqual(expect.arrayContaining(['dotSize-clamped-pixels', 'scale-clamped-frame-pixels', 'frame-scale']));
     for (const graph of [createEarlierRisoGraph('riso'), createEarlierRisoGraph('riso-glow')]) {
       for (const [nodeId, parameterId] of [['scale', 'scale'], ['amount', 'amount'], ['color-a', 'colorA'], ['color-b', 'colorB']] as const) {
         expect(graph.nodes.find(node => node.id === nodeId)?.bindings).toEqual({ value: parameterId });
@@ -57,7 +57,8 @@ describe('Riso image graphs', () => {
     expect(createEarlierRisoGraph('riso-glow').nodes.find(node => node.id === 'speed')?.bindings).toEqual({ value: 'speed' });
     // Riso Glow is Riso's print plus its Glow stage; the graph leaves room under the 512-node budget for a remix.
     expect(glow.nodes.map(node => node.id)).toEqual(expect.arrayContaining(createRisoPrintGraph().nodes.map(node => node.id)));
-    expect(glow.nodes.length).toBeLessThanOrEqual(490);
+    // Room under the 512-node budget for a remix.
+    expect(glow.nodes.length).toBeLessThanOrEqual(495);
   });
 
   it.each([['riso', riso], ['riso-glow', risoGlow]] as const)('keeps the earlier %s operation order', (type, definition) => {
@@ -176,7 +177,11 @@ describe('Riso image graphs', () => {
     }
     // Black takes both inks in full, so the glow ink is covered there: no glow lifts it.
     glowAt({ glow: 2 }, [700, 400], flat([0, 0, 0, 1])).forEach((value, index) => expect(value).toBeCloseTo(print({}, [700, 400], flat([0, 0, 0, 1]))[index], 4));
-    glowAt({ glow: 2 }, [700, 400], flat([1, 1, 1, 1])).slice(0, 3).forEach((value, index) => expect(value).toBeCloseTo(RISO_PAPER[index], 4));
+    // White prints as paper, and RISO_GLOW_PAPER of the paper's light glows in the glow ink: a white costume blooms.
+    const white = glowAt({ glow: 2 }, [700, 400], flat([1, 1, 1, 1]));
+    white.slice(0, 3).forEach((value, index) => expect(value).toBeGreaterThanOrEqual(RISO_PAPER[index] - 1e-6));
+    expect(white[0] - RISO_PAPER[0]).toBeGreaterThan(white[1] - RISO_PAPER[1]);
+    glowAt({ glow: 0 }, [700, 400], flat([1, 1, 1, 1])).slice(0, 3).forEach((value, index) => expect(value).toBeCloseTo(RISO_PAPER[index], 4));
   });
 
   it('lets the colours of the glow ink shine and spill a few cells into the dark around them, breathing with the pulse', () => {
@@ -196,6 +201,13 @@ describe('Riso image graphs', () => {
     expect(trough).toBeGreaterThan(red({ glow: 0 }, 966));
     expect(red({ speed: 0 }, 966, Math.PI / 2)).toBeCloseTo(peak, 6);
     expect(RISO_GLOW_PULSE.rest + RISO_GLOW_PULSE.swing).toBe(1);
+  });
+
+  it('names a clamped Dot Size or Registration also on a stored Riso or Riso Glow graph (no silent clamp)', () => {
+    for (const [definition, graph] of [[riso, createRisoPrintGraph()], [risoGlow, createRisoGlowGraph()]] as const) {
+      const notes = paramRangeNotes(definition.params, { dotSize: 1, scale: -2 }, graph).map(note => note.message);
+      expect(notes).toEqual(['Dot Size 1 is below the rendered minimum (2) and renders as 2.', 'Registration -2 is below the rendered minimum (0) and renders as 0.']);
+    }
   });
 
   it('keeps the glow inside the picture: transparent areas give no glow and keep their alpha', () => {

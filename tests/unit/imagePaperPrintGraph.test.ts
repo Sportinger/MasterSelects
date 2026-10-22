@@ -83,17 +83,19 @@ describe('Paper Print image graph', () => {
     }
   });
 
-  it('lets Texture show the paper through solid ink in fine specks, more with more Texture', () => {
-    const specks = (texture: number) => {
+  it('lets Texture show the paper in the mid tones, more with more Texture, and keeps solid ink solid', () => {
+    const specks = (texture: number, grey: number) => {
       const print = printer({ ...blackOnWhite, texture });
-      const samples = grid(60, 2).map(pixel => light(print(pixel, [0, 0, 0, 1])));
+      const samples = grid(60, 2).map(pixel => light(print(pixel, [grey, grey, grey, 1])));
       return samples.filter(value => value > .5).length / samples.length;
     };
-    expect(specks(0)).toBe(0);
-    const middle = specks(.5), full = specks(1);
-    expect(middle).toBeGreaterThan(.01);
+    // Solid black stays solid at every Texture: the valleys fade out with the ink's share (valley-lift-faded).
+    for (const texture of [0, .5, 1]) expect(specks(texture, 0)).toBe(0);
+    // A dark grey (ink share about 0.85) shows more paper the more Texture there is.
+    const flat = specks(0, .42), middle = specks(.5, .42), full = specks(1, .42);
+    expect(middle).toBeGreaterThan(flat + .005);
     expect(full).toBeGreaterThan(middle);
-    expect(full).toBeLessThan(.15);
+    expect(full).toBeLessThan(flat + .15);
   });
 
   it('draws the ink edge one output pixel soft at every Grain Size', () => {

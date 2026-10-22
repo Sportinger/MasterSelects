@@ -114,7 +114,9 @@ export function createDefaultPaperPrintGraph(): EffectOperatorGraph {
 
   // Print: ink where the share is above the grain's threshold (lifted in the paper's valleys), with an edge one output
   // pixel soft that turns hard at a share of 0 and 1, so white stays clean paper and black solid ink.
-  const lifted = g.binary('threshold-lifted', 'math.add.scalar', threshold, valleyLift);
+  // The valleys fade out with the ink's share (× (1 − share)): deep ink stays solid instead of showing white specks.
+  const fadedLift = g.binary('valley-lift-faded', 'math.multiply.scalar', valleyLift, g.binary('valley-ink-left', 'math.subtract.scalar', one, share));
+  const lifted = g.binary('threshold-lifted', 'math.add.scalar', threshold, fadedLift);
   const edgeWidth = g.binary('edge-width', 'math.divide-ieee.scalar', g.number('edge-slope', PAPER_PRINT_EDGE), grainSize);
   const room = g.binary('edge-room', 'math.multiply.scalar', g.binary('share-nearest-end', 'math.min.scalar', share, g.binary('share-rest', 'math.subtract.scalar', one, share)), two);
   const width = g.binary('edge-fitted', 'math.max.scalar', g.binary('edge-inside', 'math.min.scalar', edgeWidth, room), g.number('edge-floor', PAPER_PRINT_EDGE_FLOOR));

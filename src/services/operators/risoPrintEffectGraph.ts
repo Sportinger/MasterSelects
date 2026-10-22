@@ -57,6 +57,9 @@ export const RISO_GLOW_STEP = .75;
 export const RISO_GLOW_SIGMA = 2;
 /** Light the glow ink gives off at Glow 1 and the top of its pulse, as a multiple of a full layer of its colour. */
 export const RISO_GLOW_GAIN = 1.5;
+/** Share of the paper's light that glows too, tinted by the Glow Ink: highlights the print leaves as paper (a white
+ * costume, a lamp, lit skin) bloom with the glow ink instead of staying flat paper. */
+export const RISO_GLOW_PAPER = .6;
 /** Riso Glow's pulse: the glow breathes between rest − swing and rest + swing of Glow (cos of 2 × time × Speed). */
 export const RISO_GLOW_PULSE = { rest: .55, swing: .45 } as const;
 
@@ -122,11 +125,11 @@ function buildRisoPrint(glowing: boolean): EffectOperatorGraph {
     g.binary('fit-cross', 'math.multiply.scalar', darkWarm, darkWarm));
 
   // Registration: the two drums slip apart along RISO_SLIP, half the distance each.
-  const registration = g.binary('registration', 'math.max.scalar', scale, zero);
+  const registration = g.binary('scale-clamped', 'math.max.scalar', scale, zero);
   const slipDirection = g.node('slip-direction', 'vector.combine.vec2'); g.edge(g.number('slip-x', RISO_SLIP[0]), slipDirection, 'x'); g.edge(g.number('slip-y', RISO_SLIP[1]), slipDirection, 'y');
   const slip = g.node('slip', 'math.multiply.vec2-scalar'); g.edge(slipDirection, slip, 'a'); g.edge(g.binary('slip-half', 'math.multiply.scalar', registration, half), slip, 'b');
   // Screens: cells of Dot Size pixels; the dot edge is one output pixel soft at every size.
-  const size = g.binary('safe-dot-size', 'math.max.scalar', dotSize, two), size2 = g.unary('dot-size-vec2', 'convert.scalar-to-vec2', size);
+  const size = g.binary('dotSize-clamped', 'math.max.scalar', dotSize, two), size2 = g.unary('dot-size-vec2', 'convert.scalar-to-vec2', size);
   const edgeWidth = g.binary('edge-width', 'math.divide-ieee.scalar', g.number('half-pixel', .5), size);
   const reach = g.binary('tap-reach', 'math.multiply.scalar', size, g.number('quarter', .25));
   const four = g.number('four', 4), toneFloor = g.number('tone-floor', 1e-6), toneBlend = g.number('tone-blend', RISO_TONE_BLEND);
@@ -246,7 +249,12 @@ function buildRisoPrint(glowing: boolean): EffectOperatorGraph {
     // ink's)). The print and this share are cached together (one pass), then gathered over a RISO_GLOW_KERNEL ×
     // RISO_GLOW_KERNEL window of taps RISO_GLOW_STEP cells apart with Gaussian weights: a soft field that spills past
     // the edges of the glow ink's colours.
-    const visible = g.binary('glow-visible', 'math.multiply.scalar', glowInk.coverage, g.binary('glow-uncovered', 'math.subtract.scalar', one, glowInk.otherCoverage));
+    // Where the paper shows (neither ink), RISO_GLOW_PAPER of its light glows as well: mix(paper share, 1, glow coverage).
+    const glowShare = g.node('glow-share', 'math.mix.scalar'); g.edge(g.number('glow-paper-share', RISO_GLOW_PAPER), glowShare, 'a'); g.edge(one, glowShare, 'b'); g.edge(glowInk.coverage, glowShare, 't');
+    // Only opaque pixels glow: a cut-out's transparent surround (paper in the print) adds no glow to the figure.
+    const ownAlpha = g.unary('glow-own-alpha', 'convert.alpha-to-scalar', { node: own.node, port: 'alpha' }, 'alpha');
+    const visible = g.binary('glow-visible', 'math.multiply.scalar', g.binary('glow-open', 'math.multiply.scalar', glowShare,
+      g.binary('glow-uncovered', 'math.subtract.scalar', one, glowInk.otherCoverage)), ownAlpha);
     const packed = g.node('glow-print', 'vector.combine.rgba', 'image'); g.edge(printedLinear, packed, 'rgb');
     g.edge({ node: g.unary('glow-visible-alpha', 'convert.scalar-to-alpha', visible).node, port: 'alpha' }, packed, 'alpha');
     const cache = g.node('glow-cache', 'image.materialize', 'image', {}, { scale: '1' }); g.edge(packed, cache, 'image');
@@ -290,7 +298,7 @@ function buildRisoPrint(glowing: boolean): EffectOperatorGraph {
   const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: own.node, port: 'alpha' }, combine, 'alpha');
   const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
   // Registration and Dot Size count pixels of a 1080p frame; a slip may stay below one pixel, a cell never does.
-  const graph = measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'registration');
+  const graph = measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'scale-clamped');
   // The Cell Colour reads take the picture averaged over half a cell: each cell shows its whole colour and moves smoothly (patternCellFilter.ts).
-  return prefilterCellTaps(measureInReferenceFrame(graph, 'safe-dot-size', { minimumPixels: 1 }), 'safe-dot-size-pixels');
+  return prefilterCellTaps(measureInReferenceFrame(graph, 'dotSize-clamped', { minimumPixels: 1 }), 'dotSize-clamped-pixels');
 }

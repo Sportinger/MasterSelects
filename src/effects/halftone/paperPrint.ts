@@ -10,14 +10,14 @@ export const PAPER_PRINT_INK = '#1c1a18';
 export const PAPER_PRINT_PAPER = '#f3ecdc';
 
 export const PAPER_PRINT_PRESETS: readonly EffectPreset[] = [
-  // Brown-black on warm paper, a fine grain: an old photogravure in a book, almost as smooth as a photo.
-  { id: 'photogravure', name: 'Photogravure', params: { scale: 2.5, texture: 0.5, amount: 1, colorA: '#3a2416', colorB: '#eee0c4' } },
+  // Brown-black on warm paper, a fine grain and a quiet paper: an old photogravure in a book, almost as smooth as a photo.
+  { id: 'photogravure', name: 'Photogravure', params: { scale: 2.5, texture: 0.15, amount: 1, colorA: '#3a2416', colorB: '#eee0c4' } },
   // Warm black on cream, a clearly visible grain: the velvety grain of a mezzotint.
   { id: 'mezzotint', name: 'Mezzotint', params: { scale: 4, texture: 0.35, amount: 1, colorA: '#1f1a17', colorB: '#f1e8d4' } },
   // White ink on deep blue paper: the light parts of the picture are printed.
   { id: 'blueprint', name: 'Blueprint', params: { scale: 4, texture: 0.6, amount: 1, colorA: '#eef2f6', colorB: '#1d4c8c' } },
-  // Signal red on off-white, a big grain: a screen-printed poster.
-  { id: 'red-poster', name: 'Red Poster', params: { scale: 10, texture: 0.3, amount: 1, colorA: '#c8202e', colorB: '#f5efe4' } },
+  // Signal red on off-white, a coarse grain on smooth paper: a screen-printed poster.
+  { id: 'red-poster', name: 'Red Poster', params: { scale: 5.5, texture: 0.1, amount: 1, colorA: '#c8202e', colorB: '#f5efe4' } },
 ];
 
 const linearLight = (color: number | boolean | string | undefined, fallback: string) => {

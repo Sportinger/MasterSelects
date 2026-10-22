@@ -5,8 +5,8 @@ A two-ink riso print whose bright ink glows and slowly breathes, like fluorescen
 Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot docs-clip docs-compare docs-shot--float-left">
-<video src="../assets/effects/clips/riso-glow.mp4" poster="../assets/effects/clips/riso-glow.webp" width="1200" height="430" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Riso Glow right: a two-ink print of fine pink and indigo dots on a deep plum ground, where her warm-lit skin, dress and the lamp at the left edge give off a soft pink glow that swells and fades about every three seconds"></video>
-<figcaption>Left: original. Right: Riso Glow at its default settings, one breath of the glow.</figcaption>
+<video src="../assets/effects/clips/riso-glow.mp4" poster="../assets/effects/clips/riso-glow.webp" width="1200" height="430" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Riso Glow right: a two-ink print of fine pink and deep indigo dots on a near-black stage, where her dress, skin and the lamp at the left edge bloom with a soft pink glow that swells and fades once"></video>
+<figcaption>Left: original. Right: Riso Glow at its default settings, one full breath of the glow (about three seconds).</figcaption>
 </figure>
 
 **Use it for:** a figure that seems to give off light on a dark stage · neon signs and warm lamps that glow in print · a slow, hypnotic pulse under a song or a scene.
@@ -16,24 +16,24 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 - **Glow Ink** – the colour that glows.
 - **Dot Size** – how large the dots of the print are.
 
-**Tip:** the glow lives where the picture has the colour of the glow ink and spills into the dark around it. Warm light on skin glows best with a pink, red or orange glow ink; a white costume stays paper and does not glow. Set **Speed** to 0 for a steady glow, and keyframe **Glow** from 0 to bring it up on a cue.
+**Tip:** the glow comes from the parts the glow ink prints and, a little weaker, from the light parts the print leaves as paper: a white costume, lit skin and lamps bloom in the glow ink's colour and spill into the dark around them. Set **Speed** to 0 for a steady glow, and keyframe **Glow** from 0 to bring it up on a cue.
 
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/riso-glow-presets.mp4" poster="../assets/effects/clips/riso-glow-presets.webp" width="962" height="946" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Blacklight top left, violet and pink dots with a slowly breathing pink glow; Neon Sign top right, coral light on dark teal; Embers bottom left, an orange glow smouldering in a near-black print; Heartbeat bottom right, a red glow that beats fast on dark maroon"></video>
+<video src="../assets/effects/clips/riso-glow-presets.mp4" poster="../assets/effects/clips/riso-glow-presets.webp" width="962" height="946" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Blacklight top left, a pink-white glowing figure on a deep violet stage; Neon Sign top right, a pale figure with a coral sheen on dark teal; Embers bottom left, a figure glowing coral in a smoky, near-black print; Heartbeat bottom right, a pink glow that beats fast on dark maroon"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Blacklight** – medium blue and fluorescent pink, breathing slowly: a poster under ultraviolet light. The stage turns deep violet and everything pink in the picture lights up.
+**Blacklight** – medium blue and fluorescent pink, breathing slowly: a poster under ultraviolet light. The stage turns deep violet and the figure glows pink-white out of it.
 
-**Neon Sign** – teal and fluorescent orange in fine dots, with a steady hum: warm lights and skin glow like neon tubes over a cool, dark street.
+**Neon Sign** – teal and fluorescent coral in fine dots, with a quicker, livelier pulse: the figure stays pale and clear on a dark teal stage, with a coral sheen around its light parts. The calmest glow of the four.
 
-**Embers** – black and fluorescent orange in coarse dots, with a slow, strong glow: warm figures smoulder in an almost black print. Calm and heavy, good for firelight and night scenes.
+**Embers** – black and fluorescent coral in coarse dots, with a slow, strong glow: the figure glows coral in a smoky, almost black print, and the haze around it breathes. Calm and heavy, good for firelight and night scenes.
 
-**Heartbeat** – midnight and bright red, the glow beating about 76 times a minute: for tension, fear or a heart on stage.
+**Heartbeat** – slate and bright red, the glow beating about 76 times a minute: a pink glow pulses fast on a dark maroon stage. For tension, fear or a heart on stage.
 
 ## Controls
 
@@ -41,20 +41,20 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Riso Glow card: Preset menu showing Neon Sign, Dot Size and Registration under Pattern, Glow and Speed under Glow &amp; Pulse, Shadow Ink, Glow Ink and Amount under Color, beside a strip of the preview printed in teal and coral dots with a warm glow](../assets/effects/editor/riso-glow-inspector.webp)
+![Properties, Effects with a Riso Glow card: Preset menu showing Neon Sign, Dot Size and Registration under Pattern, Glow and Speed under Glow & Pulse, Shadow Ink, Glow Ink and Amount under Color, beside the preview of the dancer printed in teal and coral dots on a dark teal stage, her dress glowing coral](../assets/effects/editor/riso-glow-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 998" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 569" aria-hidden="true" focusable="false">
 <defs><marker id="riso-glow-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M491 340 L575 340" marker-end="url(#riso-glow-inspector-arrow)" />
-<circle class="docs-shot-number" cx="491" cy="340" r="18" /><text x="491" y="340" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M516 467 L600 467" marker-end="url(#riso-glow-inspector-arrow)" />
-<circle class="docs-shot-number" cx="516" cy="467" r="18" /><text x="516" y="467" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M547 652 L631 652" marker-end="url(#riso-glow-inspector-arrow)" />
-<circle class="docs-shot-number" cx="547" cy="652" r="18" /><text x="547" y="652" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M534 697 L618 697" marker-end="url(#riso-glow-inspector-arrow)" />
-<circle class="docs-shot-number" cx="534" cy="697" r="18" /><text x="534" y="697" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M513 882 L597 882" marker-end="url(#riso-glow-inspector-arrow)" />
-<circle class="docs-shot-number" cx="513" cy="882" r="18" /><text x="513" y="882" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M618 193 L702 193" marker-end="url(#riso-glow-inspector-arrow)" />
+<circle class="docs-shot-number" cx="618" cy="193" r="18" /><text x="618" y="193" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M632 266 L716 266" marker-end="url(#riso-glow-inspector-arrow)" />
+<circle class="docs-shot-number" cx="632" cy="266" r="18" /><text x="632" y="266" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M650 371 L734 371" marker-end="url(#riso-glow-inspector-arrow)" />
+<circle class="docs-shot-number" cx="650" cy="371" r="18" /><text x="650" y="371" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M643 397 L727 397" marker-end="url(#riso-glow-inspector-arrow)" />
+<circle class="docs-shot-number" cx="643" cy="397" r="18" /><text x="643" y="397" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M631 502 L715 502" marker-end="url(#riso-glow-inspector-arrow)" />
+<circle class="docs-shot-number" cx="631" cy="502" r="18" /><text x="631" y="502" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -64,7 +64,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 ### Pattern
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/riso-glow-dot-size.mp4" poster="../assets/effects/clips/riso-glow-dot-size.webp" width="720" height="628" autoplay muted loop playsinline preload="none" aria-label="The dancer with Riso Glow while Dot Size runs from 3 to 20 px and back: the fine print of pink and indigo dots coarsens into large round dots and the glow widens with them, then both shrink again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/riso-glow-dot-size.mp4" poster="../assets/effects/clips/riso-glow-dot-size.webp" width="720" height="628" autoplay muted loop playsinline preload="none" aria-label="The dancer with Riso Glow while Dot Size runs from 3 to 20 px and back: the fine print of pink and deep indigo dots coarsens into large round dots and the glow widens with them, then both shrink again; the current value is shown at the bottom left"></video>
 <figcaption>Dot Size from 3 to 20 px and back.</figcaption>
 </figure>
 
@@ -82,29 +82,31 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 ### Glow & Pulse
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/riso-glow-glow.mp4" poster="../assets/effects/clips/riso-glow-glow.webp" width="720" height="628" autoplay muted loop playsinline preload="none" aria-label="The dancer with Riso Glow while Glow runs from 0 to 2 and back at Speed 0: a plain two-ink print starts to shine pink around her skin, dress and the lamp, the glow grows strong and fades again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/riso-glow-glow.mp4" poster="../assets/effects/clips/riso-glow-glow.webp" width="720" height="628" autoplay muted loop playsinline preload="none" aria-label="The dancer with Riso Glow while Glow runs from 0 to 2 and back at Speed 0: a plain two-ink print on a dark stage starts to shine pink around her dress, skin and the lamp, the glow blooms strongly and fades again; the current value is shown at the bottom left"></video>
 <figcaption>Glow from 0 to 2 and back, at Speed 0 so the pulse holds still.</figcaption>
 </figure>
 
-**Glow** – how brightly the glow ink shines at the top of its pulse. At 0 Riso Glow is a plain two-ink print; 0.5 gives a soft sheen, 1 a clear glow that spills into the dark around the figure, 2 a strong haze. It only lights the parts of the picture the glow ink prints and the dark around them: black stays black and white paper stays paper. Keyframe it from 0 to let a picture start to glow on a cue. 0 to 2, default 1.
+**Glow** – how brightly the glow ink shines at the top of its pulse. At 0 Riso Glow is a plain two-ink print; 0.5 gives a soft sheen, 1 a clear glow that spills into the dark around the figure, 2 a strong haze. It lights the parts the glow ink prints and, weaker, the light parts the print leaves as paper, and spills into the dark around them. Where both inks print in full, as in black, the print's darkest colour stays and gives no glow. Keyframe it from 0 to let a picture start to glow on a cue. 0 to 2, default 1.
 
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/riso-glow-speed.mp4" poster="../assets/effects/clips/riso-glow-speed.webp" width="720" height="628" autoplay muted loop playsinline preload="none" aria-label="The dancer with Riso Glow at three speeds, about two seconds each: at Speed 0 the glow holds steady, at 1 it swells and fades slowly, at 3 it pulses quickly; the speed is shown at the bottom left"></video>
-<figcaption>Speed 0, 1 and 3, about two seconds each.</figcaption>
+<video src="../assets/effects/clips/riso-glow-speed.mp4" poster="../assets/effects/clips/riso-glow-speed.webp" width="720" height="628" autoplay muted loop playsinline preload="none" aria-label="The dancer with Riso Glow at three speeds, about two seconds each: at Speed 0 the glow holds steady, at 2 it swells and fades a little more than once, at 4 it pulses twice as fast; the speed is shown at the bottom left"></video>
+<figcaption>Speed 0, 2 and 4, about two seconds each (one breath lasts about 3.1 s ÷ Speed).</figcaption>
 </figure>
 
 **Speed** – how fast the glow breathes, from full down to a tenth of its strength and back. At 1 it breathes about every three seconds, 0.3 is a slow, sleepy swell, 3 and more a quick pulse. At 0 the glow holds still at its full strength. It follows the playhead, so a paused picture stands still and the export matches the preview, and a keyframed Speed speeds the breathing up smoothly. 0 to 5, default 1.
 
 ### Color
 
-**Shadow Ink** – the first ink, printed through a grid of dots turned 15°. Choose the darker of the two: it carries the shadows and, where it prints over the glow ink, it covers the glow. Blues, teals, violet, midnight and black work well. It takes a colour, default `#4f46e5`.
+**Shadow Ink** – the first ink, printed through a grid of dots turned 15°. Choose the darker of the two: it carries the shadows and, where it prints over the glow ink, it covers the glow. Deep blues, teals, violet, midnight and black work well: the darker it is, the darker the stage stays where both inks print, and the more the glow stands out. It takes a colour, default `#1b1f4a`.
 
-**Glow Ink** – the second ink, printed through a grid turned 75°, and the one that glows. Each part of the picture is printed with whatever mix of the two inks comes closest to its colour, so the glow appears where the picture has this ink's colour: pick it to match what should shine. Fluorescent pink, orange and bright red glow beautifully on warm skin and lamps. It takes a colour, default `#f43f5e`.
+**Glow Ink** – the second ink, printed through a grid turned 75°, and the one that glows. Each part of the picture is printed with whatever mix of the two inks comes closest to its colour, so the glow appears where the picture has this ink's colour: pick it to match what should shine. Fluorescent pink, coral and bright red glow beautifully on warm skin and lamps. It takes a colour, default `#f43f5e`.
+
+The paper is a fixed cream. To print on another paper, open the Nodes tab and change **Paper R**, **Paper G** and **Paper B** in the **Constants** folder.
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/riso-glow-amount.mp4" poster="../assets/effects/clips/riso-glow-amount.webp" width="720" height="628" autoplay muted loop playsinline preload="none" aria-label="The dancer with Riso Glow while Amount runs from 0 to 1 and back: the original stage picture turns into the glowing pink and indigo print and back again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/riso-glow-amount.mp4" poster="../assets/effects/clips/riso-glow-amount.webp" width="720" height="628" autoplay muted loop playsinline preload="none" aria-label="The dancer with Riso Glow while Amount runs from 0 to 1 and back: the original stage picture turns into the glowing pink and deep indigo print and back again; the current value is shown at the bottom left"></video>
 <figcaption>Amount from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -118,27 +120,27 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![The Riso Glow graph in ten folders: Parameters feed Screens, Paper and Inks, Cell Colour, Separation, Tone and Dots; Dots and Tone feed Print and Glow Share; Glow Spill gathers that share; Pulse turns Glow and Speed into a strength; Glow and Mix screens the glow onto the print](../assets/effects/graphs/riso-glow.webp)
+![The Riso Glow graph in eleven folders: Parameters feed Screens, Paper and Inks, Cell Filter, Cell Colour, Separation, Tone and Dots; Dots and Tone feed Print and Glow Share; Glow Spill gathers that share; Pulse turns Glow and Speed into a strength; Glow and Mix screens the glow onto the print](../assets/effects/graphs/riso-glow.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 843" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 895" aria-hidden="true" focusable="false">
 <defs><marker id="riso-glow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M617 635 L617 551" marker-end="url(#riso-glow-arrow)" />
-<circle class="docs-shot-number" cx="617" cy="635" r="18" /><text x="617" y="635" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M725 50 L725 134" marker-end="url(#riso-glow-arrow)" />
-<circle class="docs-shot-number" cx="725" cy="50" r="18" /><text x="725" y="50" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M833 819 L833 735" marker-end="url(#riso-glow-arrow)" />
-<circle class="docs-shot-number" cx="833" cy="819" r="18" /><text x="833" y="819" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M833 272 L833 356" marker-end="url(#riso-glow-arrow)" />
-<circle class="docs-shot-number" cx="833" cy="272" r="18" /><text x="833" y="272" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M941 470 L941 386" marker-end="url(#riso-glow-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="470" r="18" /><text x="941" y="470" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M654 805 L654 721" marker-end="url(#riso-glow-arrow)" />
+<circle class="docs-shot-number" cx="654" cy="805" r="18" /><text x="654" y="805" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 111 L752 195" marker-end="url(#riso-glow-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="111" r="18" /><text x="752" y="111" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M976 157 L892 157" marker-end="url(#riso-glow-arrow)" />
+<circle class="docs-shot-number" cx="976" cy="157" r="18" /><text x="976" y="157" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M849 337 L849 421" marker-end="url(#riso-glow-arrow)" />
+<circle class="docs-shot-number" cx="849" cy="337" r="18" /><text x="849" y="337" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M946 520 L946 436" marker-end="url(#riso-glow-arrow)" />
+<circle class="docs-shot-number" cx="946" cy="520" r="18" /><text x="946" y="520" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
 <figcaption>Riso Glow opened in the Nodes tab (input frame and output left out). 1 — Dots: the round dots of both inks. 2 — Print &amp; Glow Share: the print and where the glow ink shows. 3 — Glow Spill: that share gathered from around each pixel. 4 — Pulse: the breathing strength. 5 — Glow &amp; Mix: the glow screened onto the print.</figcaption>
 </figure>
 
-Riso Glow is [Riso](./riso.md)'s print with a glow on top, in ten folders. The first six print the picture in two inks of dots, exactly as Riso does: **Dots** is the last of them. **Print & Glow Share** puts the inks on the paper and works out where the glow ink shows, **Glow Spill** gathers that from around each pixel into a soft light, **Pulse** turns Glow and Speed into a breathing strength, and **Glow & Mix** screens the light onto the print. Click a folder's header to open it.
+Riso Glow is [Riso](./riso.md)'s print with a glow on top, in eleven folders. The first seven print the picture in two inks of dots, exactly as Riso does: **Dots** is the last of them. **Print & Glow Share** puts the inks on the paper and works out where the glow ink shows, **Glow Spill** gathers that from around each pixel into a soft light, **Pulse** turns Glow and Speed into a breathing strength, and **Glow & Mix** screens the light onto the print. Click a folder's header to open it.
 
 ### Paper & Inks
 
@@ -148,9 +150,13 @@ The paper and the two inks as light, and how much of the paper's light each ink 
 
 Each ink's grid of dots: the paper pixel slipped by Registration, turned 15° (shadow ink) or 75° (glow ink) and cut into cells of Dot Size. The same as [Riso › Screens](./riso.md#screens).
 
+### Cell Filter
+
+The picture averaged over boxes of half a cell, so the four reads of a cell together give its whole colour and the dots move smoothly with moving footage. The same as [Halftone › Cell Filter](./halftone.md#cell-filter).
+
 ### Cell Colour
 
-The colour of each cell, read at four points in linear light. The same as [Riso › Cell Colour](./riso.md#cell-colour).
+The colour of each cell, read at four points of the Cell Filter in linear light. The same as [Riso › Cell Colour](./riso.md#cell-colour).
 
 ### Separation
 
@@ -170,31 +176,37 @@ The round dot that covers exactly that share of each cell, one pixel soft at the
 
 <div class="docs-shot-stage">
 
-![Inside the Print and Glow Share folder: One minus the Shadow Coverage goes through Subtract, times the Glow Coverage in Multiply, the Glow Share; Scalar to Alpha puts it into the alpha of Combine RGB + Alpha beside the print (a Multiply of the paper through both inks), and Cache Image keeps both](../assets/effects/graphs/riso-glow-print.webp)
+![Inside the Print and Glow Share folder: Mix blends the Glow Paper Share 0.6 and One by the Glow Coverage; Multiply takes that times One minus the Shadow Coverage (Subtract) and then times the Pixel Alpha (Alpha to Scalar): the Glow Share; Scalar to Alpha puts it into the alpha of Combine RGB + Alpha beside the print (a Multiply of the paper through both inks), and Cache Image keeps both](../assets/effects/graphs/riso-glow-print.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 663" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 583" aria-hidden="true" focusable="false">
 <defs><marker id="riso-glow-print-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M264 435 L264 351" marker-end="url(#riso-glow-print-arrow)" />
-<circle class="docs-shot-number" cx="264" cy="435" r="18" /><text x="264" y="435" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M427 105 L427 189" marker-end="url(#riso-glow-print-arrow)" />
-<circle class="docs-shot-number" cx="427" cy="105" r="18" /><text x="427" y="105" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M752 407 L752 323" marker-end="url(#riso-glow-print-arrow)" />
-<circle class="docs-shot-number" cx="752" cy="407" r="18" /><text x="752" y="407" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M914 105 L914 189" marker-end="url(#riso-glow-print-arrow)" />
-<circle class="docs-shot-number" cx="914" cy="105" r="18" /><text x="914" y="105" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M230 22 L230 79" marker-end="url(#riso-glow-print-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="22" r="18" /><text x="230" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M369 22 L369 79" marker-end="url(#riso-glow-print-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="22" r="18" /><text x="369" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M508 22 L508 79" marker-end="url(#riso-glow-print-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="22" r="18" /><text x="508" y="22" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M787 22 L787 79" marker-end="url(#riso-glow-print-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="22" r="18" /><text x="787" y="22" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M926 261 L926 177" marker-end="url(#riso-glow-print-arrow)" />
+<circle class="docs-shot-number" cx="926" cy="261" r="18" /><text x="926" y="261" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Print &amp; Glow Share. 1 — Subtract: the part of the cell the shadow ink leaves open. 2 — Multiply: the Glow Share. 3 — Combine RGB + Alpha: the print with the share beside it. 4 — Cache Image: keeps both for the next folders.</figcaption>
+<figcaption>Inside Print &amp; Glow Share. 1 — Mix: how much a cell glows, from paper share to full. 2 — Multiply: what the shadow ink leaves open. 3 — Multiply: on opaque pixels only, the Glow Share. 4 — Combine RGB + Alpha: the print with the share beside it. 5 — Cache Image: keeps both for the next folders.</figcaption>
 </figure>
 
-**Subtract** – one minus the shadow ink's coverage of the glow ink's cell: how much of the cell the shadow ink leaves open. Where both inks print in full, as in black, nothing is left.
+**Mix** – how much of a cell can glow: 0.6 (Glow Paper Share) where the cell is paper, rising to 1 where the glow ink prints in full (its coverage is the mix). So the glow ink glows fully, and the light parts the print leaves as paper, such as a white costume, glow too, a little weaker.
 
-**Multiply** – the glow ink's coverage times that open part: the Glow Share, from 0 (no glow ink, or covered) to 1 (only glow ink). It is what glows. The other Multiply is the print itself, the paper's light through the dots of both inks, as in Riso.
+**Multiply** – that times one minus the shadow ink's coverage (Subtract): the part the shadow ink leaves open. Where both inks print in full, as in black, nothing is left to glow.
 
-**Combine RGB + Alpha** – packs the print into the colour and the Glow Share into the alpha of one picture.
+**Multiply** – that times the pixel's own alpha: the Glow Share, from 0 to 1. Transparent pixels never glow, so the surround of a cut-out figure adds no glow to it.
+
+**Combine RGB + Alpha** – packs the print into the colour and the Glow Share into the alpha of one picture. The other Multiply is the print itself, the paper's light through the dots of both inks, as in Riso.
 
 **Cache Image** – keeps that picture for the rest of the effect, so the print is worked out once per pixel and the next folder can read the Glow Share of its neighbours.
+
+**Remix:** open the **Constants** folder and set **Glow Paper Share** to **0**: only the glow ink's own colours glow, and a white costume stays plain paper.
 
 ### Glow Spill
 
@@ -303,8 +315,8 @@ The round dot that covers exactly that share of each cell, one pixel soft at the
 ## Technical details
 
 - **Size.** Dot Size and Registration count pixels of a frame whose shorter side is 1080, and the glow reaches a fixed number of dots: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same dots and the same glow. A cell is never smaller than one pixel of the frame, and the card says so on a frame that small.
-- **Glow.** The print and the glow share (the glow ink's coverage × the part the shadow ink leaves open) are cached in one pass; the second pass gathers the share over 9 × 9 taps 0.75 dots apart with Gaussian weights and screens the glow ink's light onto the print in linear light: 1 − (1 − print) × e^(−strength × light). Areas of pure black or white keep the look of the plain print; the glow only spills around the parts that glow.
+- **Glow.** The print and the glow share (mix(0.6, 1, the glow ink's coverage) × the part the shadow ink leaves open × the pixel's alpha) are cached in one pass; the second pass gathers the share over 9 × 9 taps 0.75 dots apart with Gaussian weights and screens the glow ink's light onto the print in linear light: 1 − (1 − print) × e^(−strength × light). Black keeps the print's darkest colour (both inks in full) and gives no glow; light parts glow with the glow ink and spill into the dark around them.
 - **Time.** The pulse is 0.55 + 0.45 × cos(2 × seconds × Speed) of the timeline: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. A keyframed Speed breathes faster or slower smoothly, without a jump.
-- **Transparency.** Transparent parts of the picture take no ink and give no glow, and each pixel keeps its own alpha, so the glow stays inside a cut-out figure's outline.
-- **Saved projects.** A Riso Glow saved before Dot Size existed keeps its earlier look: both inks printed the same darkness, a little apart, without dots, with a pulsing tint of both inks, mixed over the picture at Amount 0.75. Its card hides Dot Size and Glow and says so; add the effect again for the print described here. An edited node setup keeps its own recipe.
+- **Transparency.** Transparent parts of the picture take no ink and give no glow, and each pixel keeps its own alpha: on a cut-out figure the glow stays inside its outline and does not spill onto what lies behind it.
+- **Saved projects.** A project stores each effect's node setup, so a saved Riso Glow keeps the look it was saved with, also its Shadow Ink (effects saved without one keep `#4f46e5`). One saved before Dot Size existed, without a node setup, keeps its earlier look: both inks printed the same darkness, a little apart (Registration in pixels of the frame), without dots, with a pulsing tint of both inks, mixed over the picture at Amount 0.75. Its card hides Dot Size and Glow and says so; add the effect again for the print described here. A custom Look keeps the node setup it was saved with in the same way.
 - **More:** [Riso](./riso.md) · [Effect system](../Effect-System.md#riso-glow) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

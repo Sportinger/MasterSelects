@@ -1,6 +1,7 @@
 import lookShaders from './shader.wgsl?raw';
 import coordinateRotation from '../_shared/coordinateRotation.wgsl?raw';
 import { IMAGE_FRACTAL_NOISE_WGSL } from '../../services/operators/imageNoiseSemantics';
+import { roundImageScalarEven } from '../../services/operators/imageRoundingSemantics';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { DRIFT_LINES_PRESETS, driftLinesWarnings } from './driftLines';
 import { HALFTONE_PRESETS } from './halftonePresets';
@@ -15,7 +16,8 @@ const shader = `${lookShaders}\n${coordinateRotation}\n${IMAGE_FRACTAL_NOISE_WGS
 /** Dither cells are whole output pixels (patternReferenceFrame.ts wholePixels): say when Pixel Size rounds on this frame. */
 function ditherWholePixelNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080): string[] {
   const size = Math.max(typeof params.scale === 'number' && Number.isFinite(params.scale) ? params.scale : 3, 1);
-  const pixels = size * Math.min(width, height) / 1080, whole = Math.round(pixels);
+  // Half to even, as the graph (math.round-even) and the twin's round() do: 2.5 pixels render 2.
+  const pixels = size * Math.min(width, height) / 1080, whole = roundImageScalarEven(pixels);
   if (pixels < 1 || Math.abs(pixels - whole) < 1e-6) return [];
   return [`Pixel Size ${Number(size.toPrecision(4))} px is ${Number(pixels.toPrecision(3))} pixels on this ${width}×${height} frame; dither cells are whole pixels, so it renders ${whole}.`];
 }
@@ -119,7 +121,9 @@ export const risoGlow = createCatalogEffect({
     // How brightly the Glow Ink shines at the top of its pulse (0: a plain two-ink print). Reaches the twin through the Angle slot.
     glow: { type: 'number', label: 'Glow', default: 1, min: 0, max: 2, step: 0.05, renderMin: 0, graphOnly: true, group: 'Glow & Pulse' },
     speed: { type: 'number', label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, group: 'Glow & Pulse' },
-    colorA: { type: 'color', label: 'Shadow Ink', default: '#4f46e5', group: 'Color' },
+    // A deep indigo, so where both inks print the stage stays near black and the glow has a dark to shine into.
+    // Effects saved without a value had the lighter indigo #4f46e5.
+    colorA: { type: 'color', label: 'Shadow Ink', default: '#1b1f4a', group: 'Color', legacyDefault: '#4f46e5' },
     colorB: { type: 'color', label: 'Glow Ink', default: '#f43f5e', group: 'Color' },
     // The print alone by default; effects saved without an Amount keep the earlier 0.75.
     amount: catalogBaseParam('amount', { group: 'Color', default: 1, legacyDefault: 0.75 }),
