@@ -26,3 +26,15 @@ export function timeStackDecay(params: Record<string, unknown>): { decay: number
   const decay = Math.min(1, Math.max(TIME_STACK_MIN_DECAY, value));
   return { decay, clamped: value < 0 || value > 1, invalid: false };
 }
+
+/**
+ * How many copies a clip of this length ever shows: copy i starts i × Time offset into the clip, so on a clip
+ * shorter than the stack's span the oldest copies never appear (the card says so instead of staying silent).
+ */
+export function timeStackReach(params: Record<string, unknown>, clipDuration: number): { visible: number; count: number; nextStart?: number } {
+  const { count, offset } = timeStackSettings(params);
+  if (offset === 0 || !Number.isFinite(clipDuration) || clipDuration <= 0) return { visible: count, count };
+  // Copy i shows while i × offset lies before the clip's end.
+  const visible = Math.max(1, Math.min(count, Math.ceil(clipDuration / offset - 1e-7)));
+  return visible < count ? { visible, count, nextStart: visible * offset } : { visible, count };
+}

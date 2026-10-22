@@ -89,6 +89,47 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "time-stack-inspector",
+      "effect": "time-stack",
+      "params": {
+        "count": 5,
+        "offset": 0.5,
+        "decay": 0.9,
+        "blendMode": "lighten"
+      },
+      "image": "../footage/dancer_stage_motion.mp4",
+      "preview": 380,
+      "top": "tabs",
+      "hide": [
+        "Track Landmarks",
+        "Particle Out"
+      ],
+      "alt": "Properties, Effects with a Time Stack card: Preset menu showing Chorus, then Instances 5, Time offset 0.50 s, Decay 0.90, Blend mode Lighten, Preview size Full and Frame cache 1 GiB, with the summary line under them, beside a strip of the preview with the dancer and a faint copy",
+      "caption": "Time Stack with the Chorus preset. 1 — Preset: pick a starting point. 2 — Instances: how many copies. 3 — Time offset: the time between them. 4 — Decay: how much fainter each older copy gets. 5 — Blend mode: how the copies combine.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Instances",
+          "label": "Instances"
+        },
+        {
+          "target": "Time offset",
+          "label": "Time offset"
+        },
+        {
+          "target": "Decay",
+          "label": "Decay"
+        },
+        {
+          "target": "Blend mode",
+          "label": "Blend mode"
+        }
+      ]
     }
   ]
 }

@@ -86,6 +86,9 @@ export const EFFECT_DOC_EXTRAS = {
   flocking: {
     note: 'The card shows a **Preset** menu and the values that preset exposes, grouped as Population, Behavior, Guidance, Appearance and Lines; they change with the preset. **Open Nodes** shows the whole swarm graph.',
   },
+  'time-stack': {
+    rows: ['count', { key: 'offset', label: 'Time offset', range: '0 to 10 s', default: '0.1 s' }, 'decay', 'blendMode', 'previewSize', 'memoryMiB'],
+  },
   'slit-scan': {
     sections: ['Time', 'Wave', 'Sampling', 'Motion compensation', 'Preview quality', '3D geometry', 'Space-time slice', 'Stabilization',
       'Time map', 'Shape target', 'Motion field', 'Field shaping', 'Field noise', 'Field combination', 'RGB time', 'Protection mask',

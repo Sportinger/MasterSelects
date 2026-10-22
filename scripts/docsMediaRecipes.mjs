@@ -75,7 +75,6 @@ export const RECIPE_PENDING = {
     'scanlines.webp',
     'temperature.webp',
     'threshold.webp',
-    'time-stack.webp',
     'twirl.webp',
     'vibrance.webp',
     'vignette.webp',

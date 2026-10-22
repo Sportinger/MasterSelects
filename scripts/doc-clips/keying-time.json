@@ -381,6 +381,82 @@
       "float": "right",
       "alt": "Preview set to Time map with the Time Rings preset: black and white rings across the whole frame that slowly close in on the centre",
       "caption": "Preview → Time map with the Time Rings preset: black is now, white the full Delay."
+    },
+    {
+      "name": "time-stack",
+      "effect": "time-stack",
+      "params": {},
+      "range": [
+        2.0,
+        6.0
+      ],
+      "layout": "compare",
+      "crop": [
+        440,
+        40,
+        1040,
+        1000
+      ],
+      "width": 960,
+      "float": "left",
+      "loop": 0.35,
+      "poster": 1.6,
+      "maxBytes": 1000000,
+      "alt": "The dancer turning on a dark stage, original left and with Time Stack right: fainter and fainter copies of her arms, hair and dress fan out behind her as she turns, like a long-exposure photograph",
+      "caption": "Left: original. Right: Time Stack at its default settings, the Echo Trail preset."
+    },
+    {
+      "name": "time-stack-presets",
+      "kind": "presets",
+      "effect": "time-stack",
+      "range": [
+        2.0,
+        6.0
+      ],
+      "crop": [
+        440,
+        0,
+        1040,
+        1080
+      ],
+      "width": 960,
+      "columns": 3,
+      "loop": 0.35,
+      "poster": 1.6,
+      "maxBytes": 1400000,
+      "alt": "The dancer five times in a grid, moving in sync, each with one preset: Echo Trail with fading copies fanning out behind her, Long Exposure with a soft continuous smear, Stroboscope with eight equally bright copies close together, Chorus with five whole dancers half a second apart, Afterglow with a short glowing trail and a brighter stage",
+      "caption": "The five presets on the moving dancer, in sync."
+    },
+    {
+      "name": "time-stack-decay",
+      "effect": "time-stack",
+      "params": {},
+      "range": [
+        2.0,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        440,
+        40,
+        1040,
+        1000
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "decay",
+        "label": "Decay",
+        "from": 0,
+        "to": 1,
+        "unit": "",
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with Time Stack while Decay runs from 0 to 1 and back: at 0 she is alone, then fading copies appear behind her and grow into a dense, equally bright crowd of arms and skirts at 1, and fade again; the current value is shown at the bottom left",
+      "caption": "Decay from 0 to 1 and back."
     }
   ]
 }
