@@ -138,7 +138,7 @@ The rows below are those of the default swarm, Free Swarm. Other presets show ot
 
 <div class="docs-float-end"></div>
 
-**Color** – the colour of the points. The points add up where they crowd, so a saturated colour keeps its hue in the dense core while a very pale one turns white there; you can keyframe it to let the swarm change colour on a cue, and a warm colour reads well under stage light: a colour, default `#b4e2ff`.
+**Color** – the colour of the points. The points add up where they crowd, so a saturated colour keeps its hue in the dense core while a very pale one turns white there; you can keyframe it to let the swarm change colour on a cue, and a warm colour reads well under stage light. Type a hex value into the field beside the swatch; the reset arrow returns to the preset's colour: a colour, default `#b4e2ff`.
 
 ### More controls
 
@@ -164,12 +164,12 @@ The folded **Simulation status** section shows how much memory the swarm needs a
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 385" aria-hidden="true" focusable="false">
 <defs><marker id="flocking-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M368 78 L368 162" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="368" cy="78" r="18" /><text x="368" y="78" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M228 94 L228 178" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="228" cy="94" r="18" /><text x="228" y="94" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M93 73 L177 73" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="93" cy="73" r="18" /><text x="93" y="73" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M395 261 L375 243" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="395" cy="261" r="18" /><text x="395" y="261" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M228 317 L228 274" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="228" cy="317" r="18" /><text x="228" y="317" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M300 69 L274 78" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="300" cy="69" r="18" /><text x="300" y="69" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M509 54 L509 138" marker-end="url(#flocking-arrow)" />
 <circle class="docs-shot-number" cx="509" cy="54" r="18" /><text x="509" y="54" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M649 62 L649 146" marker-end="url(#flocking-arrow)" />

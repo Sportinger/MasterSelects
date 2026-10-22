@@ -7,7 +7,7 @@ import { useDockStore } from '../../src/stores/dockStore';
 import { useNodeWorkspaceNavigation } from '../../src/services/nodeGraph/nodeWorkspaceNavigation';
 import { flockRuntime } from '../../src/engine/flock/runtime/flockRuntimeApi';
 import type { FlockDefinition } from '../../src/types/flock';
-import { populationFromSlider, populationStep, presetFlockValue } from '../../src/components/panels/properties/flock/flockControlUtils';
+import { isPresetFlockControl, populationFromSlider, populationStep, presetFlockValue } from '../../src/components/panels/properties/flock/flockControlUtils';
 
 const initialTimeline = useTimelineStore.getState();
 const initialDock = useDockStore.getState();
@@ -137,6 +137,36 @@ describe('FlockTab', () => {
     expect(screen.queryByRole('button', { name: /^Remove control/ })).toBeNull();
     expect(screen.queryByText(/nodes · /)).toBeNull();
     expect(screen.queryByText('Resimulates from start')).toBeNull();
+  });
+
+  it('keeps a remove button on a Max Speed row added to a fresh swarm that shows Speed as Pace', async () => {
+    const simulationId = nodeIdFor(clipId, 'flock.simulation');
+    act(() => { useTimelineStore.getState().exposeFlockGraphParam(clipId, simulationId, 'maxSpeed', { label: 'Max Speed' }); });
+    await renderTab(clipId);
+    expect(screen.getByRole('button', { name: 'Remove control Max Speed' })).toBeInTheDocument();
+  });
+
+  it('treats Max Speed as the preset\'s Speed only on an older swarm without Pace, and resets it to the preset\'s value', () => {
+    const definition = structuredClone(getDefinition(clipId));
+    const pace = definition.exposed.find((item) => item.param === 'pace')!;
+    pace.param = 'maxSpeed';
+    expect(isPresetFlockControl(definition, pace)).toBe(true);
+    expect(presetFlockValue(definition, pace)).toBeTypeOf('number');
+    const fresh = getDefinition(clipId);
+    expect(isPresetFlockControl(fresh, { nodeId: pace.nodeId, param: 'maxSpeed' })).toBe(false);
+  });
+
+  it('edits Color in a bordered hex field and resets it to the preset\'s colour', async () => {
+    await renderTab(clipId);
+    const colorParam = getDefinition(clipId).exposed.find((item) => item.label === 'Color')!;
+    const presetColor = presetFlockValue(getDefinition(clipId), colorParam);
+    const hex = screen.getByRole('textbox', { name: 'Color hex' });
+    fireEvent.change(hex, { target: { value: 'ff0000' } });
+    fireEvent.keyDown(hex, { key: 'Enter' });
+    const read = () => getDefinition(clipId).nodes.find((node) => node.id === colorParam.nodeId)?.params[colorParam.param];
+    expect(read()).toBe('#ff0000');
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Reset Color' })); });
+    expect(read()).toBe(presetColor);
   });
 
   it('opens the Flock node view from the header', async () => {

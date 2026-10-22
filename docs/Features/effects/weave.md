@@ -172,7 +172,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** lays out the threads of a plain weave as curves; **Handmade** makes them uneven, **Weave In** pulls them in over the first seconds, **Yarn** twists fibres around them, and **Wind Cloth** hangs them on a sheet in the wind, turned three quarters to the camera. **Reveal by Shape** sets how thick the yarn is, so it decides how much of the net exists. **Strand Render** draws the result as lit fibres. Click a folder's header to open it; the sections below show what is inside. The **Qualle** form is a larger graph of its own, described at the end.
 
-### Weave In
+### Inside Weave In
 
 <figure class="docs-shot docs-shot--graph">
 
@@ -182,8 +182,8 @@ Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** 
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 622" aria-hidden="true" focusable="false">
 <defs><marker id="weave-weave-in-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M314 504 L314 420" marker-end="url(#weave-weave-in-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="504" r="18" /><text x="314" y="504" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M314 151 L314 230" marker-end="url(#weave-weave-in-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="151" r="18" /><text x="314" y="151" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M703 504 L703 420" marker-end="url(#weave-weave-in-arrow)" />
 <circle class="docs-shot-number" cx="703" cy="504" r="18" /><text x="703" y="504" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M897 145 L897 229" marker-end="url(#weave-weave-in-arrow)" />
@@ -202,7 +202,7 @@ Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** 
 
 **Remix:** set **Weave Rate** to 0.1: at Weave Speed 1 the net now takes ten seconds and you can watch every thread arrive.
 
-### Reveal by Shape
+### Inside Reveal by Shape
 
 <figure class="docs-shot docs-shot--graph">
 
@@ -234,7 +234,7 @@ Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** 
 
 **Ramp** – turns the distance into a thickness for the yarn: 1 well inside, 1.6 right at the edge (the swollen, frayed rim), 0 outside, where the yarn disappears.
 
-### Handmade
+### Inside Handmade
 
 <figure class="docs-shot docs-shot--graph">
 
@@ -266,7 +266,7 @@ Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** 
 
 **Set Position** – moves every point of the woven curves by that offset. A third path, not shown, swells the yarn in places (**Slubs**) and goes to Yarn.
 
-### Yarn
+### Inside Yarn
 
 <figure class="docs-shot docs-shot--graph">
 
@@ -300,7 +300,7 @@ Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** 
 
 **Remix:** in **Yarn Profile**, set Plies to 1 and Fibers to 1: the net turns into smooth, plastic-looking cord.
 
-### Wind Cloth
+### Inside Wind Cloth
 
 <figure class="docs-shot docs-shot--float-right">
 
@@ -310,12 +310,12 @@ Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** 
 
 <svg class="docs-shot-overlay" viewBox="0 0 590 630" aria-hidden="true" focusable="false">
 <defs><marker id="weave-wind-cloth-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M112 425 L112 341" marker-end="url(#weave-wind-cloth-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="425" r="18" /><text x="112" y="425" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M112 141 L112 218" marker-end="url(#weave-wind-cloth-arrow)" />
+<circle class="docs-shot-number" cx="112" cy="141" r="18" /><text x="112" y="141" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M112 608 L112 524" marker-end="url(#weave-wind-cloth-arrow)" />
 <circle class="docs-shot-number" cx="112" cy="608" r="18" /><text x="112" y="608" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M295 132 L295 216" marker-end="url(#weave-wind-cloth-arrow)" />
-<circle class="docs-shot-number" cx="295" cy="132" r="18" /><text x="295" y="132" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M295 435 L295 362" marker-end="url(#weave-wind-cloth-arrow)" />
+<circle class="docs-shot-number" cx="295" cy="435" r="18" /><text x="295" y="435" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M478 132 L478 216" marker-end="url(#weave-wind-cloth-arrow)" />
 <circle class="docs-shot-number" cx="478" cy="132" r="18" /><text x="478" y="132" class="docs-shot-number-text">4</text>
 </svg>
@@ -340,39 +340,39 @@ Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** 
 
 The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit Body** knits the bell and the closed courses of yarn, **Tail Shape** draws the loose loops in behind it, **Loose Returns**, **Return Length** and **Return Curls** let the ribbons wander and curl on both sides, **Jellyfish Pulse** contracts the bell and sends the wave down the body, **Soft Head & Yarn Motion** keeps it breathing, **Cream Yarn** gives it its fibres, and **Upright Pose** stands it up in the frame. Its folders share many values, so even with every folder closed its overview in the Nodes tab is a dense web of cables; the three folders that hold the card controls and the pose follow, each on its own. It is the ribbon motion of the animation *Qualle*, and only the ribbon values were taken over (the piece's metamorphosis, scan overlay and particle wake were left out).
 
-### Jellyfish Pulse
+### Inside Jellyfish Pulse
 
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![Inside the Jellyfish Pulse folder, the path of one beat: Clip Time times Pulse Rate counts the pulses, Fraction keeps the place within one, a Multiply and a Subtract turn it into a phase that starts later further down the body, Cosine makes it a wave, two more cards sharpen it into a Power, and, below, a Multiply weighs Pulse Size by Beat on the Bell](../assets/effects/graphs/weave-jellyfish-pulse.webp)
+![Inside the Jellyfish Pulse folder, the path of one beat: Clip Time times Pulse Rate counts the pulses, Fraction keeps the place within one, a Multiply and a Subtract turn it into a phase that starts later further down the body, Cosine makes it a wave, two more cards sharpen it into a Power, and two Multiply cards weight that beat by Near the Bell and then by Pulse Size; the last one's value goes on outside the picture](../assets/effects/graphs/weave-jellyfish-pulse.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 452" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 763" aria-hidden="true" focusable="false">
 <defs><marker id="weave-jellyfish-pulse-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M292 22 L292 85" marker-end="url(#weave-jellyfish-pulse-arrow)" />
-<circle class="docs-shot-number" cx="292" cy="22" r="18" /><text x="292" y="22" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M617 252 L617 168" marker-end="url(#weave-jellyfish-pulse-arrow)" />
-<circle class="docs-shot-number" cx="617" cy="252" r="18" /><text x="617" y="252" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M941 281 L941 197" marker-end="url(#weave-jellyfish-pulse-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="281" r="18" /><text x="941" y="281" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M184 406 L184 322" marker-end="url(#weave-jellyfish-pulse-arrow)" />
-<circle class="docs-shot-number" cx="184" cy="406" r="18" /><text x="184" y="406" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M430 22 L430 99" marker-end="url(#weave-jellyfish-pulse-arrow)" />
+<circle class="docs-shot-number" cx="430" cy="22" r="18" /><text x="430" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M902 298 L902 214" marker-end="url(#weave-jellyfish-pulse-arrow)" />
+<circle class="docs-shot-number" cx="902" cy="298" r="18" /><text x="902" y="298" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M430 354 L430 438" marker-end="url(#weave-jellyfish-pulse-arrow)" />
+<circle class="docs-shot-number" cx="430" cy="354" r="18" /><text x="430" y="354" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M744 679 L744 595" marker-end="url(#weave-jellyfish-pulse-arrow)" />
+<circle class="docs-shot-number" cx="744" cy="679" r="18" /><text x="744" y="679" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Jellyfish Pulse (Pulse Rate, Pulse Size), the beat. 1 — Fraction: the place within one pulse. 2 — Cosine: a smooth wave. 3 — Power: a short, sharp contraction. 4 — Multiply: Pulse Size times Beat on the Bell.</figcaption>
+<figcaption>Inside Jellyfish Pulse (Pulse Rate, Pulse Size), the beat. 1 — Fraction: the place within one pulse. 2 — Cosine: a smooth wave. 3 — Power: a short, sharp contraction. 4 — Multiply: how far each point is pulled in.</figcaption>
 </figure>
 
 **Fraction** – the pulses counted so far (Clip Time times **Pulse Rate**) without their whole part: where the bell is within the current pulse, from 0 to 1. Further down the body the phase starts a little later (**Delay down the Body**), so the contraction runs down the ribbons as a wave.
 
 **Cosine** – turns that phase into a smooth rise and fall.
 
-**Power** – sharpens the wave into a short contraction followed by a long, slow release, the rhythm of a swimming jellyfish. Its exponent and the card that uses the beat lie outside this picture.
+**Power** – sharpens the wave into a short contraction followed by a long, slow release, the rhythm of a swimming jellyfish. Its exponent lies outside this picture.
 
-**Multiply** – **Pulse Size** times how close a point is to the bell (**Beat on the Bell**): how strongly each point follows the beat. Further on, outside this picture, the beat from Power is multiplied by it, which pulls the bell in and stretches the body.
+**Multiply** – the beat from Power, weighted by how close a point is to the bell (**Near the Bell**, in the Multiply before it), times **Pulse Size**: how far each point is pulled in. Outside this picture that amount pulls the bell in and stretches the body.
 
-### Return Curls
+### Inside Return Curls
 
 <figure class="docs-shot docs-shot--graph">
 
@@ -386,8 +386,8 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 <circle class="docs-shot-number" cx="314" cy="497" r="18" /><text x="314" y="497" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M509 438 L509 354" marker-end="url(#weave-return-curls-arrow)" />
 <circle class="docs-shot-number" cx="509" cy="438" r="18" /><text x="509" y="438" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M509 267 L509 183" marker-end="url(#weave-return-curls-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="267" r="18" /><text x="509" y="267" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M356 121 L428 121" marker-end="url(#weave-return-curls-arrow)" />
+<circle class="docs-shot-number" cx="356" cy="121" r="18" /><text x="356" y="121" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M703 138 L703 222" marker-end="url(#weave-return-curls-arrow)" />
 <circle class="docs-shot-number" cx="703" cy="138" r="18" /><text x="703" y="138" class="docs-shot-number-text">4</text>
 </svg>
@@ -404,7 +404,7 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 
 **Multiply** – Curl Strength times the Ramp: how far an evolving curl noise may push each point. Two more Multiply cards split it between the outgoing and the incoming side of the ribbons, so they curl on both sides.
 
-### Upright Pose
+### Inside Upright Pose
 
 <figure class="docs-shot docs-shot--graph">
 
@@ -414,10 +414,10 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 618" aria-hidden="true" focusable="false">
 <defs><marker id="weave-upright-pose-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M228 248 L228 164" marker-end="url(#weave-upright-pose-arrow)" />
-<circle class="docs-shot-number" cx="228" cy="248" r="18" /><text x="228" y="248" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M374 379 L374 463" marker-end="url(#weave-upright-pose-arrow)" />
-<circle class="docs-shot-number" cx="374" cy="379" r="18" /><text x="374" y="379" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M81 177 L177 139" marker-end="url(#weave-upright-pose-arrow)" />
+<circle class="docs-shot-number" cx="81" cy="177" r="18" /><text x="81" y="177" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M504 567 L426 567" marker-end="url(#weave-upright-pose-arrow)" />
+<circle class="docs-shot-number" cx="504" cy="567" r="18" /><text x="504" y="567" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M665 442 L665 358" marker-end="url(#weave-upright-pose-arrow)" />
 <circle class="docs-shot-number" cx="665" cy="442" r="18" /><text x="665" y="442" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M934 153 L934 237" marker-end="url(#weave-upright-pose-arrow)" />
@@ -441,6 +441,6 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 - **Size.** The sheet is 1.6 × 0.96 scene units, about two thirds of the frame wide with the default camera; the Qualle stands about three quarters of the frame tall. Scale and move them with the clip's Transform.
 - **Time.** Weave runs in the time of its clip: the weave-in, the wind and the pulse start at the clip's start, and trimming or splitting the clip continues the motion instead of restarting it. Preview, scrubbing and export show the same frame for the same moment.
 - **Transparency.** The threads are drawn as an extra 3D layer above the clip with the clip's transform and blend mode; around them the clip shows through. On a transparent clip only the threads remain.
-- **Saved projects.** A Weave keeps the graph it was saved with. While that graph is one of the two forms as they are now, Form keeps working, and moving cards, renaming or folding folders in the Nodes tab is kept until you switch Form. Once you change the node setup in the Nodes tab, or switch a folder off with the switch in its card section, the graph is the Weave's own: Form leaves the card and only the controls that graph uses stay. Weaves saved before Form existed keep their look this way, with their Reveal, Weave Speed and Irregularity. Such a Weave, or one built from another built-in graph such as Jellyfish, has no Form, so the presets can change little or nothing on it; the card says so. Its own exposed values keep the graph's names and ranges.
+- **Saved projects.** A Weave keeps the graph it was saved with. While that graph is one of the two forms as they are now, Form keeps working, and moving cards, renaming or folding folders in the Nodes tab is kept until you switch Form. Once you change the node setup in the Nodes tab, or switch a folder off with the switch in its card section, the graph is the Weave's own: Form leaves the card and only the controls that graph uses stay. Weaves saved before Form existed keep their look this way, with their Reveal, Weave Speed and Irregularity. Such a Weave, or one built from another built-in graph such as Jellyfish, has no Form, so the presets can change little or nothing on it; the card says so. Its Preset row may still name a preset (often Burlap) when none of that preset's controls is on the card. Its own exposed values keep the graph's names and ranges.
 - **3D scene.** After adding the effect the preview can show "Preparing 3D scene" for a few seconds.
 - **More:** [Weave](../Weave.md) (all nodes, knots, ropes and the other built-in Weave graphs) · [Node Catalog](../Node-Catalog.md#curve-graphs-weave) · [Styles and presets](../Effects.md#styles-and-presets).

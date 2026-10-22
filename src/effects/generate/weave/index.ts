@@ -49,6 +49,10 @@ const RANGE_NOTES: Record<string, { below?: string; above?: string }> = {
     above: 'above 2 the wind blows the sheet out of shape and beyond the frame' },
   'curl-strength_value': { below: 'a negative Curl Strength curls the ribbons the other way',
     above: 'above 0.25 the ribbons swirl past the edges of the frame' },
+  reveal_value: { below: 'below 0 nothing is drawn', above: 'above 1 the net is already whole, so it changes nothing more' },
+  'pulse-rate_value': { below: 'a negative Pulse Rate runs the pulse backwards' },
+  'pulse-strength_value': { below: 'a negative Pulse Size swells the bell outwards instead of drawing it in',
+    above: 'above 0.6 the bell folds through itself and turns inside out' },
 };
 function weaveRangeNotes(params: Record<string, number | boolean | string>): string[] {
   return Object.entries(RANGE_NOTES).flatMap(([key, note]) => {

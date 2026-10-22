@@ -12,7 +12,9 @@ import { hexColorToRgb, normalizeHexColor, rgbColorToHex } from '../../../../uti
 import { DraggableNumber, KeyframeToggle, MultiKeyframeToggle } from '../shared';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import { ResolveInspectorNumberRow } from '../resolveInspector/ResolveInspectorNumberRow';
-import { ResolveInspectorRow, ResolveInspectorSection } from '../resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveInspectorSection, ResolveResetIcon } from '../resolveInspector/ResolveInspectorPrimitives';
+// The swatch and bordered hex field of the shared colour row (its row component has no slot for the keyframe toggle and ×).
+import '../resolveInspector/ResolveInspectorColorRow.css';
 import { FlockPopulationRow } from './FlockPopulationRow';
 import {
   clampFlockNumber,
@@ -166,6 +168,13 @@ function FlockColorControl({ ctx, exposed, descriptor }: ControlProps) {
   const colorValue = rgbColorToHex({ r: entries[0].value, g: entries[1].value, b: entries[2].value });
   const isKeyed = entries.some(({ property }) => isRecording(ctx.clip.id, property) || hasKeyframes(ctx.clip.id, property));
 
+  // Reset returns to the preset's colour, like the number rows.
+  const preset = presetFlockValue(ctx.clip.flock!, exposed);
+  const resetColor = normalizeHexColor(typeof preset === 'string' ? preset : fallback, fallback);
+  // The hex field shows the value, or what is being typed until Enter or blur commits it (Escape drops it).
+  const [draft, setDraft] = useState<string | null>(null);
+  const pointerChange = useRef(false);
+
   const updateColor = (nextColor: string) => {
     const normalized = normalizeHexColor(nextColor, colorValue);
     const rgb = hexColorToRgb(normalized, colorValue);
@@ -178,6 +187,14 @@ function FlockColorControl({ ctx, exposed, descriptor }: ControlProps) {
         setFlockGraphParam(ctx.clip.id, exposed.nodeId, exposed.param, normalized);
       }
     });
+  };
+  const commitDraft = () => {
+    const typed = draft?.trim();
+    if (typed && /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(typed)) {
+      const next = normalizeHexColor(typed.startsWith('#') ? typed : `#${typed}`, colorValue);
+      if (next !== colorValue) updateColor(next);
+    }
+    setDraft(null);
   };
 
   return (
@@ -194,16 +211,37 @@ function FlockColorControl({ ctx, exposed, descriptor }: ControlProps) {
             dragId={`${ctx.clip.id}:flock:${exposed.nodeId}:${exposed.param}:color`}
             title="Add color keyframes"
           />
+          <ResolveInspectorIconButton ariaLabel={`Reset ${exposed.label}`} className="resolve-inspector-reset-button"
+            onClick={(event) => { if (event.detail > 0) event.currentTarget.blur(); updateColor(resetColor); }}>
+            <ResolveResetIcon />
+          </ResolveInspectorIconButton>
         </>}
       >
-        <span className="flock-color-value">
+        <span className="resolve-inspector-color">
           <input
             type="color"
             aria-label={exposed.label}
             value={colorValue}
-            onChange={(event) => updateColor(event.target.value)}
+            onPointerDown={() => { pointerChange.current = true; }}
+            onKeyDown={() => { pointerChange.current = false; }}
+            onChange={(event) => {
+              updateColor(event.target.value);
+              if (pointerChange.current) event.currentTarget.blur();
+              pointerChange.current = false;
+            }}
           />
-          <span>{colorValue}</span>
+          <input
+            type="text"
+            aria-label={`${exposed.label} hex`}
+            value={draft ?? colorValue}
+            spellCheck={false}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); commitDraft(); }
+              if (event.key === 'Escape') { event.preventDefault(); setDraft(null); }
+            }}
+          />
         </span>
       </ResolveInspectorRow>
     </div>

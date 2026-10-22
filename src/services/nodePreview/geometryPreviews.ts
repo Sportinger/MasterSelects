@@ -6,7 +6,7 @@ import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGr
 import { compileGeometryGraph } from '../operators/geometry/geometryProgram';
 import { evaluateGeometryProgram, type CurveSet } from '../operators/geometry/geometryEvaluation';
 import { RodSimulationDeferred } from '../operators/geometry/rodCurves';
-import { geometryParameterReader } from '../operators/geometry/weaveGraph';
+import { geometryParameterReader, type SimulationClock } from '../operators/geometry/weaveGraph';
 import { compileClothSpec } from '../operators/geometry/clothProgram';
 import { clothGridAt, type ClothGrid } from '../operators/geometry/clothSurface';
 import { applyOperatorGroupBypasses } from '../operators/operatorGroupBypass';
@@ -76,14 +76,16 @@ function curveSourceNode(graph: EffectOperatorGraph, nodeId: string, portId: str
 }
 
 /** CPU reference evaluation at the playhead; opening a viewer never touches GPU state. */
-export function geometryPreview(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number, simulationTime = time): PreviewFrame {
+/** `clock` is the host clip's keyframe-to-simulation clock, so keyed forces start where the render starts them. */
+export function geometryPreview(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number, clock?: SimulationClock): PreviewFrame {
+  const simulationTime = clock ? clock.toSimulation(time) : time;
   const base = { key: request.key, revision: request.revision, time: request.time };
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return { ...base, status: 'missing', label: 'Curve node unavailable' };
   try {
     const graph = effectOperatorGraph(effect);
     const port = request.port;
-    const reader = geometryParameterReader(effectOperatorParams(effect), effect.id, keys, time);
+    const reader = geometryParameterReader(effectOperatorParams(effect), effect.id, keys, time, clock);
     const cloth = clothSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
     if (cloth) {
       const grid = clothGridAt(compileClothSpec(applyOperatorGroupBypasses(graph), cloth, reader), simulationTime);

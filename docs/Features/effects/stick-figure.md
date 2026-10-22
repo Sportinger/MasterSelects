@@ -22,14 +22,14 @@ Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.m
 
 <figure class="docs-shot docs-shot--detail">
 
-![Four Stick Figure presets alone on black, named under each: Arabesque, a thin white figure with a ring head standing on one leg, the other leg stretched back, one arm reaching forward and up clear of the head and the other out behind; Curtain Call, a gold figure in a deep bow with one hand at its chest and the other arm swept back; Walking Man, a tall, thin bronze-grey figure with a small head in mid-stride; Pictogram, a bold green running figure with a large round head, like the one on an exit sign](../assets/effects/presets/stick-figure.webp)
+![Four Stick Figure presets alone on black, named under each: Arabesque, a thin white figure with a ring head standing on one leg, the other leg stretched back, one arm stretched forward at head height and the other out behind; Curtain Call, a gold figure in a deep bow with one hand at its chest and the other arm swept back; Walking Man, a tall, thin bronze-grey figure with a small head in mid-stride; Pictogram, a bold green running figure with a large round head, like the one on an exit sign](../assets/effects/presets/stick-figure.webp)
 
 <figcaption>The four presets alone on black.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets the whole figure at once, pose, proportions, line and colour, in one undo step, and the row then shows its name until you change something. Every other control returns to its default too, so a preset also brings the figure back to the centre at Scale 1, facing right, fully opaque and planted on the ground: pick the preset first, then place the figure. The action lane stays as it is, and a joint with keyframes keeps them; the card says so.
 
-**Arabesque** – a dancer on one straight leg, the other stretched far behind, one arm reaching forward and up past the face and the other out behind, drawn in thin white lines with a ring head. A clean starting point for dance sketches.
+**Arabesque** – a dancer on one straight leg, the other stretched far behind, one arm stretched forward at head height and the other out behind, drawn in thin white lines with a ring head. A clean starting point for dance sketches.
 
 **Curtain Call** – a deep bow in warm gold, one hand at the chest and the other arm swept back. For the end of a scene, a thank-you, or a title card.
 
@@ -92,7 +92,7 @@ Angles are in degrees. Lengths and positions are in figure pixels: pixels of a 1
 </svg>
 </div>
 
-<figcaption>The Pose section with the Arabesque preset. 1 — Pelvis X: where the figure stands. 2 — Lift: up off the ground. 3 — Spine Lean: the upper body forward. 4 — Shoulder L: the arm reaching forward and up. 5 — Hip R: −100° lifts the leg behind.</figcaption>
+<figcaption>The Pose section with the Arabesque preset. 1 — Pelvis X: where the figure stands. 2 — Lift: up off the ground. 3 — Spine Lean: the upper body forward. 4 — Shoulder L: the arm stretched forward. 5 — Hip R: −100° lifts the leg behind.</figcaption>
 </figure>
 
 **Pelvis X** – where the figure stands across the frame: 0 is the middle, negative values move it left, positive right; about ±960 reaches the edges of a 16:9 frame. Facing mirrors the figure around this point, and Walk and Run add their distance to it. −2000 to 2000 px, default 0 px.

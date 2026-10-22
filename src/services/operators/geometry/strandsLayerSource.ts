@@ -4,7 +4,7 @@ import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 import type { TimelineClip } from '../../../types/timeline';
 import { effectOperatorGraph, effectOperatorParams } from '../effectGraphOwner';
 import { compileGeometryGraph, type GeometryProgram } from './geometryProgram';
-import { geometryParameterReader, WEAVE_EFFECT_TYPE, type SimulationClock } from './weaveGraph';
+import { geometryParameterReader, WEAVE_EFFECT_TYPE, weaveForm, type SimulationClock, type WeaveForm } from './weaveGraph';
 import { createFlockClipTimeMap } from '../../flock/time/flockTimeMapper';
 import { applyParameterSourcesToEffects } from '../../parameterSources/parameterSourceRendering';
 import type { ParameterSourceClip } from '../../parameterSources/parameterSourceTargets';
@@ -20,8 +20,18 @@ export interface StrandsLayerSourceData { clipId: string; effectId: string; prog
 // A saved recipe follows Form (weaveRecipeForm), so the result also depends on the instance's Form.
 const resolvedGraphs = new WeakMap<EffectOperatorGraph, { form: unknown; graph: EffectOperatorGraph }>();
 const resolvedLegacyGraphs = new WeakMap<Effect, { value: unknown; graph: EffectOperatorGraph }>();
+// A Weave without any graph (added in this session, not yet saved) draws its Form's recipe, a pure
+// function of Form. Keyframe evaluation hands over a new Effect object every frame, so a cache per
+// Effect would rebuild and validate the recipe (161 nodes for Qualle) on every frame.
+const resolvedRecipes = new Map<WeaveForm, EffectOperatorGraph>();
 function weaveGraphOf(effect: Effect): EffectOperatorGraph {
   const stored = effect.operatorGraph;
+  if (!stored && (effect.params.operatorGraph === undefined || effect.params.operatorGraph === '')) {
+    const form = weaveForm(effect.params.form);
+    let graph = resolvedRecipes.get(form);
+    if (!graph) { graph = effectOperatorGraph(effect); resolvedRecipes.set(form, graph); }
+    return graph;
+  }
   if (!stored) {
     // Legacy parameter graphs differ per effect; none may become the shared default.
     const value = effect.params.operatorGraph, cached = resolvedLegacyGraphs.get(effect);

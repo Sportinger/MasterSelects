@@ -82,6 +82,14 @@ export function flockNumberDecimals(descriptor: FlockParamDescriptor, sliderStep
 const presetSignatures = new Map<string, ReadonlySet<string>>();
 const controlSignature = (definition: FlockDefinition, exposed: { nodeId: string; param: string }) =>
   `${definition.nodes.find((node) => node.id === exposed.nodeId)?.operator ?? '?'}:${exposed.param}`;
+const PACE = 'flock.simulation:pace', MAX_SPEED = 'flock.simulation:maxSpeed';
+/**
+ * Swarms made before Speed became the simulation's Pace show Max Speed as their Speed. That holds
+ * only for a swarm that exposes no Pace: on a newer swarm a Max Speed row came through Add.
+ */
+const isLegacySpeedRow = (definition: FlockDefinition, signature: string, preset: ReadonlySet<string>) =>
+  signature === MAX_SPEED && preset.has(PACE)
+  && !definition.exposed.some((item) => controlSignature(definition, item) === PACE);
 /**
  * Whether a control is one the swarm's preset shows by itself (Population, Cohesion, …), not one
  * added later through Add or the Nodes tab. Preset node ids are generated, so controls compare by
@@ -95,18 +103,18 @@ export function isPresetFlockControl(definition: FlockDefinition, exposed: { nod
   if (!signatures) {
     const built = preset.create();
     signatures = new Set(built.exposed.map((item) => controlSignature(built, item)));
-    // Swarms made before Speed became the simulation's Pace show Max Speed as their Speed.
-    if (signatures.has('flock.simulation:pace')) signatures = new Set([...signatures, 'flock.simulation:maxSpeed']);
     presetSignatures.set(presetId, signatures);
   }
-  return signatures.has(controlSignature(definition, exposed));
+  const signature = controlSignature(definition, exposed);
+  return signatures.has(signature) || isLegacySpeedRow(definition, signature, signatures);
 }
 
 const presetValues = new Map<string, ReadonlyMap<string, unknown>>();
 /**
  * The value the swarm's preset gives a control (Free Swarm's Turbulence 18, Technical Network's
  * Population 1800), so its reset arrow returns to the preset's look; undefined for a control the
- * preset does not show (added through Add) or a swarm without a preset.
+ * preset does not show (added through Add) or a swarm without a preset. An older swarm's Max Speed
+ * row resets to the preset's own Max Speed.
  */
 export function presetFlockValue(definition: FlockDefinition, exposed: { nodeId: string; param: string }): unknown {
   const presetId = definition.presetId;
@@ -115,11 +123,16 @@ export function presetFlockValue(definition: FlockDefinition, exposed: { nodeId:
   let values = presetValues.get(presetId);
   if (!values) {
     const built = preset.create();
-    values = new Map(built.exposed.map((item) => [controlSignature(built, item),
+    const map = new Map(built.exposed.map((item) => [controlSignature(built, item),
       built.nodes.find((node) => node.id === item.nodeId)?.params[item.param]]));
+    const simulation = built.nodes.find((node) => node.operator === 'flock.simulation');
+    if (map.has(PACE) && simulation?.params.maxSpeed !== undefined) map.set(`legacy:${MAX_SPEED}`, simulation.params.maxSpeed);
+    values = map;
     presetValues.set(presetId, values);
   }
-  return values.get(controlSignature(definition, exposed));
+  const signature = controlSignature(definition, exposed);
+  if (values.has(signature)) return values.get(signature);
+  return isLegacySpeedRow(definition, signature, new Set(values.keys())) ? values.get(`legacy:${MAX_SPEED}`) : undefined;
 }
 
 export function getFlockNumberSensitivity(descriptor: FlockParamDescriptor, min?: number, max?: number): number {

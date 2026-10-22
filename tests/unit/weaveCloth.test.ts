@@ -11,6 +11,8 @@ import { bindToCloth, clothGridAt, sampleClothGrid } from '../../src/services/op
 import { weaveSimulationClock, weaveSimulationTime } from '../../src/services/operators/geometry/strandsLayerSource';
 import { addableEffectOperators } from '../../src/services/operators/effectGraphOwner';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
+import { clothWireframe, geometryPreview } from '../../src/services/nodePreview/geometryPreviews';
+import type { PreviewRequest } from '../../src/services/nodePreview/previewTypes';
 
 const read = geometryParameterReader({});
 const defaultSpec = (graph = createDefaultWeaveGraph()) => compileClothSpec(graph, graph.nodes.find(node => node.id === 'cloth')!, read);
@@ -128,5 +130,20 @@ describe('Weave cloth', () => {
     // A trimmed clip keys in clip time; the track runs in the clip's source time.
     const trimmed = weaveSimulationClock({ inPoint: 4, outPoint: 10, duration: 6, reversed: false, speed: 1 });
     expect(specAt(1, trimmed).winds[0].strengthTrack!.start).toBeCloseTo(4.5, 6);
+  });
+
+  it('shows the cloth the frame renders in the Cloth Sheet viewer of a trimmed clip with keyed Wind', () => {
+    const key = (time: number, value: number) => ({ id: `w${time}`, clipId: 'c', time, property: 'effect.fx.wind', value, easing: 'linear' }) as Keyframe;
+    const keys = [key(0.5, 0), key(1.5, 2)];
+    const effect = { id: 'fx', name: 'Weave', type: 'weave', enabled: true, params: { wind: 0.35 } } as never;
+    const clock = weaveSimulationClock({ inPoint: 4, outPoint: 10, duration: 6, reversed: false, speed: 1 });
+    const graph = createDefaultWeaveGraph(), cloth = graph.nodes.find(node => node.id === 'cloth')!;
+    const request = { key: 'p', revision: 'r', clipId: 'c', time: 1, width: 64, height: 64, interval: 100, priority: 1,
+      node: { binding: { kind: 'effect-operator', nodeId: 'cloth' } }, port: { id: 'surface', direction: 'output' } } as unknown as PreviewRequest;
+    const viewer = geometryPreview(request, effect, keys, 1, clock);
+    const rendered = clothWireframe(clothGridAt(compileClothSpec(graph, cloth, geometryParameterReader({ wind: 0.35 }, 'fx', keys, 1, clock)), clock.toSimulation(1)));
+    expect(viewer.status).toBe('live');
+    expect(viewer.label).toMatch(/5\.00 s/);
+    expect((viewer.drawing as { points: number[] }).points).toEqual(rendered.points);
   });
 });

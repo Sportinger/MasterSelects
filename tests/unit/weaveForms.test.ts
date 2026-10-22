@@ -181,6 +181,11 @@ describe('Weave forms', () => {
     expect(notes({ irregularity_value: -2 }).join(' ')).toMatch(/same positive one/);
     expect(notes({ wind: 30 }).join(' ')).toMatch(/Wind 30 is outside/);
     expect(notes({ 'curl-strength_value': 0.4 }).join(' ')).toMatch(/past the edges of the frame/);
+    expect(notes({ reveal_value: 1.5 }).join(' ')).toMatch(/Reveal 1.5 is outside .*changes nothing more/);
+    expect(notes({ reveal_value: -0.2 }).join(' ')).toMatch(/nothing is drawn/);
+    expect(notes({ 'pulse-rate_value': -1 }).join(' ')).toMatch(/Pulse Rate -1 is outside .*backwards/);
+    expect(notes({ 'pulse-strength_value': 100 }).join(' ')).toMatch(/Pulse Size 100 is outside .*inside out/);
+    expect(notes({ 'pulse-strength_value': -0.3 }).join(' ')).toMatch(/swells the bell outwards/);
   });
 
   it('declares presets the Preset row can apply to a fresh Weave', () => {
