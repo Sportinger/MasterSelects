@@ -7,6 +7,13 @@ struct EdgeFillParams { opacity: f32, available: f32, canvasSpace: f32, seamRadi
 fn fillPixel(p: vec2i) -> vec4f {
   return unpack4x8unorm(textureLoad(fillTex, clamp(p, vec2i(0), vec2i(textureDimensions(fillTex)) - 1), 0).r);
 }
+fn fillAt(point: vec2f) -> vec4f {
+  let coord = point * vec2f(textureDimensions(fillTex)) - 0.5;
+  let base = vec2i(floor(coord));
+  let f = fract(coord);
+  return mix(mix(fillPixel(base), fillPixel(base + vec2i(1, 0)), f.x),
+    mix(fillPixel(base + vec2i(0, 1)), fillPixel(base + vec2i(1, 1)), f.x), f.y);
+}
 fn sourceUv(point: vec2f) -> vec2f {
   var uv = point;
   if (params.canvasSpace > 0.5) { uv = vec2f(dot(params.row0.xyz, vec3f(uv, 1.0)), dot(params.row1.xyz, vec3f(uv, 1.0))); }
@@ -21,13 +28,11 @@ fn originalAt(point: vec2f) -> vec4f {
 fn aiEdgeFillFragment(input: VertexOutput) -> @location(0) vec4f {
   let source = originalAt(input.uv);
   if (params.available < 0.5 || source.a >= 1.0 || params.opacity <= 0.0) { return source; }
-  let coord = input.uv * vec2f(textureDimensions(fillTex)) - 0.5;
-  let base = vec2i(floor(coord));
-  let f = fract(coord);
-  let fill = mix(mix(fillPixel(base), fillPixel(base + vec2i(1, 0)), f.x),
-    mix(fillPixel(base + vec2i(0, 1)), fillPixel(base + vec2i(1, 1)), f.x), f.y);
-  // Match the adjacent original color only outside its opaque silhouette.
-  // Stop at the first ring with valid samples; no generated pixels overwrite opaque source pixels.
+  let fill = fillAt(input.uv);
+  // Seam Blend: near the photo, shift the fill's colour by how far the model's colours drift from the
+  // photo's (photo minus fill, averaged over the photo pixels in a disc around this pixel). The fill keeps
+  // its own detail; the shift fades with the share of the disc the photo covers, so it is strongest next
+  // to the photo and gone at the Seam Blend distance, without rings. Opaque photo pixels are never touched.
   var fillRgb = fill.rgb;
   let dims = vec2f(textureDimensions(inputTex));
   let aspect = dims.x / dims.y;
@@ -42,19 +47,29 @@ fn aiEdgeFillFragment(input: VertexOutput) -> @location(0) vec4f {
   }
   // Far outside the image footprint there cannot be an adjacent source edge.
   if (params.seamRadius > 0.0 && length(outside / vec2f(1.0, aspect)) <= params.seamRadius) {
-    for (var ring = 1u; ring <= 4u; ring++) {
-      let radius = params.seamRadius * f32(ring) / 4.0;
-      var edgeSum = vec3f(0.0);
-      var edgeCount = 0.0;
+    var drift = vec3f(0.0);
+    var covered = 0.0;
+    var total = 0.0;
+    // A per-pixel turn of the sample pattern (interleaved gradient noise) turns the steps a fixed pattern
+    // would leave as the disc slides over the photo edge into fine grain.
+    let turn = fract(52.9829189 * fract(dot(input.position.xy, vec2f(0.06711056, 0.00583715))));
+    for (var ring = 1u; ring <= 6u; ring++) {
+      let radius = params.seamRadius * f32(ring) / 6.0;
       for (var direction = 0u; direction < 8u; direction++) {
-        let angle = f32(direction) * 0.785398163;
-        let edge = originalAt(input.uv + vec2f(cos(angle), sin(angle) * aspect) * radius);
-        if (edge.a >= 0.999) { edgeSum += edge.rgb; edgeCount += 1.0; }
+        // Every other ring turns by half a step, so the 48 samples cover the disc evenly.
+        let angle = (f32(direction) + 0.5 * f32(ring & 1u) + turn) * 0.785398163;
+        let point = input.uv + vec2f(cos(angle), sin(angle) * aspect) * radius;
+        // Beyond the frame there is neither photo nor fill: such samples do not count.
+        if (any(point < vec2f(0.0)) || any(point > vec2f(1.0))) { continue; }
+        let edge = originalAt(point);
+        total += 1.0;
+        if (edge.a >= 0.999) { drift += edge.rgb - fillAt(point).rgb; covered += 1.0; }
       }
-      if (edgeCount > 0.0) {
-        fillRgb = mix(fill.rgb, edgeSum / edgeCount, 1.0 - smoothstep(0.0, params.seamRadius, radius));
-        break;
-      }
+    }
+    if (covered > 0.0) {
+      // Beside a straight photo edge about half the disc is photo: full shift there, none at the radius.
+      let weight = smoothstep(0.0, 1.0, min(1.0, 2.0 * covered / total));
+      fillRgb = clamp(fill.rgb + drift / covered * weight, vec3f(0.0), vec3f(1.0));
     }
   }
   let fillAlpha = fill.a * params.opacity * (1.0 - source.a);

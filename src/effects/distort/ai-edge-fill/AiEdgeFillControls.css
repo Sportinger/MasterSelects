@@ -1,8 +1,12 @@
 @layer features {
+  /* The prompt is a paragraph of text: its label sits above it and the field spans the card. */
+  .ai-edge-fill-card .ai-edge-fill-prompt-row { display: block; height: auto; }
+  .ai-edge-fill-card .ai-edge-fill-prompt-row > .resolve-inspector-row-label { display: block; margin-bottom: 4px; text-align: left; }
+  .ai-edge-fill-card .ai-edge-fill-prompt-row > .resolve-inspector-row-actions:empty { display: none; }
   .ai-edge-fill-prompt {
     width: 100%; resize: vertical; min-height: 76px; box-sizing: border-box;
     border: 1px solid var(--border-strong); border-radius: 3px; padding: 6px;
-    background: var(--bg-tertiary); color: var(--text-primary); font: inherit;
+    background: var(--bg-tertiary); color: var(--text-primary); font: inherit; font-size: 11px; line-height: 1.4;
     -webkit-tap-highlight-color: transparent;
   }
   .ai-edge-fill-prompt:focus { outline: none; }

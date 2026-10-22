@@ -60,6 +60,7 @@
     "docs/Features/assets/effects/dither-text.webp": {"recipe":"basic-still scripts/effect-docs.mjs#dither-text","fingerprint":"eaa6d85389b4ed8c"},
     "docs/Features/assets/effects/dither.webp": {"recipe":"basic-still scripts/effect-docs.mjs#dither","fingerprint":"9be5f2cc6ab0469f"},
     "docs/Features/assets/effects/editor/acuarela-inspector.webp": {"recipe":"editor scripts/effect-editor-shots/stylize-art.json#acuarela-inspector","fingerprint":"431294898af9edfd"},
+    "docs/Features/assets/effects/editor/ai-edge-fill-inspector.webp": {"recipe":"editor scripts/effect-editor-shots/distort.json#ai-edge-fill-inspector","fingerprint":"dda544e1c9b40672"},
     "docs/Features/assets/effects/editor/box-blur-inspector.webp": {"recipe":"editor scripts/effect-editor-shots/blur.json#box-blur-inspector","fingerprint":"f59aeb9ede2199ea"},
     "docs/Features/assets/effects/editor/brightness-inspector.webp": {"recipe":"editor scripts/effect-editor-shots/color.json#brightness-inspector","fingerprint":"05ddfade908e7d14"},
     "docs/Features/assets/effects/editor/chroma-key-inspector.webp": {"recipe":"editor scripts/effect-editor-shots/keying-time.json#chroma-key-inspector","fingerprint":"f16a6a4de51bcffc"},

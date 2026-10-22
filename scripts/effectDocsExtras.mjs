@@ -61,13 +61,16 @@ export const EFFECT_DOC_EXTRAS = {
       { key: 'scale', range: '50 to 300 %', default: '100 %' },
     ],
   },
+  // AI Edge Fill's own card (AiEdgeFillControls): Generate holds the request (Resolution, Prompt and the
+  // Fill button), Blend how the saved fill meets the photo.
   'ai-edge-fill': {
+    sections: ['Generate', 'Blend'],
     rows: [
-      'resolution',
-      { key: 'prompt', default: 'a description of the scene to continue (editable)' },
-      { label: 'Generate fill', range: 'button', default: '–' },
-      'mix',
-      'seamBlend',
+      { key: 'resolution', section: 'Generate', range: '1K, 2K or 4K' },
+      { key: 'prompt', section: 'Generate', range: 'Any text', default: 'a request to continue a room, its walls, ceiling and floor' },
+      { label: 'Fill', section: 'Generate', range: 'Generate fill, Resume task or Regenerate fill', default: 'Generate fill' },
+      { key: 'mix', section: 'Blend', range: '0 to 100 %', default: '100 %' },
+      { key: 'seamBlend', section: 'Blend', range: '0 to 64 px', default: '12 px' },
     ],
   },
   'face-cables': {

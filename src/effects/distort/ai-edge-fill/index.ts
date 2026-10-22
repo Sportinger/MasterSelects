@@ -17,7 +17,7 @@ export const aiEdgeFill: FullscreenEffectDefinition = {
     seamBlend: { type: 'number', label: 'Seam Blend', default: 12, min: 0, max: 64, step: 1, animatable: true, hidden: true },
     canvasWidth: { type: 'number', label: 'Canvas Width', default: 0, hidden: true, animatable: false },
     prompt: { type: 'text', label: 'Prompt', default: EDGE_FILL_PROMPT, hidden: true },
-    resolution: { type: 'select', label: 'Generation Size', default: '2K', hidden: true,
+    resolution: { type: 'select', label: 'Resolution', default: '2K', hidden: true,
       options: ['1K', '2K', '4K'].map(value => ({ value, label: value })) },
     artifactId: { type: 'text', label: 'Fill Artifact', default: '', hidden: true },
     sourceSignature: { type: 'text', label: 'Source Version', default: '', hidden: true },

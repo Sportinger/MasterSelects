@@ -2534,8 +2534,9 @@ distortion or independently straighten several surfaces with different planes.
 
 **AI Edge Fill**, under **Lens & Distort**, fills transparent borders left by
 Lens Correction and Guided Perspective on still images, including CR2. Place it
-after those corrections and before other effects. Choose a generation size,
-adjust the editable prompt for the scene, and click **Generate fill**.
+after those corrections and before other effects. The card has two sections:
+**Generate** (Resolution, the editable Prompt and the **Fill** button) and **Blend**
+(Fill Opacity, Seam Blend).
 
 Generation uploads a bounded, positioned full-composition photo reference and a
 white=missing binary mask to **Kie.ai / Nano Banana
@@ -2546,9 +2547,15 @@ the actual photograph remains protected. The editable prompt explains both refer
 Only transparent pixels use the generated image. Existing opaque pixels retain
 their original resolution and color, even if the model changes them in its output.
 **Fill Opacity** controls the added areas and supports keyframes.
-**Seam Blend** (default 12 composition pixels) softly matches the neighboring
-original color on the added side only, supports keyframes, and can be set to zero.
-It reduces color seams, not arbitrary structural mistakes made by the model.
+**Seam Blend** (default 12 composition pixels) shifts the fill's colour by the
+average photo-minus-fill difference measured over the photo pixels in a disc of that
+radius (48 jittered samples, bilinear fill reads), weighted by the share of the disc
+the photo covers: full beside a straight photo edge, zero at the radius, without rings,
+and samples beyond the frame do not count. The fill keeps its own detail; the photo
+side is never changed. It supports keyframes and can be set to zero. It reduces colour
+seams, not structural mistakes made by the model. (Before 2026-10-22 it replaced the
+fill with averaged edge pixels at four fixed rings, which echoed the photo's edge in
+steps; `tests/manual/aiEdgeFillGPU.html` checks the new behaviour on the GPU.)
 Generations are
 1K, 2K or 4K; the saved fill is sampled at the composition/export resolution,
 so a larger original photo is supported without promising native generated detail
