@@ -45,6 +45,7 @@ export const HAND_MADE = [
   { path: `${ASSET_DIR}/transitions/`, reason: 'Crossfade filmstrips composed by hand from editor frames' },
   { path: `${ASSET_DIR}/keyframes/real-editor-current.png`, reason: 'a screenshot of the editor with a real project, taken by hand' },
   { path: `${ASSET_DIR}/export/export-panel.webp`, reason: 'the Export panel with numbered callouts, made by scripts/ui-shots/export-panel.mjs against a running editor (it prints the figure); the ui-shot tooling will give it a shot-list recipe' },
+  { path: `${ASSET_DIR}/ui-panels/add-panel-menu.webp`, reason: 'a tab bar\'s + menu with Editing open, made by scripts/ui-shots/add-panel-menu.mjs against a running editor; the ui-shot tooling will give it a shot-list recipe' },
   { path: `${ASSET_DIR}/keyframes/graph-mode.webp`, reason: 'the timeline in Graph mode, made by scripts/ui-shots/keyframes-graph.mjs against a running editor (a solid with Bezier keys set through the timeline store); the ui-shot tooling will give it a shot-list recipe' },
   { path: `${ASSET_DIR}/effects/graphs/glitch-stages.svg`, reason: 'a stage diagram of Glitch drawn by hand as SVG' },
   { path: `${ASSET_DIR}/effects/graphs/flocking.webp`, reason: 'the Free Swarm\'s Flock group in the Nodes tab (a clip node graph, which effect-graph-shot cannot show), taken by hand with Expand all; its callouts are placed by hand' },

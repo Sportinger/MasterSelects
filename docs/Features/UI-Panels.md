@@ -106,6 +106,13 @@ Every panel can be added from the **+** at the end of a tab bar, or swapped in w
 | **Live** | Go Live, Slot Grid, Stream Chat, Stream Analytics |
 | **Capture & Output** | Capture, Export |
 
+<figure class="docs-shot docs-shot--float-right">
+
+![The + menu of the Preview tab bar: Nodes (open) and the groups Editing, Color, Audio, AI, 3D, Live and Capture & Output; Editing is open and lists Preview (+1), Multi Preview, Timeline (open), Curves (+1), Media (open), Layers (open), Tools, Properties (open), History, Annotations, Notebook, Stats and Transitions](./assets/ui-panels/add-panel-menu.webp)
+
+<figcaption>The <strong>+</strong> menu with Editing open. Blue entries marked <strong>open</strong> are already in the layout and come to the front; <strong>+1</strong> adds another copy of a panel that can be open more than once.</figcaption>
+</figure>
+
 Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once; every other panel exists once: **+** brings the open one to the front, and **Change to** moves it into the clicked slot. A few more panel types (AI Scene Description and the separate Waveform, Histogram and Vectorscope panels) load only from older saved layouts. Feature pages: [Preview](./Preview.md), [Timeline](./Timeline.md), [Media Panel](./Media-Panel.md), [Keyframes](./Keyframes.md), [Notebook](./Documents.md), [Annotations](./Annotations.md), [Image Mode](./Image-Mode.md) (Layers, Tools), [Slot Grid](./Slot-Grid.md), [Export](./Export.md), [Screen Capture](./Screen-Capture.md), [Media Discovery](./Media-Discovery.md) (Discover), [AI Studio](./AI-Studio.md), [Story Workflow](./Seedance-Preproduction.md), [Color Correction](./Color-Correction.md).
 
 ### View Menu Grouping
