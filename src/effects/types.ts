@@ -65,8 +65,9 @@ export interface EffectParam {
 /**
  * A named starting point of an effect, picked in its card ("Preset"). Applying it sets every visible
  * control to the preset's value, or to its default when the preset leaves it out (text controls stay
- * unless named), in one undo step. Visibility is judged with the preset's values in place, so a preset
- * that switches a mode resets that mode's controls. Controls with keyframes or a node driving them keep
+ * unless named), in one undo step. Visibility is judged once on the target (every control at its
+ * default, the preset's values in place), so a preset that switches a mode resets that mode's controls,
+ * and the result never depends on the preset picked before. Controls with keyframes or a node driving them keep
  * their animation and are named in the card instead (src/services/effects/effectPresets.ts). The docs
  * page lists each preset under "## Presets" (tests/unit/effectDocsCatalog.test.ts checks the names).
  */
@@ -77,8 +78,8 @@ export interface EffectPreset {
   name: string;
   /**
    * Values that differ from the defaults, in stored units: the effect's parameters, and for a graph
-   * effect also the exposed graph values of its default graph (`<node>_value`; values it leaves out
-   * keep theirs).
+   * effect also the exposed graph values of its default graph (`<node>_value`; one that another preset
+   * of the effect names returns to the default graph's value when this preset leaves it out).
    */
   params: Readonly<Record<string, number | boolean | string>>;
 }
