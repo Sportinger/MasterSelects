@@ -235,7 +235,10 @@ for (const svg of content?.querySelectorAll('.docs-shot-stage > svg.docs-shot-ov
     const paragraph = words[0]?.closest('p, li');
     if (paragraph) {
       const whole = paragraph.textContent.trim(), name = words[0].textContent.trim();
-      const detail = whole.startsWith(name) ? whole.slice(name.length).replace(/^[\s–—:-]+/u, '') : whole;
+      // A paragraph that starts with the name explains it; in one that names several (an overview
+      // naming every stage) only the sentences with the name belong to this note.
+      const detail = whole.startsWith(name) ? whole.slice(name.length).replace(/^[\s–—:-]+/u, '')
+        : whole.split(/(?<=[.!?])\s+/u).filter((sentence) => sentence.includes(name)).join(' ') || whole;
       item.group.dataset.detail = detail.charAt(0).toUpperCase() + detail.slice(1);
     }
     for (const word of item.words) {
