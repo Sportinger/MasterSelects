@@ -114,14 +114,19 @@ async function ensureVite() {
     if (!await reachable(url)) throw new Error(`No Vite answers at ${url}; start one in this checkout (npx vite --port <port> --strictPort) or leave --url out.`);
     // Vite serves /@fs/ only inside its own workspace: another checkout's Vite answers 403 here.
     const own = await fetch(`${url}/@fs${REPO_ROOT}/package.json`).then((response) => response.ok).catch(() => false);
-    if (!own) console.warn(`warning: ${url} does not serve this checkout (${REPO_ROOT}); the pictures show that checkout's code.`);
-    else {
-      const old = await oldModules(url, REPO_ROOT, [...new Set(selected.flatMap((recipe) => recipe.effects))].flatMap((id) => code.codeFiles(id)));
-      if (old.length) {
-        throw new Error(`The Vite at ${url} serves older code than the files on disk (${old.slice(0, 5).join(', ')}${old.length > 5 ? ` and ${old.length - 5} more` : ''}): `
-          + 'its file watcher missed edits (inotify watches used up?). Restart that Vite, or leave --url out so the runner starts a fresh one. '
-          + 'Otherwise the pictures would show the old code under the fingerprint of the new.');
-      }
+    if (!own) {
+      throw new Error(`${url} does not serve this checkout (${REPO_ROOT}): the pictures would show that checkout's code under this checkout's fingerprints. `
+        + 'Start a Vite in this checkout (npx vite --port <port> --strictPort) and pass its --url, or leave --url out so the runner starts one.');
+    }
+    const { old, unchecked } = await oldModules(url, REPO_ROOT, [...new Set(selected.flatMap((recipe) => recipe.effects).flatMap((id) => code.codeFiles(id)))]);
+    if (old.length) {
+      throw new Error(`The Vite at ${url} serves older code than the files on disk (${old.slice(0, 5).join(', ')}${old.length > 5 ? ` and ${old.length - 5} more` : ''}): `
+        + 'its file watcher missed edits (inotify watches used up?). Restart that Vite, or leave --url out so the runner starts a fresh one. '
+        + 'Otherwise the pictures would show the old code under the fingerprint of the new.');
+    }
+    if (unchecked.length) {
+      console.warn(`warning: could not compare ${unchecked.length} code files the Vite at ${url} serves with the disk; if one was edited, restart that Vite: `
+        + `${unchecked.slice(0, 5).join(', ')}${unchecked.length > 5 ? ` and ${unchecked.length - 5} more` : ''}`);
     }
     return { url, stop: () => {} };
   }

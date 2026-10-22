@@ -26,6 +26,15 @@ export const MANIFEST_FILE = 'scripts/docs-media-manifest.json';
 const CODE_SCOPES = ['src/effects', 'src/services/operators', 'src/shaders', 'src/services/faceCables', 'src/services/planarTracking'];
 /** Where an effect's own runtime may also live, found by its file name only (never walked into). */
 const NAME_SCOPES = ['src/engine'];
+/**
+ * Effects whose runtime lives in a service or engine folder of its own, which the effect definition does not
+ * import (the engine dispatches to it by type): these folders count whole as the effect's own code.
+ */
+export const RUNTIME_FOLDERS = {
+  flocking: ['src/services/flock', 'src/engine/flock'],
+  'stick-figure': ['src/services/rig'],
+  'pixel-particle-disintegrate': ['src/engine/particles'],
+};
 /** A file imported by more than this many files is shared engine code, not one effect's. */
 const SHARED_IMPORTERS = 6;
 /** A file that names more effect ids than this is a catalog hub (graph owner, presentation plans), not one effect's code. */
@@ -46,18 +55,19 @@ const canonical = (value) => (Array.isArray(value) ? `[${value.map(canonical).jo
 /** The import graph of the effect code, read once per root. */
 export function effectCodeIndex(root = REPO_ROOT) {
   const files = [];
-  const walk = (dir) => {
-    if (!fs.existsSync(path.join(root, dir))) return;
+  const runtimeDirs = Object.values(RUNTIME_FOLDERS).flat();
+  const walk = (dir, skip = []) => {
+    if (!fs.existsSync(path.join(root, dir)) || skip.includes(dir)) return;
     for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
       const file = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) walk(file);
+      if (entry.isDirectory()) walk(file, skip);
       else if (/\.(ts|tsx|wgsl|glsl|mjs|js)$/u.test(entry.name) && !/\.test\./u.test(entry.name)) files.push(file);
     }
   };
-  CODE_SCOPES.forEach(walk);
+  [...CODE_SCOPES, ...runtimeDirs].forEach((dir) => walk(dir));
   const known = new Set(files);
   const engineStart = files.length;
-  NAME_SCOPES.forEach(walk);
+  NAME_SCOPES.forEach((dir) => walk(dir, runtimeDirs));
   const engineFiles = files.splice(engineStart);
   const allKnown = new Set([...files, ...engineFiles]);
   const texts = new Map([...files, ...engineFiles].map((file) => [file, fs.readFileSync(path.join(root, file), 'utf8')]));
@@ -77,6 +87,8 @@ export function effectCodeIndex(root = REPO_ROOT) {
     imports.set(file, targets);
     for (const target of targets) importers.set(target, (importers.get(target) ?? 0) + 1);
   }
+  // The in-scope imports of the engine files, followed from an engine file named after an effect.
+  for (const file of engineFiles) imports.set(file, [...new Set(specsOf(texts.get(file)).map((spec) => resolve(file, spec)).filter(Boolean))]);
   // Importers of the engine files too, so an engine file many others use counts as shared engine.
   const allImporters = new Map();
   for (const file of [...files, ...engineFiles]) {
@@ -96,6 +108,26 @@ export function effectCodeIndex(root = REPO_ROOT) {
   // Which effect ids each file defines (`id: 'wave'`, `WAVE_ID = 'wave'`), to tell a folder of one effect from a family folder.
   const defined = new Map(files.map((file) => [file,
     new Set([...texts.get(file).matchAll(/(?:\bid:\s*|_ID\s*=\s*)['"]([a-z0-9][a-z0-9-]*)['"]/gu)].map((match) => match[1]).filter((id) => effectIds.has(id)))]));
+  // Which effect ids a file claims as the effect it is code of: defines it, tests an effect type against it, or
+  // declares it in an effect type union. A node id in an array or an argument ('contrast' as an operator) does not.
+  const claimRule = /(?:[Tt]ype\s*[=!]==\s*|\btype:\s*)['"]([a-z0-9][a-z0-9-]*)['"]|['"]([a-z0-9][a-z0-9-]*)['"]\s*[=!]==\s*[\w.]*[Tt]ype\b/gu;
+  const unionRule = /^(?:export\s+)?type\s+\w*(?:Effect|Type)\w*\s*=([^;]*)/gmu;
+  const claimed = new Map(files.map((file) => {
+    const text = texts.get(file);
+    const ids = [...text.matchAll(claimRule)].map((match) => match[1] ?? match[2]);
+    for (const union of text.matchAll(unionRule)) ids.push(...[...union[1].matchAll(/['"]([a-z0-9][a-z0-9-]*)['"]/gu)].map((match) => match[1]));
+    return [file, new Set([...defined.get(file), ...ids.filter((id) => effectIds.has(id))])];
+  }));
+  // The constants that hold an effect id (`const PARTICLE_DISINTEGRATE = 'pixel-particle-disintegrate'`), so a hub
+  // branch on such a constant leads to the effect's graph as a quoted id does.
+  const idConstants = new Map();
+  for (const file of files) {
+    for (const match of texts.get(file).matchAll(/\bconst\s+([A-Z][A-Z0-9_]*)\s*(?::\s*[\w'"|\s]+)?=\s*['"]([a-z0-9][a-z0-9-]*)['"]/gu)) {
+      if (effectIds.has(match[2])) idConstants.set(match[2], [...new Set([...idConstants.get(match[2]) ?? [], match[1]])]);
+    }
+  }
+  /** The effect whose runtime folder (RUNTIME_FOLDERS) holds a file. */
+  const runtimeOwner = (file) => Object.keys(RUNTIME_FOLDERS).find((effectId) => RUNTIME_FOLDERS[effectId].some((dir) => file.startsWith(`${dir}/`)));
   // The exported names of each code file, to follow a creator a hub calls into the file that exports it.
   const exported = new Map(files.map((file) => [file,
     new Set([...texts.get(file).matchAll(/export\s+(?:async\s+)?(?:function\*?|const|let|class)\s+([A-Za-z_$][\w$]*)/gu)].map((match) => match[1]))]));
@@ -176,6 +208,7 @@ export function effectCodeIndex(root = REPO_ROOT) {
       ...files.filter((file) => file.startsWith('src/effects/') && file.split('/').slice(0, -1).includes(id)).map((file) => file.slice(0, file.lastIndexOf(`/${id}/`) + id.length + 1)),
       ...definitions.map((file) => path.posix.dirname(file)).filter((dir) => dir.split('/').length > 3),
     ].filter((dir) => !family(dir)));
+    for (const dir of RUNTIME_FOLDERS[id] ?? []) ownFolders.add(dir);
     roots.push(...files.filter((file) => [...ownFolders].some((dir) => file.startsWith(`${dir}/`))));
     // In a family folder (several effects defined side by side, src/effects/tracking), the files beside the
     // definition that no single effect owns by name, definition or mention (DenseTerrainPipeline.ts) count for
@@ -194,20 +227,32 @@ export function effectCodeIndex(root = REPO_ROOT) {
     // sibling ids of the same branch: `type === 'id' || type === 'other'\n  ? () => createGraph(type)`. The
     // imported names of that branch, up to the next quote or the next `:` branch, lead to the files that export
     // them, also when such a file is itself a dispatcher of several effects (uvDistortEffectGraphs.ts).
-    const branch = new RegExp(`['"]${literal}['"](?:\\s*\\|\\|\\s*[\\w.]+\\s*[=!]==\\s*['"][a-z0-9-]+['"])*([^'"]{0,240})`, 'gu');
-    for (const file of files.filter((candidate) => candidate.startsWith('src/services/operators/') && shared(candidate) && !CODE_HUBS.has(candidate) && named.get(candidate).has(id))) {
+    const constants = idConstants.get(id) ?? [];
+    const idRef = [`['"]${literal}['"]`, ...constants.map((name) => `\\b${name}\\b(?!\\s*=[^=])`)].join('|');
+    const branch = new RegExp(`(?:${idRef})(?:\\s*\\|\\|\\s*[\\w.]+\\s*[=!]==\\s*['"][a-z0-9-]+['"])*([^'"]{0,240})`, 'gu');
+    const mentions = (file) => named.get(file).has(id) || constants.some((name) => new RegExp(`[=!]==\\s*${name}\\b`, 'u').test(texts.get(file)));
+    for (const file of files.filter((candidate) => candidate.startsWith('src/services/operators/') && shared(candidate) && !CODE_HUBS.has(candidate) && mentions(candidate))) {
       const names = importNames(file);
       const near = [...texts.get(file).matchAll(branch)].map((match) => branchText(match[1])).join(' ');
       const words = new Set(near.match(/[A-Za-z_$][\w$]*/gu) ?? []);
       for (const [target, locals] of names) if (locals.some((local) => words.has(local)) && !CODE_HUBS.has(target)) graphFiles.push(target);
     }
-    // The walk does not enter another effect's code: a file that names other effects but not this one.
-    // So is a file named after another effect (driftLines.ts, glowSampling.ts), by the longest effect id it starts with.
-    const otherEffect = (file) => (named.get(file).size > 0 && !named.get(file).has(id)) || ![undefined, id].includes(nameOwner(file));
+    // The walk does not enter another effect's code: a file that claims other effects (defines one, tests an
+    // effect type against one, declares one in an effect type union) but does not name this one, a file named
+    // after another effect (driftLines.ts, glowSampling.ts, by the longest effect id it starts with), or a file in
+    // another effect's runtime folder. A node id an array or a call names ('contrast' as an operator) is no claim.
+    const otherEffect = (file) => (claimed.get(file)?.size > 0 && !named.get(file)?.has(id) && !claimed.get(file).has(id))
+      || ![undefined, id].includes(nameOwner(file)) || ![undefined, id].includes(runtimeOwner(file));
     roots.push(...graphFiles.filter((file) => !shared(file)));
+    // Files named after the effect in the effects and the engine (SlitScanSurfacePass.ts, faceCables.wgsl),
+    // unless the engine shares them; the walk follows their imports into the effect code.
+    const own = nameRule(id);
+    const namedFiles = [...files, ...engineFiles].filter((file) => own.test(path.posix.basename(file))
+      && (file.startsWith('src/effects/') || NAME_SCOPES.some((scope) => file.startsWith(`${scope}/`)))
+      && (allImporters.get(file) ?? 0) <= SHARED_IMPORTERS);
     const seen = new Set(graphFiles);
     const walked = new Set();
-    const stack = [...roots];
+    const stack = [...roots, ...namedFiles];
     while (stack.length) {
       const file = stack.pop();
       if (walked.has(file)) continue;
@@ -215,18 +260,12 @@ export function effectCodeIndex(root = REPO_ROOT) {
       seen.add(file);
       stack.push(...followed(file, id, defines).filter((target) => !shared(target) && !registry(target) && !otherEffect(target)));
     }
-    // Files named after the effect in the effects and the engine (SlitScanSurfacePass.ts, faceCables.wgsl),
-    // unless the engine shares them; they are added as they are, not walked into.
-    const own = nameRule(id);
-    for (const file of [...files, ...engineFiles]) {
-      if (own.test(path.posix.basename(file)) && (file.startsWith('src/effects/') || NAME_SCOPES.some((scope) => file.startsWith(`${scope}/`)))
-        && (allImporters.get(file) ?? 0) <= SHARED_IMPORTERS) seen.add(file);
-    }
     const result = [...seen].toSorted();
     cache.set(id, result);
     return result;
   };
-  const codeHash = (ids) => sha([...new Set(ids.flatMap(codeFiles))].toSorted().map((file) => `${file}\0${texts.get(file)}`).join('\0'));
+  // Line endings do not count: a Windows checkout (core.autocrlf) holds the same code with CRLF.
+  const codeHash = (ids) => sha([...new Set(ids.flatMap(codeFiles))].toSorted().map((file) => `${file}\0${texts.get(file).replace(/\r\n?/gu, '\n')}`).join('\0'));
   return { codeFiles, codeHash };
 }
 
