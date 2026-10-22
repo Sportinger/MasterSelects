@@ -1,7 +1,11 @@
 {
   "shots": [
-    "twirl?plumbing=hide&cables=avoid",
-    "twirl?focus=twirl-angle&rows=2&cables=avoid&marks=twirl-falloff-squared:above:64,twirl-angle:above:64@twirl-angle",
+    "twirl?plumbing=hide&omit=output&cables=avoid&marks=organized-twirl-space:above,organized-twirl-coordinates:above,organized-twirl-premultiply:below,organized-twirl-edges:above,organized-twirl-finish:above@twirl",
+    "twirl?focus=centre-shape-and-radius&only=space-center,space-resolution-split,space-short-side,space-circle-scale,space-stretched,space-scale,space-delta,space-p,space-safe-radius,space-distance,space-r&cables=avoid&marks=space-short-side:above,space-scale:above,space-p:above,space-r:above@twirl-centre-shape",
+    "twirl?focus=twirl-angle&only=twirl-limited-r,twirl-falloff,twirl-falloff-squared,twirl-angle,twirl-moved,space-moved-delta,space-sample-uv&cables=avoid&marks=twirl-falloff:above,twirl-angle:above,twirl-moved:below,space-sample-uv:below@twirl-angle",
+    "twirl?focus=premultiplied-source-cached&only=source-premultiplied-split,source-premultiplied-alpha,source-premultiplied-rgb,source-premultiplied,source-cache&cables=avoid&marks=source-premultiplied-rgb:below,source-cache:above@twirl-premultiplied-source",
+    "twirl?focus=frame-edges-and-sampling&only=edge-not-mirror,edge-mirrored-uv,edge-clamped-uv,edge-uv,sample,edge-weight,edge-result&cables=avoid&name.edge-coverage=Edge Coverage&name.edge-transparent=Is Transparent&name.edge-zero-vec2=Zero&marks=edge-mirrored-uv:above,edge-clamped-uv:below,edge-uv:above,sample:above,edge-result:above@twirl-frame-edges",
+    "twirl?focus=straight-alpha-output&only=result-split,result-alpha,result-safe-alpha,result-rgb,result&cables=avoid&marks=result-safe-alpha:above,result-rgb:below,result:above@twirl-straight-alpha",
     "wave?focus=wave-displacement&only=wave-x-cycles,wave-x-angle,wave-x-phase,wave-y-sine,wave-y-offset,wave-y&break=wave-y-offset&cables=avoid&marks=wave-uv-split:y:below,wave-y-sine:below,wave-y-offset:below:64@wave-displacement",
     "bulge?focus=bulge-and-pinch-curve&only=bulge-r2,bulge-inside,bulge-inside-clamped,bulge-weight,bulge-weighted,bulge-exponent,bulge-scale,bulge-moved&break=bulge-weighted&cables=avoid&name.bulge-strength=Strength&marks=bulge-weight:above:64,bulge-weighted:below:64@bulge-curve"
   ]

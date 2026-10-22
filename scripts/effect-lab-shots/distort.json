@@ -1,0 +1,23 @@
+{
+  "pairs": [
+    {
+      "name": "twirl",
+      "out": "docs/Features/assets/effects/twirl.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "compare",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "twirl",
+        "params": {
+          "amount": 3.4907,
+          "radius": 0.6
+        }
+      },
+      "alt": "The dancer on a dark stage, original left and with Twirl right: her dress, arms and body wind into a spiral around the middle of the picture, while the stage floor and the dark edges stay as they are",
+      "caption": "Left: original. Right: Twist 200°, Radius 0.6."
+    }
+  ]
+}

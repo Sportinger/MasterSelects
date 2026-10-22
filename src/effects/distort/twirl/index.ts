@@ -2,8 +2,22 @@
 // The editable graph is the runtime; shader.wgsl is its WGSL reference.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { EDGES_PARAM, SHAPE_PARAM, UV_DISTORT_COMMON_WGSL, choiceWarnings, distortNumber, edgeIndex, radiusWarnings, shapeIndex } from '../uvDistortParams';
+
+const degrees = (value: number) => value * Math.PI / 180;
+
+/** Presets name only Twist and Radius, the two controls that make the look. */
+export const TWIRL_PRESETS: readonly EffectPreset[] = [
+  // A slow sway through a wide area: the picture stays readable, as if seen through moving water.
+  { id: 'soft-stir', name: 'Soft Stir', params: { amount: degrees(80), radius: 0.8 } },
+  // A tight knot in the middle, the rest of the frame untouched.
+  { id: 'knot', name: 'Knot', params: { amount: degrees(540), radius: 0.25 } },
+  // One full turn: the middle spirals in, the edge of the area still shows the picture.
+  { id: 'whirlpool', name: 'Whirlpool', params: { amount: degrees(360), radius: 0.6 } },
+  // Two full turns across the whole frame: nothing but spiral bands of colour.
+  { id: 'vortex', name: 'Vortex', params: { amount: degrees(720), radius: 1 } },
+];
 
 export const twirl: EffectDefinition = {
   id: 'twirl',
@@ -57,6 +71,8 @@ export const twirl: EffectDefinition = {
     shape: SHAPE_PARAM,
     edges: EDGES_PARAM,
   },
+
+  presets: TWIRL_PRESETS,
 
   paramWarnings: params => [...radiusWarnings(params), ...choiceWarnings(params)],
   packUniforms: (params, width, height) => new Float32Array([

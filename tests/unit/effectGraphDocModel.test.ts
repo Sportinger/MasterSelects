@@ -95,9 +95,14 @@ describe('effect graph doc shots: graph selection', () => {
       expect(ports.some(label => /^(Divide|Multiply|Add|Switch|Combine Vector|Vector): Value$/.test(label) || label === 'Vector')).toBe(false);
     }
     const twirl = doc('?effect=twirl').graph.nodes.find(node => node.label === 'Centre, Shape & Radius')!;
-    expect(twirl.outputs.map(port => port.label)).toEqual(expect.arrayContaining(['Centre', 'Shape Scale', 'Offset', 'Distance / Radius']));
+    expect(twirl.outputs.map(port => port.label)).toEqual(expect.arrayContaining(['Centre', 'Shape Scale', 'Offset', 'Radius Share']));
     const stubs = doc('?effect=twirl&focus=twirl-angle').graph.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label);
-    expect(stubs).toEqual(expect.arrayContaining(['Distance / Radius', 'Twist', 'Offset', 'Shape Scale', 'Centre']));
+    expect(stubs).toEqual(expect.arrayContaining(['Radius Share', 'Twist', 'Offset', 'Shape Scale', 'Centre']));
+    for (const effect of ['twirl', 'wave']) {
+      const labels = doc(`?effect=${effect}`).graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
+      expect(labels).not.toContain('(1, 1)');
+      expect(labels).not.toContain('Distance / Radius');
+    }
   });
 
   it('hides the plumbing folders on request, so the stages read as one path', () => {

@@ -80,7 +80,6 @@ export const RECIPE_PENDING = {
     'scanlines.webp',
     'slit-scan.webp',
     'time-stack.webp',
-    'twirl.webp',
     'vibrance.webp',
     'vignette.webp',
     'wave.webp',
