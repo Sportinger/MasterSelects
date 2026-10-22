@@ -302,7 +302,7 @@ A loop is the clip figure with `docs-compare` added (`doc-clip.mjs` prints it):
 
 The scripts that make the pictures and clips. Each prints the figure HTML to paste; [Effect pages](#effect-pages) says which picture an effect page needs.
 
-Each effect group keeps its shot lists under the group's name: `scripts/effect-lab-shots/<group>.json` (stills), `scripts/effect-graph-shots/<group>.json` (graphs), `scripts/effect-editor-shots/<group>.json` (inspector excerpts, `tracking.json` for Face Cables) and `scripts/doc-clips/<group>.json` (loops). `scripts/effect-lab-shots/color-thumbs.json` renders the Brightness still and the split thumbnails of the subtle tonal effects. The basic-page stills come from `node scripts/effect-docs.mjs --lab-manifest <file>`. Every entry of a shot list is a **recipe**: everything needed to make that picture again.
+Each effect group keeps its shot lists under the group's name: `scripts/effect-lab-shots/<group>.json` (stills), `scripts/effect-graph-shots/<group>.json` (graphs), `scripts/effect-editor-shots/<group>.json` (inspector excerpts, `tracking.json` for Face Cables) and `scripts/doc-clips/<group>.json` (loops). `scripts/effect-lab-shots/color-thumbs.json` renders the split thumbnails of the subtle tonal effects; their stills and preset strips come from `color.json`. The basic-page stills come from `node scripts/effect-docs.mjs --lab-manifest <file>`. Every entry of a shot list is a **recipe**: everything needed to make that picture again.
 
 ### All of them with one command
 

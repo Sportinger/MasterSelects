@@ -1,12 +1,24 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
-import { COLOR_RECIPE, createDefaultColorEffectGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
+import { COLOR_RECIPE, createDefaultColorEffectGraph, createFormerContrastGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
+import { flattenContrastGraph } from '../../src/services/operators/contrastFlattenUpgrade';
+import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
+import { effectPresentationPlan } from '../../src/services/operators/effectPresentationPlans';
+import { effectOperatorGraph, migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { colorEffectGraphState } from '../../src/services/operators/colorEffectGraphState';
 import { createLegacyColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
 import { applyWorkerSoftwareImageGraphs } from '../../src/services/render/workerSoftwareImageGraphs';
 import type { Layer } from '../../src/types/layers';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
+import { COLOR_COMPOSITIONS } from '../../src/services/operators/colorCompositions';
+import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
+import { effectRecipeFingerprint } from '../../src/services/operators/recipeFingerprint';
+import { FORMER_CONTRAST_FINGERPRINT } from '../../src/services/operators/contrastFlattenUpgrade';
 
 /**
  * Independent CPU references for the rebuilt color effects (2026-10). The formulas below are
@@ -38,6 +50,15 @@ function expectPixel(actual: number[], expected: number[], digits = 5) {
 }
 const finite = (pixel: number[]) => pixel.every(Number.isFinite);
 
+/**
+ * The former Contrast recipe as projects store it: written by the base code (task/docs-site-plumbing,
+ * bcda4f064) through migratePersistedEffectOperatorGraph, which packs every recipe graph when a project
+ * is loaded and saved. The Contrast Curve block is one instance whose nodeIds list the members the block
+ * had then, next to the Parameters and Constants folders. Frozen: never regenerate it with today's code.
+ */
+const FORMER_CONTRAST_STORED = readFileSync(path.join(process.cwd(), 'tests', 'fixtures', 'contrast-former-recipe-stored.json'), 'utf8');
+const packFormerContrast = (): EffectOperatorGraph => JSON.parse(FORMER_CONTRAST_STORED);
+
 describe('rebuilt color effect recipes', () => {
   it.each(['brightness', 'contrast', 'saturation', 'vibrance', 'exposure', 'levels', 'hue-shift', 'temperature'] as const)(
     '%s is the identity at its defaults and keeps alpha', type => {
@@ -59,7 +80,7 @@ describe('rebuilt color effect recipes', () => {
   });
 
   it('Contrast is an S-curve with slope Amount at mid-grey that never clips detail', () => {
-    for (const amount of [0.5, 1.3, 2, 3]) {
+    for (const amount of [1.3, 2, 3]) {
       for (const texel of TEXELS) {
         const expected = texel.slice(0, 3).map(raw => {
           const x = Math.min(Math.max(raw, COLOR_RECIPE.contrastEdge), 1 - COLOR_RECIPE.contrastEdge);
@@ -67,6 +88,8 @@ describe('rebuilt color effect recipes', () => {
         });
         expectPixel(render('contrast', { amount }, texel), [...expected, texel[3]]);
       }
+    }
+    for (const amount of [0, 0.3, 0.5, 1.3, 2, 3]) {
       const epsilon = 1e-4, slope = (render('contrast', { amount }, [0.5 + epsilon, 0, 0, 1])[0] - render('contrast', { amount }, [0.5 - epsilon, 0, 0, 1])[0]) / (2 * epsilon);
       expect(slope).toBeCloseTo(amount, 3);
     }
@@ -74,7 +97,87 @@ describe('rebuilt color effect recipes', () => {
     const highlights = [0.8, 0.9].map(x => render('contrast', { amount: 2 }, [x, x, x, 1])[0]);
     expect(highlights[0]).toBeLessThan(highlights[1]);
     expect(highlights[1]).toBeLessThan(1);
-    expect(render('contrast', { amount: 0 }, [0.8, 0.2, 0.6, 1]).slice(0, 3).every(value => Math.abs(value - 0.5) < 0.02)).toBe(true);
+    expectPixel(render('contrast', { amount: 0 }, [0.8, 0.2, 0.6, 1]), [0.5, 0.5, 0.5, 1]);
+  });
+
+  it('Contrast below 1 flattens toward mid-grey without stretching the shadows (2026-10-22 fix)', () => {
+    for (const amount of [0, 0.3, 0.6, 0.95]) {
+      for (const texel of TEXELS) expectPixel(render('contrast', { amount }, texel), [...texel.slice(0, 3).map(x => 0.5 + (x - 0.5) * amount), texel[3]]);
+    }
+    // One 8-bit code value above black: the former inverse S turned it into about 40 at Amount 0.3.
+    const step = 1 / 255, gain = (graph: ReturnType<typeof createFormerContrastGraph>) =>
+      (render('contrast', { amount: 0.3 }, [step, step, step, 1], graph)[0] - render('contrast', { amount: 0.3 }, [0, 0, 0, 1], graph)[0]) / step;
+    expect(gain(createFormerContrastGraph())).toBeGreaterThan(30);
+    expect(gain(createDefaultColorEffectGraph('contrast'))).toBeCloseTo(0.3, 3);
+  });
+
+  it('recognises the former Contrast recipe by its frozen fingerprint', () => {
+    // Pinned: a later change to the curve helpers must not quietly change what counts as the former recipe.
+    expect(FORMER_CONTRAST_FINGERPRINT).toBe('173cd1faa98e02');
+    expect(effectRecipeFingerprint(createFormerContrastGraph())).toBe(FORMER_CONTRAST_FINGERPRINT);
+  });
+
+  it('upgrades a former Contrast in the packed form a loaded and saved project stores, keeping card positions', () => {
+    const packed = packFormerContrast();
+    expect(packed.schemaVersion).toBe(1);
+    expect(packed.nodes.some(node => node.composition && node.id === 'shared-curve-minimum-slope')).toBe(true);
+    expect(effectRecipeFingerprint(packed)).not.toBe(FORMER_CONTRAST_FINGERPRINT);
+    expect(colorEffectGraphState('contrast', packed)).toBe('recipe');
+    expect(matchesEffectRecipe(flattenContrastGraph(packed), createDefaultColorEffectGraph('contrast'))).toBe(true);
+    const at = (amount: number) => effectOperatorGraph({ id: 'fx', name: 'contrast', type: 'contrast', enabled: true, params: { amount }, operatorGraph: packFormerContrast() });
+    // Below 1 an even fade: one 8-bit step keeps a gain of Amount (0.3), not about 40.
+    const step = (render('contrast', { amount: 0.3 }, [1 / 255, 1 / 255, 1 / 255, 1], at(0.3))[0] - render('contrast', { amount: 0.3 }, [0, 0, 0, 1], at(0.3))[0]) * 255;
+    expect(step).toBeCloseTo(0.3, 4);
+    expectPixel(render('contrast', { amount: 0.3 }, [0.1, 0.1, 0.1, 1], at(0.3)), [0.38, 0.38, 0.38, 1]);
+    // From 1 up the picture is the one the former recipe gave.
+    const former = createFormerContrastGraph();
+    for (const amount of [1, 1.5, 3]) for (const texel of TEXELS) expectPixel(render('contrast', { amount }, texel, at(amount)), render('contrast', { amount }, texel, former));
+    // A moved card and the moved block keep their places, through the upgrade and through a project load.
+    const moved = packFormerContrast();
+    moved.layout.frame = { x: 40, y: 10 };
+    moved.layout['shared-curve-minimum-slope'] = { x: 200, y: 900 };
+    const upgraded = flattenContrastGraph(moved);
+    expect(upgraded).not.toBe(moved);
+    expect(upgraded.layout.frame).toEqual({ x: 40, y: 10 });
+    const first = COLOR_COMPOSITIONS.find(definition => definition.id === 'color.contrast-curve.rgb')!.composition!.graph.nodes[0].id;
+    expect(upgraded.layout[first]).toEqual({ x: 200, y: 900 });
+    const loaded = migrateLoadedEffectOperatorGraph({ id: 'fx', name: 'contrast', type: 'contrast', enabled: true, params: { amount: 0.3 }, operatorGraph: moved });
+    expect(loaded.operatorGraph!.layout.frame).toEqual({ x: 40, y: 10 });
+    expect(colorEffectGraphState('contrast', loaded.operatorGraph!)).toBe('recipe');
+    // A user's own folder stays; the editor's stage folders are rebuilt for the new stage.
+    const foldered = packFormerContrast();
+    foldered.groups = [...(foldered.groups ?? []), { id: 'mine', label: 'Mine', color: '#888', nodeIds: ['frame', 'split'] }];
+    expect(flattenContrastGraph(foldered).groups?.find(group => group.id === 'mine')?.nodeIds).toEqual(['frame', 'split']);
+    expect(flattenContrastGraph(packFormerContrast()).groups ?? []).toEqual([]);
+    // An edit outside the block is the author's work: kept and reported as edited (the block itself has the fade).
+    const edited = packFormerContrast();
+    edited.nodes.find(node => node.id === 'amount-render-max')!.constants = { value: 4 };
+    expect(flattenContrastGraph(edited)).toBe(edited);
+    expect(colorEffectGraphState('contrast', edited)).toBe('edited');
+  });
+
+  it('upgrades a saved Contrast of the former recipe and leaves edited graphs alone', () => {
+    const former = createFormerContrastGraph();
+    const upgraded = flattenContrastGraph(structuredClone(former));
+    expect(matchesEffectRecipe(upgraded, createDefaultColorEffectGraph('contrast'))).toBe(true);
+    // From Amount 1 up the look is unchanged; only the broken range below 1 changes.
+    for (const amount of [1, 1.4, 3]) for (const texel of TEXELS) expectPixel(render('contrast', { amount }, texel, upgraded), render('contrast', { amount }, texel, former));
+    const rendered = effectOperatorGraph({ id: 'fx', name: 'contrast', type: 'contrast', enabled: true, params: { amount: 0.3 }, operatorGraph: structuredClone(former) });
+    expectPixel(render('contrast', { amount: 0.3 }, [0.1, 0.1, 0.1, 1], rendered), [0.5 - 0.4 * 0.3, 0.5 - 0.4 * 0.3, 0.5 - 0.4 * 0.3, 1]);
+    expect(colorEffectGraphState('contrast', structuredClone(former))).toBe('recipe');
+    const edited = structuredClone(former);
+    edited.nodes.find(node => node.id === 'curve-minimum-slope')!.constants = { value: 0.2 };
+    expect(flattenContrastGraph(edited)).toBe(edited);
+    const legacy = createLegacyColorEffectGraph('contrast');
+    expect(flattenContrastGraph(legacy)).toBe(legacy);
+    // A bypassed folder or an incomplete graph is the author's work: kept, and not reported as the recipe.
+    const bypassed = { ...structuredClone(former), groups: [{ id: 'g1', label: 'Tone Curve', color: '#888', bypassed: true,
+      nodeIds: former.nodes.filter(node => node.id.startsWith('curve')).map(node => node.id) }] };
+    expect(flattenContrastGraph(bypassed)).toBe(bypassed);
+    expect(colorEffectGraphState('contrast', bypassed)).not.toBe('recipe');
+    const incomplete = { ...structuredClone(former), incomplete: 'missing wire' };
+    expect(flattenContrastGraph(incomplete)).toBe(incomplete);
+    expect(colorEffectGraphState('contrast', incomplete)).not.toBe('recipe');
   });
 
   it('Saturation mixes Rec.709 luma and stops at the gamut edge without turning the hue', () => {
@@ -221,6 +324,61 @@ describe('rebuilt color effect recipes', () => {
     applyWorkerSoftwareImageGraphs(data, 1, 1, plan!.pixelEffects.imageOperatorPlans!, 0);
     const gain = 2 ** (COLOR_RECIPE.brightnessStops * 0.4), curve = (x: number) => x * gain / (x * gain + 1 - x);
     expect([...data]).toEqual([Math.round(curve(0.2) * 255), Math.round(curve(128 / 255) * 255), 0, 255]);
+  });
+
+  it('folds every working node of the Exposure recipe into a stage folder, the Offset splat into Offset & Gamma', () => {
+    const graph = createDefaultColorEffectGraph('exposure'), plan = effectPresentationPlan('exposure')!;
+    const plumbing = /^(frame|split|output)$|-render-(min|max)$|^tone-zero$|^clamp-(low|high)$/;
+    const bound = new Set(['exposure', 'offset', 'gamma']);
+    const loose = graph.nodes.filter(node => !plumbing.test(node.id) && !bound.has(node.id) && plan.stage(node as never) === 'processing');
+    expect(loose.map(node => node.id)).toEqual([]);
+    expect(plan.stage({ id: 'offset-rgb' } as never)).toBe('tone');
+    expect(plan.labels.tone).toBe('Offset & Gamma');
+  });
+
+  it('folds every working node of the Levels recipe into a stage folder, the colour splats into Input Black & White and Output Range', () => {
+    const graph = createDefaultColorEffectGraph('levels'), plan = effectPresentationPlan('levels')!;
+    const plumbing = /^(frame|split|output)$|-render-(min|max)$|^range-(zero|minimum)$|^(remap-)?clamp-(low|high)$/;
+    const bound = new Set(['inputBlack', 'inputWhite', 'gamma', 'outputBlack', 'outputWhite']);
+    const loose = graph.nodes.filter(node => !plumbing.test(node.id) && !bound.has(node.id) && plan.stage(node as never) === 'processing');
+    expect(loose.map(node => node.id)).toEqual([]);
+    expect(plan.stage({ id: 'inputBlack-rgb' } as never)).toBe('remap');
+    expect(['output-range', 'outputBlack-rgb', 'outputWhite-rgb'].map(id => plan.stage({ id } as never))).toEqual(['output', 'output', 'output']);
+    expect(plan.labels.output).toBe('Output Range');
+  });
+
+  it('the shared Contrast Curve block holds the even fade below 1 too, under its former ports (2026-10-22 fix)', () => {
+    const block = COLOR_COMPOSITIONS.find(definition => definition.id === 'color.contrast-curve.rgb')!;
+    expect(block.inputs.map(port => [port.id, port.label]).toSorted()).toEqual([['amount-clamped-value', 'Contrast'], ['split-rgb', 'RGB']]);
+    // The block alone in a graph: Frame → Split → block (Contrast from a value card) → Combine → Output.
+    const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', nodes: [
+      { id: 'frame', operator: 'image.frame', operatorVersion: 1, bindings: {} },
+      { id: 'split', operator: 'vector.split.rgba', operatorVersion: 1, bindings: {} },
+      { id: 'contrast', operator: 'values.number', operatorVersion: 1, bindings: { value: 'amount' } },
+      { id: 'block', operator: block.id, operatorVersion: 1, bindings: {} },
+      { id: 'combine', operator: 'vector.combine.rgba', operatorVersion: 1, bindings: {} },
+      { id: 'output', operator: 'image.output', operatorVersion: 1, bindings: {} }],
+    edges: [
+      { id: 'e1', from: 'frame', output: 'image', to: 'split', input: 'image' },
+      { id: 'e2', from: 'split', output: 'rgb', to: 'block', input: 'split-rgb' },
+      { id: 'e3', from: 'contrast', output: 'value', to: 'block', input: 'amount-clamped-value' },
+      { id: 'e4', from: 'block', output: 'curve-value', to: 'combine', input: 'rgb' },
+      { id: 'e5', from: 'split', output: 'alpha', to: 'combine', input: 'alpha' },
+      { id: 'e6', from: 'combine', output: 'image', to: 'output', input: 'image' }],
+    layout: {} };
+    const alone = (amount: number, pixel: Pixel) => evaluateImageOperatorPlan(compileImageOperatorGraph(expandOperatorCompositions(graph), { amount }), pixel);
+    const step = 1 / 255;
+    expect((alone(0.3, [step, step, step, 1])[0] - alone(0.3, [0, 0, 0, 1])[0]) / step).toBeCloseTo(0.3, 3);
+    for (const amount of [0.3, 1.5]) for (const texel of TEXELS) expectPixel(alone(amount, texel), render('contrast', { amount }, texel));
+    // Driven below 0 from a value card or an oscillator, the block stays plain grey, never a negative.
+    for (const amount of [0, -1, -5]) for (const texel of TEXELS) expectPixel(alone(amount, texel), [0.5, 0.5, 0.5, texel[3]]);
+  });
+
+  it('presents Contrast as Parameters and one Contrast Curve block, and names the Vibrance hue match', () => {
+    const graph = effectOperatorGraph({ id: 'fx', name: 'Contrast', type: 'contrast', enabled: true, params: getDefaultParams('contrast') }, { inspectionOnly: true });
+    expect(graph.groups?.map(group => group.label).toSorted()).toEqual(['Constants', 'Contrast Curve', 'Parameters']);
+    expect(graph.groups?.find(group => group.label === 'Contrast Curve')?.parentId).toBeUndefined();
+    expect(effectPresentationPlan('vibrance')?.portLabels?.['skin-match']).toBe('Skin Hue Match');
   });
 
   it('keeps the original formulas in the legacy graphs that saved projects still carry', () => {

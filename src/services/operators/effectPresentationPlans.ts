@@ -33,13 +33,13 @@ export const ORIGINAL_COLOR_PRESENTATION: EffectPresentationPlan = {
 const COLOR_STAGES: readonly [RegExp, string, string][] = [
   [/-clamped$/, 'controls', 'Parameters'], [/^(clamp|combine|image)(-|$)/, 'finish', 'Clamp & Alpha'],
   [/^input(-|$)/, 'input', 'Input 0–1'], [/^curve(-|$)/, 'curve', 'Tone Curve'], [/^light-/, 'light', 'Linear Light'],
-  [/^gain-/, 'gain', 'White Balance Gains'], [/^tone-/, 'tone', 'Offset & Gamma'], [/^weight(-|$)/, 'weight', 'Muted-Colour Weight'],
-  [/^measure-/, 'measure', 'Hue & Saturation'], [/^skin-/, 'skin', 'Skin Protection'], [/^gamut-/, 'gamut', 'Gamut-Safe Saturation'], [/^(range|remap)(-|$)/, 'remap', 'Input Black & White'],
-  [/^gamma-/, 'gamma', 'Gamma'], [/^output-range$/, 'output', 'Output Range'], [/^hue-/, 'hue', 'Hue Rotation'],
+  [/^gain-/, 'gain', 'White Balance Gains'], [/^tone-|^offset-rgb$/, 'tone', 'Offset & Gamma'], [/^weight(-|$)/, 'weight', 'Muted-Colour Weight'],
+  [/^measure-/, 'measure', 'Hue & Saturation'], [/^skin-/, 'skin', 'Skin Protection'], [/^gamut-/, 'gamut', 'Gamut-Safe Saturation'], [/^(range|remap)(-|$)|^inputBlack-rgb$/, 'remap', 'Input Black & White'],
+  [/^gamma-/, 'gamma', 'Gamma'], [/^output-range$|^output(Black|White)-rgb$/, 'output', 'Output Range'], [/^hue-/, 'hue', 'Hue Rotation'],
 ];
 /** What the inner values of the color recipes carry (bound parameters name themselves after their clamp). */
-const COLOR_PORTS = { input: 'RGB 0–1', 'light-linear': 'Linear RGB', 'light-encoded': 'sRGB', 'tone-gamma': 'Toned RGB',
-  'measure-hsv-split:x': 'Hue (HSV)', 'measure-hsv-split:y': 'Saturation', 'measure-hsv-split:z': 'Value (HSV)', 'skin-kept': 'Skin Weight', 'weight-saturation': 'Mix Amount',
+const COLOR_PORTS = { input: 'RGB 0–1', 'amount-steepness': 'Steepness', 'amount-flatten': 'Flatten', flatten: 'Flattened RGB', 'light-linear': 'Linear RGB', 'light-encoded': 'sRGB', 'tone-gamma': 'Toned RGB',
+  'measure-hsv-split:x': 'Hue (HSV)', 'measure-hsv-split:y': 'Saturation', 'measure-hsv-split:z': 'Value (HSV)', 'skin-match': 'Skin Hue Match', 'skin-kept': 'Skin Weight', 'weight-saturation': 'Mix Amount',
   'hue-lch-split:x': 'Lightness', 'hue-lch-split:y': 'Chroma', 'hue-lch-split:z': 'Hue', 'hue-rgb': 'Rotated RGB',
   'gain-balanced': 'Balanced Gains', 'range-safe': 'Input Range', 'remap-clamp': 'Normalized RGB', 'gamma-curve': 'Curved RGB', 'output-range': 'Levels RGB' };
 const REDUCE = 'reduce weight-vec4 average blurred';

@@ -29,8 +29,6 @@ export const EFFECT_DOC_EXTRAS = {
   contrast: { thumb: SPLIT_THUMB },
   exposure: { thumb: SPLIT_THUMB },
   levels: { thumb: SPLIT_THUMB },
-  // The still has three panels (original, Saturation, Vibrance): the card shows the last.
-  vibrance: { thumb: { region: [0.67, 0, 0.33, 1] } },
   // The whole blurred half at card size hides the blur: the houses and boats, closer.
   'gaussian-blur': { thumb: { region: [0.66, 0.2, 0.3, 0.6] } },
   // Generators: the still is the effect frame alone.

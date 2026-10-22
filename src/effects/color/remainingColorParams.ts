@@ -20,4 +20,6 @@ export const HUE_SHIFT_PARAMS = { shift: { ...number('Shift', 0, 0, 1, 1 / 360),
 export const TEMPERATURE_PARAMS = {
   temperature: number('Temperature', 0, -1, 1, 0.01, [-4, 4]), tint: number('Tint', 0, -1, 1, 0.01, [-4, 4]),
 } satisfies Record<string, EffectParam>;
-export const VIBRANCE_PARAMS = { amount: number('Amount', 0, -1, 1, 0.01, [-1, 4]) } satisfies Record<string, EffectParam>;
+// The slider reaches 2 (2026-10-22): on colourful footage 1 is only a mild push, and 2 is where pale colours
+// visibly bloom while strong ones stay; typed values, keyframes and nodes still render up to 4.
+export const VIBRANCE_PARAMS = { amount: number('Amount', 0, -1, 2, 0.01, [-1, 4]) } satisfies Record<string, EffectParam>;

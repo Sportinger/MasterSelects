@@ -1,10 +1,33 @@
 {
   "shots": [
-    "brightness?plumbing=hide",
-    "contrast?focus=contrast-curve&only=input,curve-shadows,curve-one,curve-one-rgb,curve-inverse,curve-highlights,curve-total,curve&rows=1&name.curve-slope-rgb=Slope@contrast-curve",
-    "brightness?focus=brightness-curve&only=curve-stops-per-amount,curve-stops,curve-gain,input,curve-lifted,curve-one,curve-one-rgb,curve-rest,curve-total,curve&marks=curve-stops-per-amount:above@brightness-curve",
-    "exposure?focus=exposure-stops&marks=light-gain:above@exposure-stops",
+    "brightness?plumbing=hide&marks=organized-brightness-controls:above,compound-shared-curve-stops-per-amount:above@brightness",
+    "brightness?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@brightness-parameters",
+    "brightness?focus=brightness-curve&only=curve-stops-per-amount,curve-stops,curve-gain,input,curve-lifted,curve-one,curve-one-rgb,curve-rest,curve-total,curve&cables=avoid&marks=curve-stops-per-amount:below,curve-gain:above,curve-lifted:above,curve:above@brightness-curve",
+    "contrast?plumbing=hide&marks=organized-contrast-controls:left,compound-shared-flatten-one:above@contrast",
+    "contrast?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@contrast-parameters",
+    "contrast?focus=contrast-curve&only=flatten-zero,flatten-one,amount-flatten,amount-steepness,flatten-grey,flatten-grey-rgb,flatten&rows=1&cables=avoid&layout=float&marks=amount-flatten:below,flatten:above@contrast-flatten",
+    "contrast?focus=contrast-curve&only=input,curve-shadows,curve-one,curve-one-rgb,curve-inverse,curve-highlights,curve-total,curve&rows=1&name.curve-slope-rgb=Slope&cables=avoid&marks=curve-shadows:below,curve:above@contrast-curve",
+    "exposure?plumbing=hide&marks=organized-exposure-controls:below,compound-shared-light-gain:above,organized-exposure-tone:below,organized-exposure-finish:above@exposure",
+    "exposure?focus=parameters&only=exposure,exposure-clamped,gamma,gamma-clamped,offset&constants=hide&cables=avoid&layout=float&marks=exposure-clamped:above@exposure-parameters",
+    "exposure?focus=exposure-stops&marks=light-linear:below,light-gain:above,light-exposed:above,light-encoded:above@exposure-stops",
+    "exposure?focus=offset-and-gamma&only=offset-rgb,tone-offset,tone-zero-rgb,tone-positive,tone-inverse-gamma,tone-inverse-gamma-rgb,tone-gamma&cables=avoid&marks=tone-offset:above,tone-positive:above,tone-inverse-gamma:above:24,tone-gamma:above@exposure-tone",
+    "exposure?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@exposure-finish",
+    "levels?plumbing=hide&marks=organized-levels-controls:below,organized-levels-remap:above,organized-levels-gamma:below,organized-levels-output:above,organized-levels-finish:below@levels",
+    "levels?focus=parameters&only=gamma,gamma-clamped&cables=avoid&layout=float&marks=gamma-clamped:below@levels-parameters",
+    "levels?focus=input-black-and-white&only=inputBlack-rgb,remap-black,range-safe-rgb,remap,remap-clamp&cables=avoid&marks=remap-black:above,remap:above,remap-clamp:above@levels-remap",
+    "levels?focus=gamma&only=gamma-inverse,gamma-inverse-rgb,gamma-curve&cables=avoid&layout=float&marks=gamma-inverse:below,gamma-curve:above@levels-gamma",
+    "levels?focus=output-range&cables=avoid&layout=float&marks=output-range:above@levels-output",
+    "levels?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@levels-finish",
     "hue-shift?focus=hue-rotate-oklch&marks=hue-lch-split:above,hue-lch-combine:above@hue-shift-rotate",
-    "vibrance?focus=muted-colour-weight&only=weight-muted,weight,weight-boost,weight-amount,weight-saturation&rows=1&layout=full&marks=weight:below@vibrance"
+    "vibrance?plumbing=hide&omit=combine,output&marks=organized-vibrance-controls:below,organized-vibrance-measure:below,organized-vibrance-skin:left,organized-vibrance-weight:below,compound-shared-gamut-one:below@vibrance",
+    "vibrance?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@vibrance-parameters",
+    "vibrance?focus=hue-and-saturation&cables=avoid&layout=float&marks=measure-hsv:below,measure-hsv-split:above@vibrance-measure",
+    "vibrance?focus=muted-colour-weight&rows=1&cables=avoid&marks=weight-muted:below,weight:above,weight-saturation:above@vibrance-weight",
+    "vibrance?focus=skin-protection&only=skin-hue-offset,skin-offset,skin-wrapped,skin-signed,skin-distance,skin-match&cables=avoid&marks=skin-hue-offset:above,skin-wrapped:above,skin-match:above@vibrance-skin-hue",
+    "vibrance?focus=skin-protection&only=skin-lit,skin-vivid,skin-not-vivid,skin-band,skin-weighted,skin-spared,skin-kept&name.skin-match=Skin Hue Match&cables=avoid&marks=skin-vivid:above,skin-band:below,skin-kept:above@vibrance-skin-weight",
+    "saturation?plumbing=hide&marks=organized-saturation-controls:below,compound-shared-gamut-one:above@saturation",
+    "saturation?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@saturation-parameters",
+    "saturation?focus=saturation-gamut-safe&only=gamut-luma,gamut-luma-rgb,gamut-amount,gamut-mix&name.gamut-limit=Limit&cables=avoid&marks=gamut-luma:above,gamut-amount:below,gamut-mix:above@saturation-mix",
+    "saturation?focus=saturation-gamut-safe&only=gamut-chroma,gamut-chroma-max,gamut-chroma-up,gamut-chroma-min,gamut-chroma-negated,gamut-chroma-down,gamut-headroom,gamut-limit-up,gamut-limit-down,gamut-limit&name.gamut-luma-rgb=Grey RGB&name.gamut-luma=Grey&constants=hide&cables=avoid&marks=gamut-chroma:below,gamut-chroma-max:above,gamut-limit-up:above,gamut-limit:above@saturation-limit"
   ]
 }
