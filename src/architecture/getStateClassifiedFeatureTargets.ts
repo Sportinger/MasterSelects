@@ -98,4 +98,8 @@ export const classifiedFeatureGetStateHardTargets = [
   { path: 'src/services/compositionGuides.ts', maxCurrentHits: 2 },
   { path: 'src/services/imageDocument/imageDocumentService.ts', maxCurrentHits: 29 },
   { path: 'src/services/layerBuilder/videoSyncPlaybackStopPause.ts', maxCurrentHits: 1 },
+  // 2026-10-22 effect presets and Style switch: one action-time read each, the
+  // applied effect after a preset and the keyframe actions after a style change.
+  { path: 'src/components/panels/properties/EffectPresetRow.tsx', maxCurrentHits: 1 },
+  { path: 'src/services/effects/effectStyles.ts', maxCurrentHits: 1 },
 ] as const;

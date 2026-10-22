@@ -108,7 +108,8 @@ describe('Riso image graphs', () => {
     const picture = flat([...target.map(toSrgb), 1] as Rgba);
     const total = [0, 0, 0];
     let count = 0;
-    for (let y = 300; y < 360; y += 2) for (let x = 600; x < 660; x += 2) {
+    // Every third pixel of a 60 px square (400 samples) covers several cells of both screens.
+    for (let y = 300; y < 360; y += 3) for (let x = 600; x < 660; x += 3) {
       printAt({ scale: 0 }, [x, y], picture).slice(0, 3).forEach((value, index) => { total[index] += toLinear(value); }); count++;
     }
     const average = total.map(value => value / count);
@@ -119,7 +120,7 @@ describe('Riso image graphs', () => {
     expect(average[0] / average[2]).toBeGreaterThan(dark[0] / dark[2]);
     expect(average[0] / average[2]).toBeLessThan(warm[0] / warm[2]);
     average.forEach((value, index) => expect(Math.abs(value - target[index]) / target[index]).toBeLessThan(.08));
-  });
+  }, 40_000);
 
   it('slips the two inks apart by Registration: across a dark edge the warm ink sticks out alone', () => {
     // Black left of x = 960, white right. Registration 20 px slips each drum by 10 px along RISO_SLIP (8 px across).

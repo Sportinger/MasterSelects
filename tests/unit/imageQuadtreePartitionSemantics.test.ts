@@ -5,10 +5,11 @@ const base = { pixel: [37, 19] as const, resolution: [128, 96] as const, scale: 
   threshold: .025, timelineTimeSeconds: 0, speed: .5 };
 
 describe('image Quadtree partition semantics', () => {
-  it('stops after the exact five-load constant block test', () => {
+  it('stops after the five-load test and the 4 x 4 grid test on a constant block', () => {
     const loadPixel = vi.fn(() => [0.25, 0.25, 0.25, 1] as const);
     expect(partitionImageQuadtree({ ...base, loadPixel })).toEqual({ origin: [0, 0], size: 64 });
-    expect(loadPixel.mock.calls.map(call => call[0])).toEqual([[0, 0], [63, 0], [0, 63], [63, 63], [32, 32]]);
+    const grid = [8, 24, 40, 56].flatMap(y => [8, 24, 40, 56].map(x => [x, y]));
+    expect(loadPixel.mock.calls.map(call => call[0])).toEqual([[0, 0], [63, 0], [0, 63], [63, 63], [32, 32], ...grid]);
   });
 
   it('runs to minimum size for persistent variance and uses nearest-even scale rounding', () => {
@@ -21,7 +22,8 @@ describe('image Quadtree partition semantics', () => {
   it('clamps the ordered corner and center loads at raster edges', () => {
     const loadPixel = vi.fn(() => [0, 0, 0, 1] as const);
     partitionImageQuadtree({ ...base, pixel: [7, 7], resolution: [8, 8], loadPixel });
-    expect(loadPixel.mock.calls.map(call => call[0])).toEqual([[0, 0], [7, 0], [0, 7], [7, 7], [7, 7]]);
+    const grid = Array.from({ length: 16 }, () => [7, 7]);
+    expect(loadPixel.mock.calls.map(call => call[0])).toEqual([[0, 0], [7, 0], [0, 7], [7, 7], [7, 7], ...grid]);
   });
 
   it('fails closed for invalid frame context and loader output', () => {

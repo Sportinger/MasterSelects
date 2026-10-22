@@ -28,6 +28,7 @@ export function StickFigureActionLane({ clipId, effectId, actionsParam }: { clip
   const clip = useTimelineStore(state => state.clips.find(item => item.id === clipId));
   const allClips = useTimelineStore(state => state.clips);
   const playhead = useTimelineStore(state => state.playheadPosition);
+  const setPlayheadPosition = useTimelineStore(state => state.setPlayheadPosition);
   const [selectedId, setSelectedId] = useState('');
   const [newAction, setNewAction] = useState<SkeletonActionId>('punch');
   const [sfxPreset, setSfxPreset] = useState('sfx-hit');
@@ -173,7 +174,7 @@ export function StickFigureActionLane({ clipId, effectId, actionsParam }: { clip
           {issues.length === 0 && <li>No problems found.</li>}
           {issues.slice(0, 30).map((issue, index) => (
             <li key={index}>
-              <button type="button" onClick={() => useTimelineStore.getState().setPlayheadPosition(issue.time)}>
+              <button type="button" onClick={() => setPlayheadPosition(issue.time)}>
                 {issue.time.toFixed(2)} s
               </button>{' '}
               {issue.figureName}: {issue.detail}

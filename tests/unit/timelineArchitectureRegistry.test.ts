@@ -1184,7 +1184,8 @@ describe('timeline architecture registry', () => {
     expect(audioEqPropertyModelSource).toContain('normalizeAudioEqParams');
 
     expect(lineCount(headerSource)).toBeLessThanOrEqual(338);
-    expect(lineCount(propertyLabelsHostSource)).toBeLessThanOrEqual(140);
+    // Includes hiding the lanes of a switched-away effect Style (hideOtherStyleLanes).
+    expect(lineCount(propertyLabelsHostSource)).toBeLessThanOrEqual(142);
     expect(lineCount(propertyRowSource)).toBeLessThanOrEqual(330);
     expect(lineCount(propertyModelSource)).toBeLessThanOrEqual(250);
     // Includes the per-cable and shared-wind labels added to the effect timeline.
