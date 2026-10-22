@@ -12,7 +12,7 @@ export function linesLookPresentationPlan(type: string): EffectPresentationPlan 
     stage: ({ id }) => /^(color-[ab]-rgb|styled|mixed|combined)$/.test(id) ? 'finish'
       : /^(source|source-color|source-tone|clamped-uv|clamp-m(in|ax)-vec2)$/.test(id) ? 'source'
       : /^(hatch|dark-hatch)$|-gate(d)?$/.test(id) ? 'layers'
-        : /^(weight|(first|second|third)(-(below-limit|darkness|heavy|width|low|high|smooth))?$)/.test(id) ? 'width' : 'grid',
+        : /^(weight|(first|second|third)(-(below-limit|darkness|heavy|width|low|high|smooth|soft|edge-pixels))?$)/.test(id) ? 'width' : 'grid',
   };
   // Vector Engraving: the turned line grid, the picture and its averaged tone, the wave, the line width, ink and paper.
   if (type === 'vector-tiling') return {
@@ -28,7 +28,7 @@ export function linesLookPresentationPlan(type: string): EffectPresentationPlan 
       : /^(color-[ab]-rgb|styled|mixed|combined)$/.test(id) ? 'finish'
       : /^(source|source-color|clamped-uv|clamp-m(in|ax)-vec2|tap-0-sample(-clamped-uv)?|tone|darkness)$/.test(id) ? 'source'
       : /^(wave(-phase|-depth|-offset)?|waved-across|engraving-(fraction|offset|distance))$/.test(id) ? 'wave'
-      : /^(weight(-clamped)?|darkness-width|heavy-width|line-width|engraving(-low|-high|-smooth)?)$/.test(id) ? 'width' : 'grid',
+      : /^(weight(-clamped)?|darkness-width|heavy-width|line-width|hairline(-share|-width|-pixels)?|edge-(soft|pixels)|engraving(-low|-high|-smooth)?)$/.test(id) ? 'width' : 'grid',
   };
   // Contour Map: the averaged picture (Smoothing), its height and slope, the band colours (Band Density, Fill), the lines on
   // the band edges (Line Width), ink and paper.

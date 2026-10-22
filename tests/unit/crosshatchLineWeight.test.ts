@@ -5,7 +5,7 @@ import { getDefaultParams, getEffect } from '../../src/effects';
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
-import { HATCH_HAIRLINE, HATCH_LAYERS } from '../../src/services/operators/geometryFragmentEffectGraphs';
+import { HATCH_HAIRLINE, HATCH_LAYERS, LINE_EDGE_PIXELS } from '../../src/services/operators/geometryFragmentEffectGraphs';
 
 type Rgba = [number, number, number, number];
 const RESOLUTION: [number, number] = [1920, 1080];
@@ -20,7 +20,7 @@ function referenceHatch(uv: [number, number], tone: number, scale: number, weigh
   const x = uv[0] * RESOLUTION[0] / size, y = uv[1] * RESOLUTION[1] / size, w = Math.min(Math.max(weight, 0), 1);
   const coordinates = [x + y, x - y, x * .5];
   return Math.max(...HATCH_LAYERS.map((layer, index) => {
-    const soft = (layer.high - layer.low) / 2;
+    const soft = LINE_EDGE_PIXELS * layer.pitch / size;
     const heavy = Math.min(Math.max((layer.toneLimit - tone) * (layer.heavy / layer.toneLimit), HATCH_HAIRLINE), layer.heavy);
     const width = (layer.low + layer.high) / 2 * (1 - w) + heavy * w;
     const line = 1 - smoothstep(width - soft, width + soft, Math.abs(fract(coordinates[index]) - .5));
@@ -57,16 +57,35 @@ describe('Crosshatch Line Weight', () => {
     }
   });
 
-  it('lets black reach near-solid ink at Line Weight 1, where the fixed lines stopped at about half', () => {
+  it('lets black reach dense ink (over 85 %, thin paper gaps between the strokes) at Line Weight 1, where the fixed lines stopped at about half', () => {
     const black: Rgba = [0, 0, 0, 1];
     expect(inkShare(renderFlat(black, { ...BW, weight: 0 }))).toBeLessThan(.6);
-    expect(inkShare(renderFlat(black, { ...BW, weight: 1 }))).toBeGreaterThan(.9);
+    expect(inkShare(renderFlat(black, { ...BW, weight: 1 }))).toBeGreaterThan(.85);
     // Ink grows with darkness at every weight, and a light tone stays paper.
     for (const weight of [0, .6, 1]) {
       const shares = [.95, .7, .45, .2, 0].map(tone => inkShare(renderFlat([tone, tone, tone, 1], { ...BW, weight })));
       expect(shares[0], `weight ${weight}`).toBe(0);
       for (let i = 1; i < shares.length; i++) expect(shares[i], `weight ${weight}`).toBeGreaterThanOrEqual(shares[i - 1] - 1e-6);
     }
+  });
+
+  it.each([12, 60])('softens every line edge over about one output pixel at %s px spacing', scale => {
+    // Walk along a row through the first diagonal set alone (tone .7): its ramp from 10 % to 90 % ink, measured across
+    // the line (the row crosses it at 45°, so divide by √2), spans about a pixel.
+    const tone = .7, row = Array.from({ length: 4 * scale * 20 }, (_, index) => [(index / 20 + .5) / RESOLUTION[0], .5] as [number, number]);
+    const values = row.map(uv => referenceHatch(uv, tone, scale, 0));
+    let widest = 0, start = -1;
+    values.forEach((value, index) => {
+      const ramping = value > .1 && value < .9;
+      if (ramping && start < 0) start = index;
+      if (!ramping && start >= 0) { widest = Math.max(widest, (index - start) / 20); start = -1; }
+    });
+    expect(widest / Math.SQRT2).toBeGreaterThan(.5);
+    expect(widest / Math.SQRT2).toBeLessThan(1.6);
+  });
+
+  it('keeps a paper gap of at least 1.5 px (at half ink) between the diagonal lines at 6 px spacing, even in black', () => {
+    for (const layer of HATCH_LAYERS.slice(0, 2)) expect((1 - 2 * layer.heavy) * 6 / Math.SQRT2).toBeGreaterThan(1.5);
   });
 
   it('clamps Line Weight outside 0–1 and says so', () => {

@@ -20,8 +20,8 @@ export const VECTOR_ENGRAVING_PRESETS: readonly EffectPreset[] = [
   { id: 'copper-plate', name: 'Copper Plate', params: { scale: 9, weight: 1, angle: 0, amount: 1, colorA: '#2e1d12', colorB: '#f0e3c6' } },
   // Wide black waves on white at a slant, readable from the back of a hall: an op-art poster.
   { id: 'op-art', name: 'Op Art', params: { scale: 26, weight: 1, angle: -20, amount: 1, colorA: '#0b0b0b', colorB: '#f5f2ea' } },
-  // Pale lines on deep blue: a cyanotype or a technical drawing, with the picture as a negative.
-  { id: 'cyanotype', name: 'Cyanotype', params: { scale: 8, weight: 0.8, angle: 90, amount: 1, colorA: '#e9f1fb', colorB: '#173f78' } },
+  // Prussian-blue lines on white, the shadows deep blue: a cyanotype print.
+  { id: 'cyanotype', name: 'Cyanotype', params: { scale: 8, weight: 0.85, angle: 90, amount: 1, colorA: '#1a3d7c', colorB: '#eef3f8' } },
   // Fine engraving over the picture's own colours: the picture stays, the lines lie over it.
   { id: 'engraved-photo', name: 'Engraved Photo', params: { scale: 7, weight: 0.7, angle: 0, amount: 0.55, colorA: '#141414', colorB: '#ffffff' } },
 ];

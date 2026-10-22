@@ -11,7 +11,7 @@ export const CONTOUR_MAP_PARAMS: Record<string, EffectParam> = {
   },
   // Saved projects from before Smoothing read the picture itself (legacyDefault 0).
   smoothing: {
-    type: 'number', label: 'Smoothing', default: 6, min: 0, max: 32, step: 1, unit: ' px', renderMin: 0, renderMax: 32,
+    type: 'number', label: 'Smoothing', default: 10, min: 0, max: 32, step: 1, unit: ' px', renderMin: 0, renderMax: 32,
     animatable: true, group: 'Pattern', legacyDefault: 0,
   },
   // Saved projects from before Fill keep their full ink-to-paper bands (legacyDefault 1).
@@ -26,10 +26,10 @@ export const CONTOUR_MAP_PRESETS: readonly EffectPreset[] = [
   { id: 'hiking-map', name: 'Hiking Map', params: { scale: 22, lineWidth: 1.3, smoothing: 8, fill: 0.45, amount: 1, colorA: '#4a2f1b', colorB: '#f4ecd6' } },
   // Only the lines, black on white: a survey drawing of the picture.
   { id: 'survey-lines', name: 'Survey Lines', params: { scale: 30, lineWidth: 1.2, smoothing: 6, fill: 0, amount: 1, colorA: '#141414', colorB: '#f6f3ec' } },
-  // Glowing green lines on black: a sonar or radar screen.
-  { id: 'sonar', name: 'Sonar', params: { scale: 26, lineWidth: 1.6, smoothing: 8, fill: 0, amount: 1, colorA: '#5dffb0', colorB: '#03130c' } },
+  // A few calm glowing green rings on black, the picture smoothed far: a sonar or radar screen.
+  { id: 'sonar', name: 'Sonar', params: { scale: 18, lineWidth: 1.8, smoothing: 18, fill: 0, amount: 1, colorA: '#5dffb0', colorB: '#03130c' } },
   // Flat bands from deep blue to warm sand, no lines: a screen-printed poster.
   { id: 'poster-bands', name: 'Poster Bands', params: { scale: 16, lineWidth: 0, smoothing: 10, fill: 1, amount: 1, colorA: '#1d2547', colorB: '#f6d6a6' } },
-  // Pale lines on deep blue: a blueprint of the picture.
-  { id: 'blueprint', name: 'Blueprint', params: { scale: 24, lineWidth: 1.2, smoothing: 6, fill: 0, amount: 1, colorA: '#e6efff', colorB: '#1b4a85' } },
+  // Many fine lines over a faint tint, brown on paper: a dense topographic survey map.
+  { id: 'topographic', name: 'Topographic', params: { scale: 50, lineWidth: 0.8, smoothing: 12, fill: 0.3, amount: 1, colorA: '#5a3a1e', colorB: '#f3efe2' } },
 ];

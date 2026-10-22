@@ -47,7 +47,7 @@ fn contourFragment(input: VertexOutput) -> @location(0) vec4f {
 @fragment
 fn contourMapFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
-  let levels = max(params.scale, 6.0) * 0.35;
+  let levels = max(params.scale, 60.0 / 7.0) * 0.35;
   let texel = 1.0 / params.resolution;
   let height = luminance(color.rgb) * levels;
   let slope = max(length(vec2f(
@@ -76,19 +76,22 @@ fn vectorTilingFragment(input: VertexOutput) -> @location(0) vec4f {
   let angle = params.angle * PI / 180.0;
   let point = input.uv * params.resolution - params.resolution * 0.5;
   let turned = vec2f(point.x * cos(angle) - point.y * sin(angle), point.x * sin(angle) + point.y * cos(angle));
-  let line = turned / referencePixels(max(params.scale, 3.0));
+  let spacing = referencePixels(max(params.scale, 3.0));
+  let line = turned / spacing;
   let darkness = 1.0 - toneAt(input.uv);
   let across = line.y - sin(line.x * 2.1) * darkness * 0.3;
   // Line Weight (variant slot, 0-1): 0 keeps the fixed width, 1 swells each line from a hairline on white.
-  let width = mix(0.0575, clamp(darkness * 0.46, 0.02, 0.46), clamp(params.variant, 0.0, 1.0));
-  let engraving = 1.0 - smoothstep(width - 0.0325, width + 0.0325, abs(fract(across) - 0.5));
+  // The hairline is at least half a pixel wide, the edge 0.75 px soft at every spacing (LINE_EDGE_PIXELS).
+  let width = mix(0.0575, clamp(darkness * 0.46, max(0.02, 0.5 / spacing), 0.46), clamp(params.variant, 0.0, 1.0));
+  let soft = 0.75 / spacing;
+  let engraving = 1.0 - smoothstep(width - soft, width + soft, abs(fract(across) - 0.5));
   let color = source(input.uv);
   return vec4f(mix(color.rgb, mix(params.colorB.rgb, params.colorA.rgb, engraving), params.amount), color.a);
 }
 
 // One Crosshatch line layer (geometryFragmentEffectGraphs.ts HATCH_LAYERS): drawn only where tone <= limit.
-fn hatchLine(coordinate: f32, low: f32, high: f32, limit: f32, heavy: f32, tone: f32, weight: f32) -> f32 {
-  let soft = (high - low) * 0.5;
+// `soft` is LINE_EDGE_PIXELS (0.75 px) in units of the layer's coordinate.
+fn hatchLine(coordinate: f32, low: f32, high: f32, limit: f32, heavy: f32, soft: f32, tone: f32, weight: f32) -> f32 {
   let width = mix((low + high) * 0.5, clamp((limit - tone) * (heavy / limit), 0.03, heavy), weight);
   return (1.0 - smoothstep(width - soft, width + soft, abs(fract(coordinate) - 0.5))) * step(tone, limit);
 }
@@ -97,12 +100,14 @@ fn hatchLine(coordinate: f32, low: f32, high: f32, limit: f32, heavy: f32, tone:
 fn crosshatchFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
   let tone = luminance(color.rgb);
-  let pixel = input.uv * params.resolution / referencePixels(max(params.scale, 2.0));
+  let spacing = referencePixels(max(params.scale, 2.0));
+  let pixel = input.uv * params.resolution / spacing;
   // Line Weight (variant slot, 0-1): 0 keeps the fixed widths, 1 swells each line from a hairline at its tone limit.
   let weight = clamp(params.variant, 0.0, 1.0);
-  let first = hatchLine(pixel.x + pixel.y, 0.06, 0.15, 0.82, 0.36, tone, weight);
-  let second = hatchLine(pixel.x - pixel.y, 0.06, 0.15, 0.58, 0.36, tone, weight);
-  let third = hatchLine(pixel.x * 0.5, 0.05, 0.13, 0.32, 0.3, tone, weight);
+  let diagonalSoft = 0.75 * 1.41421356 / spacing;
+  let first = hatchLine(pixel.x + pixel.y, 0.06, 0.15, 0.82, 0.3, diagonalSoft, tone, weight);
+  let second = hatchLine(pixel.x - pixel.y, 0.06, 0.15, 0.58, 0.3, diagonalSoft, tone, weight);
+  let third = hatchLine(pixel.x * 0.5, 0.05, 0.13, 0.32, 0.2, 0.375 / spacing, tone, weight);
   let hatch = max(first, max(second, third));
   return vec4f(mix(color.rgb, mix(params.colorB.rgb, params.colorA.rgb, hatch), params.amount), color.a);
 }

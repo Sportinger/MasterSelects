@@ -76,12 +76,12 @@
    "image": "dancer_stage",
    "width": 1920,
    "crop": [
-    440,
-    30,
-    1040,
-    1040
+    760,
+    120,
+    320,
+    320
    ],
-   "cellWidth": 520,
+   "cellWidth": 320,
    "columns": 3
   },
   {
@@ -89,12 +89,12 @@
    "image": "dancer_stage",
    "width": 1920,
    "crop": [
-    440,
-    30,
-    1040,
-    1040
+    760,
+    120,
+    320,
+    320
    ],
-   "cellWidth": 520,
+   "cellWidth": 320,
    "columns": 3
   },
   {

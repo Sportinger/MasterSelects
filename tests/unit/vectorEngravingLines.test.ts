@@ -6,7 +6,7 @@ import { getDefaultParams, getEffect } from '../../src/effects';
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
-import { ENGRAVING_LINE } from '../../src/services/operators/geometryFragmentEffectGraphs';
+import { ENGRAVING_LINE, LINE_EDGE_PIXELS } from '../../src/services/operators/geometryFragmentEffectGraphs';
 
 type Rgba = [number, number, number, number];
 const RESOLUTION: [number, number] = [1920, 1080];
@@ -22,8 +22,9 @@ function referenceEngraving(uv: [number, number], tone: number, scale: number, w
   const along = (px * Math.cos(angle) - py * Math.sin(angle)) / spacing, across = (px * Math.sin(angle) + py * Math.cos(angle)) / spacing;
   const darkness = 1 - tone, w = Math.min(Math.max(weight, 0), 1), line = ENGRAVING_LINE;
   const waved = across - Math.sin(along * line.waveFrequency) * darkness * line.waveDepth;
-  const width = line.fixedWidth * (1 - w) + Math.min(Math.max(darkness * line.heavy, line.hairline), line.heavy) * w;
-  return 1 - smoothstep(width - line.soft, width + line.soft, Math.abs(fract(waved) - .5));
+  const hairline = Math.max(line.hairline, line.hairlinePixels / spacing), soft = LINE_EDGE_PIXELS / spacing;
+  const width = line.fixedWidth * (1 - w) + Math.min(Math.max(darkness * line.heavy, hairline), line.heavy) * w;
+  return 1 - smoothstep(width - soft, width + soft, Math.abs(fract(waved) - .5));
 }
 
 function render(color: Rgba, params: Record<string, number | string>, points: [number, number][] = POINTS) {
@@ -81,6 +82,20 @@ describe('Vector Engraving lines', () => {
     const moved = start.map(([u, v]) => [u + Math.sin(radians) * spacing / RESOLUTION[0], v + Math.cos(radians) * spacing / RESOLUTION[1]] as [number, number]);
     const a = render(grey(.4), { ...BW, weight: .7, scale: spacing, angle }, start), b = render(grey(.4), { ...BW, weight: .7, scale: spacing, angle }, moved);
     a.forEach((pixel, index) => expect(pixel[0], `${start[index]}`).toBeCloseTo(b[index][0], 3));
+  });
+
+  it.each([6, 60])('softens the line edge over about one output pixel at %s px spacing, and keeps a visible hairline on white', scale => {
+    // Walk down a column through white (tone 1): the hairline keeps a peak near full ink, each edge ramps over about a pixel.
+    const column = Array.from({ length: 2 * scale * 20 }, (_, index) => [.5, .5 + (index / 20) / RESOLUTION[1]] as [number, number]);
+    const values = render(grey(1), { scale, weight: 1 }, column).map(pixel => 1 - pixel[0]);
+    expect(Math.max(...values)).toBeGreaterThan(.6);
+    let widest = 0, start = -1;
+    values.forEach((value, index) => {
+      const ramping = value > .1 && value < .9 * Math.max(...values);
+      if (ramping && start < 0) start = index;
+      if (!ramping && start >= 0) { widest = Math.max(widest, (index - start) / 20); start = -1; }
+    });
+    expect(widest).toBeLessThan(1.6);
   });
 
   it('clamps Line Weight outside 0–1 and says so', () => {

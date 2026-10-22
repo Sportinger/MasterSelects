@@ -22,11 +22,11 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 
 ## Presets
 
-<figure class="docs-shot docs-shot--detail">
+<figure class="docs-shot">
 
-![The dancer five times, once per preset: Banknote in fine dark-green lines on pale paper, Copper Plate in brown waves on cream with an almost solid dark stage, Op Art in wide slanted black waves on white, Cyanotype in pale upright lines on deep blue with the dancer as a dark negative, and Engraved Photo with fine lines over her own colours](../assets/effects/presets/vector-tiling.webp)
+![The dancer's head and shoulder five times, once per preset: Banknote in fine dark-green lines on pale paper, Copper Plate in brown waves on cream with an almost solid dark stage, Op Art in wide slanted black waves on white, Cyanotype in upright Prussian-blue lines on white with a deep blue stage, and Engraved Photo with fine lines over her own colours](../assets/effects/presets/vector-tiling.webp)
 
-<figcaption>The five presets on the whole figure.</figcaption>
+<figcaption>The five presets on the dancer's head and shoulder, one pixel of the picture per pixel, so every line shows.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -37,7 +37,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Op Art** – wide black waves on white, slanted by −20°. The figure becomes a graphic poster that still reads from the back of a large hall.
 
-**Cyanotype** – pale upright lines on deep blue. Because the ink is lighter than the paper, the picture turns into a negative: the dark stage fills with light lines and the bright figure stays blue.
+**Cyanotype** – upright Prussian-blue lines on white, like a sun print: the dark stage fills with deep blue and the light figure stays white with fine blue hairlines.
 
 **Engraved Photo** – fine lines over the picture's own colours, half and half: the picture stays and an engraving lies over it. The quietest preset.
 
@@ -49,7 +49,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![Properties, Effects with a Vector Engraving card: Style menu, Preset menu showing Copper Plate, then Line Spacing, Angle, Line Weight, Amount, Ink and Paper, beside a strip of the preview drawn in wavy brown lines on cream](../assets/effects/editor/vector-tiling-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 768" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 828" aria-hidden="true" focusable="false">
 <defs><marker id="vector-tiling-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M565 319 L649 319" marker-end="url(#vector-tiling-inspector-arrow)" />
 <circle class="docs-shot-number" cx="565" cy="319" r="18" /><text x="565" y="319" class="docs-shot-number-text">1</text>
@@ -64,7 +64,6 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 </svg>
 </div>
 
-
 <figcaption>Vector Engraving with the Copper Plate preset. 1 — Preset: pick a starting point. 2 — Line Spacing. 3 — Angle: the direction of the lines. 4 — Line Weight: how heavy the lines get in the shadows. 5 — Ink.</figcaption>
 </figure>
 
@@ -74,9 +73,9 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Pattern
 
-**Line Spacing** – how far apart the lines sit, and so how fine the engraving is. 5–8 px gives a fine banknote engraving that reads as a photo from a few metres away, 14 a clear print, 25 and more bold op-art waves; detail smaller than the spacing disappears. It counts pixels of a 1080p picture, so a 4K export shows the same engraving as the preview, only sharper. Below 3 px (from keyframes or a tool) it renders 3 px, and the card says so. 3 to 80 px, default 14 px.
+**Line Spacing** – how far apart the lines sit, and so how fine the engraving is. 5–8 px gives a fine banknote engraving that reads as a photo from a few metres away, 10 a clear print that keeps a face, 25 and more bold op-art waves; detail smaller than the spacing disappears. It counts pixels of a 1080p picture, so a 4K export shows the same engraving as the preview, only sharper. Below 3 px (from keyframes or a tool) it renders 3 px, and the card says so. 3 to 80 px, default 10 px.
 
-**Angle** – the direction of the lines, turned about the centre of the frame. 0 runs them across, 90 stands them upright, 45 lays them diagonally; the spacing stays the same at every angle and on every frame shape. A value past ±180 simply turns on round. −180 to 180, default 0.
+**Angle** – the direction of the lines, turned about the centre of the frame. 0 runs them across, 90 stands them upright, 45 lays them diagonally; the spacing stays the same at every angle and on every frame shape. A value past ±180 simply turns on round. −180 to 180°, default 0°.
 
 **Line Weight** – how heavy the lines get in the shadows. At 0 every line keeps one thin, even width, and a dark area shows only deeper waves; 0.7 thickens the lines clearly in the dark parts; at 1 each line starts as a hairline in the light and swells in black until only thin gaps of paper remain, like a copper-plate print. Values outside 0 to 1 (from keyframes or a tool) render as 0 or 1, and the card says so. 0 to 1, default 0.7.
 
@@ -98,20 +97,20 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![The Vector Engraving graph in six stages: Parameters feed Line Grid (Line Spacing, Angle), whose Along and Across go into Wave and whose line spacing in pixels goes into Cell Filter; the cached Cell Filter goes into Picture & Tone, whose Darkness feeds Wave and Line Width (Line Weight); Wave's Distance to Line goes into Line Width, and its Line goes with Ink, Paper, Amount and the picture's colour and alpha into Ink & Paper (Amount)](../assets/effects/graphs/vector-tiling.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 719" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 757" aria-hidden="true" focusable="false">
 <defs><marker id="vector-tiling-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M231 695 L231 611" marker-end="url(#vector-tiling-arrow)" />
-<circle class="docs-shot-number" cx="231" cy="695" r="18" /><text x="231" y="695" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M370 450 L370 366" marker-end="url(#vector-tiling-arrow)" />
-<circle class="docs-shot-number" cx="370" cy="450" r="18" /><text x="370" y="450" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M508 23 L508 107" marker-end="url(#vector-tiling-arrow)" />
-<circle class="docs-shot-number" cx="508" cy="23" r="18" /><text x="508" y="23" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M647 360 L647 444" marker-end="url(#vector-tiling-arrow)" />
-<circle class="docs-shot-number" cx="647" cy="360" r="18" /><text x="647" y="360" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M786 589 L786 505" marker-end="url(#vector-tiling-arrow)" />
-<circle class="docs-shot-number" cx="786" cy="589" r="18" /><text x="786" y="589" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M924 134 L924 218" marker-end="url(#vector-tiling-arrow)" />
-<circle class="docs-shot-number" cx="924" cy="134" r="18" /><text x="924" y="134" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M230 734 L230 650" marker-end="url(#vector-tiling-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="734" r="18" /><text x="230" y="734" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M369 432 L369 348" marker-end="url(#vector-tiling-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="432" r="18" /><text x="369" y="432" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M508 264 L508 348" marker-end="url(#vector-tiling-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="264" r="18" /><text x="508" y="264" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M648 454 L648 538" marker-end="url(#vector-tiling-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="454" r="18" /><text x="648" y="454" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M787 646 L787 562" marker-end="url(#vector-tiling-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="646" r="18" /><text x="787" y="646" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M926 22 L926 79" marker-end="url(#vector-tiling-arrow)" />
+<circle class="docs-shot-number" cx="926" cy="22" r="18" /><text x="926" y="22" class="docs-shot-number-text">6</text>
 </svg>
 </div>
 
@@ -170,13 +169,11 @@ Vector Engraving works in six stages, one folder each in the Nodes tab: **Line G
 <circle class="docs-shot-number" cx="121" cy="831" r="18" /><text x="121" y="831" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M430 1106 L430 1022" marker-end="url(#vector-tiling-cell-filter-arrow)" />
 <circle class="docs-shot-number" cx="430" cy="1106" r="18" /><text x="430" y="1106" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M740 1083 L740 1167" marker-end="url(#vector-tiling-cell-filter-arrow)" />
-<circle class="docs-shot-number" cx="740" cy="1083" r="18" /><text x="740" y="1083" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
 
-<figcaption>Inside Cell Filter, with one read of a row. 1 — Minimum: how many reads a row takes. 2 — Sequence Reduce: the average of a row. 3 — Cache Image: keeps the row averages. 4 — Cache Image: keeps the Cell Filter for Picture & Tone.</figcaption>
+<figcaption>Inside Cell Filter, with one read of a row. 1 — Minimum: how many reads a row takes. 2 — Sequence Reduce: the average of a row. 3 — Cache Image: keeps the row averages, and at the end the Cell Filter for Picture & Tone.</figcaption>
 </figure>
 
 A line reads the darkness at each of its pixels. Read from the picture itself, fine detail such as hair or a lace edge would make the line width flicker from pixel to pixel, and on moving footage the lines would shimmer. So Picture & Tone reads this copy of the picture instead, in which every pixel holds the average of a box half a line spacing wide around it: the lines swell and thin smoothly and stay calm when the picture moves. It is the same filter as in [Halftone](./halftone.md#cell-filter).
@@ -187,7 +184,7 @@ A line reads the darkness at each of its pixels. Read from the picture itself, f
 
 **Cache Image** – keeps those row averages as a picture of their own, worked out once per frame. A second Sequence Reduce averages them down a column, so together they give the average of the whole box.
 
-**Cache Image** – the last one keeps the result, turned back into colour (Divide by the Average Alpha, Linear to sRGB): the Cell Filter that Picture & Tone reads.
+The last Cache Image keeps the result, turned back into colour (Divide by the Average Alpha, Linear to sRGB): the Cell Filter that Picture & Tone reads.
 
 ### Picture & Tone
 
@@ -263,26 +260,34 @@ A line reads the darkness at each of its pixels. Read from the picture itself, f
 
 ![Inside the Line Width folder: Multiply takes Darkness times Heavy Gain 0.46, Clamp keeps it between Hairline 0.02 and Heavy Max 0.46; Mix blends Fixed Width 0.0575 with it by Line Weight; Add and Subtract Edge Soft 0.0325 give the edges of Smoothstep on the Distance to Line, and Subtract from One gives the Line](../assets/effects/graphs/vector-tiling-line-width.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 615" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 718" aria-hidden="true" focusable="false">
 <defs><marker id="vector-tiling-line-width-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M230 78 L230 162" marker-end="url(#vector-tiling-line-width-arrow)" />
-<circle class="docs-shot-number" cx="230" cy="78" r="18" /><text x="230" y="78" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M508 78 L508 162" marker-end="url(#vector-tiling-line-width-arrow)" />
-<circle class="docs-shot-number" cx="508" cy="78" r="18" /><text x="508" y="78" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M787 435 L787 351" marker-end="url(#vector-tiling-line-width-arrow)" />
-<circle class="docs-shot-number" cx="787" cy="435" r="18" /><text x="787" y="435" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M326 149 L326 233" marker-end="url(#vector-tiling-line-width-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="149" r="18" /><text x="326" y="149" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M462 436 L378 436" marker-end="url(#vector-tiling-line-width-arrow)" />
+<circle class="docs-shot-number" cx="462" cy="436" r="18" /><text x="462" y="436" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M569 484 L569 400" marker-end="url(#vector-tiling-line-width-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="484" r="18" /><text x="569" y="484" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M706 105 L622 105" marker-end="url(#vector-tiling-line-width-arrow)" />
+<circle class="docs-shot-number" cx="706" cy="105" r="18" /><text x="706" y="105" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M813 484 L813 400" marker-end="url(#vector-tiling-line-width-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="484" r="18" /><text x="813" y="484" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
 
-<figcaption>Inside Line Width (Line Weight). 1 — Multiply: the heavy width, from the darkness. 2 — Mix: the width Line Weight picks. 3 — Smoothstep: the line with a soft edge.</figcaption>
+<figcaption>Inside Line Width (Line Weight). 1 — Maximum: the hairline, at least a pixel wide. 2 — Multiply: the heavy width, from the darkness. 3 — Mix: the width Line Weight picks. 4 — Divide: the soft edge, one pixel. 5 — Smoothstep: the line with a soft edge.</figcaption>
 </figure>
 
-**Multiply** – Darkness times Heavy Gain (0.46), which Clamp keeps between Hairline 0.02 and Heavy Max 0.46: the half width a line has at Line Weight 1, a hairline on white and 0.46 of the spacing in black, where neighbouring lines almost touch.
+**Maximum** – the hairline: Hairline Pixels (0.5) divided by the line spacing in pixels, but at least Hairline Share (0.02 of the spacing). A line on white keeps half a pixel on each side, so highlights still carry a continuous line, as on a real engraving.
+
+**Multiply** – Darkness times Heavy Gain (0.46), which Clamp keeps between that hairline and Heavy Max 0.46: the half width a line has at Line Weight 1, a hairline on white and 0.46 of the spacing in black, where neighbouring lines almost touch.
 
 **Mix** – blends Fixed Width (0.0575), the even width of Line Weight 0, with that heavy width, by Line Weight (kept between 0 and 1 before it enters the folder): the half width of the line at this pixel.
 
-**Smoothstep** – compares the Distance to Line with that half width, softened by Edge Soft (0.0325) on each side (Subtract and Add): 0 inside the line, 1 outside, with a soft edge. Subtract from One turns it round, so Line is 1 on the line.
+**Divide** – Edge Pixels (0.75) divided by the line spacing in pixels: Edge Soft, about one pixel of soft edge at any spacing, so a fine engraving draws no stair-steps and a wide one stays crisp.
+
+**Smoothstep** – compares the Distance to Line with that half width, softened on each side by Edge Soft (Subtract and Add): 0 inside the line, 1 outside, with a soft edge. Subtract from One turns it round, so Line is 1 on the line.
 
 ### Ink & Paper
 
@@ -312,7 +317,7 @@ A line reads the darkness at each of its pixels. Read from the picture itself, f
 ## Technical details
 
 - **Size.** Line Spacing counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same engraving. A spacing is never thinner than one pixel of the frame; below 3 px Line Spacing renders as 3. The card says when either happens.
-- **Lines.** The darkness comes from the picture averaged over half a line spacing (Cell Filter), so the lines swell smoothly and stay calm on moving footage. Their edges are a share of the spacing soft, so very wide spacings draw slightly soft strokes.
+- **Lines.** The darkness comes from the picture averaged over half a line spacing (Cell Filter), so the lines swell smoothly and stay calm on moving footage. Every line edge is about one pixel of the output frame soft at any spacing, and the hairline in the light is at least a pixel wide, so a fine engraving draws no stair-steps and highlights keep a continuous line.
 - **Transparency.** The engraving keeps the picture's transparency, so a cut-out figure keeps clean edges and transparent parts stay transparent; a transparent neighbour never darkens the lines. The preview and the export match; the look does not move by itself.
-- **Saved projects.** A Vector Engraving saved before Line Weight existed opens with Line Weight 0 and keeps its thin, even lines. Two bug fixes change how it looks: the waves no longer break at every line spacing and run longer and calmer, and an Angle other than 0 now turns the lines in pixels, so they keep their spacing instead of stretching on a wide frame. **Line Spacing** was called Scale; the value is the same.
+- **Saved projects.** A Vector Engraving saved before Line Weight existed opens with Line Weight 0 and keeps its thin, even lines. Two bug fixes change how it looks: the waves no longer break at every line spacing and run longer and calmer, and an Angle other than 0 now turns the lines in pixels, so they keep their spacing instead of stretching on a wide frame. The line edges were a share of the spacing soft and are now one pixel soft, and the hairline is at least a pixel wide. **Line Spacing** was called Scale; the value is the same, and a project that never set it keeps the old 14 px (new cards start at 10 px).
 - **More:** [Effect system](../Effect-System.md) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

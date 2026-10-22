@@ -117,7 +117,8 @@
    ],
    "hide": [
     "Particle Out"
-   ]
+   ],
+   "height": 1100
   },
   {
    "name": "contour-map-inspector",
@@ -160,7 +161,8 @@
    ],
    "hide": [
     "Particle Out"
-   ]
+   ],
+   "height": 1100
   }
  ]
 }

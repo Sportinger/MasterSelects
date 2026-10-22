@@ -21,22 +21,22 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 
 ## Presets
 
-<figure class="docs-shot docs-shot--detail">
+<figure class="docs-shot">
 
-![The dancer five times, once per preset: Pen Sketch in grey pen lines on white, Etching in brown ink on cream with an almost solid dark stage, Ballpoint in blue on white, Woodcut in bold black strokes on a speckled black stage, and Coloured Sketch with fine lines over her own colours](../assets/effects/presets/crosshatch.webp)
+![The dancer's head and shoulder five times, once per preset: Pen Sketch in grey pen lines on white, Etching in dense brown crossing strokes on cream, Ballpoint in blue on white, Woodcut in bold black strokes that swell on the dark stage, and Coloured Sketch with fine lines over her own colours](../assets/effects/presets/crosshatch.webp)
 
-<figcaption>The five presets on the whole figure.</figcaption>
+<figcaption>The five presets on the dancer's head and shoulder, one pixel of the picture per pixel, so every line shows.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Pen Sketch** – black pen lines of one medium weight on white: a quick drawing in a sketchbook. The dark parts become an even grey net, so the figure stays light and airy.
+**Pen Sketch** – black pen lines on white that thicken a little in the dark parts: a quick drawing in a sketchbook. The dark parts become a grey net with open paper between the lines, so the figure stays light and airy.
 
-**Etching** – fine, heavy lines of brown ink on cream, like an old copper-plate print. The shadows fill almost solid while the light stays clean: strong for a memory or a historical scene.
+**Etching** – fine, heavy lines of brown ink on cream, like an old copper-plate print. The shadows fill with dense crossing strokes while the light stays clean: strong for a memory or a historical scene.
 
 **Ballpoint** – blue ballpoint on white, with a trace of the picture's own colours under the lines. A private, notebook feeling: letters, diaries, a drawing in the margin.
 
-**Woodcut** – wide, bold strokes in black on off-white. The figure turns into a graphic print that still reads from the back of a large hall.
+**Woodcut** – wide, bold strokes in black on off-white that swell in the shadows and keep a line of paper between them. The figure turns into a graphic print that still reads from the back of a large hall.
 
 **Coloured Sketch** – fine hatching over the picture's own colours, half and half: the picture stays and a drawing lies over it. The quietest preset.
 
@@ -68,13 +68,13 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Preset** – sets every control at once to one of the five starting points above.
 
-**Style** – switches to another look of the same engine, for example [Halftone](./halftone.md), [Vector Engraving](./vector-tiling.md) or [Contour Map](./contour-map.md). **Line Spacing**, **Amount**, **Ink** and **Paper** keep the values and keyframes you set in looks that have the same control, also under another name (Halftone's Dot Size). A control that means something else in the new look starts at that look's default, and the row under the menu says so: Contour Map's Band Density counts bands, and Drift Lines' Drift is a slide, not a mix. **Line Weight** belongs to Crosshatch alone. **Undo** brings the old value back.
+**Style** – switches to another look of the same engine, for example [Halftone](./halftone.md), [Vector Engraving](./vector-tiling.md) or [Contour Map](./contour-map.md). **Line Spacing**, **Amount**, **Ink** and **Paper** keep the values and keyframes you set in looks that have the same control, also under another name (Halftone's Dot Size). A control that means something else in the new look starts at that look's default, and the row under the menu says so: Contour Map's Band Density counts bands, and Drift Lines' Drift is a slide, not a mix. **Line Weight** carries over to and from Vector Engraving, where it does the same; Vector Engraving's **Angle** has no counterpart here. **Undo** brings the old value back.
 
 ### Pattern
 
 **Line Spacing** – how far apart the lines sit, and so how fine the drawing is. 4–8 px gives a fine engraving that reads as a photo from a few metres away, 14 a clear pen drawing, 30 and more bold strokes like a woodcut; detail smaller than the spacing disappears. The upright lines of the darkest layer sit twice as far apart. It counts pixels of a 1080p picture, so a 4K export shows the same drawing as the preview, only sharper. Below 2 px (from keyframes or a tool) it renders 2 px, and the card says so. 2 to 80 px, default 14 px.
 
-**Line Weight** – how heavy the lines get in the shadows. At 0 every line keeps one thin, even width, as in a quick pen sketch, and black stays a grey net; 0.5 thickens the strokes in the dark parts; at 1 each line starts as a hairline where its layer begins and swells until the deepest shadows are almost solid ink, like an etching. Values outside 0 to 1 (from keyframes or a tool) render as 0 or 1, and the card says so. 0 to 1, default 0.6.
+**Line Weight** – how heavy the lines get in the shadows. At 0 every line keeps one thin, even width, as in a quick pen sketch, and black stays a grey net; 0.5 thickens the strokes in the dark parts; at 1 each line starts as a hairline where its layer begins and swells until the deepest shadows are dense ink with thin lines of paper still between the strokes, like an etching. Values outside 0 to 1 (from keyframes or a tool) render as 0 or 1, and the card says so. 0 to 1, default 0.6.
 
 ### Mix
 
@@ -94,10 +94,10 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![The Crosshatch graph in five stages: Parameters feed Line Grid (Line Spacing), whose three Distance to Line outputs go into Line Width (Line Weight) together with Line Weight and the Tone from Picture & Tone; its three Line outputs and the Tone go into Tone Layers, whose Hatch goes with Ink, Paper, Amount and the picture's colour and alpha into Ink & Paper (Amount)](../assets/effects/graphs/crosshatch.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 796" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 822" aria-hidden="true" focusable="false">
 <defs><marker id="crosshatch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M314 773 L314 689" marker-end="url(#crosshatch-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="773" r="18" /><text x="314" y="773" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M314 798 L314 714" marker-end="url(#crosshatch-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="798" r="18" /><text x="314" y="798" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M314 410 L314 326" marker-end="url(#crosshatch-arrow)" />
 <circle class="docs-shot-number" cx="314" cy="410" r="18" /><text x="314" y="410" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M509 330 L509 414" marker-end="url(#crosshatch-arrow)" />
@@ -184,31 +184,35 @@ Crosshatch works in five stages, one folder each in the Nodes tab: **Line Grid**
 
 ![Inside the Line Width folder, for the first set: First Gated Tone Limit 0.82 minus Tone, times First Swell 0.439, clamped between First Hairline 0.03 and First Heavy Max 0.36; Mix blends First Fixed Width 0.105 with it by the clamped Line Weight; Add and Subtract First Soft 0.045 give the edges of Smoothstep on the Distance to Line, and One minus it gives the Line](../assets/effects/graphs/crosshatch-line-width.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 765" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 794" aria-hidden="true" focusable="false">
 <defs><marker id="crosshatch-line-width-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M326 413 L326 329" marker-end="url(#crosshatch-line-width-arrow)" />
-<circle class="docs-shot-number" cx="326" cy="413" r="18" /><text x="326" y="413" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M448 121 L448 205" marker-end="url(#crosshatch-line-width-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="121" r="18" /><text x="448" y="121" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M569 455 L569 371" marker-end="url(#crosshatch-line-width-arrow)" />
-<circle class="docs-shot-number" cx="569" cy="455" r="18" /><text x="569" y="455" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M813 121 L813 205" marker-end="url(#crosshatch-line-width-arrow)" />
-<circle class="docs-shot-number" cx="813" cy="121" r="18" /><text x="813" y="121" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M326 121 L326 205" marker-end="url(#crosshatch-line-width-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="121" r="18" /><text x="326" y="121" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 175 L448 205" marker-end="url(#crosshatch-line-width-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="175" r="18" /><text x="448" y="175" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M569 121 L569 205" marker-end="url(#crosshatch-line-width-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="121" r="18" /><text x="569" y="121" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M569 596 L569 512" marker-end="url(#crosshatch-line-width-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="596" r="18" /><text x="569" y="596" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M813 455 L813 371" marker-end="url(#crosshatch-line-width-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="455" r="18" /><text x="813" y="455" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Line Width (Line Weight), for the first set of lines. 1 — Multiply: how far below the set's tone limit the pixel is. 2 — Clamp: the heavy width. 3 — Mix: the width Line Weight picks. 4 — Smoothstep: the line with a soft edge.</figcaption>
+<figcaption>Inside Line Width (Line Weight), for the first set of lines. 1 — Multiply: how far below the set's tone limit the pixel is. 2 — Clamp: the heavy width. 3 — Mix: the width Line Weight picks. 4 — Divide: the soft edge, one pixel. 5 — Smoothstep: the line with a soft edge.</figcaption>
 </figure>
 
-**Multiply** – the layer's tone limit (First Gated Tone Limit, 0.82) minus the pixel's Tone (Subtract), times First Swell 0.439: how much darker the pixel is than the point where this line set begins, scaled so that black gives 0.36.
+**Multiply** – the layer's tone limit (First Gated Tone Limit, 0.82) minus the pixel's Tone (Subtract), times First Swell 0.366: how much darker the pixel is than the point where this line set begins, scaled so that black gives 0.3.
 
-**Clamp** – keeps that between First Hairline 0.03 and First Heavy Max 0.36: the half width a line has at Line Weight 1, a hairline where the set begins and 0.36 of the spacing in black, where neighbouring lines almost touch.
+**Clamp** – keeps that between First Hairline 0.03 and First Heavy Max 0.3: the half width a line has at Line Weight 1, a hairline where the set begins and 0.3 of the spacing in black, so a gap of paper of about 1.7 px stays between the lines even at 6 px spacing and the shadows read as strokes, not as a dot screen.
 
 **Mix** – blends First Fixed Width 0.105, the even width of Line Weight 0, with that heavy width, by Line Weight (the other Clamp keeps it between 0 and 1): the half width of the line at this pixel.
 
-**Smoothstep** – compares the Distance to Line with that half width, softened by First Soft 0.045 on each side (Subtract and Add): 0 inside the line, 1 outside, with a soft edge. Subtract from One turns it round, so Line is 1 on the line.
+**Divide** – First Edge Pixels (0.75 px across the line, 1.06 in the diagonal's own units) divided by the line spacing in pixels (Maximum): First Soft, about one pixel of soft edge at any spacing.
 
-**Remix:** open the **Constants** folder and set **First Swell** from **0.439** to **1**: the rising lines reach their full weight already in the mid-tones, and the drawing turns darker and bolder.
+**Smoothstep** – compares the Distance to Line with that half width, softened on each side by First Soft (Subtract and Add): 0 inside the line, 1 outside, with a soft edge. Subtract from One turns it round, so Line is 1 on the line.
+
+**Remix:** open the **Constants** folder and set **First Swell** from **0.366** to **1**: the rising lines reach their full weight already in the mid-tones, and the drawing turns darker and bolder.
 
 ### Tone Layers
 
@@ -250,8 +254,8 @@ Crosshatch works in five stages, one folder each in the Nodes tab: **Line Grid**
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 731" aria-hidden="true" focusable="false">
 <defs><marker id="crosshatch-ink-paper-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M509 569 L509 485" marker-end="url(#crosshatch-ink-paper-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="569" r="18" /><text x="509" y="569" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M509 507 L509 485" marker-end="url(#crosshatch-ink-paper-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="507" r="18" /><text x="509" y="507" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M897 467 L897 383" marker-end="url(#crosshatch-ink-paper-arrow)" />
 <circle class="docs-shot-number" cx="897" cy="467" r="18" /><text x="897" y="467" class="docs-shot-number-text">2</text>
 </svg>
@@ -267,7 +271,7 @@ Crosshatch works in five stages, one folder each in the Nodes tab: **Line Grid**
 ## Technical details
 
 - **Size.** Line Spacing counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same drawing. A spacing is never thinner than one pixel of the frame; below 2 px Line Spacing renders as 2. The card says when either happens.
-- **Lines.** The edges of a line are a share of the spacing soft, so very wide spacings draw slightly soft strokes. Each pixel reads its own brightness: the three sets begin at brightness 0.82, 0.58 and 0.32.
+- **Lines.** Every line edge is about one pixel of the output frame soft, at a fine and a wide spacing alike, so diagonals draw no stair-steps and wide strokes stay crisp. Each pixel reads its own brightness: the three sets begin at brightness 0.82, 0.58 and 0.32.
 - **Transparency.** The drawing keeps the picture's transparency, so a cut-out figure keeps clean edges and transparent parts stay transparent. The preview and the export match; the look does not move by itself.
-- **Saved projects.** A Crosshatch saved before Line Weight existed opens with Line Weight 0 and keeps its thin, even lines. **Line Spacing** was called Scale; the value is the same.
+- **Saved projects.** A Crosshatch saved before Line Weight existed opens with Line Weight 0 and keeps its thin, even lines. One bug fix changes how it looks: the line edges were a share of the spacing soft (hard stair-steps at 6 px, about 5 px of blur at 80 px) and are now one pixel soft. **Line Spacing** was called Scale; the value is the same.
 - **More:** [Effect system](../Effect-System.md) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

@@ -22,7 +22,7 @@ type Params = Record<string, number | boolean | string>;
 const LOOKS = effectEngineMembers('two-tone-pattern');
 /** Looks whose pattern edges are one output pixel soft at every size (sharper on larger frames). Pattern Halftone
  * draws its marks with Halftone's half-pixel edge; Contour Map's lines fade over one output pixel at each side. */
-const SOFT_EDGE_IN_OUTPUT_PIXELS = new Set(['halftone', 'pattern-halftone', 'riso', 'riso-glow', 'paper-print', 'contour-map']);
+const SOFT_EDGE_IN_OUTPUT_PIXELS = new Set(['halftone', 'pattern-halftone', 'riso', 'riso-glow', 'paper-print', 'contour-map', 'crosshatch', 'vector-tiling']);
 /** Engine looks whose pattern still counts output pixels, with the reason. The 1080p test checks that they still
  * differ between sizes, so the look that gets a 1080p recipe has to leave this list. */
 const OUTPUT_PIXEL_LOOKS = new Map([
@@ -90,7 +90,7 @@ describe('two-tone-pattern engine', () => {
       // Dithering draws whole pixels: at half quality its default 3 px cells would be 1.5 pixels, so compare at 720p (2 pixels).
       const hd = render(plan, [1920, 1080], 1.25);
       const uhd = render(plan, [3840, 2160], 1.25), preview = render(plan, type === 'dither' ? [1280, 720] : [960, 540], 1.25);
-      // Halftone, Riso, Riso Glow and Paper Print smooth their ink edges over one output pixel: a 4K edge is sharper, but no point turns from ink to paper.
+      // Halftone, Riso, Riso Glow, Paper Print and the Lines looks smooth their ink edges over one output pixel: a 4K edge is sharper, but no point turns from ink to paper.
       const tolerance = SOFT_EDGE_IN_OUTPUT_PIXELS.has(type) ? .5 : .03;
       if (agreement(hd, uhd, tolerance) < .98 || agreement(hd, preview, tolerance) < .98) differing.push(`${type} (4K ${agreement(hd, uhd).toFixed(2)}, half ${agreement(hd, preview).toFixed(2)})`);
     }

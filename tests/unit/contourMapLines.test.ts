@@ -1,6 +1,6 @@
 // Contour Map: the lines sit on the band edges (not in the middle of each band) and keep their width in pixels on
 // any slope, Fill tints the bands from Paper to the full Ink-to-Paper range, Smoothing reads the picture through a box
-// average so noise does not draw stray rings, and Band Density under 6 is reported instead of silently drawing 3 bands.
+// average so noise does not draw stray rings, and Band Density under 60/7 (3 bands, as saved projects drew) is reported instead of silently clamped.
 // The reference mirrors the shader twin (contourMapFragment) at Smoothing 0.
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
@@ -46,16 +46,16 @@ const inkPixels = (values: number[]) => values.reduce((sum, value) => sum + 1 - 
 const ramp = (from: number, to: number): Picture => ([u]) => from + (to - from) * u;
 
 describe('Contour Map lines', () => {
-  it('has Band Density from 6, Line Width, Smoothing and Fill; saved projects read no smoothing and full bands', () => {
+  it('has Band Density from 9 (3 bands), Line Width, Smoothing and Fill; saved projects read no smoothing and full bands', () => {
     const params = getEffect('contour-map')!.params;
-    expect(params.scale).toMatchObject({ label: 'Band Density', min: 6, renderMin: 6 });
+    expect(params.scale).toMatchObject({ label: 'Band Density', min: 9, renderMin: 60 / 7 });
     expect(params.lineWidth).toMatchObject({ type: 'number', label: 'Line Width', min: 0, max: 6, unit: ' px' });
     expect(params.smoothing).toMatchObject({ type: 'number', label: 'Smoothing', min: 0, max: 32, legacyDefault: 0 });
     expect(params.fill).toMatchObject({ type: 'number', label: 'Fill', min: 0, max: 1, legacyDefault: 1 });
     expect(effectOperatorParams({ type: 'contour-map', params: { scale: 14, amount: .75, angle: 0 } })).toMatchObject({ smoothing: 0, fill: 1 });
   });
 
-  it.each([[14, 1.8, .7], [30, 1, 0], [6, 3, 1], [50, .5, .4]])('matches the shader twin at Band Density %s, Line Width %s, Fill %s', (scale, lineWidth, fill) => {
+  it.each([[14, 1.8, .7], [30, 1, 0], [9, 3, 1], [50, .5, .4]])('matches the shader twin at Band Density %s, Line Width %s, Fill %s', (scale, lineWidth, fill) => {
     const picture: Picture = ([u, v]) => .5 + .45 * Math.sin(u * 5.1 + v * 2.3) * Math.cos(v * 3.7);
     const points = Array.from({ length: 240 }, (_, i): [number, number] => [((i * 37) % 240 + .5) / 240, ((i * 61) % 240 + .5) / 240]);
     const pixels = render(picture, { scale, lineWidth, fill, smoothing: 0 }, points);
@@ -96,18 +96,18 @@ describe('Contour Map lines', () => {
     expect(smooth).toBeGreaterThan(0);
   });
 
-  it('reports values its graph clamps: Band Density under 6, Smoothing over 32, Fill and Line Width out of range', () => {
+  it('reports values its graph clamps: Band Density under 60/7, Smoothing over 32, Fill and Line Width out of range', () => {
     const definitions = getEffect('contour-map')!.params;
     const values = { ...getDefaultParams('contour-map'), scale: 2, smoothing: 50, fill: 1.4, lineWidth: -1 };
     const graph = effectOperatorGraph({ type: 'contour-map', params: values });
     expect(paramRangeNotes(definitions, values, graph).map(note => note.param).toSorted()).toEqual(['fill', 'lineWidth', 'scale', 'smoothing']);
-    const low = render(ramp(0, 1), { scale: 2, smoothing: 0 }, row(0, 200)), floor = render(ramp(0, 1), { scale: 6, smoothing: 0 }, row(0, 200));
+    const low = render(ramp(0, 1), { scale: 2, smoothing: 0 }, row(0, 200)), floor = render(ramp(0, 1), { scale: 60 / 7, smoothing: 0 }, row(0, 200));
     low.forEach((value, index) => expect(value).toBeCloseTo(floor[index], 6));
   });
 
   it('declares five named presets in range', () => {
     const effect = getEffect('contour-map')!, presets = effect.presets ?? [];
-    expect(presets.map(preset => preset.name)).toEqual(['Hiking Map', 'Survey Lines', 'Sonar', 'Poster Bands', 'Blueprint']);
+    expect(presets.map(preset => preset.name)).toEqual(['Hiking Map', 'Survey Lines', 'Sonar', 'Poster Bands', 'Topographic']);
     for (const preset of presets) for (const [key, value] of Object.entries(preset.params)) {
       const param = effect.params[key];
       if (param?.type !== 'number') continue;

@@ -48,8 +48,8 @@ function finish(g: GraphBuilder, sourceColor: Ref, styled: Ref, amount: Ref, alp
 }
 
 /** Contour Map (shader twin: contourMapFragment). Band Density × `levelsPerDensity` bands; a value under `minimumDensity`
- * renders it (2.1 bands) and the card says so. Lines sit on the band edges at a width in pixels, whatever the slope. */
-export const CONTOUR_MAP = { levelsPerDensity: .35, minimumDensity: 6, flatSlope: 1e-4 } as const;
+ * renders it (3 bands, what Band Density 2 to 8.5 drew before) and the card says so. Lines sit on the band edges at a width in pixels, whatever the slope. */
+export const CONTOUR_MAP = { levelsPerDensity: .35, minimumDensity: 60 / 7, flatSlope: 1e-4 } as const;
 
 function contourMap(g: GraphBuilder, c: ReturnType<typeof common>) {
   const scale = g.binary('scale-clamped', 'math.max.scalar', g.node('scale', 'values.number', 0, { value: 'scale' }), g.literal('minimum-density', CONTOUR_MAP.minimumDensity), 5);
@@ -101,16 +101,21 @@ function contourMap(g: GraphBuilder, c: ReturnType<typeof common>) {
   finish(g, c.sourceColor, styled, c.amount);
 }
 
-/** Crosshatch's three line layers (shader twin: crosshatchFragment). Widths and edges are shares of the line spacing:
- * a line is darker than `toneLimit` only, its fixed half width is (low + high) / 2 with a soft edge of (high − low) / 2. */
-interface HatchLayer { toneLimit: number; low: number; high: number; heavy: number }
+/** Crosshatch's three line layers (shader twin: crosshatchFragment). Widths are shares of the line spacing: a line is
+ * darker than `toneLimit` only, its fixed half width is (low + high) / 2; `heavy` caps the swell so a paper gap of about
+ * 1.5 px survives between the diagonals at 6 px spacing, and the coarse upright set stays thinner than they are, so
+ * the shadows read as crossing strokes, not as a dot screen or a fence of bars. `pitch` is how far the layer's coordinate moves per spacing of pixels
+ * across its lines (√2 on the diagonals, ½ on the upright set at twice the spacing). */
+interface HatchLayer { toneLimit: number; low: number; high: number; heavy: number; pitch: number }
 export const HATCH_LAYERS: readonly HatchLayer[] = [
-  { toneLimit: .82, low: .06, high: .15, heavy: .36 },
-  { toneLimit: .58, low: .06, high: .15, heavy: .36 },
-  { toneLimit: .32, low: .05, high: .13, heavy: .3 },
+  { toneLimit: .82, low: .06, high: .15, heavy: .3, pitch: Math.SQRT2 },
+  { toneLimit: .58, low: .06, high: .15, heavy: .3, pitch: Math.SQRT2 },
+  { toneLimit: .32, low: .05, high: .13, heavy: .2, pitch: .5 },
 ];
 /** Half width a heavy line starts at, at its layer's tone limit. */
 export const HATCH_HAIRLINE = .03;
+/** Half the soft edge of every line of the Lines looks, in output pixels: about one pixel of antialiasing at any spacing. */
+export const LINE_EDGE_PIXELS = .75;
 
 function crosshatch(g: GraphBuilder, c: ReturnType<typeof common>) {
   const scale = g.node('scale', 'values.number', 0, { value: 'scale' }), safeScale = g.binary('safe-scale', 'math.max.scalar', scale, g.literal('minimum-scale', 2), 5);
@@ -129,7 +134,8 @@ function crosshatch(g: GraphBuilder, c: ReturnType<typeof common>) {
     g.edge(g.literal(`${id}-hairline`, HATCH_HAIRLINE), heavy, 'min'); g.edge(g.literal(`${id}-heavy-max`, layer.heavy), heavy, 'max');
     const width = g.node(`${id}-width`, 'math.mix.scalar', 11);
     g.edge(g.literal(`${id}-fixed-width`, (layer.low + layer.high) / 2), width, 'a'); g.edge(heavy, width, 'b'); g.edge(weight, width, 't');
-    const soft = g.literal(`${id}-soft`, (layer.high - layer.low) / 2);
+    // The edge is the same in pixels at every spacing: LINE_EDGE_PIXELS across the line, in units of the layer's coordinate.
+    const soft = g.binary(`${id}-soft`, 'math.divide-ieee.scalar', g.literal(`${id}-edge-pixels`, LINE_EDGE_PIXELS * layer.pitch), safeScale, 10);
     const smooth = g.node(`${id}-smooth`, 'math.smoothstep.scalar', 12);
     g.edge(g.binary(`${id}-low`, 'math.subtract.scalar', width, soft, 11), smooth, 'edge0');
     g.edge(g.binary(`${id}-high`, 'math.add.scalar', width, soft, 11), smooth, 'edge1'); g.edge(g.unary(`${id}-distance`, 'math.abs.scalar', centered, 11), smooth, 'value');
@@ -169,9 +175,10 @@ function kilim(g: GraphBuilder, c: ReturnType<typeof common>) {
   const styled = g.node('styled', 'math.multiply.rgb-scalar', 15); g.edge(textile, styled, 'a'); g.edge(brightness, styled, 'b'); finish(g, c.sourceColor, styled, c.amount);
 }
 
-/** Vector Engraving's line (shader twin: vectorTilingFragment). Shares of the line spacing: Line Weight 0 keeps the fixed
- * half width of saved projects with its soft edge; at 1 a line is a hairline on white and swells to `heavy` in black. */
-export const ENGRAVING_LINE = { fixedWidth: .0575, soft: .0325, hairline: .02, heavy: .46, waveFrequency: 2.1, waveDepth: .3 } as const;
+/** Vector Engraving's line (shader twin: vectorTilingFragment). Widths are shares of the line spacing: Line Weight 0 keeps
+ * the fixed half width of saved projects; at 1 a line is a hairline of `hairlinePixels` half width on white (at least
+ * `hairline` of the spacing) and swells to `heavy` in black. Edges are LINE_EDGE_PIXELS soft at every spacing. */
+export const ENGRAVING_LINE = { fixedWidth: .0575, hairline: .02, hairlinePixels: .5, heavy: .46, waveFrequency: 2.1, waveDepth: .3 } as const;
 
 function vectorTiling(g: GraphBuilder, c: ReturnType<typeof common>) {
   const half = g.literal('half', .5), half2 = g.unary('half-vec2', 'convert.scalar-to-vec2', half, 4);
@@ -199,10 +206,12 @@ function vectorTiling(g: GraphBuilder, c: ReturnType<typeof common>) {
   g.edge(g.node('weight', 'values.number', 0, { value: 'weight' }), weight, 'value'); g.edge(c.zero, weight, 'min'); g.edge(c.one, weight, 'max');
   const heavy = g.node('heavy-width', 'math.clamp.scalar', 13);
   g.edge(g.binary('darkness-width', 'math.multiply.scalar', darkness, g.literal('heavy-gain', ENGRAVING_LINE.heavy), 13), heavy, 'value');
-  g.edge(g.literal('hairline', ENGRAVING_LINE.hairline), heavy, 'min'); g.edge(g.literal('heavy-max', ENGRAVING_LINE.heavy), heavy, 'max');
+  const hairline = g.binary('hairline', 'math.max.scalar', g.literal('hairline-share', ENGRAVING_LINE.hairline),
+    g.binary('hairline-width', 'math.divide-ieee.scalar', g.literal('hairline-pixels', ENGRAVING_LINE.hairlinePixels), safeScale, 12), 12);
+  g.edge(hairline, heavy, 'min'); g.edge(g.literal('heavy-max', ENGRAVING_LINE.heavy), heavy, 'max');
   const width = g.node('line-width', 'math.mix.scalar', 14);
   g.edge(g.literal('fixed-width', ENGRAVING_LINE.fixedWidth), width, 'a'); g.edge(heavy, width, 'b'); g.edge(weight, width, 't');
-  const soft = g.literal('edge-soft', ENGRAVING_LINE.soft);
+  const soft = g.binary('edge-soft', 'math.divide-ieee.scalar', g.literal('edge-pixels', LINE_EDGE_PIXELS), safeScale, 13);
   const smooth = g.node('engraving-smooth', 'math.smoothstep.scalar', 15);
   g.edge(g.binary('engraving-low', 'math.subtract.scalar', width, soft, 14), smooth, 'edge0');
   g.edge(g.binary('engraving-high', 'math.add.scalar', width, soft, 14), smooth, 'edge1'); g.edge(distance, smooth, 'value');
