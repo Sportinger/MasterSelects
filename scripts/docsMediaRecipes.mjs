@@ -82,7 +82,6 @@ export const RECIPE_PENDING = {
     'time-stack.webp',
     'vibrance.webp',
     'vignette.webp',
-    'wave.webp',
     'zoom-blur.webp',
   ].map((asset) => [`${ASSET_DIR}/effects/${asset}`, BEFORE_RECIPES])),
 };

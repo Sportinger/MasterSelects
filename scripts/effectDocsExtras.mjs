@@ -34,6 +34,8 @@ export const EFFECT_DOC_EXTRAS = {
   // Generators: the still is the effect frame alone.
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
+  // Wave: the default ripple barely shows at thumbnail size; cut it from the Wave Height loop's poster (above its value label).
+  wave: { thumb: { source: 'assets/effects/clips/wave-height.webp', region: [0, 0.15, 1, 0.75] } },
   // Stick Figure: the thumbnail is cut from the still, the default figure walking alone on black (the
   // loop's poster catches it mid-jump at the right edge); below its parameters the card has the
   // Pose library, Motion and Actions sections of its own (StickFigureControls, StickFigureActionLane).

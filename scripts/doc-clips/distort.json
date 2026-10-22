@@ -1,0 +1,253 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "dancer_stage_motion.mp4",
+  "clips": [
+    {
+      "name": "wave",
+      "effect": "wave",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        420,
+        60,
+        1000,
+        960
+      ],
+      "width": 960,
+      "float": "left",
+      "alt": "The dancer turning on a dark stage, original left and with Wave right: her arms, her dress and the edge of the stage floor ripple in small waves that travel slowly through the picture",
+      "caption": "Left: original. Right: Wave at its default settings.",
+      "loop": 0.35,
+      "poster": 1.4,
+      "maxBytes": 900000
+    },
+    {
+      "name": "wave-presets",
+      "kind": "presets",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "crop": [
+        400,
+        60,
+        1040,
+        900
+      ],
+      "width": 960,
+      "loop": 0.35,
+      "poster": 1.4,
+      "maxBytes": 1200000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Heat Shimmer top left with fine trembling edges, Dream top right with the whole figure swaying in long slow waves, Flag bottom left bending up and down like a banner, Funhouse Mirror bottom right pushed sideways into one broad curve",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "wave-height",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeY": 0
+      },
+      "sweep": {
+        "param": "amplitudeX",
+        "label": "Wave Height",
+        "from": 0,
+        "to": 0.06,
+        "decimals": 3
+      },
+      "alt": "The dancer with Wave while Wave Height runs from 0 to 0.06 and back: the picture starts to bend up and down in broad waves across the frame, the edge of the floor turns into hills, and it settles again; the current value is shown at the bottom left",
+      "caption": "Wave Height from 0 to 0.06 and back, Sway 0."
+    },
+    {
+      "name": "wave-count",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeX": 0.02,
+        "amplitudeY": 0
+      },
+      "sweep": {
+        "param": "frequencyX",
+        "label": "Wave Count",
+        "from": 1,
+        "to": 16,
+        "decimals": 1
+      },
+      "alt": "The dancer with Wave while Wave Count runs from 1 to 16 and back: one slow bend across the frame becomes many tight ripples that make her outline tremble, and widens again; the current value is shown at the bottom left",
+      "caption": "Wave Count from 1 to 16 and back, at Wave Height 0.02."
+    },
+    {
+      "name": "wave-sway",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeX": 0
+      },
+      "sweep": {
+        "param": "amplitudeY",
+        "label": "Sway",
+        "from": 0,
+        "to": 0.06,
+        "decimals": 3
+      },
+      "alt": "The dancer with Wave while Sway runs from 0 to 0.06 and back: her figure is pushed left and right into a snake-like curve from head to feet, and straightens again; the current value is shown at the bottom left",
+      "caption": "Sway from 0 to 0.06 and back, Wave Height 0."
+    },
+    {
+      "name": "wave-sway-count",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeX": 0,
+        "amplitudeY": 0.02
+      },
+      "sweep": {
+        "param": "frequencyY",
+        "label": "Sway Count",
+        "from": 1,
+        "to": 16,
+        "decimals": 1
+      },
+      "alt": "The dancer with Wave while Sway Count runs from 1 to 16 and back: one broad sideways bend becomes a tight zigzag through the whole figure, and widens again; the current value is shown at the bottom left",
+      "caption": "Sway Count from 1 to 16 and back, at Sway 0.02."
+    },
+    {
+      "name": "wave-speed",
+      "effect": "wave",
+      "range": [
+        0.2,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.6,
+      "params": {
+        "amplitudeX": 0.03,
+        "amplitudeY": 0.03,
+        "frequencyX": 2,
+        "frequencyY": 2
+      },
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          0.5,
+          2
+        ]
+      },
+      "alt": "The dancer with Wave at three speeds, about two seconds each: at Speed 0 the waves stand still while she moves through them, at 0.5 they travel slowly, at 2 they wobble quickly; the speed is shown at the bottom left",
+      "caption": "Speed 0, 0.5 and 2, about two seconds each."
+    },
+    {
+      "name": "wave-phase",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeX": 0.03,
+        "amplitudeY": 0.03,
+        "frequencyX": 2,
+        "frequencyY": 2,
+        "speed": 0
+      },
+      "sweep": {
+        "param": "phase",
+        "label": "Phase",
+        "from": 0,
+        "to": 360,
+        "unit": "°"
+      },
+      "alt": "The dancer with Wave at Speed 0 while Phase runs from 0° to 360° and back: the waves slide along by one whole wave and back again; the current angle is shown at the bottom left",
+      "caption": "Phase from 0° to 360° and back, at Speed 0."
+    }
+  ]
+}
