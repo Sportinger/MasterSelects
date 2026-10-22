@@ -77,6 +77,18 @@ const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels
   duotone: 'Duotone', ink: 'Ink', background: 'Dark Ground', 'background-lift': 'Ground', 'glyph-result': 'Glyph Cell', mixed: 'Faded Color',
   'mixed-alpha': 'Faded Alpha', 'original-premultiplied': 'Original Premultiplied', 'look-premultiplied': 'Glyph Premultiplied',
   'mixed-premultiplied': 'Faded Premultiplied', 'mixed-safe-alpha': 'Faded Alpha', 'original-alpha': 'Original Alpha', 'cell-alpha': 'Cell Alpha', 'original-split:rgb': 'Original Color', 'original-split:alpha': 'Original Alpha' };
+/** Grid Glyph: the ruled lines on the cell borders and the coverage they leave for the ink. */
+const GRID_LINE_PORTS = { 'grid-line-wanted': 'Wanted Line', 'grid-line-cap': 'Line Cap', 'grid-line-pixels': 'Line Pixels', 'grid-half-width': 'Half Line', 'grid-line-reach': 'Line Reach', 'grid-line-most': 'Most Coverage',
+  'grid-local-pixels': 'Pixel in Cell', 'grid-from-line-x': 'From Line', 'grid-from-line-y': 'From Line', 'grid-line-distance-x': 'Distance Across', 'grid-line-distance-y': 'Distance Down', 'grid-cover-x': 'Column Line', 'grid-cover-y': 'Row Line',
+  'grid-line': 'Line Coverage', 'grid-alpha': 'Ruled Coverage' };
+/** Number Field: the colour step of every cell (Steps) and the flat colour it gives. */
+const NUMBER_FIELD_PORTS = { 'tone-steps-rounded': 'Whole Steps', 'steps-clamped': 'Step Count', 'tone-steps-last': 'Last Step', 'quantized-tone-scaled': 'Tone × Steps',
+  'quantized-tone-floor': 'Band', 'quantized-tone-band': 'Step Number', 'quantized-tone': 'Step Tone', 'number-ink': 'Step Color', 'background-coverage': 'Coverage', 'number-mark': 'Glyph Cell' };
+/** Pixel Code: the random draw inside each cell's Scramble window, and its Shadow-to-Highlight ink. */
+const PIXEL_CODE_PORTS = { 'glyph-index': 'Tone Glyph', 'index-cell-random': 'Cell Random', 'index-draw': 'Random × Window', 'index-offset': 'Draw',
+  'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window', 'rolled-index': 'Glyph Index',
+  'index-roll-lit': 'Lit', 'index-roll-levelled': 'Black Level Set', 'index-roll-dark': 'Dark Scramble', 'index-roll-cell': 'Cell Scramble',
+  'code-shadow-rgb': 'Shadow', 'code-highlight-rgb': 'Highlight', 'code-color': 'Code Color', 'background-coverage': 'Coverage', 'code-mark': 'Glyph Cell' };
 /** Retro Matrix: its scroll, text, Phosphor ink and scanlines. */
 const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-wrapped': 'Wrapped Scroll', 'scroll-vector': 'Scroll Offset', 'scrolled-uv': 'Scrolled Grid',
   'index-text-turns': 'Text Turns', 'index-text-line': 'Text Line', 'index-text-cell': 'Text Cell', 'index-text-random': 'Text Random',
@@ -84,6 +96,14 @@ const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-
   'retro-phosphor-rgb': 'Phosphor', 'background-coverage': 'Coverage', 'retro-ink': 'Ink', 'retro-tone-amount': 'Brightness', 'retro-lit': 'Lit Ink', 'retro-scan-ratio': 'Lines per Row',
   'retro-scan-pitch': 'Line Pitch', 'retro-scan-lines': 'Lines', 'retro-scan-dip': 'Line Dip', 'retro-scan-fade': 'Line Fade', 'retro-scan-faded': 'Faded Dip',
   'retro-scan': 'Scanline', 'retro-scanned': 'Glyph Cell' };
+/** Matrix Rain: its falling drops (Rain) and the lit rain ink. */
+const MATRIX_RAIN_PORTS = { 'rain-ground-tone': 'Glow', 'background-tone': 'Background Glow', 'ground-a-centre': 'Tap',
+  'ground-stretched': 'Stretched', 'rain-smooth-fade': 'Smooth Fade', 'rain-smooth-behind': 'Smooth Behind', 'rain-pixel-row': 'Pixel Row', 'ground-a-offset': 'Tap Offset', 'black-span': 'Black Span', 'half-vec2': 'Half Cell', 'rain-tone-curve': 'Tone²', 'rain-head-flash': 'Head Light', 'rain-head-shown': 'Head Shown', 'rain-head-light': 'Lit Head',
+  'rain-lit-trail': 'Trail Light', 'ground-luminance': 'Soft Luminance', 'ground-tone': 'Soft Tone', 'ground-upper': 'Upper Pair', 'ground-lower': 'Lower Pair', 'rain-pace-random': 'Pace Random', 'rain-gap-random': 'Gap Random', 'rain-phase-random': 'Phase Random',
+  'rain-rate': 'Fall Rate', 'rain-spacing': 'Drop Spacing', 'rain-fallen': 'Fallen', 'rain-ahead': 'Ahead', 'rain-drops': 'Drop Phase',
+  'rain-drop-place': 'Drop Place', 'rain-behind': 'Behind', 'rain-trail-rows': 'Trail Rows', 'rain-tail': 'Tail', 'rain-fade': 'Fade', 'rain-head': 'Head',
+  'rain-rgb': 'Rain Color', 'rain-white-rgb': 'White', 'rain-head-color': 'Head Color', 'rain-tone-light': 'Brightness', 'rain-light': 'Light', 'rain-glyph': 'Lit Glyph',
+  'rain-ground-light': 'Ground Light', 'rain-ground': 'Ground', 'rain-lit': 'Glyph Cell' };
 /** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */
 const GRAPH_PORT_LABELS: Record<string, Record<string, string>> = {
   'slit-scan': { 'smooth-or-banded': 'Time Map', 'subject-protected': 'Protection', 'safe-delay': 'Delay (s)',
@@ -375,18 +395,41 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   // brightness pulse has a folder of its own (Pulse).
   if (GLYPH_PRESENTATION_EFFECTS.has(type) && GLYPH_MOVING_EFFECTS.has(type)) {
     const glyph = glyphPresentation();
-    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse', scroll: 'Scroll', scanlines: 'Scanlines' },
+    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse', scroll: 'Scroll', scanlines: 'Scanlines', rain: 'Rain', glow: 'Glow' },
       portLabels: { ...GLYPH_PORTS, 'glyph-index': 'Tone Glyph', 'index-offset': 'Glyph Offset', 'index-time-speed': 'Clock', 'index-time-phase': 'Ticks',
         'index-sweep': 'Sweep', 'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window',
         'index-cell-random': 'Cell Random', 'index-tick': 'Cell Tick', 'index-jitter': 'Draw', 'symbol-pulse': 'Pulse', 'symbol-alpha': 'Pulsed Coverage',
         'index-roll-lit': 'Lit', 'index-roll-levelled': 'Black Level Set', 'index-roll-dark': 'Dark Roll', 'index-roll-cell': 'Cell Roll',
         'symbol-pulse-scale': 'Half Twinkle', 'symbol-pulse-base': 'Pulse Base',
-        ...(type === 'retro-matrix' ? RETRO_PORTS : {}) },
+        ...(type === 'retro-matrix' ? RETRO_PORTS : {}), ...(type === 'matrix' ? MATRIX_RAIN_PORTS : {}) },
       stage: (node) => type === 'retro-matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|scroll-)/.test(node.id) ? 'scroll'
+        // Matrix Rain: the clock and the drops of each column (Rain); the rain's colour and light stay in Ink & Appearance.
+        : type === 'matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|trail-clamped$|rain-(cell|pace|gap|phase|rate|spacing|fallen|ahead|lag|drops|drop-place|behind|trail|tail|fade|head$|head-left|pixel|smooth))/.test(node.id) ? 'rain'
+        // Matrix Rain: the smooth glow of the picture behind the code (Background) has a folder of its own, Glow; it hands its
+        // strength to Ink & Appearance, which colours it (Ground), so no cable runs back between the two folders.
+        : type === 'matrix' && /^(ground-|rain-ground-|background-(tone|clamped)$)/.test(node.id) ? 'glow'
         : type === 'retro-matrix' && /^(scrolled-uv|sample-unscrolled)$/.test(node.id) ? 'grid'
         : /^(scanlines-clamped$|retro-scan(?!ned))/.test(node.id) ? 'scanlines'
         : /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'
         : /^(index-|cell-id-split$)/.test(node.id) ? 'offset' : /^(symbol-|twinkle-clamped$)/.test(node.id) ? 'pulse' : glyph.stage(node) };
+  }
+  // Grid Glyph: its ruled lines (Line Width, Line Glow) have a folder of their own, Grid Lines.
+  if (type === 'grid-glyph') {
+    const glyph = glyphPresentation();
+    return { ...glyph, labels: { ...glyph.labels, lines: 'Grid Lines' }, portLabels: { ...GLYPH_PORTS, ...GRID_LINE_PORTS },
+      stage: (node) => /^(grid-|lineWidth-clamped$|lineGlow-clamped$)/.test(node.id) ? 'lines' : glyph.stage(node) };
+  }
+  // Number Field: its colour steps (Steps) have a folder of their own, Color Steps.
+  if (type === 'number-field') {
+    const glyph = glyphPresentation();
+    return { ...glyph, labels: { ...glyph.labels, steps: 'Color Steps' }, portLabels: { ...GLYPH_PORTS, ...NUMBER_FIELD_PORTS },
+      stage: (node) => /^(tone-steps|steps-clamped$|quantized-tone)/.test(node.id) ? 'steps' : glyph.stage(node) };
+  }
+  // Pixel Code: the random draw inside each cell's window (Scramble) has a folder of its own, Scramble.
+  if (type === 'pixel-code') {
+    const glyph = glyphPresentation();
+    return { ...glyph, labels: { ...glyph.labels, scramble: 'Scramble' }, portLabels: { ...GLYPH_PORTS, ...PIXEL_CODE_PORTS },
+      stage: (node) => /^(scramble-clamped$|rolled-index$|shifted-index$|index-)/.test(node.id) ? 'scramble' : glyph.stage(node) };
   }
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return glyphPresentation();
   return undefined;

@@ -378,8 +378,8 @@ All 18 glyph variants store that shared pipeline as editable generic graphs.
 Their atlas nodes keep ramp, custom text,
 font, and weight bound to the existing effect parameters; animated weight
 therefore follows the same preview, export, and saved-project timeline. Number
-Field adds quantized tone ink, Grid Glyph adds cell-border coverage, Pixel Code
-uses deterministic hashed cell selection, and Word Mosaic adds its connector band.
+Field adds quantized tone ink, Grid Glyph rules box-filtered lines along the cell borders, Pixel Code
+draws a random character inside a Scramble window, and Word Mosaic adds its connector band.
 Glyph Matrix advances character selection with timeline time and cell position;
 Data Hatching combines its animated character offset with diagonal hatch coverage.
 Brand Generator adds radial character selection and a frame mask; Stitch Poster
@@ -391,7 +391,7 @@ fixed text in its Phosphor colour with 1080p scanlines. Both retain the sampled 
 composition timeline clock.
 Capsule Cloud adds signed-distance pill coverage; UI Collage adds cell borders
 and cursor marks. Their character offsets use deterministic spatial hashes.
-Matrix Rain combines hashed column offsets with its animated green head highlight.
+Matrix Rain lets drops with near-white heads and fading tails fall down every column, lit by the cell tone, over a softly blurred glow of the picture.
 ASCII Ghost combines the current result with explicit previous-frame history using
 component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
@@ -401,7 +401,7 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
 (`src/services/operators/asciiEffectGraph.ts`); cell geometry and clock constants live in
 `src/effects/glyph/glyphGrid.ts`, and the graph is the reference: `shader.wgsl` is not compiled for these looks (graph-owned effects skip their shader) and is out of date, so do not copy its maths. A look passes `id`, `name`,
 `entryPoint`, and optionally `animated`, `feedback`, `defaultRamp`, `defaultCellSize`,
-`defaultBackground`, `defaultRoll`, `ignoresColors`, `presets` and `params` (controls of its own, placed at
+`defaultBackground`, `defaultRoll`, `ignoresColors`, `presets`, `warnings` (card notes of its own) and `params` (controls of its own, placed at
 the end of their card section and flagged `lookOwn`, so the Style menu still matches the look with the
 others: `effectStyles.ts` ignores them and starts them at their defaults when switching to the look).
 
@@ -409,7 +409,7 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   the look's dark ground (source × 0.08, Dark × 0.15, or its own paper/black) towards the
   character colour of the cell. Looks with their own palette (Matrix Rain, Retro Matrix, Pixel Code,
   Number Field, Dither Glow) colour the whole cell with their ink at Background strength (Matrix Rain
-  × the cell tone). New instances start at 0.2 (0.3 before the characters filled their cells; Stitch Poster at 0, it has its paper), so cards and
+  × a 4-tap blurred tone × 0.6–1 with its rain). New instances start at 0.2 (0.3 before the characters filled their cells; Stitch Poster at 0, it has its paper), so cards and
   stills keep about 40 % of the picture's brightness instead of about 10 %. `legacyDefault: 0` keeps
   instances saved before it on the dark ground; it is `graphOnly`, so a node setup saved before it
   hides the row; outside 0–1 it renders clamped (`background-clamped`, reported by `paramRangeNotes`).
@@ -434,8 +434,8 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   `1 + ceil(Roll × (ramp − 1))` characters around its own (`index-window`), kept inside the ramp
   (`index-window-start`), starting from its own character; the look's offset (Glyph Matrix: the
   diagonal sweep) moves it through that window. Roll 1 is exactly the earlier full-ramp wrap
-  (`legacyDefault: 1`, and the default of every look but Glyph Matrix, Retro Matrix and Symbol Matrix,
-  which start at 0.2, 0.3 and 0.4), 0 holds
+  (`legacyDefault: 1`, and the default of every look but Glyph Matrix, Retro Matrix, Symbol Matrix and
+  Matrix Rain, which start at 0.2, 0.3, 0.4 and 0.5), 0 holds
   each cell on its tone's character, and any Roll above 0 moves at least two characters. With
   Black Level above 0, a cell at or below it (tone 0) gets a window of 1 (`index-roll-lit`,
   `index-roll-levelled`, `index-roll-dark`, `index-roll-cell`), so the dark stage holds still even at
@@ -470,7 +470,60 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   borders cut characters in half, nothing scrolled, and the 1-pixel lines differed between preview and
   export sizes. A fix for new instances and setups saved without a graph; stored setups keep the old
   look. Its graph leaves out the shared colour nodes it never reads; presets: `RETRO_MATRIX_PRESETS`.
-- **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light;
+- **Matrix Rain drops** (`src/effects/glyph/matrixRain.ts`, the **Rain** folder, `rain-*`). Every column
+  draws three Random (Cell) numbers of (column, seed 1–3): its pace (12 × 0.6–1.4 rows a second × the clock,
+  `rain-rate`, `rain-fallen`), its drop spacing (32 × 0.6–1.4 rows, `rain-spacing`) and its phase.
+  `Behind = fract((fallen − row) / spacing + phase) × spacing` (`rain-behind`) is how far the last head
+  has fallen past the cell; the tail is `max(1 − Behind / max(Trail × spacing, 1), 0)`, squared
+  (`rain-fade`), the head `max(1 − Behind, 0)` (`rain-head`). A character glows at Rain Color, mixed
+  towards white by 0.8 × head, × max(fade × (0.05 + 1.5 × tone²), 0.85 × head × shown) (`rain-light`,
+  `rain-glyph`): the squared tone keeps the dim stage faint, and the head has its own light (`rain-head-light`)
+  that Black Level clears only in cells at or below it (`rain-head-shown`). Its ground is Background × the
+  **Glow** folder's soft tone (the mean luminance of four taps 0.3 cell diagonally around the pixel, `ground-*`,
+  with Black Level applied) × (0.6 + 0.4 × the fade recomputed at the pixel's exact row, `ground-fade`) in Rain
+  Color (`rain-ground`), added under it (`rain-lit`), so the glow has no cell steps. New instances start at Background 0.3.
+  Characters swap like Symbol Matrix's (`index-cell-random`, `index-tick`), twice a second × Speed.
+  **Rain Color** (`rainColor`, default `#29ff6b`) and **Trail** (`trail`, 0–1, default 0.5, clamped by
+  `trail-clamped`) are its own `graphOnly` controls; Roll starts at 0.5 and the Ramp at Numeric. This
+  replaces a symmetric sine pulse (period 14.6 rows) whose characters slid 8 rows a second, ignored the
+  picture's brightness and, at the saved Roll 1 and Background 0, lost the picture entirely: a fix for
+  new instances and setups saved without a graph; stored setups keep the old look. Its graph leaves out
+  the shared colour nodes; presets: `MATRIX_RAIN_PRESETS` (Digital Rain uses half-width katakana, drawn
+  from the system's fallback font). Test: `tests/unit/matrixRain.test.ts`.
+- **Grid Glyph lines** (`src/effects/glyph/gridGlyph.ts`, the **Grid Lines** folder, `grid-*`). Every cell rules its
+  top and left edge: **Line Width** (`lineWidth`, 0–8 px of a 1080p frame, default 1, clamped by `lineWidth-clamped`)
+  × Frame Scale, at most half a cell (`grid-line-cap`; the card says when it cuts), is the line in output pixels (`grid-line-pixels`); per axis the pixel's distance d to the middle of
+  the nearest line (`grid-line-distance-x/y`, min(|x − w/2|, cell − |x − w/2|)) gives the coverage
+  clamp(w/2 + ½ − d, 0, min(w, 1)) (`grid-cover-x/y`), the exact share of the pixel the line covers (a box filter), so
+  a hairline carries the same light at every preview quality and export size and a 1 px line fills exactly one
+  pixel row at a whole Cell Size. Inside the line the glyph coverage moves to **Line Glow** (`lineGlow`, 0–1,
+  default 0.4, `legacyDefault` 0.28, `lineGlow-clamped`) by `grid-alpha` = mix(glyph, Line Glow, line): lit lines
+  on the ground, dark joints through a full block. Both are `graphOnly`, `lookOwn`; new instances start at Cell
+  Size 18. This replaces 0.28 × (1 − smoothstep(0.02, 0.07, edge share of the cell)) drawn under the glyph
+  (max): at half Preview Quality the line vanished, where a cell was not a whole number of pixels it came and went,
+  and full blocks hid it. A fix for new instances and setups saved without a graph; stored setups keep the old line.
+  Presets: `GRID_GLYPH_PRESETS`. Test: `tests/unit/gridGlyph.test.ts`.
+- **Number Field steps** (`src/effects/glyph/numberField.ts`, the **Color Steps** folder, `tone-steps*`, `quantized-tone*`).
+  **Steps** (`steps`, 2–16, default and `legacyDefault` 5, `graphOnly`, `lookOwn`) is rounded to a whole count
+  (floor(x + ½): a keyframed ramp steps) and clamped by `steps-clamped`; the step is min(floor(tone × n), n − 1) / (n − 1)
+  (`quantized-tone`), the ink mix(Dark, Light, step) (`number-ink`). The earlier fixed floor(tone × 5) / 4 put pure white
+  at 1.25, past Light (a sixth step, out of range for some Dark/Light pairs): a fix for new instances and setups saved
+  without a graph; stored setups keep it. Its graph leaves out the unread Color Source node, so the card no longer shows
+  it (it used to, doing nothing). Presets: `NUMBER_FIELD_PRESETS`; with the Numeric ramp and 10 steps, or a ramp of n
+  characters and n steps (Paint by Numbers), the character index equals the step. Test: `tests/unit/numberField.test.ts`.
+- **Pixel Code scramble** (`src/effects/glyph/pixelCode.ts`, the **Scramble** folder, `index-*`, `scramble-clamped`). Each cell
+  draws one character of the Roll window (above) built from **Scramble** (`scramble`, 0–1, default 0.5, `legacyDefault` 1, `graphOnly`,
+  `lookOwn`, clamped by `scramble-clamped`): Random (Cell) of the cell number × the window, floored (`index-cell-random`, `index-draw`,
+  `index-offset`), moves it on from its own character inside the window (`rolled-index`; the window and dark hold are shared with the
+  moving looks through `rollWindow` / `rollInto` in `asciiEffectGraph.ts`). It used to add floor(sine hash of the cell × ramp) to the
+  tone's character and wrap over the whole ramp: the f32 sine hash drew diagonal stripes across the frame, Black Level never cleared
+  the stage (the dark cells drew too) and Invert Ramp only reshuffled the cells. Scramble 1 is that full-ramp draw with Random (Cell);
+  with Black Level above 0, cells at or below it keep their own character. The ink is mix(**Shadow**, **Highlight**, tone)
+  (`shadow`, `highlight`, own `graphOnly` colours, default `#0c2f52` / `#5cffc4`, `legacyDefault` the earlier fixed (.08, .3, .48) and
+  (.28, .95, .72) as `#144d7a` / `#47f2b8`, within half a step of 255; `code-color`). Its graph leaves out the shared colour nodes. A
+  fix for new instances and setups saved without a graph; stored setups keep the sine hash. `pixelCodeWarnings` notes Invert Ramp
+  at Scramble 1 and Black Level 0, where it only reshuffles. Presets: `PIXEL_CODE_PRESETS`. Test: `tests/unit/pixelCode.test.ts`.
+- **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light (Matrix Rain draws in its Rain Color, Pixel Code between Shadow and Highlight);
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).
 - **Transparency.** Input and output are straight alpha. Each cell takes the alpha of its centre

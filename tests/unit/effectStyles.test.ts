@@ -178,7 +178,7 @@ describe('effect styles', () => {
     // ASCII at its defaults -> Matrix Rain: its own glyph set; the Cell Size of both is 14.
     setupLook('ascii', { cellSize: 14, rampPreset: 'standard' });
     changeEffectStyle('style-clip', 'fx', 'matrix');
-    expect(fx().params).toMatchObject({ cellSize: 14, rampPreset: 'symbols' });
+    expect(fx().params).toMatchObject({ cellSize: 14, rampPreset: 'numeric' });
     setupLook('ascii', { cellSize: 14, rampPreset: 'standard' });
     changeEffectStyle('style-clip', 'fx', 'word-mosaic');
     expect(fx().params.cellSize).toBe(22);
