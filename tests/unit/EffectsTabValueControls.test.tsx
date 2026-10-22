@@ -127,11 +127,15 @@ describe('EffectsTab numeric controls', () => {
     expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'holo-colours', expect.objectContaining({ colorA: '#22d3ee' }));
   });
 
-  it('shows colour parameters in cards still on the generic rows (Riso Dark Ink / Warm Ink) and writes them', () => {
+  it('shows a card with colours in Resolve rows only (Riso numbers get sliders and resets, its inks the colour row) and writes them', () => {
     const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
     const riso: Effect = { id: 'riso-inks', type: 'riso', name: 'Riso', enabled: true,
       params: { amount: 0.75, scale: 8, colorA: '#123456', colorB: '#ef476f' } };
-    render(<EffectsTab clipId="clip:effects-controls" effects={[riso]} />);
+    const { container } = render(<EffectsTab clipId="clip:effects-controls" effects={[riso]} />);
+    // One design per card: Registration and Amount are full rows with a reset, like the inks.
+    expect(screen.getByLabelText('Reset Registration')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reset Amount')).toBeInTheDocument();
+    expect(container.querySelectorAll('.effect-params--resolve-rows').length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Dark Ink')).toHaveAttribute('type', 'color');
     expect(screen.getByLabelText('Warm Ink hex')).toHaveValue('#ef476f');
     fireEvent.click(screen.getByLabelText('Reset Dark Ink'));
