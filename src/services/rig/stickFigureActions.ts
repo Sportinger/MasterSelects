@@ -139,7 +139,8 @@ export function addStickFigureAction(clipId: string, effectId: string, action: S
   patch: Omit<ActionPatch, 'start'> = {}): string {
   if (!isSkeletonActionId(action)) throw new Error(`Unknown action: ${String(action)}`);
   const id = `action-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  const instance = applyPatch({ id, action, start: 0, duration: SKELETON_ACTIONS[action].duration }, { ...patch, start });
+  // New actions travel and jump with the figure's legs and Scale (bodyScaled); older lanes keep their pixels.
+  const instance = applyPatch({ id, action, start: 0, duration: SKELETON_ACTIONS[action].duration, bodyScaled: true }, { ...patch, start });
   writeActions(clipId, effectId, [...readActions(clipId, effectId), instance]);
   return id;
 }

@@ -64,6 +64,158 @@
         1
       ],
       "file": "docs/Features/assets/effects/flocking.webp"
+    },
+    {
+      "name": "stick-figure-inspector",
+      "effect": "stick-figure",
+      "image": "dancer_stage.jpg",
+      "params": {
+        "spine": 20,
+        "head": -14,
+        "shoulderL": 150,
+        "elbowL": 10,
+        "shoulderR": -85,
+        "elbowR": 6,
+        "hipL": 0,
+        "kneeL": 0,
+        "hipR": -100,
+        "kneeR": 0,
+        "thickness": 8,
+        "headStyle": "ring",
+        "actions": "[{\"id\":\"walk\",\"action\":\"walk\",\"start\":0.2,\"duration\":2,\"bodyScaled\":true},{\"id\":\"jump\",\"action\":\"jump\",\"start\":2.35,\"duration\":1.1,\"bodyScaled\":true},{\"id\":\"punch\",\"action\":\"punch\",\"start\":3.65,\"duration\":0.55,\"bodyScaled\":true}]"
+      },
+      "preview": 0,
+      "top": "card",
+      "layout": "float",
+      "gutter": 60,
+      "viewport": {
+        "width": 2000,
+        "height": 1800
+      },
+      "collapse": [
+        "Pose",
+        "Proportions",
+        "Ground",
+        "Style"
+      ],
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset: a whole figure at once"
+        },
+        {
+          "target": "Use",
+          "label": "Use: apply or key a pose from the library"
+        },
+        {
+          "target": "Gait",
+          "label": "Gait: Walk, Run or Idle move every joint"
+        },
+        {
+          "target": "Punch",
+          "label": "Action lane: Walk, Jump and Punch on the figure's lane",
+          "from": "right",
+          "reach": 60
+        },
+        {
+          "target": "Add",
+          "label": "Add: another action at the playhead"
+        }
+      ],
+      "alt": "The Stick Figure card in Properties, Effects, with the Arabesque preset: the Preset menu, the folded sections Pose, Proportions, Ground and Style, then Pose library (Pose Stand, Apply, Key pose, Key easing, a Pose name field and Save pose), Motion (Walk, Run, Idle) and Actions with a lane holding Walk, Jump and Punch blocks, the Add menu, At playhead, Markers, a sound menu, Sounds and Check choreography",
+      "caption": "The Stick Figure card with the Arabesque preset and three actions, its parameter sections folded.",
+      "note": "Needs clicks (card buttons pressed first), collapse (card sections folded) and nodeClicks (Nodes toolbar buttons), which scripts/effect-editor-shot.mjs does not read yet: made with a review-folder copy that adds them (ledger, GEN1)."
+    },
+    {
+      "name": "stick-figure-pose",
+      "effect": "stick-figure",
+      "image": "dancer_stage.jpg",
+      "params": {
+        "spine": 20,
+        "head": -14,
+        "shoulderL": 150,
+        "elbowL": 10,
+        "shoulderR": -85,
+        "elbowR": 6,
+        "hipL": 0,
+        "kneeL": 0,
+        "hipR": -100,
+        "kneeR": 0,
+        "thickness": 8,
+        "headStyle": "ring"
+      },
+      "preview": 0,
+      "top": "card",
+      "layout": "float",
+      "gutter": 60,
+      "viewport": {
+        "width": 2000,
+        "height": 1700
+      },
+      "collapse": [
+        "Proportions",
+        "Ground",
+        "Style",
+        "Pose library",
+        "Motion",
+        "Actions"
+      ],
+      "marks": [
+        {
+          "target": "Pelvis X",
+          "label": "Pelvis X: where the figure stands"
+        },
+        {
+          "target": "Lift",
+          "label": "Lift: up off the ground"
+        },
+        {
+          "target": "Spine Lean",
+          "label": "Spine Lean"
+        },
+        {
+          "target": "Shoulder L",
+          "label": "Shoulder L"
+        },
+        {
+          "target": "Hip R",
+          "label": "Hip R: \u2212100\u00b0 lifts the leg behind"
+        }
+      ],
+      "alt": "The Pose section of the Stick Figure card with the Arabesque preset: Pelvis X, Pelvis Y and Lift at 0 px, Spine Lean 20\u00b0, Head Tilt \u221214\u00b0, Shoulder L 150\u00b0, Elbow L 10\u00b0, Shoulder R \u221285\u00b0, Elbow R 6\u00b0, Hip L 0\u00b0, Knee L 0\u00b0, Hip R \u2212100\u00b0, Knee R 0\u00b0, each with a slider, a keyframe diamond and a reset arrow",
+      "caption": "The Pose section with the Arabesque preset.",
+      "note": "Needs clicks (card buttons pressed first), collapse (card sections folded) and nodeClicks (Nodes toolbar buttons), which scripts/effect-editor-shot.mjs does not read yet: made with a review-folder copy that adds them (ledger, GEN1)."
+    },
+    {
+      "name": "stick-figure-walk-nodes",
+      "effect": "stick-figure",
+      "image": "dancer_stage.jpg",
+      "view": "nodes",
+      "clicks": [
+        "Walk"
+      ],
+      "nodeClicks": [
+        "Avoid"
+      ],
+      "viewport": {
+        "width": 1700,
+        "height": 1000
+      },
+      "marks": [
+        {
+          "target": "title:Gait Cycle",
+          "label": "Gait Cycle: one output per joint"
+        },
+        {
+          "target": "title:Stick Figure",
+          "label": "Stick Figure: the joints as inputs",
+          "from": "above",
+          "reach": 110
+        }
+      ],
+      "alt": "The Nodes tab after Walk: a Gait Cycle card on the left with inputs time, speed, stride, lean and phase and one output per joint (Spine to Knee R), cables from each output to the matching joint input of the Stick Figure card, which also takes the picture from the clip's Source card and passes it to Target",
+      "caption": "The node setup after Walk.",
+      "note": "Needs clicks (card buttons pressed first), collapse (card sections folded) nodeClicks (Nodes toolbar buttons) and title:<card> marks, which scripts/effect-editor-shot.mjs does not read yet: made with a review-folder copy that adds them (ledger, GEN1)."
     }
   ]
 }

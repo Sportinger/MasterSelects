@@ -32,7 +32,28 @@ export const EFFECT_DOC_EXTRAS = {
   // Generators: the still is the effect frame alone.
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
-  'stick-figure': { thumb: { region: [0, 0, 1, 1] } },
+  // Stick Figure: the still is the figure alone on black; below its parameters the card has the
+  // Pose library, Motion and Actions sections of its own (StickFigureControls, StickFigureActionLane).
+  'stick-figure': {
+    thumb: { region: [0.2, 0.14, 0.6, 0.72] },
+    sections: ['Pose', 'Proportions', 'Ground', 'Style', 'Pose library', 'Motion', 'Actions'],
+    rows: [
+      cableRow('Pose library', 'Pose', '13 built-in poses and the poses you saved', 'Stand'),
+      cableRow('Pose library', 'Use', 'Apply or Key pose', 'none'),
+      cableRow('Pose library', 'Key easing', 'Ease in-out, Linear, Ease in, Ease out', 'Ease in-out'),
+      cableRow('Pose library', 'Save', 'A name and Save pose', 'empty'),
+      cableRow('Motion', 'Gait', 'Walk, Run or Idle', 'none'),
+      cableRow('Actions', 'Action lane', 'One block per action along the clip', 'empty'),
+      cableRow('Actions', 'Add', 'Idle, Walk, Run, Jump, Punch, Kick, Duck, Hit React, Throw, Grab, Land or Fall, then At playhead', 'Punch'),
+      cableRow('Actions', 'Start', '0 s to the clip length', 'the playhead'),
+      cableRow('Actions', 'Duration', '0.05 to 10 s', 'the action’s own length'),
+      cableRow('Actions', 'Strength', '0 to 2', '1'),
+      cableRow('Actions', 'Aim at', 'A joint of another Stick Figure, or No target', 'No target'),
+      cableRow('Actions', 'Contacts', 'Markers', 'none'),
+      cableRow('Actions', 'Sound', 'One of the SFX sounds, then Sounds', 'Hit'),
+      cableRow('Actions', 'Check', 'Check choreography', 'none'),
+    ],
+  },
   // Weave: the still is the net alone on black; Form and Color sit above the card's sections.
   weave: { thumb: { region: [0, 0, 1, 1] }, sectionLabels: { '': 'Form and color' } },
   'ai-edge-fill': {

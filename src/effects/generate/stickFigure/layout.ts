@@ -63,11 +63,27 @@ function scaledLengthNotes(params: Params): string[] {
   return over.length ? [`${over.join(', ')}: times Scale ${scale} is longer than ${SKELETON_COORDINATE_LIMIT} figure px, so it is drawn at ${SKELETON_COORDINATE_LIMIT}.`] : [];
 }
 
+/** Lines thinner than one output pixel are drawn as a one-pixel hairline (stickFigureLayout), so the figure never vanishes. */
+function hairlineNotes(params: Params, height: number): string[] {
+  const unit = height > 0 ? height / STICK_FIGURE_REFERENCE_HEIGHT : 1;
+  const { thickness } = skeletonFromParams(params);
+  if (thickness * unit >= 1) return [];
+  const stored = typeof params.thickness === 'number' && Number.isFinite(params.thickness) ? params.thickness : createDefaultSkeletonShape().thickness;
+  return [`thickness: ${stored} px${scaleOf(params) !== 1 ? ` times Scale ${scaleOf(params)}` : ''} is thinner than one pixel at the ${height} px tall composition, so the lines are drawn as one-pixel hairlines.`];
+}
+
+/** Ground Plant stands the lowest point on Ground Y after the pose is solved, which cancels Pelvis Y. */
+function plantedPelvisNotes(params: Params): string[] {
+  const skeleton = skeletonFromParams(params);
+  if (skeleton.groundMode !== 'plant' || skeleton.rootY === 0) return [];
+  return [`rootY: Ground "Plant lowest point" stands the figure on Ground Y, so Pelvis Y ${skeleton.rootY} px does not move it; use Lift, or set Ground to Keep above ground or Off.`];
+}
+
 /** Settings that leave nothing to see (a figure scaled to nothing, or one entirely outside its layer) and
  * scaled lengths the rig clamps. `width`/`height`: the composition size, which the off-frame check uses. */
 export function stickFigureWarnings(params: Params, width = 1920, height = 1080): string[] {
   if (scaleOf(params) <= 0) return [`scale: ${scaleOf(params)} gives the figure no size, so it is drawn as a dot at the pelvis. Use a scale above 0 (1 = 1080p proportions).`];
-  const notes = scaledLengthNotes(params);
+  const notes = [...scaledLengthNotes(params), ...hairlineNotes(params, height), ...plantedPelvisNotes(params)];
   const { joints, limbRadius, headRadius } = stickFigureLayout(params, width, height);
   const pad = Math.max(limbRadius, headRadius, stickFigureRing(limbRadius, headRadius).outer);
   const inside = SKELETON_SEGMENTS.some(([a, b]) => segmentTouchesFrame(joints[a], joints[b], pad, width, height))

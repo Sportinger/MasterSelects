@@ -1,0 +1,32 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "black_1080_10s.mp4",
+  "clips": [
+    {
+      "name": "stick-figure",
+      "effect": "stick-figure",
+      "params": {
+        "rootX": -230,
+        "actions": "[{\"id\":\"walk\",\"action\":\"walk\",\"start\":0.2,\"duration\":2,\"bodyScaled\":true},{\"id\":\"jump\",\"action\":\"jump\",\"start\":2.35,\"duration\":1.1,\"bodyScaled\":true},{\"id\":\"punch\",\"action\":\"punch\",\"start\":3.65,\"duration\":0.55,\"bodyScaled\":true}]"
+      },
+      "range": [
+        0,
+        4.7
+      ],
+      "layout": "single",
+      "crop": [
+        410,
+        250,
+        960,
+        540
+      ],
+      "width": 960,
+      "loop": 0.5,
+      "poster": 2.95,
+      "maxBytes": 600000,
+      "float": "left",
+      "alt": "A white stick figure on black at its default settings walks a few steps to the right, crouches and jumps with both arms up, lands and throws a punch, then fades back to its starting place",
+      "caption": "Stick Figure at its default settings with three actions on its lane: Walk, Jump and Punch."
+    }
+  ]
+}

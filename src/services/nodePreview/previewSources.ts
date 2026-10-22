@@ -47,8 +47,12 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
       const evaluator = createParameterSourceEvaluator(clip, state.clipKeyframes.get(clip.id) ?? [], localTime);
       const property = request.port?.metadata?.controlProperty;
       const nodeId = binding?.kind === 'parameter-source' ? binding.nodeId : '';
+      // A node viewer without a chosen port shows the node's own preview port, else its first output:
+      // multi-output controls (Gait Cycle, Limb IK) have no 'value' output.
+      const output = request.port?.direction === 'output' ? request.port.id
+        : request.node.preview?.portId ?? request.node.outputs[0]?.id ?? 'value';
       const value = property ? evaluator.resolve(property).value : request.port?.direction === 'input'
-        ? evaluator.evaluateInput(nodeId, request.port.id) : evaluator.evaluateNode({ nodeId, portId: 'value' });
+        ? evaluator.evaluateInput(nodeId, request.port.id) : evaluator.evaluateNode({ nodeId, portId: output });
       return { ...base, status: 'live', label: String(value), presentation: 'text', drawing: { kind: 'number', value: String(value), caption: 'Parameter source' } };
     } catch (error) { return { ...base, status: 'error', label: error instanceof Error ? error.message : String(error) }; }
   }

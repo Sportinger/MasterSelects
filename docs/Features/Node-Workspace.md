@@ -190,8 +190,11 @@ when the whole figure lies outside its layer.
 **Actions.** The Stick Figure's **Actions** lane holds action clips: Idle, Walk, Run,
 Jump, Punch, Kick, Duck, Hit React, Throw, Grab, Land and Fall. Each has authored key
 poses with anticipation, contact and follow-through, forward travel (added to Pelvis X
-in the facing direction and kept afterwards) and, for Jump, lift. Add one at the
-playhead, drag blocks along the lane, set Start, Duration and Strength (how far the
+in the facing direction and kept afterwards) and, for Jump, lift. Actions added since
+22 October 2026 travel and lift in proportion to the figure's legs and Scale (`bodyScaled`
+on the stored action; `listRigs` reports each action's `travel`); older lanes keep their
+pixel distances. Add one at the
+playhead, drag blocks along the lane (or move a focused block with the arrow keys), set Start, Duration and Strength (how far the
 pose departs from standing). Actions blend in and out over the keyframed pose and
 cross-fade where they overlap; joint angles always blend the short way round. Fall
 holds its lying pose until a later action blends over it. Node sources still override

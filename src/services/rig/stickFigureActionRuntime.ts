@@ -1,6 +1,7 @@
 import type { Effect } from '../../types/effects';
 import { useTimelineStore } from '../../stores/timeline';
 import {
+  createDefaultSkeletonShape,
   figureMirror,
   unfacingX,
   SKELETON_ANGLE_KEYS,
@@ -36,6 +37,14 @@ const numberParam = (params: Params, key: string) => {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 };
 
+const DEFAULT_LEG = (() => { const shape = createDefaultSkeletonShape(); return shape.thigh + shape.shin; })();
+
+/** The figure's leg length times Scale relative to the default figure: body-scaled actions travel and jump with it. */
+export function stickFigureBodyScale(params: Params): number {
+  const skeleton = skeletonFromParams(params);
+  return (skeleton.thigh + skeleton.shin) / DEFAULT_LEG;
+}
+
 /** Limb angles that put the striking hand or foot on the target joint (or as close as it reaches). */
 function aimLimb(clipId: string, timelineTime: number, clipTime: number, params: Params,
   instance: SkeletonActionInstance, limb: SkeletonLimb): Partial<Record<SkeletonAngleKey, number>> {
@@ -68,7 +77,7 @@ export function applyStickFigureActions(clip: { id?: string; startTime?: number 
     const actions = parseSkeletonActions(effect.params.actions);
     if (!actions.length) return effect;
     const base = Object.fromEntries(SKELETON_ANGLE_KEYS.map(key => [key, numberParam(effect.params, key)])) as Record<SkeletonAngleKey, number>;
-    const result = applySkeletonActions(base, numberParam(effect.params, 'lift'), actions, clipTime);
+    const result = applySkeletonActions(base, numberParam(effect.params, 'lift'), actions, clipTime, stickFigureBodyScale(effect.params));
     // Travel goes the way the figure faces; Pelvis X is a screen position.
     const facing = Math.sign(figureMirror(effect.params)) || 1;
     const params: Params = { ...effect.params, ...result.pose, lift: result.lift,

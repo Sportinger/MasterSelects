@@ -4,6 +4,7 @@ import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
 import { colorToRgba } from '../../_shared/catalogColor';
 import { STICK_FIGURE_PARAMS } from './params';
+import { STICK_FIGURE_PRESETS } from './presets';
 import { stickFigureLayout, stickFigureRing, stickFigureWarnings } from './layout';
 import { generatorChoiceWarnings } from '../generatorParams';
 
@@ -17,6 +18,7 @@ export const stickFigure: EffectDefinition = {
   uniformSize: 144,
 
   params: STICK_FIGURE_PARAMS,
+  presets: STICK_FIGURE_PRESETS,
   extraControls: () => import('./StickFigureControls'),
   // Clamps of number params are reported from renderMin/renderMax (paramRangeNotes).
   paramWarnings: (params, width, height) => [...stickFigureWarnings(params, width, height),

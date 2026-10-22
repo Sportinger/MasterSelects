@@ -53,44 +53,6 @@
       }
     },
     {
-      "name": "stick-figure",
-      "out": "docs/Features/assets/effects/stick-figure.webp",
-      "image": "dancer_stage",
-      "width": 1920,
-      "layout": "stack",
-      "crop": [
-        600,
-        40,
-        1320,
-        990
-      ],
-      "outWidth": 960,
-      "gap": 6,
-      "left": {
-        "effect": "original"
-      },
-      "right": {
-        "effect": "stick-figure",
-        "params": {
-          "facing": "left",
-          "rootX": 600,
-          "groundY": 430,
-          "scale": 1.6,
-          "spine": 12,
-          "head": -15,
-          "shoulderL": 140,
-          "elbowL": 10,
-          "shoulderR": -80,
-          "elbowR": -15,
-          "hipL": -6,
-          "kneeL": 8,
-          "hipR": -60,
-          "kneeR": 12,
-          "headStyle": "ring"
-        }
-      }
-    },
-    {
       "name": "memory-leak",
       "out": "docs/Features/assets/effects/memory-leak.webp",
       "image": "dancer_stage",
