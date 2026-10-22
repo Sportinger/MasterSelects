@@ -560,6 +560,12 @@ pattern (Perspective Grid Speed, Color Wheel Spin; see
 [Generate Effects](./Effect-System.md#generate-notes)). Stored travel values are
 dropped, `addEffect`/`updateEffect` do not store them, and a node source that drives
 such a rate drops the travel (logged), so the source runs at rate × time.
+Geometry graphs (Weave) reach the same rule in their compiler: a Multiply of Clip Time
+or Time with a Value node bound to a keyframed integrating parameter compiles to the
+distance travelled on that clock (`geometryRateTravel.ts`, supplied by the strand layer
+source and the node previews), so a keyed Weave Speed or Pulse Rate eases instead of
+jumping. The clip clock runs in source time (speed, reversal, trim), so its travel is
+scaled by that clock's rate.
 
 A parameter added after instances were saved can declare `legacyDefault`: what a saved
 instance without it renders. Renderers, keyframe base values and the inspector

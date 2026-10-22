@@ -5,6 +5,7 @@ import type { TimelineClip } from '../../../types/timeline';
 import { effectOperatorGraph, effectOperatorParams } from '../effectGraphOwner';
 import { compileGeometryGraph, type GeometryProgram } from './geometryProgram';
 import { geometryParameterReader, WEAVE_EFFECT_TYPE } from './weaveGraph';
+import { geometryRateTravel } from './geometryRateTravel';
 import { createFlockClipTimeMap } from '../../flock/time/flockTimeMapper';
 import { applyParameterSourcesToEffects } from '../../parameterSources/parameterSourceRendering';
 import type { ParameterSourceClip } from '../../parameterSources/parameterSourceTargets';
@@ -63,9 +64,11 @@ export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effect
   return effects.flatMap(effect => {
     try {
       // Keyframes use clip time; Time nodes read the composition clock like image graphs.
+      const rateTravel = geometryRateTravel(effect, keyframes ?? [], clipTime,
+        { clipClockAt: local => weaveSimulationTime(clip, local), timelineStart: clip.startTime ?? 0 });
       const program = compileGeometryGraph(weaveGraphOf(effect),
         geometryParameterReader(effectOperatorParams(effect), effect.id, [...keyframes ?? []], clipTime), undefined,
-        { time: (clip.startTime ?? 0) + clipTime, simulationTime });
+        { time: (clip.startTime ?? 0) + clipTime, simulationTime, ...(rateTravel ? { rateTravel } : {}) });
       return program.render ? [{ effectId: effect.id, source: { type: 'strands' as const, strands: { clipId: clip.id, effectId: effect.id, program } } }] : [];
     } catch {
       return [];

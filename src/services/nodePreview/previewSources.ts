@@ -72,7 +72,8 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
     const effect = findClipOperatorEffect(clip, binding.effectId);
     if (effect?.type === 'audio-math') return audioOperatorPreview({ ...request, clipId: clip.id }, effect);
     if (effect?.type === 'voxel-relief') return voxelPreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
-    if (effect?.type === WEAVE_EFFECT_TYPE) return geometryPreview(request, effect, state.clipKeyframes.get(clip.id) ?? [], localTime, weaveSimulationTime(clip, localTime));
+    if (effect?.type === WEAVE_EFFECT_TYPE) return geometryPreview(request, effect, state.clipKeyframes.get(clip.id) ?? [], localTime, weaveSimulationTime(clip, localTime),
+      { clipClockAt: local => weaveSimulationTime(clip, local), timelineStart: clip.startTime });
     if (effect && isComputeImageEffectType(effect.type)) {
       const preview = computeImageOperatorValuePreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
       if (preview) return preview;
