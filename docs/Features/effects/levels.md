@@ -124,7 +124,7 @@ Equal Input Black and Input White make a hard cut on each colour channel, a post
 <figcaption>Levels opened in the Nodes tab (the Constants folder left out). 1 — Parameters: the five controls, Gamma kept within its range. 2 — Input Black & White: stretches the tones between the two input points to the full range. 3 — Gamma: bends the mid-tones. 4 — Output Range: places the result between Output Black and Output White. 5 — Clamp & Alpha: keeps the colour within 0 to 1 and puts the transparency back.</figcaption>
 </figure>
 
-Levels works in five stages, one folder each in the Nodes tab: **Parameters** holds the five controls, **Input Black & White** stretches the tones, **Gamma** bends the middle, **Output Range** sets the final black and white, and **Clamp & Alpha** finishes. **Split RGB + Alpha** takes the transparency aside first. Every colour effect has this shape ([Color & Tone](../Effects-Color.md#the-shared-idea)). Click a folder's header to open it; the sections below show what is inside.
+Levels works in five stages ([Color & Tone](../Effects-Color.md#the-shared-idea) shows the shape all colour effects share), one folder each in the Nodes tab: **Parameters** holds the five controls, **Input Black & White** stretches the tones, **Gamma** bends the middle, **Output Range** sets the final black and white, and **Clamp & Alpha** finishes. **Split RGB + Alpha** takes the transparency aside first. Click a folder's header to open it; the sections below show what is inside.
 
 ### Parameters
 
@@ -145,7 +145,7 @@ Levels works in five stages, one folder each in the Nodes tab: **Parameters** ho
 <figcaption>Inside Parameters (the four other controls go out directly). 1 — Clamp: keeps Gamma between 0.1 and 10.</figcaption>
 </figure>
 
-**Clamp** – keeps Gamma between 0.1 and 10, the values in **Gamma Render Min** and **Gamma Render Max**. At 0 the curve would have no answer, so the floor keeps it at an almost black but valid picture. A keyframe, a node or the AI agent may send more; the picture then uses the limit, and the card and the tool result say so.
+**Clamp** – keeps Gamma between 0.1 and 10, the values in the Gamma Render Min and Gamma Render Max cards. At 0 the curve would have no answer, so the floor keeps it at an almost black but valid picture. A keyframe, a node or the AI agent may send more; the picture then uses the limit, and the card and the tool result say so.
 
 **Input Black**, **Input White**, **Output Black** and **Output White** go out as they are: any value a node or the AI agent sends has a clear result. An Input Black below 0 lifts the blacks a little, and an output point beyond 0 or 1 is cut at black or white at the end.
 
@@ -205,7 +205,7 @@ Levels works in five stages, one folder each in the Nodes tab: **Parameters** ho
 
 **Power** – raises each channel of the Normalized RGB to that exponent. 0 and 1 stay where they are, and only the tones in between move: an exponent below 1 lifts them, above 1 lowers them.
 
-**Remix:** take **Reciprocal** out and wire **Gamma** straight into **Scalar to RGB**: the control then works the other way round, above 1 heavier and below 1 lighter, as in some grading tools.
+**Remix:** take **Reciprocal** out and wire the Gamma card straight into **Scalar to RGB**: the control then works the other way round, above 1 heavier and below 1 lighter, as in some grading tools.
 
 <div class="docs-float-end"></div>
 
@@ -253,7 +253,7 @@ Levels works in five stages, one folder each in the Nodes tab: **Parameters** ho
 <figcaption>Inside Clamp & Alpha. 1 — Clamp: keeps each channel between 0 and 1.</figcaption>
 </figure>
 
-**Clamp** – keeps each colour channel between **Clamp Low** (0) and **Clamp High** (1), for output points set beyond black or white.
+**Clamp** – keeps each colour channel between 0 and 1 (its Clamp Low and Clamp High cards), for output points set beyond black or white.
 
 **Combine RGB + Alpha** then puts the original transparency back, untouched.
 

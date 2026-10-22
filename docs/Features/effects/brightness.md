@@ -87,7 +87,7 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 <figcaption>Brightness opened in the Nodes tab (the Constants folder left out). 1 — Parameters: Amount, kept within its range. 2 — Brightness Curve: lifts or lowers the mid-tones.</figcaption>
 </figure>
 
-Brightness works in two stages, one folder each in the Nodes tab: **Parameters** holds Amount and keeps it within the range the curve can show, and **Brightness Curve** bends each colour channel with it. **Split RGB + Alpha** takes the transparency aside first and **Combine RGB + Alpha** puts it back untouched. Every colour effect has this shape ([Color & Tone](../Effects-Color.md#the-shared-idea)). Click a folder's header to open it; the sections below show what is inside.
+Brightness works in two stages ([Color & Tone](../Effects-Color.md#the-shared-idea) shows the shape all colour effects share), one folder each in the Nodes tab: **Parameters** holds Amount and keeps it within the range the curve can show, and **Brightness Curve** bends each colour channel with it. **Split RGB + Alpha** takes the transparency aside first and **Combine RGB + Alpha** puts it back untouched. Click a folder's header to open it; the sections below show what is inside.
 
 ### Parameters
 

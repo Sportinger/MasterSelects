@@ -5,7 +5,7 @@
     "brightness?focus=brightness-curve&only=curve-stops-per-amount,curve-stops,curve-gain,input,curve-lifted,curve-one,curve-one-rgb,curve-rest,curve-total,curve&cables=avoid&marks=curve-stops-per-amount:below,curve-gain:above,curve-lifted:above,curve:above@brightness-curve",
     "contrast?plumbing=hide&marks=organized-contrast-controls:left,compound-shared-flatten-one:above@contrast",
     "contrast?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@contrast-parameters",
-    "contrast?focus=contrast-curve&only=flatten-zero,flatten-one,amount-flatten,amount-steepness,flatten-grey,flatten-grey-rgb,flatten&rows=1&cables=avoid&layout=float&marks=amount-flatten:below,amount-steepness:above:24,flatten:above@contrast-flatten",
+    "contrast?focus=contrast-curve&only=flatten-zero,flatten-one,amount-flatten,amount-steepness,flatten-grey,flatten-grey-rgb,flatten&rows=1&cables=avoid&layout=float&marks=amount-flatten:below,flatten:above@contrast-flatten",
     "contrast?focus=contrast-curve&only=input,curve-shadows,curve-one,curve-one-rgb,curve-inverse,curve-highlights,curve-total,curve&rows=1&name.curve-slope-rgb=Slope&cables=avoid&marks=curve-shadows:below,curve:above@contrast-curve",
     "exposure?plumbing=hide&marks=organized-exposure-controls:below,compound-shared-light-gain:above,organized-exposure-tone:below,organized-exposure-finish:above@exposure",
     "exposure?focus=parameters&only=exposure,exposure-clamped,gamma,gamma-clamped,offset&constants=hide&cables=avoid&layout=float&marks=exposure-clamped:above@exposure-parameters",
@@ -25,7 +25,7 @@
     "vibrance?focus=muted-colour-weight&rows=1&cables=avoid&marks=weight-muted:below,weight:above,weight-saturation:above@vibrance-weight",
     "vibrance?focus=skin-protection&only=skin-hue-offset,skin-offset,skin-wrapped,skin-signed,skin-distance,skin-match&cables=avoid&marks=skin-hue-offset:above,skin-wrapped:above,skin-match:above@vibrance-skin-hue",
     "vibrance?focus=skin-protection&only=skin-lit,skin-vivid,skin-not-vivid,skin-band,skin-weighted,skin-spared,skin-kept&name.skin-match=Skin Hue Match&cables=avoid&marks=skin-vivid:above,skin-band:below,skin-kept:above@vibrance-skin-weight",
-    "saturation?plumbing=hide&marks=organized-saturation-controls:below,input:above,compound-shared-gamut-one:above@saturation",
+    "saturation?plumbing=hide&marks=organized-saturation-controls:below,compound-shared-gamut-one:above@saturation",
     "saturation?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@saturation-parameters",
     "saturation?focus=saturation-gamut-safe&only=gamut-luma,gamut-luma-rgb,gamut-amount,gamut-mix&name.gamut-limit=Limit&cables=avoid&marks=gamut-luma:above,gamut-amount:below,gamut-mix:above@saturation-mix",
     "saturation?focus=saturation-gamut-safe&only=gamut-chroma,gamut-chroma-max,gamut-chroma-up,gamut-chroma-min,gamut-chroma-negated,gamut-chroma-down,gamut-headroom,gamut-limit-up,gamut-limit-down,gamut-limit&name.gamut-luma-rgb=Grey RGB&name.gamut-luma=Grey&constants=hide&cables=avoid&marks=gamut-chroma:below,gamut-chroma-max:above,gamut-limit-up:above,gamut-limit:above@saturation-limit"

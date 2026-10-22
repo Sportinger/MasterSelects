@@ -117,25 +117,21 @@ Contrast works in two stages ([Color & Tone](../Effects-Color.md#the-shared-idea
 
 <div class="docs-shot-stage">
 
-![Inside the Contrast Curve block, its first half: the Amount from outside and a Value of 1 go into a Maximum, whose output is Steepness, and with a Value of 0 into Value, Max and Min of a Clamp, whose output is Flatten; a Value of 0.5 becomes an RGB colour through Scalar to RGB and goes into input A of a Mix, the RGB from outside into B and Flatten into T; the Mix output is the Flattened RGB](../assets/effects/graphs/contrast-flatten.webp)
+![Inside the Contrast Curve block, its first half: the Amount from outside and a Value of 1 go into a Maximum, whose output is Steepness; the Amount also goes into a Clamp between 0 and 1 (a Value of 0 as its Min, the Value of 1 as its Max), whose output is Flatten; a Value of 0.5 becomes an RGB colour through Scalar to RGB and goes into input A of a Mix, the RGB from outside into B and Flatten into T; the Mix output is the Flattened RGB](../assets/effects/graphs/contrast-flatten.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 590 933" aria-hidden="true" focusable="false">
 <defs><marker id="contrast-flatten-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M295 911 L295 827" marker-end="url(#contrast-flatten-arrow)" />
 <circle class="docs-shot-number" cx="295" cy="911" r="18" /><text x="295" y="911" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M295 347 L295 371" marker-end="url(#contrast-flatten-arrow)" />
-<circle class="docs-shot-number" cx="295" cy="347" r="18" /><text x="295" y="347" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M478 132 L478 216" marker-end="url(#contrast-flatten-arrow)" />
-<circle class="docs-shot-number" cx="478" cy="132" r="18" /><text x="478" y="132" class="docs-shot-number-text">3</text>
+<circle class="docs-shot-number" cx="478" cy="132" r="18" /><text x="478" y="132" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
-<figcaption>Inside Contrast Curve, the fade. 1 — Clamp: the Flatten share, between 0 and 1. 2 — Maximum: the Steepness, at least 1. 3 — Mix: between mid-grey and the picture.</figcaption>
+<figcaption>Inside Contrast Curve, the fade (the Maximum in the middle belongs to the S-curve below). 1 — Clamp: the Flatten share, between 0 and 1. 2 — Mix: between mid-grey and the picture.</figcaption>
 </figure>
 
 **Clamp** – keeps Amount between 0 and 1: how much of the picture's spread the fade keeps. From Amount 1 up it stays 1, so the fade does nothing. The 0 matters only when you drive the block yourself in an [Image graph](../Node-Workspace.md): a value below 0 gives plain grey, not a negative.
-
-**Maximum** – the larger of Amount and 1: the Steepness of the S-curve. Below Amount 1 it stays 1, so the curve does nothing.
 
 **Mix** – blends mid-grey (the Value 0.5) with the picture by the Flatten share: 1 is the picture as it is, 0.5 halfway to grey, 0 plain grey. Every tone moves the same way, so the shadows get no extra push and their noise stays as fine as it was. The result is the **Flattened RGB**.
 
@@ -163,7 +159,7 @@ Contrast works in two stages ([Color & Tone](../Effects-Color.md#the-shared-idea
 <figcaption>Inside Contrast Curve, the S-curve (Clamp's limits and the minimum slope are left out). 1 — Power: bends the shadow side; the Power above it does the same for the highlights. 2 — Divide: sets one against the other.</figcaption>
 </figure>
 
-**Power** – there are two, one per side. The lower one raises each colour channel to the Slope, the Steepness from the first half: a higher Slope pushes dark tones down. The upper one does the same for the channel's distance to white (Subtract: 1 minus the channel): a higher Slope pushes bright tones up.
+**Power** – there are two, one per side. The lower one raises each colour channel to the Slope. The Slope is the Steepness from the first half, where a Maximum takes the larger of Amount and 1: below Amount 1 it stays 1 and the curve does nothing. A higher Slope pushes dark tones down. The upper one does the same for the channel's distance to white (Subtract: 1 minus the channel): a higher Slope pushes bright tones up.
 
 **Divide** – divides the shadow side by the sum of both sides (**Add**). Black stays 0, white stays 1, mid-grey stays mid-grey, and the tones in between bend into an S. That is why Contrast never clips.
 

@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { COLOR_RECIPE, createDefaultColorEffectGraph, createFormerContrastGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
 import { flattenContrastGraph } from '../../src/services/operators/contrastFlattenUpgrade';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { effectPresentationPlan } from '../../src/services/operators/effectPresentationPlans';
-import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { effectOperatorGraph, migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { colorEffectGraphState } from '../../src/services/operators/colorEffectGraphState';
 import { createLegacyColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
@@ -15,7 +17,6 @@ import type { Layer } from '../../src/types/layers';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { COLOR_COMPOSITIONS } from '../../src/services/operators/colorCompositions';
 import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
-import { extractImageComposition } from '../../src/services/operators/extractImageComposition';
 import { effectRecipeFingerprint } from '../../src/services/operators/recipeFingerprint';
 import { FORMER_CONTRAST_FINGERPRINT } from '../../src/services/operators/contrastFlattenUpgrade';
 
@@ -50,30 +51,13 @@ function expectPixel(actual: number[], expected: number[], digits = 5) {
 const finite = (pixel: number[]) => pixel.every(Number.isFinite);
 
 /**
- * The former Contrast recipe as a Nodes-tab save stored it before the fade: the Contrast Curve block
- * packed into one instance whose nodeIds list the members the block had then (curve…, input and
- * their literals), next to a Parameters folder.
+ * The former Contrast recipe as projects store it: written by the base code (task/docs-site-plumbing,
+ * bcda4f064) through migratePersistedEffectOperatorGraph, which packs every recipe graph when a project
+ * is loaded and saved. The Contrast Curve block is one instance whose nodeIds list the members the block
+ * had then, next to the Parameters and Constants folders. Frozen: never regenerate it with today's code.
  */
-function packFormerContrast(): EffectOperatorGraph {
-  const former = createFormerContrastGraph();
-  const block = extractImageComposition(former, { id: 'color.contrast-curve.rgb', label: 'Contrast Curve', description: '', consumers: [],
-    members: former.nodes.filter(node => (/^curve/.test(node.id) || node.id === 'input') && !(node.operator === 'values.number' && node.constants)).map(node => node.id) });
-  const body = new Set(block.composition!.graph.nodes.map(node => node.id));
-  const instance = { id: 'contrast-curve', operator: block.id, operatorVersion: 1, bindings: {},
-    composition: { nodeIds: Object.fromEntries([...body].map(id => [id, id])), layout: block.composition!.graph.layout } };
-  const edges = new Map<string, EffectOperatorGraph['edges'][number]>();
-  for (const edge of former.edges) {
-    const inside = [body.has(edge.from), body.has(edge.to)];
-    if (inside[0] && inside[1]) continue;
-    const packed = inside[1] ? { ...edge, to: instance.id, input: `${edge.from}-${edge.output}` }
-      : inside[0] ? { ...edge, from: instance.id, output: `${edge.from}-${edge.output}` } : edge;
-    edges.set(`${packed.from}.${packed.output}>${packed.to}.${packed.input}`, { ...packed, id: `e${edges.size}` });
-  }
-  const parameters = former.nodes.filter(node => node.id.startsWith('amount')).map(node => node.id);
-  return { ...former, nodes: [...former.nodes.filter(node => !body.has(node.id)), instance], edges: [...edges.values()],
-    layout: { ...Object.fromEntries(Object.entries(former.layout).filter(([id]) => !body.has(id))), [instance.id]: { x: 600, y: 0 } },
-    groups: [{ id: 'parameters', label: 'Parameters', color: '#888', nodeIds: parameters }] };
-}
+const FORMER_CONTRAST_STORED = readFileSync(path.join(process.cwd(), 'tests', 'fixtures', 'contrast-former-recipe-stored.json'), 'utf8');
+const packFormerContrast = (): EffectOperatorGraph => JSON.parse(FORMER_CONTRAST_STORED);
 
 describe('rebuilt color effect recipes', () => {
   it.each(['brightness', 'contrast', 'saturation', 'vibrance', 'exposure', 'levels', 'hue-shift', 'temperature'] as const)(
@@ -133,13 +117,38 @@ describe('rebuilt color effect recipes', () => {
     expect(effectRecipeFingerprint(createFormerContrastGraph())).toBe(FORMER_CONTRAST_FINGERPRINT);
   });
 
-  it('upgrades a former Contrast packed by a Nodes-tab save, whose block instance lists only the former members', () => {
+  it('upgrades a former Contrast in the packed form a loaded and saved project stores, keeping card positions', () => {
     const packed = packFormerContrast();
+    expect(packed.schemaVersion).toBe(1);
+    expect(packed.nodes.some(node => node.composition && node.id === 'shared-curve-minimum-slope')).toBe(true);
     expect(effectRecipeFingerprint(packed)).not.toBe(FORMER_CONTRAST_FINGERPRINT);
     expect(colorEffectGraphState('contrast', packed)).toBe('recipe');
     expect(matchesEffectRecipe(flattenContrastGraph(packed), createDefaultColorEffectGraph('contrast'))).toBe(true);
-    const rendered = effectOperatorGraph({ id: 'fx', name: 'contrast', type: 'contrast', enabled: true, params: { amount: 0.3 }, operatorGraph: packFormerContrast() });
-    expectPixel(render('contrast', { amount: 0.3 }, [0.1, 0.1, 0.1, 1], rendered), [0.38, 0.38, 0.38, 1]);
+    const at = (amount: number) => effectOperatorGraph({ id: 'fx', name: 'contrast', type: 'contrast', enabled: true, params: { amount }, operatorGraph: packFormerContrast() });
+    // Below 1 an even fade: one 8-bit step keeps a gain of Amount (0.3), not about 40.
+    const step = (render('contrast', { amount: 0.3 }, [1 / 255, 1 / 255, 1 / 255, 1], at(0.3))[0] - render('contrast', { amount: 0.3 }, [0, 0, 0, 1], at(0.3))[0]) * 255;
+    expect(step).toBeCloseTo(0.3, 4);
+    expectPixel(render('contrast', { amount: 0.3 }, [0.1, 0.1, 0.1, 1], at(0.3)), [0.38, 0.38, 0.38, 1]);
+    // From 1 up the picture is the one the former recipe gave.
+    const former = createFormerContrastGraph();
+    for (const amount of [1, 1.5, 3]) for (const texel of TEXELS) expectPixel(render('contrast', { amount }, texel, at(amount)), render('contrast', { amount }, texel, former));
+    // A moved card and the moved block keep their places, through the upgrade and through a project load.
+    const moved = packFormerContrast();
+    moved.layout.frame = { x: 40, y: 10 };
+    moved.layout['shared-curve-minimum-slope'] = { x: 200, y: 900 };
+    const upgraded = flattenContrastGraph(moved);
+    expect(upgraded).not.toBe(moved);
+    expect(upgraded.layout.frame).toEqual({ x: 40, y: 10 });
+    const first = COLOR_COMPOSITIONS.find(definition => definition.id === 'color.contrast-curve.rgb')!.composition!.graph.nodes[0].id;
+    expect(upgraded.layout[first]).toEqual({ x: 200, y: 900 });
+    const loaded = migrateLoadedEffectOperatorGraph({ id: 'fx', name: 'contrast', type: 'contrast', enabled: true, params: { amount: 0.3 }, operatorGraph: moved });
+    expect(loaded.operatorGraph!.layout.frame).toEqual({ x: 40, y: 10 });
+    expect(colorEffectGraphState('contrast', loaded.operatorGraph!)).toBe('recipe');
+    // A user's own folder stays; the editor's stage folders are rebuilt for the new stage.
+    const foldered = packFormerContrast();
+    foldered.groups = [...(foldered.groups ?? []), { id: 'mine', label: 'Mine', color: '#888', nodeIds: ['frame', 'split'] }];
+    expect(flattenContrastGraph(foldered).groups?.find(group => group.id === 'mine')?.nodeIds).toEqual(['frame', 'split']);
+    expect(flattenContrastGraph(packFormerContrast()).groups ?? []).toEqual([]);
     // An edit outside the block is the author's work: kept and reported as edited (the block itself has the fade).
     const edited = packFormerContrast();
     edited.nodes.find(node => node.id === 'amount-render-max')!.constants = { value: 4 };

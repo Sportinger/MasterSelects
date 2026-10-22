@@ -6,7 +6,7 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot docs-compare">
 
-![The dancer on a dark stage, original left and with Vibrance at Amount 2 right: the blue side light and the warm haze around her deepen into strong colour, while her face and arms keep their natural tone and the pale dress turns only a little warmer](../assets/effects/vibrance.webp)
+![The dancer leaping in front of a green screen, original left and with Vibrance at Amount 2 right: the pale, washed-out green turns a strong, bright green and the darker green of the curtains and the floor deepens, while her skin turns only a little warmer and the white dress stays white](../assets/effects/vibrance.webp)
 
 <figcaption>Left: original. Right: Amount 2 (the Strong preset).</figcaption>
 </figure>
@@ -15,7 +15,7 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 - **Amount** – up for livelier colour, down for a muted look; skin moves least either way.
 
-**Tip:** for a close-up of a face, Vibrance is the safer push. For the same push on the background, [Saturation](./saturation.md) turns skin orange, Vibrance leaves it as it is. Drag the slider across her face:
+**Tip:** for a close-up of a face, Vibrance is the safer push. For the same push on the background, [Saturation](./saturation.md) turns skin orange, Vibrance warms it only a little. Drag the slider across her face:
 
 <figure class="docs-shot docs-compare" data-before="Saturation 2.2" data-after="Vibrance 2">
 
@@ -65,11 +65,11 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 **Preset** – one of the three starting points above; it sets Amount.
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/vibrance-amount.mp4" poster="../assets/effects/clips/vibrance-amount.webp" width="720" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage with Vibrance while Amount runs from −1 to 2 and back: at −1 the haze and the blue backlight turn almost grey while her skin keeps a little warmth, then the haze turns brown-orange, the backlight deep blue and her backlit hair glows orange, while her skin and the pale dress change far less; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/vibrance-amount.mp4" poster="../assets/effects/clips/vibrance-amount.webp" width="720" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage with Vibrance while Amount runs from −1 to 2 and back: at −1 the haze and the blue backlight turn almost grey; toward 2 the backlight turns a deep blue, the haze brown-orange and her backlit hair glows orange, and her skin and the pale dress warm a little too, because on a warm-lit stage Vibrance spares the warm haze like skin and acts much like a mild Saturation; the current value is shown at the bottom left"></video>
 <figcaption>Amount from −1 to 2 and back.</figcaption>
 </figure>
 
-**Amount** – how much livelier or quieter the colour gets. 0 leaves the picture as it is. Above 0 every colour grows stronger by how pale it is: a washed-out sky or a pale green screen gains a lot, a colour that is already strong gains little, and lit skin tones are spared most of it. Below 0 it works the other way round: pale colours fade toward grey first, and at −1 only the strongest colours keep much of theirs. Like [Saturation](./saturation.md), every colour stops at the strongest version the screen can show, so nothing clips and the brightness stays. Warm surfaces in bright light count as skin too, so on a stage lit in orange the push is weaker; use Saturation there. 1 is a clear push, 2 a strong one. −1 to 2, default 0. In the number field you can type up to 4 for an even stronger push; beyond that, and below −1, the picture uses the limit and the inspector says so.
+**Amount** – how much livelier or quieter the colour gets. 0 leaves the picture as it is. Above 0 every colour grows stronger by how pale it is: a washed-out sky or a pale green screen gains a lot, a colour that is already strong gains little, and lit skin tones are spared most of it. Below 0 it works the other way round: pale colours fade toward grey first, and at −1 only the strongest colours keep much of theirs. Like [Saturation](./saturation.md), every colour stops at the strongest version the screen can show, so nothing clips and the brightness stays. Warm surfaces in bright light count as skin too: on a stage lit in orange, like the one in the loop, the warm haze is spared like skin, and Vibrance acts much like a mild Saturation. Use Saturation there for a stronger push. 1 is a clear push, 2 a strong one. −1 to 2, default 0. In the number field you can type up to 4 for an even stronger push; beyond that, and below −1, the picture uses the limit and the inspector says so.
 
 <div class="docs-float-end"></div>
 

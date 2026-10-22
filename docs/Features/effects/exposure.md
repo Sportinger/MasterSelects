@@ -110,7 +110,7 @@ Pick one in the **Preset** row of the effect card. It sets Exposure, Offset and 
 <figcaption>Exposure opened in the Nodes tab (the Constants folder left out). 1 — Parameters: the three controls, kept within their ranges. 2 — Exposure (Stops): changes the light. 3 — Offset & Gamma: lifts the tones and bends the mid-tones. 4 — Clamp & Alpha: keeps the colour within 0 to 1 and puts the transparency back.</figcaption>
 </figure>
 
-Exposure works in four stages, one folder each in the Nodes tab: **Parameters** holds the three controls, **Exposure (Stops)** changes the light, **Offset & Gamma** shapes the tones on the screen colours, and **Clamp & Alpha** finishes. **Split RGB + Alpha** takes the transparency aside first. Every colour effect has this shape ([Color & Tone](../Effects-Color.md#the-shared-idea)). Click a folder's header to open it; the sections below show what is inside.
+Exposure works in four stages ([Color & Tone](../Effects-Color.md#the-shared-idea) shows the shape all colour effects share), one folder each in the Nodes tab: **Parameters** holds the three controls, **Exposure (Stops)** changes the light, **Offset & Gamma** shapes the tones on the screen colours, and **Clamp & Alpha** finishes. **Split RGB + Alpha** takes the transparency aside first. Click a folder's header to open it; the sections below show what is inside.
 
 ### Parameters
 
@@ -226,7 +226,7 @@ Exposure works in four stages, one folder each in the Nodes tab: **Parameters** 
 <figcaption>Inside Clamp & Alpha. 1 — Clamp: keeps each channel between 0 and 1.</figcaption>
 </figure>
 
-**Clamp** – keeps each colour channel between **Clamp Low** (0) and **Clamp High** (1). This is where bright tones burn out to white: a channel that has gone past 1 stays at 1.
+**Clamp** – keeps each colour channel between 0 and 1 (its Clamp Low and Clamp High cards). This is where bright tones burn out to white: a channel that has gone past 1 stays at 1.
 
 **Combine RGB + Alpha** then puts the original transparency back, untouched.
 

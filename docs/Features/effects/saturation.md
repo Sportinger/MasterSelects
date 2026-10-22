@@ -80,18 +80,16 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 <defs><marker id="saturation-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M427 442 L427 358" marker-end="url(#saturation-arrow)" />
 <circle class="docs-shot-number" cx="427" cy="442" r="18" /><text x="427" y="442" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M427 22 L427 83" marker-end="url(#saturation-arrow)" />
-<circle class="docs-shot-number" cx="427" cy="22" r="18" /><text x="427" y="22" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M589 22 L589 99" marker-end="url(#saturation-arrow)" />
-<circle class="docs-shot-number" cx="589" cy="22" r="18" /><text x="589" y="22" class="docs-shot-number-text">3</text>
+<circle class="docs-shot-number" cx="589" cy="22" r="18" /><text x="589" y="22" class="docs-shot-number-text">2</text>
 </svg>
 
 </div>
 
-<figcaption>Saturation opened in the Nodes tab (the Constants folder left out). 1 — Parameters: Amount, kept within its range. 2 — Clamp: keeps the colour within 0 to 1. 3 — Saturation (Gamut-Safe): mixes between grey and colour, never past the edge.</figcaption>
+<figcaption>Saturation opened in the Nodes tab (the Constants folder left out). 1 — Parameters: Amount, kept within its range. 2 — Saturation (Gamut-Safe): mixes between grey and colour, never past the edge.</figcaption>
 </figure>
 
-Saturation works in three steps: **Parameters** holds Amount, **Clamp** keeps each colour channel of the picture between 0 and 1, and the block **Saturation (Gamut-Safe)** does the work. **Split RGB + Alpha** takes the transparency aside first and **Combine RGB + Alpha** puts it back untouched. Every colour effect has this shape ([Color & Tone](../Effects-Color.md#the-shared-idea)). Click a folder's header to open it; the sections below show what is inside. The same block is in **right-click → Reusable Nodes**, and [Vibrance](./vibrance.md) uses it too.
+Saturation works in three steps ([Color & Tone](../Effects-Color.md#the-shared-idea) shows the shape all colour effects share): **Parameters** holds Amount, a Clamp keeps each colour channel of the picture between 0 and 1, and the block **Saturation (Gamut-Safe)** does the work. **Split RGB + Alpha** takes the transparency aside first and **Combine RGB + Alpha** puts it back untouched. Click a folder's header to open it; the sections below show what is inside. The same block is in **right-click → Reusable Nodes**, and [Vibrance](./vibrance.md) uses it too.
 
 ### Parameters
 

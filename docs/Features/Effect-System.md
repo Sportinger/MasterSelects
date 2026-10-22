@@ -517,7 +517,8 @@ bypasses the RGB math. New instances (since the 2026-10 rebuild,
   0..1 (driven below 0 in an Image graph it gives plain grey). Before this fix the S-curve ran
   below 1 too, an inverse S with an infinite slope at black and white that turned one
   8-bit shadow step into about 40 at Amount 0.3; saved graphs of that recipe, plain or packed
-  by a Nodes-tab save, are recognised by a frozen fingerprint and upgraded on load
+  (when a project is loaded and saved, or by a Nodes-tab edit), are recognised by a frozen
+  fingerprint and upgraded on load with their card positions and the user's own folders
   (`contrastFlattenUpgrade.ts`; not when a folder is bypassed or the graph is incomplete),
   identical from Amount 1 up, and saved instances of the block get the fade under their
   unchanged ports.

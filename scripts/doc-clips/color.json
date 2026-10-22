@@ -11,7 +11,7 @@
       "alt": "The dancer turning on a dark stage with Contrast while Amount runs from 0.4 to 1.8 and back: at first the whole stage is a pale, misty grey, then the haze sinks into black while the dress and skin glow brighter and warmer, and back to the grey veil; the current value is shown at the bottom left",
       "caption": "Amount from 0.4 to 1.8 and back." },
     { "name": "exposure-exposure", "effect": "exposure", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
-      "sweep": { "param": "exposure", "label": "Exposure", "from": -2, "to": 2, "unit": " EV", "decimals": 0 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
+      "sweep": { "param": "exposure", "label": "Exposure", "from": -2, "to": 2, "unit": " EV", "decimals": 1 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
       "alt": "The dancer turning on a dark stage with Exposure while it runs from −2 to +2 EV and back: first she is a dim figure in the dark, then the light comes up evenly over the whole stage until the haze glows and the brightest folds of her dress burn out to white; the current value is shown at the bottom left",
       "caption": "Exposure from −2 to +2 EV and back." },
     { "name": "levels-gamma", "effect": "levels", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
@@ -24,7 +24,7 @@
       "caption": "Amount from 0 to 1.8 and back." },
     { "name": "vibrance-amount", "effect": "vibrance", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
       "sweep": { "param": "amount", "label": "Amount", "from": -1, "to": 2, "decimals": 1 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
-      "alt": "The dancer turning on a dark stage with Vibrance while Amount runs from −1 to 2 and back: at −1 the haze and the blue backlight turn almost grey while her skin keeps a little warmth, then the haze turns brown-orange, the backlight deep blue and her backlit hair glows orange, while her skin and the pale dress change far less; the current value is shown at the bottom left",
+      "alt": "The dancer turning on a dark stage with Vibrance while Amount runs from −1 to 2 and back: at −1 the haze and the blue backlight turn almost grey; toward 2 the backlight turns a deep blue, the haze brown-orange and her backlit hair glows orange, and her skin and the pale dress warm a little too, because on a warm-lit stage Vibrance spares the warm haze like skin and acts much like a mild Saturation; the current value is shown at the bottom left",
       "caption": "Amount from −1 to 2 and back." }
   ]
 }
