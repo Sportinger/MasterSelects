@@ -350,7 +350,10 @@ No editor control mounts `SplitCompareOverlay` (`src/components/preview/SplitCom
 ### Glyph, Cell, And Compute Effects
 
 Glyph effects share one exact cell-grid model, curated ASCII ramps, and a
-generated glyph atlas cached beside the effect runtime. The same grid contract
+generated glyph atlas cached beside the effect runtime (`_shared/glyphAtlas.ts`: least
+recently used atlases go first, 16 per device and 128 MB; when frames use more atlases at
+once, the device raises its count up to 64 and logs it instead of rebuilding them every
+frame, and says so once if the byte budget still forces rebuilds). The same grid contract
 drives rendering and artifact export, so the exported rows match the visible
 cell selection instead of approximating it independently.
 All 18 glyph variants store that shared pipeline as editable generic graphs.
@@ -567,7 +570,8 @@ or Time with a Value node bound to a keyframed integrating parameter compiles to
 distance travelled on that clock (`geometryRateTravel.ts`, supplied by the strand layer
 source and the node previews), so a keyed Weave Speed or Pulse Rate eases instead of
 jumping. The clip clock runs in source time (speed, reversal, trim), so its travel is
-scaled by that clock's rate.
+scaled by that clock's rate. A rate that a node source or the Constant mode drives keeps
+rate × time there too, logged once like the image path.
 
 A parameter added after instances were saved can declare `legacyDefault`: what a saved
 instance without it renders. Renderers, keyframe base values and the inspector

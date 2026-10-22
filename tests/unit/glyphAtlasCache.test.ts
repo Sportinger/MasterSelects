@@ -65,4 +65,23 @@ describe('glyph atlas cache', () => {
     releaseGlyphAtlasesForDevice(device);
     releaseGlyphAtlasesForDevice(huge.device);
   });
+
+  it('raises a device limit instead of rebuilding atlases every frame when more are in use at once, and says so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const { device, created } = fakeDevice();
+      const limit = GLYPH_ATLAS_CACHE_LIMIT.atlases;
+      // A look grid with 20 ramps on screen: frame after frame asks for the same 20 atlases.
+      const frame = () => { for (let index = 0; index < limit + 4; index += 1) getGlyphAtlas(device, options(`grid-${index}`)); };
+      frame();
+      frame();
+      // The second frame notices the thrash at its first atlas and keeps all 20 from then on.
+      const afterTwo = created.mock.calls.length;
+      frame();
+      frame();
+      expect(created.mock.calls.length).toBe(afterTwo);
+      expect(warn.mock.calls.some(call => call.join(' ').includes(`now keeps up to ${limit * 2}`))).toBe(true);
+      releaseGlyphAtlasesForDevice(device);
+    } finally { warn.mockRestore(); }
+  });
 });
