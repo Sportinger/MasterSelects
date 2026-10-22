@@ -65,7 +65,8 @@ const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 export function snapshotRegistry(api) {
   const byId = new Map(api.effects.map((effect) => [effect.id, effect]));
   const groupOf = new Map(api.groups.flatMap((group) => group.effects.map((id) => [id, group.id])));
-  const keys = (effect) => Object.keys(effect.params ?? {}).toSorted().join(',');
+  // The Style menu rule (src/services/effects/effectStyles.ts): a parameter two looks share is of the same kind.
+  const sameKinds = (effect, other) => Object.entries(effect.params ?? {}).every(([key, param]) => !other.params?.[key] || other.params[key].type === param.type);
   const groups = api.groups.map((group) => ({ id: group.id, label: group.label, effects: group.effects.filter((id) => byId.has(id)) }));
   const ungrouped = api.effects.filter((effect) => !groupOf.has(effect.id)).map((effect) => effect.id);
   if (ungrouped.length) groups.push({ id: 'other', label: 'Other', effects: ungrouped });
@@ -73,7 +74,7 @@ export function snapshotRegistry(api) {
   const effects = order.map((id) => {
     const effect = byId.get(id);
     const engine = api.engineOf(id);
-    const styles = engine ? api.engineMembers(engine).filter((member) => member !== id && byId.has(member) && keys(byId.get(member)) === keys(effect)) : [];
+    const styles = engine ? api.engineMembers(engine).filter((member) => member !== id && byId.has(member) && sameKinds(effect, byId.get(member))) : [];
     const describe = ([key, param]) => ({
         key,
         label: param.label,
@@ -523,7 +524,7 @@ const ENGINE_LABELS = {
 /**
  * A basic page for an effect without a hand-written page. ctx: { groupLabel (the sidebar label, joined
  * groups as "Keying & Time"), overview (file relative to docs/Features or undefined), still (its Effect Lab
- * still, asset path, or undefined), stillSize (its pixel size: a compare pair gets a compare slider), names (id → name), hasPage(id) (whether effects/<id>.md exists, for
+ * still, asset path, or undefined), stillSize (its pixel size: a compare pair gets a compare slider), names (id → name), groupOf(id) (its picker group), hasPage(id) (whether effects/<id>.md exists, for
  * links to the other styles) }. The marker under the title carries the hash of the rest of the page.
  */
 export function basicPage(effect, ctx) {
@@ -544,8 +545,12 @@ export function basicPage(effect, ctx) {
   }
   parts.push(`## Controls\n\n${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`);
   if (effect.styles.length) {
-    const names = effect.styles.map((id) => (ctx.hasPage?.(id) ? `[${ctx.names.get(id) ?? id}](./${id}.md)` : ctx.names.get(id) ?? id));
-    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: ${names.join(', ')}.`);
+    // The looks of the effect's own picker group by name, the rest of the engine as a count.
+    const near = effect.styles.filter((id) => ctx.groupOf?.(id) === effect.group);
+    const shown = near.length ? near : effect.styles, more = effect.styles.length - shown.length;
+    const names = shown.map((id) => (ctx.hasPage?.(id) ? `[${ctx.names.get(id) ?? id}](./${id}.md)` : ctx.names.get(id) ?? id));
+    const rest = more ? `, and ${more} more ${more === 1 ? 'look' : 'looks'} from other groups` : '';
+    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: ${names.join(', ')}${rest}.`);
   }
   const details = [];
   if (effect.engine) details.push(`${effect.name} is one look of ${ENGINE_LABELS[effect.engine] ?? `the ${effect.engine} engine`}; its looks share one node setup.`);
@@ -588,6 +593,7 @@ export function planEffectDocs(snapshot, files, { basic = [] } = {}) {
     still: files.exists(effectAssets(effect.id).still) ? effectAssets(effect.id).still : undefined,
     stillSize: files.exists(effectAssets(effect.id).still) ? files.size(effectAssets(effect.id).still) : undefined,
     names,
+    groupOf: (id) => byId.get(id)?.group,
     hasPage: (id) => pageIds.has(id),
   });
   for (const id of files.pages) {

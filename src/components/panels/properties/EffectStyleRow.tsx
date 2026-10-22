@@ -9,7 +9,7 @@ export function EffectStyleRow({ clipId, effect }: { clipId: string; effect: { i
   const [message, setMessage] = useState('');
   const options = effectStyleOptions(effect.type);
   if (options.length < 2) return null;
-  return <div className="effect-style-row" title={effect.operatorGraph ? 'Switching the style resets edits to this effect\'s node graph' : 'Same controls and keyframes, different look'}>
+  return <div className="effect-style-row" title={effect.operatorGraph ? 'Switching the style resets edits to this effect\'s node graph' : 'Shared controls and keyframes carry over, different look'}>
     <ResolveInspectorRow label="Style">
       <InspectorSelect ariaLabel="Effect style" value={effect.type} options={options} onChange={type => {
         try { changeEffectStyle(clipId, effect.id, type); setMessage(''); }

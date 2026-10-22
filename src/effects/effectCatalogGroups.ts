@@ -29,12 +29,13 @@ export function effectGroup(effectId: string): { id: EffectGroupId | 'other'; la
 }
 
 /**
- * Looks rendered by one shared engine. Effects of an engine with identical
- * parameters are "styles": the inspector can switch between them in place.
+ * Looks rendered by one shared engine. They are "styles" of each other: the inspector can switch
+ * between them in place (services/effects/effectStyles.ts).
  */
 const ENGINES: Record<string, readonly string[]> = {
   'two-tone-pattern': ['drift-lines', 'glitch-grid', 'riso-glow', 'scatter-mosaic', 'crt-screen', 'crystal', 'film-prism', 'glass-dispersion', 'glitch', 'holo', 'ribbon-scan', 'wave-lines', 'bricks', 'embroidery', 'outline',
-    'cross-stitch', 'dither', 'halftone', 'paper-print', 'pixel-poster', 'riso', 'contour-map', 'crosshatch', 'kilim', 'vector-tiling'],
+    'cross-stitch', 'dither', 'halftone', 'paper-print', 'pixel-poster', 'riso', 'contour-map', 'crosshatch', 'kilim', 'vector-tiling',
+    'dither-studio', 'pattern-halftone', 'tone-geometry'],
   'glyph-mosaic': ['ascii', 'brand-generator', 'grid-glyph', 'inscribe', 'number-field', 'pixel-code', 'stitch-poster', 'word-mosaic', 'contour-type',
     'capsule-cloud', 'data-hatch', 'dither-text', 'glyph-matrix', 'matrix', 'pixel-dither', 'retro-matrix', 'symbol-matrix', 'ui-collage'],
   'tracking-overlay': ['cctv', 'hud-tracker', 'rain-reveal', 'stardust', 'tracked-scene'],

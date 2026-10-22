@@ -308,9 +308,11 @@ Effects are grouped by look in `src/effects/effectCatalogGroups.ts` (Color & Ton
 Blur & Sharpen, Light & Stylize, Lens & Distort, Pixel & Mosaic, Print & Halftone,
 Lines & Engraving, Textile & Craft, Text & Glyph, Analog & Glitch, Keying, Time,
 Tracking & Overlays, 3D & Particles); the registry `category` stays internal.
-Looks of one engine with identical parameters are styles: the Effects tab shows a
-**Style** selector that switches in place and keeps the effect ID, values and
-keyframes (a customized node graph restarts from the new look's default). Rom1, the
+Looks of one engine are styles of each other: the Effects tab shows a **Style**
+selector that switches in place and keeps the effect ID and the values and keyframes
+of the controls both looks have. A control only the new look has starts at its
+default; one only the old look has keeps its value for a switch back (a customized
+node graph restarts from the new look's default). Rom1, the
 watery-smoke look, is its own effect again since Acuarela became a watercolour.
 Audio effects use six groups: Level & Channels, EQ & Filter, Dynamics, Repair,
 Time & Space, Character & Advanced.

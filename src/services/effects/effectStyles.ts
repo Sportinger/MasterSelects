@@ -7,21 +7,28 @@ import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/ex
 import { EFFECT_GRAPH_PARAM } from '../operators/effectGraph';
 import { startBatch, endBatch } from '../../stores/historyStore';
 
-const parameterKeys = (type: string) => Object.keys(getEffect(type)?.params ?? {}).toSorted().join(',');
+const paramsOf = (type: string) => getEffect(type)?.params ?? {};
 
 /**
- * Other looks of the same engine with exactly the same parameters. Switching
- * keeps every value and keyframe, because parameter IDs are identical.
+ * Other looks of the same engine. Every look of an engine has the engine's base parameters, and a
+ * parameter two looks both have must be of the same kind, so switching keeps those values and
+ * keyframes. A look's own controls (a Speed, a Shape) keep their stored value for a switch back.
  */
 export function effectStyleOptions(type: string): Array<{ value: string; label: string }> {
   const engine = effectEngine(type);
-  if (!engine) return [];
-  const keys = parameterKeys(type);
-  return effectEngineMembers(engine).filter(member => getEffect(member) && parameterKeys(member) === keys)
-    .map(member => ({ value: member, label: getEffect(member)!.name }));
+  const own = paramsOf(type);
+  if (!engine || !getEffect(type)) return [];
+  return effectEngineMembers(engine).filter((member) => {
+    const other = getEffect(member)?.params;
+    return !!other && Object.entries(own).every(([key, param]) => !other[key] || other[key].type === param.type);
+  }).map(member => ({ value: member, label: getEffect(member)!.name }));
 }
 
-/** Replaces the look in place: same effect ID, stack position, parameters and keyframes; one undo step. */
+/**
+ * Replaces the look in place: same effect ID, stack position, parameters and keyframes; one undo
+ * step. Controls only the new look has start at its defaults (not a saved-project fallback), and a
+ * choice the new look does not offer falls back to its default.
+ */
 export function changeEffectStyle(clipId: string, effectId: string, type: string): void {
   assertExclusiveTimelineMutationAllowed();
   const state = readTimelineRuntimeState(useTimelineStore);
@@ -31,6 +38,11 @@ export function changeEffectStyle(clipId: string, effectId: string, type: string
   if (!effectStyleOptions(effect.type).some(option => option.value === type)) throw new Error(`${type} is not a style of ${effect.type}.`);
   // A customized node graph belongs to the previous look; the new style starts from its own default graph.
   const params = Object.fromEntries(Object.entries(effect.params).filter(([key]) => key !== EFFECT_GRAPH_PARAM));
+  for (const [key, param] of Object.entries(paramsOf(type))) {
+    const stored = params[key];
+    const offered = param.type !== 'select' || param.options?.some(option => option.value === stored);
+    if (stored === undefined || !offered) params[key] = param.default;
+  }
   const next: Effect = { ...effect, type: type as Effect['type'], params, operatorGraph: undefined,
     name: effect.name === effect.type || effect.name === getEffect(effect.type)?.name ? type : effect.name };
   const batch = startBatch('Change effect style');

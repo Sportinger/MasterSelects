@@ -122,7 +122,7 @@ opens that node in the Nodes tab. More: [Parameter sources](./Node-Workspace.md#
 
 **Styles.** Many print, line, textile and text effects are looks of one shared engine. Their card
 has a **Style** menu at the top: it switches to another look and keeps your settings and
-keyframes.
+keyframes. A control the new look adds starts at its default.
 
 **Presets.** Effects that come with presets have a **Preset** row under **Style**. A preset is a
 named starting point: it sets all controls of the card at once, and one undo takes it back. A control
