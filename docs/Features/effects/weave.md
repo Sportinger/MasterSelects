@@ -76,7 +76,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Weave Speed 0.5, 1 and 2.5, each from the clip start.</figcaption>
 </figure>
 
-**Weave Speed** – how fast the threads are pulled into the sheet, warps first, then the wefts row by row. At 1 the net is finished after four seconds, at 2.5 after about one and a half, at 0.5 after eight; at 0 the sheet stays empty. The weave runs with the playhead from the start of the clip, so scrubbing and the export show the same moment. Keyframing it makes the net jump, because the speed multiplies the time since the clip started: to start later, move the clip. 0 to 10, default 1.
+**Weave Speed** – how fast the threads are pulled into the sheet, warps first, then the wefts row by row. At 1 the net is finished after four seconds, at 2.5 after about one and a half, at 0.5 after eight; at 0 the sheet stays empty. The weave runs with the playhead from the start of the clip, so scrubbing and the export show the same moment. Keyframe it to speed the weave up or slow it down: the net keeps the threads it already has and goes on at the new speed, without a jump, and a key at 0 pauses it. To start later, move the clip. 0 to 10, default 1.
 
 <div class="docs-float-end"></div>
 
@@ -120,7 +120,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Pulse Rate 0, 0.4 and 1.2 Hz, side by side.</figcaption>
 </figure>
 
-**Pulse Rate** – how often the bell contracts, in pulses per second. 0.4 is a slow, calm breath, about one pulse every two and a half seconds; 1.2 and more looks hurried. At 0 the jellyfish holds still and only its ribbons drift. Like Weave Speed, it multiplies the time since the clip started, so keyframing it makes the pulse jump. 0 to 2 Hz, default 0.4 Hz.
+**Pulse Rate** – how often the bell contracts, in pulses per second. 0.4 is a slow, calm breath, about one pulse every two and a half seconds; 1.2 and more looks hurried. At 0 the jellyfish holds still and only its ribbons drift. Like Weave Speed, it can be keyframed: the pulse speeds up or slows down from where it is, without a jump. 0 to 2 Hz, default 0.4 Hz.
 
 <div class="docs-float-end"></div>
 
@@ -414,8 +414,8 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 618" aria-hidden="true" focusable="false">
 <defs><marker id="weave-upright-pose-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M81 177 L177 139" marker-end="url(#weave-upright-pose-arrow)" />
-<circle class="docs-shot-number" cx="81" cy="177" r="18" /><text x="81" y="177" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M146 170 L175 150" marker-end="url(#weave-upright-pose-arrow)" />
+<circle class="docs-shot-number" cx="146" cy="170" r="18" /><text x="146" y="170" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M504 567 L426 567" marker-end="url(#weave-upright-pose-arrow)" />
 <circle class="docs-shot-number" cx="504" cy="567" r="18" /><text x="504" y="567" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M665 442 L665 358" marker-end="url(#weave-upright-pose-arrow)" />
@@ -440,6 +440,7 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 
 - **Size.** The sheet is 1.6 × 0.96 scene units, about two thirds of the frame wide with the default camera; the Qualle stands about three quarters of the frame tall. Scale and move them with the clip's Transform.
 - **Time.** Weave runs in the time of its clip: the weave-in, the wind and the pulse start at the clip's start, and trimming or splitting the clip continues the motion instead of restarting it. Preview, scrubbing and export show the same frame for the same moment.
+- **Keyframed speeds.** With keyframes, Weave Speed and Pulse Rate count the threads and pulses already made, so a ramp eases from where the weave or the pulse is instead of jumping. While a node or the Constant mode drives one of them, it runs at that value times the clip time, and the log says so.
 - **Transparency.** The threads are drawn as an extra 3D layer above the clip with the clip's transform and blend mode; around them the clip shows through. On a transparent clip only the threads remain.
 - **Saved projects.** A Weave keeps the graph it was saved with. While that graph is one of the two forms as they are now, Form keeps working, and moving cards, renaming or folding folders in the Nodes tab is kept until you switch Form. Once you change the node setup in the Nodes tab, or switch a folder off with the switch in its card section, the graph is the Weave's own: Form leaves the card and only the controls that graph uses stay. Weaves saved before Form existed keep their look this way, with their Reveal, Weave Speed and Irregularity. Such a Weave, or one built from another built-in graph such as Jellyfish, has no Form, so the presets can change little or nothing on it; the card says so. Its Preset row may still name a preset (often Burlap) when none of that preset's controls is on the card. Its own exposed values keep the graph's names and ranges.
 - **3D scene.** After adding the effect the preview can show "Preparing 3D scene" for a few seconds.

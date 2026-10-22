@@ -164,12 +164,12 @@ The folded **Simulation status** section shows how much memory the swarm needs a
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 385" aria-hidden="true" focusable="false">
 <defs><marker id="flocking-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M395 261 L375 243" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="395" cy="261" r="18" /><text x="395" y="261" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M482 316 L420 224" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="482" cy="316" r="18" /><text x="482" y="316" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M228 317 L228 274" marker-end="url(#flocking-arrow)" />
 <circle class="docs-shot-number" cx="228" cy="317" r="18" /><text x="228" y="317" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M300 69 L274 78" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="300" cy="69" r="18" /><text x="300" y="69" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M262 22 L262 50" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="262" cy="22" r="18" /><text x="262" y="22" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M509 54 L509 138" marker-end="url(#flocking-arrow)" />
 <circle class="docs-shot-number" cx="509" cy="54" r="18" /><text x="509" y="54" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M649 62 L649 146" marker-end="url(#flocking-arrow)" />

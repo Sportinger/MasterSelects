@@ -728,7 +728,8 @@ Geometry graphs (Weave) reach the same rule in their compiler: a Multiply of Cli
 or Time with a Value node bound to a keyframed integrating parameter compiles to the
 distance travelled on that clock (`geometryRateTravel.ts`, supplied by the strand layer
 source and the node previews), so a keyed Weave Speed or Pulse Rate eases instead of
-jumping. The clip clock runs in source time (speed, reversal, trim), so its travel is
+jumping: Weave declares both (`weave_value` as `weaveTravel`, `pulse-rate_value` as
+`pulseTravel`, `src/effects/generate/weave/index.ts`; `geometryRateTravel.test.ts`). The clip clock runs in source time (speed, reversal, trim), so its travel is
 scaled by that clock's rate. A geometry graph reads a value that a node source or the
 Constant mode drives, not its keyframes (`keyframesBindingsLeave` leaves those keys out
 for the parameter reader, the travel and the Weave node previews), so a driven rate runs

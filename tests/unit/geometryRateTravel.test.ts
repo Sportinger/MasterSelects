@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { getEffect } from '../../src/effects';
-import type { EffectParam } from '../../src/effects/types';
+import { effectRateTravelParams, getDefaultParams } from '../../src/effects';
+import { WEAVE_PULSE_TRAVEL, WEAVE_SPEED_TRAVEL } from '../../src/effects/generate/weave';
 import { evaluateGeometryProgram } from '../../src/services/operators/geometry/geometryEvaluation';
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { geometryRateTravel, keyframesBindingsLeave } from '../../src/services/operators/geometry/geometryRateTravel';
@@ -66,9 +66,6 @@ describe('integrated rates in geometry graphs', () => {
   it('weaves at the value a node or the Constant mode gives a keyed Weave Speed, not at its keyframes', async () => {
     const { vi } = await import('vitest');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const definition = getEffect('weave')! as { params: Record<string, EffectParam> };
-    const params = definition.params;
-    definition.params = { ...params, weave_value: { type: 'number', label: 'Weave Speed', default: 1, min: 0, max: 10, step: 0.05, integratedAs: 'weaveTravel' } };
     try {
       const graph = flatWeave();
       // Keys 0 → 0.4 over two seconds read 0.2 at one second; the binding says 0.3.
@@ -84,7 +81,7 @@ describe('integrated rates in geometry graphs', () => {
       node.constants = { value: 0.6 };
       expect(strands({ 'effect.fx.weave_value': { source: { nodeId: 'level', portId: 'value' } } }, [node])).toEqual(radiusAt(graph, 1, 0.6));
       expect(radiusAt(graph, 1, 0.3)).not.toEqual(radiusAt(graph, 1, 0.2));
-    } finally { definition.params = params; warn.mockRestore(); }
+    } finally { warn.mockRestore(); }
   });
 
   it('lowers Clip Time × a travelling rate in the Weave In progress to the travelled distance', () => {
@@ -96,18 +93,35 @@ describe('integrated rates in geometry graphs', () => {
     expect(Array.from(withTravel)).not.toEqual(radiusAt(graph, 1, 9));
   });
 
-  it('weaves smoothly under a keyframed Weave Speed when it integrates (as Weave on its own branch declares)', () => {
-    const definition = getEffect('weave')! as { params: Record<string, EffectParam> };
-    const params = definition.params;
-    definition.params = { ...params, weave_value: { type: 'number', label: 'Weave Speed', default: 1, min: 0, max: 10, step: 0.05, integratedAs: 'weaveTravel' } };
-    try {
-      const graph = flatWeave();
-      const effect: Effect = { id: 'fx', type: 'weave', name: 'Weave', enabled: true, operatorGraph: graph, params: { weave_value: 1 } };
-      const clip = { id: 'clip', effects: [effect], startTime: 0 };
-      const keys = [key('fx', 'weave_value', 0, 0), key('fx', 'weave_value', 2, 4)];
-      const [source] = buildStrandsLayerSources(clip, 1, keys);
-      // At one second the ramp has travelled 1 (Weave Speed 1 for one second), not 2 × 1.
-      expect(Array.from(evaluateGeometryProgram(source.source.strands.program).radius!)).toEqual(radiusAt(graph, 1, 1));
-    } finally { definition.params = params; }
+  it('declares Weave Speed and Pulse Rate as integrating rates of Weave', () => {
+    expect(effectRateTravelParams('weave')).toEqual([['weave_value', WEAVE_SPEED_TRAVEL], ['pulse-rate_value', WEAVE_PULSE_TRAVEL]]);
+  });
+
+  it('weaves smoothly under a keyframed Weave Speed', () => {
+    const graph = flatWeave();
+    const effect: Effect = { id: 'fx', type: 'weave', name: 'Weave', enabled: true, operatorGraph: graph, params: { weave_value: 1 } };
+    const clip = { id: 'clip', effects: [effect], startTime: 0 };
+    const keys = [key('fx', 'weave_value', 0, 0), key('fx', 'weave_value', 2, 4)];
+    const [source] = buildStrandsLayerSources(clip, 1, keys);
+    // At one second the ramp has travelled 1 (Weave Speed 1 for one second), not 2 × 1.
+    expect(Array.from(evaluateGeometryProgram(source.source.strands.program).radius!)).toEqual(radiusAt(graph, 1, 1));
+    expect(Array.from(evaluateGeometryProgram(source.source.strands.program).radius!)).not.toEqual(radiusAt(graph, 1, 2));
+  });
+
+  it('pulses the Qualle smoothly under a keyframed Pulse Rate', () => {
+    const effect: Effect = { id: 'fx', type: 'weave', name: 'Weave', enabled: true, params: { ...getDefaultParams('weave'), form: 'qualle' } };
+    const clip = { id: 'clip', effects: [effect], startTime: 0 };
+    const positionsAt = (keys: Keyframe[], rate = 0.4) => {
+      const [source] = buildStrandsLayerSources({ ...clip, effects: [{ ...effect, params: { ...effect.params, 'pulse-rate_value': rate } }] }, 1, keys);
+      return Array.from(evaluateGeometryProgram(source.source.strands.program).positions);
+    };
+    // 0 → 1.6 Hz over two seconds: after one second the bell has run 0.4 pulses (∫ 0.8 t dt), where
+    // rate × time would put it at 0.8 pulses, a jump as soon as the rate is keyed.
+    const keyed = positionsAt([key('fx', 'pulse-rate_value', 0, 0), key('fx', 'pulse-rate_value', 2, 1.6)]);
+    // Compared by the largest point offset: the arrays hold tens of thousands of coordinates.
+    const offset = (other: number[]) => other.length === keyed.length
+      ? other.reduce((largest, value, index) => Math.max(largest, Math.abs(value - keyed[index])), 0) : Infinity;
+    expect(offset(positionsAt([], 0.4))).toBe(0);
+    expect(offset(positionsAt([], 0.8))).toBeGreaterThan(1e-3);
   });
 });

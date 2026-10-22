@@ -233,7 +233,10 @@ Reveal, Weave Speed and Irregularity keep their Value nodes, exposed under the s
 parameter keys (`reveal_value`, …), so saved graphs, keyframes and node drivers keep
 working; the card shows each key once. A bound value missing from saved params renders
 the node's own value (`geometryParameterReader`), so a Weave saved before Wind and Color
-were bound keeps its 0.35 wind and grey wool.
+were bound keeps its 0.35 wind and grey wool. Weave Speed and Pulse Rate are integrating
+rates (`integratedAs`): while one has keyframes, its Clip Time × rate Multiply compiles to the
+distance the rate has travelled (`geometryRateTravel.ts`, see
+[Effect System](./Effect-System.md)), so a keyed ramp eases instead of jumping.
 
 ### Qualle form
 

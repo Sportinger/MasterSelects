@@ -11,19 +11,29 @@ import { generatorChoiceWarnings } from '../generatorParams';
 const CLOTH_ONLY = { param: 'form', values: ['cloth'], note: 'Acts on the Woven Cloth form only.' } as const;
 const QUALLE_ONLY = { param: 'form', values: ['qualle'], note: 'Acts on the Qualle form only.' } as const;
 const number = (label: string, value: number, min: number, max: number, step: number, group: string,
-  activeWhen: EffectParam['activeWhen'], unit?: string): EffectParam =>
-  ({ type: 'number', label, default: value, min, max, step, animatable: true, group, graphOnly: true, activeWhen, ...(unit ? { unit } : {}) });
+  activeWhen: EffectParam['activeWhen'], unit?: string, integratedAs?: string): EffectParam =>
+  ({ type: 'number', label, default: value, min, max, step, animatable: true, group, graphOnly: true, activeWhen,
+    ...(unit ? { unit } : {}), ...(integratedAs ? { integratedAs } : {}) });
+
+/**
+ * Runtime-only travel of the two rates the recipes multiply by Clip Time (EffectParam.integratedAs):
+ * the Weave In progress under Weave Speed and the pulse cycles under Pulse Rate. While a rate has
+ * keyframes, the geometry compiler reads the distance it has travelled instead of rate × time
+ * (geometryRateTravel.ts), so a keyed ramp eases instead of jumping.
+ */
+export const WEAVE_SPEED_TRAVEL = 'weaveTravel';
+export const WEAVE_PULSE_TRAVEL = 'pulseTravel';
 
 /** Weave's card. Defaults equal the recipe graphs' own node values (tests/unit/weaveForms.test.ts). */
 export const WEAVE_PARAMS: Record<string, EffectParam> = {
   form: { type: 'select', label: 'Form', default: 'cloth', animatable: false, graphOnly: true,
     options: [{ value: 'cloth', label: 'Woven Cloth' }, { value: 'qualle', label: 'Qualle' }] },
   color: { type: 'color', label: 'Color', default: '#8a857c', graphOnly: true },
-  weave_value: number('Weave Speed', 1, 0, 10, 0.05, 'Weave In', CLOTH_ONLY),
+  weave_value: number('Weave Speed', 1, 0, 10, 0.05, 'Weave In', CLOTH_ONLY, undefined, WEAVE_SPEED_TRAVEL),
   reveal_value: number('Reveal', 1, 0, 1, 0.01, 'Reveal by Shape', CLOTH_ONLY),
   irregularity_value: number('Irregularity', 1, 0, 3, 0.01, 'Handmade', CLOTH_ONLY),
   wind: number('Wind', 0.35, 0, 2, 0.01, 'Wind Cloth', CLOTH_ONLY),
-  'pulse-rate_value': number('Pulse Rate', 0.4, 0, 2, 0.01, 'Jellyfish Pulse', QUALLE_ONLY, ' Hz'),
+  'pulse-rate_value': number('Pulse Rate', 0.4, 0, 2, 0.01, 'Jellyfish Pulse', QUALLE_ONLY, ' Hz', WEAVE_PULSE_TRAVEL),
   'pulse-strength_value': number('Pulse Size', 0.54, 0, 0.6, 0.01, 'Jellyfish Pulse', QUALLE_ONLY),
   'curl-strength_value': number('Curl Strength', 0.063, 0, 0.25, 0.001, 'Return Curls', QUALLE_ONLY),
 };
