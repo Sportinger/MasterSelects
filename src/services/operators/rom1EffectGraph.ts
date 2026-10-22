@@ -1,6 +1,9 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { kneeRom1GainGraph } from './smokeGainUpgrade';
 
+/** Smallest fade per frame (three quarters of an 8-bit step), so every trail reaches zero on 8-bit history. */
+export const ROM1_TRAIL_FADE_FLOOR = 0.75 / 255;
+
 type Ref = { node: string; port: string };
 class Graph {
   readonly nodes: BoundOperatorNode[] = []; readonly edges: OperatorEdge[] = []; readonly layout: EffectOperatorGraph['layout'] = {};
@@ -151,9 +154,21 @@ function finishPremultiplied({ g, source, wet, feedback, edgeMask, split, numeri
   const liftedRaw = g.binary('lifted-raw', 'math.add.rgb', wetMix, alphaGain), lifted = g.node('lifted', 'math.clamp.rgb-scalar');
   g.edge(liftedRaw, lifted, 'value'); g.edge(zero, lifted, 'min'); g.edge(sourceAlpha, lifted, 'max');
   const advected = g.node('advected', 'math.multiply.rgb-scalar'); g.edge(feedbackP, advected, 'a'); g.edge(decay, advected, 'b');
-  const waterRgb = g.node('water-rgb', 'math.max.rgb'); g.edge(lifted, waterRgb, 'a'); g.edge(advected, waterRgb, 'b');
+  // The frame history is 8-bit: a fade smaller than half a step rounds back to the same value, so a
+  // high Trail left a grey ghost that never went (Trail 0.995 at 100 of 255). Each frame fades by at
+  // least ROM1_TRAIL_FADE_FLOOR; above that the share kept is exactly Trail.
+  const floor = g.number('trail-fade-floor', ROM1_TRAIL_FADE_FLOOR);
+  const floorRgb = g.unary('trail-fade-floor-rgb', 'convert.scalar-to-rgb', floor, 'value', 'rgb');
+  const zeroRgb = g.unary('trail-zero-rgb', 'convert.scalar-to-rgb', zero, 'value', 'rgb');
+  const shortfall = g.binary('trail-shortfall', 'math.max.rgb', g.binary('trail-shortfall-raw', 'math.subtract.rgb', floorRgb,
+    g.binary('trail-faded-by', 'math.subtract.rgb', feedbackP, advected)), zeroRgb);
+  const faded = g.binary('trail-faded', 'math.subtract.rgb', advected, shortfall);
+  const waterRgb = g.node('water-rgb', 'math.max.rgb'); g.edge(lifted, waterRgb, 'a'); g.edge(faded, waterRgb, 'b');
   const decayedAlpha = g.binary('feedback-alpha-decayed', 'math.multiply.scalar', feedbackAlpha, decay);
-  const alphaMax = g.binary('water-alpha-max', 'math.max.scalar', sourceAlpha, decayedAlpha);
+  const alphaShortfall = g.binary('trail-alpha-shortfall', 'math.max.scalar', g.binary('trail-alpha-shortfall-raw', 'math.subtract.scalar', floor,
+    g.binary('trail-alpha-faded-by', 'math.subtract.scalar', feedbackAlpha, decayedAlpha)), zero);
+  const fadedAlpha = g.binary('trail-alpha-faded', 'math.subtract.scalar', decayedAlpha, alphaShortfall);
+  const alphaMax = g.binary('water-alpha-max', 'math.max.scalar', sourceAlpha, fadedAlpha);
   const waterAlpha = g.node('water-alpha', 'math.clamp.scalar'); g.edge(alphaMax, waterAlpha, 'value'); g.edge(zero, waterAlpha, 'min'); g.edge(one, waterAlpha, 'max');
   const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceP, mixed, 'a'); g.edge(waterRgb, mixed, 'b'); g.edge(opacityClamp, mixed, 't');
   const mixedAlpha = g.node('mixed-alpha', 'math.mix.scalar'); g.edge(sourceAlpha, mixedAlpha, 'a'); g.edge(waterAlpha, mixedAlpha, 'b'); g.edge(opacityClamp, mixedAlpha, 't');

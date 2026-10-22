@@ -1,5 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
-import { EDGE_GAIN, EDGE_MAX_REACH_PX, EDGE_MIN_SIGMA_PX, EDGE_MIN_WIDTH, EDGE_REFERENCE_HEIGHT, EDGE_VIVID_FLOOR } from '../../effects/stylize/edge-detect/edgeDetectModel';
+import { EDGE_GAIN, EDGE_WINDOW_TAPS, EDGE_MIN_SIGMA_PX, EDGE_MIN_WIDTH, EDGE_REFERENCE_HEIGHT, EDGE_VIVID_FLOOR } from '../../effects/stylize/edge-detect/edgeDetectModel';
 import { BlurGraphBuilder } from './blurGraphBuilder';
 
 const node = (id: string, operator: string, bindings: BoundOperatorNode['bindings'] = {}, constants?: BoundOperatorNode['constants']): BoundOperatorNode =>
@@ -64,7 +64,8 @@ export function createEarlierEdgeDetectGraph(): EffectOperatorGraph {
  * normalized by the window's own second moment (exact for ramps at every Width and resolution),
  * a soft roll-off, and line/background colours composited premultiplied. One fullscreen pass.
  * The outermost taps count with the share of them two sigma covers, so the window grows
- * continuously while Width is animated.
+ * continuously while Width is animated; past 8 taps per side the taps spread out, so a Width draws
+ * the same line in a preview, at 1080p and at 4K.
  */
 export function createDefaultEdgeDetectGraph(): EffectOperatorGraph {
   return createEdgeDetectGraph('covered');
@@ -86,28 +87,37 @@ function createEdgeDetectGraph(windowKind: 'covered' | 'whole'): EffectOperatorG
   const strength = g.bound('strength', 'strength'), width = g.bound('width', 'width');
   const invert = g.bound('invert', 'invert', 'values.boolean'), colorize = g.bound('colorize', 'colorize');
 
-  // Scale: sigma = Width pixels of a 1080p frame (at least EDGE_MIN_SIGMA_PX); the window reaches two sigma (capped).
+  // Scale: sigma = Width pixels of a 1080p frame (at least EDGE_MIN_SIGMA_PX); the window reaches two sigma.
   g.number('reference-height', EDGE_REFERENCE_HEIGHT); g.number('width-minimum', EDGE_MIN_WIDTH);
-  g.number('sigma-minimum', EDGE_MIN_SIGMA_PX); g.number('reach-limit', EDGE_MAX_REACH_PX);
+  g.number('sigma-minimum', EDGE_MIN_SIGMA_PX); g.number('reach-limit', EDGE_WINDOW_TAPS);
   const pixelScale = g.binary('pixel-scale', 'math.divide-ieee.scalar', g.unary('short-side', 'vector.reduce-min.vec2', 'resolution'), 'reference-height');
   const sigmaRaw = g.binary('sigma-raw', 'math.multiply.scalar', g.binary('width-safe', 'math.max.scalar', width, 'width-minimum'), pixelScale);
   const sigma = g.binary('sigma', 'math.max.scalar', sigmaRaw, 'sigma-minimum');
-  const reach = g.binary('reach', 'math.min.scalar', g.unary('reach-needed', 'math.ceil.scalar', g.binary('two-sigma', 'math.multiply.scalar', sigma, 'two')), 'reach-limit');
+  const twoSigma = g.binary('two-sigma', 'math.multiply.scalar', sigma, 'two');
+  // Taps per side: ceil(2 sigma), at most EDGE_WINDOW_TAPS. Covered window: a wider window keeps
+  // that many taps and spaces them 2 sigma / EDGE_WINDOW_TAPS pixels apart, so it always reaches
+  // two sigma (the 3.2.7 window ended at 8 px: thinner lines in large frames).
+  const reach = g.binary('reach', 'math.min.scalar', g.unary('reach-needed', 'math.ceil.scalar', twoSigma), 'reach-limit');
   const span = g.binary('window-size', 'math.add.scalar', g.binary('reach-double', 'math.multiply.scalar', reach, 'two'), 'one');
+  const spacing = windowKind === 'covered'
+    ? g.binary('tap-spacing', 'math.divide-ieee.scalar', g.binary('tap-spacing-wide', 'math.max.scalar', twoSigma, 'reach-limit'), 'reach-limit') : '';
 
-  // Window taps at whole-pixel offsets (texel centres, so premultiplying each tap is exact), Gaussian weights.
+  // Window taps at whole-pixel offsets up to 2 sigma = 8 px (texel centres, so premultiplying each
+  // tap is exact), spaced further apart beyond (bilinear reads), Gaussian weights.
   const index = g.add('window-index', 'vector.split.vec2', { value: g.add('window-kernel', 'image.kernel-index') });
-  const dx = g.binary('tap-x', 'math.subtract.scalar', [index, 'x'], reach), dy = g.binary('tap-y', 'math.subtract.scalar', [index, 'y'], reach);
+  const tx = g.binary('tap-x', 'math.subtract.scalar', [index, 'x'], reach), ty = g.binary('tap-y', 'math.subtract.scalar', [index, 'y'], reach);
+  const dx = windowKind === 'covered' ? g.binary('tap-x-px', 'math.multiply.scalar', tx, spacing) : tx;
+  const dy = windowKind === 'covered' ? g.binary('tap-y-px', 'math.multiply.scalar', ty, spacing) : ty;
   const offset = g.add('tap-offset', 'vector.combine.vec2', { x: dx, y: dy });
   const sampleUv = g.binary('tap-uv', 'math.add.vec2', ['uv', 'uv'], g.binary('tap-offset-uv', 'math.divide-ieee.vec2', offset, 'resolution'));
   const gaussian = g.add('tap-weight', 'math.gaussian.scalar', { value: g.unary('tap-distance', 'vector.length.vec2', offset), sigma });
-  // Covered window: a tap counts with the share of it two sigma (capped at the reach limit) covers,
-  // 1 inside, the covered part for the outermost ring, so no ring of taps pops in at once.
-  const reachCovered = windowKind === 'covered' ? g.binary('reach-covered', 'math.min.scalar', 'two-sigma', 'reach-limit') : '';
+  // Covered window: a tap counts with the share of it two sigma covers (in taps), 1 inside, the
+  // covered part for the outermost ring, so no ring of taps pops in at once.
+  const reachCovered = windowKind === 'covered' ? g.binary('reach-covered', 'math.min.scalar', twoSigma, 'reach-limit') : '';
   const coverage = (axis: 'x' | 'y', tapOffset: string) => g.add(`tap-${axis}-coverage`, 'math.clamp.scalar', { value: g.binary(`tap-${axis}-coverage-raw`, 'math.add.scalar',
     g.binary(`tap-${axis}-inside`, 'math.subtract.scalar', reachCovered, g.unary(`tap-${axis}-distance`, 'math.abs.scalar', tapOffset)), 'one'), min: 'zero', max: 'one' });
   const weight = windowKind === 'covered'
-    ? g.binary('tap-weight-covered', 'math.multiply.scalar', gaussian, g.binary('tap-coverage', 'math.multiply.scalar', coverage('x', dx), coverage('y', dy)))
+    ? g.binary('tap-weight-covered', 'math.multiply.scalar', gaussian, g.binary('tap-coverage', 'math.multiply.scalar', coverage('x', tx), coverage('y', ty)))
     : gaussian;
   const tap = g.add('tap-split', 'vector.split.rgba', { image: [g.add('tap-sample', 'image.sample', { image: ['frame', 'image'], uv: sampleUv }), 'image'] });
   const tapLuma = g.binary('tap-luma', 'math.multiply.scalar', g.add('tap-luma-straight', 'color.luminance-rec709.rgb', { rgb: [tap, 'rgb'] }),

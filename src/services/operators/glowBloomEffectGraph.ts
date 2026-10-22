@@ -23,6 +23,19 @@ function filterTaps(g: BlurGraphBuilder, prefix: string, source: GraphPort, uv: 
  * full-frame passes of work and about 1.7 frames of rgba16float cache memory, at any Radius.
  */
 export function createDefaultGlowGraph(): EffectOperatorGraph {
+  return createGlowGraph(false);
+}
+
+/**
+ * The bloom recipe released with 3.2.7 (until 2026-10-22): the same pixels, plus a weight-sum card
+ * on the top Pyramid Up level that nothing read. Kept only so upgradeGlowGraph can recognize an
+ * untouched saved copy and replace it with createDefaultGlowGraph (same look, folders and notes).
+ */
+export function createGlowGraphBefore20261022(): EffectOperatorGraph {
+  return createGlowGraph(true);
+}
+
+function createGlowGraph(unusedTopWeight: boolean): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
   g.number('zero', 0); g.number('one', 1); g.number('two', 2); g.number('three', 3); g.number('half', .5);
@@ -93,6 +106,7 @@ export function createDefaultGlowGraph(): EffectOperatorGraph {
     const tentSplit = g.add(`up-${level}-split`, 'vector.split.rgba', { image: tent });
     // The smallest level carries no weight sum yet: it joins by the top level weight instead.
     const top = level === GLOW_LEVELS - 1;
+    if (top && unusedTopWeight) g.add(`up-${level}-weight-sum`, 'convert.alpha-to-scalar', { alpha: [tentSplit, 'alpha'] });
     const tentRgb: GraphPort = top ? g.add(`up-${level}-top-light`, 'math.multiply.rgb-scalar', { a: [tentSplit, 'rgb'], b: 'top-level-weight' }) : [tentSplit, 'rgb'];
     const tentWeight: GraphPort = top ? 'top-level-weight' : g.add(`up-${level}-weight-sum`, 'convert.alpha-to-scalar', { alpha: [tentSplit, 'alpha'] });
     const own = g.add(`up-${level}-level`, 'image.sample', { image: [`down-${level}-cache`, 'image'], uv: ['uv', 'uv'] });

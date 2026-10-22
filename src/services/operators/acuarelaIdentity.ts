@@ -24,6 +24,23 @@ export function rendersBuiltInAcuarelaRecipe(effect: { type: string; params: Rec
   return known;
 }
 
+let before20261022: EffectOperatorGraph | undefined;
+const upgradedCopies = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
+
+/**
+ * An untouched saved copy of the watercolour recipe before 2026-10-22 (3.2.7: one unused density
+ * card and constant more, the same pixels) loads as the current recipe, so the Nodes tab shows its
+ * stage folders. Edited graphs and bypassed folders are user work and stay as saved.
+ */
+export function upgradeAcuarelaGraph(source: EffectOperatorGraph): EffectOperatorGraph {
+  if (source.incomplete || source.groups?.some(group => group.bypassed)) return source;
+  const known = upgradedCopies.get(source); if (known) return known;
+  before20261022 ??= createAcuarelaGraphBefore20261022();
+  const result = matchesEffectRecipe(source, before20261022) ? createDefaultAcuarelaGraph() : source;
+  upgradedCopies.set(source, result); upgradedCopies.set(result, result);
+  return result;
+}
+
 /** Mix 0 returns the original picture: the pipeline skips the three passes. */
 export function isNeutralAcuarelaEffect(effect: { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }): boolean {
   const mix = effect.params.opacity;

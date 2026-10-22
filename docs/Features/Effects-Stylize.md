@@ -39,6 +39,6 @@ Pooling**; each effect page shows them under *Node setup*. How to open a graph:
 
 ## Technical details
 
-Glow Radius, Edge Detect Width and Acuarela's Wash and Bleed are measured on a 1080p frame and scale with the picture, so the preview, the export and 4K match. Glow, Vignette and Edge Detect saved before 21 October 2026 keep their earlier look; their card offers **Use the new …** to switch.
+Glow Radius, Edge Detect Width and Acuarela's Wash and Bleed are measured on a 1080p frame and scale with the picture, so the preview, the export and 4K match. Glow, Vignette and Edge Detect saved before 21 October 2026 keep their earlier look, and so does an Edge Detect saved with 3.2.7, whose window ends at 8 px (thinner wide lines at 4K); their card says so and offers **Use the new …** to switch.
 
 Developer notes: [Effect system: Light & Stylize notes](./Effect-System.md#light--stylize-notes).

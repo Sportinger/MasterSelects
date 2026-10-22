@@ -9,7 +9,8 @@ import { rom1ParamWarnings, ROM1_TRAIL_DEFAULT, ROM1_TRAIL_MAX } from './warning
 
 /** Named starting points (Preset row, docs presets loop); each was rendered on the moving dancer and the neon street. */
 export const ROM1_PRESETS: readonly EffectPreset[] = [
-  { id: 'soft-echo', name: 'Soft Echo', params: { trail: 0.85, strength: 0.2 } },
+  // Opacity 0.6 keeps the face readable: the trails stay a faint glow beside the figure, not stepped copies over it.
+  { id: 'soft-echo', name: 'Soft Echo', params: { opacity: 0.6, trail: 0.8, strength: 0.12 } },
   { id: 'light-trails', name: 'Light Trails', params: { trail: 0.95, strength: 0.35, gainX: 0.9, gainY: 0, density: 1 } },
   { id: 'dripping-light', name: 'Dripping Light', params: { trail: 0.97, gain: 0.03, strength: 0.35, gainX: 0, gainY: 0.9, density: 1.5 } },
   { id: 'smoke-storm', name: 'Smoke Storm', params: { trail: 0.99, speed: 10, strength: 0.5, density: 3 } },

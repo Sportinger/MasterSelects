@@ -261,6 +261,17 @@ describe('Acuarela saved with the watery-smoke recipe', () => {
     expect(paint(createDefaultAcuarelaGraph())).toEqual(paint(before));
   });
 
+  it('loads an untouched copy saved before 2026-10-22 as the current recipe, so it keeps its stage folders', () => {
+    const before = createAcuarelaGraphBefore20261022();
+    const folders = (graph: typeof before) => (effectOperatorGraph({ ...effect(watercolour()), operatorGraph: graph }, { inspectionOnly: true }).groups ?? []).length;
+    const current = folders(createDefaultAcuarelaGraph());
+    expect(current).toBeGreaterThan(10);
+    expect(folders(before)).toBe(current);
+    const constant = before.nodes.find(node => node.operator === 'values.number' && typeof node.constants?.value === 'number')!;
+    const edited = { ...before, nodes: before.nodes.map(node => node === constant ? { ...node, constants: { ...node.constants, value: Number(node.constants!.value) + 0.5 } } : node) };
+    expect(effectOperatorGraph({ ...effect(watercolour()), operatorGraph: edited }, { inspectionOnly: true }).nodes.some(node => node.id === 'density')).toBe(true);
+  });
+
   it('skips the watercolour at Mix 0 but never the smoke recipe, whose history keeps running', () => {
     expect(isNeutralEffect(effect(watercolour({ opacity: 0 })), 1920, 1080)).toBe(true);
     expect(isNeutralEffect(effect(watercolour({ opacity: 0.01 })), 1920, 1080)).toBe(false);

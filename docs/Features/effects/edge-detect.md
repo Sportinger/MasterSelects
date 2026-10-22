@@ -26,9 +26,9 @@ Group: [Light & Stylize](../Effects-Stylize.md) · [How to add an effect](../Eff
 
 <figure class="docs-shot docs-shot--detail">
 
-![The harbour town four times, labelled: Neon Outline with the houses and boats drawn in their own warm and turquoise colours on black, Pencil Sketch with dark grey lines on white, Coloured Pencil with pale coloured lines on white, Bold Contours with thick white lines around only the big shapes](../assets/effects/presets/edge-detect.webp)
+![The dancer on a dark stage four times, labelled: Neon Outline with her dress, arms and hair drawn in their own warm colours on black, Pencil Sketch with dark grey lines on white, Coloured Pencil with pale warm lines on white, Bold Contours with thick white lines around only the big shapes](../assets/effects/presets/edge-detect.webp)
 
-<figcaption>The four presets on the harbour town.</figcaption>
+<figcaption>The four presets on the dancer.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all four controls in one undo step, and the row shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -78,7 +78,7 @@ Pick one in the **Preset** row of the effect card. It sets all four controls in 
 <figcaption>Left: Width 1 px, every fine detail. Right: Width 4 px, only the big shapes.</figcaption>
 </figure>
 
-**Width** – how thick the lines are, and how big a detail has to be to get one. At 1 every hair and fold gets a line; at 3–4 fine texture fades and thick, soft lines follow only the big shapes. It is measured in pixels of a 1080p frame, so the look stays the same in a 4K export. A 1080p frame cannot show lines thinner than about 0.7 px, so the lowest values look alike there (the card says so); above about 4 the reading window reaches its limit and lines come out a little thinner than set. Animating Width changes the lines smoothly. 0.5 to 6 px, default 1 px.
+**Width** – how thick the lines are, and how big a detail has to be to get one. At 1 every hair and fold gets a line; at 3–4 fine texture fades and thick, soft lines follow only the big shapes. It is measured in pixels of a 1080p frame, so a half-size preview, the 1080p export and a 4K export draw the same line. A 1080p frame cannot show lines thinner than about 0.7 px, so the lowest values look alike there (the card says so). Animating Width changes the lines smoothly. 0.5 to 6 px, default 1 px.
 
 **Color** – the colour of the lines. At 0 they are white (with Invert: black); at 1 each line takes the colour of the picture next to it, at full brightness, so a dark red stays a clear red line. Values between mix the two. 0 to 1, default 0.
 
@@ -94,16 +94,16 @@ Pick one in the **Preset** row of the effect card. It sets all four controls in 
 
 ![The Edge Detect graph: Parameters feed Line Width (sigma & window), Gradient & Edge Strength and Line Color & Alpha; Line Width passes Sigma, Reach, Window Size and Covered Reach on to Window Taps; Input Frame feeds Window Taps and Line Color & Alpha; Window Taps passes its Window Sums to Gradient & Edge Strength, which passes the Gradient and the Edge to Line Color & Alpha](../assets/effects/graphs/edge-detect.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 876" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 928" aria-hidden="true" focusable="false">
 <defs><marker id="edge-detect-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M314 853 L314 769" marker-end="url(#edge-detect-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="853" r="18" /><text x="314" y="853" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M509 380 L509 296" marker-end="url(#edge-detect-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="380" r="18" /><text x="509" y="380" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M703 378 L703 462" marker-end="url(#edge-detect-arrow)" />
-<circle class="docs-shot-number" cx="703" cy="378" r="18" /><text x="703" y="378" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M897 509 L897 425" marker-end="url(#edge-detect-arrow)" />
-<circle class="docs-shot-number" cx="897" cy="509" r="18" /><text x="897" y="509" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M314 905 L314 821" marker-end="url(#edge-detect-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="905" r="18" /><text x="314" y="905" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M509 406 L509 322" marker-end="url(#edge-detect-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="406" r="18" /><text x="509" y="406" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M703 404 L703 488" marker-end="url(#edge-detect-arrow)" />
+<circle class="docs-shot-number" cx="703" cy="404" r="18" /><text x="703" y="404" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M897 535 L897 451" marker-end="url(#edge-detect-arrow)" />
+<circle class="docs-shot-number" cx="897" cy="535" r="18" /><text x="897" y="535" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -118,31 +118,35 @@ Edge Detect is one pass over the picture. **Line Width (sigma & window)** turns 
 
 <div class="docs-shot-stage">
 
-![Inside the Line Width folder: Multiply of Width (at least 0.25) and Short Side ÷ 1080 gives the size in pixels; Maximum with Sigma Minimum 0.7 gives the Sigma; Multiply by Two gives 2 Sigma; Ceiling rounds it up to whole taps; Minimum with Reach Limit 8 gives the Covered Reach](../assets/effects/graphs/edge-detect-width.webp)
+![Inside the Line Width folder: Multiply of Width (at least 0.25) and Short Side ÷ 1080 gives the size in pixels; Maximum with Sigma Minimum 0.7 gives the Sigma; Multiply by Two gives 2 Sigma; Ceiling rounds it up to whole taps; Minimum with Reach Limit 8 gives the Covered Reach; Divide of 2 Sigma (at least 8 px) by Reach Limit 8 gives the Tap Spacing](../assets/effects/graphs/edge-detect-width.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 578" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 782" aria-hidden="true" focusable="false">
 <defs><marker id="edge-detect-width-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M314 23 L314 107" marker-end="url(#edge-detect-width-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="23" r="18" /><text x="314" y="23" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M509 23 L509 107" marker-end="url(#edge-detect-width-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="23" r="18" /><text x="509" y="23" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M897 555 L897 471" marker-end="url(#edge-detect-width-arrow)" />
-<circle class="docs-shot-number" cx="897" cy="555" r="18" /><text x="897" y="555" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M897 23 L897 107" marker-end="url(#edge-detect-width-arrow)" />
-<circle class="docs-shot-number" cx="897" cy="23" r="18" /><text x="897" y="23" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M314 296 L314 274" marker-end="url(#edge-detect-width-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="296" r="18" /><text x="314" y="296" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M509 296 L509 274" marker-end="url(#edge-detect-width-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="296" r="18" /><text x="509" y="296" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M897 223 L897 307" marker-end="url(#edge-detect-width-arrow)" />
+<circle class="docs-shot-number" cx="897" cy="223" r="18" /><text x="897" y="223" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M897 760 L897 676" marker-end="url(#edge-detect-width-arrow)" />
+<circle class="docs-shot-number" cx="897" cy="760" r="18" /><text x="897" y="760" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M314 520 L314 498" marker-end="url(#edge-detect-width-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="520" r="18" /><text x="314" y="520" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Line Width, reduced to its recipe (the window size the Ceiling feeds is left out). 1 — Multiply: Width in pixels of this frame. 2 — Maximum: never finer than 0.7 px. 3 — Ceiling: whole taps. 4 — Minimum: at most 8 px.</figcaption>
+<figcaption>Inside Line Width, reduced to its recipe (the window size the Ceiling feeds is left out). 1 — Multiply: Width in pixels of this frame. 2 — Maximum: never finer than 0.7 px. 3 — Ceiling: whole taps. 4 — Minimum: at most 8 taps. 5 — Divide: how far apart the taps sit.</figcaption>
 </figure>
 
 **Multiply** – Width times the frame's short side divided by 1080: the line's blur size (sigma) in pixels of this frame. That is why a line looks the same in a 1080p preview and a 4K export.
 
 **Maximum** – keeps sigma at 0.7 px or more. A pixel grid cannot show a finer line; it would only fade.
 
-**Ceiling** – two sigma rounded up to whole pixels: how many taps the window reaches to each side. A Minimum after it limits that to 8, so a window is at most 17 × 17 pixels.
+**Ceiling** – two sigma rounded up to whole pixels: how many taps the window reaches to each side. A Minimum after it limits that to 8, so a window has at most 17 × 17 taps.
 
-**Minimum** – the Covered Reach: two sigma, also limited to 8 px, but not rounded. Window Taps uses it to count the outermost taps only with the share of them the reach covers.
+**Minimum** – the Covered Reach: two sigma counted in taps, also limited to 8, but not rounded. Window Taps uses it to count the outermost taps only with the share of them the reach covers.
+
+**Divide** – the Tap Spacing, how far apart the taps sit: two sigma, at least 8 px, divided by 8. That is 1 px until two sigma passes 8 px, then more. A wide window keeps its 8 taps per side and spreads them out, reading between pixels, so it always reaches two sigma. That is why Width 3 draws the same line at 4K as at 1080p.
 
 ### Window Taps (premultiplied brightness)
 
@@ -253,7 +257,7 @@ Edge Detect is one pass over the picture. **Line Width (sigma & window)** turns 
 ## Technical details
 
 - **Lines.** A derivative of a Gaussian on premultiplied brightness (Rec. 709), in one Kernel Sum (Rect) over a window of ±2 sigma, normalized by the window's own second moment; line strength `1 − exp(−4 · contrast · Strength)`.
-- **Width** is sigma in pixels of a 1080p frame (at least 0.7 px). The window reaches at most ±8 px: up to 289 reads per pixel, plus two for Color. The outermost taps count with the share 2 sigma covers, so an animated Width changes smoothly. A Width finer than a pixel or wider than the window, a negative Strength and a Color outside 0–1 are reported in the effect card and the tool result. Wide lines cost more render time.
+- **Width** is sigma in pixels of a 1080p frame (at least 0.7 px). The window keeps at most 8 taps to each side, up to 289 reads per pixel plus two for Color: one pixel apart up to 2 sigma = 8 px, and 2 sigma / 8 px apart beyond, with bilinear reads, so a Width covers the same share of the frame at every size. The outermost taps count with the share 2 sigma covers, so an animated Width changes smoothly. A Width finer than a pixel, a negative Strength and a Color outside 0–1 are reported in the effect card and the tool result. Wide lines cost more render time.
 - **Transparency.** Lines are composited premultiplied (alpha = edge + source alpha × (1 − edge)), so transparent surroundings stay transparent and a layer's outline shows in its full line colour.
-- **Saved projects.** An Edge Detect saved before 2026-10-21 keeps its earlier one-pixel Sobel (Width and Color have no effect on it); one saved with version 3.2.7 keeps whole taps out to 2 sigma, whose lines can jump a step while Width is animated. The card of both offers **Use the new Edge Detect**.
+- **Saved projects.** An Edge Detect saved before 2026-10-21 keeps its earlier one-pixel Sobel (Width and Color have no effect on it); one saved with version 3.2.7 keeps whole taps out to 2 sigma, whose lines can jump a step while Width is animated, and a window that ends at 8 px, so its wide lines come out thinner in large frames (at 4K above Width 2; the card says so). The card of both offers **Use the new Edge Detect**.
 - Shared notes: [Light & Stylize](../Effect-System.md#light--stylize-notes). Formulas: [Effect system](../Effect-System.md#editable-blur-kernels); blocks: [Node Catalog](../Node-Catalog.md).

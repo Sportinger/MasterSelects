@@ -5,7 +5,7 @@ Paints the picture as a watercolour, with flat washes of colour and the grain of
 Group: [Light & Stylize](../Effects-Stylize.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot docs-clip docs-compare docs-shot--float-left">
-<video src="../assets/effects/clips/acuarela.mp4" poster="../assets/effects/clips/acuarela.webp" width="960" height="460" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Acuarela right: her white dress and skin become flat washes of warm colour with darker paint pooled along every fold and edge, the dark stage turns into a soft brown-grey paper with grain and a few stained rings, and the painting follows her as she moves"></video>
+<video src="../assets/effects/clips/acuarela.mp4" poster="../assets/effects/clips/acuarela.webp" width="960" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer close up, turning on a dark stage, original left and with Acuarela right: her white dress, arms and red hair become flat washes of warm colour with darker paint pooled along every fold, the dark stage turns into brown-grey paper with grain and a stained ring, and the painting follows her as she moves"></video>
 <figcaption>Left: original. Right: Acuarela at its default settings.</figcaption>
 </figure>
 
@@ -21,7 +21,7 @@ Group: [Light & Stylize](../Effects-Stylize.md) · [How to add an effect](../Eff
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/acuarela-presets.mp4" poster="../assets/effects/clips/acuarela-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Fine Study top left with crisp lines and readable face and hands, Loose Wash top right with big flat patches of colour and dark rims, Wet in Wet bottom left with colour running over the edges and stained rings drifting slowly over the background, Pale Paper bottom right faded towards white on coarse grained paper"></video>
+<video src="../assets/effects/clips/acuarela-presets.mp4" poster="../assets/effects/clips/acuarela-presets.webp" width="962" height="1066" autoplay muted loop playsinline preload="none" aria-label="The dancer close up four times in a grid, moving in sync, each with one preset: Fine Study top left with crisp lines and a readable face, Loose Wash top right with big flat patches of colour and hard dark rims, Wet in Wet bottom left with soft edges and big stained rings over the background, Pale Paper bottom right faded towards grey-white on coarse grained paper"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
@@ -29,9 +29,9 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Fine Study** – small washes, crisp dark edges and little paper. Faces and hands stay readable; a careful study rather than a sketch.
 
-**Loose Wash** – big, flat patches in a few tones, strong edges and some stains. A quick, loose sketch; faces lose their features, so use it for bodies, crowds and places.
+**Loose Wash** – big, flat patches in a few tones with hard, dark edges and few stains. A quick, loose sketch; faces lose their features, so use it for bodies, crowds and places.
 
-**Wet in Wet** – colour runs far over the borders, many blooms, and the wet areas drift slowly with the playhead. For dreams and memories, and for slow or still shots.
+**Wet in Wet** – colour runs far over soft borders, big blooms stain the background, and the wet areas drift with the playhead. For dreams and memories, and for slow or still shots.
 
 **Pale Paper** – a thin wash on coarse, strongly grained paper that shows through, with the shadows lifted to indigo. A faded page from a sketchbook; calm enough to put text over.
 
@@ -66,7 +66,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 ### General
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-mix.mp4" poster="../assets/effects/clips/acuarela-mix.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Mix runs from 0 to 1 and back: the photo fades into the watercolour painting and back; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-mix.mp4" poster="../assets/effects/clips/acuarela-mix.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Mix runs from 0 to 1 and back: the photo fades into the watercolour painting and back; the current value is shown at the bottom left"></video>
 <figcaption>Mix from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -77,7 +77,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 ### Paint
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-wash.mp4" poster="../assets/effects/clips/acuarela-wash.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Wash runs from 0 to 12 px and back: the fine folds of her dress and the strands of her hair melt into broader, flatter patches of colour and sharpen again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-wash.mp4" poster="../assets/effects/clips/acuarela-wash.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Wash runs from 0 to 12 px and back: the fine folds of her dress and the strands of her hair melt into broader, flatter patches of colour and sharpen again; the current value is shown at the bottom left"></video>
 <figcaption>Wash from 0 to 12 px and back.</figcaption>
 </figure>
 
@@ -86,7 +86,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-bleed.mp4" poster="../assets/effects/clips/acuarela-bleed.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Bleed runs from 0 to 30 px and back: her outline starts to wobble and colour runs out over the edges of the dress and arms in wet patches, then settles again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-bleed.mp4" poster="../assets/effects/clips/acuarela-bleed.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Bleed runs from 0 to 30 px and back: her outline starts to wobble and colour runs out over the edges of the dress and arms in wet patches, then settles again; the current value is shown at the bottom left"></video>
 <figcaption>Bleed from 0 to 30 px and back.</figcaption>
 </figure>
 
@@ -95,7 +95,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-edges.mp4" poster="../assets/effects/clips/acuarela-edges.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Edges runs from 0 to 2 and back: at 0 the painting looks pale and soft, then darker paint gathers along every fold, arm and hair edge, and fades again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-edges.mp4" poster="../assets/effects/clips/acuarela-edges.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Edges runs from 0 to 2 and back: at 0 the painting looks pale and soft, then darker paint gathers along every fold, arm and hair edge, and fades again; the current value is shown at the bottom left"></video>
 <figcaption>Edges from 0 to 2 and back.</figcaption>
 </figure>
 
@@ -104,7 +104,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-simplify.mp4" poster="../assets/effects/clips/acuarela-simplify.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Simplify runs from 0 to 1 and back: the soft gradients of her dress and skin step into a few flat tones like layered glazes, then smooth out again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-simplify.mp4" poster="../assets/effects/clips/acuarela-simplify.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Simplify runs from 0 to 1 and back: the soft gradients of her dress and skin step into a few flat tones like layered glazes, then smooth out again; the current value is shown at the bottom left"></video>
 <figcaption>Simplify from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -113,7 +113,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-blooms.mp4" poster="../assets/effects/clips/acuarela-blooms.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Blooms runs from 0 to 2 and back: ragged rings with dark rims and lighter centres appear on the flat background and grow stronger, then fade again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-blooms.mp4" poster="../assets/effects/clips/acuarela-blooms.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Blooms runs from 0 to 2 and back: ragged rings with dark rims and lighter centres appear on the flat background and grow stronger, then fade again; the current value is shown at the bottom left"></video>
 <figcaption>Blooms from 0 to 2 and back.</figcaption>
 </figure>
 
@@ -122,7 +122,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-shadow-pigment.mp4" poster="../assets/effects/clips/acuarela-shadow-pigment.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Shadow Pigment runs from 0 to 1 and back: the black of the stage lifts to a dark blue-grey indigo paint and sinks back to near black; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-shadow-pigment.mp4" poster="../assets/effects/clips/acuarela-shadow-pigment.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Shadow Pigment runs from 0 to 1 and back: the black of the stage lifts to a dark blue-grey indigo paint and sinks back to near black; the current value is shown at the bottom left"></video>
 <figcaption>Shadow Pigment from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -133,7 +133,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 ### Paper
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-granulation.mp4" poster="../assets/effects/clips/acuarela-granulation.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Granulation runs from 0 to 2 and back: fine speckled pigment settles into the grain of the paper, most of all on the dress, then smooths out again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-granulation.mp4" poster="../assets/effects/clips/acuarela-granulation.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Granulation runs from 0 to 2 and back: fine speckled pigment settles into the grain of the paper, most of all on the dress, then smooths out again; the current value is shown at the bottom left"></video>
 <figcaption>Granulation from 0 to 2 and back.</figcaption>
 </figure>
 
@@ -142,7 +142,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-paper.mp4" poster="../assets/effects/clips/acuarela-paper.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Paper runs from 0 to 2 and back: the relief of the paper, lit from one side, rises over the light dress and arms and sinks again; the dark stage hides most of it; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-paper.mp4" poster="../assets/effects/clips/acuarela-paper.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Paper runs from 0 to 2 and back: the relief of the paper, lit from one side, rises over the light dress and arms and sinks again; the dark stage hides most of it; the current value is shown at the bottom left"></video>
 <figcaption>Paper from 0 to 2 and back.</figcaption>
 </figure>
 
@@ -151,7 +151,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-grain-size.mp4" poster="../assets/effects/clips/acuarela-grain-size.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Grain Size runs from 0.25 to 4 and back: the paper grain grows from a fine sand into a coarse, cloudy texture and shrinks again; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-grain-size.mp4" poster="../assets/effects/clips/acuarela-grain-size.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Grain Size runs from 0.25 to 4 and back: the paper grain grows from a fine sand into a coarse, cloudy texture and shrinks again; the current value is shown at the bottom left"></video>
 <figcaption>Grain Size from 0.25 to 4× and back.</figcaption>
 </figure>
 
@@ -160,7 +160,7 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-lift.mp4" poster="../assets/effects/clips/acuarela-lift.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Acuarela while Lift runs from 0 to 1 and back: the whole painting fades towards white paper until only a faint wash is left, then the colour comes back; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/acuarela-lift.mp4" poster="../assets/effects/clips/acuarela-lift.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Lift runs from 0 to 1 and back: the whole painting fades towards white paper until only a faint wash is left, then the colour comes back; the current value is shown at the bottom left"></video>
 <figcaption>Lift from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -592,6 +592,6 @@ One formula from watercolour research does the painting: new colour = C − (C �
 - **Time.** Without Flow the result depends only on the frame and the settings. Flow reads the timeline time, so scrubbing, playback and export give the same frame; the paper and the blooms stay put on the frame, the wet patches and the wobble move.
 - **Limits.** Values from keyframes or tools outside a control's range are named in the card and the tool result: a negative Wash or Bleed renders as 0, Grain Size below 0.25 as 0.25, and Mix, Simplify, Shadow Pigment and Lift are kept within 0 to 1. A negative Edges, Blooms, Granulation or Paper inverts its look (the card says so). The wobble stops growing at Bleed 16 px.
 - **Transparency.** The washes read premultiplied colour, so transparent surroundings never bleed dark into a cut-out figure; the painting keeps the wash's alpha.
-- **Saved projects.** Acuarela effects saved with the earlier smoke look keep it (their Gain is clamped to 0–1); that look is now [Rom1](./rom1.md). Untouched node setups saved before 2026-10-22 carried two unused cards (an extra Pigment Density sum and a constant 3); they still count as the standard recipe and look the same.
+- **Saved projects.** Acuarela effects saved with the earlier smoke look keep it (their Gain is clamped to 0–1); that look is now [Rom1](./rom1.md). Untouched node setups saved before 2026-10-22 carried two unused cards (an extra Pigment Density sum and a constant 3); they open as the standard recipe, with its stage folders in the Nodes tab, and look the same.
 - **Software preview.** The worker software preview falls back to the main-thread GPU renderer for the watercolour; the smoke look runs on the CPU.
 - **More:** [Effect system](../Effect-System.md#light--stylize-notes) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

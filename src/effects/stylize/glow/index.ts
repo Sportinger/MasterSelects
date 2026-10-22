@@ -16,7 +16,7 @@ export const GLOW_PRESETS: readonly EffectPreset[] = [
   // Bright skin and costumes join in too: a soft, wide, dreamy haze over the whole scene.
   { id: 'dream-glow', name: 'Dream Glow', params: { amount: 1.6, threshold: 0.55, softness: 1, radius: 160 } },
   // A cool blue halo, like moonlight or a cold follow spot, on warm footage too.
-  { id: 'moonlight', name: 'Moonlight', params: { amount: 2.5, threshold: 0.7, softness: 0.8, radius: 120, color: '#9cc4ff' } },
+  { id: 'moonlight', name: 'Moonlight', params: { amount: 2.5, threshold: 0.7, softness: 0.8, radius: 120, color: '#7fb0ff' } },
 ];
 
 const RING_ONLY = 'Only Glows saved with the earlier ring version read it; the bloom chooses its own sampling, so it has no effect here.';

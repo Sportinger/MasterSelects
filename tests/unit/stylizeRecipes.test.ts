@@ -10,6 +10,8 @@ import { createStylizeRecipeGraph, earlierStylizeRecipeNote, isEarlierStylizeGra
 import { unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
 import { createSpreadWindowSharpenGraph } from '../../src/services/operators/sharpenEffectGraph';
 import { createWholeTapEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
+import { createDefaultGlowGraph, createGlowGraphBefore20261022 } from '../../src/services/operators/glowBloomEffectGraph';
+import { effectDefinitionNotes } from '../../src/services/operators/effectParamVisibility';
 import { applyWorkerSoftwareImageGraphs, canApplyWorkerSoftwareImageGraphPlan } from '../../src/services/render/workerSoftwareImageGraphs';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
@@ -82,6 +84,30 @@ describe('stylize recipes: ownership and saved projects', () => {
     expect(stylizeRecipeUpdate('edge-detect', released)).toMatchObject({ label: 'Use the new Edge Detect', message: expect.stringContaining('3.2.7') });
     expect(stylizeRecipeUpdate('edge-detect', current)).toBeUndefined();
     expect(previousStylizeRecipeNote('edge-detect', released)).toContain('Width is animated');
+  });
+
+  it.each([['edge-detect', createWholeTapEdgeDetectGraph], ['sharpen', createSpreadWindowSharpenGraph]] as const)(
+    '%s of 3.2.7 opens with the same stage folders as the current recipe', (type, released) => {
+      const folders = (operatorGraph: ReturnType<typeof released>) => (effectOperatorGraph({ type, params: getDefaultParams(type) as Effect['params'], operatorGraph },
+        { inspectionOnly: true }).groups ?? []).map(group => group.label).filter(label => !/^(Pair Tap Offsets|Merge Pair Weights)$/.test(label));
+      const current = folders(createStylizeRecipeGraph(type)!);
+      expect(current.length).toBeGreaterThan(5);
+      expect(folders(released())).toEqual(current);
+    });
+
+  it('loads an untouched Glow of 3.2.7 (one unused weight card more, same pixels) as the current recipe: folders and plain notes', () => {
+    const released = createGlowGraphBefore20261022(), current = createDefaultGlowGraph();
+    expect(released.nodes.length).toBe(current.nodes.length + 1);
+    const effect = (operatorGraph: typeof released) => ({ type: 'glow', params: { ...getDefaultParams('glow'), threshold: 1.2 } as Effect['params'], operatorGraph });
+    const resolved = effectOperatorGraph(effect(released), { inspectionOnly: true });
+    expect(matchesEffectRecipe(resolved, current)).toBe(true);
+    expect((resolved.groups ?? []).map(group => group.label)).toEqual((effectOperatorGraph(effect(current), { inspectionOnly: true }).groups ?? []).map(group => group.label));
+    expect(effectDefinitionNotes(effect(released), 640, 360)).toEqual(effectDefinitionNotes(effect(current), 640, 360));
+    expect(effectDefinitionNotes(effect(released), 640, 360).join(' ')).not.toMatch(/edited graph/);
+    expect(stylizeRecipeUpdate('glow', released)).toBeUndefined();
+    // An edited 3.2.7 graph is user work and stays as saved.
+    const edited = { ...released, nodes: released.nodes.map(node => node.id === 'ramp-floor' ? { ...node, constants: { ...node.constants, value: 0.2 } } : node) } as typeof released;
+    expect(matchesEffectRecipe(effectOperatorGraph(effect(edited), { inspectionOnly: true }), current)).toBe(false);
   });
 
   it('gives new stylize effects their current recipe graph', () => {
@@ -215,6 +241,12 @@ describe('Vignette', () => {
       expect(gain({ amount: 1, size, softness: 1, roundness: 0 }, uv, [1920, 1080])).toBeCloseTo(1, 3);
     }
     expect(gain({ amount: 1, size: 0.95, softness: 0.1 }, [0.5 / 1920, 0.5 / 1080], [1920, 1080])).toBeLessThan(0.9);
+  });
+
+  it('ends the Size slider at the corners (1) and keeps up to 1.5 in the number field for saved Vignettes', () => {
+    const size = getEffect('vignette')!.params.size as { max?: number; renderMax?: number };
+    expect(size.max).toBe(1);
+    expect(size.renderMax).toBe(1.5);
   });
 
   it('looks the same at every resolution', () => {
@@ -352,6 +384,48 @@ describe('Edge Detect', () => {
       expect(change(edge)).toBeLessThanOrEqual(steady + 1 / 255);
     }
   });
+
+  it('draws the same line at 1080p and at 4K: past 8 taps per side the window spreads its taps instead of ending at 8 px', () => {
+    // Line brightness across a vertical step, at positions measured in 1080p pixels from the step.
+    const profile = (graph: ReturnType<typeof createStylizeRecipeGraph>, width: number, height: number) => {
+      const resolution: [number, number] = [height * 16 / 9, height], scale = height / 1080;
+      // A soft step over 3 px of a 1080p frame (as in real footage), the same share of every frame.
+      const source = ([u]: [number, number]): Pixel => {
+        const t = Math.min(1, Math.max(0, ((u - 0.5) * resolution[0] / scale + 1.5) / 3)), v = 0.2 + 0.5 * t * t * (3 - 2 * t);
+        return [v, v, v, 1];
+      };
+      const compiled = plan('edge-detect', { width, strength: 0.5 }, graph);
+      return Array.from({ length: 31 }, (_, index) => {
+        const uv: [number, number] = [0.5 + (index - 15 + 0.5) * scale / resolution[0], 0.5];
+        return evaluateImageOperatorPlan(compiled, source(uv), { uv, resolution, sampleImage: source })[0];
+      });
+    };
+    const largest = (a: number[], b: number[]) => Math.max(...a.map((value, index) => Math.abs(value - b[index])));
+    for (const width of [3, 5]) {
+      const current = createStylizeRecipeGraph('edge-detect');
+      expect(largest(profile(current, width, 1080), profile(current, width, 2160))).toBeLessThan(0.02);
+      expect(largest(profile(current, width, 540), profile(current, width, 2160))).toBeLessThan(0.04);
+    }
+    // The 3.2.7 window ended at 8 px: at 4K, Width 3 drew a clearly thinner line than at 1080p.
+    const released = createWholeTapEdgeDetectGraph();
+    expect(largest(profile(released, 3, 1080), profile(released, 3, 2160))).toBeGreaterThan(0.08);
+    // No note claims a cut window any more.
+    expect((getEffect('edge-detect') as FullscreenEffectDefinition).paramWarnings!({ ...getDefaultParams('edge-detect'), width: 6 } as Record<string, number>, 3840, 2160)).toEqual([]);
+  });
+
+  it('changes smoothly when an animated Width starts spreading the taps (2 sigma = 8 px)', () => {
+    const size = 32, pixel = (x: number, y: number): Pixel => {
+      const v = (x > 15 ? 0.65 : 0.3) + 0.15 * Math.sin(1.3 * x + 0.4 * y) * Math.cos(1.1 * y); return [v, v, v, 1];
+    };
+    const frame = (sigma: number) => render('edge-detect', { strength: 1, width: sigma * 1080 / size }, size, size, pixel);
+    const change = (sigma: number) => {
+      const [before, after] = [frame(sigma - 0.01), frame(sigma + 0.01)];
+      let largestChange = 0;
+      for (let index = 0; index < before.length; index++) largestChange = Math.max(largestChange, Math.abs(after[index] - before[index]));
+      return largestChange;
+    };
+    expect(change(4)).toBeLessThanOrEqual(Math.max(change(3.94), change(4.06)) + 1 / 255);
+  }, 60_000);
 
   it('finds no edges in a flat picture and keeps transparent surroundings transparent', () => {
     const flat = (): Pixel => [0.4, 0.4, 0.4, 1];

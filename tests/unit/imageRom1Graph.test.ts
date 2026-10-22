@@ -80,6 +80,28 @@ describe('ROM1 image operator graph', () => {
     expect(definition.params.trail).toMatchObject({ default: .98, min: 0, max: .995 });
   });
 
+  it('lets every trail fade to nothing on the 8-bit frame history (no grey ghost that never goes)', () => {
+    // The history is stored in 8 bits: a fade below half a step rounded back to the same value, so
+    // Trail 0.995 stopped at 100 of 255 and the fixed 0.98 of the earlier recipe at 24.
+    const quantized = (graph: EffectOperatorGraph, params: Record<string, unknown>, source: Rgba, history: Rgba, frames: number) => {
+      const plan = planOf(graph, params);
+      let previous = history;
+      for (let frame = 0; frame < frames; frame++) {
+        const next = evaluateImageOperatorPlan(plan, source, { uv: [.5, .5], timelineTimeSeconds: 1 + frame / 30, sampleImage: () => source, sampleResource: () => previous }) as Rgba;
+        previous = next.map(value => Math.round(Math.min(1, Math.max(0, value)) * 255) / 255) as Rgba;
+      }
+      return previous;
+    };
+    for (const trail of [.98, .99, .995]) {
+      const transparent = quantized(createDefaultRom1Graph(), { trail, gain: 0 }, [0, 0, 0, 0], [1, 1, 1, 1], 1500);
+      const opaque = quantized(createDefaultRom1Graph(), { trail, gain: 0 }, [0, 0, 0, 1], [1, 1, 1, 1], 1500);
+      expect(transparent[3]).toBe(0);
+      expect(opaque.slice(0, 3)).toEqual([0, 0, 0]);
+    }
+    // Above the floor the share kept per frame is exactly Trail (bright smoke keeps its length).
+    expect(run(createDefaultRom1Graph(), { trail: .98, gain: 0, opacity: 1, strength: 0 }, [0, 0, 0, 0], [.5, .8, .3, 1], 5)[3]).toBeCloseTo(.98 ** 5, 9);
+  });
+
   it('upgrades untouched saved graphs to the premultiplied recipe and keeps edited ones', () => {
     expect(matchesEffectRecipe(createSavedRom1GraphBefore20261022(), createRom1GraphBefore20261022())).toBe(true);
     for (const saved of [createSavedRom1GraphBefore20261022(), createSavedRom1GraphBeforeGainKnee()]) {

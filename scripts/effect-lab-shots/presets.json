@@ -71,15 +71,15 @@
     },
     {
       "effect": "glow",
-      "image": "dancer_stage",
+      "image": "neon_rain_street",
       "width": 1920,
       "crop": [
-        380,
+        520,
         0,
-        1080,
-        1080
+        640,
+        360
       ],
-      "cellWidth": 420
+      "cellWidth": 480
     },
     {
       "effect": "sheen",
@@ -95,15 +95,21 @@
     },
     {
       "effect": "vignette",
-      "image": "harbor_town",
+      "image": "dancer_stage",
       "width": 1920,
       "cellWidth": 420
     },
     {
       "effect": "edge-detect",
-      "image": "harbor_town",
+      "image": "dancer_stage",
       "width": 1920,
-      "cellWidth": 420
+      "cellWidth": 420,
+      "crop": [
+        380,
+        0,
+        1080,
+        1080
+      ]
     }
   ]
 }

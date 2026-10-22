@@ -106,10 +106,20 @@ export function stylizePresentation(type: string, graph: EffectOperatorGraph): {
  * Edge Detect of 3.2.7: whole window taps out to ceil(2 sigma), so its lines jumped whenever an
  * animated Width made the window one tap wider; both agree where 2 sigma is a whole number of pixels.
  */
-const previousRecognizers: Partial<Record<StylizeRecipeEffectType, (graph: EffectOperatorGraph | undefined) => boolean>> = {
-  sharpen: recognizer(createSpreadWindowSharpenGraph),
-  'edge-detect': recognizer(createWholeTapEdgeDetectGraph),
+const PREVIOUS: Partial<Record<StylizeRecipeEffectType, () => EffectOperatorGraph>> = {
+  sharpen: createSpreadWindowSharpenGraph, 'edge-detect': createWholeTapEdgeDetectGraph,
 };
+const previousRecognizers: Partial<Record<StylizeRecipeEffectType, (graph: EffectOperatorGraph | undefined) => boolean>> = Object.fromEntries(
+  Object.entries(PREVIOUS).map(([type, create]) => [type, recognizer(create)]));
+
+/**
+ * The previous release's recipe of this stylize effect, if it has one. It shares the current
+ * recipe's folder plan, so an untouched saved copy opens with the same stage folders.
+ */
+export function previousStylizeRecipe(type: string): { key: string; createDefault: () => EffectOperatorGraph } | undefined {
+  const create = isRecipeType(type) ? PREVIOUS[type] : undefined;
+  return create ? { key: 'previous', createDefault: create } : undefined;
+}
 
 /** True when `graph` is an untouched previous release of this stylize effect's current recipe (see above). */
 export function isPreviousStylizeGraph(type: string, graph: EffectOperatorGraph | undefined): boolean {
@@ -155,9 +165,9 @@ const PREVIOUS_STYLIZE_RECIPE_UPDATES: Partial<Record<StylizeRecipeEffectType, S
   sharpen: { message: 'This Sharpen was saved with version 3.2.7 and keeps that look; its halo limit can jump a step when Radius is animated.',
     label: 'Use the new Sharpen',
     toolNote: 'This Sharpen runs the 3.2.7 version saved with its project: the same values, but its halo limit can jump a step while Radius is animated (between whole steps of twice the blur sigma).' },
-  'edge-detect': { message: 'This Edge Detect was saved with version 3.2.7 and keeps that look; its lines can jump a step when Width is animated.',
+  'edge-detect': { message: 'This Edge Detect was saved with version 3.2.7 and keeps that look; its lines can jump a step when Width is animated, and its window ends at 8 px, so wide lines come out thinner in large frames (at 4K above Width 2).',
     label: 'Use the new Edge Detect',
-    toolNote: 'This Edge Detect runs the 3.2.7 version saved with its project: the same values, but its lines can jump a step while Width is animated (whenever twice the line sigma passes a whole pixel).' },
+    toolNote: 'This Edge Detect runs the 3.2.7 version saved with its project: the same values, but its lines can jump a step while Width is animated (whenever twice the line sigma passes a whole pixel), and its window ends at 8 px, so a Width above 4 x 1080 / (shorter frame side) draws thinner lines than set (at 4K above 2).' },
 };
 
 /** What the inspector offers for an untouched earlier or previous recipe of this stylize effect; undefined for the current one. */

@@ -26,9 +26,9 @@ Group: [Light & Stylize](../Effects-Stylize.md) · [How to add an effect](../Eff
 
 <figure class="docs-shot docs-shot--detail">
 
-![The harbour town four times, labelled: Soft Frame with only the corners a little darker, Old Lens with dark corners that follow the frame, Spotlight with a round pool of light in the middle and the rest almost black, Iris with a hard-edged black circle around the town](../assets/effects/presets/vignette.webp)
+![The dancer on a stage four times, labelled: Soft Frame with only the corners a little darker, Old Lens with dark corners that follow the frame, Spotlight with a round pool of light around the dancer and the stage almost black, Iris with a hard-edged black circle around her](../assets/effects/presets/vignette.webp)
 
-<figcaption>The four presets on the harbour town.</figcaption>
+<figcaption>The four presets on the dancer.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all four controls in one undo step, and the row shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -47,7 +47,7 @@ Pick one in the **Preset** row of the effect card. It sets all four controls in 
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside a strip of the preview where the dancer's lit dress and arm fade into a dark stage](../assets/effects/editor/vignette-inspector.webp)
+![Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside a strip of the preview where the harbour town stays lit only in a round patch at the centre and fades to black towards every edge](../assets/effects/editor/vignette-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 422" aria-hidden="true" focusable="false">
 <defs><marker id="vignette-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -55,23 +55,19 @@ Pick one in the **Preset** row of the effect card. It sets all four controls in 
 <circle class="docs-shot-number" cx="639" cy="224" r="18" /><text x="639" y="224" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M631 274 L715 274" marker-end="url(#vignette-inspector-arrow)" />
 <circle class="docs-shot-number" cx="631" cy="274" r="18" /><text x="631" y="274" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M652 304 L736 304" marker-end="url(#vignette-inspector-arrow)" />
-<circle class="docs-shot-number" cx="652" cy="304" r="18" /><text x="652" y="304" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M625 334 L709 334" marker-end="url(#vignette-inspector-arrow)" />
-<circle class="docs-shot-number" cx="625" cy="334" r="18" /><text x="625" y="334" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M609 364 L693 364" marker-end="url(#vignette-inspector-arrow)" />
-<circle class="docs-shot-number" cx="609" cy="364" r="18" /><text x="609" y="364" class="docs-shot-number-text">5</text>
+<circle class="docs-shot-number" cx="625" cy="334" r="18" /><text x="625" y="334" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
-<figcaption>Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Size: where the darkening begins. 4 — Softness: how gradually it fades in. 5 — Roundness: circle or frame shape.</figcaption>
+<figcaption>Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Softness: how gradually it fades in.</figcaption>
 </figure>
 
 **Preset** – a starting point for all four controls; see [Presets](#presets).
 
 **Amount** – how dark the edges get. 0.3 is barely noticeable, the default 0.5 a clear but natural darkening, and at 1 the darkest part goes fully black, for a spotlight or an iris. Only the colour gets darker; transparent parts stay transparent. 0 to 1, default 0.5.
 
-**Size** – where the darkening begins, measured from the middle (0) to the corners (1). At the default 0.5 it begins about where a circle would touch the top and bottom of a 16:9 frame; at 0.1–0.2 only the middle stays bright. From 1 on the darkening would start past the corners, so nothing darkens, and the card says so; the slider reaches 1.5 because Vignettes saved before 2026-10-21 still use that range. Animate it for an iris that opens or closes. 0 to 1.5, default 0.5.
+**Size** – where the darkening begins, measured from the middle (0) to the corners (1). At the default 0.5 it begins about where a circle would touch the top and bottom of a 16:9 frame; at 0.1–0.2 only the middle stays bright. The slider ends at 1, where the darkening starts at the corners and nothing darkens any more; the number field still takes up to 1.5 for Vignettes saved before 2026-10-21, and a Size of 1 or more that arrives from keyframes or the AI tools gets a note in the card. Animate it for an iris that opens or closes. 0 to 1, default 0.5.
 
 **Softness** – how gradually the darkening fades in, from where Size begins to how far it reaches. At 1 it fades over the whole frame, gentle as a lens; around 0.5 it is a clear soft ring; at 0 it is a hard edge, only one and a half pixels wide, for an iris or a keyhole. Size plus Softness above 1 means the corners are only partly dark. 0 to 1, default 0.5.
 

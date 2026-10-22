@@ -21,13 +21,13 @@ Group: [Light & Stylize](../Effects-Stylize.md) · [How to add an effect](../Eff
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/rom1-presets.mp4" poster="../assets/effects/clips/rom1-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Soft Echo top left with short, faint trails, Light Trails top right with her arms and dress streaking sideways, Dripping Light bottom left with trails that run up and down in streaks, Smoke Storm bottom right with large swirling smoke that fills the stage"></video>
+<video src="../assets/effects/clips/rom1-presets.mp4" poster="../assets/effects/clips/rom1-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Soft Echo top left with faint trails beside her and her face clear, Light Trails top right with her arms and dress streaking sideways, Dripping Light bottom left with trails that run up and down in streaks, Smoke Storm bottom right with large swirling smoke that fills the stage"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Soft Echo** – short, faint trails that cling to the figure. The footage stays clear; a gentle afterglow for dance and slow movement.
+**Soft Echo** – short, faint trails beside the figure at Opacity 0.6. Face and costume stay clear; a gentle afterglow for dance and slow movement.
 
 **Light Trails** – the flow runs sideways only, so arms, lights and a dress streak across the frame. Strong on turns and on lights passing by.
 
@@ -63,7 +63,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 Rom1 makes every frame from its own last one: it pushes that frame a little along the currents, keeps whichever is brighter, the picture or the smoke, and lets the smoke fade by **Trail**. Some controls overlap: **Strength** and **Speed** multiply each other, and so do **Density** and **Detail**. The **Preset** row sets them all at once.
 
-**History Loop** – what happens to the smoke when playback loops back to the start. Reset clears it, so every pass starts clean, as on the first play; Continuous keeps the trails across the loop point, for an installation loop without a visible restart. Scrubbing or jumping always starts fresh. Reset, Continuous, default Reset.
+**History Loop** – what happens to the smoke when playback loops back to the start. Reset clears it, so every pass starts clean, as on the first play; Continuous keeps the trails across the loop point, for an installation loop without a visible restart. Scrubbing or jumping always starts fresh. Two settings: Reset, Continuous, default Reset.
 
 <div class="docs-float-end"></div>
 
@@ -81,7 +81,7 @@ Rom1 makes every frame from its own last one: it pushes that frame a little alon
 <figcaption>Trail from 0.5 to 0.995 and back.</figcaption>
 </figure>
 
-**Trail** – how much of the smoke stays from one frame to the next, so how long it lingers. 0.5 leaves only a faint smear at the edges, 0.9 short echoes, 0.98 long trails of about two seconds, 0.995 smoke that hardly fades. A higher value renders as 0.995, and the card says so: the smoke always fades in the end. It counts frames, so at a higher frame rate the smoke fades sooner. 0 to 0.995, default 0.98.
+**Trail** – how much of the smoke stays from one frame to the next, so how long it lingers. 0.5 leaves only a faint smear at the edges, 0.9 short echoes, 0.98 long trails of about two seconds, 0.995 smoke that hardly fades. A higher value renders as 0.995, and the card says so. Each frame also fades the smoke by at least three quarters of an 8-bit step, so even 0.995 fades out completely, after about ten seconds, instead of leaving a grey ghost. It counts frames, so at a higher frame rate the smoke fades sooner. 0 to 0.995, default 0.98.
 
 <div class="docs-float-end"></div>
 
@@ -94,21 +94,11 @@ Rom1 makes every frame from its own last one: it pushes that frame a little alon
 
 <div class="docs-float-end"></div>
 
-<figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/rom1-speed.mp4" poster="../assets/effects/clips/rom1-speed.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Rom1 while Speed runs from 0 to 16 and back: the trails start to flow and smear further and further into large swirling shapes, then calm down again; the current value is shown at the bottom left"></video>
-<figcaption>Speed from 0 to 16 and back.</figcaption>
-</figure>
-
-**Speed** – how far the picture flows along the currents each frame. 4 drifts slowly, 10 and more smears the figure into large swirls. At 0 the smoke still trails behind moving things but no longer flows (the card says so). It multiplies **Strength**: doubling one does the same as doubling the other. The currents themselves change slowly over time, whatever Speed is. 0 to 40, default 4.
+**Speed** – the same as **Strength**, on a larger scale: the two multiply, so doubling one does the same as doubling the other, and the Strength loop below shows both. Set Speed for the overall pace (4 drifts slowly, 10 and more smears the figure into large swirls) and keyframe Strength. At 0 the smoke still trails behind moving things but no longer flows (the card says so). The currents themselves change slowly over time, whatever Speed is. 0 to 40, default 4.
 
 <div class="docs-float-end"></div>
 
-<figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/rom1-detail.mp4" poster="../assets/effects/clips/rom1-detail.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Rom1 while Detail runs from 0.5 to 8 and back: the smoke changes from broad, slow sweeps to finer, more broken streaks and back; the current value is shown at the bottom left"></video>
-<figcaption>Detail from 0.5 to 8 and back.</figcaption>
-</figure>
-
-**Detail** – the size of the currents, together with **Density**: the two multiply. Low values give broad, slow sweeps, high values fine, broken streaks. At 0 the currents merge into one wide stream (the card says so). 0 to 8, default 4.
+**Detail** – the same as **Density**: the two multiply, so the Density loop below shows both. Low values give broad, slow sweeps, high values finer, more broken streaks. At 0 the currents merge into one wide stream (the card says so). 0 to 8, default 4.
 
 <div class="docs-float-end"></div>
 
@@ -117,16 +107,16 @@ Rom1 makes every frame from its own last one: it pushes that frame a little alon
 <figcaption>Strength from 0 to 1 and back.</figcaption>
 </figure>
 
-**Strength** – how far the picture flows each frame, like **Speed** (the two multiply). 0 stops the flow, so only the trail of moving things remains; 0.3 drifts gently; 1 smears the picture into large swirls. Use Strength for fine changes and keyframes, Speed for the overall pace. 0 to 1, default 0.32.
+**Strength** – how far the picture flows along the currents each frame. 0 stops the flow, so only the trail of moving things remains; 0.3 drifts gently; 1 smears the picture into large swirls. Use Strength for fine changes and keyframes, Speed for the overall pace. 0 to 1, default 0.32.
 
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/rom1-density.mp4" poster="../assets/effects/clips/rom1-density.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Rom1 while Density runs from 0.5 to 16 and back: the smoke changes from broad, slow sweeps to finer, more broken streaks and back; the current value is shown at the bottom left"></video>
-<figcaption>Density from 0.5 to 16 and back.</figcaption>
+<video src="../assets/effects/clips/rom1-density.mp4" poster="../assets/effects/clips/rom1-density.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Rom1 at Strength 0.15 while Density runs from 1 to 16 and back: the smoke changes from a few broad, slow sweeps to many smaller currents and back; the current value is shown at the bottom left"></video>
+<figcaption>Density from 1 to 16 and back, at Strength 0.15.</figcaption>
 </figure>
 
-**Density** – how many currents cross the frame, together with **Detail** (the two multiply): at the defaults, 4 × 4, about 16 across the width. 1–2 makes a few wide streams, 8–16 many fine ones, and very high values break the smoke into grain. 0 to 100, default 4.
+**Density** – how many currents cross the frame, together with **Detail** (the two multiply): at the defaults, 4 × 4, about 16 across the width. 1–2 makes a few wide streams, 8–16 many smaller ones, and very high values break the smoke into grain. 0 to 100, default 4.
 
 <div class="docs-float-end"></div>
 
@@ -148,7 +138,7 @@ Rom1 makes every frame from its own last one: it pushes that frame a little alon
 
 <div class="docs-float-end"></div>
 
-**Reset** – clears the smoke at once when you switch it on; it then builds again from the current picture. Switch it off again before the next reset. on or off, default off.
+**Reset** – clears the smoke at once when you switch it on; it then builds again from the current picture. Switch it off again before the next reset. A switch: on or off, default off.
 
 ## Node setup
 
@@ -219,7 +209,7 @@ Rom1 works in nine stages, one folder each in the Nodes tab. **Noise Scale**, **
 </svg>
 </div>
 
-<figcaption>Inside Noise Scale. 1 — Maximum: Density above 0. 2 — UV × Density. 3 — Noise Position: where the noise is read.</figcaption>
+<figcaption>Inside Noise Scale. 1 — Maximum: Density above 0. 2 — UV × Density: the frame in currents. 3 — Noise Position: where the noise is read.</figcaption>
 </figure>
 
 **Maximum** – keeps Density above 0 (at least 0.001); the other Maximum does the same for Detail, so a 0 never turns the currents into nothing.
@@ -347,7 +337,7 @@ Rom1 works in nine stages, one folder each in the Nodes tab. **Noise Scale**, **
 </svg>
 </div>
 
-<figcaption>Inside Frame Edge Fade (the edges −0.005 and 0.025 come from Constants). 1 — Distance to Side. 2 — Distance to Edge: the nearest edge. 3 — Smoothstep: the fade.</figcaption>
+<figcaption>Inside Frame Edge Fade (the edges −0.005 and 0.025 come from Constants). 1 — Distance to Side: left or right. 2 — Distance to Edge: the nearest edge. 3 — Smoothstep: the fade.</figcaption>
 </figure>
 
 **Distance to Side** – the smaller of x and 1 − x: how close the drifted place is to the left or right edge. Its twin does the same for top and bottom.
@@ -375,7 +365,7 @@ Rom1 works in nine stages, one folder each in the Nodes tab. **Noise Scale**, **
 </svg>
 </div>
 
-<figcaption>Inside Premultiplied Reads, the read of the last frame (the two reads of the picture are left out). 1 — Sample Image: the last frame. 2 — Last Frame Alpha (faded at edges). 3 — Last Frame (premultiplied): colour × transparency.</figcaption>
+<figcaption>Inside Premultiplied Reads, the read of the last frame (the two reads of the picture are left out). 1 — Sample Image: the last frame. 2 — Last Frame Alpha (faded at edges): no smoke from outside. 3 — Last Frame (premultiplied): colour × transparency.</figcaption>
 </figure>
 
 **Sample Image** – reads the last frame (the frame history) at the drifted place. Two more reads, left out here, take the picture at the pixel itself and at the drifted place.
@@ -420,31 +410,35 @@ Rom1 works in nine stages, one folder each in the Nodes tab. **Noise Scale**, **
 
 <div class="docs-shot-stage">
 
-![Inside the Trail folder: Clamp keeps Trail between 0 and 0.995; two Multiply cards fade the last frame's colour and alpha by it; two Maximum cards keep the brighter of the faded trail and the Lifted Picture, and of the faded alpha and the Picture Alpha; a last Clamp gives the Smoke Alpha](../assets/effects/graphs/rom1-trail.webp)
+![Inside the Trail folder, reduced to its recipe: Clamp keeps the Trail control in range; Multiply fades the Last Frame (premultiplied) by it into the Faded Trail; two Subtract cards and a Maximum with Zero work out how much the fade falls short of the Fade Floor of 3/4 step; a third Subtract takes that off, and Maximum keeps the brighter of this faded trail and the Lifted Picture as the Smoke](../assets/effects/graphs/rom1-trail.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 485" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 565" aria-hidden="true" focusable="false">
 <defs><marker id="rom1-trail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M216 336 L216 252" marker-end="url(#rom1-trail-arrow)" />
-<circle class="docs-shot-number" cx="216" cy="336" r="18" /><text x="216" y="336" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M497 22 L497 99" marker-end="url(#rom1-trail-arrow)" />
-<circle class="docs-shot-number" cx="497" cy="22" r="18" /><text x="497" y="22" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M779 22 L779 99" marker-end="url(#rom1-trail-arrow)" />
-<circle class="docs-shot-number" cx="779" cy="22" r="18" /><text x="779" y="22" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M931 154 L931 238" marker-end="url(#rom1-trail-arrow)" />
-<circle class="docs-shot-number" cx="931" cy="154" r="18" /><text x="931" y="154" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M204 543 L204 459" marker-end="url(#rom1-trail-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="543" r="18" /><text x="204" y="543" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M326 37 L326 121" marker-end="url(#rom1-trail-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="37" r="18" /><text x="326" y="37" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M691 208 L691 292" marker-end="url(#rom1-trail-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="208" r="18" /><text x="691" y="208" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M813 22 L813 44" marker-end="url(#rom1-trail-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="22" r="18" /><text x="813" y="22" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M935 208 L935 292" marker-end="url(#rom1-trail-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="208" r="18" /><text x="935" y="208" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Trail (fade, keep brighter). 1 — Trail (0 to 0.995): the control, kept in range. 2 — Faded Trail: a little fainter each frame. 3 — Smoke: the brighter of trail and picture. 4 — Smoke Alpha: the larger transparency.</figcaption>
+<figcaption>Inside Trail (fade, keep brighter), reduced to its recipe (the transparency takes the same steps). 1 — Trail (kept in range): the control, 0 to 0.995. 2 — Faded Trail: the last frame times Trail. 3 — Missing Fade: what the fade lacks of 3/4 step. 4 — Faded Trail (at least a step): always a little fainter. 5 — Smoke: the brighter of trail and picture.</figcaption>
 </figure>
 
-**Trail (0 to 0.995)** – the Trail control, kept between 0 and 0.995.
+**Trail (kept in range)** – the Trail control, kept between 0 and 0.995.
 
 **Faded Trail** – the last frame times Trail: the smoke, a little fainter than a frame ago.
 
-**Smoke** – the brighter of the faded trail and the lifted picture, colour by colour. Bright things leave smoke behind; dark things cannot cover it.
+**Missing Fade** – the frame history keeps 8 bits per channel, so a fade smaller than half a step would round back to the same value and the smoke would never quite go. The two Subtract cards before it measure how much the fade by Trail falls short of the Fade Floor (three quarters of a step); Maximum with Zero keeps only a shortfall.
 
-**Smoke Alpha** – the same for transparency: the larger of the picture's and the faded trail's, so smoke can lie over transparent parts of a layer.
+**Faded Trail (at least a step)** – the Faded Trail minus that shortfall: every frame the smoke fades by at least three quarters of a step, so even Trail 0.995 fades out completely. Bright smoke fades by Trail alone; only the last faint tail is affected.
+
+**Smoke** – the brighter of this faded trail and the lifted picture, colour by colour. Bright things leave smoke behind; dark things cannot cover it. The transparency goes through the same steps (Smoke Alpha), so smoke can lie over transparent parts of a layer.
 
 ### Opacity Mix & Straight Alpha
 
@@ -467,7 +461,7 @@ Rom1 works in nine stages, one folder each in the Nodes tab. **Noise Scale**, **
 </svg>
 </div>
 
-<figcaption>Inside Opacity Mix & Straight Alpha, reduced to its recipe (turning the colour back into an image is left out). 1 — Mixed (premultiplied): picture and smoke by Opacity. 2 — Mixed Alpha. 3 — Divide: back to plain colour. 4 — Clamp: 0 to 1.</figcaption>
+<figcaption>Inside Opacity Mix & Straight Alpha, reduced to its recipe (turning the colour back into an image is left out). 1 — Mixed (premultiplied): picture and smoke by Opacity. 2 — Mixed Alpha: transparency by Opacity. 3 — Divide: back to plain colour. 4 — Clamp: 0 to 1.</figcaption>
 </figure>
 
 **Mixed (premultiplied)** – blends the picture and the smoke by Opacity.

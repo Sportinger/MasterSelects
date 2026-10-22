@@ -47,36 +47,34 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Sheen card: the Preset menu showing Golden Beam, Position 0.5, Angle -60 degrees, Width 0.16, Softness 0.7, Intensity 1.2, Highlights 0.6 and a golden Color swatch, beside a strip of the preview where a warm beam crosses the dancer](../assets/effects/editor/sheen-inspector.webp)
+![Properties, Effects with a Sheen card: the Preset menu showing Golden Beam, Position 0.5, Angle -60 degrees, Width 0.16, Softness 0.7, Intensity 1.2, Highlights 0.6 and a golden Color swatch, beside the preview where a warm golden beam crosses the dancer's dress and arm](../assets/effects/editor/sheen-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 619" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 434" aria-hidden="true" focusable="false">
 <defs><marker id="sheen-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M554 344 L638 344" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="554" cy="344" r="18" /><text x="554" y="344" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M571 382 L655 382" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="571" cy="382" r="18" /><text x="571" y="382" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M571 419 L655 419" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="571" cy="419" r="18" /><text x="571" y="419" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M548 457 L632 457" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="548" cy="457" r="18" /><text x="548" y="457" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M551 494 L635 494" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="551" cy="494" r="18" /><text x="551" y="494" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M673 198 L757 198" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="673" cy="198" r="18" /><text x="673" y="198" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M665 241 L749 241" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="665" cy="241" r="18" /><text x="665" y="241" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M677 294 L761 294" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="677" cy="294" r="18" /><text x="677" y="294" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M663 347 L747 347" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="663" cy="347" r="18" /><text x="663" y="347" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M679 399 L763 399" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="679" cy="399" r="18" /><text x="679" y="399" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Sheen with the Golden Beam preset. 1 — Preset: pick a starting point. 2 — Position: where the band is. 3 — Angle: which way it travels. 4 — Width: how far the light reaches. 5 — Softness: how gently it fades. 6 — Intensity: how bright.</figcaption>
+<figcaption>Sheen with the Golden Beam preset. 1 — Preset: pick a starting point. 2 — Position: where the band is. 3 — Width: how far the light reaches. 4 — Intensity: how bright. 5 — Color: the tint of the light.</figcaption>
 </figure>
 
 **Preset** – a starting point for all controls; see [Presets](#presets).
 
-<figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/sheen-position.mp4" poster="../assets/effects/clips/sheen-position.webp" width="768" height="432" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage while Sheen's Position runs from 0 to 1 and back: a soft white band of light, leaning to the right, slides in from the left edge, crosses her dress, leaves at the right edge and comes back; the current value is shown at the bottom left"></video>
-<figcaption>Position from 0 to 1 and back.</figcaption>
+<figure class="docs-shot docs-clip">
+<video src="../assets/effects/clips/sheen-position.mp4" poster="../assets/effects/clips/sheen-position.webp" width="960" height="266" autoplay muted loop playsinline preload="none" aria-label="The silver title ACT ONE on a transparent layer, shown over black, while Sheen's Position (Glint preset) runs from 0 to 1 and back: a thin bright glint, leaning to the right, slides across the letters from left to right and back; the light appears only on the letters, never on the empty background between them; the current value is shown at the bottom left"></video>
+<figcaption>Glint on a title layer: Position from 0 to 1 and back.</figcaption>
 </figure>
 
-**Position** – where the band is on its way across the layer. At 0 it waits just outside one edge, at 1 just outside the other, so a keyframe from 0 to 1 is one complete sweep that starts and ends with no light at all. Near both ends only the tip of the band touches a corner, so the light seems to arrive a little late and leave a little early. Half a second reads as a glint, three seconds and more as a slow beam. 0 to 1, default 0.5.
+**Position** – where the band is on its way across the layer. At 0 it waits just outside one edge, at 1 just outside the other, so a keyframe from 0 to 1 is one complete sweep that starts and ends with no light at all. Near both ends only the tip of the band touches a corner, so the light seems to arrive a little late and leave a little early. Half a second reads as a glint, three seconds and more as a slow beam. On a title layer, as in the loop above, the light falls only on the letters and stops cleanly at their edges; where the band crosses empty layer around the title, nothing shows. 0 to 1, default 0.5.
 
 <div class="docs-float-end"></div>
 
@@ -97,7 +95,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Highlights** – how much more the light catches bright surfaces than dark ones. At 0 every part of the band gets the same light, so it also shows over black as a grey haze, like a beam in smoke. At 1 the light falls only where the picture is already bright, like a reflection on a glossy surface, and black stays black. The default 0.6 lies in between: the band shows on the dark stage but is strongest on the dress. 0 to 1, default 0.6.
 
-**Color** – the tint of the light. White keeps the colours of the picture, warm yellow gives sunlight, pale blue moonlight. A darker colour gives a dimmer light of that tint, and black gives none. a colour, default `#ffffff`.
+**Color** – the tint of the light. White keeps the colours of the picture, warm yellow gives sunlight, pale blue moonlight. A darker colour gives a dimmer light of that tint, and black gives none. Color cannot be keyframed; for a change of tint, stack two Sheens and keyframe their Intensity. The swatch takes a colour, default `#ffffff` (white).
 
 <div class="docs-float-end"></div>
 

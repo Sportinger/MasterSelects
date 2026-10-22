@@ -30,7 +30,7 @@ export function rom1PresentationPlan(type: string): EffectPresentationPlan | und
       'wet-premultiplied': 'Drifted Picture (premultiplied)', 'feedback-premultiplied': 'Last Frame (premultiplied)',
       'safe-gain': 'Gain (≥ 0)', 'gain-knee': 'Gain Lift', 'gain-rgb': 'Gain Lift (RGB)', 'alpha-gain': 'Lift × Alpha',
       'wet-mix': 'Wet Picture', 'lifted-raw': 'Wet Picture + Lift', lifted: 'Lifted Picture',
-      'trail-clamped': 'Trail (0 to 0.995)', advected: 'Faded Trail', 'feedback-alpha-decayed': 'Faded Trail Alpha', 'water-rgb': 'Smoke', 'water-alpha-max': 'Brighter Alpha', 'water-alpha': 'Smoke Alpha',
+      'trail-clamped': 'Trail (kept in range)', advected: 'Faded Trail', 'trail-fade-floor': 'Fade Floor (3/4 step)', 'trail-faded-by': 'Fade by Trail', 'trail-shortfall': 'Missing Fade', 'trail-faded': 'Faded Trail (at least a step)', 'trail-alpha-faded-by': 'Alpha Fade by Trail', 'trail-alpha-shortfall': 'Missing Alpha Fade', 'trail-alpha-faded': 'Faded Trail Alpha (at least a step)', 'feedback-alpha-decayed': 'Faded Trail Alpha', 'water-rgb': 'Smoke', 'water-alpha-max': 'Brighter Alpha', 'water-alpha': 'Smoke Alpha',
       'opacity-clamp': 'Opacity (0 to 1)', mixed: 'Mixed (premultiplied)', 'mixed-alpha': 'Mixed Alpha', 'mixed-alpha-safe': 'Mixed Alpha (> 0)',
       straight: 'Straight Colour', 'straight-clamped': 'Straight Colour (0 to 1)', 'water-value': 'Smoke (RGBA)', 'result:image': 'Rom1',
     },
@@ -43,6 +43,6 @@ export function rom1PresentationPlan(type: string): EffectPresentationPlan | und
             : /^(warped-parts|one-minus-[xy]|edge-[xy]|edge|edge-mask)$/.test(id) ? 'edges'
               : /^(source|wet-source|feedback-sample|source-split|wet-split|feedback-split|(source|wet|feedback)-alpha-(vec4|components)|feedback-alpha-masked|(source|wet|feedback)-premultiplied)$/.test(id) ? 'read'
                 : /^(wet-mix|alpha-gain|lifted-raw|lifted|safe-gain|gain-rgb|gain-knee.*)$/.test(id) ? 'lift'
-                  : /^(trail-clamped|advected|water-rgb|feedback-alpha-decayed|water-alpha-max|water-alpha)$/.test(id) ? 'trail' : 'finish',
+                  : /^(trail-.*|advected|water-rgb|feedback-alpha-decayed|water-alpha-max|water-alpha)$/.test(id) ? 'trail' : 'finish',
   };
 }

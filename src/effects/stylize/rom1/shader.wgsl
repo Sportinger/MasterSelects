@@ -86,9 +86,17 @@ fn rom1Fragment(input: VertexOutput) -> @location(0) vec4f {
     vec3f(source.a)
   );
 
+  // The history is 8-bit: each frame fades by at least three quarters of a step, so every trail reaches
+  // zero (a smaller fade rounded back to the same value and left a grey ghost).
   let feedbackDecay = clamp(params.trail, 0.0, 0.995);
-  let waterPremultiplied = max(liftedPremultiplied, feedback.rgb * feedbackAlpha * feedbackDecay);
-  let waterAlpha = clamp(max(source.a, feedbackAlpha * feedbackDecay), 0.0, 1.0);
+  let fadeFloor = 0.75 / 255.0;
+  let feedbackPremultiplied = feedback.rgb * feedbackAlpha;
+  let decayedPremultiplied = feedbackPremultiplied * feedbackDecay;
+  let fadedPremultiplied = decayedPremultiplied - max(vec3f(fadeFloor) - (feedbackPremultiplied - decayedPremultiplied), vec3f(0.0));
+  let decayedAlpha = feedbackAlpha * feedbackDecay;
+  let fadedAlpha = decayedAlpha - max(fadeFloor - (feedbackAlpha - decayedAlpha), 0.0);
+  let waterPremultiplied = max(liftedPremultiplied, fadedPremultiplied);
+  let waterAlpha = clamp(max(source.a, fadedAlpha), 0.0, 1.0);
 
   let opacity = clamp(params.opacity, 0.0, 1.0);
   let mixedPremultiplied = mix(sourcePremultiplied, waterPremultiplied, opacity);

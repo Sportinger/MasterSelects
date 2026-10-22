@@ -25,9 +25,9 @@ Group: [Light & Stylize](../Effects-Stylize.md) · [How to add an effect](../Eff
 
 <figure class="docs-shot docs-shot--detail">
 
-![The dancer on the dark stage four times, labelled: Tight Halo with a thin glow along the bright folds of her dress, Neon Bloom with a strong white halo around dress and arms, Dream Glow with her whole figure shining in a soft warm haze, Moonlight with a cool blue-white halo around her](../assets/effects/presets/glow.webp)
+![Neon signs on a rainy night street four times, labelled: Tight Halo with crisp tubes and a thin halo hugging each sign, Neon Bloom with the pink spiral, the cyan sign and the yellow lights blooming strongly into the rain, Dream Glow with a softer, wider haze over the whole street, Moonlight with cooler, bluish halos around every light](../assets/effects/presets/glow.webp)
 
-<figcaption>The four presets on the dancer.</figcaption>
+<figcaption>The four presets on neon signs in the rain.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all five controls in one undo step, and the row shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -38,7 +38,7 @@ Pick one in the **Preset** row of the effect card. It sets all five controls in 
 
 **Dream Glow** – the Threshold drops so far that bright skin and costumes join in: the whole figure shines in a soft, wide haze. For memories, dreams and slow scenes.
 
-**Moonlight** – a cool blue-white halo, like moonlight or a cold follow spot. It turns the warm stage light around the dancer cold without regrading the picture.
+**Moonlight** – a cool blue halo, like moonlight or a cold follow spot. It turns warm lights cold around their edges without regrading the picture.
 
 ## Controls
 
@@ -87,7 +87,7 @@ Pick one in the **Preset** row of the effect card. It sets all five controls in 
 
 **Radius** – how far the light spreads. 10–20 px is a tight halo that hugs the light, 80 px a soft glow, 150 px and more a wide haze that fills the dark around a lamp. It counts pixels of a 1080p picture, so the preview, a 4K export and a portrait frame show the same glow, and it changes smoothly when animated. At 0 the lights only brighten without spreading. 0 to 300 px, default 80 px.
 
-**Color** – tints the halo: white keeps each light's own colour, warm orange gives candle light, a pale blue moonlight. A light that is already white stays white at its centre; the tint shows in the glow around it. a colour, default `#ffffff`.
+**Color** – tints the halo: white keeps each light's own colour, warm orange gives candle light, a pale blue moonlight. A light that is already white stays white at its centre; the tint shows in the glow around it. Color cannot be keyframed; for a change of tint on a cue, stack two Glows with different colours and keyframe their Amounts. The swatch takes a colour, default `#ffffff` (white).
 
 ## Node setup
 

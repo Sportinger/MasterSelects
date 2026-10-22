@@ -54,8 +54,8 @@
         "intensity": 1.2
       },
       "image": "dancer_stage.jpg",
-      "preview": 380,
-      "alt": "Properties, Effects with a Sheen card: the Preset menu showing Golden Beam, Position 0.5, Angle -60 degrees, Width 0.16, Softness 0.7, Intensity 1.2, Highlights 0.6 and a golden Color swatch, beside a strip of the preview where a warm beam crosses the dancer",
+      "preview": 680,
+      "alt": "Properties, Effects with a Sheen card: the Preset menu showing Golden Beam, Position 0.5, Angle -60 degrees, Width 0.16, Softness 0.7, Intensity 1.2, Highlights 0.6 and a golden Color swatch, beside the preview where a warm golden beam crosses the dancer's dress and arm",
       "marks": [
         {
           "target": "Preset",
@@ -66,27 +66,23 @@
           "label": "Position"
         },
         {
-          "target": "Angle",
-          "label": "Angle"
-        },
-        {
           "target": "Width",
           "label": "Width"
         },
         {
-          "target": "Softness",
-          "label": "Softness"
-        },
-        {
           "target": "Intensity",
           "label": "Intensity"
+        },
+        {
+          "target": "Color",
+          "label": "Color"
         }
       ],
       "top": "tabs",
       "hide": [
         "Particle Out"
       ],
-      "caption": "Sheen with the Golden Beam preset. 1 — Preset: pick a starting point. 2 — Position: where the band is. 3 — Angle: which way it travels. 4 — Width: how far the light reaches. 5 — Softness: how gently it fades. 6 — Intensity: how bright."
+      "caption": "Sheen with the Golden Beam preset. 1 — Preset: pick a starting point. 2 — Position: where the band is. 3 — Width: how far the light reaches. 4 — Intensity: how bright. 5 — Color: the tint of the light."
     },
     {
       "name": "vignette-inspector",
@@ -97,9 +93,9 @@
         "softness": 0.5,
         "roundness": 1
       },
-      "image": "dancer_stage.jpg",
+      "image": "harbor_town.jpg",
       "preview": 560,
-      "alt": "Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside a strip of the preview where the dancer's lit dress and arm fade into a dark stage",
+      "alt": "Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside a strip of the preview where the harbour town stays lit only in a round patch at the centre and fades to black towards every edge",
       "marks": [
         {
           "target": "Preset",
@@ -110,23 +106,15 @@
           "label": "Amount"
         },
         {
-          "target": "Size",
-          "label": "Size"
-        },
-        {
           "target": "Softness",
           "label": "Softness"
-        },
-        {
-          "target": "Roundness",
-          "label": "Roundness"
         }
       ],
       "top": "tabs",
       "hide": [
         "Particle Out"
       ],
-      "caption": "Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Size: where the darkening begins. 4 — Softness: how gradually it fades in. 5 — Roundness: circle or frame shape."
+      "caption": "Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Softness: how gradually it fades in."
     },
     {
       "name": "edge-detect-inspector",
@@ -172,11 +160,11 @@
       "name": "acuarela-inspector",
       "effect": "acuarela",
       "params": {
-        "wash": 10,
-        "bleed": 16,
-        "edges": 1.6,
-        "simplify": 0.85,
-        "blooms": 1.2,
+        "wash": 12,
+        "bleed": 8,
+        "edges": 2,
+        "simplify": 1,
+        "blooms": 0.4,
         "granulation": 0.8,
         "paper": 0.8
       },

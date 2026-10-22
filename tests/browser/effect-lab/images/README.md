@@ -19,3 +19,7 @@ Derived from `neon_rain_street.jpg` with Pillow (2026-10-21) to show corrections
 
 - `black.jpg` – plain black 1920×1080 (Pillow, 2026-10-22): the background of a generator's basic
   still, which shows the effect alone.
+
+- `title_act_one.png` – the title "ACT ONE" in silver grey (#969ca8, FreeSans Bold 260 px) on a
+  transparent 1920×1080 PNG (Pillow, 2026-10-22): a title layer for effects that stay inside a
+  layer's shape (Sheen's glint).
