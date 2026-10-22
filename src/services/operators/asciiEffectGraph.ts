@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { GLYPH_ATLAS_TEXEL_INSET, GLYPH_MAX_BLACK_LEVEL, GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
+import { SYMBOL_LEGACY_TWINKLE } from '../../effects/glyph/symbolMatrix';
 import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
 type Ref = { node: string; port: string };
 class Builder {
@@ -21,6 +22,7 @@ type GlyphGraphVariant = 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' 
  *   travelled (`speedTravel`, written while rendering), so a Speed ramp never jumps.
  * - Roll (moving looks): each cell runs through a window of 1 + ceil(Roll × (ramp − 1)) characters around
  *   its own one; Roll 1 is the whole ramp (instances saved before Roll existed), 0 holds the cells still.
+ *   With Black Level above 0, cells at or below it (tone 0) hold their character, so the dark stage drops out.
  * - Background: the cell ground is mixed from the look's dark ground towards the character colour
  *   (Background 0 = the original dark ground, which instances saved before it existed keep).
  */
@@ -166,7 +168,13 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
       const rollValue = g.node('roll', 'values.number', 'value', { value: 'roll' }, { value: 1 });
       // Roll outside 0..1 renders clamped (renderMin/renderMax; paramRangeNotes reports it through this node's id).
       const roll = g.node('roll-clamped', 'math.clamp.scalar'); g.edge(rollValue, roll, 'value'); g.edge(zero, roll, 'min'); g.edge(one, roll, 'max');
-      const steps = g.binary('index-roll-scaled', 'math.multiply.scalar', roll, g.binary('index-roll-steps', 'math.subtract.scalar', safeCount, one));
+      // With a Black Level above 0, a cell at or below it (tone 0) holds its character (window 1): the dark stage
+      // drops out and only the lit picture rolls. At Black Level 0 every cell rolls, as before.
+      const lit = g.node('index-roll-lit', 'compare.greater.scalar', 'condition'); g.edge(tone, lit, 'a'); g.edge(zero, lit, 'b');
+      const levelled = g.node('index-roll-levelled', 'compare.greater.scalar', 'condition'); g.edge(blackLevel, levelled, 'a'); g.edge(zero, levelled, 'b');
+      const darkRoll = g.node('index-roll-dark', 'select.scalar'); g.edge(roll, darkRoll, 'falseValue'); g.edge(zero, darkRoll, 'trueValue'); g.edge(levelled, darkRoll, 'condition');
+      const cellRoll = g.node('index-roll-cell', 'select.scalar'); g.edge(darkRoll, cellRoll, 'falseValue'); g.edge(roll, cellRoll, 'trueValue'); g.edge(lit, cellRoll, 'condition');
+      const steps = g.binary('index-roll-scaled', 'math.multiply.scalar', cellRoll, g.binary('index-roll-steps', 'math.subtract.scalar', safeCount, one));
       const window = g.binary('index-window', 'math.add.scalar', g.unary('index-roll-chars', 'math.ceil.scalar', steps), one);
       const halfWindow = g.unary('index-window-half', 'math.floor.scalar', g.binary('index-window-halved', 'math.multiply.scalar', window, half));
       const start = g.node('index-window-start', 'math.clamp.scalar'); g.edge(g.binary('index-window-centered', 'math.subtract.scalar', baseGlyphIndex, halfWindow), start, 'value');
@@ -355,7 +363,13 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const pulseTime = g.binary('symbol-pulse-time', 'math.multiply.scalar', animatedTimeSpeed!, g.number('symbol-pulse-time-scale', 2));
     const hashPhase = g.binary('symbol-hash-phase', 'math.multiply.scalar', baseHash, g.number('symbol-tau', 6.28318530718));
     const wave = g.unary('symbol-wave', 'math.sin.scalar', g.binary('symbol-wave-phase', 'math.add.scalar', pulseTime, hashPhase));
-    const pulse = g.binary('symbol-pulse', 'math.add.scalar', g.number('symbol-pulse-base', .65), g.binary('symbol-pulse-wave', 'math.multiply.scalar', g.number('symbol-pulse-scale', .35), wave));
+    // Twinkle d: the sign breathes between 1 − d and 1 (pulse = (1 − d/2) + d/2 × sin). Without a stored value (saved
+    // before it existed) d = 0.7, the earlier 0.65 + 0.35 × sin. Outside 0..1 it renders clamped (twinkle-clamped, paramRangeNotes).
+    const twinkleValue = g.node('symbol-twinkle', 'values.number', 'value', { value: 'twinkle' }, { value: SYMBOL_LEGACY_TWINKLE });
+    const twinkle = g.node('twinkle-clamped', 'math.clamp.scalar'); g.edge(twinkleValue, twinkle, 'value'); g.edge(zero, twinkle, 'min'); g.edge(one, twinkle, 'max');
+    const pulseScale = g.binary('symbol-pulse-scale', 'math.multiply.scalar', twinkle, half);
+    const pulseBase = g.binary('symbol-pulse-base', 'math.subtract.scalar', one, pulseScale);
+    const pulse = g.binary('symbol-pulse', 'math.add.scalar', pulseBase, g.binary('symbol-pulse-wave', 'math.multiply.scalar', pulseScale, wave));
     inkAlpha = g.binary('symbol-alpha', 'math.multiply.scalar', glyphAlpha, pulse);
   } else if (variant === 'capsule-cloud') {
     const local = g.node('capsule-local-split', 'vector.split.vec2', 'x'); g.edge(localUv, local, 'value');

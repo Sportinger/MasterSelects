@@ -75,6 +75,8 @@ export const PROCESSING_COMPOSITIONS = [
     description: 'Pixel-sized glyph grid, cell indices, local coordinates and cell-center UV. Shares the existing minimum cell size and half-cell placement.',
     members: ['safe-cell', 'safe-cell-vec2', 'grid', 'scaled-uv', 'cell-id', 'local-uv', 'half-vec2', 'sample-pixel', 'sample-uv'],
     additionalOutputs: ['safe-cell', 'safe-cell-vec2', 'grid', 'cell-id', 'half-vec2'].map(nodeId => ({ nodeId, portId: 'value' })), consumers: glyphConsumers,
+    // Saved before the 1080p grid (3.2.7 and earlier) Cell Size fed the grid directly: those instances keep max(Cell Size, 2) output pixels.
+    legacyInputs: { 'cell-size-value': [{ nodeId: 'safe-cell', portId: 'a' }] },
     outputLabels: { 'safe-cell-value': 'Cell Pixels', 'safe-cell-vec2-value': 'Cell Pixels (XY)', 'grid-value': 'Cells Across', 'cell-id-value': 'Cell Number',
       'half-vec2-value': 'Half', 'local-uv-value': 'Position in Cell', 'sample-uv-value': 'Cell Center' },
   }),
@@ -91,7 +93,8 @@ export const PROCESSING_COMPOSITIONS = [
     members: ['safe-columns', 'safe-rows', 'column-ratio', 'atlas-row', 'row-width', 'atlas-column', 'atlas-tile',
       'atlas-inset-vec2', 'atlas-inset-end-vec2', 'clamped-local-uv', 'atlas-pixel', 'atlas-size', 'atlas-uv', 'atlas-sample', 'atlas-vec4', 'atlas-split'],
     inputLabels: { 'local-uv-value': 'Position in Cell' }, consumers: glyphConsumers,
-    // Saved before 2026-10-22 the tile was read .001–.999 (Tiny / Almost One inputs); those instances keep it.
+    // Saved before 2026-10-22 the tile was read .001–.999 (Tiny / Almost One inputs); those instances keep it:
+    // their edges replace the body's half-texel inset edges into the same clamp (expandOperatorCompositions).
     legacyInputs: { 'tiny-vec2-value': [{ nodeId: 'clamped-local-uv', portId: 'min' }], 'almost-vec2-value': [{ nodeId: 'clamped-local-uv', portId: 'max' }] },
   }),
   extractImageComposition(createDefaultAsciiGhostGraph(), {

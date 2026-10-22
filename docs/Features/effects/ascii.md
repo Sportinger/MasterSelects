@@ -23,18 +23,18 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot">
 
-![The dancer's head and arms four times in a grid, one preset each: Green Terminal top left with green letters on black, Shade Blocks top right with fine dotted shading blocks in the picture's colours, Level Bars bottom left with a bar in every cell that rises with its brightness, LED Wall bottom right with one round coloured dot per cell](../assets/effects/presets/ascii.webp)
+![The dancer's head and arms four times in a grid, one preset each: Green Terminal top left with green letters on black, the brightest almost white, Shade Blocks top right with fine dotted shading blocks in the picture's colours, Level Bars bottom left with a bar in every cell that rises with its brightness over the dimmed figure, LED Wall bottom right with one round coloured dot per cell](../assets/effects/presets/ascii.webp)
 
 <figcaption>The four presets on the dancer, each named under its picture.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Green Terminal** – green letters and signs on black, like the screen of an old computer. Black Level 0.2 turns the grey stage black, so only the lit figure is typed, and its bright parts glow. For a hacker scene, a surveillance feed or a machine that thinks.
+**Green Terminal** – green letters and signs on black, like the screen of an old computer. Black Level 0.2 turns the grey stage black, so only the lit figure is typed, and its brightest letters glow almost white. For a hacker scene, a surveillance feed or a machine that thinks.
 
 **Shade Blocks** – small cells filled with the shading blocks ░ ▒ ▓ █, in the picture's colours. The figure stays easy to read and turns into the coarse dotted mosaic of early computer art.
 
-**Level Bars** – large cells on black, each a bar that rises with its brightness, like a wall of level meters. The tallest bar stops short of the cell, so the rows stay apart. Graphic and calm; strong on large surfaces and with music.
+**Level Bars** – large cells, each a bar that rises with its brightness over a dim picture, like a wall of level meters. The tallest bar stops short of the cell, so the rows stay apart. Graphic and calm; strong on large surfaces and with music.
 
 **LED Wall** – one round dot per cell in the picture's colour, like the LEDs of a video wall seen up close. Good for faking a screen inside the stage picture.
 

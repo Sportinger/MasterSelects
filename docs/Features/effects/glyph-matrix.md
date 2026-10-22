@@ -98,7 +98,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Black Level from 0 to 0.5 and back.</figcaption>
 </figure>
 
-**Black Level** – the brightness up to which the picture counts as black. Everything darker becomes the first character of the ramp, the space in most ramps, and stops rolling, so a grey stage drops out and only the lit figure rolls; the rest of the picture spreads over the whole ramp. Try 0.15–0.25 on stage footage, above all with Duotone. 0 to 0.9, default 0.
+**Black Level** – the brightness up to which the picture counts as black. Everything darker becomes the first character of the ramp, the space in most ramps, and stops rolling, even at Roll 1, so a grey stage drops out and only the lit figure rolls; the rest of the picture spreads over the whole ramp. Try 0.15–0.25 on stage footage, above all with Duotone. 0 to 0.9, default 0.
 
 <div class="docs-float-end"></div>
 
@@ -148,24 +148,24 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![The Glyph Matrix graph in seven stages: Parameters feed Cell Grid (Cell Size), which passes the cell number to Glyph Offset, the cell centre to Cell Sampling & Tone and the position in the cell to Atlas Alpha; Tone to Glyph turns the tone into the cell's own character, Glyph Offset (Speed) works out how far it has rolled, Roll Window (Roll) keeps the roll inside a part of the ramp and passes the glyph index to Atlas Alpha; Ink & Appearance takes the colours, Background, Amount, the cell colour and the glyph coverage and draws the picture](../assets/effects/graphs/glyph-matrix.webp)
+![The Glyph Matrix graph in seven stages: Parameters feed Cell Grid (Cell Size), which passes the cell number to Glyph Offset, the cell centre to Cell Sampling & Tone and the position in the cell to Atlas Alpha; Tone to Glyph turns the tone into the cell's own character, Glyph Offset (Speed) works out how far it has rolled, Roll Window (Roll) keeps the roll inside a part of the ramp, holds cells below Black Level still and passes the glyph index to Atlas Alpha; Ink & Appearance takes the colours, Background, Amount, the cell colour and the glyph coverage and draws the picture](../assets/effects/graphs/glyph-matrix.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 855" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 861" aria-hidden="true" focusable="false">
 <defs><marker id="glyph-matrix-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M230 521 L230 437" marker-end="url(#glyph-matrix-arrow)" />
-<circle class="docs-shot-number" cx="230" cy="521" r="18" /><text x="230" y="521" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M369 832 L369 748" marker-end="url(#glyph-matrix-arrow)" />
-<circle class="docs-shot-number" cx="369" cy="832" r="18" /><text x="369" y="832" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M508 329 L508 413" marker-end="url(#glyph-matrix-arrow)" />
-<circle class="docs-shot-number" cx="508" cy="329" r="18" /><text x="508" y="329" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M508 477 L508 393" marker-end="url(#glyph-matrix-arrow)" />
-<circle class="docs-shot-number" cx="508" cy="477" r="18" /><text x="508" y="477" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M648 22 L648 79" marker-end="url(#glyph-matrix-arrow)" />
-<circle class="docs-shot-number" cx="648" cy="22" r="18" /><text x="648" y="22" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M787 329 L787 413" marker-end="url(#glyph-matrix-arrow)" />
-<circle class="docs-shot-number" cx="787" cy="329" r="18" /><text x="787" y="329" class="docs-shot-number-text">6</text>
-<path class="docs-shot-arrow" d="M926 827 L926 743" marker-end="url(#glyph-matrix-arrow)" />
-<circle class="docs-shot-number" cx="926" cy="827" r="18" /><text x="926" y="827" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M230 309 L230 225" marker-end="url(#glyph-matrix-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="309" r="18" /><text x="230" y="309" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M369 621 L369 537" marker-end="url(#glyph-matrix-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="621" r="18" /><text x="369" y="621" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M508 118 L508 202" marker-end="url(#glyph-matrix-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="118" r="18" /><text x="508" y="118" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M508 265 L508 181" marker-end="url(#glyph-matrix-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="265" r="18" /><text x="508" y="265" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M648 554 L648 638" marker-end="url(#glyph-matrix-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="554" r="18" /><text x="648" y="554" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M787 118 L787 202" marker-end="url(#glyph-matrix-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="118" r="18" /><text x="787" y="118" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M926 616 L926 532" marker-end="url(#glyph-matrix-arrow)" />
+<circle class="docs-shot-number" cx="926" cy="616" r="18" /><text x="926" y="616" class="docs-shot-number-text">7</text>
 </svg>
 </div>
 
@@ -327,9 +327,35 @@ Glyph Matrix works in seven stages, one folder each in the Nodes tab: **Cell Gri
 
 <div class="docs-shot-stage">
 
-![Inside the Roll Window folder, first part: Glyph Count minus One times the clamped Roll, through Ceiling and plus One, gives the window; times Half and Floor gives half the window; Tone Glyph minus that half, clamped between Zero and Glyph Count minus the window, gives the window start](../assets/effects/graphs/glyph-matrix-roll-window.webp)
+![Inside the Roll Window folder, the dark hold: Greater Than asks whether Black Level is above Zero and feeds a Switch that gives Zero instead of Roll as the Dark Roll; a second Greater Than asks whether the Tone is above Zero (Lit) and feeds a Switch that gives Roll for lit cells and the Dark Roll for the others, the Cell Roll](../assets/effects/graphs/glyph-matrix-roll-hold.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 603" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 724" aria-hidden="true" focusable="false">
+<defs><marker id="glyph-matrix-roll-hold-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M363 234 L363 318" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="363" cy="234" r="18" /><text x="363" y="234" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M363 81 L363 165" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="363" cy="81" r="18" /><text x="363" y="81" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M500 300 L500 216" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="500" cy="300" r="18" /><text x="500" y="300" class="docs-shot-number-text">3</text>
+</svg>
+</div>
+
+<figcaption>Inside Roll Window (Roll, Black Level), the dark hold. 1 — Lit: the cell is brighter than Black Level. 2 — Dark Roll: the roll of a dark cell. 3 — Cell Roll: the roll this cell gets.</figcaption>
+</figure>
+
+**Lit** – Greater Than: is the cell's Tone above 0, so brighter than Black Level? The other Greater Than asks whether Black Level is set at all (above 0).
+
+**Dark Roll** – a Switch: 0 while Black Level is above 0, otherwise Roll. At Black Level 0, also in effects saved before this hold existed, every cell rolls as before.
+
+**Cell Roll** – the second Switch: Roll for a lit cell, the Dark Roll for a dark one. The window below is built from it, so with Black Level set a dark cell holds its character, even at Roll 1, and the dark stage stays empty.
+
+<figure class="docs-shot docs-shot--graph">
+
+<div class="docs-shot-stage">
+
+![Inside the Roll Window folder, first part: Glyph Count minus One times the Cell Roll, through Ceiling and plus One, gives the window; times Half and Floor gives half the window; Tone Glyph minus that half, clamped between Zero and Glyph Count minus the window, gives the window start](../assets/effects/graphs/glyph-matrix-roll-window.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 398" aria-hidden="true" focusable="false">
 <defs><marker id="glyph-matrix-roll-window-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M400 48 L400 132" marker-end="url(#glyph-matrix-roll-window-arrow)" />
 <circle class="docs-shot-number" cx="400" cy="48" r="18" /><text x="400" y="48" class="docs-shot-number-text">1</text>
@@ -337,15 +363,15 @@ Glyph Matrix works in seven stages, one folder each in the Nodes tab: **Cell Gri
 <circle class="docs-shot-number" cx="509" cy="48" r="18" /><text x="509" y="48" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M725 299 L725 215" marker-end="url(#glyph-matrix-roll-window-arrow)" />
 <circle class="docs-shot-number" cx="725" cy="299" r="18" /><text x="725" y="299" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M941 394 L941 310" marker-end="url(#glyph-matrix-roll-window-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="394" r="18" /><text x="941" y="394" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M941 365 L941 281" marker-end="url(#glyph-matrix-roll-window-arrow)" />
+<circle class="docs-shot-number" cx="941" cy="365" r="18" /><text x="941" y="365" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
 <figcaption>Inside Roll Window (Roll), the size of the window. 1 — Ceiling: the neighbours a cell rolls through. 2 — Window: how many characters. 3 — Floor: half the window. 4 — Window Start: where the window begins in the ramp.</figcaption>
 </figure>
 
-**Ceiling** – Roll times the ramp's length minus one (Subtract, Multiply), rounded up: how many neighbours a cell rolls through. Any Roll above 0 gives at least one.
+**Ceiling** – the Cell Roll times the ramp's length minus one (Subtract, Multiply), rounded up: how many neighbours a cell rolls through. Any Cell Roll above 0 gives at least one.
 
 **Window** – that number plus the cell's own character (Add): from 1 at Roll 0 to the whole ramp at Roll 1.
 

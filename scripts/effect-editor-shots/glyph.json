@@ -97,25 +97,22 @@
         "rampPreset": "symbols",
         "customRamp": " ·○◇△□●◆■",
         "roll": 0.35,
-        "background": 0.3
+        "background": 0.3,
+        "twinkle": 0.25
       },
       "image": "dancer_stage.jpg",
       "preview": 380,
       "top": "tabs",
       "viewport": {
         "width": 1600,
-        "height": 1650
+        "height": 1700
       },
-      "alt": "Properties, Effects with a Symbol Matrix card: Style menu, Preset menu showing Shape Shift, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp dimmed under the note Used while Custom Ramp is empty, Custom Ramp with a row of shapes, Font and Weight, then Color Source with Dark and Light dimmed under the note Used with Color Source Duotone, then Speed and Roll, beside a strip of the preview where the dancer is built from circles, diamonds, triangles and squares",
-      "caption": "Symbol Matrix with the Shape Shift preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Custom Ramp: the signs, here shapes. 4 — Speed: how often they swap. 5 — Roll: how far they may swap.",
+      "alt": "Properties, Effects with a Symbol Matrix card: Style menu, Preset menu showing Shape Shift, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp dimmed under the note Used while Custom Ramp is empty, Custom Ramp with a row of shapes, Font and Weight, then Color Source with Dark and Light dimmed under the note Used with Color Source Duotone, then Speed, Roll and Twinkle, beside a strip of the preview where the dancer is built from circles, diamonds, triangles and squares",
+      "caption": "Symbol Matrix with the Shape Shift preset. 1 — Preset: pick a starting point. 2 — Custom Ramp: the signs, here shapes. 3 — Speed: how often they swap. 4 — Roll: how far they may swap. 5 — Twinkle: how deep they breathe.",
       "marks": [
         {
           "target": "Preset",
           "label": "Preset"
-        },
-        {
-          "target": "Cell Size",
-          "label": "Cell Size"
         },
         {
           "target": "Custom Ramp",
@@ -128,6 +125,10 @@
         {
           "target": "Roll",
           "label": "Roll"
+        },
+        {
+          "target": "Twinkle",
+          "label": "Twinkle"
         }
       ],
       "hide": [
@@ -143,7 +144,7 @@
         "customRamp": "",
         "roll": 0.2,
         "background": 0.15,
-        "blackLevel": 0,
+        "blackLevel": 0.14,
         "scanlines": 0.8,
         "speed": 0.4,
         "fontWeight": 700

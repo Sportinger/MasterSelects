@@ -1,6 +1,7 @@
 import { createGlyphEffect, type GlyphColorControl } from './glyphEffectFactory';
 import { ASCII_PRESETS, GLYPH_MATRIX_PRESETS, RETRO_MATRIX_PRESETS, SYMBOL_MATRIX_PRESETS } from './glyphPresets';
 import { RETRO_MATRIX_PARAMS } from './retroMatrix';
+import { SYMBOL_MATRIX_PARAMS } from './symbolMatrix';
 
 // Looks with a palette of their own (green rain, amber terminal, blue-to-mint code) never read the
 // shared colour controls; Number Field and Dither Glow always colour between Dark and Light.
@@ -20,8 +21,9 @@ export const capsuleCloud = createGlyphEffect({ id: 'capsule-cloud', name: 'Tag 
 export const inscribe = createGlyphEffect({ id: 'inscribe', name: 'Inscribe', entryPoint: 'inscribeFragment', defaultRamp: 'symbols' });
 export const dataHatch = createGlyphEffect({ id: 'data-hatch', name: 'Data Hatching', entryPoint: 'dataHatchFragment', animated: true, motionOnlyByRoll: true, defaultRamp: 'binary' });
 export const glyphMatrix = createGlyphEffect({ id: 'glyph-matrix', name: 'Glyph Matrix', entryPoint: 'glyphMatrixFragment', animated: true, motionOnlyByRoll: true, defaultRamp: 'detailed', defaultRoll: 0.2, presets: GLYPH_MATRIX_PRESETS });
-// Symbol Matrix twinkles among the neighbours of each cell's own character (Roll 0.4: four of the seven Symbols), so the picture stays in the characters.
-export const symbolMatrix = createGlyphEffect({ id: 'symbol-matrix', name: 'Symbol Matrix', entryPoint: 'symbolMatrixFragment', animated: true, defaultRamp: 'symbols', defaultRoll: 0.4, presets: SYMBOL_MATRIX_PRESETS });
+// Symbol Matrix twinkles among the neighbours of each cell's own character (Roll 0.4: four of the seven Symbols), so the picture stays in the characters;
+// Twinkle (symbolMatrix.ts) sets how far each sign dims as it breathes.
+export const symbolMatrix = createGlyphEffect({ id: 'symbol-matrix', name: 'Symbol Matrix', entryPoint: 'symbolMatrixFragment', animated: true, defaultRamp: 'symbols', defaultRoll: 0.4, params: SYMBOL_MATRIX_PARAMS, presets: SYMBOL_MATRIX_PRESETS });
 // Retro Matrix scrolls a fixed text up like a terminal: Roll 0.3 keeps each character near the one of its brightness,
 // so the picture reads in the text, and Background 0.2 keeps the screen dark around it. Phosphor and Scanlines: retroMatrix.ts.
 export const retroMatrix = createGlyphEffect({ id: 'retro-matrix', name: 'Retro Matrix', entryPoint: 'retroMatrixFragment', animated: true, defaultRamp: 'numeric', defaultRoll: 0.3, defaultBackground: 0.2, ignoresColors: OWN_PALETTE, params: RETRO_MATRIX_PARAMS, presets: RETRO_MATRIX_PRESETS });

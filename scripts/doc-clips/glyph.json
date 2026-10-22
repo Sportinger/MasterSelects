@@ -421,6 +421,36 @@
       "caption": "Roll from 0 to 1 and back."
     },
     {
+      "name": "symbol-matrix-twinkle",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        600,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "twinkle",
+        "label": "Twinkle",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Symbol Matrix while Twinkle runs from 0 to 1 and back: at 0 every sign shines steadily, then each one breathes darker on its own beat until the signs flicker in and out like stars, and back; the current value is shown at the bottom left",
+      "caption": "Twinkle from 0 to 1 and back."
+    },
+    {
       "name": "symbol-matrix-speed",
       "effect": "symbol-matrix",
       "params": {},
@@ -624,14 +654,14 @@
       ],
       "layout": "single",
       "crop": [
-        800,
-        250,
-        320,
-        320
+        560,
+        260,
+        480,
+        480
       ],
-      "width": 640,
+      "width": 600,
       "loop": 0.35,
-      "poster": 2.0,
+      "poster": 2.6,
       "maxBytes": 600000,
       "float": "right",
       "name": "retro-matrix-scanlines",
@@ -642,8 +672,8 @@
         "to": 1,
         "decimals": 2
       },
-      "alt": "A close-up of Retro Matrix at twice the size while Scanlines runs from 0 to 1 and back: at 0 the amber characters are solid, then dark lines three pixels apart cut through every row until each character is drawn in separate strokes, and back; the current value is shown at the bottom left",
-      "caption": "Scanlines from 0 to 1 and back, in a close-up at twice the size.",
+      "alt": "A close-up of Retro Matrix at one and a quarter times the size while Scanlines runs from 0 to 1 and back: at 0 the amber characters on her dress are solid, then dark lines three pixels apart cut through every row until each character is drawn in separate strokes, and back; the current value is shown at the bottom left",
+      "caption": "Scanlines from 0 to 1 and back, in a close-up at one and a quarter times the size.",
       "crf": 14
     },
     {

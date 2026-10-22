@@ -18,7 +18,7 @@ struct GlyphParams {
   background: f32,
   travel: f32,
   roll: f32,
-  scanlines: f32, // Retro Matrix only (0 elsewhere)
+  scanlines: f32, // Retro Matrix: Scanlines; Symbol Matrix: Twinkle (0 elsewhere)
 };
 
 struct GlyphCell {
@@ -222,7 +222,8 @@ fn symbolMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
   let tick = floor(motionTime() * 4.0 + cellRandom);
   let jitter = floor(glyphHashPcg(vec2f(cellRandom, tick)) * params.glyphCount);
   let cell = glyphCell(input.uv, jitter);
-  let pulse = 0.65 + 0.35 * sin(motionTime() * 2.0 + hash(base.id) * TAU);
+  let twinkle = clamp(params.scanlines, 0.0, 1.0) * 0.5; // Twinkle d: the sign breathes between 1 − d and 1
+  let pulse = 1.0 - twinkle + twinkle * sin(motionTime() * 2.0 + hash(base.id) * TAU);
   return glyphInk(cell, cell.alpha * pulse, darkBackground(cell));
 }
 

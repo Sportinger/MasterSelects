@@ -45,7 +45,7 @@ drawn and coloured.
   picture stays readable; effects saved earlier keep their dark ground.
 - **Black Level** – the brightness up to which the picture counts as black: darker parts get the first
   character of the ramp (a space in most ramps), so a grey stage drops out and only the lit figure is
-  drawn. 0 (the default, also for saved effects) keeps the picture's tones; 0.15–0.25 suits stage footage.
+  drawn; in the moving looks those cells also stop rolling, even at Roll 1. 0 (the default, also for saved effects) keeps the picture's tones; 0.15–0.25 suits stage footage.
 - **Ramp** – the set of characters (Standard, Detailed, Blocks, Bars, Binary, Numeric, Symbols), or your
   own in **Custom Ramp**: one character puts the same sign in every cell, more than 256 are thinned
   to 256. Characters fill most of the cell height; Blocks and Bars are exact shapes that join without seams in

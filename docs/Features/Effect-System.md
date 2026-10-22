@@ -395,6 +395,14 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   renders as 2 (`cellSize-clamped`); cells under 2 output pixels on small frames are reported by
   `glyphCellWarnings`. This is a fix: on a 1080p composition nothing changes, on other sizes the
   export now matches the preview. Projects saved with their node setup keep the earlier grid.
+- **Saved node setups** store the glyph blocks packed (Cell Grid, Tone to Glyph, Atlas Alpha), and
+  loading expands them from the current definitions. Their port ids are fixed: a 3.2.7 setup wires
+  Cell Grid's `cell-size-value` (a `legacyInputs` port that feeds `safe-cell` directly, the earlier
+  max(Cell Size, 2) output pixels) and Atlas Alpha's `tiny-vec2-value` / `almost-vec2-value` (the
+  earlier .001–.999 read; such a legacy edge replaces the body's inset edge into the same clamp,
+  `expandOperatorCompositions`). `tests/unit/glyphSavedGraphs.test.ts` loads six looks saved by
+  3.2.7 (`tests/fixtures/glyph-graphs-saved-3.2.7.json`), renders them like the 3.2.7 code did and
+  pins the block port ids.
 - **Clock.** The moving looks read timeline time (`timelineAnimated`, no continuous rendering while
   paused). Speed is `integratedAs: 'speedTravel'`: with keyframes the graph reads the travelled
   distance (`index-speed-travel`), otherwise timeline time × Speed (the sentinel `GLYPH_NO_TRAVEL`,
@@ -405,7 +413,10 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   diagonal sweep) moves it through that window. Roll 1 is exactly the earlier full-ramp wrap
   (`legacyDefault: 1`, and the default of every look but Glyph Matrix, Retro Matrix and Symbol Matrix,
   which start at 0.2, 0.3 and 0.4), 0 holds
-  each cell on its tone's character, and any Roll above 0 moves at least two characters. The
+  each cell on its tone's character, and any Roll above 0 moves at least two characters. With
+  Black Level above 0, a cell at or below it (tone 0) gets a window of 1 (`index-roll-lit`,
+  `index-roll-levelled`, `index-roll-dark`, `index-roll-cell`), so the dark stage holds still even at
+  Roll 1; at Black Level 0 every cell rolls as before. The
   quotient carries + ½ so GPU division never drops a cycle. `graphOnly`; outside 0–1 it renders
   clamped (`roll-clamped`). The moving looks show these nodes in two folders, **Glyph Offset** and
   **Roll Window**; `effectGraphProjection.ts` names the runtime-only travel card after its rate
@@ -415,8 +426,11 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   its tick) (`index-jitter`). It used to hash cell + `floor(4 × clock)`: every cell swapped on the same
   frame, and since the sine hash only reads a dot product, the random field slid one cell diagonally
   per tick. A fix for new instances and setups saved without a graph; stored setups keep the old swap.
-  Its brightness pulse (`symbol-*` nodes, 0.65 + 0.35 × sin(2 × clock + cell phase)) has its own
-  **Pulse** folder; presets: `SYMBOL_MATRIX_PRESETS`.
+  Its brightness pulse (`symbol-*` nodes, (1 − d/2) + d/2 × sin(2 × clock + cell phase)) has its own
+  **Pulse** folder. Its depth d is **Twinkle** (`twinkle`, 0–1, Motion group, own control,
+  `src/effects/glyph/symbolMatrix.ts`): default 0.35, `legacyDefault` 0.7, the earlier hard-wired
+  0.65 + 0.35 × sin, which dimmed half the signs to grey squares once Background lifted the ground;
+  `graphOnly`, clamped by `twinkle-clamped`. Presets: `SYMBOL_MATRIX_PRESETS`.
 - **Retro Matrix scroll** (`src/effects/glyph/retroMatrix.ts`). Its cell grid moves up by
   `clock × 3` rows (`scroll-rows`, the **Scroll** folder), added to the grid position (`scrolled-uv`) and
   taken off again for the cell centre (`sample-unscrolled`), so characters stay whole and each reads the
@@ -478,7 +492,8 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
 Tests: `tests/unit/glyphEngine.test.ts` (every shown control reaches the output, Background,
 1080p cells, Speed travel, timeline clock, WGSL literals, Amount 0 gives the original, Ramp menu and
 warnings, Weight, Roll window and its legacy full-ramp sweep, Symbol Matrix's staggered swaps, the
-premultiplied Amount fade, the half-texel atlas read, Black Level, the Roll 0 warning, the dimmed rows),
+premultiplied Amount fade, the half-texel atlas read, Black Level and its dark hold, Symbol Matrix's Twinkle,
+the Roll 0 warning, the dimmed rows), `tests/unit/glyphSavedGraphs.test.ts` (3.2.7 node setups),
 `tests/unit/cellGrid.test.ts` (ramps), `tests/unit/glyphAtlasRaster.test.ts` (Block
 Elements, the fill atlas, the atlas cache limit), `tests/unit/imageAsciiGraph.test.ts`, `tests/unit/imageGlyphVariantGraphs.test.ts`,
 `tests/unit/imageInscribeGraph.test.ts` and `tests/unit/imageContourTypeGraph.test.ts` (each look's

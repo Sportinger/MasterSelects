@@ -1,6 +1,6 @@
 # Tag Pills
 
-<!-- effect-docs: basic page sha=aa91a60d7e5a, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=a56cf1f5401a, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Places each character inside a faint rounded pill, like a cloud of UI tags, with glyphs cycling over time; Cell Size sets the pill size.
 
@@ -41,7 +41,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Roll | 0 to 1 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Data Hatching](./data-hatch.md), [Dither Text](./dither-text.md), [Glyph Matrix](./glyph-matrix.md), [Matrix Rain](./matrix.md), [Dither Glow](./pixel-dither.md), [Symbol Matrix](./symbol-matrix.md), [Creative UI Collage](./ui-collage.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Data Hatching](./data-hatch.md), [Dither Text](./dither-text.md), [Glyph Matrix](./glyph-matrix.md), [Matrix Rain](./matrix.md), [Dither Glow](./pixel-dither.md), [Creative UI Collage](./ui-collage.md).
 
 ## Technical details
 

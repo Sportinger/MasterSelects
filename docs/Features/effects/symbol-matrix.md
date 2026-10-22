@@ -40,27 +40,27 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Symbol Matrix card: Style menu, Preset menu showing Shape Shift, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp dimmed under the note Used while Custom Ramp is empty, Custom Ramp with a row of shapes, Font and Weight, then Color Source with Dark and Light dimmed under the note Used with Color Source Duotone, then Speed and Roll, beside a strip of the preview where the dancer is built from circles, diamonds, triangles and squares](../assets/effects/editor/symbol-matrix-inspector.webp)
+![Properties, Effects with a Symbol Matrix card: Style menu, Preset menu showing Shape Shift, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp dimmed under the note Used while Custom Ramp is empty, Custom Ramp with a row of shapes, Font and Weight, then Color Source with Dark and Light dimmed under the note Used with Color Source Duotone, then Speed, Roll and Twinkle, beside a strip of the preview where the dancer is built from circles, diamonds, triangles and squares](../assets/effects/editor/symbol-matrix-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1402" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1439" aria-hidden="true" focusable="false">
 <defs><marker id="symbol-matrix-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M565 319 L649 319" marker-end="url(#symbol-matrix-inspector-arrow)" />
 <circle class="docs-shot-number" cx="565" cy="319" r="18" /><text x="565" y="319" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M583 425 L667 425" marker-end="url(#symbol-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="583" cy="425" r="18" /><text x="583" y="425" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M541 845 L625 845" marker-end="url(#symbol-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="541" cy="845" r="18" /><text x="541" y="845" class="docs-shot-number-text">3</text>
+<circle class="docs-shot-number" cx="541" cy="845" r="18" /><text x="541" y="845" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M601 1305 L685 1305" marker-end="url(#symbol-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="601" cy="1305" r="18" /><text x="601" y="1305" class="docs-shot-number-text">4</text>
+<circle class="docs-shot-number" cx="601" cy="1305" r="18" /><text x="601" y="1305" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M622 1343 L706 1343" marker-end="url(#symbol-matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="622" cy="1343" r="18" /><text x="622" y="1343" class="docs-shot-number-text">5</text>
+<circle class="docs-shot-number" cx="622" cy="1343" r="18" /><text x="622" y="1343" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M594 1380 L678 1380" marker-end="url(#symbol-matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="594" cy="1380" r="18" /><text x="594" y="1380" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Symbol Matrix with the Shape Shift preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Custom Ramp: the signs, here shapes. 4 — Speed: how often they swap. 5 — Roll: how far they may swap.</figcaption>
+<figcaption>Symbol Matrix with the Shape Shift preset. 1 — Preset: pick a starting point. 2 — Custom Ramp: the signs, here shapes. 3 — Speed: how often they swap. 4 — Roll: how far they may swap. 5 — Twinkle: how deep they breathe.</figcaption>
 </figure>
 
-**Style** – switches to another look of the same engine and keeps your values and keyframes, for example [Glyph Matrix](./glyph-matrix.md), [Matrix Rain](./matrix.md) or [Retro Matrix](./retro-matrix.md).
+The Style menu at the top of the card switches to another look of the same engine and keeps your values and keyframes, for example [Glyph Matrix](./glyph-matrix.md), [Matrix Rain](./matrix.md) or [Retro Matrix](./retro-matrix.md). Twinkle belongs to Symbol Matrix: the other looks keep its value for when you switch back.
 
 ### Grid
 
@@ -98,7 +98,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Black Level from 0 to 0.5 and back.</figcaption>
 </figure>
 
-**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the first sign of the ramp, the space in most ramps, so a grey stage stops twinkling and only the lit figure sparkles; the rest of the picture spreads over the whole ramp. Try 0.15–0.25 on stage footage, above all with Duotone. With Roll above 0 a dark cell can still swap to its nearest neighbours. 0 to 0.9, default 0.
+**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the first sign of the ramp, the space in most ramps, and stops swapping, even at Roll 1, so a grey stage drops out and only the lit figure sparkles; the rest of the picture spreads over the whole ramp. Try 0.15–0.25 on stage footage, above all with Duotone. 0 to 0.9, default 0.
 
 <div class="docs-float-end"></div>
 
@@ -142,32 +142,41 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-float-end"></div>
 
+<figure class="docs-shot docs-clip docs-shot--float-right">
+<video src="../assets/effects/clips/symbol-matrix-twinkle.mp4" poster="../assets/effects/clips/symbol-matrix-twinkle.webp" width="540" height="526" autoplay muted loop playsinline preload="none" aria-label="The dancer with Symbol Matrix while Twinkle runs from 0 to 1 and back: at 0 every sign shines steadily, then each one breathes darker on its own beat until the signs flicker in and out like stars, and back; the current value is shown at the bottom left"></video>
+<figcaption>Twinkle from 0 to 1 and back.</figcaption>
+</figure>
+
+**Twinkle** – how far each sign dims as it breathes, each on its own beat. At 0 the signs shine steadily and only swap; 0.35 lets them breathe gently, so the figure keeps its brightness; at 1 a sign fades out completely at the low point of its breath, and the picture flickers like a starry sky. The breath follows Speed, so at Speed 0 it stops too. Effects saved before Twinkle existed keep their deeper breath (0.7). 0 to 1, default 0.35.
+
+<div class="docs-float-end"></div>
+
 ## Node setup
 
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![The Symbol Matrix graph in eight stages: Parameters feed Cell Grid (Cell Size), which passes the cell number to Glyph Offset and Pulse, the cell centre to Cell Sampling & Tone and the position in the cell to Atlas Alpha; Tone to Glyph turns the tone into the cell's own sign, Glyph Offset (Speed) draws each cell's random swap and passes the clock to Pulse, Roll Window (Roll) keeps the swap inside a part of the ramp and passes the glyph index to Atlas Alpha; Pulse lets the glyph coverage breathe; Ink & Appearance takes the colours, Background, Amount, the cell colour and the pulsed coverage and draws the picture](../assets/effects/graphs/symbol-matrix.webp)
+![The Symbol Matrix graph in eight stages: Parameters feed Cell Grid (Cell Size), which passes the cell number to Glyph Offset and Pulse, the cell centre to Cell Sampling & Tone and the position in the cell to Atlas Alpha; Tone to Glyph turns the tone into the cell's own sign, Glyph Offset (Speed) draws each cell's random swap and passes the clock to Pulse, Roll Window (Roll) keeps the swap inside a part of the ramp, holds cells below Black Level still and passes the glyph index to Atlas Alpha; Pulse (Twinkle) lets the glyph coverage breathe; Ink & Appearance takes the colours, Background, Amount, the cell colour and the pulsed coverage and draws the picture](../assets/effects/graphs/symbol-matrix.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 698" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 722" aria-hidden="true" focusable="false">
 <defs><marker id="symbol-matrix-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M184 675 L184 591" marker-end="url(#symbol-matrix-arrow)" />
-<circle class="docs-shot-number" cx="184" cy="675" r="18" /><text x="184" y="675" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M292 104 L292 188" marker-end="url(#symbol-matrix-arrow)" />
-<circle class="docs-shot-number" cx="292" cy="104" r="18" /><text x="292" y="104" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M400 459 L400 375" marker-end="url(#symbol-matrix-arrow)" />
-<circle class="docs-shot-number" cx="400" cy="459" r="18" /><text x="400" y="459" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M509 668 L509 584" marker-end="url(#symbol-matrix-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="668" r="18" /><text x="509" y="668" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M617 22 L617 72" marker-end="url(#symbol-matrix-arrow)" />
-<circle class="docs-shot-number" cx="617" cy="22" r="18" /><text x="617" y="22" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M725 133 L725 217" marker-end="url(#symbol-matrix-arrow)" />
-<circle class="docs-shot-number" cx="725" cy="133" r="18" /><text x="725" y="133" class="docs-shot-number-text">6</text>
-<path class="docs-shot-arrow" d="M833 198 L833 282" marker-end="url(#symbol-matrix-arrow)" />
-<circle class="docs-shot-number" cx="833" cy="198" r="18" /><text x="833" y="198" class="docs-shot-number-text">7</text>
-<path class="docs-shot-arrow" d="M941 610 L941 526" marker-end="url(#symbol-matrix-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="610" r="18" /><text x="941" y="610" class="docs-shot-number-text">8</text>
+<path class="docs-shot-arrow" d="M184 363 L184 279" marker-end="url(#symbol-matrix-arrow)" />
+<circle class="docs-shot-number" cx="184" cy="363" r="18" /><text x="184" y="363" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M292 430 L292 514" marker-end="url(#symbol-matrix-arrow)" />
+<circle class="docs-shot-number" cx="292" cy="430" r="18" /><text x="292" y="430" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M400 428 L400 344" marker-end="url(#symbol-matrix-arrow)" />
+<circle class="docs-shot-number" cx="400" cy="428" r="18" /><text x="400" y="428" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M509 262 L509 178" marker-end="url(#symbol-matrix-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="262" r="18" /><text x="509" y="262" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M617 459 L617 543" marker-end="url(#symbol-matrix-arrow)" />
+<circle class="docs-shot-number" cx="617" cy="459" r="18" /><text x="617" y="459" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M725 23 L725 107" marker-end="url(#symbol-matrix-arrow)" />
+<circle class="docs-shot-number" cx="725" cy="23" r="18" /><text x="725" y="23" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M833 167 L833 251" marker-end="url(#symbol-matrix-arrow)" />
+<circle class="docs-shot-number" cx="833" cy="167" r="18" /><text x="833" y="167" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M941 594 L941 510" marker-end="url(#symbol-matrix-arrow)" />
+<circle class="docs-shot-number" cx="941" cy="594" r="18" /><text x="941" y="594" class="docs-shot-number-text">8</text>
 </svg>
 </div>
 
@@ -327,9 +336,35 @@ Symbol Matrix works in eight stages, one folder each in the Nodes tab: **Cell Gr
 
 <div class="docs-shot-stage">
 
-![Inside the Roll Window folder, first part: Glyph Count minus One times the clamped Roll, through Ceiling and plus One, gives the window; times Half and Floor gives half the window; Tone Glyph minus that half, clamped between Zero and Glyph Count minus the window, gives the window start](../assets/effects/graphs/glyph-matrix-roll-window.webp)
+![Inside the Roll Window folder, the dark hold: Greater Than asks whether Black Level is above Zero and feeds a Switch that gives Zero instead of Roll as the Dark Roll; a second Greater Than asks whether the Tone is above Zero (Lit) and feeds a Switch that gives Roll for lit cells and the Dark Roll for the others, the Cell Roll](../assets/effects/graphs/glyph-matrix-roll-hold.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 603" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 724" aria-hidden="true" focusable="false">
+<defs><marker id="glyph-matrix-roll-hold-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M363 234 L363 318" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="363" cy="234" r="18" /><text x="363" y="234" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M363 81 L363 165" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="363" cy="81" r="18" /><text x="363" y="81" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M500 300 L500 216" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="500" cy="300" r="18" /><text x="500" y="300" class="docs-shot-number-text">3</text>
+</svg>
+</div>
+
+<figcaption>Inside Roll Window (Roll, Black Level), the dark hold. 1 — Lit: the cell is brighter than Black Level. 2 — Dark Roll: the roll of a dark cell. 3 — Cell Roll: the roll this cell gets.</figcaption>
+</figure>
+
+**Lit** – Greater Than: is the cell's Tone above 0, so brighter than Black Level? The other Greater Than asks whether Black Level is set at all (above 0).
+
+**Dark Roll** – a Switch: 0 while Black Level is above 0, otherwise Roll. At Black Level 0, also in effects saved before this hold existed, every cell rolls as before.
+
+**Cell Roll** – the second Switch: Roll for a lit cell, the Dark Roll for a dark one. The window below is built from it, so with Black Level set a dark cell keeps its sign, even at Roll 1, and the dark stage stays empty.
+
+<figure class="docs-shot docs-shot--graph">
+
+<div class="docs-shot-stage">
+
+![Inside the Roll Window folder, first part: Glyph Count minus One times the Cell Roll, through Ceiling and plus One, gives the window; times Half and Floor gives half the window; Tone Glyph minus that half, clamped between Zero and Glyph Count minus the window, gives the window start](../assets/effects/graphs/glyph-matrix-roll-window.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 398" aria-hidden="true" focusable="false">
 <defs><marker id="glyph-matrix-roll-window-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M400 48 L400 132" marker-end="url(#glyph-matrix-roll-window-arrow)" />
 <circle class="docs-shot-number" cx="400" cy="48" r="18" /><text x="400" y="48" class="docs-shot-number-text">1</text>
@@ -337,15 +372,15 @@ Symbol Matrix works in eight stages, one folder each in the Nodes tab: **Cell Gr
 <circle class="docs-shot-number" cx="509" cy="48" r="18" /><text x="509" y="48" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M725 299 L725 215" marker-end="url(#glyph-matrix-roll-window-arrow)" />
 <circle class="docs-shot-number" cx="725" cy="299" r="18" /><text x="725" y="299" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M941 394 L941 310" marker-end="url(#glyph-matrix-roll-window-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="394" r="18" /><text x="941" y="394" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M941 365 L941 281" marker-end="url(#glyph-matrix-roll-window-arrow)" />
+<circle class="docs-shot-number" cx="941" cy="365" r="18" /><text x="941" y="365" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
 <figcaption>Inside Roll Window (Roll), the size of the window. 1 — Ceiling: the neighbours a cell rolls through. 2 — Window: how many characters. 3 — Floor: half the window. 4 — Window Start: where the window begins in the ramp.</figcaption>
 </figure>
 
-**Ceiling** – Roll times the ramp's length minus one (Subtract, Multiply), rounded up: how many neighbours a cell may swap to. Any Roll above 0 gives at least one.
+**Ceiling** – the Cell Roll times the ramp's length minus one (Subtract, Multiply), rounded up: how many neighbours a cell may swap to. Any Cell Roll above 0 gives at least one.
 
 **Window** – that number plus the cell's own sign (Add): from 1 at Roll 0 to the whole ramp at Roll 1.
 
@@ -425,37 +460,37 @@ Symbol Matrix works in eight stages, one folder each in the Nodes tab: **Cell Gr
 
 <div class="docs-shot-stage">
 
-![Inside the Pulse folder: Random (Hash) of the cell number times Symbol Tau 6.2832, and the clock times Symbol Pulse Time Scale 2, are added into the phase; Sine Wave with Symbol Pulse Scale 0.35 and Symbol Pulse Base 0.65 gives the pulse; a last Multiply with the glyph coverage gives the pulsed coverage](../assets/effects/graphs/symbol-matrix-pulse.webp)
+![Inside the Pulse folder: Random (Hash) of the cell number times Symbol Tau 6.2832, and the clock times Symbol Pulse Time Scale 2, are added into the phase; Twinkle, clamped between Zero and One, times Half gives Half Twinkle, and One minus it the Pulse Base; Sine Wave with Half Twinkle as amplitude and the Pulse Base gives the pulse; a last Multiply with the glyph coverage gives the pulsed coverage](../assets/effects/graphs/symbol-matrix-pulse.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 740" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1225" aria-hidden="true" focusable="false">
 <defs><marker id="symbol-matrix-pulse-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M264 105 L264 189" marker-end="url(#symbol-matrix-pulse-arrow)" />
-<circle class="docs-shot-number" cx="264" cy="105" r="18" /><text x="264" y="105" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M427 622 L427 538" marker-end="url(#symbol-matrix-pulse-arrow)" />
-<circle class="docs-shot-number" cx="427" cy="622" r="18" /><text x="427" y="622" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M589 105 L589 189" marker-end="url(#symbol-matrix-pulse-arrow)" />
-<circle class="docs-shot-number" cx="589" cy="105" r="18" /><text x="589" y="105" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M752 429 L752 345" marker-end="url(#symbol-matrix-pulse-arrow)" />
-<circle class="docs-shot-number" cx="752" cy="429" r="18" /><text x="752" y="429" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M914 435 L914 351" marker-end="url(#symbol-matrix-pulse-arrow)" />
-<circle class="docs-shot-number" cx="914" cy="435" r="18" /><text x="914" y="435" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M265 208 L265 292" marker-end="url(#symbol-matrix-pulse-arrow)" />
+<circle class="docs-shot-number" cx="265" cy="208" r="18" /><text x="265" y="208" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M427 725 L427 641" marker-end="url(#symbol-matrix-pulse-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="725" r="18" /><text x="427" y="725" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M590 160 L590 244" marker-end="url(#symbol-matrix-pulse-arrow)" />
+<circle class="docs-shot-number" cx="590" cy="160" r="18" /><text x="590" y="160" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M752 532 L752 448" marker-end="url(#symbol-matrix-pulse-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="532" r="18" /><text x="752" y="532" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M914 538 L914 454" marker-end="url(#symbol-matrix-pulse-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="538" r="18" /><text x="914" y="538" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Pulse. The number cards are values from the Constants folder, shown where they plug in. 1 — Random (Hash): the cell's own place in its breath. 2 — Multiply: the clock, twice. 3 — Add: the phase. 4 — Sine Wave: the pulse. 5 — Pulsed Coverage: the breathing sign.</figcaption>
+<figcaption>Inside Pulse (Twinkle). The number cards are values from the Constants folder, shown where they plug in. 1 — Random (Hash): the cell's own place in its breath. 2 — Half Twinkle: how deep the breath goes. 3 — Add: the phase. 4 — Sine Wave: the pulse. 5 — Pulsed Coverage: the breathing sign.</figcaption>
 </figure>
 
 **Random (Hash)** – a random number for each cell, times a full turn (Symbol Tau 6.2832, the Multiply beside it): where in its breath the cell starts, so neighbours never breathe in step.
 
-**Multiply** – the clock from Glyph Offset times Symbol Pulse Time Scale 2: at Speed 1 one breath lasts about three seconds.
+**Half Twinkle** – **Twinkle**, kept between 0 and 1 (Clamp), times Half: the swing of the breath. One minus it (Subtract) is the Pulse Base, the middle of the breath.
 
-**Add** – both together: where the cell is in its breath right now.
+**Add** – the cell's start plus the clock from Glyph Offset times Symbol Pulse Time Scale 2 (the Multiply below): where the cell is in its breath right now. At Speed 1 one breath lasts about three seconds.
 
-**Sine Wave** – Symbol Pulse Base 0.65 plus Symbol Pulse Scale 0.35 times the sine of that: the pulse, which rises and falls between 0.3 and 1.
+**Sine Wave** – the Pulse Base plus Half Twinkle times the sine of that: the pulse, which rises and falls between 1 − Twinkle and 1 (0.65 to 1 at the default).
 
 **Pulsed Coverage** – the Glyph Coverage from Atlas Alpha times the pulse: the sign fades towards its ground and back. Ink & Appearance draws with it.
 
-**Remix:** open the **Constants** folder and set **Symbol Pulse Base** and **Symbol Pulse Scale** both to **0.5**: every sign fades out completely at the bottom of its breath, and the picture sparkles like stars. Scale **0** stops the breathing.
+**Remix:** open the **Constants** folder and set **Symbol Pulse Time Scale** from **2** to **0.5**: the signs breathe four times slower, about once in twelve seconds, while they keep swapping at their own pace.
 
 ### Ink & Appearance
 

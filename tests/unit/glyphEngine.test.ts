@@ -350,6 +350,48 @@ describe('glyph engine', () => {
       .toBe('Black Level 0.95 is above the rendered range (0 to 0.9) and renders as 0.9.');
   });
 
+  it('with Black Level above 0 a moving look holds cells at or below it still, so the dark stage drops out', () => {
+    // Grey 0.1 under Black Level 0.3 is tone 0: the first character ('space'), at every moment, even at Roll 1.
+    const glyphsOf = (type: string, grey: number, blackLevel: number) => {
+      const plan = compile(type, { ...getDefaultParams(type), roll: 1, speed: 1, blackLevel });
+      return new Set(Array.from({ length: 30 }, (_, frame) => {
+        let glyph = -1;
+        evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv: [.31, .47], resolution: [1920, 1080], timelineTimeSeconds: frame / 12,
+          sampleImage: () => [grey, grey, grey, 1], sampleResource: (_id, [u, v]) => { glyph = Math.floor(v * 2) * 2 + Math.floor(u * 2); return [0, 0, 0, 1]; } });
+        return glyph;
+      }));
+    };
+    for (const type of ['glyph-matrix', 'symbol-matrix', 'retro-matrix', 'matrix']) {
+      expect(glyphsOf(type, .1, .3), type).toEqual(new Set([0]));
+      // Above the level the cell still rolls; at Black Level 0 (also saved effects) every cell rolls, as before.
+      expect(glyphsOf(type, .7, .3).size, type).toBeGreaterThan(1);
+      expect(glyphsOf(type, .1, 0).size, type).toBeGreaterThan(1);
+    }
+  });
+
+  it('Symbol Matrix Twinkle sets how far each sign dims as it breathes; saved effects keep the earlier 0.3–1 pulse', () => {
+    const twinkle = getEffect('symbol-matrix')!.params.twinkle;
+    expect(twinkle).toMatchObject({ default: .35, legacyDefault: .7, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true, lookOwn: true, group: 'Motion' });
+    expect(getEffect('glyph-matrix')!.params.twinkle).toBeUndefined();
+    // A full sign (coverage 1) held on one character (Roll 0) over a dark ground: its brightness over 4 s.
+    const range = (overrides: Record<string, unknown>, omit?: string) => {
+      const params: Record<string, unknown> = { ...getDefaultParams('symbol-matrix'), roll: 0, background: 0, colorMode: 'duotone', colorA: '#000000', colorB: '#ffffff', ...overrides };
+      if (omit) delete params[omit];
+      const plan = compile('symbol-matrix', params);
+      const levels = Array.from({ length: 96 }, (_, frame) => evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv: [.31, .47], resolution: [1920, 1080],
+        timelineTimeSeconds: frame / 24, sampleImage: () => [1, 1, 1, 1], sampleResource: () => [0, 0, 0, 1] })[0] as number);
+      return [Math.min(...levels), Math.max(...levels)].map(value => +value.toFixed(2));
+    };
+    expect(range({ twinkle: 0 })).toEqual([1, 1]);
+    expect(range({ twinkle: .35 })[0]).toBeCloseTo(.65, 1);
+    expect(range({ twinkle: 1 })[0]).toBeCloseTo(0, 1);
+    // Saved before Twinkle existed: the value is missing and the sign dims to 0.3, as with the earlier 0.65 + 0.35 × sin.
+    expect(range({}, 'twinkle')[0]).toBeCloseTo(.3, 1);
+    expect(migratePersistedEffectOperatorGraph({ id: 'old', name: 'Symbol Matrix', type: 'symbol-matrix', enabled: true, params: { cellSize: 14 } }).params.twinkle).toBe(.7);
+    expect(paramRangeNotes(getEffect('symbol-matrix')!.params, { twinkle: 2 }, effectOperatorGraph({ type: 'symbol-matrix', params: getDefaultParams('symbol-matrix') }))[0]?.message)
+      .toBe('Twinkle 2 is above the rendered range (0 to 1) and renders as 1.');
+  });
+
   it('warns that Speed does nothing at Roll 0 in the looks that move only by rolling', () => {
     const warnings = (type: string, values: Record<string, unknown>) => getEffect(type)!.paramWarnings!({ ...getDefaultParams(type), ...values } as Record<string, number | boolean | string>, 1920, 1080);
     for (const type of ['glyph-matrix', 'data-hatch', 'pixel-dither', 'capsule-cloud', 'ui-collage', 'ascii-ghost']) {

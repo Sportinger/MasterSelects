@@ -313,12 +313,14 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       portLabels: { ...GLYPH_PORTS, 'glyph-index': 'Tone Glyph', 'index-offset': 'Glyph Offset', 'index-time-speed': 'Clock', 'index-time-phase': 'Ticks',
         'index-sweep': 'Sweep', 'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window',
         'index-cell-random': 'Cell Random', 'index-tick': 'Cell Tick', 'index-jitter': 'Draw', 'symbol-pulse': 'Pulse', 'symbol-alpha': 'Pulsed Coverage',
+        'index-roll-lit': 'Lit', 'index-roll-levelled': 'Black Level Set', 'index-roll-dark': 'Dark Roll', 'index-roll-cell': 'Cell Roll',
+        'symbol-pulse-scale': 'Half Twinkle', 'symbol-pulse-base': 'Pulse Base',
         ...(type === 'retro-matrix' ? RETRO_PORTS : {}) },
       stage: (node) => type === 'retro-matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|scroll-)/.test(node.id) ? 'scroll'
         : type === 'retro-matrix' && /^(scrolled-uv|sample-unscrolled)$/.test(node.id) ? 'grid'
         : /^(scanlines-clamped$|retro-scan(?!ned))/.test(node.id) ? 'scanlines'
         : /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'
-        : /^(index-|cell-id-split$)/.test(node.id) ? 'offset' : /^symbol-/.test(node.id) ? 'pulse' : glyph.stage(node) };
+        : /^(index-|cell-id-split$)/.test(node.id) ? 'offset' : /^(symbol-|twinkle-clamped$)/.test(node.id) ? 'pulse' : glyph.stage(node) };
   }
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return glyphPresentation();
   return undefined;

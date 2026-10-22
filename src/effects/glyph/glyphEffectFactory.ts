@@ -205,7 +205,9 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
         Math.min(Math.max(numeric(values.background, 0), 0), 1),
         numeric(values[GLYPH_SPEED_TRAVEL], GLYPH_NO_TRAVEL),
         Math.min(Math.max(numeric(values.roll, 1), 0), 1),
-        options.params?.scanlines ? Math.min(Math.max(numeric(values.scanlines, Number(options.params.scanlines.legacyDefault ?? 0)), 0), 1) : 0,
+        // The last slot carries a look's own strength: Retro Matrix's Scanlines or Symbol Matrix's Twinkle.
+        ...[options.params?.scanlines ? 'scanlines' : options.params?.twinkle ? 'twinkle' : undefined].map(key => key
+          ? Math.min(Math.max(numeric(values[key], Number(options.params![key].legacyDefault ?? 0)), 0), 1) : 0),
       ]);
     },
   };

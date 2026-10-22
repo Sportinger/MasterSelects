@@ -30,7 +30,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Paper White** – crisp white text without scanlines, like the paper-white monitors of the eighties; Black Level 0.15 keeps the dark stage a dark screen. Cool and clean; it sits well next to black-and-white footage.
 
-**Teletype** – large amber digits that crawl up slowly. Reads from far away on a projection and gives a scene a calm, heavy rhythm.
+**Teletype** – large amber digits that crawl up slowly; Black Level 0.14 empties the dark stage, so the bright digits carry the figure. Reads from far away on a projection and gives a scene a calm, heavy rhythm.
 
 **Binary Stream** – zeros and ones in cold cyan that race upwards; Black Level 0.15 keeps them to the figure. Restless and technical: data flowing, a system under load.
 
@@ -98,15 +98,15 @@ The Style menu at the top of the card switches to another look of the same engin
 <figcaption>Black Level from 0 to 0.5 and back.</figcaption>
 </figure>
 
-**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the dimmest glow and the first character of the ramp, the space in most ramps, so a grey stage turns into a dark screen and the lit figure stands out; the rest of the picture spreads over the whole ramp and the glow. With Roll above 0 the dark cells still show sparse text. 0 to 0.9, default 0.
+**Black Level** – the brightness up to which the picture counts as black. Everything darker gets the dimmest glow and the first character of the ramp, the space in most ramps, and keeps it, even at Roll 1, so a grey stage turns into an empty dark screen and the lit figure stands out; the rest of the picture spreads over the whole ramp and the glow. 0 to 0.9, default 0.
 
 <div class="docs-float-end"></div>
 
 **Invert Ramp** – swaps the ends of the ramp: dark parts get the dense characters and bright parts the sparse ones, like a negative. The glow still follows the picture, so bright parts stay bright. The higher Roll, the less it shows. Either on or off, default off.
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/retro-matrix-scanlines.mp4" poster="../assets/effects/clips/retro-matrix-scanlines.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="A close-up of Retro Matrix at twice the size while Scanlines runs from 0 to 1 and back: at 0 the amber characters are solid, then dark lines three pixels apart cut through every row until each character is drawn in separate strokes, and back; the current value is shown at the bottom left"></video>
-<figcaption>Scanlines from 0 to 1 and back, in a close-up at twice the size.</figcaption>
+<video src="../assets/effects/clips/retro-matrix-scanlines.mp4" poster="../assets/effects/clips/retro-matrix-scanlines.webp" width="600" height="600" autoplay muted loop playsinline preload="none" aria-label="A close-up of Retro Matrix at one and a quarter times the size while Scanlines runs from 0 to 1 and back: at 0 the amber characters on her dress are solid, then dark lines three pixels apart cut through every row until each character is drawn in separate strokes, and back; the current value is shown at the bottom left"></video>
+<figcaption>Scanlines from 0 to 1 and back, in a close-up at one and a quarter times the size.</figcaption>
 </figure>
 
 **Scanlines** – how dark the gaps between the lines of the screen get. At 0 the text is clean; 0.5 gives the soft lines of a monitor; at 1 the gaps turn black and every character is drawn in separate strokes, like an old tube up close. There is one line every 3 pixels of a 1080p frame, and the lines move with the text. On smaller frames, such as a reduced Preview Quality or the thumbnails, they fade into an even dimming instead of flickering; a 1080p or 4K export shows them in full. 0 to 1, default 0.5.
@@ -143,7 +143,7 @@ The Style menu at the top of the card switches to another look of the same engin
 <figcaption>Roll from 0 to 1 and back.</figcaption>
 </figure>
 
-**Roll** – how far a character of the text may stray from the character of its brightness. At 0 every cell shows exactly that character, like [ASCII](./ascii.md), and the dark stage stays empty; 0.3 picks among its four nearest neighbours in the ramp, so the screen fills with text while dense characters still mark the bright parts; at 1 any character can stand anywhere, and the figure shows only in the brightness. Any value above 0 draws from at least two characters. 0 to 1, default 0.3.
+**Roll** – how far a character of the text may stray from the character of its brightness. At 0 every cell shows exactly that character, like [ASCII](./ascii.md), and the dark stage stays empty; 0.3 picks from a window of four characters: its own and its three nearest neighbours in the ramp, so the screen fills with text while dense characters still mark the bright parts; at 1 any character can stand anywhere, and the figure shows only in the brightness. Any value above 0 draws from at least two characters. 0 to 1, default 0.3.
 
 <div class="docs-float-end"></div>
 
@@ -153,22 +153,22 @@ The Style menu at the top of the card switches to another look of the same engin
 
 <div class="docs-shot-stage">
 
-![The Retro Matrix graph in nine stages: Parameters feed Scroll (Speed), whose Scroll Offset moves Cell Grid (Cell Size); Cell Grid passes the cell centre to Cell Sampling & Tone, the line cell to Glyph Offset, the position in the cell to Atlas Alpha and the scrolled grid to Scanlines; Tone to Glyph turns the tone into the cell's own character, Glyph Offset gives each cell of the text its random character, Roll Window (Roll) keeps it near the Tone Glyph and passes the glyph index to Atlas Alpha; Scanlines (Scanlines) and Ink & Appearance (Phosphor, Background, Amount) light the coverage and draw the picture](../assets/effects/graphs/retro-matrix.webp)
+![The Retro Matrix graph in nine stages: Parameters feed Scroll (Speed), whose Scroll Offset moves Cell Grid (Cell Size); Cell Grid passes the cell centre to Cell Sampling & Tone, the line cell to Glyph Offset, the position in the cell to Atlas Alpha and the scrolled grid to Scanlines; Tone to Glyph turns the tone into the cell's own character, Glyph Offset gives each cell of the text its random character, Roll Window (Roll) keeps it near the Tone Glyph, holds cells below Black Level still and passes the glyph index to Atlas Alpha; Scanlines (Scanlines) and Ink & Appearance (Phosphor, Background, Amount) light the coverage and draw the picture](../assets/effects/graphs/retro-matrix.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 748" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 876" aria-hidden="true" focusable="false">
 <defs><marker id="retro-matrix-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M184 194 L184 278" marker-end="url(#retro-matrix-arrow)" />
 <circle class="docs-shot-number" cx="184" cy="194" r="18" /><text x="184" y="194" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M292 726 L292 642" marker-end="url(#retro-matrix-arrow)" />
 <circle class="docs-shot-number" cx="292" cy="726" r="18" /><text x="292" y="726" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M400 136 L400 220" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="400" cy="136" r="18" /><text x="400" y="136" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M400 656 L400 740" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="400" cy="656" r="18" /><text x="400" y="656" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M509 506 L509 422" marker-end="url(#retro-matrix-arrow)" />
 <circle class="docs-shot-number" cx="509" cy="506" r="18" /><text x="509" y="506" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M617 22 L617 72" marker-end="url(#retro-matrix-arrow)" />
 <circle class="docs-shot-number" cx="617" cy="22" r="18" /><text x="617" y="22" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M725 423 L725 339" marker-end="url(#retro-matrix-arrow)" />
-<circle class="docs-shot-number" cx="725" cy="423" r="18" /><text x="725" y="423" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M725 452 L725 368" marker-end="url(#retro-matrix-arrow)" />
+<circle class="docs-shot-number" cx="725" cy="452" r="18" /><text x="725" y="452" class="docs-shot-number-text">6</text>
 <path class="docs-shot-arrow" d="M833 244 L833 328" marker-end="url(#retro-matrix-arrow)" />
 <circle class="docs-shot-number" cx="833" cy="244" r="18" /><text x="833" y="244" class="docs-shot-number-text">7</text>
 <path class="docs-shot-arrow" d="M833 670 L833 586" marker-end="url(#retro-matrix-arrow)" />
@@ -350,9 +350,35 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 
 <div class="docs-shot-stage">
 
-![Inside the Roll Window folder, first part: Glyph Count minus One times the clamped Roll, through Ceiling and plus One, gives the window; times Half and Floor gives half the window; Tone Glyph minus that half, clamped between Zero and Glyph Count minus the window, gives the window start](../assets/effects/graphs/glyph-matrix-roll-window.webp)
+![Inside the Roll Window folder, the dark hold: Greater Than asks whether Black Level is above Zero and feeds a Switch that gives Zero instead of Roll as the Dark Roll; a second Greater Than asks whether the Tone is above Zero (Lit) and feeds a Switch that gives Roll for lit cells and the Dark Roll for the others, the Cell Roll](../assets/effects/graphs/glyph-matrix-roll-hold.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 603" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 724" aria-hidden="true" focusable="false">
+<defs><marker id="glyph-matrix-roll-hold-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M363 234 L363 318" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="363" cy="234" r="18" /><text x="363" y="234" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M363 81 L363 165" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="363" cy="81" r="18" /><text x="363" y="81" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M500 300 L500 216" marker-end="url(#glyph-matrix-roll-hold-arrow)" />
+<circle class="docs-shot-number" cx="500" cy="300" r="18" /><text x="500" y="300" class="docs-shot-number-text">3</text>
+</svg>
+</div>
+
+<figcaption>Inside Roll Window (Roll, Black Level), the dark hold. 1 — Lit: the cell is brighter than Black Level. 2 — Dark Roll: the roll of a dark cell. 3 — Cell Roll: the roll this cell gets.</figcaption>
+</figure>
+
+**Lit** – Greater Than: is the cell's Tone above 0, so brighter than Black Level? The other Greater Than asks whether Black Level is set at all (above 0).
+
+**Dark Roll** – a Switch: 0 while Black Level is above 0, otherwise Roll. At Black Level 0, also in effects saved before this hold existed, every cell rolls as before.
+
+**Cell Roll** – the second Switch: Roll for a lit cell, the Dark Roll for a dark one. The window below is built from it, so with Black Level set a dark cell keeps its character, even at Roll 1, and the dark stage stays empty.
+
+<figure class="docs-shot docs-shot--graph">
+
+<div class="docs-shot-stage">
+
+![Inside the Roll Window folder, first part: Glyph Count minus One times the Cell Roll, through Ceiling and plus One, gives the window; times Half and Floor gives half the window; Tone Glyph minus that half, clamped between Zero and Glyph Count minus the window, gives the window start](../assets/effects/graphs/glyph-matrix-roll-window.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 398" aria-hidden="true" focusable="false">
 <defs><marker id="glyph-matrix-roll-window-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M400 48 L400 132" marker-end="url(#glyph-matrix-roll-window-arrow)" />
 <circle class="docs-shot-number" cx="400" cy="48" r="18" /><text x="400" y="48" class="docs-shot-number-text">1</text>
@@ -360,15 +386,15 @@ Retro Matrix works in nine stages, one folder each in the Nodes tab: **Scroll** 
 <circle class="docs-shot-number" cx="509" cy="48" r="18" /><text x="509" y="48" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M725 299 L725 215" marker-end="url(#glyph-matrix-roll-window-arrow)" />
 <circle class="docs-shot-number" cx="725" cy="299" r="18" /><text x="725" y="299" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M941 394 L941 310" marker-end="url(#glyph-matrix-roll-window-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="394" r="18" /><text x="941" y="394" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M941 365 L941 281" marker-end="url(#glyph-matrix-roll-window-arrow)" />
+<circle class="docs-shot-number" cx="941" cy="365" r="18" /><text x="941" y="365" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
 <figcaption>Inside Roll Window (Roll), the size of the window. 1 — Ceiling: the neighbours a cell draws from. 2 — Window: how many characters. 3 — Floor: half the window. 4 — Window Start: where the window begins in the ramp.</figcaption>
 </figure>
 
-**Ceiling** – Roll times the ramp's length minus one (Subtract, Multiply), rounded up: how many neighbours a character may be drawn from. Any Roll above 0 gives at least one.
+**Ceiling** – the Cell Roll times the ramp's length minus one (Subtract, Multiply), rounded up: how many neighbours a character may be drawn from. Any Cell Roll above 0 gives at least one.
 
 **Window** – that number plus the cell's own character (Add): from 1 at Roll 0 to the whole ramp at Roll 1.
 
