@@ -27,8 +27,6 @@ export const EFFECT_DOC_EXTRAS = {
   contrast: { thumb: SPLIT_THUMB },
   exposure: { thumb: SPLIT_THUMB },
   levels: { thumb: SPLIT_THUMB },
-  // The still has three panels (original, Saturation, Vibrance): the card shows the last.
-  vibrance: { thumb: { region: [0.67, 0, 0.33, 1] } },
   // Generators: the still is the effect frame alone.
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },

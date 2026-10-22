@@ -150,6 +150,31 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "vibrance-inspector",
+      "effect": "vibrance",
+      "params": {
+        "amount": 0.7
+      },
+      "image": "greenscreen_dancer.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Vibrance card: the Preset menu showing Lively and the Amount row at 0.7, beside a strip of the preview with the dancer in front of a brighter green screen",
+      "caption": "Vibrance with the Lively preset. 1 — Preset: pick a starting point. 2 — Amount: muted or livelier colour.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }
