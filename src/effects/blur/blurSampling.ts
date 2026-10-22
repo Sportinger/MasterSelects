@@ -193,14 +193,26 @@ export function transformDirectionalPixel(plan: DirectionalBlurPlan, pixel: [num
  * the middle of the span.
  */
 export function coveredCellTaps(span: number, reachPx: number, maxTaps: number): Array<{ offset: number; weight: number }> {
+  const offsets = new Float64Array(Math.max(maxTaps, 2)), weights = new Float64Array(Math.max(maxTaps, 2));
+  const count = fillCoveredCellTaps(span, reachPx, maxTaps, offsets, weights);
+  return Array.from({ length: count }, (_, index) => ({ offset: offsets[index], weight: weights[index] }));
+}
+
+/**
+ * coveredCellTaps written into caller-owned arrays (at least max(maxTaps, 2) long); returns the tap
+ * count. Per-pixel CPU paths reuse the arrays instead of building tap objects for every pixel.
+ */
+export function fillCoveredCellTaps(span: number, reachPx: number, maxTaps: number, offsets: Float64Array, weights: Float64Array): number {
   const cell = Math.max(reachPx / maxTaps, 1), halfCells = reachPx * 0.5 / cell;
   const pairs = clamp(Math.ceil(halfCells), 1, Math.floor(maxTaps / 2));
   const unitsPerCell = span * 0.5 / Math.max(halfCells, 1e-9);
-  return Array.from({ length: 2 * pairs }, (_, index) => {
+  for (let index = 0; index < 2 * pairs; index += 1) {
     const slot = index + 0.5 - pairs, distance = Math.abs(slot), ring = distance - 0.5;
     const covered = clamp(halfCells - ring, 0, 1);
-    return { offset: slot * ((ring + 0.5 * covered) / distance) * unitsPerCell, weight: Math.max(covered, 1e-6) };
-  });
+    offsets[index] = slot * ((ring + 0.5 * covered) / distance) * unitsPerCell;
+    weights[index] = Math.max(covered, 1e-6);
+  }
+  return 2 * pairs;
 }
 
 /** Stage A taps at a pixel: the box of length h in covered one-pixel cells (coveredCellTaps). */

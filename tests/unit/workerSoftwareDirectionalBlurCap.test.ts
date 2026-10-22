@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({ warn: vi.fn() }));
 vi.mock('../../src/services/logger', () => ({ Logger: { create: () => ({ warn: mocks.warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() }) } }));
 
 import { applyWorkerSoftwareSourceResamplingEffects } from '../../src/services/render/workerSoftwareSourceResamplingEffects';
+import { fastestMs, referenceFrameMs } from '../helpers/cpuFrameBudget';
 
 describe('software preview directional blur tap cap', () => {
   it('says once per effect and size when a streak is longer than its 64 taps', () => {
@@ -48,5 +49,23 @@ describe('software preview directional blur tap cap', () => {
     const median = changes.toSorted((a, b) => a - b)[Math.floor(changes.length / 2)];
     expect(median).toBeGreaterThan(1e-4);
     expect(Math.max(...bends) / median).toBeLessThan(1.5);
+  });
+
+  it.each([
+    // About 24 taps a pixel at 240x135 (Motion 0.05 at 0.2 rad, Zoom 0.5 and Spin 0.5 at the far corners).
+    ['motionBlurAdjustments', { amount: 0.05, angle: 0.2 }],
+    ['zoomBlurAdjustments', { amount: 0.5 }],
+    ['radialBlurAdjustments', { amount: 0.5, mode: 'spin' as const }],
+  ] as const)('%s paints a frame within its budget: no arrays per pixel or per tap', (key, adjustment) => {
+    const width = 240, height = 135, source = stripes(width, height);
+    const blurred = fastestMs(() => {
+      for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+        applyWorkerSoftwareSourceResamplingEffects(source, width, height, x, y, { [key]: [adjustment] });
+      }
+    });
+    // Measured against a scalar reference pass over the same frame on this machine (cpuFrameBudget.ts), so a
+    // slow CI runner does not fail it. The scalar taps take about 40-70x that pass; building the taps, corners
+    // and coordinate tuples as arrays for every read (the first covered-cell version, commit 959684610) took about 250-400x.
+    expect(blurred).toBeLessThan(150 * referenceFrameMs(source));
   });
 });
