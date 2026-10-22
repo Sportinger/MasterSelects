@@ -7,25 +7,20 @@
         "radius": 10
       },
       "image": "harbor_town.jpg",
-      "preview": 200,
-      "alt": "Properties, Effects with + Add Effect and a Gaussian Blur card at Radius 10, beside a strip of the blurred preview",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Gaussian Blur card: the Preset menu showing Out of Focus and the Radius row at 10 px, beside a strip of the preview where the harbour town has gone soft",
+      "caption": "Gaussian Blur at its default, which is also the Out of Focus preset. 1 — Preset: pick a starting point. 2 — Radius: how soft the picture gets.",
       "marks": [
         {
-          "target": "add",
-          "from": "right",
-          "label": "+ Add Effect lists every effect"
+          "target": "Preset",
+          "label": "Preset"
         },
         {
           "target": "Radius",
           "label": "Radius"
-        },
-        {
-          "target": "bypass",
-          "from": "below",
-          "label": "Bypass, to compare with the original"
         }
       ],
-      "top": "tabs",
       "hide": [
         "Particle Out"
       ]
