@@ -1,5 +1,4 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
-import { measureInReferenceFrame } from './patternReferenceFrame';
 
 export type EditableDitherEffectType = 'dither' | 'dither-studio';
 type Ref = { node: string; port: string };
@@ -40,8 +39,8 @@ export function createDefaultDitherGraph(type: EditableDitherEffectType): Effect
     const mixed = g.node('mixed-color', 'math.mix.rgb'); g.edge(rgb, mixed, 'a'); g.edge(quantized, mixed, 'b'); g.edge(amount, mixed, 't');
     const combined = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combined, 'rgb'); g.edge({ node: split.node, port: 'alpha' }, combined, 'alpha');
     const output = g.node('output', 'image.output', ''); g.edge(combined, output, 'image');
-    // Pixel Size counts pixels of a 1080p frame, in whole output pixels (patternReferenceFrame.ts).
-    return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'safe-scale', { minimumPixels: 1, wholePixels: true });
+    // The earlier recipe exactly as saved (3.2.7): Pixel Size in output pixels, no 1080p measure.
+    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   const pointThreeFive = g.number('point-three-five', .35), scaled = g.binary('scaled', 'math.multiply.scalar', scale, pointThreeFive);
   const safeScale = g.node('safe-scale', 'math.max.scalar'); g.edge(scaled, safeScale, 'a'); g.edge(one, safeScale, 'b');

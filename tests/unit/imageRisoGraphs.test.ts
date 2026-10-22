@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { colorToRgba } from '../../src/effects/_shared/catalogColor';
 import { riso, risoGlow } from '../../src/effects/halftone';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
-import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { evaluateImagePasses } from '../helpers/imageGraphPasses';
+import { migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { createDefaultRisoGraph, createEarlierRisoGraph } from '../../src/services/operators/risoEffectGraphs';
 import { createRisoGlowGraph, createRisoPrintGraph, hasEarlierRisoParams, RISO_GLOW_PULSE, RISO_PAPER, RISO_SLIP } from '../../src/services/operators/risoPrintEffectGraph';
 import type { ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
@@ -21,8 +22,7 @@ const inkLinear = (hex: string) => colorToRgba(hex, hex).slice(0, 3).map(toLinea
 function printAt(params: Record<string, number | string | boolean>, pixel: [number, number], picture: (uv: [number, number]) => Rgba,
   resolution: [number, number] = [1920, 1080]) {
   const plan = compileImageOperatorGraph(createRisoPrintGraph(), { ...defaults, ...params }, { parameterSchema: riso.params });
-  return evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv: [(pixel[0] + .5) / resolution[0], (pixel[1] + .5) / resolution[1]], resolution,
-    timelineTimeSeconds: 0, sampleImage: picture });
+  return evaluateImagePasses(plan, [(pixel[0] + .5) / resolution[0], (pixel[1] + .5) / resolution[1]], resolution, picture);
 }
 const flat = (rgba: Rgba) => (): Rgba => rgba;
 const glowDefaults = Object.fromEntries(Object.entries(risoGlow.params).map(([id, spec]) => [id, spec.default])) as Record<string, number | string | boolean>;
@@ -57,12 +57,12 @@ describe('Riso image graphs', () => {
     expect(createEarlierRisoGraph('riso-glow').nodes.find(node => node.id === 'speed')?.bindings).toEqual({ value: 'speed' });
     // Riso Glow is Riso's print plus its Glow stage; the graph leaves room under the 512-node budget for a remix.
     expect(glow.nodes.map(node => node.id)).toEqual(expect.arrayContaining(createRisoPrintGraph().nodes.map(node => node.id)));
-    expect(glow.nodes.length).toBeLessThanOrEqual(450);
+    expect(glow.nodes.length).toBeLessThanOrEqual(490);
   });
 
   it.each([['riso', riso], ['riso-glow', risoGlow]] as const)('keeps the earlier %s operation order', (type, definition) => {
     const params = { scale: 8, amount: .7, speed: 1.3, colorA: definition.params.colorA.default as string, colorB: definition.params.colorB.default as string };
-    const uv: [number, number] = [.63, .41], resolution: [number, number] = [64, 37], time = .75, offset = params.scale * (Math.min(...resolution) / 1080) / resolution[0] * .35;
+    const uv: [number, number] = [.63, .41], resolution: [number, number] = [64, 37], time = .75, offset = params.scale / resolution[0] * .35; // output pixels, exactly as 3.2.7
     const color = sample(uv), a = 1 - luma(sample([uv[0] - offset, uv[1]])), b = 1 - luma(sample([uv[0] + offset, uv[1]]));
     const colorA = colorToRgba(params.colorA, params.colorA), colorB = colorToRgba(params.colorB, params.colorB), paper = [.96, .93, .85];
     const glow = type === 'riso-glow' ? .55 + .45 * Math.sin(time * params.speed * 2) : 0;
@@ -77,7 +77,7 @@ describe('Riso image graphs', () => {
     const earlier = { scale: 8, amount: .75, angle: 0, colorA: '#2046b3', colorB: '#ef476f' };
     expect(hasEarlierRisoParams(earlier)).toBe(true);
     expect(hasEarlierRisoParams({ ...earlier, dotSize: 6 })).toBe(false);
-    const ids = (params: Record<string, unknown>) => effectOperatorGraph({ id: 'fx', type: 'riso', name: 'Riso', enabled: true, params } as never)?.nodes.map(node => node.id) ?? [];
+    const ids = (params: Record<string, unknown>) => migratePersistedEffectOperatorGraph({ id: 'fx', type: 'riso', name: 'Riso', enabled: true, params } as never).operatorGraph?.nodes.map(node => node.id) ?? [];
     expect(ids(earlier)).not.toContain('dark-share');
     expect(ids({ ...earlier, dotSize: 6 })).toContain('dark-share');
     expect(riso.paramWarnings?.(earlier).join(' ')).toMatch(/saved before Dot Size/);
@@ -157,7 +157,7 @@ describe('Riso image graphs', () => {
   });
   it('keeps a graph-less Riso Glow saved before Dot Size on the earlier recipe and says so in the card', () => {
     const earlier = { scale: 14, amount: .75, angle: 0, speed: 1, colorA: '#4f46e5', colorB: '#f43f5e' };
-    const ids = (params: Record<string, unknown>) => effectOperatorGraph({ id: 'fx', type: 'riso-glow', name: 'Riso Glow', enabled: true, params } as never)?.nodes.map(node => node.id) ?? [];
+    const ids = (params: Record<string, unknown>) => migratePersistedEffectOperatorGraph({ id: 'fx', type: 'riso-glow', name: 'Riso Glow', enabled: true, params } as never).operatorGraph?.nodes.map(node => node.id) ?? [];
     expect(ids(earlier)).not.toContain('glow-cache');
     expect(ids({ ...earlier, dotSize: 6, glow: 1 })).toContain('glow-cache');
     expect(risoGlow.paramWarnings?.(earlier).join(' ')).toMatch(/This Riso Glow was saved before Dot Size/);

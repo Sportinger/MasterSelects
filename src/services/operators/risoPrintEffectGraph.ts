@@ -1,6 +1,7 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { HALFTONE_DOT, HALFTONE_TAPS } from './halftoneEffectGraphs';
 import { measureInReferenceFrame } from './patternReferenceFrame';
+import { prefilterCellTaps } from './patternCellFilter';
 
 type Ref = { node: string; port: string };
 class Builder {
@@ -290,5 +291,6 @@ function buildRisoPrint(glowing: boolean): EffectOperatorGraph {
   const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
   // Registration and Dot Size count pixels of a 1080p frame; a slip may stay below one pixel, a cell never does.
   const graph = measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'registration');
-  return measureInReferenceFrame(graph, 'safe-dot-size', { minimumPixels: 1 });
+  // The Cell Colour reads take the picture averaged over half a cell: each cell shows its whole colour and moves smoothly (patternCellFilter.ts).
+  return prefilterCellTaps(measureInReferenceFrame(graph, 'safe-dot-size', { minimumPixels: 1 }), 'safe-dot-size-pixels');
 }

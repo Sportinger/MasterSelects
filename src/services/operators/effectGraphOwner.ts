@@ -70,11 +70,10 @@ import { createDefaultCrystalGraph } from './crystalEffectGraph';
 import { createDefaultGlassDispersionGraph } from './glassDispersionEffectGraph';
 import { createDefaultHalftoneGraph, type EditableHalftoneEffectType } from './halftoneEffectGraphs';
 import { createDefaultHoloGraph } from './holoRecipe';
-import { createDefaultRisoGraph, createEarlierRisoGraph, type EditableRisoEffectType } from './risoEffectGraphs';
-import { hasEarlierRisoParams } from './risoPrintEffectGraph';
+import { createDefaultRisoGraph, type EditableRisoEffectType } from './risoEffectGraphs';
 import { createDefaultDitherGraph, type EditableDitherEffectType } from './ditherEffectGraphs';
-import { createDefaultDitheringGraph, hasEarlierDitheringParams } from './ditheringEffectGraph';
-import { createEarlierPaperPrintGraph, hasEarlierPaperPrintParams } from './paperPrintEffectGraph';
+import { createDefaultDitheringGraph } from './ditheringEffectGraph';
+import { earlierPrintGraph, pinEarlierPrintGraph } from './patternLegacyGraphs';
 import { createDefaultPaperPrintGraph } from './paperPrintGrainGraph';
 import { createDefaultPixelPosterGraph } from './pixelPosterEffectGraph';
 import { createDefaultToneGeometryGraph } from './toneGeometryEffectGraph';
@@ -227,14 +226,12 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'crystal' ? createDefaultCrystalGraph
         : effectType === 'glass-dispersion' ? createDefaultGlassDispersionGraph
         : effectType === 'holo' ? createDefaultHoloGraph
-        // A graph-less Riso or Riso Glow saved before Dot Size keeps the look it was saved with (the earlier recipe).
-        : (effectType === 'riso' || effectType === 'riso-glow') && hasEarlierRisoParams(effect.params) ? () => createEarlierRisoGraph(effectType)
+        // Old graph-less print looks are given their 3.2.7 graph at every persisted entry (patternLegacyGraphs.ts),
+        // so the fallback is always the current recipe.
         : effectType === 'riso' || effectType === 'riso-glow' ? () => createDefaultRisoGraph(effectType)
-        // A graph-less Dithering saved before Levels keeps the look it was saved with (the earlier recipe).
-        : effectType === 'dither' ? (hasEarlierDitheringParams(effect.params) ? () => createDefaultDitherGraph('dither') : createDefaultDitheringGraph)
+        : effectType === 'dither' ? createDefaultDitheringGraph
         : effectType === 'dither-studio' ? () => createDefaultDitherGraph(effectType)
-        // A graph-less Paper Print saved before Texture keeps the look it was saved with (the earlier recipe).
-        : effectType === 'paper-print' ? (hasEarlierPaperPrintParams(effect.params) ? createEarlierPaperPrintGraph : createDefaultPaperPrintGraph)
+        : effectType === 'paper-print' ? createDefaultPaperPrintGraph
         : effectType === 'pixel-poster' ? createDefaultPixelPosterGraph
         : effectType === 'tone-geometry' ? createDefaultToneGeometryGraph
         : effectType === 'cross-stitch' ? createDefaultCrossStitchGraph
@@ -296,13 +293,15 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
  * Project-file entry point. An effect saved before effect graphs existed (no graph at all) rendered
  * an earlier recipe, so it gets that graph instead of the current one and the project keeps its
  * look: a color effect (projects before 2026-09-21) the original color math, a rebuilt stylize
- * effect (2026-10-21) its earlier recipe. A graphless effect in the running editor is a new one
+ * effect (2026-10-21) its earlier recipe, a print look (2026-10-22, patternLegacyGraphs.ts) its 3.2.7
+ * graph. A graphless effect in the running editor is a new one
  * and keeps the current recipe.
  */
 export function migrateLoadedEffectOperatorGraph(effect: Effect): Effect {
   const graphless = !effect.operatorGraph && effect.params[EFFECT_GRAPH_PARAM] === undefined;
   const earlier = !graphless ? undefined : COLOR_RECIPE_EFFECT_TYPES.has(effect.type)
-    ? createLegacyColorEffectGraph(effect.type as EditableColorEffectType) : createEarlierStylizeGraph(effect.type);
+    ? createLegacyColorEffectGraph(effect.type as EditableColorEffectType)
+    : createEarlierStylizeGraph(effect.type) ?? earlierPrintGraph(effect.type);
   return migratePersistedEffectOperatorGraph(earlier ? { ...effect, operatorGraph: earlier } : effect);
 }
 
@@ -327,8 +326,9 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
     // Sheen saved before the falloff profile keeps its flat-topped band and even light.
     return (effect.type as string) === 'sheen' && effect.params.profile === undefined ? { ...effect, params: withLegacySheenParams(effect.params) } : effect;
   }
-  // Graph-less analog effects from before their 2026-10 rebuild keep their original look.
-  effect = pinOriginalAnalogGraph(effect);
+  // Graph-less analog effects from before their 2026-10 rebuild keep their original look, and so do graph-less
+  // print looks from before the 2026-10-22 print review (patternLegacyGraphs.ts).
+  effect = pinEarlierPrintGraph(pinOriginalAnalogGraph(effect));
   effect = upgradePersistedMirrorPixelEffect(upgradePersistedUvDistortEffect(effect));
   // A valid Weave document with unfinished wiring is an editable draft, not
   // an unloadable project. Keep every node/cable; reject structural corruption.

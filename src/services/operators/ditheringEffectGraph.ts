@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { measureInReferenceFrame } from './patternReferenceFrame';
+import { prefilterCellTaps } from './patternCellFilter';
 
 type Ref = { node: string; port: string };
 class Builder {
@@ -107,6 +108,7 @@ export function createDefaultDitheringGraph(): EffectOperatorGraph {
   const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge(ownAlpha, combine, 'alpha');
   const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
   // Pixel Size counts pixels of a 1080p frame, in whole output pixels (a 1.5-pixel Bayer cell would beat into a plaid).
-  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'safe-scale',
-    { minimumPixels: 1, wholePixels: true });
+  // The Cell Colour reads take the picture averaged over half a cell: each cell shows its whole colour and moves smoothly (patternCellFilter.ts).
+  return prefilterCellTaps(measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'safe-scale',
+    { minimumPixels: 1, wholePixels: true }), 'safe-scale-pixels');
 }

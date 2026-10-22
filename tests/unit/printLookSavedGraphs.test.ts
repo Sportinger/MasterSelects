@@ -1,0 +1,111 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { getDefaultParams, getEffect } from '../../src/effects';
+import { applyLookToClip, stackFromClipEffects } from '../../src/effects/looks/applyLook';
+import { lookPreviewEffects } from '../../src/effects/looks/lookEntryGraph';
+import type { LookDefinition } from '../../src/effects/looks/types';
+import { effectOperatorGraph, migrateLoadedEffectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
+import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
+import { evaluateImagePasses } from '../helpers/imageGraphPasses';
+import { createLegacyHalftoneGraph } from '../../src/services/operators/legacyHalftoneGraph';
+import { createEarlierRisoGraph } from '../../src/services/operators/risoEffectGraphs';
+import { createDefaultDitherGraph } from '../../src/services/operators/ditherEffectGraphs';
+import { createEarlierPaperPrintGraph } from '../../src/services/operators/paperPrintEffectGraph';
+import { createDefaultHalftoneGraph } from '../../src/services/operators/halftoneEffectGraphs';
+import type { Effect } from '../../src/types/effects';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
+import { useTimelineStore } from '../../src/stores/timeline';
+import { createMockClip, createMockTrack } from '../helpers/mockData';
+
+type Rgba = [number, number, number, number];
+// A picture with fine detail, so pattern sizes and per-pixel tone show in the output.
+const picture = ([u, v]: [number, number]): Rgba => [.5 + .5 * Math.sin(u * 91), .5 + .5 * Math.cos(v * 57), (u + v) / 2, 1];
+const graphless = (type: string, params: Record<string, unknown>): Effect => ({ id: 'fx', name: type, type: type as Effect['type'], enabled: true, params: params as Effect['params'] });
+const hasNode = (graph: EffectOperatorGraph | undefined, id: string) => graph?.nodes.some(node => node.id === id) ?? false;
+
+function renderAt(graph: EffectOperatorGraph, params: Record<string, unknown>, resolution: [number, number], type?: string): number[] {
+  const plan = compileImageOperatorGraph(graph, params as never, type ? { parameterSchema: getEffect(type)!.params } : undefined);
+  const values: number[] = [];
+  for (const [x, y] of [[101, 57], [1203, 640], [2900, 1700], [3333, 99]]) {
+    const uv: [number, number] = [(x % resolution[0] + .5) / resolution[0], (y % resolution[1] + .5) / resolution[1]];
+    values.push(...evaluateImagePasses(plan, uv, resolution, picture, { timelineTimeSeconds: .5 }));
+  }
+  return values;
+}
+const expectSameRender = (a: number[], b: number[]) => a.forEach((value, index) => expect(value).toBeCloseTo(b[index], 9));
+
+const custom = (stack: LookDefinition['stack']): LookDefinition => ({ id: 'mine', name: 'Mine', category: 'custom', tags: [], builtIn: false,
+  thumbnail: { kind: 'generated' }, stack });
+
+afterEach(() => useTimelineStore.setState({ clips: [], tracks: [], clipKeyframes: new Map(), isExporting: false }));
+
+describe('print looks saved before the 2026-10-22 print review', () => {
+  it('a graph-less 3.2.7 Halftone from a project file renders exactly the 3.2.7 graph, also at 4K', () => {
+    for (const type of ['halftone', 'pattern-halftone'] as const) {
+      const params = { scale: 12, angle: 30, amount: .8, colorA: '#101010', colorB: '#f4ecd8' };
+      const loaded = migrateLoadedEffectOperatorGraph(graphless(type, params));
+      expect(matchesEffectRecipe(loaded.operatorGraph!, createLegacyHalftoneGraph(type))).toBe(true);
+      expect(hasNode(loaded.operatorGraph, 'frame-scale')).toBe(false);
+      const merged = { ...getDefaultParams(type), ...loaded.params };
+      expectSameRender(renderAt(loaded.operatorGraph!, merged, [3840, 2160], type), renderAt(createLegacyHalftoneGraph(type), merged, [3840, 2160], type));
+      // The check is not vacuous: the current recipe draws something else there.
+      expect(renderAt(createDefaultHalftoneGraph(type), merged, [3840, 2160], type)).not.toEqual(renderAt(createLegacyHalftoneGraph(type), merged, [3840, 2160], type));
+    }
+  });
+
+  it.each([
+    ['riso', { scale: 8, amount: .75, angle: 0, colorA: '#2046b3', colorB: '#ef476f' }, () => createEarlierRisoGraph('riso')],
+    ['riso-glow', { scale: 8, amount: .75, angle: 0, speed: 1, colorA: '#2046b3', colorB: '#ef476f' }, () => createEarlierRisoGraph('riso-glow')],
+    ['dither', { scale: 3, amount: .75, angle: 0, colorA: '#000000', colorB: '#ffffff' }, () => createDefaultDitherGraph('dither')],
+    ['paper-print', { scale: 6, amount: .8, angle: 0, colorA: '#1c1917', colorB: '#f5f0e6' }, createEarlierPaperPrintGraph],
+  ] as const)('a graph-less 3.2.7 %s keeps its earlier recipe in output pixels at 4K, from a project file and any other persisted entry', (type, params, earlier) => {
+    for (const migrate of [migrateLoadedEffectOperatorGraph, migratePersistedEffectOperatorGraph]) {
+      const loaded = migrate(graphless(type, params));
+      expect(matchesEffectRecipe(loaded.operatorGraph!, earlier())).toBe(true);
+      // Exactly as 3.2.7 drew it: no 1080p measure in the earlier recipe.
+      expect(hasNode(loaded.operatorGraph, 'frame-scale')).toBe(false);
+      expectSameRender(renderAt(loaded.operatorGraph!, loaded.params, [3840, 2160]), renderAt(earlier(), loaded.params, [3840, 2160]));
+    }
+  });
+
+  it('a stored graph stays as saved, and a graph-less look in the running editor is the current recipe', () => {
+    const saved = createLegacyHalftoneGraph('halftone');
+    const loaded = migrateLoadedEffectOperatorGraph({ ...graphless('halftone', getDefaultParams('halftone')), operatorGraph: saved });
+    expect(matchesEffectRecipe(loaded.operatorGraph!, saved)).toBe(true);
+    // S1's untouched-graph check asks for the recipe with no parameters: it must be the current one.
+    for (const type of ['riso', 'riso-glow', 'dither', 'paper-print', 'halftone']) {
+      const current = effectOperatorGraph(graphless(type, getDefaultParams(type)));
+      expect(effectOperatorGraph(graphless(type, {})).nodes.map(node => node.id), type).toEqual(current.nodes.map(node => node.id));
+    }
+    expect(hasNode(effectOperatorGraph(graphless('riso', {})), 'dark-share')).toBe(true);
+  });
+
+  it('a custom Look entry saved without a graph keeps the 3.2.7 graph in its thumbnail and on the clip, without the new controls', () => {
+    const oldRiso = { effectId: 'riso', params: { scale: 8, amount: .75, colorA: '#2046b3', colorB: '#ef476f' }, enabled: true };
+    const oldHalftone = { effectId: 'halftone', params: { scale: 14, angle: 45, amount: 1 }, enabled: true };
+    const look = custom([oldRiso, oldHalftone]);
+    const [riso, halftone] = lookPreviewEffects(look);
+    expect(matchesEffectRecipe(riso.operatorGraph!, createEarlierRisoGraph('riso'))).toBe(true);
+    expect(matchesEffectRecipe(halftone.operatorGraph!, createLegacyHalftoneGraph('halftone'))).toBe(true);
+    expect(riso.params).not.toHaveProperty('dotSize');
+
+    const clip = createMockClip({ id: 'c', effects: [] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] } as never);
+    applyLookToClip(look, 'c');
+    const [appliedRiso, appliedHalftone] = useTimelineStore.getState().clips[0].effects;
+    expect(matchesEffectRecipe(appliedRiso.operatorGraph!, riso.operatorGraph!)).toBe(true);
+    expect(matchesEffectRecipe(appliedHalftone.operatorGraph!, halftone.operatorGraph!)).toBe(true);
+    expect(appliedRiso.params).not.toHaveProperty('dotSize');
+    expect(getEffect('riso')!.paramWarnings?.(appliedRiso.params as never).join(' ')).toMatch(/saved before Dot Size/);
+    // Built-in Looks follow the current recipe.
+    expect(lookPreviewEffects({ ...look, builtIn: true })[0].operatorGraph).toBeUndefined();
+  });
+
+  it('a Look saved now stores the print look graph, so it keeps the look it was saved with', () => {
+    const current = createDefaultHalftoneGraph('halftone');
+    const [entry] = stackFromClipEffects([{ type: 'halftone', params: getDefaultParams('halftone') as never, operatorGraph: current }]);
+    expect(entry.operatorGraph && matchesEffectRecipe(entry.operatorGraph, current)).toBe(true);
+    const [preview] = lookPreviewEffects(custom([entry]));
+    expect(matchesEffectRecipe(preview.operatorGraph!, current)).toBe(true);
+  });
+});

@@ -18,6 +18,28 @@ fn source(uv: vec2f) -> vec4f {
   return textureSample(inputTex, texSampler, clamp(uv, vec2f(0.001), vec2f(0.999)));
 }
 
+// Cell Filter (prefilterCellTaps in patternCellFilter.ts): the picture averaged over a box of half a cell (whole
+// pixels, at most 32 evenly spread reads per axis) in linear light weighted by alpha, back in straight sRGB with the
+// average alpha. The cell reads of Halftone, Riso and Dithering take it, so a cell shows its whole light.
+fn cellFiltered(uv: vec2f, cells: f32) -> vec4f {
+  let width = max(floor(cells * 0.5 + 0.5), 1.0);
+  let count = min(width, 32.0);
+  let spacing = width / count;
+  var sum = vec4f(0.0);
+  for (var j = 0; j < i32(count); j++) {
+    let dy = ((f32(j) + 0.5) * spacing - width * 0.5) / params.resolution.y;
+    var row = vec4f(0.0);
+    for (var i = 0; i < i32(count); i++) {
+      let dx = ((f32(i) + 0.5) * spacing - width * 0.5) / params.resolution.x;
+      let p = source(uv + vec2f(dx, dy));
+      row += vec4f(srgbToLinear(p.rgb) * p.a, p.a);
+    }
+    sum += row / count;
+  }
+  let average = sum / count;
+  return vec4f(linearToSrgb(average.rgb / max(average.a, 1e-6)), average.a);
+}
+
 // Pattern sizes count pixels of a 1080p frame (shorter side), as the graphs do (patternReferenceFrame.ts).
 fn frameScale() -> f32 {
   return min(params.resolution.x, params.resolution.y) / 1080.0;
@@ -68,7 +90,7 @@ fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
   var alpha = 0.0;
   for (var tap = 0; tap < 4; tap++) {
     let side = vec2f(select(-1.0, 1.0, (tap & 1) == 1), select(-1.0, 1.0, tap >= 2));
-    let point = source((center + side * reach) / params.resolution);
+    let point = cellFiltered((center + side * reach) / params.resolution, size);
     light += srgbToLinear(point.rgb) * point.a;
     alpha += point.a;
   }
@@ -129,7 +151,7 @@ fn halftoneCellLight(uv: vec2f, cells: f32) -> f32 {
   var alpha = own.a * 0.05;
   for (var tap = 0; tap < 4; tap++) {
     let side = vec2f(select(-1.0, 1.0, (tap & 1) == 1), select(-1.0, 1.0, tap >= 2));
-    let point = source(centerUv + stepX * side.x + stepY * side.y);
+    let point = cellFiltered(centerUv + stepX * side.x + stepY * side.y, cells);
     light += luminance(srgbToLinear(point.rgb)) * point.a;
     alpha += point.a;
   }
@@ -174,12 +196,12 @@ fn risoTurn(p: vec2f, a: f32) -> vec2f {
 // Cell Colour (cellColourAt in risoPrintEffectGraph.ts): four reads around `centre` (pixels) in the graph's order,
 // centre − diagonal, + anti-diagonal, − anti-diagonal, + diagonal, in linear light and weighted by alpha, with the paper
 // at weight 0.001 (it decides only where all four reads are transparent).
-fn risoCellLight(centre: vec2f, diagonal: vec2f, antiDiagonal: vec2f, paper: vec3f) -> vec3f {
+fn risoCellLight(centre: vec2f, diagonal: vec2f, antiDiagonal: vec2f, paper: vec3f, size: f32) -> vec3f {
   let reads = array<vec2f, 4>(centre - diagonal, centre + antiDiagonal, centre - antiDiagonal, centre + diagonal);
   var light = paper * 0.001;
   var alpha = 0.001;
   for (var tap = 0; tap < 4; tap++) {
-    let point = source(reads[tap] / params.resolution);
+    let point = cellFiltered(reads[tap] / params.resolution, size);
     light += srgbToLinear(point.rgb) * point.a;
     alpha += point.a;
   }
@@ -240,7 +262,7 @@ fn risoInkDot(layer: vec2f, angle: f32, size: f32, paper: vec3f, dark: bool) -> 
   let cellCenter = risoTurn((floor(cells) + vec2f(0.5)) * size, -a) + center;
   let stepX = risoTurn(vec2f(size * 0.25, 0.0), -a);
   let stepY = risoTurn(vec2f(0.0, size * 0.25), -a);
-  let shares = risoCoverage(risoCellLight(cellCenter, stepX + stepY, stepX - stepY, paper), paper, dark);
+  let shares = risoCoverage(risoCellLight(cellCenter, stepX + stepY, stepX - stepY, paper, size), paper, dark);
   let edge = 0.5 / size;
   let dotRadius = halftoneDotRadius(shares.x) + (shares.x * 2.0 - 1.0) * edge;
   return vec3f(1.0 - smoothstep(dotRadius - edge, dotRadius + edge, length(place)), shares.x, shares.y);
@@ -313,7 +335,8 @@ fn risoGlowFragment(input: VertexOutput) -> @location(0) vec4f {
 fn paperPrintEarlierFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
   let pixel = floor(input.uv * params.resolution);
-  let grain = noise2d(pixel / referencePixels(max(params.scale, 1.0))) - 0.5;
+  // Exactly as saved (3.2.7): Press Grain in output pixels.
+  let grain = noise2d(pixel / max(params.scale, 1.0)) - 0.5;
   let pressed = smoothstep(0.15, 0.85, luminance(color.rgb) + grain * 0.3);
   let printColor = mix(params.colorA.rgb, params.colorB.rgb, pressed) * (0.92 + grain * 0.08);
   return vec4f(mix(color.rgb, printColor, params.amount), color.a);

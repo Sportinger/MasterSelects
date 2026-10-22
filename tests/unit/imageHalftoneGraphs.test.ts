@@ -11,7 +11,9 @@ import common from '../../src/effects/_shared/commonShader';
 import { halftone, patternHalftone } from '../../src/effects/halftone';
 import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { createDefaultHalftoneGraph, HALFTONE_DOT, HALFTONE_OWN_WEIGHT, HALFTONE_TAPS } from '../../src/services/operators/halftoneEffectGraphs';
-import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
+import { createImagePassEvaluator, evaluateImagePasses } from '../helpers/imageGraphPasses';
+import { cellFilteredPicture } from '../helpers/patternCellFilterReference';
 
 type Rgba = [number, number, number, number];
 type Picture = (uv: [number, number]) => Rgba;
@@ -39,8 +41,10 @@ function reference(type: 'halftone' | 'pattern-halftone', uv: [number, number], 
     const middleUv: [number, number] = [(middle[0] + center[0]) / resolution[0], (middle[1] + center[1]) / resolution[1]];
     const stepX = turn([cells / 4, 0], -angle), stepY = turn([0, cells / 4], -angle);
     let lightSum = light(color) * color[3] * HALFTONE_OWN_WEIGHT, alphaSum = color[3] * HALFTONE_OWN_WEIGHT;
+    // The four points read the picture averaged over half a cell (Cell Filter).
+    const filtered = cellFilteredPicture(picture, cells, resolution);
     for (const [x, y] of HALFTONE_TAPS) {
-      const tap = picture(clampUv([middleUv[0] + (x * stepX[0] + y * stepY[0]) / resolution[0], middleUv[1] + (x * stepX[1] + y * stepY[1]) / resolution[1]]));
+      const tap = filtered(clampUv([middleUv[0] + (x * stepX[0] + y * stepY[0]) / resolution[0], middleUv[1] + (x * stepX[1] + y * stepY[1]) / resolution[1]]));
       lightSum += light(tap) * tap[3]; alphaSum += tap[3];
     }
     const darkness = Math.min(Math.max(1 - lightSum / Math.max(alphaSum, 1e-6), 0), 1);
@@ -60,7 +64,7 @@ function reference(type: 'halftone' | 'pattern-halftone', uv: [number, number], 
 function evaluate(type: 'halftone' | 'pattern-halftone', params: Record<string, number | string>, uv: [number, number], resolution: [number, number], picture: Picture) {
   const definition = type === 'halftone' ? halftone : patternHalftone;
   const plan = compileImageOperatorGraph(createDefaultHalftoneGraph(type), { ...getDefaultParams(type), ...params }, { parameterSchema: definition.params });
-  return evaluateImageOperatorPlan(plan, picture(clampUv(uv)), { uv, resolution, sampleImage: picture });
+  return evaluateImagePasses(plan, uv, resolution, picture);
 }
 
 describe('halftone image graph factories', () => {
@@ -102,7 +106,9 @@ describe('halftone image graph factories', () => {
   it('prints black as solid ink and white as clean paper, with one dot per cell covering its share', () => {
     const resolution: [number, number] = [1920, 1080], params = { scale: 40, angle: 0, amount: 1, colorA: '#000000', colorB: '#ffffff' };
     const grid = Array.from({ length: 24 * 24 }, (_, index): [number, number] => [(400 + (index % 24 + .5) * 40 / 24) / 1920, (400 + (Math.floor(index / 24) + .5) * 40 / 24) / 1080]);
-    const ink = (picture: Picture) => grid.map(uv => 1 - evaluate('halftone', params, uv, resolution, picture)[0]);
+    // The caches are kept as textures across the grid (flat pictures: the Cell Filter changes nothing).
+    const plan = compileImageOperatorGraph(createDefaultHalftoneGraph('halftone'), { ...getDefaultParams('halftone'), ...params }, { parameterSchema: halftone.params });
+    const ink = (picture: Picture) => { const render = createImagePassEvaluator(plan, resolution, picture, { filterResources: true }); return grid.map(uv => 1 - render(uv)[0]); };
     expect(Math.min(...ink(() => [0, 0, 0, 1]))).toBeGreaterThan(.999); // cell corners included
     expect(Math.max(...ink(() => [1, 1, 1, 1]))).toBeLessThan(.001); // cell centres included
     // A flat tone covers its share of the cell, so ink and paper mix back to the picture's light.

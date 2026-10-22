@@ -88,7 +88,8 @@ describe('two-tone-pattern engine', () => {
       if (agreement(hd, uhd, tolerance) < .98 || agreement(hd, preview, tolerance) < .98) differing.push(`${type} (4K ${agreement(hd, uhd).toFixed(2)}, half ${agreement(hd, preview).toFixed(2)})`);
     }
     expect(differing).toEqual([]);
-  });
+  // 25 looks at three sizes; the cell-filtered looks evaluate their two filter passes per read.
+  }, 120_000);
 
   it('a measured size is the 1080p size × shorter side / 1080, never under its pixel floor', () => {
     const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', layout: {}, nodes: [
@@ -182,5 +183,5 @@ describe('two-tone-pattern engine', () => {
     }
     expect(getEffect('film-prism')!.paramWarnings?.({ ...getDefaultParams('film-prism'), mode: 'lens', angle: 30 }).join(' ')).toMatch(/Prism Angle only acts/u);
     expect(silent).toEqual([]);
-  });
+  }, 120_000);
 });

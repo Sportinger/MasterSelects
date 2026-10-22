@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { measureInReferenceFrame } from './patternReferenceFrame';
+import { prefilterCellTaps } from './patternCellFilter';
 
 export type EditableHalftoneEffectType = 'halftone' | 'pattern-halftone';
 type Ref = { node: string; port: string };
@@ -140,5 +141,8 @@ export function createDefaultHalftoneGraph(type: EditableHalftoneEffectType): Ef
   const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: split.node, port: 'alpha' }, combine, 'alpha');
   const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
   // Dot Size counts pixels of a 1080p frame (patternReferenceFrame.ts); the screen cells and the edge width read the measured size.
-  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'safe-scale', { minimumPixels: 1 });
+  const graph = measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'safe-scale', { minimumPixels: 1 });
+  // Halftone's four Cell Tone points read the picture averaged over half a cell, so a dot shows the whole cell's light
+  // and changes smoothly as the picture moves (patternCellFilter.ts).
+  return type === 'halftone' ? prefilterCellTaps(graph, 'safe-scale-pixels') : graph;
 }

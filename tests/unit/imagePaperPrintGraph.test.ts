@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { paperPrint } from '../../src/effects/halftone';
 import { PAPER_PRINT_PRESETS } from '../../src/effects/halftone/paperPrint';
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { createEarlierPaperPrintGraph, hasEarlierPaperPrintParams } from '../../src/services/operators/paperPrintEffectGraph';
 import { createDefaultPaperPrintGraph, PAPER_PRINT_EVEN } from '../../src/services/operators/paperPrintGrainGraph';
-import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
 import { evaluateFractalNoise2d } from '../../src/services/operators/imageNoiseSemantics';
@@ -165,9 +166,9 @@ describe('Paper Print image graph', () => {
     const earlier = { scale: 18, amount: .75, colorA: '#111827', colorB: '#f8fafc' };
     expect(hasEarlierPaperPrintParams(earlier)).toBe(true);
     expect(hasEarlierPaperPrintParams({ ...earlier, texture: .5 })).toBe(false);
-    const ids = (params: Record<string, unknown>) => (effectOperatorGraph({ id: 'fx', type: 'paper-print', name: 'Paper Print', enabled: true, params } as never)?.nodes.map(node => node.id) ?? []).toSorted();
-    expect(ids(earlier)).toEqual(createEarlierPaperPrintGraph().nodes.map(node => node.id).toSorted());
-    expect(ids({ ...earlier, texture: .5 })).toEqual(createDefaultPaperPrintGraph().nodes.map(node => node.id).toSorted());
+    const loaded = (params: Record<string, unknown>) => migratePersistedEffectOperatorGraph({ id: 'fx', type: 'paper-print', name: 'Paper Print', enabled: true, params } as never).operatorGraph!;
+    expect(matchesEffectRecipe(loaded(earlier), createEarlierPaperPrintGraph())).toBe(true);
+    expect(matchesEffectRecipe(loaded({ ...earlier, texture: .5 }), createDefaultPaperPrintGraph())).toBe(true);
     expect(paperPrint.paramWarnings?.(earlier).join(' ')).toMatch(/saved before Texture/);
     // Values saved before they existed render as before.
     expect(paperPrint.params.scale.legacyDefault).toBe(18);
@@ -203,7 +204,8 @@ describe('Paper Print earlier image graph', () => {
     const params = { amount: .72, scale: 18, colorA: '#204060', colorB: '#e0c080' };
     const plan = compileImageOperatorGraph(createEarlierPaperPrintGraph(), params);
     const uv: [number, number] = [.37, .62], resolution: [number, number] = [47, 29], color: Rgba = [.2, .6, .35, .43];
-    const grain = noise([Math.floor(uv[0] * resolution[0]) / px(18, resolution), Math.floor(uv[1] * resolution[1]) / px(18, resolution)]) - .5;
+    // Exactly as 3.2.7 drew it: Press Grain in output pixels.
+    const grain = noise([Math.floor(uv[0] * resolution[0]) / 18, Math.floor(uv[1] * resolution[1]) / 18]) - .5;
     const luma = color[0] * .2126 + color[1] * .7152 + color[2] * .0722, pressed = smoothstep(.15, .85, luma + grain * .3);
     const inkA = [0x20 / 255, 0x40 / 255, 0x60 / 255], inkB = [0xe0 / 255, 0xc0 / 255, 0x80 / 255];
     const factor = .92 + grain * .08;

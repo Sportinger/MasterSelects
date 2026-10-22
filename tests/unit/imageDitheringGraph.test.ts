@@ -1,14 +1,18 @@
 // Dithering (createDefaultDitheringGraph): big pixels of Pixel Size, each read as one colour in linear light, stepped
+import { createDefaultDitherGraph } from '../../src/services/operators/ditherEffectGraphs';
+import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 // to Levels per channel by the cell's 4 × 4 Bayer threshold with the share of the upper step in linear light.
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams } from '../../src/effects';
 import { dither } from '../../src/effects/halftone';
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { createDefaultDitheringGraph, DITHER_ALPHA_FLOOR, DITHER_TAPS } from '../../src/services/operators/ditheringEffectGraph';
-import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { effectParamDefinitions } from '../../src/services/operators/effectParamVisibility';
 import { linearToSrgb, srgbToLinear } from '../../src/services/operators/imageColorSpaceSemantics';
-import { compileImageOperatorGraph, evaluateImageOperatorPlan, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { compileImageOperatorGraph, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { evaluateImagePasses } from '../helpers/imageGraphPasses';
+import { cellFilteredPicture } from '../helpers/patternCellFilterReference';
 import { roundImageScalarEven } from '../../src/services/operators/imageRoundingSemantics';
 
 type Rgba = [number, number, number, number];
@@ -26,8 +30,10 @@ function reference(uv: [number, number], resolution: [number, number], params: P
   const center = cells.map(value => (Math.floor(value) + .5) * size), reach = Math.min(size * .25, (size - 1) * .5);
   const read = (point: [number, number]) => sample([clamp(point[0], .001, .999), clamp(point[1], .001, .999)]);
   let light = [0, 0, 0], alpha = 0;
+  // The four reads take the picture averaged over half a cell (Cell Filter).
+  const filtered = cellFilteredPicture(sample, size, resolution);
   for (const [x, y] of DITHER_TAPS) {
-    const tap = read([(center[0] + x * reach) / resolution[0], (center[1] + y * reach) / resolution[1]]);
+    const tap = ((point: [number, number]) => filtered([clamp(point[0], .001, .999), clamp(point[1], .001, .999)]))([(center[0] + x * reach) / resolution[0], (center[1] + y * reach) / resolution[1]]);
     light = light.map((value, c) => value + srgbToLinear(tap[c]) * tap[3]); alpha += tap[3];
   }
   const own = read(uv), steps = Math.max(params.levels, 2) - 1, threshold = bayer4(cells);
@@ -45,7 +51,7 @@ function render(params: Partial<Params>, uv: [number, number], resolution: [numb
   const values = { ...getDefaultParams('dither'), ...params }, key = JSON.stringify(values);
   let plan = plans.get(key);
   if (!plan) { plan = compileImageOperatorGraph(createDefaultDitheringGraph(), values, { parameterSchema: dither.params }); plans.set(key, plan); }
-  return evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv, resolution, sampleImage: sample }) as Rgba;
+  return evaluateImagePasses(plan, uv, resolution, sample) as Rgba;
 }
 const flat = (color: Rgba): Sample => () => color;
 /** UV of the centre of pixel (x, y). */
@@ -113,8 +119,10 @@ describe('Dithering image graph', () => {
 
   it('keeps a Dithering saved before Levels on its earlier recipe, with Levels hidden', () => {
     const saved = { type: 'dither', params: { scale: 3, amount: .75, angle: 0, colorA: '#111827', colorB: '#f8fafc' } };
-    expect(effectOperatorGraph(saved).nodes.some(node => node.id === 'quantize-four')).toBe(true);
-    expect(effectParamDefinitions(saved).levels.hidden).toBe(true);
+    // Pinned at every persisted entry (patternLegacyGraphs.ts); the graph-less fallback itself is the current recipe.
+    const loaded = migratePersistedEffectOperatorGraph({ id: 'fx', name: 'Dithering', enabled: true, ...saved } as never);
+    expect(matchesEffectRecipe(loaded.operatorGraph!, createDefaultDitherGraph('dither'))).toBe(true);
+    expect(effectParamDefinitions(loaded).levels.hidden).toBe(true);
     const added = { type: 'dither', params: getDefaultParams('dither') };
     expect(effectOperatorGraph(added).nodes.some(node => node.id === 'share')).toBe(true);
     expect(effectParamDefinitions(added).levels.hidden).toBeFalsy();
