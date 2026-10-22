@@ -63,7 +63,7 @@ Pick one in the **Preset** row of the effect card. It sets Type and Amount and p
 </svg>
 </div>
 
-<figcaption>Radial Blur with the Whirlpool preset. 1 — Preset: pick a starting point. 2 — Type: streaks outward or circles. 3 — Amount: how strong. 4 — Center X: where the middle sits across. 5 — Center Y: where it sits up or down.</figcaption>
+<figcaption>Radial Blur with the Whirlpool preset. 1 — Preset: pick a starting point. 2 — Type: streaks outward or circles. 3 — Amount: how strong. 4 — Center X: where the middle sits across. 5 — Center Y: where the middle sits up or down.</figcaption>
 </figure>
 
 **Preset** – a starting point for Type and Amount; see [Presets](#presets).
@@ -74,7 +74,7 @@ Pick one in the **Preset** row of the effect card. It sets Type and Amount and p
 
 **Center X** – where the sharp middle sits across the frame: 0 is the left edge, 0.5 the middle, 1 the right edge. The streaks are longest at the corner farthest from it, so an off-centre point gives a lopsided, more dynamic swirl. Keyframe it to follow a performer. 0 to 1, default 0.5.
 
-**Center Y** – where the sharp middle sits from top to bottom: 0 is the top edge, 0.5 the middle, 1 the bottom. Raise it to the height of a face to keep the face sharp. 0 to 1, default 0.5.
+**Center Y** – where the sharp middle sits from top to bottom: 0 is the top edge, 0.5 the middle, 1 the bottom. Move it up to the height of a face (a smaller value) to keep the face sharp. 0 to 1, default 0.5.
 
 ## Node setup
 
@@ -216,8 +216,8 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 <circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M706 335 L622 335" marker-end="url(#radial-blur-stage-a-arrow)" />
 <circle class="docs-shot-number" cx="706" cy="335" r="18" /><text x="706" y="335" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M691 293 L691 209" marker-end="url(#radial-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="691" cy="293" r="18" /><text x="691" y="293" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M691 22 L691 89" marker-end="url(#radial-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="22" r="18" /><text x="691" y="22" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M935 260 L935 176" marker-end="url(#radial-blur-stage-a-arrow)" />
 <circle class="docs-shot-number" cx="935" cy="260" r="18" /><text x="935" y="260" class="docs-shot-number-text">5</text>
 </svg>
@@ -244,18 +244,18 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 ![Inside the Stage B folder, reduced to its recipe: Streak length divided by Box Length gives the number of pieces; minus the Coarse Tap and clamped it gives the covered share, at least Covered Floor by Maximum the Box Weight; Distance along divided by Streak length gives Position t, times Half and One minus that the Zoom taper, and a Switch picks it or One by Is Spin; Multiply weighs the taper with the Box Weight into the Tap Weight; Sample Image reads the Short Boxes at the Read position, Sequence Reduce adds up the weighted reads over Taps Here and Normalize by Weight divides by the summed weight](../assets/effects/graphs/radial-blur-stage-b.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 928" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 960" aria-hidden="true" focusable="false">
 <defs><marker id="radial-blur-stage-b-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M311 126 L395 126" marker-end="url(#radial-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="311" cy="126" r="18" /><text x="311" y="126" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M311 836 L395 836" marker-end="url(#radial-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="311" cy="836" r="18" /><text x="311" y="836" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M433 485 L517 485" marker-end="url(#radial-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="433" cy="485" r="18" /><text x="433" y="485" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M555 304 L639 304" marker-end="url(#radial-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="304" r="18" /><text x="555" y="304" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M676 301 L760 301" marker-end="url(#radial-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="676" cy="301" r="18" /><text x="676" y="301" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M448 22 L448 75" marker-end="url(#radial-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M584 869 L500 869" marker-end="url(#radial-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="584" cy="869" r="18" /><text x="584" y="869" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M433 517 L517 517" marker-end="url(#radial-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="433" cy="517" r="18" /><text x="433" y="517" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M691 190 L691 274" marker-end="url(#radial-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="190" r="18" /><text x="691" y="190" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M813 190 L813 274" marker-end="url(#radial-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="190" r="18" /><text x="813" y="190" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -307,6 +307,6 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 - **Two stages.** About 2 × √(2 × longest streak in pixels) reads per pixel: Stage B reads up to 64 pieces, Stage A up to 256 pixels per piece. Neither count is rounded to a whole read: the last piece and the outermost reads count with the share of them that fits, so the blur changes smoothly when the amount is animated. A streak beyond that (only on very large frames) reads its pieces further apart, and the card and the tool result say so.
 - **Edges.** At the frame edge the picture is clamped, not mirrored. Transparent edges smear without a dark rim, and the preview and the export match.
 - **Below 0 and zero.** A negative Amount leaves the picture unchanged, as in earlier versions, and the card and the tool result say so. An unedited Radial Blur at Amount 0 is skipped, so the picture passes through exactly.
-- **Software preview.** Where the editor falls back to its software preview, Radial Blur reads up to 64 taps along the same path in one stage; very long streaks can look stepped there, and the `SoftwareBlur` log says so.
-- **Saved projects.** They keep their look, with one fix: an unedited Radial Blur saved with version 3.2.7 loads with the current recipe, whose counts never step (that one jumped a little where an animated amount added a read, and left a streak under about a pixel unchanged). Still pictures differ by less than half a level on average. A missing or unknown Type counts as Zoom. The old Samples value is kept in the project but no longer changes anything. A Radial Blur whose node setup you edited keeps its own recipe; when that recipe does not read Type, the card hides it and says so if it is set.
+- **Software preview.** Where the editor falls back to its software preview, Radial Blur reads the same path in one stage of up to 64 one-pixel steps, blended between pixels, so an animated amount changes smoothly there too. Streaks longer than 64 px spread their reads and can look stepped; the `SoftwareBlur` log says so.
+- **Saved projects.** They keep their look, with one fix: every Radial Blur without an edited node setup renders with the current recipe, also in projects saved with version 3.2.7 (that recipe jumped a little where an animated amount added a read, and left a streak under about a pixel unchanged). Still pictures differ by less than half a level on average, up to about 10–30 levels on thin high-contrast lines. A missing or unknown Type counts as Zoom. The old Samples value is kept in the project but no longer changes anything. A Radial Blur whose node setup you edited keeps its own recipe; when that recipe does not read Type, the card hides it and says so if it is set.
 - **More:** [Blur & Sharpen notes](../Effect-System.md#blur--sharpen-notes) · [Editable blur kernels](../Effect-System.md#editable-blur-kernels) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

@@ -60,7 +60,7 @@ Pick one in the **Preset** row of the effect card. It sets Amount and puts the c
 </svg>
 </div>
 
-<figcaption>Zoom Blur with the Rush preset. 1 — Preset: pick a starting point. 2 — Amount: how long the streaks are. 3 — Center X: where the burst starts across. 4 — Center Y: and up or down.</figcaption>
+<figcaption>Zoom Blur with the Rush preset. 1 — Preset: pick a starting point. 2 — Amount: how long the streaks are. 3 — Center X: where the burst starts across. 4 — Center Y: where the burst starts up or down.</figcaption>
 </figure>
 
 **Preset** – a starting point for Amount; see [Presets](#presets).
@@ -69,7 +69,7 @@ Pick one in the **Preset** row of the effect card. It sets Amount and puts the c
 
 **Center X** – where the burst starts across the frame: 0 is the left edge, 0.5 the middle, 1 the right edge. The point under it stays sharp, and the streaks are longest at the corner farthest from it, so an off-centre point gives a lopsided rush. Keyframe it to follow a performer. 0 to 1, default 0.5.
 
-**Center Y** – where the burst starts from top to bottom: 0 is the top edge, 0.5 the middle, 1 the bottom. Raise it to the height of a face to keep the face sharp. 0 to 1, default 0.5.
+**Center Y** – where the burst starts from top to bottom: 0 is the top edge, 0.5 the middle, 1 the bottom. Move it up to the height of a face (a smaller value) to keep the face sharp. 0 to 1, default 0.5.
 
 ## Node setup
 
@@ -211,8 +211,8 @@ Zoom Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup),
 <circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M706 335 L622 335" marker-end="url(#zoom-blur-stage-a-arrow)" />
 <circle class="docs-shot-number" cx="706" cy="335" r="18" /><text x="706" y="335" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M691 293 L691 209" marker-end="url(#zoom-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="691" cy="293" r="18" /><text x="691" y="293" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M691 22 L691 89" marker-end="url(#zoom-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="22" r="18" /><text x="691" y="22" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M935 260 L935 176" marker-end="url(#zoom-blur-stage-a-arrow)" />
 <circle class="docs-shot-number" cx="935" cy="260" r="18" /><text x="935" y="260" class="docs-shot-number-text">5</text>
 </svg>
@@ -241,16 +241,16 @@ Zoom Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup),
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 688" aria-hidden="true" focusable="false">
 <defs><marker id="zoom-blur-stage-b-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M67 312 L151 312" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="67" cy="312" r="18" /><text x="67" y="312" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M311 333 L395 333" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="311" cy="333" r="18" /><text x="311" y="333" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M555 271 L639 271" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="271" r="18" /><text x="555" y="271" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M67 436 L151 436" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="67" cy="436" r="18" /><text x="67" y="436" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M676 310 L760 310" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="676" cy="310" r="18" /><text x="676" y="310" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M204 250 L204 250" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="250" r="18" /><text x="204" y="250" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 166 L448 250" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="166" r="18" /><text x="448" y="166" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M691 125 L691 209" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="125" r="18" /><text x="691" y="125" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M204 483 L204 483" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="483" r="18" /><text x="204" y="483" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M813 166 L813 250" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="166" r="18" /><text x="813" y="166" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -301,6 +301,6 @@ Zoom Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup),
 - **Two stages.** About 2 × √(2 × longest streak in pixels) reads per pixel: Stage B reads up to 64 pieces, Stage A up to 256 pixels per piece. Neither count is rounded to a whole read: the last piece and the outermost reads count with the share of them that fits, so the blur changes smoothly when the amount is animated. A streak beyond that (only on very large frames) reads its pieces further apart, and the card and the tool result say so.
 - **Edges.** At the frame edge the picture is clamped, not mirrored. Because the reads look outward, a cut-out layer's edge pulls inward and gets soft instead of spreading; transparent edges keep their real colour without a dark rim, and the preview and the export match.
 - **Below 0 and zero.** A negative Amount (from a keyframe overshoot or a tool) streaks inward, as in earlier versions, which looks like a zoom out; below −1.9 the streak stops at the centre and the card and the tool result say so. An unedited Zoom Blur at Amount 0 is skipped, so the picture passes through exactly.
-- **Software preview.** Where the editor falls back to its software preview, Zoom Blur reads up to 64 taps along the same path in one stage; very long streaks can look stepped there, and the `SoftwareBlur` log says so.
-- **Saved projects.** They keep their look, with one fix: an unedited Zoom Blur saved with version 3.2.7 loads with the current recipe, whose counts never step (that one jumped a little where an animated amount added a read, and left a streak under about a pixel unchanged). Still pictures differ by less than half a level on average. The old Samples value is kept in the project but no longer changes anything. A Zoom Blur whose node setup you edited keeps its own recipe.
+- **Software preview.** Where the editor falls back to its software preview, Zoom Blur reads the same path in one stage of up to 64 one-pixel steps, blended between pixels, so an animated amount changes smoothly there too. Streaks longer than 64 px spread their reads and can look stepped; the `SoftwareBlur` log says so.
+- **Saved projects.** They keep their look, with one fix: every Zoom Blur without an edited node setup renders with the current recipe, also in projects saved with version 3.2.7 (that recipe jumped a little where an animated amount added a read, and left a streak under about a pixel unchanged). Still pictures differ by less than half a level on average, up to about 10–30 levels on thin high-contrast lines. The old Samples value is kept in the project but no longer changes anything. A Zoom Blur whose node setup you edited keeps its own recipe.
 - **More:** [Blur & Sharpen notes](../Effect-System.md#blur--sharpen-notes) · [Editable blur kernels](../Effect-System.md#editable-blur-kernels) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

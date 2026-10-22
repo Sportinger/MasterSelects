@@ -23,9 +23,9 @@ Group: [Blur & Sharpen](../Effects-Blur.md) · [How to add an effect](../Effects
 
 <figure class="docs-shot docs-shot--detail">
 
-![The street lamps of the night street four times, labelled: Soft Edge barely softened, Frosted Glass with each lamp turned into a small square glow, Square Lights with the lamps and windows turned into large flat blocks with straight edges, Colour Field with only broad patches of warm and cool colour left](../assets/effects/presets/box-blur.webp)
+![The dark top of the night street four times, lit windows and an orange neon sign against the night sky, labelled: Soft Edge barely softened, Frosted Glass with each window turned into a soft square glow and the sign still readable, Square Lights with the windows and the sign turned into flat blocks with straight edges, Colour Field with only broad patches of warm and cool colour left](../assets/effects/presets/box-blur.webp)
 
-<figcaption>The four presets on the street lamps of the night street.</figcaption>
+<figcaption>The four presets on lit windows and a neon sign against the night sky.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets Radius in one undo step, and the row shows its name until you change something. A Radius with keyframes keeps them, and the card says so.
@@ -79,18 +79,18 @@ Pick one in the **Preset** row of the effect card. It sets Radius in one undo st
 
 ![The Box Blur graph: Radius feeds Radius & Tap Count, Input Frame feeds Premultiplied Source (cached); Reach, Pairs, Stride, Tap Count and the premultiplied picture feed Horizontal Pass, its result and the same numbers feed Vertical Pass, and Straight Alpha Output turns the result back into a normal picture](../assets/effects/graphs/box-blur.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 617" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 720" aria-hidden="true" focusable="false">
 <defs><marker id="box-blur-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M150 308 L234 308" marker-end="url(#box-blur-arrow)" />
-<circle class="docs-shot-number" cx="150" cy="308" r="18" /><text x="150" y="308" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M150 512 L234 512" marker-end="url(#box-blur-arrow)" />
-<circle class="docs-shot-number" cx="150" cy="512" r="18" /><text x="150" y="512" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M344 178 L428 178" marker-end="url(#box-blur-arrow)" />
-<circle class="docs-shot-number" cx="344" cy="178" r="18" /><text x="344" y="178" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M538 321 L622 321" marker-end="url(#box-blur-arrow)" />
-<circle class="docs-shot-number" cx="538" cy="321" r="18" /><text x="538" y="321" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M733 269 L817 269" marker-end="url(#box-blur-arrow)" />
-<circle class="docs-shot-number" cx="733" cy="269" r="18" /><text x="733" y="269" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M314 155 L314 239" marker-end="url(#box-blur-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="155" r="18" /><text x="314" y="155" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M314 698 L314 614" marker-end="url(#box-blur-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="698" r="18" /><text x="314" y="698" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M509 22 L509 96" marker-end="url(#box-blur-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="22" r="18" /><text x="509" y="22" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M703 155 L703 239" marker-end="url(#box-blur-arrow)" />
+<circle class="docs-shot-number" cx="703" cy="155" r="18" /><text x="703" y="155" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M897 155 L897 239" marker-end="url(#box-blur-arrow)" />
+<circle class="docs-shot-number" cx="897" cy="155" r="18" /><text x="897" y="155" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -107,16 +107,16 @@ Box Blur works in five stages, one folder each in the Nodes tab: **Radius & Tap 
 
 ![Inside the Radius & Tap Count folder: Resolution through Smallest Component, divided by Reference Height 1080, times Radius gives the radius in pixels; plus One gives the Reach; Reach times Half, rounded up by Ceiling and capped by Minimum with Pairs Limit 127 gives the Pairs; Reach divided by Pair Span Limit 254, at least One by Maximum, gives the Stride; Pairs times Two plus One gives the Tap Count](../assets/effects/graphs/box-blur-radius-tap-count.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 538" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 542" aria-hidden="true" focusable="false">
 <defs><marker id="box-blur-radius-tap-count-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M41 254 L125 254" marker-end="url(#box-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="41" cy="254" r="18" /><text x="41" y="254" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M333 269 L417 269" marker-end="url(#box-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="333" cy="269" r="18" /><text x="333" y="269" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M624 269 L708 269" marker-end="url(#box-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="624" cy="269" r="18" /><text x="624" y="269" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M527 154 L611 154" marker-end="url(#box-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="527" cy="154" r="18" /><text x="527" y="154" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M168 138 L168 222" marker-end="url(#box-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="168" cy="138" r="18" /><text x="168" y="138" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M460 138 L460 222" marker-end="url(#box-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="460" cy="138" r="18" /><text x="460" y="138" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M752 138 L752 222" marker-end="url(#box-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="138" r="18" /><text x="752" y="138" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M654 23 L654 107" marker-end="url(#box-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="654" cy="23" r="18" /><text x="654" y="23" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -163,18 +163,18 @@ Box Blur works in five stages, one folder each in the Nodes tab: **Radius & Tap 
 
 ![Inside the Horizontal Pass folder: Tap Index, Pairs and Stride feed Pair Tap Offsets; Reach minus each offset goes through Subtract and Clamp (between Zero and One) into Merge Pair Weights; Sample Image reads the Premultiplied Source at the Read Position; Sequence Reduce adds up the reads over the Tap Count, Normalize by Weight divides by the summed weight and Cache Image keeps the result](../assets/effects/graphs/box-blur-horizontal-pass.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 737" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 770" aria-hidden="true" focusable="false">
 <defs><marker id="box-blur-horizontal-pass-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M67 214 L151 214" marker-end="url(#box-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="67" cy="214" r="18" /><text x="67" y="214" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M189 147 L273 147" marker-end="url(#box-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="189" cy="147" r="18" /><text x="189" y="147" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M311 140 L395 140" marker-end="url(#box-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="311" cy="140" r="18" /><text x="311" y="140" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M555 206 L639 206" marker-end="url(#box-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="206" r="18" /><text x="555" y="206" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M676 198 L760 198" marker-end="url(#box-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="676" cy="198" r="18" /><text x="676" y="198" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M204 399 L204 315" marker-end="url(#box-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="399" r="18" /><text x="204" y="399" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M326 34 L326 118" marker-end="url(#box-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="34" r="18" /><text x="326" y="34" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M448 22 L448 89" marker-end="url(#box-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M691 95 L691 179" marker-end="url(#box-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="95" r="18" /><text x="691" y="95" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M813 95 L813 179" marker-end="url(#box-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="95" r="18" /><text x="813" y="95" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 

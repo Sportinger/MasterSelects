@@ -115,16 +115,16 @@ Sharpen does two things at once. It makes a soft copy of the picture and adds th
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 583" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-radius-window-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M41 199 L125 199" marker-end="url(#sharpen-radius-window-arrow)" />
-<circle class="docs-shot-number" cx="41" cy="199" r="18" /><text x="41" y="199" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M138 199 L222 199" marker-end="url(#sharpen-radius-window-arrow)" />
-<circle class="docs-shot-number" cx="138" cy="199" r="18" /><text x="138" y="199" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M624 298 L708 298" marker-end="url(#sharpen-radius-window-arrow)" />
-<circle class="docs-shot-number" cx="624" cy="298" r="18" /><text x="624" y="298" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M722 311 L806 311" marker-end="url(#sharpen-radius-window-arrow)" />
-<circle class="docs-shot-number" cx="722" cy="311" r="18" /><text x="722" y="311" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M819 320 L903 320" marker-end="url(#sharpen-radius-window-arrow)" />
-<circle class="docs-shot-number" cx="819" cy="320" r="18" /><text x="819" y="320" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M168 64 L168 148" marker-end="url(#sharpen-radius-window-arrow)" />
+<circle class="docs-shot-number" cx="168" cy="64" r="18" /><text x="168" y="64" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M265 64 L265 148" marker-end="url(#sharpen-radius-window-arrow)" />
+<circle class="docs-shot-number" cx="265" cy="64" r="18" /><text x="265" y="64" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M752 420 L752 336" marker-end="url(#sharpen-radius-window-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="420" r="18" /><text x="752" y="420" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M849 176 L849 260" marker-end="url(#sharpen-radius-window-arrow)" />
+<circle class="docs-shot-number" cx="849" cy="176" r="18" /><text x="849" y="176" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M946 168 L946 252" marker-end="url(#sharpen-radius-window-arrow)" />
+<circle class="docs-shot-number" cx="946" cy="168" r="18" /><text x="946" y="168" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -149,12 +149,12 @@ Sharpen does two things at once. It makes a soft copy of the picture and adds th
 
 ![Inside the Source Brightness folder: Frame goes into Split RGB + Alpha, and its colour into Luminance, which gives the Source Brightness](../assets/effects/graphs/sharpen-source-brightness.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 547" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 594" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-source-brightness-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M239 167 L323 167" marker-end="url(#sharpen-source-brightness-arrow)" />
-<circle class="docs-shot-number" cx="239" cy="167" r="18" /><text x="239" y="167" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M22 422 L82 422" marker-end="url(#sharpen-source-brightness-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="422" r="18" /><text x="22" y="422" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M417 22 L417 106" marker-end="url(#sharpen-source-brightness-arrow)" />
+<circle class="docs-shot-number" cx="417" cy="22" r="18" /><text x="417" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M172 299 L172 383" marker-end="url(#sharpen-source-brightness-arrow)" />
+<circle class="docs-shot-number" cx="172" cy="299" r="18" /><text x="172" y="299" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -199,14 +199,14 @@ Sharpen does two things at once. It makes a soft copy of the picture and adds th
 
 ![Inside the Horizontal Blur Pass folder: Tap Index, Pairs and Stride feed Pair Tap Offsets; two Gaussian Falloff cards weigh the near and far pixel of each pair; Merge Pair Weights folds them into one read; Sample Image reads the Premultiplied Source at the Read Position; Sequence Reduce adds up the reads over the Tap Count, Normalize by Weight divides by the summed weight and Split RGB + Alpha hands over the blurred colour and alpha](../assets/effects/graphs/sharpen-horizontal-pass.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 684" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 717" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-horizontal-pass-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M226 116 L310 116" marker-end="url(#sharpen-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="226" cy="116" r="18" /><text x="226" y="116" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M504 179 L588 179" marker-end="url(#sharpen-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="504" cy="179" r="18" /><text x="504" y="179" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M783 169 L867 169" marker-end="url(#sharpen-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="783" cy="169" r="18" /><text x="783" y="169" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M369 22 L369 79" marker-end="url(#sharpen-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="22" r="18" /><text x="369" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M648 60 L648 144" marker-end="url(#sharpen-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="60" r="18" /><text x="648" y="60" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M926 60 L926 144" marker-end="url(#sharpen-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="926" cy="60" r="18" /><text x="926" y="60" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
@@ -432,5 +432,5 @@ The same soft maximum and minimum, now down a column of the row results, so toge
 - **Colour and transparency.** Only brightness is sharpened; the change goes to R, G and B alike and alpha is kept. The blur and the range read a premultiplied copy, so a cut-out on transparency gets no dark or bright rim.
 - **Zero and below.** Amount 0 leaves the picture exactly as it was. An Amount below 0 (typed or via tools) softens and is reported.
 - **Cost.** Three GPU passes, independent of the timeline time.
-- **Saved projects.** A Sharpen keeps the recipe it was saved with, so a project looks the same when it opens again. One saved with version 3.2.7 has a halo limit that can jump a step while Radius is animated; its card says so and offers **Use the new Sharpen**. The two match at Radius 0.5, 1, 1.5 … on a 1080p frame; in between, a strong Sharpen differs on fine detail (up to about 60 of 255 levels at Amount 2 to 5). A Sharpen saved before 2026-10-21 keeps its earlier graph without a halo limit and offers the same button. An edited node setup keeps its own recipe.
+- **Saved projects.** A Sharpen keeps the recipe it was saved with, so a project looks the same when it opens again. One saved with version 3.2.7 has a halo limit that can jump a step while Radius is animated; its card says so and offers **Use the new Sharpen**. The two match at Radius 0.5, 1, 1.5 … on a 1080p frame; in between, a strong Sharpen differs on fine detail (up to about 60 of 255 levels at Amount 2 to 5). A Sharpen saved before 2026-10-21 keeps its earlier graph without a halo limit and offers the same button. An edited node setup keeps its own recipe. A Custom Look does not carry the 3.2.7 recipe: a Look that holds a Sharpen always applies the current one.
 - **More:** [Blur & Sharpen notes](../Effect-System.md#blur--sharpen-notes) · [Editable blur kernels](../Effect-System.md#editable-blur-kernels) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

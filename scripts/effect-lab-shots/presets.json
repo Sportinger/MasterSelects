@@ -5,10 +5,10 @@
       "image": "neon_rain_street",
       "width": 1920,
       "crop": [
-        600,
-        370,
-        360,
-        203
+        880,
+        0,
+        480,
+        270
       ],
       "cellWidth": 480
     },

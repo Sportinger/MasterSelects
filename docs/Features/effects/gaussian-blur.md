@@ -105,20 +105,20 @@ Gaussian Blur works in five stages, one folder each in the Nodes tab: **Radius &
 
 <div class="docs-shot-stage">
 
-![Inside the Radius & Tap Count folder: Resolution through Smallest Component, divided by Reference Height 1080, times Radius gives the radius in pixels; times Sigma Per Radius 0.5, at least Sigma Minimum by Maximum, gives the Sigma; times Reach Sigmas 3 gives the Reach; Reach times Half, rounded up by Ceiling and capped by Minimum with Pairs Limit 127 gives the Pairs; Reach divided by Pair Span Limit 254, at least One, gives the Stride; Pairs times Two plus One gives the Tap Count](../assets/effects/graphs/gaussian-blur-radius-tap-count.webp)
+![Inside the Radius & Tap Count folder: Resolution through Smallest Component, divided by Reference Height 1080, times Radius gives the radius in pixels; times Sigma Per Radius 0.5, at least Sigma Minimum by Maximum, gives the Sigma; times Reach Sigmas 3 gives the Reach; Reach times Half, rounded up by Ceiling and capped by Minimum with Pairs Limit 127 gives the Pairs; Reach divided by Pair Span Limit 254, at least one, gives the Stride; Pairs times Two plus one gives the Tap Count (the card One that both read is left out of the picture)](../assets/effects/graphs/gaussian-blur-radius-tap-count.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1353" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1017" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-radius-tap-count-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M275 101 L275 185" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="275" cy="101" r="18" /><text x="275" y="101" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M898 101 L898 185" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="898" cy="101" r="18" /><text x="898" y="101" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M119 433 L119 517" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="119" cy="433" r="18" /><text x="119" y="433" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M586 723 L586 673" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="586" cy="723" r="18" /><text x="586" y="723" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M898 788 L898 704" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="898" cy="788" r="18" /><text x="898" y="788" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M273 99 L273 183" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="273" cy="99" r="18" /><text x="273" y="99" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M902 99 L902 183" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="902" cy="99" r="18" /><text x="902" y="99" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M115 434 L115 518" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="115" cy="434" r="18" /><text x="115" y="434" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M587 678 L587 674" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="587" cy="678" r="18" /><text x="587" y="678" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M902 758 L902 674" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="902" cy="758" r="18" /><text x="902" y="758" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
