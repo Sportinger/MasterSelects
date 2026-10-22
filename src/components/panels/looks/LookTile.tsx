@@ -35,7 +35,7 @@ export function LookTile({ look, sourceFrameId, onApply, onDelete }: LookTilePro
   // Moving looks (a live clock or the timeline clock) play on hover.
   const animated = look.stack.some((entry) => {
     const definition = getEffect(entry.effectId);
-    return definition?.requiresContinuousRender === true || definition?.timelineAnimated === true;
+    return definition?.requiresContinuousRender === true || (!!definition && 'timelineAnimated' in definition && definition.timelineAnimated === true);
   });
 
   const draw = useCallback((bitmap: ImageBitmap | null) => {
