@@ -165,6 +165,8 @@ class LookThumbnailRuntime {
     sourceId: string,
     cacheKey: string,
     cache = true,
+    /** Timeline time of the frame: 0 for the still, a running time for the hover animation. */
+    timelineTimeSeconds = 0,
   ): Promise<ImageBitmap | null> {
     if (cache) {
       const cached = this.cache.get(cacheKey);
@@ -202,7 +204,7 @@ class LookThumbnailRuntime {
       ping,
       pong,
       undefined,
-      0,
+      timelineTimeSeconds,
       undefined,
       { frameRate: 30, scopeId: `look-thumbnail:${look.id}` },
     );
