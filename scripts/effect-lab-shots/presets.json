@@ -5,11 +5,12 @@
       "image": "neon_rain_street",
       "width": 1920,
       "crop": [
-        320,
-        0,
-        960,
-        540
-      ]
+        600,
+        370,
+        360,
+        203
+      ],
+      "cellWidth": 480
     },
     {
       "effect": "gaussian-blur",
@@ -60,10 +61,10 @@
       "image": "harbor_town",
       "width": 1920,
       "crop": [
-        1100,
-        440,
-        320,
-        180
+        1170,
+        480,
+        200,
+        112
       ],
       "cellWidth": 480,
       "maxBytes": 120000

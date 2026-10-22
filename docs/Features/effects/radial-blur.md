@@ -6,7 +6,7 @@ Group: [Blur & Sharpen](../Effects-Blur.md) · [How to add an effect](../Effects
 
 <figure class="docs-shot docs-compare docs-shot--float-left">
 
-![The dancer on the dark stage, original left and with Radial Blur in Spin mode at Amount 0.5 right: her arms, dress and the stage floor smear in arcs around her middle, as if she spun in a pirouette while the shutter was open](../assets/effects/radial-blur.webp)
+![The harbour town, original left and with Radial Blur in Spin mode at Amount 0.5 right: the houses in the middle stay readable, while the hillside, the boats and the water around them smear in circles around the centre of the frame](../assets/effects/radial-blur.webp)
 
 <figcaption>Left: original. Right: Type Spin, Amount 0.5.</figcaption>
 </figure>
@@ -86,8 +86,8 @@ Pick one in the **Preset** row of the effect card. It sets Type and Amount and p
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 620" aria-hidden="true" focusable="false">
 <defs><marker id="radial-blur-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M112 259 L196 259" marker-end="url(#radial-blur-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="259" r="18" /><text x="112" y="259" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M264 64 L264 148" marker-end="url(#radial-blur-arrow)" />
+<circle class="docs-shot-number" cx="264" cy="64" r="18" /><text x="264" y="64" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M274 519 L358 519" marker-end="url(#radial-blur-arrow)" />
 <circle class="docs-shot-number" cx="274" cy="519" r="18" /><text x="274" y="519" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M274 370 L358 370" marker-end="url(#radial-blur-arrow)" />
@@ -96,8 +96,8 @@ Pick one in the **Preset** row of the effect card. It sets Type and Amount and p
 <circle class="docs-shot-number" cx="437" cy="139" r="18" /><text x="437" y="139" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M599 259 L683 259" marker-end="url(#radial-blur-arrow)" />
 <circle class="docs-shot-number" cx="599" cy="259" r="18" /><text x="599" y="259" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M762 204 L846 204" marker-end="url(#radial-blur-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="204" r="18" /><text x="762" y="204" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M914 345 L914 261" marker-end="url(#radial-blur-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="345" r="18" /><text x="914" y="345" class="docs-shot-number-text">6</text>
 </svg>
 </div>
 
@@ -114,18 +114,18 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 ![Inside the Blur Range folder, reduced to its recipe: Amount, at least Zero by Maximum, times Spin Per Amount gives the Spin Arc, and Zero minus half of it the Spin Start; Type above Half by Greater Than gives Is Spin; the Zoom scale goes through Natural Logarithm into the Zoom Range; two Switches pick the Range Start and the Range Length](../assets/effects/graphs/radial-blur-blur-range.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1348" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1349" aria-hidden="true" focusable="false">
 <defs><marker id="radial-blur-blur-range-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M114 656 L198 656" marker-end="url(#radial-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="114" cy="656" r="18" /><text x="114" y="656" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M276 581 L360 581" marker-end="url(#radial-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="276" cy="581" r="18" /><text x="276" y="581" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M266 492 L266 576" marker-end="url(#radial-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="266" cy="492" r="18" /><text x="266" y="492" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M428 431 L428 515" marker-end="url(#radial-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="428" cy="431" r="18" /><text x="428" y="431" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M276 248 L360 248" marker-end="url(#radial-blur-blur-range-arrow)" />
 <circle class="docs-shot-number" cx="276" cy="248" r="18" /><text x="276" y="248" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M276 980 L360 980" marker-end="url(#radial-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="276" cy="980" r="18" /><text x="276" y="980" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M437 839 L521 839" marker-end="url(#radial-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="839" r="18" /><text x="437" y="839" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M428 1124 L428 1040" marker-end="url(#radial-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="428" cy="1124" r="18" /><text x="428" y="1124" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M437 840 L521 840" marker-end="url(#radial-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="437" cy="840" r="18" /><text x="437" y="840" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -150,18 +150,18 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 <div class="docs-shot-stage">
 
-![Inside the Tap Counts & Box Length folder: Longest Range times Farthest (px) gives the longest streak in pixels; times Two it goes through Square Root and Ceiling and is clamped between One and Coarse Limit 64 into the Coarse Taps; Longest Range divided by the Coarse Taps, at least Tiny by Maximum, gives the Box Length](../assets/effects/graphs/radial-blur-tap-counts.webp)
+![Inside the Tap Counts & Box Length folder: Longest Range times Farthest (px) gives the longest streak in pixels; times Two it goes through Square Root and is clamped between One and Coarse Limit 64 into the Coarse Taps, not rounded; Longest Range divided by the Coarse Taps, at least Tiny by Maximum, gives the Box Length](../assets/effects/graphs/radial-blur-tap-counts.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 749" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 794" aria-hidden="true" focusable="false">
 <defs><marker id="radial-blur-tap-counts-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M67 105 L151 105" marker-end="url(#radial-blur-tap-counts-arrow)" />
-<circle class="docs-shot-number" cx="67" cy="105" r="18" /><text x="67" y="105" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M311 162 L395 162" marker-end="url(#radial-blur-tap-counts-arrow)" />
-<circle class="docs-shot-number" cx="311" cy="162" r="18" /><text x="311" y="162" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M555 199 L639 199" marker-end="url(#radial-blur-tap-counts-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="199" r="18" /><text x="555" y="199" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M798 178 L882 178" marker-end="url(#radial-blur-tap-counts-arrow)" />
-<circle class="docs-shot-number" cx="798" cy="178" r="18" /><text x="798" y="178" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M230 237 L230 187" marker-end="url(#radial-blur-tap-counts-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="237" r="18" /><text x="230" y="237" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M508 41 L508 125" marker-end="url(#radial-blur-tap-counts-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="41" r="18" /><text x="508" y="41" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M648 398 L648 314" marker-end="url(#radial-blur-tap-counts-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="398" r="18" /><text x="648" y="398" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M783 195 L867 195" marker-end="url(#radial-blur-tap-counts-arrow)" />
+<circle class="docs-shot-number" cx="783" cy="195" r="18" /><text x="783" y="195" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -170,9 +170,9 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 **Multiply** – the Longest Range (the range at the corner farthest from the centre) times that corner's distance in pixels: the longest streak anywhere in the frame. At the default (Zoom 0.5, centred) it is about 80 px in a 1080p frame, with Spin 0.5 about 190 px.
 
-**Square Root** – the square root of twice that length. Cutting the streak into that many pieces gives both stages about the same work: 190 px become 20 pieces of about 10 px, so a pixel reads about 30 times instead of 190.
+**Square Root** – the square root of twice that length. Cutting the streak into that many pieces gives both stages about the same work: 190 px become about 20 pieces of about 10 px, so a pixel reads about 30 times instead of 190.
 
-**Clamp** – rounds that up and keeps it between 1 and 64: the Coarse Taps, the most pieces Stage B reads.
+**Clamp** – keeps that between 1 and 64 without rounding it: the Coarse Taps, how many pieces Stage B reads at most. It is rarely a whole number; the last piece then counts only with the share of it that fits (Stage B), so the pieces grow smoothly with Amount instead of jumping by one.
 
 **Maximum** – the Longest Range divided by the number of pieces: the Box Length, shared by every pixel. It is measured along the range, not in pixels, so a piece is longer far from the centre and shorter close to it, just like the streak. It never reaches 0, so a zero streak cannot divide by zero.
 
@@ -206,33 +206,33 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 <div class="docs-shot-stage">
 
-![Inside the Stage A folder, reduced to its recipe: the Offset from centre goes through Length, times Box Length, rounded up by Ceiling and clamped between One and Fine Limit 256; the Offset is scaled by Multiply and turned by Rotate UV, and a Switch picks one by Is Spin; Sample Image reads the Premultiplied Source at the Read position, Sequence Reduce adds up the reads, Normalize by Weight divides by their number and Cache Image keeps the Short Boxes](../assets/effects/graphs/radial-blur-stage-a.webp)
+![Inside the Stage A folder, reduced to its recipe: Half Box (px) divided by Cell (px) gives the half piece in cells; minus the Ring and clamped between 0 and 1 it is the share of that ring's cell the piece covers, at least a tiny floor by Maximum the Fine Weight; Rings needed, clamped and doubled by Multiply, gives the Fine Taps; Sample Image reads the Premultiplied Source at the Read position, Sequence Reduce adds up the weighted reads, Normalize by Weight turns the sum into an average and Cache Image keeps the Short Boxes](../assets/effects/graphs/radial-blur-stage-a.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 874" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 680" aria-hidden="true" focusable="false">
 <defs><marker id="radial-blur-stage-a-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M67 454 L151 454" marker-end="url(#radial-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="67" cy="454" r="18" /><text x="67" y="454" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M433 282 L517 282" marker-end="url(#radial-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="433" cy="282" r="18" /><text x="433" y="282" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M189 210 L273 210" marker-end="url(#radial-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="189" cy="210" r="18" /><text x="189" y="210" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M555 470 L639 470" marker-end="url(#radial-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="470" r="18" /><text x="555" y="470" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M798 454 L882 454" marker-end="url(#radial-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="798" cy="454" r="18" /><text x="798" y="454" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M204 22 L204 89" marker-end="url(#radial-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="22" r="18" /><text x="204" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 22 L448 89" marker-end="url(#radial-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M706 335 L622 335" marker-end="url(#radial-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="706" cy="335" r="18" /><text x="706" y="335" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M691 293 L691 209" marker-end="url(#radial-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="293" r="18" /><text x="691" y="293" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M935 260 L935 176" marker-end="url(#radial-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="260" r="18" /><text x="935" y="260" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Stage A, reduced to its recipe (how the read offset and position are worked out is left out). 1 — Length: the distance from the centre. 2 — Clamp: reads per piece. 3 — Switch: along a ray or a circle. 4 — Sequence Reduce: adds up the reads. 5 — Cache Image: keeps the short pieces.</figcaption>
+<figcaption>Inside Stage A, reduced to its recipe (how the piece and the read position are worked out is left out, and so are the fixed values). 1 — Divide: the half piece in cells. 2 — Clamp: how much of a cell counts. 3 — Multiply: how many reads. 4 — Sequence Reduce: adds up the reads. 5 — Cache Image: keeps the short pieces.</figcaption>
 </figure>
 
-**Length** – the pixel's distance from the centre in pixels. Times the Box Length it gives how long this pixel's piece is: the farther out, the longer.
+**Divide** – half of this pixel's piece in cells of one pixel. The piece is the Box Length times the pixel's distance from the centre (Length in the folder), so it is longer far from the centre and shorter close to it. Only a piece longer than 256 px gets cells wider than a pixel (Cell).
 
-**Clamp** – that length rounded up, between 1 and 256: one read per pixel of the piece, so no pixel along it is skipped.
+**Clamp** – the reads sit one pixel apart, in pairs from the pixel outward, each in the middle of its one-pixel cell. A cell the piece covers only partly counts with that share, and its read moves to the middle of the covered part; Maximum keeps every weight just above 0. So the piece grows smoothly with Amount: a new pair enters with weight 0 and grows in, and even a piece shorter than a pixel blurs a little instead of leaving the picture unchanged.
 
-**Switch** – where the reads go. For Zoom, **Multiply** scales the offset from the centre, so the reads run along the ray to the centre; for Spin, **Rotate UV** turns it, so they run along the circle. Is Spin picks one. A read that falls outside the frame repeats the edge pixel; a mirrored edge, as in Motion Blur, would fold the path onto another ray or circle.
+**Multiply** – the number of reads: twice the rings needed to reach the end of the piece, kept between 1 and 128 pairs by the other Clamp. Close to the centre it is 2, in the far corners as many as the piece has pixels.
 
-**Sequence Reduce** – reads the Premultiplied Source at every position along the piece (**Sample Image**) and adds up the reads; Normalize by Weight turns the sum into an average.
+**Sequence Reduce** – reads the Premultiplied Source at every position along the piece (**Sample Image**) and adds up the reads, each times its weight; Normalize by Weight divides by the summed weight, so the sum becomes an average. For Zoom the reads run along the ray to the centre (the offset from the centre is scaled), for Spin along the circle around it (the offset is turned); a Switch on Is Spin picks one. A read that falls outside the frame repeats the edge pixel; a mirrored edge, as in Motion Blur, would fold the path onto another ray or circle.
 
 **Cache Image** – keeps, for every pixel, the average of the short piece around it: the Short Boxes that Stage B reads.
 
@@ -272,7 +272,6 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 **Sequence Reduce** – reads one cached short piece per tap (**Sample Image** on the Short Boxes), adds them up with their Tap Weights, and Normalize by Weight divides by the summed weight, so the streak keeps the picture's brightness.
 
-**Remix:** for an even Zoom streak without the fade, open **Stage B**, unplug **Subtract** from input False of the **Switch** and plug a **Value** of 1 into it. The streaks then look longer and harder, closer to [Zoom Blur](./zoom-blur.md).
 
 ### Straight Alpha Output
 
@@ -305,9 +304,9 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 ## Technical details
 
 - **Units.** Center X and Y are shares of the frame (0 to 1, from the top left). Spin turns by 20° per unit of Amount in total, half each way, so its streak at a pixel is Amount × 0.349 × the distance from the centre. Zoom reads from the pixel towards the centre down to a scale of 1 − 0.2 × Amount × the distance from the centre in shares of the frame, never below 0.05, and weights its reads 1 − t/2. At the same Amount, [Zoom Blur](./zoom-blur.md)'s streak is about 3.5 times as long in the corners and more near the centre.
-- **Two stages.** About 2 × √(2 × longest streak in pixels) reads per pixel: Stage B reads up to 64 pieces, Stage A up to 256 pixels per piece. A streak beyond that (only on very large frames) reads its pieces further apart, and the card and the tool result say so.
+- **Two stages.** About 2 × √(2 × longest streak in pixels) reads per pixel: Stage B reads up to 64 pieces, Stage A up to 256 pixels per piece. Neither count is rounded to a whole read: the last piece and the outermost reads count with the share of them that fits, so the blur changes smoothly when the amount is animated. A streak beyond that (only on very large frames) reads its pieces further apart, and the card and the tool result say so.
 - **Edges.** At the frame edge the picture is clamped, not mirrored. Transparent edges smear without a dark rim, and the preview and the export match.
 - **Below 0 and zero.** A negative Amount leaves the picture unchanged, as in earlier versions, and the card and the tool result say so. An unedited Radial Blur at Amount 0 is skipped, so the picture passes through exactly.
 - **Software preview.** Where the editor falls back to its software preview, Radial Blur reads up to 64 taps along the same path in one stage; very long streaks can look stepped there, and the `SoftwareBlur` log says so.
-- **Saved projects.** They keep their look. A missing or unknown Type counts as Zoom. The old Samples value is kept in the project but no longer changes anything. A Radial Blur whose node setup you edited keeps its own recipe; when that recipe does not read Type, the card hides it and says so if it is set.
+- **Saved projects.** They keep their look, with one fix: an unedited Radial Blur saved with version 3.2.7 loads with the current recipe, whose counts never step (that one jumped a little where an animated amount added a read, and left a streak under about a pixel unchanged). Still pictures differ by less than half a level on average. A missing or unknown Type counts as Zoom. The old Samples value is kept in the project but no longer changes anything. A Radial Blur whose node setup you edited keeps its own recipe; when that recipe does not read Type, the card hides it and says so if it is set.
 - **More:** [Blur & Sharpen notes](../Effect-System.md#blur--sharpen-notes) · [Editable blur kernels](../Effect-System.md#editable-blur-kernels) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

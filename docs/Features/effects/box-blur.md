@@ -23,9 +23,9 @@ Group: [Blur & Sharpen](../Effects-Blur.md) · [How to add an effect](../Effects
 
 <figure class="docs-shot docs-shot--detail">
 
-![The neon signs of the night street four times, labelled: Soft Edge barely softened, Frosted Glass with the signs blurred into readable shapes, Square Lights with the lights turned into soft squares, Colour Field with only large patches of colour left](../assets/effects/presets/box-blur.webp)
+![The street lamps of the night street four times, labelled: Soft Edge barely softened, Frosted Glass with each lamp turned into a small square glow, Square Lights with the lamps and windows turned into large flat blocks with straight edges, Colour Field with only broad patches of warm and cool colour left](../assets/effects/presets/box-blur.webp)
 
-<figcaption>The four presets on the neon signs of the night street.</figcaption>
+<figcaption>The four presets on the street lamps of the night street.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets Radius in one undo step, and the row shows its name until you change something. A Radius with keyframes keeps them, and the card says so.
@@ -34,7 +34,7 @@ Pick one in the **Preset** row of the effect card. It sets Radius in one undo st
 
 **Frosted Glass** – Radius 8: shapes stay readable as areas, fine detail and lettering behind it are gone. Good for a panel behind a title.
 
-**Square Lights** – Radius 20: every small light becomes a flat, soft-edged square. The look Gaussian Blur cannot give.
+**Square Lights** – Radius 20: every lamp and window becomes a flat block with straight edges, and the frame reads as a pattern of squares. The look Gaussian Blur cannot give: its lights turn into round glows.
 
 **Colour Field** – Radius 50: only large patches of light and colour are left, a quiet backdrop for text or a scene change.
 
@@ -67,7 +67,7 @@ Pick one in the **Preset** row of the effect card. It sets Radius in one undo st
 <figcaption>The same street lamps at Radius 10. Left: Gaussian Blur. Right: Box Blur.</figcaption>
 </figure>
 
-**Radius** – how far the softening reaches: every pixel becomes the average of a square twice as wide as Radius. 1–2 only takes the edge off, 8–12 makes a frosted panel, from about 20 small lights read as squares, and 50 leaves broad patches of colour. It counts pixels of a 1080p picture, so a 4K export shows the same blur, only finer. It changes smoothly when animated, and 0 leaves the picture untouched. 0 to 50 px, default 5 px.
+**Radius** – how far the softening reaches: every pixel becomes the average of a square twice as wide as Radius. 1–2 only takes the edge off, 8–12 makes a frosted panel, from about 20 small lights read as squares, and 50 leaves broad patches of colour. It counts pixels of a 1080p picture, so a 4K export shows the same blur relative to the picture. It changes smoothly when animated, and 0 leaves the picture untouched. 0 to 50 px, default 5 px.
 
 <div class="docs-float-end"></div>
 
@@ -120,7 +120,7 @@ Box Blur works in five stages, one folder each in the Nodes tab: **Radius & Tap 
 </svg>
 </div>
 
-<figcaption>Inside Radius & Tap Count (Radius). The number cards are values from the Constants folder, shown where they plug in. 1 — Smallest Component: the shorter side of the frame. 2 — Add: the Reach. 3 — Minimum: the pairs of reads. 4 — Maximum: the stride.</figcaption>
+<figcaption>Inside Radius & Tap Count, the folder that turns Radius into reads. The number cards are values from the Constants folder, shown where they plug in. 1 — Smallest Component: the shorter side of the frame. 2 — Add: the Reach. 3 — Minimum: the pairs of reads. 4 — Maximum: the stride.</figcaption>
 </figure>
 
 **Smallest Component** – the shorter side of the frame. Divided by 1080 it says how much larger or smaller this frame is than a 1080p one; Multiply turns Radius into pixels of this frame, so a 4K export, a portrait frame and a thumbnail show the same blur.

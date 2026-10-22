@@ -67,7 +67,7 @@ Pick one in the **Preset** row of the effect card. It sets Radius in one undo st
 <figcaption>The same street lamps at Radius 10. Left: Gaussian Blur. Right: Box Blur.</figcaption>
 </figure>
 
-**Radius** – how soft the picture gets. Every pixel becomes an average of its neighbours, the nearest counting most, so edges melt into each other and small lights turn into round glows, like a lens out of focus. It starts to show at about 1; 2–5 takes the edge off, 10 is clearly out of focus, around 20 only the large forms are left and 50 leaves soft patches of light and colour. It counts pixels of a 1080p picture, so a 4K export shows the same blur, only finer. Animated, it changes smoothly, and 0 leaves the picture untouched. 0 to 50 px, default 10 px.
+**Radius** – how soft the picture gets. Every pixel becomes an average of its neighbours, the nearest counting most, so edges melt into each other and small lights turn into round glows, like a lens out of focus. It starts to show at about 1; 2–5 takes the edge off, 10 is clearly out of focus, around 20 only the large forms are left and 50 leaves soft patches of light and colour. It counts pixels of a 1080p picture, so a 4K export shows the same blur relative to the picture. Animated, it changes smoothly, and 0 leaves the picture untouched. 0 to 50 px, default 10 px.
 
 <div class="docs-float-end"></div>
 
@@ -107,22 +107,22 @@ Gaussian Blur works in five stages, one folder each in the Nodes tab: **Radius &
 
 ![Inside the Radius & Tap Count folder: Resolution through Smallest Component, divided by Reference Height 1080, times Radius gives the radius in pixels; times Sigma Per Radius 0.5, at least Sigma Minimum by Maximum, gives the Sigma; times Reach Sigmas 3 gives the Reach; Reach times Half, rounded up by Ceiling and capped by Minimum with Pairs Limit 127 gives the Pairs; Reach divided by Pair Span Limit 254, at least One, gives the Stride; Pairs times Two plus One gives the Tap Count](../assets/effects/graphs/gaussian-blur-radius-tap-count.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1323" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1353" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-radius-tap-count-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M142 235 L226 235" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="142" cy="235" r="18" /><text x="142" y="235" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M751 258 L835 258" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="751" cy="258" r="18" /><text x="751" y="258" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M22 583 L73 583" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="583" r="18" /><text x="22" y="583" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M446 583 L530 583" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="446" cy="583" r="18" /><text x="446" y="583" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M751 613 L835 613" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="751" cy="613" r="18" /><text x="751" y="613" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M275 101 L275 185" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="275" cy="101" r="18" /><text x="275" y="101" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M898 101 L898 185" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="898" cy="101" r="18" /><text x="898" y="101" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M119 433 L119 517" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="119" cy="433" r="18" /><text x="119" y="433" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M586 723 L586 673" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="586" cy="723" r="18" /><text x="586" y="723" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M898 788 L898 704" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="898" cy="788" r="18" /><text x="898" y="788" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Radius & Tap Count (Radius). The number cards are values from the Constants folder, shown where they plug in. 1 — Smallest Component: the shorter side of the frame. 2 — Maximum: the Sigma. 3 — Multiply: the Reach. 4 — Minimum: the pairs of reads. 5 — Add: the Tap Count.</figcaption>
+<figcaption>Inside Radius & Tap Count, the folder that turns Radius into reads. The number cards are values from the Constants folder, shown where they plug in. 1 — Smallest Component: the shorter side of the frame. 2 — Maximum: the Sigma. 3 — Multiply: the Reach. 4 — Minimum: the pairs of reads. 5 — Add: the Tap Count.</figcaption>
 </figure>
 
 **Smallest Component** – the shorter side of the frame. Divided by 1080 it says how much larger or smaller this frame is than a 1080p one; the next Multiply turns Radius into pixels of this frame, so a 4K export, a portrait frame and a thumbnail show the same blur.

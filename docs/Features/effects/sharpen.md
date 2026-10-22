@@ -65,7 +65,7 @@ Pick one in the **Preset** row of the effect card. It sets Amount and Radius in 
 
 **Amount** – how much crisper the picture gets. 1 is gentle, 2–3 clearly crisp, 4–5 a gritty, high-contrast look. Even at 5, edges get only a thin outline, because the halo limit (see [Node setup](#node-setup)) keeps them small. 0 leaves the picture untouched. A value below 0, typed or set by a tool, softens instead, and the card says so. 0 to 5, default 1.
 
-**Radius** – the size of the detail it works on. 0.5–1 crisps fine texture such as hair, fabric and leaves; 2–3 works on the edges of faces and objects; 4–5 makes larger shapes stand out, more like local contrast than sharpening, and with a high Amount bright walls can turn white. It counts pixels of a 1080p picture, so a 4K export looks the same, only finer. It changes smoothly when animated. 0.5 to 5 px, default 1 px.
+**Radius** – the size of the detail it works on. 0.5–1 crisps fine texture such as hair, fabric and leaves; 2–3 works on the edges of faces and objects; 4–5 makes larger shapes stand out, more like local contrast than sharpening, and with a high Amount bright walls can turn white. It counts pixels of a 1080p picture, so a 4K export shows the same sharpening relative to the picture. It changes smoothly when animated. 0.5 to 5 px, default 1 px.
 
 ## Node setup
 
@@ -81,16 +81,16 @@ Pick one in the **Preset** row of the effect card. It sets Amount and Radius in 
 <circle class="docs-shot-number" cx="67" cy="529" r="18" /><text x="67" y="529" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M189 799 L273 799" marker-end="url(#sharpen-arrow)" />
 <circle class="docs-shot-number" cx="189" cy="799" r="18" /><text x="189" y="799" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M67 360 L151 360" marker-end="url(#sharpen-arrow)" />
-<circle class="docs-shot-number" cx="67" cy="360" r="18" /><text x="67" y="360" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M204 233 L204 317" marker-end="url(#sharpen-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="233" r="18" /><text x="204" y="233" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M189 119 L273 119" marker-end="url(#sharpen-arrow)" />
 <circle class="docs-shot-number" cx="189" cy="119" r="18" /><text x="189" y="119" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M311 439 L395 439" marker-end="url(#sharpen-arrow)" />
 <circle class="docs-shot-number" cx="311" cy="439" r="18" /><text x="311" y="439" class="docs-shot-number-text">5</text>
 <path class="docs-shot-arrow" d="M433 163 L517 163" marker-end="url(#sharpen-arrow)" />
 <circle class="docs-shot-number" cx="433" cy="163" r="18" /><text x="433" y="163" class="docs-shot-number-text">6</text>
-<path class="docs-shot-arrow" d="M555 204 L639 204" marker-end="url(#sharpen-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="204" r="18" /><text x="555" y="204" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M691 52 L691 136" marker-end="url(#sharpen-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="52" r="18" /><text x="691" y="52" class="docs-shot-number-text">7</text>
 <path class="docs-shot-arrow" d="M555 571 L639 571" marker-end="url(#sharpen-arrow)" />
 <circle class="docs-shot-number" cx="555" cy="571" r="18" /><text x="555" y="571" class="docs-shot-number-text">8</text>
 <path class="docs-shot-arrow" d="M676 379 L760 379" marker-end="url(#sharpen-arrow)" />
@@ -227,24 +227,24 @@ This is the horizontal pass of [Gaussian Blur](./gaussian-blur.md#horizontal-pas
 
 <div class="docs-shot-stage">
 
-![Inside the Row Darkest & Brightest folder, the brightest half: Tap Brightness minus Source Brightness, times the Row Tap Share, plus Source Brightness is the covered tap; Tap Alpha times the share is the tap weight; the covered tap's difference to Source Brightness, times Window Sharpness 64, goes through Exponential; Multiply and Combine Vector pack the weighted brightness, Kernel Sum (Rect) adds it up over the Window Taps, and Divide by the summed weight gives the row's brightest](../assets/effects/graphs/sharpen-rows.webp)
+![Inside the Row Darkest & Brightest folder, reduced to the brightest half: Source Brightness plus Share × (Tap − Source) by Add is the covered tap; 64 × (Tap − Source) goes through Exponential; Multiply and Combine Vector pack the weighted brightness into an image for Kernel Sum (Rect), whose weight is Tap Alpha times Row Tap Share; Split Vector, Maximum and Divide turn the sums into the row's brightest](../assets/effects/graphs/sharpen-rows.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 683" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 951" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-rows-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M208 198 L292 198" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="208" cy="198" r="18" /><text x="208" y="198" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M473 443 L557 443" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="473" cy="443" r="18" /><text x="473" y="443" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M208 356 L292 356" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="208" cy="356" r="18" /><text x="208" y="356" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M561 372 L645 372" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="561" cy="372" r="18" /><text x="561" y="372" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M827 368 L911 368" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="827" cy="368" r="18" /><text x="827" y="368" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M156 192 L240 192" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="156" cy="192" r="18" /><text x="156" y="192" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M995 342 L917 342" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="995" cy="342" r="18" /><text x="995" y="342" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M156 373 L240 373" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="156" cy="373" r="18" /><text x="156" y="373" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M22 749 L64 749" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="749" r="18" /><text x="22" y="749" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M509 741 L593 741" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="741" r="18" /><text x="509" y="741" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Row Darkest & Brightest, the brightest half (the darkest half mirrors it). 1 — Add: the tap, by its covered share. 2 — Multiply: the tap's weight. 3 — Exponential: brighter taps count far more. 4 — Kernel Sum (Rect): adds up the row. 5 — Divide: the row's brightest.</figcaption>
+<figcaption>Inside Row Darkest & Brightest, reduced to the brightest half (the darkest half mirrors it; the fixed values are left out). 1 — Add: the tap, by its covered share. 2 — Multiply: the tap's weight. 3 — Exponential: brighter taps count far more. 4 — Kernel Sum (Rect): adds up the row. 5 — Divide: the row's brightest.</figcaption>
 </figure>
 
 The folder reads every tap of the window along the row from the Premultiplied Source and turns it back into a plain brightness.
@@ -327,22 +327,22 @@ The same recipe as the horizontal pass, down the columns:
 
 <div class="docs-shot-stage">
 
-![Inside the Window Darkest & Brightest folder, the brightest half: Row Brightest minus Source Brightness, times the Column Tap Share, plus Source Brightness is the covered row value; its difference to Source Brightness times Window Sharpness 64 goes through Exponential; Multiply and Combine Vector pack the weighted brightness, Kernel Sum (Rect) adds it up over the Window Taps with the Column Tap Share as weight, and Divide by the summed weight gives the Brightest Nearby](../assets/effects/graphs/sharpen-window.webp)
+![Inside the Window Darkest & Brightest folder, reduced to the brightest half: Source Brightness plus Share × (Row − Source) by Add is the covered row value; 64 × (Row − Source) goes through Exponential; Multiply and Combine Vector pack the weighted brightness into an image for Kernel Sum (Rect), weighted by the Column Tap Share; Split Vector, Maximum and Divide give the Brightest Nearby](../assets/effects/graphs/sharpen-window.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 786" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 902" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-window-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M208 569 L292 569" marker-end="url(#sharpen-window-arrow)" />
-<circle class="docs-shot-number" cx="208" cy="569" r="18" /><text x="208" y="569" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M208 477 L292 477" marker-end="url(#sharpen-window-arrow)" />
-<circle class="docs-shot-number" cx="208" cy="477" r="18" /><text x="208" y="477" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M561 325 L645 325" marker-end="url(#sharpen-window-arrow)" />
-<circle class="docs-shot-number" cx="561" cy="325" r="18" /><text x="561" y="325" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M827 488 L911 488" marker-end="url(#sharpen-window-arrow)" />
-<circle class="docs-shot-number" cx="827" cy="488" r="18" /><text x="827" y="488" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M168 202 L252 202" marker-end="url(#sharpen-window-arrow)" />
+<circle class="docs-shot-number" cx="168" cy="202" r="18" /><text x="168" y="202" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M168 391 L252 391" marker-end="url(#sharpen-window-arrow)" />
+<circle class="docs-shot-number" cx="168" cy="391" r="18" /><text x="168" y="391" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M22 691 L67 691" marker-end="url(#sharpen-window-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="691" r="18" /><text x="22" y="691" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M538 682 L622 682" marker-end="url(#sharpen-window-arrow)" />
+<circle class="docs-shot-number" cx="538" cy="682" r="18" /><text x="538" y="682" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Window Darkest & Brightest, the brightest half. 1 — Add: a row's brightest, by its covered share. 2 — Exponential: the soft maximum. 3 — Kernel Sum (Rect): adds up the column. 4 — Divide: the brightest nearby.</figcaption>
+<figcaption>Inside Window Darkest & Brightest, reduced to the brightest half (the darkest half mirrors it). 1 — Add: a row's brightest, by its covered share. 2 — Exponential: the soft maximum. 3 — Kernel Sum (Rect): adds up the column. 4 — Divide: the brightest nearby.</figcaption>
 </figure>
 
 The same soft maximum and minimum, now down a column of the row results, so together they cover a square around the pixel.
@@ -361,24 +361,24 @@ The same soft maximum and minimum, now down a column of the row results, so toge
 
 <div class="docs-shot-stage">
 
-![Inside the Halo Limit folder, the brightening half: Brightest Nearby minus Darkest Nearby is the range; times Overshoot 0.05 and at least the Margin Floor 0.04 by Maximum it is the margin; Brightest Nearby plus the margin, at least Source Brightness, is the Ceiling; Sharpened Brightness minus the Ceiling, at least Zero, is the excess; divided by the Roll-off Scale (margin times Roll Off 0.5), plus One, through Natural Logarithm and times the scale it is the rolled-off excess; Clamp keeps the Sharpened Brightness between Floor and Ceiling, and Add puts the two together](../assets/effects/graphs/sharpen-halo-limit.webp)
+![Inside the Halo Limit folder, reduced to the brightening half: Range × Overshoot, at least the Margin Floor by Maximum, is the margin; Brightest Nearby plus the margin by Add, at least Source Brightness, is the Ceiling; Sharpened Brightness minus the Ceiling by Subtract, at least zero, is the excess; 1 + Excess ÷ Scale goes through Natural Logarithm and times the Roll-off Scale is the rolled-off excess; Clamp keeps the Sharpened Brightness between Floor and Ceiling, and Add puts the two together](../assets/effects/graphs/sharpen-halo-limit.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 598" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 817" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-halo-limit-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M165 324 L249 324" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="165" cy="324" r="18" /><text x="165" y="324" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M240 234 L324 234" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="240" cy="234" r="18" /><text x="240" y="234" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M389 324 L473 324" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="389" cy="324" r="18" /><text x="389" y="324" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M688 269 L772 269" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="688" cy="269" r="18" /><text x="688" y="269" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M763 337 L847 337" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="763" cy="337" r="18" /><text x="763" y="337" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M112 270 L196 270" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="112" cy="270" r="18" /><text x="112" y="270" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M274 270 L358 270" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="274" cy="270" r="18" /><text x="274" y="270" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M599 270 L683 270" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="599" cy="270" r="18" /><text x="599" y="270" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M437 436 L521 436" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="437" cy="436" r="18" /><text x="437" y="436" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M599 486 L683 486" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="599" cy="486" r="18" /><text x="599" y="486" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Halo Limit, the brightening half (the darkening half mirrors it). 1 — Maximum: the margin. 2 — Add: the Ceiling. 3 — Subtract: what passes the Ceiling. 4 — Natural Logarithm: rolls it off. 5 — Clamp: the part within range.</figcaption>
+<figcaption>Inside Halo Limit, reduced to the brightening half (the darkening half mirrors it; the fixed values are left out). 1 — Maximum: the margin. 2 — Add: the Ceiling. 3 — Subtract: what passes the Ceiling. 4 — Natural Logarithm: rolls it off. 5 — Clamp: the part within range.</figcaption>
 </figure>
 
 **Maximum** – the margin the result may go past the range: 5 % of the range between darkest and brightest nearby (**Overshoot**), but at least 0.04 (**Margin Floor**). Without it, flat areas could not gain any contrast at all.
@@ -432,5 +432,5 @@ The same soft maximum and minimum, now down a column of the row results, so toge
 - **Colour and transparency.** Only brightness is sharpened; the change goes to R, G and B alike and alpha is kept. The blur and the range read a premultiplied copy, so a cut-out on transparency gets no dark or bright rim.
 - **Zero and below.** Amount 0 leaves the picture exactly as it was. An Amount below 0 (typed or via tools) softens and is reported.
 - **Cost.** Three GPU passes, independent of the timeline time.
-- **Saved projects.** An untouched Sharpen saved with version 3.2.7 loads with this recipe: it fixes a flicker when Radius is animated and looks the same at Radius 0.5, 1, 1.5 … (in between, the difference is slight). A Sharpen saved before 2026-10-21 keeps its earlier graph without a halo limit; its card offers **Use the new Sharpen**. An edited node setup keeps its own recipe.
+- **Saved projects.** A Sharpen keeps the recipe it was saved with, so a project looks the same when it opens again. One saved with version 3.2.7 has a halo limit that can jump a step while Radius is animated; its card says so and offers **Use the new Sharpen**. The two match at Radius 0.5, 1, 1.5 … on a 1080p frame; in between, a strong Sharpen differs on fine detail (up to about 60 of 255 levels at Amount 2 to 5). A Sharpen saved before 2026-10-21 keeps its earlier graph without a halo limit and offers the same button. An edited node setup keeps its own recipe.
 - **More:** [Blur & Sharpen notes](../Effect-System.md#blur--sharpen-notes) · [Editable blur kernels](../Effect-System.md#editable-blur-kernels) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

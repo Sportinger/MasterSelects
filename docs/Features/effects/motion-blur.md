@@ -65,7 +65,7 @@ Pick one in the **Preset** row of the effect card. It sets Length and Angle in o
 
 **Length** – how far the streak reaches to each side of every pixel, as a share of the picture: of its width for a horizontal streak, of its height for a vertical one. The middle of the streak counts most and its ends fade out, so edges smear softly instead of showing ghost copies. 0.5–1% takes the edge off a movement, 1–3% is a quick move with faces still readable, the default 5% (about 96 px to each side in a 1080p frame) a fast one, 10% leaves only shapes and from 20% on only bands of colour remain. Because it counts in shares of the frame, a 4K export shows the same streak as the preview. Animated it changes smoothly, and 0 leaves the picture untouched. 0 to 30%, default 5%.
 
-**Angle** – which way the streak points: 0° is horizontal, 90° vertical, 45° diagonal. The streak runs to both sides, so 180° looks the same as 0°. Turning it changes the length a little too: Length counts the width for horizontal and the height for vertical streaks, so in a 16:9 frame a vertical streak is a bit more than half as long as a horizontal one at the same Length. 0 to 360°, default 0°.
+**Angle** – which way the streak points: 0° is horizontal, 90° vertical, 45° diagonal. The streak runs to both sides, so 180° looks the same as 0°. Turning it also changes the length: Length counts the width for horizontal and the height for vertical streaks, so in a 16:9 frame a vertical streak is only a bit more than half as long as a horizontal one at the same Length. 0 to 360°, default 0°.
 
 ## Node setup
 
@@ -77,8 +77,8 @@ Pick one in the **Preset** row of the effect card. It sets Length and Angle in o
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 550" aria-hidden="true" focusable="false">
 <defs><marker id="motion-blur-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M112 215 L196 215" marker-end="url(#motion-blur-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="215" r="18" /><text x="112" y="215" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M264 43 L264 127" marker-end="url(#motion-blur-arrow)" />
+<circle class="docs-shot-number" cx="264" cy="43" r="18" /><text x="264" y="43" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M274 459 L358 459" marker-end="url(#motion-blur-arrow)" />
 <circle class="docs-shot-number" cx="274" cy="459" r="18" /><text x="274" y="459" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M274 321 L358 321" marker-end="url(#motion-blur-arrow)" />
@@ -87,8 +87,8 @@ Pick one in the **Preset** row of the effect card. It sets Length and Angle in o
 <circle class="docs-shot-number" cx="437" cy="129" r="18" /><text x="437" y="129" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M599 226 L683 226" marker-end="url(#motion-blur-arrow)" />
 <circle class="docs-shot-number" cx="599" cy="226" r="18" /><text x="599" y="226" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M762 183 L846 183" marker-end="url(#motion-blur-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="183" r="18" /><text x="762" y="183" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M914 323 L914 239" marker-end="url(#motion-blur-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="323" r="18" /><text x="914" y="323" class="docs-shot-number-text">6</text>
 </svg>
 </div>
 
@@ -105,18 +105,18 @@ Motion Blur works in six stages, one folder each in the Nodes tab. **Blur Range*
 
 ![Inside the Blur Range folder: Angle goes into Direction from Angle, times Resolution, and Length measures that vector; Length, at least Zero by Maximum, times it gives the Half Length; times Two gives the Range Length, Zero minus the Half Length the Range Start, and Absolute the Longest Range](../assets/effects/graphs/motion-blur-blur-range.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 453" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 486" aria-hidden="true" focusable="false">
 <defs><marker id="motion-blur-blur-range-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M365 235 L449 235" marker-end="url(#motion-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="365" cy="235" r="18" /><text x="365" y="235" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M86 95 L170 95" marker-end="url(#motion-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="86" cy="95" r="18" /><text x="86" y="95" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M365 95 L449 95" marker-end="url(#motion-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="365" cy="95" r="18" /><text x="365" y="95" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M644 277 L728 277" marker-end="url(#motion-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="644" cy="277" r="18" /><text x="644" y="277" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M783 98 L867 98" marker-end="url(#motion-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="783" cy="98" r="18" /><text x="783" y="98" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M508 421 L508 337" marker-end="url(#motion-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="421" r="18" /><text x="508" y="421" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M230 22 L230 79" marker-end="url(#motion-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="22" r="18" /><text x="230" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M508 22 L508 79" marker-end="url(#motion-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="22" r="18" /><text x="508" y="22" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M644 310 L728 310" marker-end="url(#motion-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="644" cy="310" r="18" /><text x="644" y="310" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M926 22 L926 79" marker-end="url(#motion-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="926" cy="22" r="18" /><text x="926" y="22" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -139,25 +139,25 @@ Motion Blur works in six stages, one folder each in the Nodes tab. **Blur Range*
 
 <div class="docs-shot-stage">
 
-![Inside the Tap Counts & Box Length folder: Longest Range times Two goes through Square Root and Ceiling and is clamped between One and Coarse Limit 64 into the Coarse Taps; Longest Range divided by the Coarse Taps, at least Tiny by Maximum, gives the Box Length](../assets/effects/graphs/motion-blur-tap-counts.webp)
+![Inside the Tap Counts & Box Length folder: Longest Range times Two goes through Square Root and is clamped between One and Coarse Limit 64 into the Coarse Taps, not rounded; Longest Range divided by the Coarse Taps, at least Tiny by Maximum, gives the Box Length](../assets/effects/graphs/motion-blur-tap-counts.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 667" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 666" aria-hidden="true" focusable="false">
 <defs><marker id="motion-blur-tap-counts-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M226 354 L310 354" marker-end="url(#motion-blur-tap-counts-arrow)" />
-<circle class="docs-shot-number" cx="226" cy="354" r="18" /><text x="226" y="354" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M504 396 L588 396" marker-end="url(#motion-blur-tap-counts-arrow)" />
-<circle class="docs-shot-number" cx="504" cy="396" r="18" /><text x="504" y="396" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M783 372 L867 372" marker-end="url(#motion-blur-tap-counts-arrow)" />
-<circle class="docs-shot-number" cx="783" cy="372" r="18" /><text x="783" y="372" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M427 162 L427 246" marker-end="url(#motion-blur-tap-counts-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="162" r="18" /><text x="427" y="162" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M589 548 L589 464" marker-end="url(#motion-blur-tap-counts-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="548" r="18" /><text x="589" y="548" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M762 327 L846 327" marker-end="url(#motion-blur-tap-counts-arrow)" />
+<circle class="docs-shot-number" cx="762" cy="327" r="18" /><text x="762" y="327" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
 <figcaption>Inside Tap Counts & Box Length. 1 — Square Root: the balance of both stages. 2 — Clamp: how many pieces. 3 — Maximum: how long one piece is.</figcaption>
 </figure>
 
-**Square Root** – the square root of twice the streak length. Cutting the streak into that many pieces gives both stages about the same work: a 192 px streak (the default in a 1080p frame) becomes 20 pieces of about 10 px, so a pixel reads about 30 times instead of 192.
+**Square Root** – the square root of twice the streak length. Cutting the streak into that many pieces gives both stages about the same work: a 192 px streak (the default in a 1080p frame) becomes about 20 pieces of about 10 px, so a pixel reads about 30 times instead of 192.
 
-**Clamp** – rounds that up and keeps it between 1 and 64: the Coarse Taps, the number of pieces Stage B reads.
+**Clamp** – keeps that between 1 and 64 without rounding it: the Coarse Taps, the number of pieces Stage B reads. It is rarely a whole number; the last piece then counts only with the share of it that fits (Stage B), so the pieces grow smoothly with Length instead of jumping by one.
 
 **Maximum** – the streak divided by the number of pieces: the Box Length, how long one piece is. It never reaches 0, so a zero streak cannot divide by zero.
 
@@ -191,29 +191,33 @@ Motion Blur works in six stages, one folder each in the Nodes tab. **Blur Range*
 
 <div class="docs-shot-stage">
 
-![Inside the Stage A folder, reduced to its recipe: Box Length rounded up by Ceiling and clamped between One and Fine Limit 256; the Read position goes through Mirror Repeat into Sample Image, which reads the Premultiplied Source; Sequence Reduce adds up the reads, Normalize by Weight divides by their number and Cache Image keeps the Short Boxes](../assets/effects/graphs/motion-blur-stage-a.webp)
+![Inside the Stage A folder, reduced to its recipe: Half Box (px) divided by Cell (px) gives the half box in cells; minus the Ring and clamped between 0 and 1 it is the share of that ring's cell the piece covers, at least a tiny floor by Maximum the Fine Weight; Fine Taps sets how many reads; the Read position goes through Mirror Repeat into Sample Image, which reads the Premultiplied Source; Sequence Reduce adds up the weighted reads, Normalize by Weight turns the sum into an average and Cache Image keeps the Short Boxes](../assets/effects/graphs/motion-blur-stage-a.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 983" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 602" aria-hidden="true" focusable="false">
 <defs><marker id="motion-blur-stage-a-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M274 840 L358 840" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="274" cy="840" r="18" /><text x="274" y="840" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M112 525 L196 525" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="525" r="18" /><text x="112" y="525" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M437 402 L521 402" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="402" r="18" /><text x="437" y="402" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M762 381 L846 381" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="381" r="18" /><text x="762" y="381" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M204 96 L204 180" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="96" r="18" /><text x="204" y="96" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 22 L448 180" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M448 535 L448 451" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="535" r="18" /><text x="448" y="535" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M691 384 L691 300" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="384" r="18" /><text x="691" y="384" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M935 351 L935 267" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="351" r="18" /><text x="935" y="351" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Stage A, reduced to its recipe (how the read position is worked out is left out). 1 — Clamp: reads per piece. 2 — Mirror Repeat: mirrors at the frame edge. 3 — Sequence Reduce: adds up the reads. 4 — Cache Image: keeps the short pieces.</figcaption>
+<figcaption>Inside Stage A, reduced to its recipe (how the read position is worked out is left out, and so are the fixed values). 1 — Divide: the half piece in cells. 2 — Clamp: how much of a cell counts. 3 — Mirror Repeat: mirrors at the frame edge. 4 — Sequence Reduce: adds up the reads. 5 — Cache Image: keeps the short pieces.</figcaption>
 </figure>
 
-**Clamp** – the Box Length rounded up, between 1 and 256: one read per pixel of the piece, so no pixel along it is skipped.
+**Divide** – half the Box Length in cells of one pixel: how far the piece reaches to each side of this pixel. Only a piece longer than 256 px gets cells wider than a pixel (Cell), so a pixel never reads more than 256 times here. The number of reads (Fine Taps) is twice the rings needed to reach the end of the piece.
+
+**Clamp** – the reads sit one pixel apart, in pairs from the pixel outward, each in the middle of its one-pixel cell. A cell the piece covers only partly counts with that share, and its read moves to the middle of the covered part; Maximum keeps every weight just above 0. So the piece grows smoothly with Length: a new pair enters with weight 0 and grows in, and even a piece shorter than a pixel blurs a little instead of leaving the picture unchanged.
 
 **Mirror Repeat** – where a read falls outside the frame, it is mirrored back in. The streak at the frame edge therefore continues the picture instead of fading to black or repeating the last pixel as a hard line.
 
-**Sequence Reduce** – reads the Premultiplied Source at every position along the piece (**Sample Image**) and adds up the reads; Normalize by Weight turns the sum into an average.
+**Sequence Reduce** – reads the Premultiplied Source at every position along the piece (**Sample Image**) and adds up the reads, each times its weight; Normalize by Weight divides by the summed weight, so the sum becomes an average.
 
 **Cache Image** – keeps, for every pixel, the average of the short piece around it: the Short Boxes that Stage B reads.
 
@@ -286,9 +290,9 @@ Motion Blur works in six stages, one folder each in the Nodes tab. **Blur Range*
 ## Technical details
 
 - **Units.** The streak reaches Length × |(cos × width, sin × height)| pixels to each side: a share of the frame width for horizontal and of the height for vertical streaks, so saved projects and the Film Roll transition keep their streaks on every aspect ratio. Angle is the exact on-screen direction; it is stored in radians (0–6.28) for tools and keyframes, and the card shows degrees. Length is stored as a share (0–0.3), and the card shows percent.
-- **Two stages.** About 2 × √(2 × streak length in pixels) reads per pixel: Stage B reads up to 64 pieces, Stage A up to 256 pixels per piece. A streak beyond 64 × 256 pixels (only on very large frames) reads its pieces further apart, and the card and the tool result say so.
+- **Two stages.** About 2 × √(2 × streak length in pixels) reads per pixel: Stage B reads up to 64 pieces, Stage A up to 256 pixels per piece. Neither count is rounded to a whole read: the last piece and the outermost reads count with the share of them that fits, so the blur changes smoothly when the amount is animated. A streak beyond 64 × 256 pixels (only on very large frames) reads its pieces further apart, and the card and the tool result say so.
 - **Edges.** At the frame edge the picture is mirrored. Transparent edges smear without a dark rim, and the preview and the export match.
 - **Below 0 and zero.** A negative Length leaves the picture unchanged, as in earlier versions, and the card and the tool result say so. An unedited Motion Blur at Length 0 is skipped, so the picture passes through exactly.
 - **Software preview.** Where the editor falls back to its software preview, Motion Blur reads up to 64 taps along the same path in one stage; very long streaks can look stepped there, and the `SoftwareBlur` log says so.
-- **Saved projects.** They keep their look. The old Samples value is kept in the project but no longer changes anything. A Motion Blur whose node setup you edited keeps its own recipe.
+- **Saved projects.** They keep their look, with one fix: an unedited Motion Blur saved with version 3.2.7 loads with the current recipe, whose counts never step (that one jumped a little where an animated amount added a read, and left a streak under about a pixel unchanged). Still pictures differ by less than half a level on average. The old Samples value is kept in the project but no longer changes anything. A Motion Blur whose node setup you edited keeps its own recipe.
 - **More:** [Blur & Sharpen notes](../Effect-System.md#blur--sharpen-notes) · [Editable blur kernels](../Effect-System.md#editable-blur-kernels) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

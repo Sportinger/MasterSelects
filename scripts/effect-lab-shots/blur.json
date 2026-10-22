@@ -90,7 +90,7 @@
     {
       "name": "radial-blur",
       "out": "docs/Features/assets/effects/radial-blur.webp",
-      "image": "dancer_stage",
+      "image": "harbor_town",
       "width": 1920,
       "layout": "compare",
       "left": {
@@ -103,7 +103,7 @@
           "amount": 0.5
         }
       },
-      "alt": "The dancer on the dark stage, original left and with Radial Blur in Spin mode at Amount 0.5 right: her arms, dress and the stage floor smear in arcs around her middle, as if she spun in a pirouette while the shutter was open",
+      "alt": "The harbour town, original left and with Radial Blur in Spin mode at Amount 0.5 right: the houses in the middle stay readable, while the hillside, the boats and the water around them smear in circles around the centre of the frame",
       "caption": "Left: original. Right: Type Spin, Amount 0.5."
     },
     {
