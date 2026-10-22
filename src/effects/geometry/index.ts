@@ -2,6 +2,9 @@ import shader from './shader.wgsl?raw';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { createGlyphEffect } from '../glyph/glyphEffectFactory';
 import { createComputeEffect } from './computeEffectFactory';
+import { CONTOUR_MAP_PARAMS, CONTOUR_MAP_PRESETS } from './contourMap';
+import { CROSSHATCH_PARAMS, CROSSHATCH_PRESETS } from './crosshatch';
+import { VECTOR_ENGRAVING_PARAMS, VECTOR_ENGRAVING_PRESETS } from './vectorEngraving';
 import type { ComputeEffectDefinition } from '../types';
 
 export const voronoi = createComputeEffect({
@@ -54,13 +57,17 @@ export const contour = createComputeEffect({
     threshold: { type: 'number', label: 'Iso Level', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Structure' },
   },
 });
-// Scale counts the bands (contourMapFragment: levels = scale x 0.35), the reverse of a cell size: its own role.
+// Scale counts the bands (contourMapFragment: bands = scale x 0.35, from 60/7 = 3 bands as saved projects drew), the reverse of a cell size: its own role.
 export const contourMap = createCatalogEffect({ id: 'contour-map', name: 'Contour Map', category: 'geometry', shader, entryPoint: 'contourMapFragment',
-  params: { scale: catalogBaseParam('scale', { label: 'Band Density', styleRole: 'band-count' }) },
-  retired: ignoredBaseParams('Contour Map', ['angle']) });
+  params: { scale: catalogBaseParam('scale', { label: 'Band Density', styleRole: 'band-count', min: 9, renderMin: 60 / 7 }), ...CONTOUR_MAP_PARAMS },
+  variantParam: 'lineWidth', angleSlotParam: 'fill', presets: CONTOUR_MAP_PRESETS, retired: ignoredBaseParams('Contour Map', ['angle']) });
 export const contourType = createGlyphEffect({ id: 'contour-type', name: 'Contour Type', category: 'geometry', entryPoint: 'contourTypeFragment', defaultRamp: 'numeric', defaultCellSize: 20 });
-export const vectorTiling = createCatalogEffect({ id: 'vector-tiling', name: 'Vector Engraving', category: 'geometry', shader, entryPoint: 'vectorTilingFragment', scaleFloor: 3 });
-export const crosshatch = createCatalogEffect({ id: 'crosshatch', name: 'Crosshatch', category: 'geometry', shader, entryPoint: 'crosshatchFragment', scaleFloor: 2, retired: ignoredBaseParams('Crosshatch', ['angle']) });
+// Line Spacing starts at 10 px for new cards (a face keeps its lines); saved projects without it read the old 14.
+export const vectorTiling = createCatalogEffect({ id: 'vector-tiling', name: 'Vector Engraving', category: 'geometry', shader, entryPoint: 'vectorTilingFragment', scaleFloor: 3,
+  params: { scale: catalogBaseParam('scale', { label: 'Line Spacing', unit: ' px', min: 3, default: 10, legacyDefault: 14 }),
+    angle: catalogBaseParam('angle', { unit: '°' }), ...VECTOR_ENGRAVING_PARAMS }, variantParam: 'weight', presets: VECTOR_ENGRAVING_PRESETS });
+export const crosshatch = createCatalogEffect({ id: 'crosshatch', name: 'Crosshatch', category: 'geometry', shader, entryPoint: 'crosshatchFragment', scaleFloor: 2,
+  params: { scale: catalogBaseParam('scale', { label: 'Line Spacing', unit: ' px' }), ...CROSSHATCH_PARAMS }, variantParam: 'weight', presets: CROSSHATCH_PRESETS, retired: ignoredBaseParams('Crosshatch', ['angle']) });
 export const embroidery = createCatalogEffect({ id: 'embroidery', name: 'Embroidery', category: 'geometry', shader, entryPoint: 'embroideryFragment', scaleFloor: 3, animated: true, retired: ignoredBaseParams('Embroidery', ['angle', 'colorB']) });
 export const kilim = createCatalogEffect({ id: 'kilim', name: 'Kilim Carpet', category: 'geometry', shader, entryPoint: 'kilimFragment', scaleFloor: 4, retired: ignoredBaseParams('Kilim Carpet', ['angle']) });
 export const outline = createCatalogEffect({ id: 'outline', name: 'Outline', category: 'geometry', shader, entryPoint: 'outlineFragment', animated: true, retired: ignoredBaseParams('Outline', ['scale', 'angle']) });

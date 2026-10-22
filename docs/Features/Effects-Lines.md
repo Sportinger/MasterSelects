@@ -10,10 +10,10 @@ Add one in **Properties → Effects → + Add Effect → Lines & Engraving**
 
 | Look | Use |
 |---|---|
-| pen hatching, more directions where it is darker | [Crosshatch](./effects/crosshatch.md) |
+| pen hatching, more and heavier lines where it is darker | [Crosshatch](./effects/crosshatch.md) |
 | rows of engraved wavy lines, like a banknote | [Vector Engraving](./effects/vector-tiling.md) |
 | clean lines where the brightness crosses one level | [Contour](./effects/contour.md) |
-| banded zones with a line at each band, like a map | [Contour Map](./effects/contour-map.md) |
+| banded zones with a fine contour line on every band edge, like a hiking map | [Contour Map](./effects/contour-map.md) |
 | an edge drawing | [Outline](./effects/outline.md) |
 | wavy line art on a plain background | [Wave Lines](./effects/wave-lines.md) |
 | bands of the picture drifting sideways | [Drift Lines](./effects/drift-lines.md) |
@@ -23,13 +23,13 @@ Add one in **Properties → Effects → + Add Effect → Lines & Engraving**
 They all read the brightness of the picture and turn it into lines, in one of three ways:
 
 - **Lines across the tones**: Crosshatch, Vector Engraving and Wave Lines draw a line pattern whose
-  density or waviness follows how dark the picture is.
+  density, weight or waviness follows how dark the picture is.
 - **Lines along the tones**: Contour and Contour Map draw where the brightness crosses a level, like
   height lines on a map.
 - **Lines along edges**: Outline draws where the brightness changes quickly.
 
 **Ink** and **Paper** (Contour: **Line** and **Paper**) are the two colours of the drawing, **Scale**
-sets the line spacing (Contour Map: **Band Density**, more bands as it grows) and **Amount** mixes back
+sets the line spacing (Crosshatch and Vector Engraving: **Line Spacing**; Contour Map: **Band Density**, more bands as it grows) and **Amount** mixes back
 towards the original. Drift Lines, Outline and Wave
 Lines move over time.
 

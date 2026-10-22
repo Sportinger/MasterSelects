@@ -21,12 +21,6 @@ fn toneAt(uv: vec2f) -> f32 {
   return luminance(source(uv).rgb);
 }
 
-fn rotatedGeometry(uv: vec2f) -> vec2f {
-  let angle = params.angle * PI / 180.0;
-  let point = uv - 0.5;
-  return vec2f(point.x * cos(angle) - point.y * sin(angle), point.x * sin(angle) + point.y * cos(angle)) + 0.5;
-}
-
 @fragment
 fn quadtreeZoomFragment(input: VertexOutput) -> @location(0) vec4f {
   let pixel = 1.0 / params.resolution;
@@ -48,14 +42,26 @@ fn contourFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(mix(color.rgb, mix(params.colorB.rgb, params.colorA.rgb, contourLine), params.amount), color.a);
 }
 
+// Contour Map (geometryFragmentEffectGraphs.ts CONTOUR_MAP). The graph reads the tone through Smoothing (patternCellFilter.ts);
+// this twin reads the pixel itself.
 @fragment
 fn contourMapFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
-  let levels = max(3.0, params.scale * 0.35);
-  let quantized = floor(luminance(color.rgb) * levels) / max(1.0, levels - 1.0);
-  let bandColor = mix(params.colorA.rgb, params.colorB.rgb, quantized);
-  let line = 1.0 - smoothstep(0.02, 0.09, abs(fract(luminance(color.rgb) * levels) - 0.5));
-  return vec4f(mix(color.rgb, bandColor * (0.72 + line * 0.28), params.amount), color.a);
+  let levels = max(params.scale, 60.0 / 7.0) * 0.35;
+  let texel = 1.0 / params.resolution;
+  let height = luminance(color.rgb) * levels;
+  let slope = max(length(vec2f(
+    luminance(source(input.uv + vec2f(texel.x, 0.0)).rgb) - luminance(source(input.uv - vec2f(texel.x, 0.0)).rgb),
+    luminance(source(input.uv + vec2f(0.0, texel.y)).rgb) - luminance(source(input.uv - vec2f(0.0, texel.y)).rgb)) * levels * 0.5), 1e-4);
+  let nearest = floor(height + 0.5);
+  // Line Width (variant slot) in 1080p pixels; a line under one pixel fades. No line at pure black or white.
+  let width = max(params.variant, 0.0) * min(params.resolution.x, params.resolution.y) / 1080.0;
+  let line = clamp(width * 0.5 + 0.5 - abs(height - nearest) / slope, 0.0, 1.0) * min(width, 1.0)
+    * step(0.5, nearest) * step(nearest, levels - 0.5);
+  let quantized = min(1.0, floor(height) / max(1.0, ceil(levels) - 1.0));
+  // Fill (Angle slot): bands tinted from Paper (0) to the full Ink-to-Paper range (1).
+  let band = mix(params.colorB.rgb, mix(params.colorA.rgb, params.colorB.rgb, quantized), clamp(params.angle, 0.0, 1.0));
+  return vec4f(mix(color.rgb, mix(band, params.colorA.rgb, line), params.amount), color.a);
 }
 
 // Pattern sizes count pixels of a 1080p frame (shorter side), as the graphs do (patternReferenceFrame.ts).
@@ -63,26 +69,46 @@ fn referencePixels(size: f32) -> f32 {
   return max(size * (min(params.resolution.x, params.resolution.y) / 1080.0), 1.0);
 }
 
+// Vector Engraving (geometryFragmentEffectGraphs.ts ENGRAVING_LINE). The graph reads the tone from the picture
+// averaged over half a line spacing (patternCellFilter.ts); this twin reads the pixel itself.
 @fragment
 fn vectorTilingFragment(input: VertexOutput) -> @location(0) vec4f {
-  let uv = rotatedGeometry(input.uv);
-  let grid = params.resolution / referencePixels(max(params.scale, 3.0));
-  let cell = fract(uv * grid) - 0.5;
-  let tone = toneAt((floor(uv * grid) + 0.5) / grid);
-  let engraving = 1.0 - smoothstep(0.025, 0.09, abs(cell.y - sin(cell.x * 10.0) * (1.0 - tone) * 0.18));
+  let angle = params.angle * PI / 180.0;
+  let point = input.uv * params.resolution - params.resolution * 0.5;
+  let turned = vec2f(point.x * cos(angle) - point.y * sin(angle), point.x * sin(angle) + point.y * cos(angle));
+  let spacing = referencePixels(max(params.scale, 3.0));
+  let line = turned / spacing;
+  let darkness = 1.0 - toneAt(input.uv);
+  let across = line.y - sin(line.x * 2.1) * darkness * 0.3;
+  // Line Weight (variant slot, 0-1): 0 keeps the fixed width, 1 swells each line from a hairline on white.
+  // The hairline is at least half a pixel wide, the edge 0.75 px soft at every spacing (LINE_EDGE_PIXELS).
+  let width = mix(0.0575, clamp(darkness * 0.46, max(0.02, 0.5 / spacing), 0.46), clamp(params.variant, 0.0, 1.0));
+  let soft = 0.75 / spacing;
+  let engraving = 1.0 - smoothstep(width - soft, width + soft, abs(fract(across) - 0.5));
   let color = source(input.uv);
   return vec4f(mix(color.rgb, mix(params.colorB.rgb, params.colorA.rgb, engraving), params.amount), color.a);
+}
+
+// One Crosshatch line layer (geometryFragmentEffectGraphs.ts HATCH_LAYERS): drawn only where tone <= limit.
+// `soft` is LINE_EDGE_PIXELS (0.75 px) in units of the layer's coordinate.
+fn hatchLine(coordinate: f32, low: f32, high: f32, limit: f32, heavy: f32, soft: f32, tone: f32, weight: f32) -> f32 {
+  let width = mix((low + high) * 0.5, clamp((limit - tone) * (heavy / limit), 0.03, heavy), weight);
+  return (1.0 - smoothstep(width - soft, width + soft, abs(fract(coordinate) - 0.5))) * step(tone, limit);
 }
 
 @fragment
 fn crosshatchFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
   let tone = luminance(color.rgb);
-  let pixel = input.uv * params.resolution / referencePixels(max(params.scale, 2.0));
-  let first = 1.0 - smoothstep(0.06, 0.15, abs(fract(pixel.x + pixel.y) - 0.5));
-  let second = 1.0 - smoothstep(0.06, 0.15, abs(fract(pixel.x - pixel.y) - 0.5));
-  let third = 1.0 - smoothstep(0.05, 0.13, abs(fract(pixel.x * 0.5) - 0.5));
-  let hatch = max(first * step(tone, 0.82), max(second * step(tone, 0.58), third * step(tone, 0.32)));
+  let spacing = referencePixels(max(params.scale, 2.0));
+  let pixel = input.uv * params.resolution / spacing;
+  // Line Weight (variant slot, 0-1): 0 keeps the fixed widths, 1 swells each line from a hairline at its tone limit.
+  let weight = clamp(params.variant, 0.0, 1.0);
+  let diagonalSoft = 0.75 * 1.41421356 / spacing;
+  let first = hatchLine(pixel.x + pixel.y, 0.06, 0.15, 0.82, 0.3, diagonalSoft, tone, weight);
+  let second = hatchLine(pixel.x - pixel.y, 0.06, 0.15, 0.58, 0.3, diagonalSoft, tone, weight);
+  let third = hatchLine(pixel.x * 0.5, 0.05, 0.13, 0.32, 0.2, 0.375 / spacing, tone, weight);
+  let hatch = max(first, max(second, third));
   return vec4f(mix(color.rgb, mix(params.colorB.rgb, params.colorA.rgb, hatch), params.amount), color.a);
 }
 

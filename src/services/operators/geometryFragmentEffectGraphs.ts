@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge, OperatorValue } from '../../types/operatorGraph';
+import { prefilterCellTaps } from './patternCellFilter';
 import { measureInReferenceFrame } from './patternReferenceFrame';
 
 export type EditableGeometryFragmentEffectType = 'contour-map' | 'crosshatch' | 'kilim' | 'vector-tiling' | 'embroidery' | 'outline' | 'bricks';
@@ -46,38 +47,106 @@ function finish(g: GraphBuilder, sourceColor: Ref, styled: Ref, amount: Ref, alp
   const output = g.node('output', 'image.output', 18); g.edge(combined, output, 'image');
 }
 
+/** Contour Map (shader twin: contourMapFragment). Band Density × `levelsPerDensity` bands; a value under `minimumDensity`
+ * renders it (3 bands, what Band Density 2 to 8.5 drew before) and the card says so. Lines sit on the band edges at a width in pixels, whatever the slope. */
+export const CONTOUR_MAP = { levelsPerDensity: .35, minimumDensity: 60 / 7, flatSlope: 1e-4 } as const;
+
 function contourMap(g: GraphBuilder, c: ReturnType<typeof common>) {
-  const scale = g.node('scale', 'values.number', 0, { value: 'scale' }), three = g.literal('three', 3), point35 = g.literal('point-35', .35);
-  const levels = g.binary('levels', 'math.max.scalar', three, g.binary('scaled-levels', 'math.multiply.scalar', scale, point35, 5), 6);
-  const toneLevels = g.binary('tone-levels', 'math.multiply.scalar', c.tone!, levels, 7);
-  const denominator = g.binary('level-denominator', 'math.max.scalar', c.one, g.binary('levels-minus-one', 'math.subtract.scalar', levels, c.one, 7), 8);
-  const quantized = g.binary('quantized', 'math.divide-ieee.scalar', g.unary('quantized-floor', 'math.floor.scalar', toneLevels, 8), denominator, 9);
-  const band = g.node('band-color', 'math.mix.rgb', 10); g.edge(c.colorA!, band, 'a'); g.edge(c.colorB!, band, 'b'); g.edge(quantized, band, 't');
-  const centered = g.binary('band-centered', 'math.subtract.scalar', g.unary('band-fraction', 'math.fract.scalar', toneLevels, 8), g.literal('half', .5), 9);
-  const distance = g.unary('band-distance', 'math.abs.scalar', centered, 10), smooth = g.node('line-smooth', 'math.smoothstep.scalar', 11);
-  g.edge(g.literal('line-low', .02), smooth, 'edge0'); g.edge(g.literal('line-high', .09), smooth, 'edge1'); g.edge(distance, smooth, 'value');
-  const line = g.binary('line', 'math.subtract.scalar', c.one, smooth, 12);
-  const brightness = g.binary('band-brightness', 'math.add.scalar', g.literal('brightness-base', .72),
-    g.binary('line-gain', 'math.multiply.scalar', line, g.literal('brightness-gain', .28), 12), 13);
-  const styled = g.node('styled', 'math.multiply.rgb-scalar', 14); g.edge(band, styled, 'a'); g.edge(brightness, styled, 'b'); finish(g, c.sourceColor, styled, c.amount);
+  const scale = g.binary('scale-clamped', 'math.max.scalar', g.node('scale', 'values.number', 0, { value: 'scale' }), g.literal('minimum-density', CONTOUR_MAP.minimumDensity), 5);
+  const levels = g.binary('levels', 'math.multiply.scalar', scale, g.literal('levels-per-density', CONTOUR_MAP.levelsPerDensity), 6);
+  // The tone at the pixel and one pixel to each side, read from the picture averaged over Smoothing (prefilterCellTaps).
+  const step = g.binary('pixel-step', 'math.divide-ieee.vec2', g.unary('one-vec2', 'convert.scalar-to-vec2', c.one, 5), c.resolution, 6);
+  const parts = g.unary('pixel-step-components', 'vector.split.vec2', step, 7), px = { node: parts.node, port: 'x' }, py = { node: parts.node, port: 'y' };
+  const negative = (id: string, value: Ref) => g.binary(id, 'math.subtract.scalar', c.zero, value, 8);
+  const offsets: [Ref, Ref][] = [[px, c.zero], [negative('pixel-left', px), c.zero], [c.zero, py], [c.zero, negative('pixel-up', py)]];
+  const toneAt = (index: number) => {
+    const at = index === 0 ? c.uv : g.binary(`tap-${index}-uv`, 'math.add.vec2', c.uv, g.vec2(`tap-${index}-offset`, offsets[index - 1][0], offsets[index - 1][1], 8), 9);
+    return g.unary(`tap-${index}-tone`, 'color.luminance-rec709.image', sampleAt(g, c, `tap-${index}-sample`, at, 10), 12, 'image');
+  };
+  const [tone, right, left, down, up] = [0, 1, 2, 3, 4].map(toneAt);
+  const height = g.binary('height', 'math.multiply.scalar', tone, levels, 13);
+  // Slope: bands per pixel (central differences); the distance to the nearest band edge in pixels is distance ÷ slope.
+  const halfLevels = g.binary('half-levels', 'math.multiply.scalar', levels, g.literal('half', .5), 7);
+  const slopeX = g.binary('slope-x', 'math.multiply.scalar', g.binary('tone-dx', 'math.subtract.scalar', right, left, 13), halfLevels, 14);
+  const slopeY = g.binary('slope-y', 'math.multiply.scalar', g.binary('tone-dy', 'math.subtract.scalar', down, up, 13), halfLevels, 14);
+  const slope = g.binary('safe-slope', 'math.max.scalar', g.unary('slope', 'vector.length.vec2', g.vec2('slope-vector', slopeX, slopeY, 15), 16, 'value'),
+    g.literal('flat-slope', CONTOUR_MAP.flatSlope), 17);
+  const nearest = g.unary('nearest-edge', 'math.floor.scalar', g.binary('height-rounding', 'math.add.scalar', height, g.literal('half-band', .5), 14), 15);
+  const distance = g.binary('edge-distance', 'math.divide-ieee.scalar',
+    g.unary('band-edge-distance', 'math.abs.scalar', g.binary('height-offset', 'math.subtract.scalar', height, nearest, 16), 17), slope, 18);
+  // Line Width in pixels of a 1080p frame (measured in the frame below); a line under one pixel fades instead of thinning.
+  const width = g.binary('lineWidth-clamped', 'math.max.scalar', g.node('line-width', 'values.number', 0, { value: 'lineWidth' }), c.zero, 5);
+  const coverage = g.node('line-coverage', 'math.clamp.scalar', 19);
+  g.edge(g.binary('line-reach', 'math.subtract.scalar', g.binary('line-outer', 'math.add.scalar',
+    g.binary('line-half', 'math.multiply.scalar', width, g.literal('line-half-share', .5), 17), g.literal('line-soft', .5), 18), distance, 19), coverage, 'value');
+  g.edge(c.zero, coverage, 'min'); g.edge(c.one, coverage, 'max');
+  const thin = g.binary('line-opacity', 'math.min.scalar', width, c.one, 18);
+  // Only edges between two bands: none at pure black (edge 0) or at the top of the last band (pure white).
+  const above = g.node('edge-above-black', 'math.step.scalar', 16); g.edge(g.literal('half-edge', .5), above, 'edge'); g.edge(nearest, above, 'value');
+  const below = g.node('edge-below-white', 'math.step.scalar', 16); g.edge(nearest, below, 'edge');
+  g.edge(g.binary('last-edge', 'math.subtract.scalar', levels, g.literal('half-step', .5), 15), below, 'value');
+  const line = g.binary('line', 'math.multiply.scalar', g.binary('line-shape', 'math.multiply.scalar', coverage, thin, 20),
+    g.binary('inner-edge', 'math.multiply.scalar', above, below, 17), 21);
+  // Bands from Ink (dark) to Paper (light); Fill tints them from Paper (0, lines only) to the full range (1).
+  const bandCount = g.binary('band-steps', 'math.max.scalar', c.one, g.binary('bands-minus-one', 'math.subtract.scalar', g.unary('band-count', 'math.ceil.scalar', levels, 7), c.one, 8), 9);
+  const quantized = g.binary('quantized', 'math.min.scalar', c.one, g.binary('band-position', 'math.divide-ieee.scalar', g.unary('band-index', 'math.floor.scalar', height, 14), bandCount, 15), 16);
+  const band = g.node('band-color', 'math.mix.rgb', 17); g.edge(c.colorA!, band, 'a'); g.edge(c.colorB!, band, 'b'); g.edge(quantized, band, 't');
+  const fill = g.node('fill-clamped', 'math.clamp.scalar', 5); g.edge(g.node('fill', 'values.number', 0, { value: 'fill' }), fill, 'value'); g.edge(c.zero, fill, 'min'); g.edge(c.one, fill, 'max');
+  const filled = g.node('filled-band', 'math.mix.rgb', 18); g.edge(c.colorB!, filled, 'a'); g.edge(band, filled, 'b'); g.edge(fill, filled, 't');
+  const styled = g.node('styled', 'math.mix.rgb', 22); g.edge(filled, styled, 'a'); g.edge(c.colorA!, styled, 'b'); g.edge(line, styled, 't');
+  // Smoothing: the box the taps read through, in pixels of a 1080p frame (the Cell Filter averages half a "cell").
+  const smoothing = g.node('smoothing-clamped', 'math.clamp.scalar', 5);
+  g.edge(g.node('smoothing', 'values.number', 0, { value: 'smoothing' }), smoothing, 'value'); g.edge(c.zero, smoothing, 'min'); g.edge(g.literal('smoothing-max', 32), smoothing, 'max');
+  g.binary('smoothing-cell', 'math.multiply.scalar', smoothing, g.literal('smoothing-cell-share', 2), 6);
+  finish(g, c.sourceColor, styled, c.amount);
 }
+
+/** Crosshatch's three line layers (shader twin: crosshatchFragment). Widths are shares of the line spacing: a line is
+ * darker than `toneLimit` only, its fixed half width is (low + high) / 2; `heavy` caps the swell so a paper gap of about
+ * 1.5 px survives between the diagonals at 6 px spacing, and the coarse upright set stays thinner than they are, so
+ * the shadows read as crossing strokes, not as a dot screen or a fence of bars. `pitch` is how far the layer's coordinate moves per spacing of pixels
+ * across its lines (√2 on the diagonals, ½ on the upright set at twice the spacing). */
+interface HatchLayer { toneLimit: number; low: number; high: number; heavy: number; pitch: number }
+export const HATCH_LAYERS: readonly HatchLayer[] = [
+  { toneLimit: .82, low: .06, high: .15, heavy: .3, pitch: Math.SQRT2 },
+  { toneLimit: .58, low: .06, high: .15, heavy: .3, pitch: Math.SQRT2 },
+  { toneLimit: .32, low: .05, high: .13, heavy: .2, pitch: .5 },
+];
+/** Half width a heavy line starts at, at its layer's tone limit. */
+export const HATCH_HAIRLINE = .03;
+/** Half the soft edge of every line of the Lines looks, in output pixels: about one pixel of antialiasing at any spacing. */
+export const LINE_EDGE_PIXELS = .75;
 
 function crosshatch(g: GraphBuilder, c: ReturnType<typeof common>) {
   const scale = g.node('scale', 'values.number', 0, { value: 'scale' }), safeScale = g.binary('safe-scale', 'math.max.scalar', scale, g.literal('minimum-scale', 2), 5);
   const pixel = (() => { const out = g.node('pattern-pixel', 'math.divide-ieee.vec2-scalar', 7); g.edge(g.binary('pixel', 'math.multiply.vec2', c.uv, c.resolution, 6), out, 'a'); g.edge(safeScale, out, 'b'); return out; })();
   const split = g.unary('pixel-components', 'vector.split.vec2', pixel, 8), x = { node: split.node, port: 'x' }, y = { node: split.node, port: 'y' };
-  const line = (id: string, coordinate: Ref, low: number, high: number) => {
+  // Line Weight 0 keeps the fixed half width (low + high) / 2 of saved projects; at 1 a line starts as a hairline at its
+  // layer's tone limit and swells to HATCH_HEAVY of the spacing towards black, so shadows reach near-solid ink.
+  const weight = g.node('weight-clamped', 'math.clamp.scalar', 5);
+  g.edge(g.node('weight', 'values.number', 0, { value: 'weight' }), weight, 'value'); g.edge(c.zero, weight, 'min'); g.edge(c.one, weight, 'max');
+  const line = (id: string, coordinate: Ref, layer: HatchLayer) => {
     const centered = g.binary(`${id}-centered`, 'math.subtract.scalar', g.unary(`${id}-fraction`, 'math.fract.scalar', coordinate, 9), g.literal(`${id}-half`, .5), 10);
-    const smooth = g.node(`${id}-smooth`, 'math.smoothstep.scalar', 12); g.edge(g.literal(`${id}-low`, low), smooth, 'edge0');
-    g.edge(g.literal(`${id}-high`, high), smooth, 'edge1'); g.edge(g.unary(`${id}-distance`, 'math.abs.scalar', centered, 11), smooth, 'value');
-    return g.binary(id, 'math.subtract.scalar', c.one, smooth, 13);
+    const limit = g.literal(`${id}-gated-tone-limit`, layer.toneLimit);
+    const heavy = g.node(`${id}-heavy`, 'math.clamp.scalar', 11);
+    g.edge(g.binary(`${id}-darkness`, 'math.multiply.scalar', g.binary(`${id}-below-limit`, 'math.subtract.scalar', limit, c.tone!, 10),
+      g.literal(`${id}-swell`, layer.heavy / layer.toneLimit), 10), heavy, 'value');
+    g.edge(g.literal(`${id}-hairline`, HATCH_HAIRLINE), heavy, 'min'); g.edge(g.literal(`${id}-heavy-max`, layer.heavy), heavy, 'max');
+    const width = g.node(`${id}-width`, 'math.mix.scalar', 11);
+    g.edge(g.literal(`${id}-fixed-width`, (layer.low + layer.high) / 2), width, 'a'); g.edge(heavy, width, 'b'); g.edge(weight, width, 't');
+    // The edge is the same in pixels at every spacing: LINE_EDGE_PIXELS across the line, in units of the layer's coordinate.
+    const soft = g.binary(`${id}-soft`, 'math.divide-ieee.scalar', g.literal(`${id}-edge-pixels`, LINE_EDGE_PIXELS * layer.pitch), safeScale, 10);
+    const smooth = g.node(`${id}-smooth`, 'math.smoothstep.scalar', 12);
+    g.edge(g.binary(`${id}-low`, 'math.subtract.scalar', width, soft, 11), smooth, 'edge0');
+    g.edge(g.binary(`${id}-high`, 'math.add.scalar', width, soft, 11), smooth, 'edge1'); g.edge(g.unary(`${id}-distance`, 'math.abs.scalar', centered, 11), smooth, 'value');
+    return { line: g.binary(id, 'math.subtract.scalar', c.one, smooth, 13), limit };
   };
-  const first = line('first', g.binary('first-coordinate', 'math.add.scalar', x, y, 9), .06, .15);
-  const second = line('second', g.binary('second-coordinate', 'math.subtract.scalar', x, y, 9), .06, .15);
-  const third = line('third', g.binary('third-coordinate', 'math.multiply.scalar', x, g.literal('third-half-scale', .5), 9), .05, .13);
-  const gated = (id: string, value: Ref, threshold: number) => { const gate = g.node(`${id}-gate`, 'math.step.scalar', 12); g.edge(c.tone!, gate, 'edge'); g.edge(g.literal(`${id}-tone-limit`, threshold), gate, 'value'); return g.binary(id, 'math.multiply.scalar', value, gate, 14); };
-  const hatch = g.binary('hatch', 'math.max.scalar', gated('first-gated', first, .82),
-    g.binary('dark-hatch', 'math.max.scalar', gated('second-gated', second, .58), gated('third-gated', third, .32), 15), 15);
+  const first = line('first', g.binary('first-coordinate', 'math.add.scalar', x, y, 9), HATCH_LAYERS[0]);
+  const second = line('second', g.binary('second-coordinate', 'math.subtract.scalar', x, y, 9), HATCH_LAYERS[1]);
+  const third = line('third', g.binary('third-coordinate', 'math.multiply.scalar', x, g.literal('third-half-scale', .5), 9), HATCH_LAYERS[2]);
+  const gated = (id: string, layer: { line: Ref; limit: Ref }) => { const gate = g.node(`${id}-gate`, 'math.step.scalar', 12); g.edge(c.tone!, gate, 'edge'); g.edge(layer.limit, gate, 'value'); return g.binary(id, 'math.multiply.scalar', layer.line, gate, 14); };
+  const hatch = g.binary('hatch', 'math.max.scalar', gated('first-gated', first),
+    g.binary('dark-hatch', 'math.max.scalar', gated('second-gated', second), gated('third-gated', third), 15), 15);
   const styled = g.node('styled', 'math.mix.rgb', 15); g.edge(c.colorB!, styled, 'a'); g.edge(c.colorA!, styled, 'b'); g.edge(hatch, styled, 't'); finish(g, c.sourceColor, styled, c.amount);
 }
 
@@ -106,29 +175,46 @@ function kilim(g: GraphBuilder, c: ReturnType<typeof common>) {
   const styled = g.node('styled', 'math.multiply.rgb-scalar', 15); g.edge(textile, styled, 'a'); g.edge(brightness, styled, 'b'); finish(g, c.sourceColor, styled, c.amount);
 }
 
+/** Vector Engraving's line (shader twin: vectorTilingFragment). Widths are shares of the line spacing: Line Weight 0 keeps
+ * the fixed half width of saved projects; at 1 a line is a hairline of `hairlinePixels` half width on white (at least
+ * `hairline` of the spacing) and swells to `heavy` in black. Edges are LINE_EDGE_PIXELS soft at every spacing. */
+export const ENGRAVING_LINE = { fixedWidth: .0575, hairline: .02, hairlinePixels: .5, heavy: .46, waveFrequency: 2.1, waveDepth: .3 } as const;
+
 function vectorTiling(g: GraphBuilder, c: ReturnType<typeof common>) {
   const half = g.literal('half', .5), half2 = g.unary('half-vec2', 'convert.scalar-to-vec2', half, 4);
   // Keep conversion in WGSL so legacy `(angle * PI) / 180` rounding is retained.
   const angleDegrees = g.binary('angle-degrees', 'math.add.scalar', g.node('angle', 'values.number', 0, { value: 'angle' }), c.zero, 4);
   const angle = g.unary('angle-radians', 'convert.degrees-to-radians.scalar', angleDegrees, 5);
-  const centered = g.binary('centered-uv', 'math.subtract.vec2', c.uv, half2, 5);
-  const rotated = g.node('rotated', 'coordinates.rotate.vec2', 6); g.edge(centered, rotated, 'value'); g.edge(angle, rotated, 'angle');
-  const geometryUv = g.binary('geometry-uv', 'math.add.vec2', rotated, half2, 7);
+  // The lines turn in pixels about the frame centre, so a line spacing is the same at every angle and frame shape.
+  const pixel = g.binary('pixel', 'math.multiply.vec2', c.uv, c.resolution, 5);
+  const centered = g.binary('centered-pixel', 'math.subtract.vec2', pixel, g.binary('frame-center', 'math.multiply.vec2', c.resolution, half2, 5), 6);
+  const rotated = g.node('rotated', 'coordinates.rotate.vec2', 7); g.edge(centered, rotated, 'value'); g.edge(angle, rotated, 'angle');
   const scale = g.node('scale', 'values.number', 0, { value: 'scale' }), safeScale = g.binary('safe-scale', 'math.max.scalar', scale, g.literal('minimum-scale', 3), 5);
-  const safeScale2 = g.unary('safe-scale-vec2', 'convert.scalar-to-vec2', safeScale, 6), grid = g.binary('grid', 'math.divide-ieee.vec2', c.resolution, safeScale2, 7);
-  const gridUv = g.binary('grid-uv', 'math.multiply.vec2', geometryUv, grid, 8), cell = g.binary('cell', 'math.subtract.vec2',
-    g.unary('cell-fraction', 'math.fract.vec2', gridUv, 9), half2, 10);
-  const centerCell = g.binary('center-cell', 'math.add.vec2', g.unary('cell-id', 'math.floor.vec2', gridUv, 9), half2, 10);
-  const sampleUv = g.binary('sample-uv', 'math.divide-ieee.vec2', centerCell, grid, 11), centerSample = sampleAt(g, c, 'center-sample', sampleUv, 12);
-  const centerTone = g.unary('center-tone', 'color.luminance-rec709.image', centerSample, 14, 'image');
-  const parts = g.unary('cell-components', 'vector.split.vec2', cell, 11), x = { node: parts.node, port: 'x' }, y = { node: parts.node, port: 'y' };
-  const wave = g.binary('wave-amplitude', 'math.multiply.scalar',
-    g.unary('wave', 'math.sin.scalar', g.binary('wave-phase', 'math.multiply.scalar', x, g.literal('wave-frequency', 10), 12), 13),
-    g.binary('inverse-tone', 'math.subtract.scalar', c.one, centerTone, 13), 14);
-  const waveScaled = g.binary('wave-scaled', 'math.multiply.scalar', wave, g.literal('wave-scale', .18), 14);
-  const distance = g.unary('engraving-distance', 'math.abs.scalar', g.binary('engraving-offset', 'math.subtract.scalar', y, waveScaled, 14), 15);
-  const smooth = g.node('engraving-smooth', 'math.smoothstep.scalar', 15); g.edge(g.literal('engraving-low', .025), smooth, 'edge0');
-  g.edge(g.literal('engraving-high', .09), smooth, 'edge1'); g.edge(distance, smooth, 'value');
+  const position = g.node('line-position', 'math.divide-ieee.vec2-scalar', 8); g.edge(rotated, position, 'a'); g.edge(safeScale, position, 'b');
+  const parts = g.unary('line-components', 'vector.split.vec2', position, 9), along = { node: parts.node, port: 'x' }, across = { node: parts.node, port: 'y' };
+  // Tone at the pixel, read from the picture averaged over half a line spacing (prefilterCellTaps), so lines swell smoothly.
+  const tap = sampleAt(g, c, 'tap-0-sample', c.uv, 9);
+  const darkness = g.binary('darkness', 'math.subtract.scalar', c.one, g.unary('tone', 'color.luminance-rec709.image', tap, 11, 'image'), 12);
+  // The wave runs along the whole line (not per cell), so the lines never break; its depth follows darkness.
+  const wave = g.unary('wave', 'math.sin.scalar', g.binary('wave-phase', 'math.multiply.scalar', along, g.literal('wave-frequency', ENGRAVING_LINE.waveFrequency), 10), 11);
+  const depth = g.binary('wave-depth', 'math.multiply.scalar', darkness, g.literal('wave-scale', ENGRAVING_LINE.waveDepth), 12);
+  const waved = g.binary('waved-across', 'math.subtract.scalar', across, g.binary('wave-offset', 'math.multiply.scalar', wave, depth, 13), 13);
+  const distance = g.unary('engraving-distance', 'math.abs.scalar', g.binary('engraving-offset', 'math.subtract.scalar',
+    g.unary('engraving-fraction', 'math.fract.scalar', waved, 13), half, 14), 14);
+  // Line Weight 0 keeps the fixed width; 1 swells each line from a hairline on white to near-solid ink in black.
+  const weight = g.node('weight-clamped', 'math.clamp.scalar', 12);
+  g.edge(g.node('weight', 'values.number', 0, { value: 'weight' }), weight, 'value'); g.edge(c.zero, weight, 'min'); g.edge(c.one, weight, 'max');
+  const heavy = g.node('heavy-width', 'math.clamp.scalar', 13);
+  g.edge(g.binary('darkness-width', 'math.multiply.scalar', darkness, g.literal('heavy-gain', ENGRAVING_LINE.heavy), 13), heavy, 'value');
+  const hairline = g.binary('hairline', 'math.max.scalar', g.literal('hairline-share', ENGRAVING_LINE.hairline),
+    g.binary('hairline-width', 'math.divide-ieee.scalar', g.literal('hairline-pixels', ENGRAVING_LINE.hairlinePixels), safeScale, 12), 12);
+  g.edge(hairline, heavy, 'min'); g.edge(g.literal('heavy-max', ENGRAVING_LINE.heavy), heavy, 'max');
+  const width = g.node('line-width', 'math.mix.scalar', 14);
+  g.edge(g.literal('fixed-width', ENGRAVING_LINE.fixedWidth), width, 'a'); g.edge(heavy, width, 'b'); g.edge(weight, width, 't');
+  const soft = g.binary('edge-soft', 'math.divide-ieee.scalar', g.literal('edge-pixels', LINE_EDGE_PIXELS), safeScale, 13);
+  const smooth = g.node('engraving-smooth', 'math.smoothstep.scalar', 15);
+  g.edge(g.binary('engraving-low', 'math.subtract.scalar', width, soft, 14), smooth, 'edge0');
+  g.edge(g.binary('engraving-high', 'math.add.scalar', width, soft, 14), smooth, 'edge1'); g.edge(distance, smooth, 'value');
   const engraving = g.binary('engraving', 'math.subtract.scalar', c.one, smooth, 15);
   const styled = g.node('styled', 'math.mix.rgb', 15); g.edge(c.colorB!, styled, 'a'); g.edge(c.colorA!, styled, 'b'); g.edge(engraving, styled, 't');
   finish(g, c.sourceColor, styled, c.amount);
@@ -216,7 +302,7 @@ const REFERENCE_SIZE: Partial<Record<EditableGeometryFragmentEffectType, { node:
 
 export function createDefaultGeometryFragmentGraph(type: EditableGeometryFragmentEffectType): EffectOperatorGraph {
   const g = new GraphBuilder(), c = common(g, {
-    tone: type === 'contour-map' || type === 'crosshatch' || type === 'kilim',
+    tone: type === 'crosshatch' || type === 'kilim',
     colors: type === 'embroidery' ? 'a' : type === 'bricks' ? 'none' : 'both',
   });
   if (type === 'contour-map') contourMap(g, c);
@@ -228,6 +314,13 @@ export function createDefaultGeometryFragmentGraph(type: EditableGeometryFragmen
   else bricks(g, c);
   const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   // Pattern sizes and the Outline edge step count pixels of a 1080p frame (patternReferenceFrame.ts); Contour Map Scale is a level count.
+  if (type === 'contour-map') {
+    // Line Width and Smoothing count pixels of a 1080p frame; a line may stay under a pixel (it fades), Smoothing 0 reads the picture itself.
+    const measured = measureInReferenceFrame(measureInReferenceFrame(graph, 'lineWidth-clamped'), 'smoothing-clamped');
+    return prefilterCellTaps(measured, 'smoothing-cell');
+  }
   const size = REFERENCE_SIZE[type];
-  return size ? measureInReferenceFrame(graph, size.node, { minimumPixels: 1, ...(size.consumers ? { consumers: size.consumers } : {}) }) : graph;
+  const measured = size ? measureInReferenceFrame(graph, size.node, { minimumPixels: 1, ...(size.consumers ? { consumers: size.consumers } : {}) }) : graph;
+  // Vector Engraving reads its tone from the picture averaged over half a line spacing (patternCellFilter.ts).
+  return type === 'vector-tiling' ? prefilterCellTaps(measured, 'safe-scale-pixels') : measured;
 }

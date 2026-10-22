@@ -1,40 +1,168 @@
 {
-  "shots": [
+ "shots": [
+  {
+   "name": "drift-lines-inspector",
+   "effect": "drift-lines",
+   "params": {
+    "scale": 6,
+    "amount": 0.25,
+    "angle": 90,
+    "speed": 1.6
+   },
+   "image": "dancer_stage.jpg",
+   "preview": 380,
+   "top": "tabs",
+   "alt": "Properties, Effects with a Drift Lines card: Style menu, Preset menu showing Rain Curtain, then Band Size, Angle, Drift and Speed, beside a strip of the preview with thin vertical bands",
+   "caption": "Drift Lines with the Rain Curtain preset. 1 — Preset: pick a starting point. 2 — Band Size. 3 — Angle: 90° stands the bands upright. 4 — Drift.",
+   "marks": [
     {
-      "name": "drift-lines-inspector",
-      "effect": "drift-lines",
-      "params": {
-        "scale": 6,
-        "amount": 0.25,
-        "angle": 90,
-        "speed": 1.6
-      },
-      "image": "dancer_stage.jpg",
-      "preview": 380,
-      "top": "tabs",
-      "alt": "Properties, Effects with a Drift Lines card: Style menu, Preset menu showing Rain Curtain, then Band Size, Angle, Drift and Speed, beside a strip of the preview with thin vertical bands",
-      "caption": "Drift Lines with the Rain Curtain preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Band Size. 3 \u2014 Angle: 90\u00b0 stands the bands upright. 4 \u2014 Drift.",
-      "marks": [
-        {
-          "target": "Preset",
-          "label": "Preset"
-        },
-        {
-          "target": "Band Size",
-          "label": "Band Size"
-        },
-        {
-          "target": "Angle",
-          "label": "Angle"
-        },
-        {
-          "target": "Drift",
-          "label": "Drift"
-        }
-      ],
-      "hide": [
-        "Particle Out"
-      ]
+     "target": "Preset",
+     "label": "Preset"
+    },
+    {
+     "target": "Band Size",
+     "label": "Band Size"
+    },
+    {
+     "target": "Angle",
+     "label": "Angle"
+    },
+    {
+     "target": "Drift",
+     "label": "Drift"
     }
-  ]
+   ],
+   "hide": [
+    "Particle Out"
+   ]
+  },
+  {
+   "name": "crosshatch-inspector",
+   "effect": "crosshatch",
+   "params": {
+    "scale": 6,
+    "weight": 1,
+    "amount": 1,
+    "colorA": "#2b1b12",
+    "colorB": "#efe2c4"
+   },
+   "image": "dancer_stage.jpg",
+   "preview": 380,
+   "top": "tabs",
+   "alt": "Properties, Effects with a Crosshatch card: Style menu, Preset menu showing Etching, then Line Spacing, Line Weight, Amount, Ink and Paper, beside a strip of the preview drawn in fine brown lines on cream",
+   "caption": "Crosshatch with the Etching preset. 1 — Preset: pick a starting point. 2 — Line Spacing. 3 — Line Weight: how heavy the lines get in the shadows. 4 — Amount. 5 — Ink.",
+   "marks": [
+    {
+     "target": "Preset",
+     "label": "Preset"
+    },
+    {
+     "target": "Line Spacing",
+     "label": "Line Spacing"
+    },
+    {
+     "target": "Line Weight",
+     "label": "Line Weight"
+    },
+    {
+     "target": "Amount",
+     "label": "Amount"
+    },
+    {
+     "target": "Ink",
+     "label": "Ink"
+    }
+   ],
+   "hide": [
+    "Particle Out"
+   ]
+  },
+  {
+   "name": "vector-tiling-inspector",
+   "effect": "vector-tiling",
+   "params": {
+    "scale": 9,
+    "weight": 1,
+    "angle": 0,
+    "amount": 1,
+    "colorA": "#2e1d12",
+    "colorB": "#f0e3c6"
+   },
+   "image": "dancer_stage.jpg",
+   "preview": 380,
+   "top": "tabs",
+   "alt": "Properties, Effects with a Vector Engraving card: Style menu, Preset menu showing Copper Plate, then Line Spacing, Angle, Line Weight, Amount, Ink and Paper, beside a strip of the preview drawn in wavy brown lines on cream",
+   "caption": "Vector Engraving with the Copper Plate preset. 1 — Preset: pick a starting point. 2 — Line Spacing. 3 — Angle: the direction of the lines. 4 — Line Weight: how heavy the lines get in the shadows. 5 — Ink.",
+   "marks": [
+    {
+     "target": "Preset",
+     "label": "Preset"
+    },
+    {
+     "target": "Line Spacing",
+     "label": "Line Spacing"
+    },
+    {
+     "target": "Angle",
+     "label": "Angle"
+    },
+    {
+     "target": "Line Weight",
+     "label": "Line Weight"
+    },
+    {
+     "target": "Ink",
+     "label": "Ink"
+    }
+   ],
+   "hide": [
+    "Particle Out"
+   ],
+   "height": 1100
+  },
+  {
+   "name": "contour-map-inspector",
+   "effect": "contour-map",
+   "params": {
+    "scale": 22,
+    "lineWidth": 1.3,
+    "smoothing": 8,
+    "fill": 0.45,
+    "amount": 1,
+    "colorA": "#4a2f1b",
+    "colorB": "#f4ecd6"
+   },
+   "image": "dancer_stage.jpg",
+   "preview": 380,
+   "top": "tabs",
+   "alt": "Properties, Effects with a Contour Map card: Style menu, Preset menu showing Hiking Map, then Band Density, Line Width, Smoothing, Fill, Amount, Ink and Paper, beside a strip of the preview drawn as brown contour lines over pale tinted bands on cream",
+   "caption": "Contour Map with the Hiking Map preset. 1 — Preset: pick a starting point. 2 — Band Density: how many bands. 3 — Line Width. 4 — Smoothing: how calm the lines run. 5 — Fill: how strongly the bands are tinted.",
+   "marks": [
+    {
+     "target": "Preset",
+     "label": "Preset"
+    },
+    {
+     "target": "Band Density",
+     "label": "Band Density"
+    },
+    {
+     "target": "Line Width",
+     "label": "Line Width"
+    },
+    {
+     "target": "Smoothing",
+     "label": "Smoothing"
+    },
+    {
+     "target": "Fill",
+     "label": "Fill"
+    }
+   ],
+   "hide": [
+    "Particle Out"
+   ],
+   "height": 1100
+  }
+ ]
 }

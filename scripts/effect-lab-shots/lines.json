@@ -1,0 +1,114 @@
+{
+ "pairs": [
+  {
+   "name": "crosshatch",
+   "out": "docs/Features/assets/effects/crosshatch.webp",
+   "image": "dancer_stage",
+   "width": 1920,
+   "crop": [
+    500,
+    60,
+    900,
+    960
+   ],
+   "layout": "compare",
+   "outWidth": 1600,
+   "left": {
+    "effect": "original"
+   },
+   "right": {
+    "effect": "crosshatch",
+    "params": {}
+   },
+   "alt": "The dancer on a dark stage, original left and with Crosshatch right: the dark stage becomes a dense net of crossing ink lines, her arms and dress stay pale paper with a few diagonal strokes, and the folds of the dress are drawn with more line directions where they are darker",
+   "caption": "Left: original. Right: Crosshatch at its default settings."
+  },
+  {
+   "name": "vector-tiling",
+   "out": "docs/Features/assets/effects/vector-tiling.webp",
+   "image": "dancer_stage",
+   "width": 1920,
+   "crop": [
+    500,
+    60,
+    900,
+    960
+   ],
+   "layout": "compare",
+   "outWidth": 1600,
+   "left": {
+    "effect": "original"
+   },
+   "right": {
+    "effect": "vector-tiling",
+    "params": {}
+   },
+   "alt": "The dancer on a dark stage, original left and with Vector Engraving right: the dark stage becomes rows of heavy, wavy ink lines with thin pale gaps, while her arms and dress turn into pale paper crossed by fine straight hairlines that follow the folds",
+   "caption": "Left: original. Right: Vector Engraving at its default settings."
+  },
+  {
+   "name": "contour-map",
+   "out": "docs/Features/assets/effects/contour-map.webp",
+   "image": "dancer_stage",
+   "width": 1920,
+   "crop": [
+    500,
+    60,
+    900,
+    960
+   ],
+   "layout": "compare",
+   "outWidth": 1600,
+   "left": {
+    "effect": "original"
+   },
+   "right": {
+    "effect": "contour-map",
+    "params": {}
+   },
+   "alt": "The dancer on a dark stage, original left and with Contour Map right: the dark stage becomes one flat slate band, her dress and arms turn into pale tinted bands from grey to white, and a fine dark contour line runs along every edge between two bands, tracing the folds of the dress and the outline of the figure",
+   "caption": "Left: original. Right: Contour Map at its default settings."
+  }
+ ],
+ "strips": [
+  {
+   "effect": "crosshatch",
+   "image": "dancer_stage",
+   "width": 1920,
+   "crop": [
+    760,
+    120,
+    320,
+    320
+   ],
+   "cellWidth": 320,
+   "columns": 3
+  },
+  {
+   "effect": "vector-tiling",
+   "image": "dancer_stage",
+   "width": 1920,
+   "crop": [
+    760,
+    120,
+    320,
+    320
+   ],
+   "cellWidth": 320,
+   "columns": 3
+  },
+  {
+   "effect": "contour-map",
+   "image": "dancer_stage",
+   "width": 1920,
+   "crop": [
+    440,
+    30,
+    1040,
+    1040
+   ],
+   "cellWidth": 520,
+   "columns": 3
+  }
+ ]
+}
