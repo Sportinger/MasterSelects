@@ -3,6 +3,7 @@ import { EditableDraggableNumber } from '../../../common/EditableDraggableNumber
 import { startBatch, endBatch } from '../../../../stores/historyStore';
 import type { PreviewValueControl } from '../../../../services/nodePreview/previewTypes';
 import { operatorConstantNumberPersistenceKey } from '../../../common/EditableDraggableNumberSettings';
+import { nodeValueDecimals } from './nodeValueFormat';
 
 /** Keep the value under the pointer immediate. Computed previews may arrive
  * later; they must not pull an active drag back to an older sampled number. */
@@ -21,7 +22,7 @@ export function PreviewNumber({ entry, revision, nodeId, label, onChange }: {
     ? operatorConstantNumberPersistenceKey(entry.target)
     : `node-inline.${nodeId}.${entry.target.parameter}`);
   return <EditableDraggableNumber value={value} defaultValue={Number(entry.defaultValue)} min={entry.min} max={entry.max}
-    decimals={entry.step && entry.step >= 1 && Number.isInteger(value) ? 0 : 3} ariaLabel={label}
+    decimals={entry.step && entry.step >= 1 && Number.isInteger(value) ? 0 : nodeValueDecimals(value, 3)} ariaLabel={label}
     persistenceKey={persistenceKey}
     onDragStart={() => { dragging.current = true; batchOpened.current = startBatch('Change node value').opened; }}
     onDragEnd={() => { dragging.current = false; if (batchOpened.current) { batchOpened.current = false; endBatch(); } }}

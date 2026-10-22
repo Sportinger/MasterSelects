@@ -3,6 +3,7 @@ import type { NodeGraphNode } from '../../../../types/nodeGraph';
 import { useNodeValueFrame } from './useNodeValueFrame';
 import { editPreviewValue } from '../../../../services/nodePreview/editPreviewValue';
 import { PreviewNumber } from './PreviewNumber';
+import { nodeValueText } from './nodeValueFormat';
 import { getNodeHeight, getPortCenter } from '../canvas/canvasGeometry';
 import { inlineNumericPorts, isNumericValueNode, previewRect } from './previewGeometry';
 import type { PreviewValueControl } from '../../../../services/nodePreview/previewTypes';
@@ -51,7 +52,7 @@ export function NodeValuePreview({ node, canvasRendered = false }: { node: NodeG
         return <output key={`${entry.direction}-${entry.portId}`} className="node-value-inline node-value-computed" aria-label={`${node.label} ${entry.direction} ${entry.portId} live value`}
           onPointerDown={event => event.stopPropagation()}
           title={frame.label.toLowerCase().includes('center cell') ? 'Live sample at the center grid cell. Values vary across the image.' : frame.label} style={{ left: node.layout.x + (entry.direction === 'output' ? 99 : 16), top: point.y + 12, width: 70 }}>
-          {entry.value === undefined ? '—' : Number(entry.value.toFixed(4))}</output>;
+          {entry.value === undefined ? '—' : nodeValueText(entry.value)}</output>;
       })}
       {error && <small className="node-value-inline node-value-status" role="alert"
         style={{ left: node.layout.x + rect.x, top: node.layout.y + rect.y + 17, width: rect.width }}>{error}</small>}
