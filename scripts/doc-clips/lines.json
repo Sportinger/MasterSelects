@@ -6,14 +6,167 @@
       "name": "drift-lines",
       "effect": "drift-lines",
       "params": {},
-      "range": [0.5, 5.5],
-      "layout": "pair",
-      "crop": [420, 60, 1000, 960],
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        420,
+        60,
+        1000,
+        960
+      ],
       "width": 960,
       "float": "left",
       "alt": "The dancer turning on a dark stage, original left and with Drift Lines right: the picture is cut into thin horizontal bands that slide left and right in a slow wave, so her dress and arms break into a rippling staircase, with faint dark lines between the bands",
       "caption": "Left: original. Right: Drift Lines at its default settings.",
-      "loop": 0.35
+      "loop": 0.35,
+      "poster": 1.4,
+      "maxBytes": 1000000
+    },
+    {
+      "name": "drift-lines-presets",
+      "kind": "presets",
+      "effect": "drift-lines",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "crop": [
+        400,
+        60,
+        1040,
+        900
+      ],
+      "width": 960,
+      "loop": 0.35,
+      "poster": 1.4,
+      "maxBytes": 1200000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Heat Haze top left with fine rippling rows, Venetian Blinds top right with broad shaded bands, Rain Curtain bottom left with thin upright columns sliding up and down, Torn Signal bottom right with fine rows torn far apart",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "drift-lines-band-size",
+      "effect": "drift-lines",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "scale",
+        "label": "Band Size",
+        "from": 4,
+        "to": 40,
+        "unit": " px"
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 600000,
+      "float": "right",
+      "alt": "The dancer with Drift Lines while Band Size runs from 4 to 40 px and back: fine rippling rows grow into broad sliding strips and shrink again; the current value is shown at the bottom left",
+      "caption": "Band Size from 4 to 40 px and back."
+    },
+    {
+      "name": "drift-lines-angle",
+      "effect": "drift-lines",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 600000,
+      "float": "right",
+      "sweep": {
+        "param": "angle",
+        "label": "Angle",
+        "from": 0,
+        "to": 90,
+        "unit": "°"
+      },
+      "poster": 2.5,
+      "alt": "The dancer with Drift Lines while Angle turns from 0° to 90° and back: the bands tilt from lying flat, sliding sideways, to standing upright, sliding up and down; the current angle is shown at the bottom left",
+      "caption": "Angle from 0° to 90° and back."
+    },
+    {
+      "name": "drift-lines-drift",
+      "effect": "drift-lines",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 600000,
+      "float": "right",
+      "sweep": {
+        "param": "amount",
+        "label": "Drift",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "poster": 2.5,
+      "alt": "The dancer with Drift Lines while Drift runs from 0 to 1 and back: at 0 only fine dark lines cross the picture, then the bands slide further and further apart until the figure breaks into steps, and close again; the current value is shown at the bottom left",
+      "caption": "Drift from 0 to 1 and back."
+    },
+    {
+      "name": "drift-lines-speed",
+      "effect": "drift-lines",
+      "params": {},
+      "range": [
+        0.2,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 600000,
+      "float": "right",
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          1,
+          3
+        ]
+      },
+      "poster": 2.6,
+      "alt": "The dancer with Drift Lines at three speeds, about two seconds each: at Speed 0 the bands hold still while she moves, at 1 they sway slowly, at 3 they flicker; the speed is shown at the bottom left",
+      "caption": "Speed 0, 1 and 3, about two seconds each."
     }
   ]
 }
