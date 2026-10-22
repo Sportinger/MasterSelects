@@ -1,7 +1,7 @@
 import type { WorkerRenderSoftwareFrame, WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import { projectImageRadius, rotateImageCoordinate, unprojectImageRadius } from '../operators/imageOpticsSemantics';
 import {
-  directionalBlurPlan, directionalBlurStreakPx, transformDirectionalPixel, type DirectionalBlurPlan, type DirectionalBlurType,
+  directionalBlurPlan, directionalBlurStreakPx, fillCoveredCellTaps, type DirectionalBlurPlan, type DirectionalBlurType,
 } from '../../effects/blur/blurSampling';
 import { Logger } from '../logger';
 import { applyWorkerSoftwareUvDistort } from './workerSoftwareUvDistortEffects';
@@ -46,14 +46,14 @@ function mirrorEdgeUv(value: number): number {
 type DirectionalAdjustment = { readonly amount: number; readonly angle?: number; readonly centerX?: number;
   readonly centerY?: number; readonly mode?: 'zoom' | 'spin' };
 const SOFTWARE_DIRECTIONAL_MAX_TAPS = 64;
-const directionalPlans = new WeakMap<DirectionalAdjustment, { width: number; height: number; plan: DirectionalBlurPlan }>();
+const directionalPlans = new WeakMap<DirectionalAdjustment, CachedDirectionalPlan>();
 const log = Logger.create('SoftwareBlur');
 const reportedTapCaps = new Set<string>();
 
 /** Longer streaks than the tap cap step visibly in the CPU preview: say so once per effect, size and streak. */
 function reportSoftwareTapCap(type: DirectionalBlurType, adjustment: DirectionalAdjustment, width: number, height: number): void {
   const streak = directionalBlurStreakPx(type, adjustment, width, height);
-  if (!(streak + 1 > SOFTWARE_DIRECTIONAL_MAX_TAPS)) return;
+  if (!(streak > SOFTWARE_DIRECTIONAL_MAX_TAPS)) return;
   const key = `${type}:${width}x${height}:${Math.round(streak)}`;
   if (reportedTapCaps.has(key)) return;
   if (reportedTapCaps.size > 256) reportedTapCaps.clear();
@@ -63,11 +63,23 @@ function reportSoftwareTapCap(type: DirectionalBlurType, adjustment: Directional
     + '(the GPU preview and the export use the two-stage graph).');
 }
 
+/** Reused tap buffers of the CPU directional blurs (one frame is painted pixel by pixel, never re-entrantly). */
+const tapOffsets = new Float64Array(SOFTWARE_DIRECTIONAL_MAX_TAPS), tapWeights = new Float64Array(SOFTWARE_DIRECTIONAL_MAX_TAPS);
+
+type CachedDirectionalPlan = {
+  width: number; height: number; plan: DirectionalBlurPlan;
+  /** Motion Blur's taps are the same at every pixel: offsets and tapered weights, computed once per plan. */
+  motionTaps?: { count: number; offsets: Float64Array; weights: Float64Array; total: number };
+};
+
 /**
- * Motion, Radial and Zoom Blur on the CPU: the shared sampling contract (blurSampling.ts) with
- * one stage of evenly spaced taps along each pixel's own range, up to 64 taps (the GPU graph
- * uses two stages and stays continuous beyond 64 px of streak; longer streaks are logged).
- * Alpha is premultiplied.
+ * Motion, Radial and Zoom Blur on the CPU: the shared sampling contract (blurSampling.ts) in one
+ * stage of covered one-pixel cells along each pixel's own range (coveredCellTaps, as stage A of
+ * the GPU graph), up to 64 taps, read bilinearly (premultiplied, texel centres at i + 0.5, edge
+ * texels repeat, like the GPU sampler). An animated amount therefore changes the picture
+ * continuously; streaks longer than 64 px spread their cells and are logged (the GPU graph uses
+ * two stages and stays continuous). This runs once per pixel, so it builds no arrays per pixel
+ * or per tap: taps go into reused typed arrays, coordinates and corners stay scalar.
  */
 function applyDirectionalBlurAdjustment(
   type: DirectionalBlurType,
@@ -78,31 +90,59 @@ function applyDirectionalBlurAdjustment(
   uvY: number,
   adjustment: DirectionalAdjustment,
 ): readonly [number, number, number, number] {
-  let cached = directionalPlans.get(adjustment);
+  let cached: CachedDirectionalPlan | undefined = directionalPlans.get(adjustment);
   if (!cached || cached.width !== width || cached.height !== height) {
     cached = { width, height, plan: directionalBlurPlan(type, adjustment, width, height) };
     directionalPlans.set(adjustment, cached);
     reportSoftwareTapCap(type, adjustment, width, height);
   }
-  const plan = cached.plan, pixel: [number, number] = [uvX * width, uvY * height];
-  const { start, length } = plan.range(pixel);
-  const reachPx = Math.abs(length) * plan.speed(pixel);
-  if (!(reachPx > 1e-3)) return sampleRgba(sourceData, width, height, uvX, uvY);
-  const count = Math.max(2, Math.min(SOFTWARE_DIRECTIONAL_MAX_TAPS, Math.ceil(reachPx) + 1));
-  const sum = [0, 0, 0, 0];
-  let weightTotal = 0;
-  for (let index = 0; index < count; index += 1) {
-    const t = (index + 0.5) / count, weight = plan.taper(t);
-    const [x, y] = transformDirectionalPixel(plan, pixel, start + length * t);
-    const sample = type === 'motion-blur'
-      ? sampleRgba(sourceData, width, height, mirrorEdgeUv(x / width), mirrorEdgeUv(y / height))
-      : sampleRgba(sourceData, width, height, clamp01(x / width), clamp01(y / height));
-    sum[0] += sample[0] * sample[3] * weight; sum[1] += sample[1] * sample[3] * weight;
-    sum[2] += sample[2] * sample[3] * weight; sum[3] += sample[3] * weight;
-    weightTotal += weight;
+  const plan = cached.plan, pixelX = uvX * width, pixelY = uvY * height, pixel: [number, number] = [pixelX, pixelY];
+  const { start, length } = plan.range(pixel), span = Math.abs(length);
+  const middle = start + length * 0.5, sign = length < 0 ? -1 : 1;
+  let count: number, offsets: Float64Array, weights: Float64Array, weightTotal: number;
+  if (plan.group === 'translate' && cached.motionTaps) {
+    ({ count, offsets, weights, total: weightTotal } = cached.motionTaps);
+  } else {
+    const reachPx = span * plan.speed(pixel);
+    offsets = tapOffsets; weights = tapWeights; weightTotal = 0;
+    // No streak: the pixel's own texel (the taps converge on it as the amount goes to 0).
+    if (reachPx > 1e-6) count = fillCoveredCellTaps(span, reachPx, SOFTWARE_DIRECTIONAL_MAX_TAPS, offsets, weights);
+    else { count = 1; offsets[0] = 0; weights[0] = 1; }
+    for (let index = 0; index < count; index += 1) {
+      weights[index] *= plan.taper(span > 0 ? 0.5 + offsets[index] / span : 0.5);
+      weightTotal += weights[index];
+    }
+    if (plan.group === 'translate') {
+      cached.motionTaps = { count, offsets: offsets.slice(0, count), weights: weights.slice(0, count), total: weightTotal };
+    }
   }
-  const alpha = sum[3] / weightTotal, coverage = Math.max(alpha, 1e-6);
-  return [sum[0] / weightTotal / coverage, sum[1] / weightTotal / coverage, sum[2] / weightTotal / coverage, alpha];
+  const [directionX, directionY] = plan.direction, [centerX, centerY] = plan.center;
+  const dx = pixelX - centerX, dy = pixelY - centerY;
+  let red = 0, green = 0, blue = 0, coverageSum = 0;
+  for (let index = 0; index < count; index += 1) {
+    const u = middle + sign * offsets[index], weight = weights[index];
+    let px: number, py: number;
+    if (plan.group === 'translate') {
+      px = mirrorEdgeUv((pixelX + directionX * u) / width) * width; py = mirrorEdgeUv((pixelY + directionY * u) / height) * height;
+    } else if (plan.group === 'scale') {
+      const scale = Math.exp(u); px = centerX + dx * scale; py = centerY + dy * scale;
+    } else {
+      const cos = Math.cos(u), sin = Math.sin(u); px = centerX + dx * cos - dy * sin; py = centerY + dx * sin + dy * cos;
+    }
+    // Premultiplied bilinear read: a tap that moves by a fraction of a pixel changes the result by that fraction.
+    const fx = px - 0.5, fy = py - 0.5, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+    const xa = clampIndex(x0, width), xb = clampIndex(x0 + 1, width), ya = clampIndex(y0, height), yb = clampIndex(y0 + 1, height);
+    const i00 = (ya * width + xa) * 4, i10 = (ya * width + xb) * 4, i01 = (yb * width + xa) * 4, i11 = (yb * width + xb) * 4;
+    const s00 = (1 - tx) * (1 - ty) * weight * sourceData[i00 + 3], s10 = tx * (1 - ty) * weight * sourceData[i10 + 3];
+    const s01 = (1 - tx) * ty * weight * sourceData[i01 + 3], s11 = tx * ty * weight * sourceData[i11 + 3];
+    red += sourceData[i00] * s00 + sourceData[i10] * s10 + sourceData[i01] * s01 + sourceData[i11] * s11;
+    green += sourceData[i00 + 1] * s00 + sourceData[i10 + 1] * s10 + sourceData[i01 + 1] * s01 + sourceData[i11 + 1] * s11;
+    blue += sourceData[i00 + 2] * s00 + sourceData[i10 + 2] * s10 + sourceData[i01 + 2] * s01 + sourceData[i11 + 2] * s11;
+    coverageSum += s00 + s10 + s01 + s11;
+  }
+  // Colour sums carry byte * byte alpha; coverage sums carry byte alpha.
+  const alpha = coverageSum / 255 / weightTotal, coverage = Math.max(coverageSum, 1e-6 * 255 * weightTotal);
+  return [red / 255 / coverage, green / 255 / coverage, blue / 255 / coverage, alpha];
 }
 
 type FisheyeAdjustment = NonNullable<

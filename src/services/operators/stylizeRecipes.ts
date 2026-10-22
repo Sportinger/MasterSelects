@@ -9,7 +9,7 @@ import { createRingGlowGraph } from './glowEffectGraph';
 import { isRingGlowGraph } from './glowGraphUpgrade';
 import { createDefaultGrainGraph } from './grainEffectGraph';
 import { createDefaultScanlinesGraph } from './scanlinesEffectGraph';
-import { createDefaultSharpenGraph } from './sharpenEffectGraph';
+import { createDefaultSharpenGraph, createSpreadWindowSharpenGraph } from './sharpenEffectGraph';
 import { createDefaultVignetteGraph } from './vignetteEffectGraph';
 import { createDefaultPointwiseEffectGraph, createEarlierPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
 import { GLOW_DEFAULTS } from '../../effects/stylize/glow/glowBloom';
@@ -96,6 +96,23 @@ export function stylizePresentation(type: string, graph: EffectOperatorGraph): {
   return isRecipeType(type) && isEarlierStylizeGraph(type, graph) ? { key: `${type}-earlier`, createDefault: EARLIER[type] } : undefined;
 }
 
+/**
+ * Previous recipes: released versions that read every value as the current recipe does and share
+ * its folders, but render a little differently. Saved projects keep them (their look does not
+ * change on load); the inspector offers the current one. Sharpen of 3.2.7: its halo
+ * window spread the taps of a fractional reach evenly, so the limit jumped whenever an animated
+ * Radius made the window one tap wider. Both agree only where twice the blur sigma is a whole
+ * number of pixels; elsewhere a strong Sharpen differs by up to about 60 levels on fine detail.
+ */
+const previousRecognizers: Partial<Record<StylizeRecipeEffectType, (graph: EffectOperatorGraph | undefined) => boolean>> = {
+  sharpen: recognizer(createSpreadWindowSharpenGraph),
+};
+
+/** True when `graph` is an untouched previous release of this stylize effect's current recipe (see above). */
+export function isPreviousStylizeGraph(type: string, graph: EffectOperatorGraph | undefined): boolean {
+  return isRecipeType(type) && !!previousRecognizers[type]?.(graph);
+}
+
 /** Untouched earlier Threshold/Posterize graphs read as the current recipe (identical at Softness 0). */
 export function upgradePointwiseStylizeGraph(type: string, graph: EffectOperatorGraph): EffectOperatorGraph {
   if ((type !== 'threshold' && type !== 'posterize') || graph.groups?.some(group => group.bypassed)) return graph;
@@ -131,7 +148,24 @@ export const STYLIZE_RECIPE_UPDATES: Partial<Record<StylizeRecipeEffectType, Sty
     toolNote: `This Edge Detect ${RUNS_EARLIER}: a one-pixel Sobel at render resolution with opaque output; Width and Color have no effect.` },
 };
 
-/** Tool note for an instance that runs an untouched earlier stylize recipe; undefined otherwise. */
+const PREVIOUS_STYLIZE_RECIPE_UPDATES: Partial<Record<StylizeRecipeEffectType, StylizeRecipeUpdate>> = {
+  sharpen: { message: 'This Sharpen was saved with version 3.2.7 and keeps that look; its halo limit can jump a step when Radius is animated.',
+    label: 'Use the new Sharpen',
+    toolNote: 'This Sharpen runs the 3.2.7 version saved with its project: the same values, but its halo limit can jump a step while Radius is animated (between whole steps of twice the blur sigma).' },
+};
+
+/** What the inspector offers for an untouched earlier or previous recipe of this stylize effect; undefined for the current one. */
+export function stylizeRecipeUpdate(type: string, graph: EffectOperatorGraph | undefined): StylizeRecipeUpdate | undefined {
+  if (isEarlierStylizeGraph(type, graph)) return STYLIZE_RECIPE_UPDATES[type as StylizeRecipeEffectType];
+  return isPreviousStylizeGraph(type, graph) ? PREVIOUS_STYLIZE_RECIPE_UPDATES[type as StylizeRecipeEffectType] : undefined;
+}
+
+/** Tool note for an instance that runs an untouched earlier stylize recipe (its values read differently); undefined otherwise. */
 export function earlierStylizeRecipeNote(type: string, graph: EffectOperatorGraph | undefined): string | undefined {
   return isEarlierStylizeGraph(type, graph) ? STYLIZE_RECIPE_UPDATES[type as StylizeRecipeEffectType]?.toolNote : undefined;
+}
+
+/** Tool note for an instance that runs an untouched previous release (its value notes still apply); undefined otherwise. */
+export function previousStylizeRecipeNote(type: string, graph: EffectOperatorGraph | undefined): string | undefined {
+  return isPreviousStylizeGraph(type, graph) ? PREVIOUS_STYLIZE_RECIPE_UPDATES[type as StylizeRecipeEffectType]?.toolNote : undefined;
 }

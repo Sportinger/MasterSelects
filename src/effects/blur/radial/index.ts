@@ -3,8 +3,20 @@
 // directionalBlur.wgsl is its WGSL reference. Contract: ../blurSampling.ts.
 
 import shader from '../directionalBlur.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { finiteBlurParam, radialBlurMode } from '../blurSampling';
+
+// Presets leave the centre at the middle of the frame; Spin turns by 20 degrees per unit of Amount.
+export const RADIAL_BLUR_PRESETS: readonly EffectPreset[] = [
+  // The frame wobbles a few degrees: a dizzy moment, the middle stays readable.
+  { id: 'dizzy', name: 'Dizzy', params: { mode: 'spin', amount: 0.2 } },
+  // A rotating camera: the figure smears in an arc but is still recognisable.
+  { id: 'turning-stage', name: 'Turning Stage', params: { mode: 'spin', amount: 0.6 } },
+  // Everything but the middle turns into rings of light.
+  { id: 'whirlpool', name: 'Whirlpool', params: { mode: 'spin', amount: 1.5 } },
+  // The edges of the frame rush towards the middle, which stays sharp.
+  { id: 'tunnel-vision', name: 'Tunnel Vision', params: { mode: 'zoom', amount: 2 } },
+];
 
 export const radialBlur: EffectDefinition = {
   id: 'radial-blur',
@@ -65,6 +77,8 @@ export const radialBlur: EffectDefinition = {
       deprecated: 'Radial Blur now chooses its taps from the streak length automatically; samples has no effect.',
     },
   },
+
+  presets: RADIAL_BLUR_PRESETS,
 
   packUniforms: (params, width, height) => new Float32Array([
     finiteBlurParam(params.amount, 0.5), 0, finiteBlurParam(params.centerX, 0.5), finiteBlurParam(params.centerY, 0.5), width, height, 2,

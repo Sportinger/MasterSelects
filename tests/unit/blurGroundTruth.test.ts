@@ -99,12 +99,13 @@ describe('Motion Blur length keeps the legacy pixel length', () => {
   });
 
   it.each([[192, 108], [108, 192], [128, 128]] as const)('the graph streaks a line Length * height up and down on %sx%s', (width, height) => {
-    // A white line on black, blurred vertically: rows within the reach pick it up, rows beyond it do not.
+    // A white line on black, blurred vertically: rows within the reach pick it up, rows beyond it at
+    // most a trace (the partial last coarse box keeps its full stage A box and spills its share × taper).
     const line = Math.round(height / 2), reach = 0.1 * height;
     const pixel = evaluator('motion-blur', { amount: 0.1, angle: Math.PI / 2 }, [width, height], (_x, y) => y === line ? [1, 1, 1, 1] : [0, 0, 0, 1]);
     for (const direction of [-1, 1]) {
       expect(pixel(width / 2, line + direction * Math.floor(reach - 1.5))[0], `inside, ${direction}`).toBeGreaterThan(1e-3);
-      expect(pixel(width / 2, line + direction * Math.ceil(reach + 1.5))[0], `outside, ${direction}`).toBeLessThan(1e-6);
+      expect(pixel(width / 2, line + direction * Math.ceil(reach + 1.5))[0], `outside, ${direction}`).toBeLessThan(1 / 2048);
     }
   });
 

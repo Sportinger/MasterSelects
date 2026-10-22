@@ -763,6 +763,16 @@ T(a)·T(b) = T(a + b), the boxes tile the range exactly, so streaks stay continu
 at any length with about `2 × sqrt(2 × streak length in px)` taps per pixel; the old
 fixed sample counts showed ghost copies and stair steps on long streaks. A partial
 last box (Radial Zoom ranges differ per pixel) is weighted by its covered share.
+Since 2026-10-22 the counts never step: the coarse count `sqrt(2 × longest px)` is not
+rounded (h follows the amount, the partial last box grows in), and stage A works in
+one-pixel cells from the centre out whose outermost pair counts with the share of its
+cell the box covers. Every tap position and weight is a continuous function of the
+amount, so an animated amount ramps smoothly from 0 (the 3.2.7 recipe rounded both
+counts up: a streak under about a pixel rendered the source unchanged, Motion jumped by
+up to 35 levels at count steps, Radial Zoom near Amount 1 drew a faint ring near the
+centre). Untouched 3.2.7 graphs load with the new recipe as a bug fix; still pictures
+differ by under 0.4 levels on average (up to about 30 on a few thin high-contrast lines,
+measured on the Effect Lab images at the presets).
 Motion Blur's direction is now an exact on-screen angle (diagonal angles were
 skewed on non-square frames); its reach to each side keeps the legacy length,
 Length × |(cos × width, sin × height)|: a share of the width for horizontal and of
@@ -810,8 +820,10 @@ kernel is spread or capped there.
 **Worker hosts.** The opt-in worker render modes follow the same units: worker
 software draws Gaussian and Box as a canvas blur with the contract's sigma, and
 Motion, Radial (Zoom and Spin) and Zoom along the contract's paths in one stage of
-up to 64 taps with premultiplied alpha (longer streaks step visibly there; the
-`SoftwareBlur` log says so once per effect, size and streak); worker GPU runs the
+covered one-pixel cells (`coveredCellTaps`, as stage A of the graph), up to 64 bilinear
+premultiplied reads, so an animated amount changes smoothly there too (streaks longer
+than 64 px spread their reads and can look stepped; the `SoftwareBlur` log says so once
+per effect, size and streak); worker GPU runs the
 blur graphs. Gaussian
 Blur on a motion-adjustment layer in the worker GPU host
 (`workerGpuAdjustmentBlur.ts`) renders the tap list of `separableBlurTaps` itself:
@@ -855,7 +867,10 @@ Gaussian Blur passes (σ = Radius pixels of a 1080p frame, at least 0.25 px) and
 colour fringes. A halo limit removes most of the bright and dark outlines of a
 classic unsharp mask. It takes a smooth darkest and brightest brightness of the
 neighbourhood within ±2σ (at least ±1 px), densely, one pixel apart (up to 24 taps
-per side, wider steps beyond): first along each row in the horizontal blur pass,
+per side, wider steps beyond). The outermost tap counts with the share of it the
+window covers: its brightness moves towards the pixel's own and its weight shrinks by
+that share, so the window grows continuously and an animated Radius does not flicker
+when the window gains a tap. The extremes are taken first along each row in the horizontal blur pass,
 whose cache then holds blurred brightness, blurred alpha, row brightest and row
 darkest; then down a column of those rows in the final pass (means weighted by
 `exp(±64 × Δluma)`; transparent taps weigh nothing, rows without an opaque tap are
@@ -867,7 +882,11 @@ halo stays at about 18 % of the step at Amount 1 and about 26 % at Amount 5 (a
 plain unsharp mask overshoots by 40 % or more). At Amount 3–5 on strong texture the
 peaks are compressed, and two neighbours at a peak can round to the same level.
 Nothing depends on the timeline time. Negative Amount softens; alpha is kept. Three
-passes. Sharpens saved
+passes. A Sharpen saved with the 3.2.7 recipe (taps spread evenly over a fractional
+window, which jumped when an animated Radius added a tap) keeps it; the inspector names
+it and offers the current recipe (`isPreviousStylizeGraph`). Both render the same
+wherever 2σ is a whole number of pixels (Radius 0.5, 1, 1.5 … at 1080p); in between, a
+strong Sharpen differs by up to about 60 levels on fine detail. Sharpens saved
 earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
 **Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,

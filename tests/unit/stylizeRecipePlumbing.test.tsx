@@ -8,7 +8,8 @@ import type { LookDefinition } from '../../src/effects/looks/types';
 import { handleUpdateEffect } from '../../src/services/aiTools/handlers/effects';
 import { migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { effectDefinitionNotes } from '../../src/services/operators/effectParamVisibility';
-import { createStylizeRecipeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_UPDATES } from '../../src/services/operators/stylizeRecipes';
+import { createStylizeRecipeGraph, isCurrentStylizeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_UPDATES } from '../../src/services/operators/stylizeRecipes';
+import { createSpreadWindowSharpenGraph } from '../../src/services/operators/sharpenEffectGraph';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
 import type { Keyframe } from '../../src/types/keyframes';
@@ -113,6 +114,19 @@ describe('Use the new … (StylizeRecipeNote)', () => {
     expect(isEarlierStylizeGraph('glow', updated.operatorGraph)).toBe(false);
     expect(updated.params).toMatchObject(STYLIZE_RECIPE_UPDATES.glow!.resetParams!);
     expect((state.clipKeyframes.get(clipId) ?? []).filter(item => item.property.endsWith('.radius'))).toEqual([]);
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('names a Sharpen saved with 3.2.7, keeps its look and its value notes, and switches it on request', () => {
+    const sharpen: Effect = { ...current('sharpen', { amount: 2, radius: 1.2 }), operatorGraph: createSpreadWindowSharpenGraph() };
+    const clipId = withClip([sharpen]);
+    expect(effectDefinitionNotes({ ...sharpen, params: { ...sharpen.params, amount: -1 } }, 1920, 1080).join(' ')).not.toMatch(/edited graph/);
+    render(<StylizeRecipeNote clipId={clipId} effectInstanceId={sharpen.id} effectId="sharpen" params={sharpen.params as Record<string, number | boolean | string>} onChange={() => {}} />);
+    expect(screen.getByRole('status').textContent).toMatch(/3\.2\.7/);
+    fireEvent.click(screen.getByRole('button', { name: 'Use the new Sharpen' }));
+    const updated = useTimelineStore.getState().clips[0].effects[0];
+    expect(isCurrentStylizeGraph('sharpen', updated.operatorGraph)).toBe(true);
+    expect(updated.params).toMatchObject({ amount: 2, radius: 1.2 });
     expect(screen.queryByRole('button')).toBeNull();
   });
 });

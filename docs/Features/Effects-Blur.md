@@ -44,4 +44,6 @@ How to open a graph: [The node setup](./Effects.md#the-node-setup).
 
 Radius is measured on a 1080p frame and scales with the picture, so the preview, the export and 4K show the same softness. Transparent edges blur without a dark rim. A blur at 0 leaves the picture exactly as it was.
 
+Where the editor falls back to its software preview (no WebGPU, for example on some Linux drivers), Motion, Radial and Zoom Blur are painted on the CPU, pixel by pixel, with the same path as the GPU. That path keeps its reads in reused number lists instead of building new ones for every read, so a frame paints about five times faster than in the first smooth version; a test holds it within a budget measured against a plain pass on the same machine.
+
 Developer notes: [Effect system: Blur & Sharpen notes](./Effect-System.md#blur--sharpen-notes).

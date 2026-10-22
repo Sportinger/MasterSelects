@@ -35,6 +35,9 @@ export const EFFECT_DOC_EXTRAS = {
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
   'stick-figure': { thumb: { region: [0, 0, 1, 1] } },
+  // A current Sharpen's card has only these rows: its own control (a note with Use the new Sharpen)
+  // shows on Sharpens saved with 3.2.7 alone, and the page's Saved projects note describes it.
+  sharpen: { rows: ['amount', 'radius'] },
   'ai-edge-fill': {
     rows: [
       'resolution',
