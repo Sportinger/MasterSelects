@@ -58,6 +58,24 @@ describe('InspectorSelect pointer interaction', () => {
     expect(trigger).not.toHaveFocus();
   });
 
+  it('closes a menu opened by pointer with Escape, although its trigger lost focus, without reaching timeline shortcuts', () => {
+    const timelineShortcut = vi.fn();
+    window.addEventListener('keydown', timelineShortcut);
+    try {
+      render(<InspectorSelect ariaLabel="Font" onChange={vi.fn()} options={[...OPTIONS]} value="normal" />);
+      const trigger = screen.getByRole('combobox', { name: 'Font' });
+      fireEvent.click(trigger);
+      trigger.blur();
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      fireEvent.keyDown(document.body, { key: 'Escape' });
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(timelineShortcut).not.toHaveBeenCalled();
+      // Closed, Escape is the timeline's again.
+      fireEvent.keyDown(document.body, { key: 'Escape' });
+      expect(timelineShortcut).toHaveBeenCalledTimes(1);
+    } finally { window.removeEventListener('keydown', timelineShortcut); }
+  });
+
   it('opens upward when the menu would run past the bottom of its scrolling panel', () => {
     const rect = (top: number, height: number) => ({ top, bottom: top + height, height, left: 0, right: 200, width: 200, x: 0, y: top, toJSON: () => ({}) });
     const panelRect = vi.fn(() => rect(100, 200));

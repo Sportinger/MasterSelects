@@ -155,7 +155,7 @@ Further reusable processing recipes are available in the same menu:
 | Sampling | Bounded Sample Count | Explicit count, minimum and maximum; integer truncation remains with the reducer. |
 | Sampling | Pair Tap Offsets; Merge Pair Weights | Sequence index, pairs per side and texel stride give the near/far texel offsets, a centre gate and the side; two kernel weights then merge into one linear-filtered tap (exact for any weights). Used by Box and Gaussian Blur. |
 | Coordinates | Scale From Center | Direction, scalar scale and center; no hidden UV or resolution source. |
-| Color | Brightness Curve; Contrast Curve | 0–1 RGB and the amount; black and white stay fixed (odds curve with gain `2^(2.5·Brightness)`, S-curve with slope Contrast at mid-grey). Used by Brightness and Contrast. |
+| Color | Brightness Curve; Contrast Curve | 0–1 RGB and the amount (odds curve with gain `2^(2.5·Brightness)`, black and white stay fixed; Contrast from 1 up an S-curve with slope Contrast at mid-grey that keeps black and white, below 1 an even fade toward mid-grey, `0.5 + (x − 0.5)·Contrast`, plain grey at 0 and below). Used by Brightness and Contrast. |
 | Color | Exposure (Stops); White Balance | RGB and stops, or Temperature and Tint (per unit red up and blue down 0.6 stops each; Tint green down 0.5, red and blue up 0.25); the light math runs between sRGB to Linear and Linear to sRGB, not clamped. Used by Exposure and Temperature. |
 | Color | Saturation (Gamut-Safe); Hue Rotate (OkLCh) | 0–1 RGB and amount (≥ 0) mixed with Rec.709 luma up to the gamut edge; or RGB and a shift in turns rotated in OkLCh, not clamped. Used by Saturation, Vibrance and Hue Shift. |
 | Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. Kept for colour effects saved before 2026-10. |
@@ -308,9 +308,11 @@ Effects are grouped by look in `src/effects/effectCatalogGroups.ts` (Color & Ton
 Blur & Sharpen, Light & Stylize, Lens & Distort, Pixel & Mosaic, Print & Halftone,
 Lines & Engraving, Textile & Craft, Text & Glyph, Analog & Glitch, Keying, Time,
 Tracking & Overlays, 3D & Particles); the registry `category` stays internal.
-Looks of one engine with identical parameters are styles: the Effects tab shows a
-**Style** selector that switches in place and keeps the effect ID, values and
-keyframes (a customized node graph restarts from the new look's default). Rom1, the
+Looks of one engine are styles of each other: the Effects tab shows a **Style**
+selector that switches in place and keeps the effect ID and the values and keyframes
+of the controls both looks have. A control only the new look has starts at its
+default; one only the old look has keeps its value for a switch back (a customized
+node graph restarts from the new look's default). Rom1, the
 watery-smoke look, is its own effect again since Acuarela became a watercolour.
 Audio effects use six groups: Level & Channels, EQ & Filter, Dynamics, Repair,
 Time & Space, Character & Advanced.

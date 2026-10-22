@@ -45,6 +45,9 @@ const consumers = (...effects: string[]) => ['Image graphs', ...effects];
  * each effect graph is its bound parameters plus one of these, and every block is insertable
  * from Reusable Nodes and expandable into its primitives.
  */
+// Contrast's block holds both halves of the recipe, Flatten below 1 and the S-curve from 1 up (2026-10-22):
+// the S-curve family alone ran an inverse S below 1 that blew shadow noise into colour blotches. Its ports
+// (RGB and the clamped Contrast) are the ones the curve-only block had, so saved instances stay valid.
 const brightness = createDefaultBrightnessGraph(), contrast = createDefaultContrastGraph(), exposure = createDefaultExposureGraph();
 const temperature = createDefaultTemperatureGraph(), saturation = createDefaultSaturationGraph(), hue = createDefaultHueShiftGraph();
 const RECIPE_COMPOSITIONS: readonly OperatorDefinition[] = [
@@ -56,8 +59,8 @@ const RECIPE_COMPOSITIONS: readonly OperatorDefinition[] = [
   }),
   extractImageComposition(contrast, {
     id: 'color.contrast-curve.rgb', label: 'Contrast Curve',
-    description: 'S-curve around mid-grey with slope Contrast there: y = x^c / (x^c + (1 − x)^c). Black and white stay put and highlights roll off instead of clipping; below 1 it flattens.',
-    members: [...ids(contrast, /^curve/), 'input'], consumers: consumers('Contrast'),
+    description: 'Contrast with slope c at mid-grey on 0–1 RGB. From 1 up an S-curve y = x^c / (x^c + (1 − x)^c): black and white stay put and highlights roll off instead of clipping. Below 1 an even fade toward mid-grey, y = 0.5 + (x − 0.5)·c: blacks lift and whites soften, 0 and below is plain grey.',
+    members: [...ids(contrast, /^(curve|flatten)(-|$)|^amount-(steepness|flatten)$/), 'input'], consumers: consumers('Contrast'),
     inputLabels: { ...rgbIn, 'amount-clamped-value': 'Contrast' }, outputLabels: { 'curve-value': 'RGB' },
   }),
   extractImageComposition(exposure, {

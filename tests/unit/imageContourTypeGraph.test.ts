@@ -23,8 +23,10 @@ describe('Contour Type image operator graph', () => {
   });
 
   it('matches the zero-gradient band resolve while preserving sampled source alpha', () => {
-    const definition = getEffect('contour-type')!, values = { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.default])),
-      cellSize: 10, amount: 1, colorMode: 'source' };
+    // The recipe as saved before Background existed (the dark ground). Cell Size counts pixels of a 1080p frame,
+    // so on this 40 × 20 frame 540 is a 10-pixel cell.
+    const definition = getEffect('contour-type')!, values = { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.legacyDefault ?? spec.default])),
+      cellSize: 10 * 1080 / 20, amount: 1, colorMode: 'source' };
     const plan = compileImageOperatorGraph(createDefaultContourTypeGraph(), values, { parameterSchema: definition.params,
       resolveGlyphAtlas: () => ({ fontFamily: 'monospace', fontWeight: 600, charset: '0123', cellSize: 64 }) });
     const resolution: [number, number] = [40, 20], pixelCoordinate: [number, number] = [11, 7], uv: [number, number] = [11.5 / 40, 7.5 / 20];

@@ -5,7 +5,7 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { effectOperatorGraph, isImageGraphEffectType } from './effectGraphOwner';
 import { WEAVE_EFFECT_TYPE, weaveBoundParameters, weaveRecipeForm } from './geometry/weaveGraph';
 import { exposedGraphValues } from './exposedGraphValueList';
-import { isCurrentStylizeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_EFFECT_TYPES } from './stylizeRecipes';
+import { isCurrentStylizeGraph, isEarlierStylizeGraph, isPreviousStylizeGraph, STYLIZE_RECIPE_EFFECT_TYPES } from './stylizeRecipes';
 import { Logger } from '../logger';
 
 const log = Logger.create('EffectParamVisibility');
@@ -112,7 +112,8 @@ export function effectDefinitionNotes(effect: EffectParamOwner, width: number, h
   if (!notes.length || !recipe) return notes;
   let graph: EffectOperatorGraph | undefined;
   try { graph = effectOperatorGraph(effect, { inspectionOnly: true }); } catch { graph = undefined; }
-  if (isCurrentStylizeGraph(effect.type, graph)) return notes;
+  // A previous release (Sharpen 3.2.7) reads the values as the current recipe does.
+  if (isCurrentStylizeGraph(effect.type, graph) || isPreviousStylizeGraph(effect.type, graph)) return notes;
   return [`This ${definition.name} runs an edited graph, so its own nodes decide how these values act; the standard recipe would say: ${notes.join(' ')}`];
 }
 

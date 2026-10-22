@@ -39,6 +39,19 @@ export const effectAssets = (id) => ({
 });
 export const pageFile = (id) => `effects/${id}.md`;
 
+/**
+ * The picture a gallery thumbnail is cut from (relative to docs/Features): `override` (thumb.source of
+ * effectDocsExtras.mjs), else the clip poster when the page plays the effect's loop, has no still or does not
+ * show it (the still of a rewritten page is out of date), else the still. `page` is the page's markdown.
+ */
+export function thumbSource(id, { exists, page, override }) {
+  if (override) return exists(override) ? override : undefined;
+  const { still, poster, clip } = effectAssets(id);
+  const shows = (asset) => page !== undefined && page.includes(`/${asset}`);
+  if (exists(poster) && (!exists(still) || shows(clip) || (page !== undefined && !shows(still)))) return poster;
+  return exists(still) ? still : undefined;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Registry snapshot
 
@@ -52,7 +65,8 @@ const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 export function snapshotRegistry(api) {
   const byId = new Map(api.effects.map((effect) => [effect.id, effect]));
   const groupOf = new Map(api.groups.flatMap((group) => group.effects.map((id) => [id, group.id])));
-  const keys = (effect) => Object.keys(effect.params ?? {}).toSorted().join(',');
+  // The Style menu rule (src/services/effects/effectStyles.ts): a parameter two looks share is of the same kind.
+  const sameKinds = (effect, other) => Object.entries(effect.params ?? {}).every(([key, param]) => !other.params?.[key] || other.params[key].type === param.type);
   const groups = api.groups.map((group) => ({ id: group.id, label: group.label, effects: group.effects.filter((id) => byId.has(id)) }));
   const ungrouped = api.effects.filter((effect) => !groupOf.has(effect.id)).map((effect) => effect.id);
   if (ungrouped.length) groups.push({ id: 'other', label: 'Other', effects: ungrouped });
@@ -60,7 +74,7 @@ export function snapshotRegistry(api) {
   const effects = order.map((id) => {
     const effect = byId.get(id);
     const engine = api.engineOf(id);
-    const styles = engine ? api.engineMembers(engine).filter((member) => member !== id && byId.has(member) && keys(byId.get(member)) === keys(effect)) : [];
+    const styles = engine ? api.engineMembers(engine).filter((member) => member !== id && byId.has(member) && sameKinds(effect, byId.get(member))) : [];
     const describe = ([key, param]) => ({
         key,
         label: param.label,
@@ -422,19 +436,33 @@ export function catalogJson(catalog) {
 // Basic pages
 
 /** Effect Lab test image (tests/browser/effect-lab/images) for an effect's basic still, and how alt texts name it. */
-const LAB_IMAGE_BY_GROUP = { print: 'harbor_town', textile: 'harbor_town', text: 'dancer_stage', scene: 'harbor_town', pixel: 'neon_rain_street', analog: 'neon_rain_street' };
+const LAB_IMAGE_BY_GROUP = { generate: 'black', print: 'harbor_town', textile: 'harbor_town', text: 'dancer_stage', scene: 'harbor_town', pixel: 'neon_rain_street', analog: 'neon_rain_street' };
 /**
- * Stills that are not a whole-frame split. Glyph looks: an enlarged detail of the dancer's lit dress, side by
+ * Stills that are not a compare pair. Generators: the effect alone on black. Glyph looks: an enlarged detail of the dancer's lit dress, side by
  * side, so the characters can be read at page width. Tracking overlays: both whole frames side by side, so the
  * seam never cuts the target box in half.
  */
 const LAB_SHOT_BY_GROUP = {
+  // A generator draws its own picture: shown alone on black (an original beside it would show nothing).
+  generate: { layout: 'single', outWidth: 1600 },
   text: { layout: 'pair', crop: [740, 140, 460, 360], zoom: 1.3, gap: 6, detail: true },
 };
 const LAB_SHOT_BY_ENGINE = {
   'tracking-overlay': { layout: 'pair', outWidth: 1200, gap: 6 },
 };
-const labShot = (effect) => LAB_SHOT_BY_GROUP[effect.group] ?? LAB_SHOT_BY_ENGINE[effect.engine] ?? { layout: 'split', outWidth: 1200 };
+/** Every other basic still is the pair of a compare slider: the whole frame, original | effect, without a gap. */
+const COMPARE_SHOT = { layout: 'compare', outWidth: 1600 };
+/** Basic stills made before the compare slider: one frame split down the middle. They stay until their page is rewritten. */
+const SPLIT_SHOT = { layout: 'split', outWidth: 1200 };
+/**
+ * How an effect's basic still is shot. `size` is the existing still's pixel size: a still one frame wide is an
+ * older split, two frames side by side a compare pair; without a still, a new one is a compare pair.
+ */
+export function labShot(effect, size) {
+  const shot = LAB_SHOT_BY_GROUP[effect.group] ?? LAB_SHOT_BY_ENGINE[effect.engine];
+  if (shot) return shot;
+  return size && size.width / size.height < 2.5 ? SPLIT_SHOT : COMPARE_SHOT;
+}
 /** Effects a still test image cannot show; they wait for a clip on suitable footage. */
 export const LAB_STILL_SKIP = {
   'face-cables': 'needs a face-tracking bake of moving footage',
@@ -447,6 +475,7 @@ export const LAB_STILL_SKIP = {
 /** Effects without a still or thumbnail yet, and why; every other effect with a page needs both. */
 export const PICTURE_PENDING = { ...LAB_STILL_SKIP, 'ai-edge-fill': 'needs a generated fill of a corrected photo (cloud credits)' };
 const LAB_IMAGE_TEXT = {
+  black: 'black',
   dancer_stage: 'the dancer on a dark stage',
   harbor_town: 'the harbour town',
   neon_rain_street: 'the night street with neon signs',
@@ -454,19 +483,24 @@ const LAB_IMAGE_TEXT = {
 export const labImage = (effect) => LAB_IMAGE_BY_GROUP[effect.group] ?? 'dancer_stage';
 export function stillAlt(effect) {
   const shot = labShot(effect);
+  if (shot.layout === 'single') return `${effect.name} at its default settings, drawn on black`;
   const where = shot.detail ? `an enlarged detail of ${LAB_IMAGE_TEXT[labImage(effect)]}` : LAB_IMAGE_TEXT[labImage(effect)];
   const frames = shot.layout === 'pair' && !shot.detail ? ': the whole frame twice, ' : ': ';
   return `${effect.name} on ${where}${frames}the original on the left, ${effect.name} at its default settings on the right`;
 }
 /** The caption of a basic page's still. */
 export function stillCaption(effect) {
+  if (labShot(effect).layout === 'single') return `${effect.name} at its default settings, on black${effect.moving ? ': one frame of its movement' : ''}.`;
   const detail = labShot(effect).detail ? ' An enlarged detail, so the characters can be read.' : '';
   return `Left: the original. Right: ${effect.name} at its default settings${effect.moving ? ', one frame of its movement' : ''}.${detail}`;
 }
 
-/** An Effect Lab --pairs entry for an effect's basic still: the original and the effect at its defaults. */
-export function labPair(effect) {
-  const { detail, ...shot } = labShot(effect);
+/**
+ * An Effect Lab --pairs entry for an effect's basic still: the original and the effect at its defaults.
+ * `size`: the existing still's pixel size, so a reshoot keeps its layout (see labShot).
+ */
+export function labPair(effect, size) {
+  const { detail, ...shot } = labShot(effect, size);
   void detail;
   return {
     name: effect.id,
@@ -490,7 +524,8 @@ const ENGINE_LABELS = {
 /**
  * A basic page for an effect without a hand-written page. ctx: { groupLabel (the sidebar label, joined
  * groups as "Keying & Time"), overview (file relative to docs/Features or undefined), still (its Effect Lab
- * still, asset path, or undefined), names (id → name), hasPage(id) (whether effects/<id>.md exists, for
+ * still, asset path, or undefined), stillSize (its pixel size: a compare pair gets a compare slider), names (id → name), groupOf(id) (its picker group), groupOrder (picker group ids in order), groupName(id) and
+ * groupHref(id) (a picker group's label and overview link), hasPage(id) (whether effects/<id>.md exists, for
  * links to the other styles) }. The marker under the title carries the hash of the rest of the page.
  */
 export function basicPage(effect, ctx) {
@@ -501,7 +536,8 @@ export function basicPage(effect, ctx) {
     `Group: [${ctx.groupLabel}](${groupLink}) · [How to add an effect](../Effects.md#add-an-effect)`,
   ];
   if (ctx.still) {
-    parts.push(`<figure class="docs-shot">\n\n![${stillAlt(effect)}](../${ctx.still})\n\n<figcaption>${stillCaption(effect)}</figcaption>\n</figure>`);
+    const compare = labShot(effect, ctx.stillSize).layout === 'compare' ? ' docs-compare' : '';
+    parts.push(`<figure class="docs-shot${compare}">\n\n![${stillAlt(effect)}](../${ctx.still})\n\n<figcaption>${stillCaption(effect)}</figcaption>\n</figure>`);
   }
   if (effect.experimental) parts.push(`**Experimental:** ${effect.experimental.trim()}`);
   parts.push('*A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*');
@@ -510,8 +546,18 @@ export function basicPage(effect, ctx) {
   }
   parts.push(`## Controls\n\n${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`);
   if (effect.styles.length) {
-    const names = effect.styles.map((id) => (ctx.hasPage?.(id) ? `[${ctx.names.get(id) ?? id}](./${id}.md)` : ctx.names.get(id) ?? id));
-    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: ${names.join(', ')}.`);
+    // As the Style menu: the looks of the effect's own picker group by name, the other groups by name and count.
+    const byName = (a, b) => (ctx.names.get(a) ?? a).localeCompare(ctx.names.get(b) ?? b);
+    const look = (id) => (ctx.hasPage?.(id) ? `[${ctx.names.get(id) ?? id}](./${id}.md)` : ctx.names.get(id) ?? id);
+    const near = effect.styles.filter((id) => ctx.groupOf?.(id) === effect.group).toSorted(byName);
+    const others = effect.styles.filter((id) => ctx.groupOf?.(id) !== effect.group);
+    const groups = (ctx.groupOrder ?? []).map((group) => [group, others.filter((id) => ctx.groupOf?.(id) === group)]).filter(([, ids]) => ids.length);
+    const group = (id) => `[${ctx.groupName?.(id) ?? id}](${ctx.groupHref?.(id) ?? './index.md'})`;
+    const own = near.length ? ` Looks of ${ctx.groupLabel}: ${near.map(look).join(', ')}.` : '';
+    const rest = !groups.length ? ''
+      : others.length <= 3 ? ` ${near.length ? 'Also' : 'Looks'}: ${groups.map(([id, ids]) => `${ids.toSorted(byName).map(look).join(', ')} (${group(id)})`).join('; ')}.`
+        : ` ${near.length ? 'Further looks' : 'Looks'} under ${groups.map(([id, ids]) => `${group(id)} (${ids.length})`).join(', ')}.`;
+    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults.${own}${rest}`);
   }
   const details = [];
   if (effect.engine) details.push(`${effect.name} is one look of ${ENGINE_LABELS[effect.engine] ?? `the ${effect.engine} engine`}; its looks share one node setup.`);
@@ -532,8 +578,8 @@ export function basicPage(effect, ctx) {
 // The whole plan, shared by the script and the drift test
 
 /**
- * What the effect docs should look like. files: { read(file) → text | undefined, exists(file),
- * pages: ids of the existing effects/<id>.md pages }. `basic`: ids to write new basic pages for.
+ * What the effect docs should look like. files: { read(file) → text | undefined, exists(file), size(file) →
+ * { width, height } of a picture (basic stills keep their layout), pages: ids of the existing effects/<id>.md pages }. `basic`: ids to write new basic pages for.
  * Returns { texts: Map<file, text> (every file the script owns, with its current text), catalog,
  * uncovered: visible effects without a page, unknownPages: page ids the registry lacks,
  * problems: [{ file, text }] pages left alone (a basic page edited under its marker, broken markers) }.
@@ -552,7 +598,15 @@ export function planEffectDocs(snapshot, files, { basic = [] } = {}) {
     groupLabel: (overviews.get(effect.group)?.joined ?? [effect.group]).map((id) => labels.get(id) ?? id).join(' & '),
     overview: overviews.get(effect.group)?.overview,
     still: files.exists(effectAssets(effect.id).still) ? effectAssets(effect.id).still : undefined,
+    stillSize: files.exists(effectAssets(effect.id).still) ? files.size(effectAssets(effect.id).still) : undefined,
     names,
+    groupOf: (id) => byId.get(id)?.group,
+    groupOrder: snapshot.groups.map((group) => group.id),
+    groupName: (id) => labels.get(id) ?? id,
+    groupHref: (id) => {
+      const overview = overviews.get(id)?.overview;
+      return overview ? `../${overview}` : `./index.md#${slug((overviews.get(id)?.joined ?? [id]).map((group) => labels.get(group) ?? group).join(' & '))}`;
+    },
     hasPage: (id) => pageIds.has(id),
   });
   for (const id of files.pages) {

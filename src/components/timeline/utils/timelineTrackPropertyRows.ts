@@ -10,7 +10,7 @@ export type TimelineTrackPropertyClip = {
   duration: number;
   is3D?: boolean;
   masks?: ClipMask[];
-  effects?: Array<{ id: string; name: string; params: Record<string, unknown> }>;
+  effects?: Array<{ id: string; type?: string; name: string; params: Record<string, unknown> }>;
   source?: {
     type?: string;
     gaussianSplatSettings?: {

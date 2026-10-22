@@ -185,37 +185,6 @@
       "alt": "The Pose section of the Stick Figure card with the Arabesque preset: Pelvis X, Pelvis Y and Lift at 0 px, Spine Lean 20°, Head Tilt −14°, Shoulder L 150°, Elbow L 10°, Shoulder R −85°, Elbow R 6°, Hip L 0°, Knee L 0°, Hip R −100°, Knee R 0°, each with a slider, a keyframe diamond and a reset arrow",
       "caption": "The Pose section with the Arabesque preset.",
       "note": "Needs clicks (card buttons pressed first), collapse (card sections folded) and nodeClicks (Nodes toolbar buttons), which scripts/effect-editor-shot.mjs does not read yet: made with a review-folder copy that adds them (ledger, GEN1)."
-    },
-    {
-      "name": "stick-figure-walk-nodes",
-      "effect": "stick-figure",
-      "image": "dancer_stage.jpg",
-      "view": "nodes",
-      "clicks": [
-        "Walk"
-      ],
-      "nodeClicks": [
-        "Avoid"
-      ],
-      "viewport": {
-        "width": 1700,
-        "height": 1000
-      },
-      "marks": [
-        {
-          "target": "title:Gait Cycle",
-          "label": "Gait Cycle: one output per joint"
-        },
-        {
-          "target": "title:Stick Figure",
-          "label": "Stick Figure: the joints as inputs",
-          "from": "above",
-          "reach": 110
-        }
-      ],
-      "alt": "The Nodes tab after Walk: a Gait Cycle card on the left with inputs time, speed, stride, lean and phase and one output per joint (Spine to Knee R), cables from each output to the matching joint input of the Stick Figure card, which also takes the picture from the clip's Source card and passes it to Target",
-      "caption": "The node setup after Walk.",
-      "note": "Replaced by docs/Features/assets/effects/graphs/stick-figure-walk.webp: the Rig nodes live in the clip's node graph, which effect-graph-shot cannot show, so the picture comes from a review-folder script (review/GEN1/stick/r1/nodes.mjs with moves.json: a black clip, Walk, Previews off, Avoid on, Source and Target dragged below, canvas cropped to Gait Cycle and Stick Figure; ledger, GEN1). Kept as the recipe of the earlier full-tab view."
     }
   ]
 }

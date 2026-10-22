@@ -1,6 +1,6 @@
 # Stitch Poster
 
-<!-- effect-docs: basic page sha=17dd82c49404, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=1dd859b48bb0, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Combines character art with cross-stitch X marks that get denser in dark areas over a paper-tinted background; Cell Size sets stitch size.
 
@@ -21,22 +21,24 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 | Control | Range | Default |
 |---|---|---|
 | **Grid** | | |
-| Cell Size | 4 to 72 | 12 |
+| Cell Size | 4 to 72 px | 12 px |
 | **Style** | | |
 | Amount | 0 to 1 | 1 |
+| Background | 0 to 1 | 0 |
+| Black Level | 0 to 0.9 | 0 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | symbols |
+| Ramp (Used while Custom Ramp is empty) | Standard, Detailed, Blocks, Bars, Binary and 2 more | Symbols |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |
 | **Color** | | |
 | Color Source | Source, Duotone | Source |
-| Dark | a colour | `#081018` |
-| Light | a colour | `#e8fff5` |
+| Dark (Used with Color Source Duotone) | a colour | `#081018` |
+| Light (Used with Color Source Duotone) | a colour | `#e8fff5` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [ASCII](./ascii.md), [Brand Generator](./brand-generator.md), [Grid Glyph](./grid-glyph.md), [Inscribe](./inscribe.md), [Number Field](./number-field.md), [Pixel Code](./pixel-code.md), [Word Mosaic](./word-mosaic.md), [Contour Type](./contour-type.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults. Looks under [Text & Glyph](../Effects-Glyph.md) (17).
 
 ## Technical details
 

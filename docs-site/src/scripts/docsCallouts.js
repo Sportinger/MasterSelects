@@ -91,12 +91,28 @@ function sectionOf(figure, content) {
   const section = [top];
   for (let el = top.previousElementSibling; el && !ends(el); el = el.previousElementSibling) section.unshift(el);
   for (let el = top.nextElementSibling; el && !ends(el); el = el.nextElementSibling) section.push(el);
-  return section;
+  if (ends !== isH2) return section;
+  // A ## picture leaves out the ### subsections that have a callout picture of their own (the stage
+  // folders under Node setup), so their node names do not also light the overview's callouts. ###
+  // subsections without one (Pattern and Motion under Controls) still belong to the ## picture.
+  const kept = [];
+  let sub = [];
+  const flush = () => { if (!sub.some((el) => el.querySelector?.('.docs-shot-overlay'))) kept.push(...sub); sub = []; };
+  for (const el of section) {
+    if (isH3(el)) { flush(); sub = [el]; continue; }
+    if (sub.length) sub.push(el); else kept.push(el);
+  }
+  flush();
+  return kept;
 }
 
+// Whole names win: "Gamma" links **Gamma**, not **Gamma Render Min**. A longer bold name only counts
+// when the scope has no exact one (**Line Shading & Alpha** for the callout "Line Shading").
 function boldWords(scope, label) {
-  return scope.flatMap((el) => [...el.querySelectorAll('strong, b')])
+  const candidates = scope.flatMap((el) => [...el.querySelectorAll('strong, b')])
     .filter((word) => !word.closest('figure, h1, h2, h3, h4, a') && sameName(normal(word.textContent), label));
+  const exact = candidates.filter((word) => normal(word.textContent) === label);
+  return exact.length ? exact : candidates;
 }
 
 // One connector for the whole page, drawn in viewport coordinates.

@@ -7,7 +7,7 @@ import {
 import { catalogText } from '../../src/services/nodeGraph/catalogText';
 import { upgradeBlurGraph } from '../../src/services/operators/blurGraphUpgrade';
 import { createDefaultBoxBlurGraph, createDefaultGaussianBlurGraph } from '../../src/services/operators/blurEffectGraphs';
-import { createDefaultMotionBlurGraph, createDefaultRadialBlurGraph, createDefaultZoomBlurGraph } from '../../src/services/operators/directionalBlurEffectGraphs';
+import { createDefaultMotionBlurGraph, createDefaultRadialBlurGraph, createDefaultZoomBlurGraph, createEvenTapDirectionalBlurGraph } from '../../src/services/operators/directionalBlurEffectGraphs';
 import { createLegacyBoxBlurGraph, createLegacyGaussianBlurGraph } from '../../src/services/operators/legacyBlurEffectGraphs';
 import { createLegacyMotionBlurGraph, createLegacyRadialBlurGraph, createLegacyZoomBlurGraph } from '../../src/services/operators/legacyDirectionalBlurEffectGraphs';
 import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
@@ -96,6 +96,10 @@ describe('legacy blur graph upgrade', () => {
     ['motion-blur', createLegacyMotionBlurGraph, createDefaultMotionBlurGraph],
     ['radial-blur', createLegacyRadialBlurGraph, createDefaultRadialBlurGraph],
     ['zoom-blur', createLegacyZoomBlurGraph, createDefaultZoomBlurGraph],
+    // The 3.2.7 two-stage recipes: their stage A jumped when an animated amount changed its tap count.
+    ['motion-blur', () => createEvenTapDirectionalBlurGraph('motion-blur'), createDefaultMotionBlurGraph],
+    ['radial-blur', () => createEvenTapDirectionalBlurGraph('radial-blur'), createDefaultRadialBlurGraph],
+    ['zoom-blur', () => createEvenTapDirectionalBlurGraph('zoom-blur'), createDefaultZoomBlurGraph],
   ];
 
   it.each(cases)('replaces an untouched saved %s graph, including packed compositions and layout', (type, legacy, current) => {
@@ -143,5 +147,10 @@ describe('legacy blur graph upgrade', () => {
       else expect(text).toMatch(/negative Amount streaks inward/);
       expect(text).not.toMatch(/negative \w+ draws the same streak/);
     }
+  });
+
+  it('names a negative Motion Blur Length in the percent its card shows', () => {
+    expect(blurBudgetNotes('motion-blur', { ...getDefaultParams('motion-blur'), amount: -0.05 }, 1920, 1080)[0]).toMatch(/^Length -5% \(amount -0\.05\) is below 0/);
+    expect(blurBudgetNotes('radial-blur', { ...getDefaultParams('radial-blur'), amount: -0.5 }, 1920, 1080)[0]).toMatch(/^Amount -0.5 is below 0/);
   });
 });

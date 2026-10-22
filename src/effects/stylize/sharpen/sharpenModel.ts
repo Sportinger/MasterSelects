@@ -50,6 +50,8 @@ export function sharpenParamNotes(params: Record<string, unknown>, width = 1920,
   if (amount < 0) notes.push(`Amount ${amount} is below 0: Sharpen softens instead.`);
   if (radius * shortSide / SHARPEN_REFERENCE_HEIGHT < SHARPEN_MIN_SIGMA_PX) notes.push(`Radius ${radius} is finer than ${SHARPEN_MIN_SIGMA_PX} px at ${width}x${height}; it is used as ${SHARPEN_MIN_SIGMA_PX} px.`);
   const reach = sharpenSigmaPx(radius, shortSide) * GAUSSIAN_REACH_SIGMAS;
+  const windowReach = Math.max(1, sharpenSigmaPx(radius, shortSide) * SHARPEN_WINDOW_SIGMAS);
+  if (windowReach > SHARPEN_WINDOW_MAX_TAPS_PER_SIDE) notes.push(`Radius ${radius} makes the halo window reach ${Math.round(windowReach)} px at ${width}x${height}; its ${SHARPEN_WINDOW_MAX_TAPS_PER_SIDE} taps per side are ${(windowReach / SHARPEN_WINDOW_MAX_TAPS_PER_SIDE).toFixed(1)} px apart, so thin bright or dark lines between them can still draw a halo.`);
   if (reach > 2 * SEPARABLE_MAX_PAIRS_PER_SIDE) notes.push(`Radius ${radius} reaches ${Math.round(reach)} px at ${width}x${height}, beyond the ${2 * SEPARABLE_MAX_PAIRS_PER_SIDE} px a pass reads texel by texel; fine detail can shimmer.`);
   return notes;
 }

@@ -105,3 +105,22 @@ export function assetBudgetIssues(file, bytes, { thumb = false } = {}) {
   if (width > BUDGETS.imageWidth) issues.push(`${width} px wide (budget ${BUDGETS.imageWidth} px)`);
   return issues;
 }
+
+/**
+ * Whether a running docs dev server serves an asset the sync has just added under public/. Vite
+ * serves public/ from a file list its watcher keeps; on a machine short of inotify watches a new file
+ * or folder never gets into it, and the server answers 404 until restarted. The watcher may need a
+ * moment, so it asks again. Only a 404 counts as missing: no answer at all is not this problem.
+ */
+export async function devServerServesAsset(url, relativePath, { fetchImpl = globalThis.fetch, attempts = 6, waitMs = 500 } = {}) {
+  if (!url) return true;
+  const address = `${url.replace(/\/$/u, '')}/docs/${relativePath.split('/').map(encodeURIComponent).join('/')}`;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(address, { method: 'HEAD', signal: AbortSignal.timeout(1500) });
+      if (response.status !== 404) return true;
+    } catch { return true; }
+    if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  return false;
+}

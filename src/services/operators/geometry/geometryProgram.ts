@@ -1,4 +1,5 @@
 import { motionPhase, motionTime } from './motionTime';
+import type { GeometryRateClock, GeometryRateTravel } from './geometryRateTravel';
 import { readCurveWake, CURVE_WAKE_NUMBERS, type CurveWakeSpec } from './curveWake';
 import { readCurveLabels, CURVE_LABEL_NUMBERS, type CurveLabelSpec } from './curveLabels';
 import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
@@ -155,7 +156,11 @@ const finite = (value: OperatorValue, label: string) => {
  * Frame context of a lowering: `time` is the composition time read by Time nodes, `simulationTime`
  * the source time of the host clip that drives cloth (seconds).
  */
-export interface GeometryCompileContext { time?: number; simulationTime?: number }
+export interface GeometryCompileContext {
+  time?: number; simulationTime?: number;
+  /** Time × a keyframed integrating rate reads the travelled distance instead (geometryRateTravel.ts). */
+  rateTravel?: GeometryRateTravel;
+}
 
 export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryParameterReader, target?: string,
   context: GeometryCompileContext = {}): GeometryProgram {
@@ -473,8 +478,10 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         throw new Error('Rod Pull Direction is a fixed rest-state field; use Pull Start and Pull Time to move pinned points.');
       }
       let register: number;
-      const rule = pointwiseLoweringFor(node.operator, output);
-      if (rule) {
+      const rule = pointwiseLoweringFor(node.operator, output), travel = rateTravelOf(node);
+      if (travel !== undefined) {
+        register = emit(constant(node.id, travel), `rate-travel:${node.id}`);
+      } else if (rule) {
         if (!FIELD_TYPES.has(rule.type)) throw new Error(`${getEffectOperator(node.operator)?.label ?? node.operator} is not available for curve points.`);
         register = lowerPointwiseNode(rule, node, id => {
           const linked = sourceOf(node, id), fallback = rule.defaults?.[id];
@@ -509,6 +516,17 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       visiting.delete(key); registers.set(key, register);
       return register;
     };
+    /** Time × a rate bound to an integrating parameter: the distance it travelled, when keyframed. */
+    function rateTravelOf(node: BoundOperatorNode): number | undefined {
+      if (!context.rateTravel || node.operator !== 'math.multiply.scalar' || node.bypassed) return undefined;
+      const clockOf = (item?: BoundOperatorNode): GeometryRateClock | undefined => item?.operator === 'geometry.clip-time' ? 'clip'
+        : item?.operator === 'image.timeline-time' ? 'timeline' : undefined;
+      const a = sourceOf(node, 'a')?.node, b = sourceOf(node, 'b')?.node;
+      const [clock, rate] = clockOf(a) ? [clockOf(a), b] : clockOf(b) ? [clockOf(b), a] : [undefined, undefined];
+      const binding = rate?.operator === 'values.number' && !rate.bypassed ? rate.bindings.value : undefined;
+      const travel = clock && typeof binding === 'string' ? context.rateTravel(binding, clock) : undefined;
+      return travel === undefined ? undefined : finite(travel, `${binding} travel`);
+    }
     /** A parameter-backed input: a number becomes one constant, a vector three combined constants. */
     function literal(node: BoundOperatorNode, parameter: string): number {
       const value = read(node, parameter);

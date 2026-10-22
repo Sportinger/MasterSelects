@@ -12,6 +12,7 @@ import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { sourcePreview } from './sourcePreview';
 import { createParameterSourceEvaluator } from '../parameterSources/parameterSourceEvaluation';
+import { applyParameterSourcesToEffects } from '../parameterSources/parameterSourceRendering';
 import { TEXT_NODE_STAGES } from '../text/textNodeStages';
 import { sampleTextProperties } from '../text/textAnimation';
 import { createCaptionFrameModel } from '../captions/captionRuntime';
@@ -76,7 +77,13 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
     const effect = findClipOperatorEffect(clip, binding.effectId);
     if (effect?.type === 'audio-math') return audioOperatorPreview({ ...request, clipId: clip.id }, effect);
     if (effect?.type === 'voxel-relief') return voxelPreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
-    if (effect?.type === WEAVE_EFFECT_TYPE) return geometryPreview(request, effect, state.clipKeyframes.get(clip.id) ?? [], localTime, weaveSimulationClock(clip));
+    if (effect?.type === WEAVE_EFFECT_TYPE) {
+      // Driven values (a node source, the Constant mode) as the render reads them (buildStrandsLayerSources).
+      const keys = state.clipKeyframes.get(clip.id) ?? [];
+      const [driven] = applyParameterSourcesToEffects(clip, keys, localTime, [effect]);
+      return geometryPreview(request, driven, keys, localTime, weaveSimulationClock(clip),
+        { timelineStart: clip.startTime, bindings: clip.nodeGraph?.parameterSources?.targets });
+    }
     if (effect && isComputeImageEffectType(effect.type)) {
       const preview = computeImageOperatorValuePreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
       if (preview) return preview;

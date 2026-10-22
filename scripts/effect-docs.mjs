@@ -9,8 +9,9 @@
 //   node scripts/effect-docs.mjs --basic halftone,print   # ...for these effect or picker group ids
 //   node scripts/effect-docs.mjs --lab-manifest <file> # Effect Lab --pairs manifest for basic pages
 //                                                      # without a still (render it, then rerun this)
-//       [--reshoot <effect or group ids>]              # ...also for these basic pages that have one
-//   node scripts/effect-docs.mjs --thumbs [--force [ids]] # gallery thumbnails from the effect stills (an effect's
+//       [--reshoot <effect or group ids>]              # ...also for these basic pages that have one (keeping
+//       [--layout compare]                             # its layout; --layout compare makes a split still a compare pair)
+//   node scripts/effect-docs.mjs --thumbs [--force [ids]] # gallery thumbnails from the still or clip poster (an effect's
 //                                                      # `thumb` in effectDocsExtras.mjs picks the region or
 //                                                      # names the Effect Lab shot file that makes it); --force
 //                                                      # remakes them all, or only these effect or group ids
@@ -24,7 +25,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONTROLS_END, CONTROLS_START, LAB_STILL_SKIP, controlDefault, THUMB_TARGET_BYTES, controlsTable, effectAssets, isBasicPage, labPair, pageFile, planEffectDocs, snapshotRegistry } from './effectDocsCatalog.mjs';
+import { CONTROLS_END, CONTROLS_START, LAB_STILL_SKIP, controlDefault, controlsTable, effectAssets, isBasicPage, labPair, labShot, pageFile, planEffectDocs } from './effectDocsCatalog.mjs';
+import { imageSize } from '../docs-site/scripts/lib/media.mjs';
+import { makeThumb } from './docShotThumb.mjs';
+import { recordFingerprints } from './docsMediaFingerprint.mjs';
+import { loadEffectSnapshot } from './effectDocsRegistry.mjs';
+import { effectThumbRecipe } from './docsMediaRecipes.mjs';
 import { EFFECT_DOC_EXTRAS } from './effectDocsExtras.mjs';
 import { controlParagraphSkeletons, handWrittenPageProblems, presetsVisual } from './effectDocsPageCheck.mjs';
 
@@ -41,35 +47,13 @@ const check = args.includes('--check');
 const feature = (file) => path.join(featuresDir, file);
 const read = (file) => (fs.existsSync(feature(file)) ? fs.readFileSync(feature(file), 'utf8') : undefined);
 const exists = (file) => fs.existsSync(feature(file));
+/** Pixel size of a picture in docs/Features (basic stills keep their layout). */
+const size = (file) => (exists(file) ? imageSize(fs.readFileSync(feature(file))) : undefined);
 const listPages = () => (fs.existsSync(feature('effects'))
   ? fs.readdirSync(feature('effects')).filter((name) => name.endsWith('.md') && name !== 'index.md').map((name) => name.slice(0, -3)).toSorted()
   : []);
 
-/** The registry as plain data, loaded through Vite's SSR module loader. */
-async function loadRegistry() {
-  const { createServer } = await import('vite');
-  const server = await createServer({
-    root, configFile: false, logLevel: 'error', appType: 'custom',
-    server: { middlewareMode: true, hmr: false, watch: null },
-    optimizeDeps: { noDiscovery: true, include: [] },
-    resolve: { alias: { '@': path.join(root, 'src') } },
-    define: { __APP_VERSION__: '"docs"', __SHOW_CHANGELOG__: 'false', __DEV_BRIDGE_TOKEN__: '""', __DEV_ALLOWED_FILE_ROOTS__: '[]' },
-  });
-  try {
-    const effects = await server.ssrLoadModule('/src/effects/index.ts');
-    const { catalogText } = await server.ssrLoadModule('/src/services/nodeGraph/catalogText.ts');
-    const { effectParamDisplay } = await server.ssrLoadModule('/src/effects/paramDisplay.ts');
-    return snapshotRegistry({
-      effects: effects.getAllEffects(), groups: effects.EFFECT_GROUPS, hidden: effects.EFFECTS_HIDDEN_FROM_CATALOG,
-      engineOf: effects.effectEngine, engineMembers: effects.effectEngineMembers, text: catalogText,
-      display: effectParamDisplay, experimental: effects.effectExperimentalNote,
-    });
-  } finally {
-    await server.close();
-  }
-}
-
-const snapshot = await loadRegistry();
+const snapshot = await loadEffectSnapshot(root);
 const notes = [];
 
 const controlsFor = option('--controls');
@@ -92,35 +76,18 @@ if (controlsFor !== undefined) {
 
 // Gallery thumbnails first (the catalog lists them): the effect half of the still, 400 x 250 WebP (smaller if needed).
 if (args.includes('--thumbs') && !check) {
-  const { default: sharp } = await import('sharp');
   const forceOption = option('--force');
   const forceIds = forceOption ? forceOption.split(',').map((item) => item.trim()).filter(Boolean) : undefined;
   const forced = (effect) => forceOption !== undefined && (!forceIds || forceIds.includes(effect.id) || forceIds.includes(effect.group));
   for (const effect of snapshot.effects) {
     const assets = effectAssets(effect.id);
-    const source = [assets.still, assets.poster].find(exists);
-    if (!source || (exists(assets.thumb) && !forced(effect))) continue;
+    const recipe = effectThumbRecipe(effect.id, undefined, { wholeStill: labShot(effect).layout === 'single' });
+    if (!recipe || (exists(assets.thumb) && !forced(effect))) continue;
     const thumb = EFFECT_DOC_EXTRAS[effect.id]?.thumb;
     if (thumb?.shot) { notes.push(`${assets.thumb}: made by node scripts/effect-lab.mjs --pairs ${thumb.shot} --only ${effect.id}; left alone.`); continue; }
-    const { width, height } = await sharp(feature(source)).metadata();
-    // Stills show "original | effect" side by side, or stacked when taller than wide: keep the effect half
-    // (or the region the extras name, as fractions of the still: [left, top, width, height]).
-    const region = thumb?.region
-      ? { left: Math.round(thumb.region[0] * width), top: Math.round(thumb.region[1] * height), width: Math.round(thumb.region[2] * width), height: Math.round(thumb.region[3] * height) }
-      : height > width * 0.9
-        ? { left: 0, top: Math.ceil(height / 2), width, height: Math.floor(height / 2) }
-        : { left: Math.ceil(width / 2), top: 0, width: Math.floor(width / 2), height };
-    // Lower the quality first, then the size, until the thumbnail fits (fine line patterns compress badly).
-    let buffer;
-    search: for (const [width, height] of [[400, 250], [352, 220], [320, 200]]) {
-      for (let quality = 72; quality >= 40; quality -= 8) {
-        buffer = await sharp(feature(source)).extract(region).resize(width, height, { fit: 'cover', position: 'attention' }).webp({ quality }).toBuffer();
-        if (buffer.length <= THUMB_TARGET_BYTES) break search;
-      }
-    }
-    fs.mkdirSync(path.dirname(feature(assets.thumb)), { recursive: true });
-    fs.writeFileSync(feature(assets.thumb), buffer);
-    console.log(`${assets.thumb}: ${buffer.length} bytes from ${source}`);
+    const bytes = await makeThumb({ source: feature(recipe.spec.source), out: feature(assets.thumb), region: recipe.spec.region, fit: recipe.spec.fit });
+    recordFingerprints([recipe]);
+    console.log(`${assets.thumb}: ${bytes} bytes from ${recipe.spec.source}`);
   }
 }
 
@@ -135,10 +102,10 @@ if (basicOption !== undefined) {
   }
   basic = wanted
     ? snapshot.effects.filter((effect) => wanted.includes(effect.id) || wanted.includes(effect.group)).map((effect) => effect.id)
-    : planEffectDocs(snapshot, { read, exists, pages: listPages() }).uncovered.map((effect) => effect.id);
+    : planEffectDocs(snapshot, { read, exists, size, pages: listPages() }).uncovered.map((effect) => effect.id);
 }
 
-const plan = planEffectDocs(snapshot, { read, exists, pages: listPages() }, { basic });
+const plan = planEffectDocs(snapshot, { read, exists, size, pages: listPages() }, { basic });
 for (const id of plan.unknownPages) notes.push(`effects/${id}.md: "${id}" is not an effect id of the registry; the page is left alone.`);
 for (const problem of plan.problems) notes.push(problem.text);
 if (plan.problems.length) process.exitCode = 1;
@@ -167,7 +134,9 @@ if (manifestFile) {
     .filter((effect) => isBasicPage(plan.texts.get(pageFile(effect.id)) ?? '')
       && (!exists(effectAssets(effect.id).still) || reshoot.includes(effect.id) || reshoot.includes(effect.group)))
     .filter((effect) => !LAB_STILL_SKIP[effect.id] || void notes.push(`${effect.id}: no Effect Lab still, it ${LAB_STILL_SKIP[effect.id]}.`))
-    .map(labPair);
+    // --layout compare: shoot the reshot ones as compare pairs, also those that are an older split still.
+    .map((effect) => labPair(effect, option('--layout') === 'compare' && reshoot.some((id) => id === effect.id || id === effect.group)
+      ? undefined : size(effectAssets(effect.id).still)));
   fs.writeFileSync(path.resolve(manifestFile), `${JSON.stringify({ pairs }, null, 2)}\n`);
   console.log(`${manifestFile}: ${pairs.length} stills: node scripts/effect-lab.mjs --pairs ${manifestFile} --url http://localhost:<vite port>, then rerun this script.`);
 }

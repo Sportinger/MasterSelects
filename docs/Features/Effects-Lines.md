@@ -29,7 +29,8 @@ They all read the brightness of the picture and turn it into lines, in one of th
 - **Lines along edges**: Outline draws where the brightness changes quickly.
 
 **Ink** and **Paper** (Contour: **Line** and **Paper**) are the two colours of the drawing, **Scale**
-sets the line spacing and **Amount** mixes back towards the original. Drift Lines, Outline and Wave
+sets the line spacing (Contour Map: **Band Density**, more bands as it grows) and **Amount** mixes back
+towards the original. Drift Lines, Outline and Wave
 Lines move over time.
 
 ## Technical details

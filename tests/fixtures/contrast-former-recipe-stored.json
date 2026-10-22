@@ -1,0 +1,268 @@
+{
+ "version": 1,
+ "schemaVersion": 1,
+ "domain": "image",
+ "nodes": [
+  {
+   "id": "frame",
+   "operator": "image.frame",
+   "operatorVersion": 1,
+   "bindings": {}
+  },
+  {
+   "id": "split",
+   "operator": "vector.split.rgba",
+   "operatorVersion": 1,
+   "bindings": {}
+  },
+  {
+   "id": "amount",
+   "operator": "values.number",
+   "operatorVersion": 1,
+   "bindings": {
+    "value": "amount"
+   }
+  },
+  {
+   "id": "amount-render-min",
+   "operator": "values.number",
+   "operatorVersion": 1,
+   "bindings": {},
+   "constants": {
+    "value": 0
+   }
+  },
+  {
+   "id": "amount-render-max",
+   "operator": "values.number",
+   "operatorVersion": 1,
+   "bindings": {},
+   "constants": {
+    "value": 10
+   }
+  },
+  {
+   "id": "amount-clamped",
+   "operator": "math.clamp.scalar",
+   "operatorVersion": 1,
+   "bindings": {}
+  },
+  {
+   "id": "shared-curve-minimum-slope",
+   "operator": "color.contrast-curve.rgb",
+   "operatorVersion": 1,
+   "bindings": {},
+   "composition": {
+    "nodeIds": {
+     "curve-minimum-slope": "curve-minimum-slope",
+     "curve-slope": "curve-slope",
+     "curve-slope-rgb": "curve-slope-rgb",
+     "input-low": "input-low",
+     "input-high": "input-high",
+     "input": "input",
+     "curve-shadows": "curve-shadows",
+     "curve-one": "curve-one",
+     "curve-one-rgb": "curve-one-rgb",
+     "curve-inverse": "curve-inverse",
+     "curve-highlights": "curve-highlights",
+     "curve-total": "curve-total",
+     "curve": "curve"
+    },
+    "layout": {
+     "curve-minimum-slope": {
+      "x": 0,
+      "y": 0
+     },
+     "curve-slope": {
+      "x": 280,
+      "y": 0
+     },
+     "curve-slope-rgb": {
+      "x": 560,
+      "y": 0
+     },
+     "input-low": {
+      "x": 840,
+      "y": 0
+     },
+     "input-high": {
+      "x": 1120,
+      "y": 0
+     },
+     "input": {
+      "x": 1400,
+      "y": 0
+     },
+     "curve-shadows": {
+      "x": 0,
+      "y": 360
+     },
+     "curve-one": {
+      "x": 280,
+      "y": 360
+     },
+     "curve-one-rgb": {
+      "x": 560,
+      "y": 360
+     },
+     "curve-inverse": {
+      "x": 840,
+      "y": 360
+     },
+     "curve-highlights": {
+      "x": 1120,
+      "y": 360
+     },
+     "curve-total": {
+      "x": 1400,
+      "y": 360
+     },
+     "curve": {
+      "x": 0,
+      "y": 720
+     }
+    }
+   }
+  },
+  {
+   "id": "combine",
+   "operator": "vector.combine.rgba",
+   "operatorVersion": 1,
+   "bindings": {}
+  },
+  {
+   "id": "output",
+   "operator": "image.output",
+   "operatorVersion": 1,
+   "bindings": {}
+  }
+ ],
+ "edges": [
+  {
+   "id": "frame-image-split-image",
+   "from": "frame",
+   "output": "image",
+   "to": "split",
+   "input": "image"
+  },
+  {
+   "id": "amount-value-amount-clamped-value",
+   "from": "amount",
+   "output": "value",
+   "to": "amount-clamped",
+   "input": "value"
+  },
+  {
+   "id": "amount-render-min-value-amount-clamped-min",
+   "from": "amount-render-min",
+   "output": "value",
+   "to": "amount-clamped",
+   "input": "min"
+  },
+  {
+   "id": "amount-render-max-value-amount-clamped-max",
+   "from": "amount-render-max",
+   "output": "value",
+   "to": "amount-clamped",
+   "input": "max"
+  },
+  {
+   "id": "split-alpha-combine-alpha",
+   "from": "split",
+   "output": "alpha",
+   "to": "combine",
+   "input": "alpha"
+  },
+  {
+   "id": "combine-image-output-image",
+   "from": "combine",
+   "output": "image",
+   "to": "output",
+   "input": "image"
+  },
+  {
+   "id": "amount-clamped-value-curve-slope-a",
+   "from": "amount-clamped",
+   "output": "value",
+   "to": "shared-curve-minimum-slope",
+   "input": "amount-clamped-value"
+  },
+  {
+   "id": "split-rgb-input-value",
+   "from": "split",
+   "output": "rgb",
+   "to": "shared-curve-minimum-slope",
+   "input": "split-rgb"
+  },
+  {
+   "id": "curve-value-combine-rgb",
+   "from": "shared-curve-minimum-slope",
+   "output": "curve-value",
+   "to": "combine",
+   "input": "rgb"
+  }
+ ],
+ "layout": {
+  "frame": {
+   "x": 0,
+   "y": 0
+  },
+  "split": {
+   "x": 280,
+   "y": 0
+  },
+  "amount": {
+   "x": 560,
+   "y": 0
+  },
+  "amount-render-min": {
+   "x": 840,
+   "y": 0
+  },
+  "amount-render-max": {
+   "x": 1120,
+   "y": 0
+  },
+  "amount-clamped": {
+   "x": 1400,
+   "y": 0
+  },
+  "combine": {
+   "x": 280,
+   "y": 1080
+  },
+  "output": {
+   "x": 560,
+   "y": 1080
+  },
+  "shared-curve-minimum-slope": {
+   "x": 0,
+   "y": 360
+  }
+ },
+ "compositionRules": 2,
+ "colorCompositionRules": 1,
+ "effectPresentationRules": 1,
+ "groups": [
+  {
+   "id": "organized-contrast-controls",
+   "label": "Parameters",
+   "color": "#6b99bd",
+   "nodeIds": [
+    "amount",
+    "amount-clamped"
+   ],
+   "collapsedByDefault": true
+  },
+  {
+   "id": "organized-contrast-constants",
+   "label": "Constants",
+   "color": "#6b99bd",
+   "nodeIds": [
+    "amount-render-min",
+    "amount-render-max"
+   ],
+   "collapsedByDefault": true
+  }
+ ]
+}

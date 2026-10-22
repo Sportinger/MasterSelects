@@ -4,6 +4,7 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { compileGeometryGraph } from '../operators/geometry/geometryProgram';
+import { geometryRateTravel, keyframesBindingsLeave } from '../operators/geometry/geometryRateTravel';
 import { evaluateGeometryProgram, type CurveSet } from '../operators/geometry/geometryEvaluation';
 import { RodSimulationDeferred } from '../operators/geometry/rodCurves';
 import { geometryParameterReader, type SimulationClock } from '../operators/geometry/weaveGraph';
@@ -75,16 +76,30 @@ function curveSourceNode(graph: EffectOperatorGraph, nodeId: string, portId: str
   return undefined;
 }
 
-/** CPU reference evaluation at the playhead; opening a viewer never touches GPU state. */
-/** `clock` is the host clip's keyframe-to-simulation clock, so keyed forces start where the render starts them. */
-export function geometryPreview(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number, clock?: SimulationClock): PreviewFrame {
+/** Clip context that lets a Weave node preview read what the render reads. */
+export interface GeometryPreviewDrive {
+  /** Where the clip starts on the timeline clock: keyframed integrating rates read their travel. */
+  timelineStart: number;
+  /** The clip's parameter source bindings: properties they drive read the driven value, not their keyframes. */
+  bindings?: Parameters<typeof keyframesBindingsLeave>[2];
+}
+
+/**
+ * CPU reference evaluation at the playhead; opening a viewer never touches GPU state. `clock` is the
+ * host clip's keyframe-to-simulation clock, so keyed forces start where the render starts them.
+ * `effect` carries the values its parameter sources drive (applyParameterSourcesToEffects); with
+ * `drive`, the keyframes of those properties are left out here, so the preview shows the driven
+ * value like the render, and keyframed integrating rates read their travelled distance.
+ */
+export function geometryPreview(request: PreviewRequest, effect: Effect, keyframes: Keyframe[], time: number, clock?: SimulationClock,
+  drive?: GeometryPreviewDrive): PreviewFrame {
   const simulationTime = clock ? clock.toSimulation(time) : time;
   const base = { key: request.key, revision: request.revision, time: request.time };
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return { ...base, status: 'missing', label: 'Curve node unavailable' };
   try {
     const graph = effectOperatorGraph(effect);
-    const port = request.port;
+    const port = request.port, keys = keyframesBindingsLeave(effect, keyframes, drive?.bindings);
     const reader = geometryParameterReader(effectOperatorParams(effect), effect.id, keys, time, clock);
     const cloth = clothSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
     if (cloth) {
@@ -95,8 +110,10 @@ export function geometryPreview(request: PreviewRequest, effect: Effect, keys: K
     const target = curveSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
     if (!target) return { ...base, status: 'live', label: 'Per-point value', presentation: 'text',
       drawing: { kind: 'text', lines: ['Evaluated once per curve point', 'where a modifier reads it'] } };
+    const rateTravel = drive ? geometryRateTravel(effect, keys, time,
+      { clipClockAt: clock?.toSimulation ?? (local => local), timelineStart: drive.timelineStart }) : undefined;
     const program = compileGeometryGraph(graph, reader, target,
-      { time: request.time, simulationTime });
+      { time: request.time, simulationTime, ...(rateTravel ? { rateTravel } : {}) });
     let curves: CurveSet, label = `${program.strandCount.toLocaleString('en-US')} curves · ${program.pointCount.toLocaleString('en-US')} points`;
     try {
       curves = evaluateGeometryProgram(program, { rodBudget: PREVIEW_ROD_BUDGET });

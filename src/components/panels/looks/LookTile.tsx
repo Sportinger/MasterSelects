@@ -32,7 +32,11 @@ export function LookTile({ look, sourceFrameId, onApply, onDelete }: LookTilePro
   const stackHash = useMemo(() => JSON.stringify(look.stack), [look.stack]);
   const cacheKey = `${sourceFrameId}:${look.id}:${stackHash}`;
   const ready = readyKey === cacheKey;
-  const animated = look.stack.some((entry) => getEffect(entry.effectId)?.requiresContinuousRender === true);
+  // Moving looks (a live clock or the timeline clock) play on hover.
+  const animated = look.stack.some((entry) => {
+    const definition = getEffect(entry.effectId);
+    return definition?.requiresContinuousRender === true || (!!definition && 'timelineAnimated' in definition && definition.timelineAnimated === true);
+  });
 
   const draw = useCallback((bitmap: ImageBitmap | null) => {
     if (!bitmap || bitmap.width === 0 || bitmap.height === 0 || !canvasRef.current) return false;
@@ -152,7 +156,9 @@ export function LookTile({ look, sourceFrameId, onApply, onDelete }: LookTilePro
       if (cancelled || now - startedAt > HOVER_DURATION_MS) return;
       if (now - lastFrame >= HOVER_FRAME_MS) {
         lastFrame = now;
-        void lookThumbnailRuntime.renderLook(look, sourceFrameId, `${cacheKey}:hover:${Math.floor(now)}`, false).then((bitmap) => {
+        // The look's time runs from 0 (the still) while the pointer rests on the tile.
+        const seconds = Math.max(0, now - startedAt) / 1_000;
+        void lookThumbnailRuntime.renderLook(look, sourceFrameId, `${cacheKey}:hover:${Math.floor(now)}`, false, seconds).then((bitmap) => {
           if (!cancelled) draw(bitmap);
           bitmap?.close();
         });

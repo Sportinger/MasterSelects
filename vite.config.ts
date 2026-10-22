@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'path'
 import { buildIdentity } from './tools/buildIdentity'
 import { compressOversizedSam2OrtWasm, ffmpegCoreAssets } from './tools/buildAssetPlugins.ts'
+import { isUnwatchedDevServerPath } from './tools/devServerWatch.ts'
 import {
   allowedFileRoots,
   bridgeToken,
@@ -322,14 +323,17 @@ export default defineConfig(({ command, mode }) => {
         ignored: freezeE2eSourceSnapshot ? ['**/*'] : [
           // Cargo executes locked binaries here on Windows. Generated reports
           // also contain HTML copies that must not trigger editor reloads.
-          'tools/native-helper/target',
-          'output',
-          'test-results',
-          'playwright-report',
-          'playwright-built-report',
-          'blob-report',
-          'coverage',
-        ].map(directory => `${path.resolve(__dirname, directory).replace(/\\/g, '/')}/**`),
+          ...[
+            'tools/native-helper/target',
+            'output',
+            'test-results',
+            'playwright-report',
+            'playwright-built-report',
+            'blob-report',
+            'coverage',
+          ].map(directory => `${path.resolve(__dirname, directory).replace(/\\/g, '/')}/**`),
+          (file: string) => isUnwatchedDevServerPath(file, __dirname),
+        ],
       },
       headers: {
         // Required for SharedArrayBuffer (FFmpeg multi-threaded, cross-tab sync)

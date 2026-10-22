@@ -12,8 +12,10 @@
 //   sectionLabels  card titles for registry parameter groups ({ 'Time map': 'Time field source' }).
 //   note      the controls text when the card shows no fixed rows.
 //   deeper    [[text, link relative to docs/Features/effects]] for a basic page's Technical details.
-//   thumb     the gallery thumbnail: { region: [left, top, width, height] } as fractions of the still
-//             (default: its effect half), or { shot: <Effect Lab --pairs file> } that renders it.
+//   thumb     the gallery thumbnail: { region: [left, top, width, height] } as fractions of the source
+//             (default: its effect half), { source: <asset path relative to docs/Features> } to cut it from
+//             another picture (default: the clip poster when the page plays the effect's loop, else the
+//             still), or { shot: <Effect Lab --pairs file> } that renders it.
 
 const LANDMARK_EFFECTS = ['Effect system: landmark tracking effects', '../Effect-System.md#landmark-tracking-effects'];
 
@@ -27,15 +29,16 @@ export const EFFECT_DOC_EXTRAS = {
   contrast: { thumb: SPLIT_THUMB },
   exposure: { thumb: SPLIT_THUMB },
   levels: { thumb: SPLIT_THUMB },
-  // The still has three panels (original, Saturation, Vibrance): the card shows the last.
-  vibrance: { thumb: { region: [0.67, 0, 0.33, 1] } },
+  // The whole blurred half at card size hides the blur: the houses and boats, closer.
+  'gaussian-blur': { thumb: { region: [0.66, 0.2, 0.3, 0.6] } },
   // Generators: the still is the effect frame alone.
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
-  // Stick Figure: the still is the figure alone on black; below its parameters the card has the
+  // Stick Figure: the thumbnail is cut from the still, the default figure walking alone on black (the
+  // loop's poster catches it mid-jump at the right edge); below its parameters the card has the
   // Pose library, Motion and Actions sections of its own (StickFigureControls, StickFigureActionLane).
   'stick-figure': {
-    thumb: { region: [0.2, 0.14, 0.6, 0.72] },
+    thumb: { source: 'assets/effects/stick-figure.webp', region: [0.2, 0.14, 0.6, 0.72] },
     sections: ['Pose', 'Proportions', 'Ground', 'Style', 'Pose library', 'Motion', 'Actions'],
     rows: [
       cableRow('Pose library', 'Pose', '13 built-in poses and the poses you saved', 'Stand'),
@@ -54,8 +57,11 @@ export const EFFECT_DOC_EXTRAS = {
       cableRow('Actions', 'Check', 'Check choreography', 'none'),
     ],
   },
-  // Weave: the still is the net alone on black; Form and Color sit above the card's sections.
+  // Weave: the loop's poster is the finished net alone on black; Form and Color sit above the card's sections.
   weave: { thumb: { region: [0, 0, 1, 1] }, sectionLabels: { '': 'Form and color' } },
+  // A current Sharpen's card has only these rows: its own control (a note with Use the new Sharpen)
+  // shows on Sharpens saved with 3.2.7 alone, and the page's Saved projects note describes it.
+  sharpen: { rows: ['amount', 'radius'] },
   'ai-edge-fill': {
     rows: [
       'resolution',

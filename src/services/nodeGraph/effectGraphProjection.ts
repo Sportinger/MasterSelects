@@ -8,7 +8,7 @@ import { addableEffectOperators, effectOperatorGraph, isImageGraphEffectType } f
 import { operatorAdaptiveVariants } from '../operators/operatorAdaptiveVariants';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { getEffectOperator } from '../operators/operatorRegistry';
-import { getEffect } from '../../effects';
+import { effectRateTravelParams, getEffect } from '../../effects';
 import { operatorEnabled } from '../operators/effectGraph';
 import { mathNodeSymbol } from './mathNodeSymbol';
 import { compositionGroupInterface } from '../operators/operatorComposition';
@@ -28,6 +28,8 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
   }
   const supported = addableEffectOperators(effect.type);
   const parameters = getEffect(effect.type)?.params as Record<string, { label?: string }> | undefined;
+  // The runtime-only distance a keyframed rate has travelled (EffectParam.integratedAs) is named after its rate ("Speed Travel").
+  const travelLabels = Object.fromEntries(effectRateTravelParams(effect.type).map(([rate, travel]) => [travel, { label: `${parameters?.[rate]?.label ?? rate} Travel` }]));
   const plan = effectPresentationPlan(effect.type);
   // A saved smoke-recipe Acuarela shares the effect id but not the watercolour's node meanings.
   const portLabels = plan?.portLabelsApply && !plan.portLabelsApply(graph) ? undefined : effectPortLabels(effect.type), inputLabels = plan?.inputLabels;
@@ -49,7 +51,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
         return channel ? { ...projected, label: channel } : projected;
       };
       // A value node driven by an effect parameter is titled by that parameter ("Radius"), not "Value".
-      const parameter = operator.id.startsWith('values.') && typeof node.bindings.value === 'string' ? parameters?.[node.bindings.value] : undefined;
+      const parameter = operator.id.startsWith('values.') && typeof node.bindings.value === 'string' ? parameters?.[node.bindings.value] ?? travelLabels[node.bindings.value] : undefined;
       const valueTitle = operator.id.startsWith('values.') ? node.valueControl?.label ?? node.exposed?.label ?? parameter?.label : undefined;
       return { id: node.id, operatorId: operator.id, label: valueTitle ?? operator.label, description: operator.description,
         connectionVariants: operatorAdaptiveVariants(operator, supported),

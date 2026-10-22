@@ -1,6 +1,6 @@
 # Motion Trails
 
-<!-- effect-docs: basic page sha=0a928d57eba7, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=4f076599b99d, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Leaves fading light trails behind moving content that drift with the tracked motion, tinted with the Overlay color around the subject.
 
@@ -13,8 +13,9 @@ Group: [Keying & Time](../Effects-Keying-Time.md) · [How to add an effect](../E
 <!-- generated:controls start -->
 | Control | Range | Default |
 |---|---|---|
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.8 |
+| **Color** | | |
 | Overlay | a colour | `#36f59a` |
 | **General** | | |
 | History Loop | Reset, Continuous | Reset |

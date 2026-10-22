@@ -97,7 +97,10 @@ export function expandOperatorCompositions(source: EffectOperatorGraph): EffectO
     });
     remapGroupBypassEndpoints(graph, new Map(Object.entries(body.outputs).map(([port, endpoint]) =>
       [`${instance.id}:${port}`, { nodeId: ids[endpoint.nodeId], portId: endpoint.portId }])));
-    graph.edges.push(...body.graph.edges.map(edge => ({ ...edge, id: `${instance.id}--${edge.id}`, from: ids[edge.from], to: ids[edge.to] })));
+    // A body edge into an endpoint a legacy port now feeds gives way to it (an input the earlier
+    // definition took from outside is built inside the current one), so the saved wiring wins.
+    graph.edges.push(...body.graph.edges.filter(edge => !claimed.has(`${edge.to}:${edge.input}`))
+      .map(edge => ({ ...edge, id: `${instance.id}--${edge.id}`, from: ids[edge.from], to: ids[edge.to] })));
     graph.nodes.splice(graph.nodes.indexOf(instance), 1, ...body.graph.nodes.map(node => ({ ...structuredClone(node), id: ids[node.id],
       ...(instance.composition?.children?.[node.id] ? { composition: structuredClone(instance.composition.children[node.id]) } : {}) })));
     for (const node of body.graph.nodes) {

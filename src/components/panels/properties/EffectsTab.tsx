@@ -44,7 +44,7 @@ import { trackEditorControlCommitted } from '../../../services/productAnalytics'
 import { EffectGpuFailureNotice } from './EffectGpuFailureNotice';
 import { EffectBudgetNotice } from './EffectBudgetNotice';
 import { ResolveEffectParamRow } from './ResolveEffectParamRow';
-import { hasResolveEffectParamRow, RESOLVE_ROW_EFFECTS } from './resolveEffectRows';
+import { hasResolveEffectParamRow, usesResolveEffectRows } from './resolveEffectRows';
 import { effectParamDefinitions } from '../../../services/operators/effectParamVisibility';
 import { EffectParamRangeNotice } from './EffectParamRangeNotice';
 import './effectValueControls.css';
@@ -272,7 +272,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
 
   // Hidden/retired parameters follow what this instance's graph actually reads.
   const parameterGroups = groupEffectParameters(effectParamDefinitions(effect));
-  const resolveRows = RESOLVE_ROW_EFFECTS.has(effect.type);
+  const resolveRows = usesResolveEffectRows(effect.type, effectDef.params);
   const rowsClass = (base: string) => resolveRows ? `${base} effect-params--resolve-rows` : base;
   const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false, noteShown = false) => {
     const value = effect.params[paramName] ?? paramDef.legacyDefault ?? paramDef.default;

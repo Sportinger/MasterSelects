@@ -3,7 +3,7 @@ import { getEffect } from '../../src/effects';
 import {
   directionalBlurPlan, directionalCoarseTaps, directionalFineTaps, mirrorRepeat, transformDirectionalPixel, type DirectionalBlurType,
 } from '../../src/effects/blur/blurSampling';
-import { createDefaultDirectionalBlurGraph } from '../../src/services/operators/directionalBlurEffectGraphs';
+import { createDefaultDirectionalBlurGraph, createEvenTapDirectionalBlurGraph } from '../../src/services/operators/directionalBlurEffectGraphs';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, isImageGraphEffectType, isLocalImageEffectType } from '../../src/services/operators/effectGraphOwner';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
@@ -34,12 +34,14 @@ function reference(type: DirectionalBlurType, params: Record<string, unknown>, u
     return type === 'motion-blur' ? [mirrorRepeat(raw[0]), mirrorRepeat(raw[1])] : raw;
   };
   const fine = (at: [number, number]): Pixel => {
-    const pixel: [number, number] = [at[0] * resolution[0], at[1] * resolution[1]], count = directionalFineTaps(plan, pixel), sum: Pixel = [0, 0, 0, 0];
-    for (let index = 0; index < count; index += 1) {
-      const color = source(toUv(transformDirectionalPixel(plan, pixel, ((index + 0.5) / count - 0.5) * Math.max(plan.step, 1e-9))));
-      [color[0] * color[3], color[1] * color[3], color[2] * color[3], color[3]].forEach((value, channel) => { sum[channel] += value / count; });
+    const pixel: [number, number] = [at[0] * resolution[0], at[1] * resolution[1]], sum: Pixel = [0, 0, 0, 0];
+    let total = 0;
+    for (const tap of directionalFineTaps(plan, pixel)) {
+      const color = source(toUv(transformDirectionalPixel(plan, pixel, tap.u)));
+      [color[0] * color[3], color[1] * color[3], color[2] * color[3], color[3]].forEach((value, channel) => { sum[channel] += value * tap.weight; });
+      total += tap.weight;
     }
-    return sum;
+    return sum.map(value => value / total) as Pixel;
   };
   const pixel: [number, number] = [uv[0] * resolution[0], uv[1] * resolution[1]], sum: Pixel = [0, 0, 0, 0];
   let weight = 0;
@@ -54,7 +56,7 @@ function reference(type: DirectionalBlurType, params: Record<string, unknown>, u
 describe('directional blur image graphs', () => {
   it.each(TYPES)('%s is a valid three-pass graph (premultiplied source, stage A, stage B) with stable owner bindings and runtime parameters', type => {
     const graph = createDefaultDirectionalBlurGraph(type), bindings = graph.nodes.flatMap(node => Object.values(node.bindings));
-    expect(validateEffectGraph(graph)).toEqual([]); expect(graph.nodes.length).toBeLessThanOrEqual(140);
+    expect(validateEffectGraph(graph)).toEqual([]); expect(graph.nodes.length).toBeLessThanOrEqual(150);
     expect(bindings.toSorted()).toEqual([...expectedBindings[type]].toSorted());
     expect(isImageGraphEffectType(type)).toBe(true); expect(isLocalImageEffectType(type)).toBe(false);
     expect(matchesEffectRecipe(effectOperatorGraph({ type, params: {} }), graph)).toBe(true);
@@ -79,16 +81,63 @@ describe('directional blur image graphs', () => {
   });
 
   it.each(TYPES)('%s at amount 0 is the identity for visible pixels', type => {
-    const plan = compile(type, { amount: 0 }), uv: [number, number] = [0.3, 0.1], input = source(uv);
+    // (0.3, 0.13): clear of the synthetic source's blue wrap at 3u + v = 1, where any two taps would straddle a jump.
+    const plan = compile(type, { amount: 0 }), uv: [number, number] = [0.3, 0.13], input = source(uv);
     evaluateImagePasses(plan, uv, [320, 180], source).forEach((value, channel) => expect(value).toBeCloseTo(input[channel], 5));
+  });
+
+  // Fine stripes about 3 px wide at 1080p: a sub-pixel change of the streak shows directly.
+  const stripes = ([u, v]: [number, number]): Pixel => [0.5 + 0.5 * Math.sin(u * 1920 * 2.1 + v * 7), 0.5 + 0.5 * Math.sin(v * 1080 * 1.9 + u * 3),
+    0.5 + 0.5 * Math.sin((u * 1920 + v * 1080) * 1.3), 1];
+  const sweep = (graph: ReturnType<typeof createDefaultDirectionalBlurGraph>, type: DirectionalBlurType, extra: Record<string, unknown>, amounts: number[]) => {
+    const pixels: Array<[number, number]> = [[0.21, 0.37], [0.83, 0.12], [0.55, 0.81], [0.512, 0.523], [0.47, 0.46]];
+    const frames = amounts.map(amount => {
+      const effect = { type, params: { ...extra, amount } };
+      const plan = compileImageOperatorGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
+      return pixels.flatMap(uv => evaluateImagePasses(plan, uv, [1920, 1080], stripes).slice(0, 3));
+    });
+    // A smooth ramp changes its rate of change only gradually; a jump at a count step shows as a
+    // second difference as large as the jump itself. Ratio: largest second difference over the
+    // typical (median) change between neighbouring frames.
+    const changes = frames.slice(1).map((frame, index) => Math.max(...frame.map((value, channel) => Math.abs(value - frames[index][channel]))));
+    const bends = frames.slice(2).map((frame, index) => Math.max(...frame.map((value, channel) => Math.abs(value - 2 * frames[index + 1][channel] + frames[index][channel]))));
+    const largestStep = Math.max(...changes), median = changes.toSorted((a, b) => a - b)[Math.floor(changes.length / 2)];
+    const jump = Math.max(...bends) / Math.max(median, 1e-6);
+    return { jump, largestStep, median };
+  };
+
+  it.each([
+    ['motion-blur', {}, Array.from({ length: 61 }, (_, index) => index * 0.00001)],
+    ['radial-blur', { mode: 'spin' }, Array.from({ length: 61 }, (_, index) => index * 0.00005)],
+    ['radial-blur', {}, Array.from({ length: 61 }, (_, index) => 0.9 + index * 0.002)],
+    ['zoom-blur', {}, Array.from({ length: 61 }, (_, index) => index * 0.0005)],
+  ] as const)('%s %j changes smoothly when its amount is animated from a standstill (the 3.2.7 recipe jumped at its tap-count steps)', (type, extra, amounts) => {
+    const current = sweep(createDefaultDirectionalBlurGraph(type), type, extra, [...amounts]);
+    expect(current.jump).toBeLessThan(1.5);
+    // The 3.2.7 recipe bent by about ten typical frame changes at once (Zoom Blur's stayed smooth over this ramp).
+    if (type !== 'zoom-blur') expect(sweep(createEvenTapDirectionalBlurGraph(type), type, extra, [...amounts]).jump).toBeGreaterThan(5);
+  });
+
+  it('blurs a little under one pixel of streak instead of passing the picture through', () => {
+    for (const [type, extra, amount] of [['motion-blur', {}, 0.00005], ['radial-blur', { mode: 'spin' }, 0.0004]] as const) {
+      const effect = { type, params: { ...extra, amount } }, uv: [number, number] = [0.83, 0.12];
+      const blurred = evaluateImagePasses(compileImageOperatorGraph(createDefaultDirectionalBlurGraph(type), effectOperatorParams(effect), effectOperatorCompileContext(effect)), uv, [1920, 1080], stripes);
+      const even = evaluateImagePasses(compileImageOperatorGraph(createEvenTapDirectionalBlurGraph(type), effectOperatorParams(effect), effectOperatorCompileContext(effect)), uv, [1920, 1080], stripes);
+      expect(Math.max(...blurred.slice(0, 3).map((value, channel) => Math.abs(value - stripes(uv)[channel])))).toBeGreaterThan(1e-4);
+      even.slice(0, 3).forEach((value, channel) => expect(value).toBeCloseTo(stripes(uv)[channel], 9));
+    }
   });
 
   it('keeps motion streaks continuous: coarse boxes tile the range, fine taps stay within one pixel', () => {
     const plan = directionalBlurPlan('motion-blur', { amount: 0.3, angle: 0 }, 3840, 2160);
-    const taps = directionalCoarseTaps(plan, [100, 100]);
-    expect(taps.length * plan.step).toBeCloseTo(2 * 0.3 * 3840, 6);
-    expect(plan.step / directionalFineTaps(plan, [100, 100])).toBeLessThanOrEqual(1);
-    expect(taps.length + directionalFineTaps(plan, [100, 100])).toBeLessThan(160);
+    const taps = directionalCoarseTaps(plan, [100, 100]), fine = directionalFineTaps(plan, [100, 100]);
+    expect(plan.coarseTaps * plan.step).toBeCloseTo(2 * 0.3 * 3840, 6);
+    // Coarse boxes cover the range: full boxes weigh 1, the partial last one its covered share.
+    expect(taps.reduce((sum, tap) => sum + tap.weight / plan.taper((tap.u + 0.3 * 3840) / (2 * 0.3 * 3840)), 0)).toBeCloseTo(plan.coarseTaps, 4);
+    const fineU = fine.map(tap => tap.u).toSorted((a, b) => a - b);
+    for (let index = 1; index < fineU.length; index += 1) expect(fineU[index] - fineU[index - 1]).toBeLessThanOrEqual(1 + 1e-9);
+    expect(fine.reduce((sum, tap) => sum + tap.weight, 0)).toBeCloseTo(plan.step, 4);
+    expect(taps.length + fine.length).toBeLessThan(160);
   });
 
   it('measures motion on screen: the direction is an exact angle in pixels, the reach the legacy Length * |(cos W, sin H)|', () => {

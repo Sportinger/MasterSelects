@@ -1,6 +1,6 @@
 // Generic effect parameter rows in the shared Resolve inspector design (AGENTS.md section 9):
-// slider + number + reset for numbers, InspectorSelect for choices, a checkbox for switches and
-// swatch + hex + reset for colours (ResolveInspectorColorRow). Effects opt in through
+// slider + number + reset for numbers, InspectorSelect for choices, a checkbox for switches,
+// swatch + hex + reset for colours (ResolveInspectorColorRow) and a text field + reset for typed text. Effects opt in through
 // RESOLVE_ROW_EFFECTS (resolveEffectRows.ts) as their inspector is revised.
 import { useTimelineStore } from '../../../stores/timeline';
 import { createEffectProperty } from '../../../types/animationProperties';
@@ -10,7 +10,7 @@ import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 import { ResolveInspectorColorRow } from './resolveInspector/ResolveInspectorColorRow';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
-import { ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
 import { EffectKeyframeToggle } from './shared';
 import { effectParamDisplay } from '../../../effects/paramDisplay';
 import './effectResolveRows.css';
@@ -65,6 +65,14 @@ function ResolveEffectParamControl({ paramName, definition, value, effect, clipI
   if (definition.type === 'color') return <ResolveInspectorColorRow label={definition.label} value={String(value)}
     defaultValue={String(definition.default)} disabled={inactive} title={title} onChange={set}
     onCommit={method => onParamCommit?.(paramName, 'select', method === 'type' ? 'type' : method)} />;
+  // Typed text (a ramp of characters, a word): one undo step per edit, from focus to blur.
+  if (definition.type === 'text') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title}
+    actions={<ResolveInspectorIconButton ariaLabel={`Reset ${definition.label}`} className="resolve-inspector-reset-button"
+      onClick={() => { set(String(definition.default)); onParamCommit?.(paramName, 'number', 'reset'); }}><ResolveResetIcon /></ResolveInspectorIconButton>}>
+    <input type="text" className="resolve-inspector-text-input" aria-label={definition.label} value={String(value)}
+      onFocus={onDragStart} onChange={event => set(event.target.value)}
+      onBlur={() => { onDragEnd?.(); onParamCommit?.(paramName, 'number', 'type'); }} />
+  </ResolveInspectorRow>;
   if (definition.type !== 'number') return null;
   const min = definition.min ?? 0, max = definition.max ?? 1, number = typeof value === 'number' ? value : Number(definition.default);
   // Shown in display units (radians as whole degrees, turns as degrees, " EV"); the stored unit

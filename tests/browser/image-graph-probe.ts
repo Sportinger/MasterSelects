@@ -68,6 +68,15 @@ async function checkGpu() {
       return `PASS: ${blur} blur, ${directional} directional-blur and ${materialization} materialization comparisons; the blur pass chains match their WGSL references and keep hard alpha edges clean; no validation errors.`;
     } finally { device.destroy(); }
   }
+  if (suite === 'stylize-recipes') {
+    // The stylize recipes alone (the default run stops earlier when another check fails).
+    try {
+      const comparisons = await checkStylizeRecipesGpu(device);
+      const validation = await device.popErrorScope();
+      if (validation) throw new Error(validation.message);
+      return `PASS: ${comparisons} stylize recipe comparisons (Glow, Edge Detect, Sharpen, Grain, Vignette, Scanlines, Posterize); no validation errors.`;
+    } finally { device.destroy(); }
+  }
   if (suite === 'color-recipes') {
     try {
       const comparisons = await checkColorRecipesGpu(device);

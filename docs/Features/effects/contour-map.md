@@ -1,8 +1,8 @@
 # Contour Map
 
-<!-- effect-docs: basic page sha=988611537c7f, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=708debc06cf8, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
-Turns brightness into banded elevation zones between Ink and Paper with lines at each band, like a topographic map; Scale sets band count.
+Turns brightness into banded elevation zones between Ink and Paper with lines at each band, like a topographic map; Band Density sets how many bands.
 
 Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Effects.md#add-an-effect)
 
@@ -21,15 +21,15 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 | Control | Range | Default |
 |---|---|---|
 | **Pattern** | | |
-| Scale | 2 to 80 | 14 |
-| **Style** | | |
+| Band Density | 2 to 80 | 14 |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |
 | Ink | a colour | `#111827` |
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults. Looks of Lines & Engraving: [Crosshatch](./crosshatch.md), [Drift Lines](./drift-lines.md), [Outline](./outline.md), [Vector Engraving](./vector-tiling.md), [Wave Lines](./wave-lines.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Textile & Craft](../Effects-Textile.md) (3), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 

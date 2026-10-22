@@ -31,7 +31,9 @@ grow where it is dark, dither patterns decide pixel by pixel between a few tones
 
 Halftone, Dithering, Riso and Paper Print share one pattern engine with most
 [Lines](./Effects-Lines.md) and [Textile](./Effects-Textile.md) looks: the **Style** menu in their card
-switches between these looks and keeps the values and keyframes.
+switches between these looks. A control you changed keeps its value and keyframes when the new look
+has the same control; the others open at the new look's defaults (details in
+[Effects](./Effects.md#styles-and-presets)).
 
 ## Technical details
 
