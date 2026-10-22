@@ -21,7 +21,7 @@ Group: [Keying & Time](../Effects-Keying-Time.md) · [How to add an effect](../E
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/time-stack-presets.mp4" poster="../assets/effects/clips/time-stack-presets.webp" width="960" height="730" autoplay muted loop playsinline preload="none" aria-label="The dancer five times in a grid, moving in sync, each with one preset: Echo Trail with fading copies fanning out behind her, Long Exposure with a soft continuous smear, Stroboscope with eight equally bright copies close together, Chorus with five whole dancers half a second apart, Afterglow with a short glowing trail and a brighter stage"></video>
+<video src="../assets/effects/clips/time-stack-presets.mp4" poster="../assets/effects/clips/time-stack-presets.webp" width="960" height="730" autoplay muted loop playsinline preload="none" aria-label="The dancer five times in a grid, moving in sync, each with one preset: Echo Trail with fading copies fanning out behind her, Long Exposure with a long smear of the last two and a half seconds, Stroboscope with eight equally bright copies close together, Chorus with five whole dancers half a second apart, Afterglow with a short soft glow around her on a dark stage"></video>
 <figcaption>The five presets on the moving dancer, in sync.</figcaption>
 </figure>
 
@@ -29,13 +29,13 @@ Pick one in the **Preset** row of the effect card. It sets Instances, Time offse
 
 **Echo Trail** – twenty copies a tenth of a second apart, each a little fainter: arms, hair and dress fan out behind the movement and fade. The default; good for most dance.
 
-**Long Exposure** – thirty-two copies very close together that fade slowly: the movement melts into one soft, continuous smear, like a camera with an open shutter.
+**Long Exposure** – thirty-two copies, each 0.08 s apart, that fade only slowly: the last two and a half seconds of movement melt into one long smear, like a camera with its shutter left open.
 
 **Stroboscope** – eight equally bright copies a fifth of a second apart: the movement breaks into clear separate poses, like a strobe photograph.
 
 **Chorus** – five whole figures half a second apart: one performer becomes a small group that repeats her steps, the older ones a little fainter. Strongest on slow, large movements.
 
-**Afterglow** – a short trail added in Screen: the figure glows and the stage light grows brighter where she moves. For a dreamlike, luminous look.
+**Afterglow** – six quickly fading copies added in Screen: a short, soft glow follows the figure, while the dark stage stays dark (more or brighter copies would lift it into haze). For a dreamlike, luminous look.
 
 ## Controls
 
@@ -78,7 +78,7 @@ The line under the rows sums up the stack: how long it reaches back and how much
 
 <div class="docs-float-end"></div>
 
-**Blend mode** – how the copies combine, with the timeline's own blend modes. **Lighten** keeps the brightest copy at every pixel: lit performers on a dark stage, the usual choice. **Screen** and **Add** add the light of all copies, so the figure glows and the stage brightens (Afterglow). **Darken** suits a dark figure in front of a bright background, **Difference** turns the stack dark and ghostly, and **Multiply** quickly sinks it into black. In **Normal** each older copy covers the newer ones, so the current picture ends up underneath; the card says so. Darken, Lighten, Multiply, Screen, Normal and 32 more, default Lighten.
+**Blend mode** – how the copies combine, with the timeline's own blend modes. **Lighten** keeps the brightest copy at every pixel: lit performers on a dark stage, the usual choice. **Screen** and **Add** add the light of all copies, so the figure glows and the stage brightens (Afterglow). **Darken** suits a dark figure in front of a bright background, **Difference** turns the stack dark and ghostly, and **Multiply** quickly sinks it into black. In **Normal** each older copy covers the newer ones, so the current picture ends up underneath; the card says so. Darken, Lighten, Multiply, Screen, Normal and 32 more, default Lighten: all 37 blend modes of the timeline.
 
 **Preview size** – the size of the frames the preview works with. **Small** reads them at 960 px, which needs less memory and plays more smoothly; **Full** uses the original source size. The export always uses the full frames. Small (960 px), Full, default Full.
 

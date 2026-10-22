@@ -69,10 +69,14 @@ const CHROMA_KEY_PORTS = { 'unmix-color': 'Color', 'screen-channel': 'Screen Cha
   'screen-found': 'Screen Found', 'spill-primary': 'Screen Level', 'spill-other': 'Stronger Other', 'spill-other-sum': 'Other Sum',
   'spill-other-mean': 'Other Mean', 'spill-is-gentle': 'Is Gentle', 'spill-limit': 'Limit', 'spill-strength': 'Strength', 'spill-excess': 'Excess',
   // What crosses between the keyer's folders, so its overview reads as one path.
-  'screen-rgb': 'Screen Color', 'screen-key-primary': 'Screen Level', 'screen-safe-difference': 'Screen Difference', 'screen-purity': 'Screen Purity',
+  'screen-rgb': 'Screen Color', 'screen-key-primary': 'Screen Level', 'screen-safe-difference': 'Difference', 'screen-purity': 'Screen Purity',
   'matte-source-split:alpha': 'Source Alpha', 'matte-source-positive': 'Source Color', 'matte-source-primary': 'Source Level', 'matte-clipped': 'Matte',
-  'edge-source-alpha': 'Source Alpha', 'edge-negative-sharpness': 'Erode Sharpness', 'edge-key-cache': 'Keyed Matte', 'edge-shrunk-cache': 'Shrunk Matte',
-  'edge-matte': 'Edge Matte', 'spill-despilled': 'Despilled Color', 'spill-alpha': 'Alpha' };
+  'edge-source-alpha': 'Source Alpha', 'edge-negative-sharpness': '−Sharpness', 'edge-key-cache': 'Keyed Matte', 'edge-shrunk-cache': 'Shrunk Matte',
+  'edge-matte': 'Edge Matte', 'spill-despilled': 'Despilled Color', 'spill-alpha': 'Alpha',
+  // Short enough for the overview cards: the kernel sizes' operator names were cut off.
+  'kernel-shrink-sigma': 'Sigma', 'kernel-shrink-side': 'Side Taps', 'kernel-shrink-stride': 'Stride',
+  'kernel-shrink-count': 'Taps', 'kernel-soften-sigma': 'Sigma', 'kernel-soften-side': 'Side Taps', 'kernel-soften-stride': 'Stride',
+  'kernel-soften-count': 'Taps', 'kernel-shrink-used': 'Shrink Used' };
 // What crosses between the glyph engine's folders: the cell, its colour and tone, the glyph and its coverage.
 const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels (XY)', 'safe-cell-frame-scale': 'Frame Scale', grid: 'Cells Across',
   'scaled-uv': 'Grid Position', 'cell-id': 'Cell Number', 'local-uv': 'Position in Cell', luminance: 'Luminance', 'blackLevel-clamped': 'Black Level', 'sample-uv': 'Cell Center', 'source-split:rgb': 'Cell Color',

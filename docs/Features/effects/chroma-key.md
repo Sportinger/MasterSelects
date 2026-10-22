@@ -8,7 +8,7 @@ Group: [Keying & Time](../Effects-Keying-Time.md) · [How to add an effect](../E
 
 ![A dancer leaping in front of an unevenly lit green screen, with curly hair and a chiffon scarf, original left and keyed with Chroma Key right over a dark blue background: the green is gone, the flyaway hair keeps its detail without a green rim and the scarf stays see-through](../assets/effects/chroma-key.webp)
 
-<figcaption>Left: original. Right: Chroma Key at its default settings, over dark blue.</figcaption>
+<figcaption>Left: original. Right: Chroma Key at its default settings, over dark blue (cropped to the screen).</figcaption>
 </figure>
 
 **Use it for:** a performer filmed in front of a green screen · a blue-screen insert · a coloured cloth or wall that should disappear (pick its colour).
@@ -24,12 +24,12 @@ Group: [Keying & Time](../Effects-Keying-Time.md) · [How to add an effect](../E
 
 <figure class="docs-shot">
 
-![The keyed dancer four times over dark blue, each with one preset: Fine Hair with the most wisps of hair and a see-through scarf, Firm Figure with a solid body and a denser scarf, Uneven Screen with a cleaner edge and a thinner scarf, Soft Blend with a slightly softened outline](../assets/effects/presets/chroma-key.webp)
+![The keyed dancer's head, raised hand and scarf four times over light grey, each with one preset: Fine Hair keeps the most loose wisps of hair, Firm Figure has fewer and harder curls and a denser scarf, Uneven Screen loses the faintest wisps and thins the scarf, Soft Blend shows the same hair with a slightly soft outline](../assets/effects/presets/chroma-key.webp)
 
-<figcaption>The four presets on the green-screen dancer, over dark blue.</figcaption>
+<figcaption>The four presets on a detail of the green-screen dancer, over light grey, where hair and edges show best. Click for full size.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. A preset sets the **Screen** to Green and the **View** to Final result: on a blue screen, choose Blue after the preset.
+Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. A preset sets the **Screen** to Green and the **View** to Final result. Each preset works for a blue screen too: choose Blue after it, and the card reminds you under Screen while Screen is not Green.
 
 **Fine Hair** – keeps faint detail: wisps of hair, chiffon and smoke stay, soft and see-through (Clip Black 0.15, Clip White 0.95). For a well-lit screen and a performer with loose hair. On an uneven screen, specks of the background may stay too.
 
@@ -45,7 +45,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Chroma Key card: Preset menu showing Fine Hair, then the Key section (Screen: Green, View: Final result), Matte (Clip Black 0.15, Clip White 0.95), Edge (Shrink / Grow and Softness at 0 px) and Spill (Suppression 1.00, Method: Neutral), beside a strip of the preview with the keyed dancer](../assets/effects/editor/chroma-key-inspector.webp)
+![Properties, Effects with a Chroma Key card: Preset menu showing Fine Hair, then the Key section (Screen: Green, View: Final result), Matte (Clip Black 0.15, Clip White 0.95), Edge (Shrink / Grow and Softness at 0.0 px) and Spill (Suppression 1.00, Method: Neutral), beside a strip of the preview with the keyed dancer](../assets/effects/editor/chroma-key-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 940" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -73,7 +73,7 @@ A key in four steps: choose the **Screen**, switch **View** to Matte, raise **Cl
 
 **Screen** – which colour becomes transparent. Green and Blue measure the screen from every frame, so a screen that is darker in the corners, or a light change during the shot, still keys. Picked color keys the colour in the row below, for a cloth, a wall or a screen of another shade. The card says so when the clip shows no such screen. Green, Blue, Picked color, default Green.
 
-**Screen color** – the colour to key with Picked color; the row appears only then. Pick it from the screen where it is brightest and purest. A greyish colour keys nothing, and the card says so. a colour, default `#4c9a55`.
+**Screen color** – the colour to key with Picked color; the row appears only then. Pick it from the screen where it is brightest and purest. A greyish colour keys nothing, and the card says so. It holds a colour, default `#4c9a55`.
 
 <figure class="docs-shot docs-shot--float-right">
 
@@ -110,27 +110,27 @@ A key in four steps: choose the **Screen**, switch **View** to Matte, raise **Cl
 
 <div class="docs-shot-stage">
 
-![The Chroma Key graph with its main stages: Screen Grid and Screen Color feed Screen Matte & Clip; its matte goes through Matte Cache, Shrink / Grow and Edge Softness; Screen Subtraction cleans the colour, Spill Suppression removes the glow, and View & Output puts out the result or the matte](../assets/effects/graphs/chroma-key.webp)
+![The Chroma Key graph with its main stages, read left to right: Screen Color feeds Screen Matte & Clip; its matte goes through Matte Cache, Shrink / Grow and Edge Softness along the top; below, Screen Subtraction cleans the colour, Spill Suppression removes the glow, and View & Output puts out the result or the matte](../assets/effects/graphs/chroma-key.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1065" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1205" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M22 406 L73 406" marker-end="url(#chroma-key-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="406" r="18" /><text x="22" y="406" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M176 876 L260 876" marker-end="url(#chroma-key-arrow)" />
-<circle class="docs-shot-number" cx="176" cy="876" r="18" /><text x="176" y="876" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M552 244 L636 244" marker-end="url(#chroma-key-arrow)" />
-<circle class="docs-shot-number" cx="552" cy="244" r="18" /><text x="552" y="244" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M364 691 L448 691" marker-end="url(#chroma-key-arrow)" />
-<circle class="docs-shot-number" cx="364" cy="691" r="18" /><text x="364" y="691" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M552 729 L636 729" marker-end="url(#chroma-key-arrow)" />
-<circle class="docs-shot-number" cx="552" cy="729" r="18" /><text x="552" y="729" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M22 409 L70 409" marker-end="url(#chroma-key-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="409" r="18" /><text x="22" y="409" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M337 23 L337 75" marker-end="url(#chroma-key-arrow)" />
+<circle class="docs-shot-number" cx="337" cy="23" r="18" /><text x="337" y="23" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M583 246 L635 246" marker-end="url(#chroma-key-arrow)" />
+<circle class="docs-shot-number" cx="583" cy="246" r="18" /><text x="583" y="246" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M395 978 L447 978" marker-end="url(#chroma-key-arrow)" />
+<circle class="docs-shot-number" cx="395" cy="978" r="18" /><text x="395" y="978" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M583 733 L635 733" marker-end="url(#chroma-key-arrow)" />
+<circle class="docs-shot-number" cx="583" cy="733" r="18" /><text x="583" y="733" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Chroma Key opened in the Nodes tab (input frame, parameters, output and four small helper folders left out). 1 — Screen Color: the colour of the screen. 2 — Screen Matte & Clip: the key. 3 — Shrink / Grow: the edge in or out. 4 — Screen Subtraction: the screen out of see-through pixels. 5 — Spill Suppression: the green glow away.</figcaption>
+<figcaption>Chroma Key opened in the Nodes tab (input frame, parameters, output and five small helper folders left out, the Screen Grid cache among them). 1 — Screen Color: the colour of the screen. 2 — Screen Matte & Clip: the key. 3 — Shrink / Grow: the edge in or out. 4 — Screen Subtraction: the screen out of see-through pixels. 5 — Spill Suppression: the green glow away.</figcaption>
 </figure>
 
-Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** finds the screen colour from a small cached grid of the frame (Screen Grid). **Screen Matte & Clip** compares every pixel with it and applies Clip Black and Clip White. **Shrink / Grow** and Edge Softness shape the edge of that matte. **Screen Subtraction** takes the screen's share out of see-through pixels, so hair and chiffon show the new background, and **Spill Suppression** removes the glow. View & Output puts out the result or the matte. Click a folder's header to open it; the sections below show what is inside. How to open the graph: [The node setup](../Effects.md#the-node-setup).
+Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** finds the screen colour from a small cached grid of the frame (the Screen Grid folder, left out of the picture). **Screen Matte & Clip** compares every pixel with it and applies Clip Black and Clip White. **Shrink / Grow** and Edge Softness shape the edge of that matte. **Screen Subtraction** takes the screen's share out of see-through pixels, so hair and chiffon show the new background, and **Spill Suppression** removes the glow. View & Output puts out the result or the matte. Click a folder's header to open it; the sections below show what is inside. How to open the graph: [The node setup](../Effects.md#the-node-setup).
 
 ### Screen Color
 
@@ -140,16 +140,16 @@ Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** f
 
 ![Inside the Screen Color folder: Weighted Sum and Total Weight feed Divide, the mean screen colour; Mix chooses between it and the Picked Color by Is Picked; Screen Share and Screen Purity go through two Smoothstep cards and a Maximum into Multiply, which outputs Screen Found](../assets/effects/graphs/chroma-key-screen-color.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1343" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1348" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-screen-color-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M203 554 L287 554" marker-end="url(#chroma-key-screen-color-arrow)" />
-<circle class="docs-shot-number" cx="203" cy="554" r="18" /><text x="203" y="554" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M446 596 L530 596" marker-end="url(#chroma-key-screen-color-arrow)" />
-<circle class="docs-shot-number" cx="446" cy="596" r="18" /><text x="446" y="596" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M446 961 L530 961" marker-end="url(#chroma-key-screen-color-arrow)" />
-<circle class="docs-shot-number" cx="446" cy="961" r="18" /><text x="446" y="961" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M689 189 L773 189" marker-end="url(#chroma-key-screen-color-arrow)" />
-<circle class="docs-shot-number" cx="689" cy="189" r="18" /><text x="689" y="189" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M265 557 L287 557" marker-end="url(#chroma-key-screen-color-arrow)" />
+<circle class="docs-shot-number" cx="265" cy="557" r="18" /><text x="265" y="557" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M629 387 L629 439" marker-end="url(#chroma-key-screen-color-arrow)" />
+<circle class="docs-shot-number" cx="629" cy="387" r="18" /><text x="629" y="387" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M629 1177 L629 1125" marker-end="url(#chroma-key-screen-color-arrow)" />
+<circle class="docs-shot-number" cx="629" cy="1177" r="18" /><text x="629" y="1177" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M872 22 L872 74" marker-end="url(#chroma-key-screen-color-arrow)" />
+<circle class="docs-shot-number" cx="872" cy="22" r="18" /><text x="872" y="22" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -172,14 +172,14 @@ Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** f
 
 ![Inside the Screen Matte and Clip folder, left to right: Screen Likeness goes through Clamp, a Subtract from one, a Subtract of Clip Black, a Divide by the Clip Range and a final Clamp that outputs the Matte](../assets/effects/graphs/chroma-key-matte-clip.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 405" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 411" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-matte-clip-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M274 151 L358 151" marker-end="url(#chroma-key-matte-clip-arrow)" />
-<circle class="docs-shot-number" cx="274" cy="151" r="18" /><text x="274" y="151" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M599 151 L683 151" marker-end="url(#chroma-key-matte-clip-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="151" r="18" /><text x="599" y="151" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M762 179 L846 179" marker-end="url(#chroma-key-matte-clip-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="179" r="18" /><text x="762" y="179" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M427 23 L427 75" marker-end="url(#chroma-key-matte-clip-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="23" r="18" /><text x="427" y="23" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 23 L752 75" marker-end="url(#chroma-key-matte-clip-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="23" r="18" /><text x="752" y="23" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M914 23 L914 75" marker-end="url(#chroma-key-matte-clip-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="23" r="18" /><text x="914" y="23" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
@@ -202,21 +202,21 @@ Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** f
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 465" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-shrink-grow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M52 144 L136 144" marker-end="url(#chroma-key-shrink-grow-arrow)" />
-<circle class="docs-shot-number" cx="52" cy="144" r="18" /><text x="52" y="144" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M593 161 L677 161" marker-end="url(#chroma-key-shrink-grow-arrow)" />
-<circle class="docs-shot-number" cx="593" cy="161" r="18" /><text x="593" y="161" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M593 286 L677 286" marker-end="url(#chroma-key-shrink-grow-arrow)" />
-<circle class="docs-shot-number" cx="593" cy="286" r="18" /><text x="593" y="286" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M702 180 L786 180" marker-end="url(#chroma-key-shrink-grow-arrow)" />
-<circle class="docs-shot-number" cx="702" cy="180" r="18" /><text x="702" y="180" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M184 236 L184 184" marker-end="url(#chroma-key-shrink-grow-arrow)" />
+<circle class="docs-shot-number" cx="184" cy="236" r="18" /><text x="184" y="236" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M725 53 L725 105" marker-end="url(#chroma-key-shrink-grow-arrow)" />
+<circle class="docs-shot-number" cx="725" cy="53" r="18" /><text x="725" y="53" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M824 286 L772 286" marker-end="url(#chroma-key-shrink-grow-arrow)" />
+<circle class="docs-shot-number" cx="824" cy="286" r="18" /><text x="824" y="286" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M833 53 L833 105" marker-end="url(#chroma-key-shrink-grow-arrow)" />
+<circle class="docs-shot-number" cx="833" cy="53" r="18" /><text x="833" y="53" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Shrink / Grow (soft min/max), after its two blur passes; its number cards are left out. 1 — Blurred Matte Terms: the matte, blurred. 2 — Divide: the shrunk edge. 3 — Add: the grown edge. 4 — Mix: shrink or grow.</figcaption>
+<figcaption>Inside Shrink / Grow (soft min/max), after its two blur passes; its number cards are left out. 1 — Image to RGBA: the blurred matte terms, read out. 2 — Divide: the shrunk edge. 3 — Add: the grown edge. 4 — Mix: shrink or grow.</figcaption>
 </figure>
 
-**Blurred Matte Terms** – the Matte Cache folder stores the matte together with two exponential forms of it, and two Gaussian passes (rows, then columns) as wide as Shrink / Grow blur all three at once.
+**Image to RGBA** – reads the Blurred Matte Terms: the Matte Cache folder stores the matte together with two exponential forms of it, and two Gaussian passes (rows, then columns) as wide as Shrink / Grow blur all three at once. Split Vector hands each term to its own path.
 
 **Divide** – a soft minimum: the logarithm of the blurred term, divided by the Erode Sharpness. A pixel near the background takes on the background's low matte, so the edge moves inwards smoothly, without the stair steps of a hard minimum.
 
@@ -234,10 +234,10 @@ Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** f
 
 <svg class="docs-shot-overlay" viewBox="0 0 590 1013" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-edge-softness-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M237 204 L321 204" marker-end="url(#chroma-key-edge-softness-arrow)" />
-<circle class="docs-shot-number" cx="237" cy="204" r="18" /><text x="237" y="204" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M237 473 L321 473" marker-end="url(#chroma-key-edge-softness-arrow)" />
-<circle class="docs-shot-number" cx="237" cy="473" r="18" /><text x="237" y="473" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M432 25 L432 77" marker-end="url(#chroma-key-edge-softness-arrow)" />
+<circle class="docs-shot-number" cx="432" cy="25" r="18" /><text x="432" y="25" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M432 615 L432 563" marker-end="url(#chroma-key-edge-softness-arrow)" />
+<circle class="docs-shot-number" cx="432" cy="615" r="18" /><text x="432" y="615" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -260,14 +260,14 @@ Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** f
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 729" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-screen-subtraction-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M86 235 L170 235" marker-end="url(#chroma-key-screen-subtraction-arrow)" />
-<circle class="docs-shot-number" cx="86" cy="235" r="18" /><text x="86" y="235" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M226 235 L310 235" marker-end="url(#chroma-key-screen-subtraction-arrow)" />
-<circle class="docs-shot-number" cx="226" cy="235" r="18" /><text x="226" y="235" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M504 235 L588 235" marker-end="url(#chroma-key-screen-subtraction-arrow)" />
-<circle class="docs-shot-number" cx="504" cy="235" r="18" /><text x="504" y="235" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M644 208 L728 208" marker-end="url(#chroma-key-screen-subtraction-arrow)" />
-<circle class="docs-shot-number" cx="644" cy="208" r="18" /><text x="644" y="208" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M230 357 L230 305" marker-end="url(#chroma-key-screen-subtraction-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="357" r="18" /><text x="230" y="357" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M369 113 L369 165" marker-end="url(#chroma-key-screen-subtraction-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="113" r="18" /><text x="369" y="113" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M648 113 L648 165" marker-end="url(#chroma-key-screen-subtraction-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="113" r="18" /><text x="648" y="113" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M787 62 L787 114" marker-end="url(#chroma-key-screen-subtraction-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="62" r="18" /><text x="787" y="62" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -288,33 +288,29 @@ Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** f
 
 <div class="docs-shot-stage">
 
-![Inside the Spill Suppression folder: Spill Method feeds Step, whose Is Gentle output picks between Other Mean and Stronger Other in Mix; the Limit is subtracted from the Screen Level, kept above zero by Maximum, multiplied by Strength into the Excess, multiplied onto the Screen Channel and subtracted from the Color](../assets/effects/graphs/chroma-key-spill.webp)
+![Inside the Spill Suppression folder: Spill Method feeds Step, which makes Mix pick between Other Mean and Stronger Other; the Limit is subtracted from the Screen Level, kept above zero by Maximum, multiplied by Strength into the Excess, multiplied onto the Screen Channel and subtracted from the Color](../assets/effects/graphs/chroma-key-spill.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 444" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-spill-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M67 210 L151 210" marker-end="url(#chroma-key-spill-arrow)" />
-<circle class="docs-shot-number" cx="67" cy="210" r="18" /><text x="67" y="210" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M189 232 L273 232" marker-end="url(#chroma-key-spill-arrow)" />
-<circle class="docs-shot-number" cx="189" cy="232" r="18" /><text x="189" y="232" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M555 210 L639 210" marker-end="url(#chroma-key-spill-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="210" r="18" /><text x="555" y="210" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M798 210 L882 210" marker-end="url(#chroma-key-spill-arrow)" />
-<circle class="docs-shot-number" cx="798" cy="210" r="18" /><text x="798" y="210" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M326 367 L326 315" marker-end="url(#chroma-key-spill-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="367" r="18" /><text x="326" y="367" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M691 324 L691 272" marker-end="url(#chroma-key-spill-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="324" r="18" /><text x="691" y="324" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M935 96 L935 148" marker-end="url(#chroma-key-spill-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="96" r="18" /><text x="935" y="96" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
-<figcaption>Inside Spill Suppression; its 0.5 and 0 cards are left out. 1 — Step: Neutral or Gentle. 2 — Mix: the limit. 3 — Multiply: the excess green. 4 — Subtract: the glow taken out.</figcaption>
+<figcaption>Inside Spill Suppression; its 0.5 and 0 cards are left out. 1 — Mix: the limit. 2 — Multiply: the excess green. 3 — Subtract: the glow taken out.</figcaption>
 </figure>
 
-**Step** – turns Spill Method into 0 (Neutral) or 1 (Gentle).
-
-**Mix** – picks the Limit for the screen channel: the Other Mean of red and blue (Neutral), or the Stronger Other of the two (Gentle).
+**Mix** – picks the Limit for the screen channel: the Other Mean of red and blue (Neutral), or the Stronger Other of the two (Gentle). The Step before it turns Spill Method into that choice, 0 or 1.
 
 **Multiply** – whatever green lies above the Limit, times the Strength (Suppression, and Screen Found): the Excess, the glow of the screen.
 
 **Subtract** – takes the Excess out of the screen channel only, so the other colours stay as they are.
 
-**Remix:** for a limit halfway between Neutral and Gentle, unplug **Step** from input T of **Mix** and plug a **Value** of 0.5 into T.
+**Remix:** for a limit halfway between Neutral and Gentle, unplug Step from input T of **Mix** and plug a **Value** of 0.5 into T.
 
 ## Technical details
 
@@ -323,6 +319,6 @@ Chroma Key works in stages, one folder each in the Nodes tab. **Screen Color** f
 - **Values.** Out-of-range values are used at their limit, values that are not a number at their default, and Clip Black at or above Clip White makes a hard cut; the card names each case and tool results report unusable numbers. A clip without screen colour keys nothing, and the card and `addEffect`/`updateEffect` say so (checked on the clip's thumbnails).
 - **Limits.** Chroma Key measures one screen colour per frame plus a coarse local grid, so see-through fabric that fills a whole grid cell can come out greyish. Curtains, stands and floor edges that are not screen colour stay; cut them with a mask.
 - **Software preview and export readback.** The worker CPU keys a 1080p frame in under 0.1 s (the whole worker pixel pass, with frame copy and write-back, about 0.25 s), but only on a layer whose sole effect is one Chroma Key without Shrink / Grow or Softness. A stored key graph among other effects runs on the slower graph interpreter in stack order; a graph-less key among other effects is reported as unsupported.
-- **Presets.** They set Clip Black, Clip White, Shrink / Grow, Softness, Suppression and Method, and reset Screen to Green and View to Final result. A Chroma Key whose node setup was edited before the screen-matte keyer has no Clip Black, Shrink / Grow or Method: a preset then changes only what that setup reads. Re-add Chroma Key to use the presets fully.
+- **Presets.** They set Clip Black, Clip White, Shrink / Grow, Softness, Suppression and Method, and reset Screen to Green and View to Final result, because the shared preset row resets every control a preset does not name; the card says so under Screen. There is no Blue Screen preset yet: until presets can leave Screen alone, it would only set Screen to Blue, and the preset strip shows one green-screen test image. A Chroma Key whose node setup was edited before the screen-matte keyer has no Clip Black, Shrink / Grow or Method: a preset then changes only what that setup reads. Re-add Chroma Key to use the presets fully.
 - **Saved projects.** Untouched older key graphs switch to the current keyer: stored Spill Suppression stays, Clip Black/White and the edge use their defaults, and the card lists the retired Tolerance and Edge Softness values and keyframes that no longer act. The old Custom choice keyed pure green and now keys the picked colour (#4C9A55 unless one is stored). Edited graphs keep the old key with its Tolerance and Edge Softness rows.
 - **More:** [Effect system: editable keying and feedback graphs](../Effect-System.md#editable-keying-and-feedback-graphs) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

@@ -8,10 +8,11 @@ import { TIME_STACK_DEFAULT_DECAY, TIME_STACK_LEGACY_DECAY } from './settings';
  */
 export const TIME_STACK_PRESETS: readonly EffectPreset[] = [
   { id: 'echo-trail', name: 'Echo Trail', params: { count: 20, offset: 0.1, decay: 0.8, blendMode: 'lighten' } },
-  { id: 'long-exposure', name: 'Long Exposure', params: { count: 32, offset: 0.04, decay: 0.92, blendMode: 'lighten' } },
+  { id: 'long-exposure', name: 'Long Exposure', params: { count: 32, offset: 0.08, decay: 0.95, blendMode: 'lighten' } },
   { id: 'stroboscope', name: 'Stroboscope', params: { count: 8, offset: 0.2, decay: 1, blendMode: 'lighten' } },
   { id: 'chorus', name: 'Chorus', params: { count: 5, offset: 0.5, decay: 0.9, blendMode: 'lighten' } },
-  { id: 'afterglow', name: 'Afterglow', params: { count: 10, offset: 0.06, decay: 0.55, blendMode: 'screen' } },
+  // Few, quickly fading copies: Screen adds them up, so more or brighter copies would lift a dark stage into haze.
+  { id: 'afterglow', name: 'Afterglow', params: { count: 6, offset: 0.08, decay: 0.5, blendMode: 'screen' } },
 ];
 
 export const timeStack: FullscreenEffectDefinition = {

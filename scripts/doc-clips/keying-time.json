@@ -5,11 +5,7 @@
     {
       "name": "slit-scan",
       "effect": "slit-scan",
-      "params": {
-        "profile": "linear",
-        "angle": 0,
-        "delay": 3
-      },
+      "params": {},
       "range": [
         0.8,
         5.8
@@ -27,96 +23,7 @@
       "poster": 2.6,
       "maxBytes": 1000000,
       "alt": "The dancer turning on a dark stage, original left and with Slit Scan right: every strip of the picture further right shows a moment further back, so her arms and skirt stretch into pleated, rippling smears and a hand trails behind her",
-      "caption": "Left: original. Right: Slit Scan with the Sweep preset: the right edge of the frame is 3 s behind the left."
-    },
-    {
-      "name": "slit-scan-presets",
-      "kind": "presets",
-      "effect": "slit-scan",
-      "presets": [
-        {
-          "name": "Sweep",
-          "params": {
-            "profile": "linear",
-            "angle": 0,
-            "delay": 3,
-            "bands": 0,
-            "mix": 1,
-            "waves": 2,
-            "phase": 0,
-            "speed": 0.15
-          }
-        },
-        {
-          "name": "Wave Folds",
-          "params": {
-            "profile": "wave",
-            "angle": 0,
-            "delay": 2,
-            "bands": 0,
-            "mix": 1,
-            "waves": 2,
-            "phase": 0,
-            "speed": 0.15
-          }
-        },
-        {
-          "name": "Radial Bloom",
-          "params": {
-            "profile": "radial",
-            "angle": 0,
-            "delay": 3,
-            "bands": 0,
-            "mix": 1,
-            "waves": 2,
-            "phase": 0,
-            "speed": 0.15
-          }
-        },
-        {
-          "name": "Time Rings",
-          "params": {
-            "profile": "rings",
-            "angle": 0,
-            "delay": 2,
-            "bands": 0,
-            "mix": 1,
-            "waves": 3,
-            "phase": 0,
-            "speed": 0.25
-          }
-        },
-        {
-          "name": "Time Steps",
-          "params": {
-            "profile": "linear",
-            "angle": 0,
-            "delay": 2,
-            "bands": 12,
-            "mix": 1,
-            "waves": 2,
-            "phase": 0,
-            "speed": 0.15
-          }
-        }
-      ],
-      "range": [
-        0.8,
-        5.8
-      ],
-      "crop": [
-        420,
-        0,
-        1080,
-        1000
-      ],
-      "width": 960,
-      "columns": 3,
-      "loop": 0.35,
-      "poster": 2.6,
-      "maxBytes": 1400000,
-      "alt": "The dancer five times in a grid, moving in sync, each with one preset: Sweep with pleated sideways smears, Wave Folds with hands floating apart from the body, Radial Bloom with limbs smeared outwards from the middle, Time Rings breaking her into rings that close in on the centre, Time Steps cutting her into upright strips from different moments",
-      "caption": "The five presets on the moving dancer, in sync."
+      "caption": "Left: original. Right: Slit Scan at its default settings (the Sweep preset): the right edge of the frame is 3 s behind the left."
     },
     {
       "name": "slit-scan-delay",
@@ -144,7 +51,7 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 380000,
       "float": "right",
       "alt": "The dancer with Slit Scan while Delay runs from 0 to 3 s and back: at 0 she is the plain picture, then her arms and skirt stretch into longer and longer pleated smears and gather again; the current value is shown at the bottom left",
       "caption": "Delay from 0 to 3 s and back."
@@ -177,7 +84,7 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 380000,
       "float": "right",
       "alt": "The dancer with Slit Scan at Delay 2 s while Angle turns from 0° to 180° and back: the smears run sideways, then up and down, then sideways the other way; the current angle is shown at the bottom left",
       "caption": "Angle from 0° to 180° and back, at Delay 2 s."
@@ -209,7 +116,7 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 380000,
       "float": "right",
       "alt": "The dancer with Slit Scan at Delay 2 s while Mix runs from 0 to 1 and back: the smeared picture fades in over the plain one as a ghost and becomes solid; the current value is shown at the bottom left",
       "caption": "Mix from 0 to 1 and back, at Delay 2 s."
@@ -244,7 +151,7 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 380000,
       "float": "right",
       "alt": "The dancer with Slit Scan at Delay 2 s and Time bands 0, 3, 8 and 24, about a second each: the smooth smear becomes three, eight and twenty-four upright strips, each from one moment; the value is shown at the bottom left",
       "caption": "Time bands 0, 3, 8 and 24, at Delay 2 s."
@@ -277,7 +184,7 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 380000,
       "float": "right",
       "alt": "The dancer with the Wave / folds profile at Delay 2 s while Waves runs from 0.5 to 6 and back: one broad fold becomes many narrow upright folds that cut her into repeated slices; the current value is shown at the bottom left",
       "caption": "Waves from 0.5 to 6 and back, Wave / folds at Delay 2 s."
@@ -311,7 +218,7 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 380000,
       "float": "right",
       "alt": "The dancer with the Wave / folds profile at Delay 2 s and Speed 0 while Phase runs from 0 to 1 and back: the folds slide sideways across her body by one whole wave and back; the current value is shown at the bottom left",
       "caption": "Phase from 0 to 1 and back, Wave / folds at Delay 2 s, Speed 0."
@@ -348,7 +255,7 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 380000,
       "float": "right",
       "alt": "The dancer with the Time rings profile at Delay 2 s and Speed 0, 0.25 and 1 cycles/s, about one and a half seconds each: the rings stand still, then drift slowly inwards, then race inwards; the value is shown at the bottom left",
       "caption": "Speed 0, 0.25 and 1 cycles/s, Time rings at Delay 2 s."
@@ -424,7 +331,7 @@
       "loop": 0.35,
       "poster": 1.6,
       "maxBytes": 1400000,
-      "alt": "The dancer five times in a grid, moving in sync, each with one preset: Echo Trail with fading copies fanning out behind her, Long Exposure with a soft continuous smear, Stroboscope with eight equally bright copies close together, Chorus with five whole dancers half a second apart, Afterglow with a short glowing trail and a brighter stage",
+      "alt": "The dancer five times in a grid, moving in sync, each with one preset: Echo Trail with fading copies fanning out behind her, Long Exposure with a long smear of the last two and a half seconds, Stroboscope with eight equally bright copies close together, Chorus with five whole dancers half a second apart, Afterglow with a short soft glow around her on a dark stage",
       "caption": "The five presets on the moving dancer, in sync."
     },
     {
@@ -500,7 +407,7 @@
       "loop": 0.35,
       "poster": 2.0,
       "maxBytes": 1400000,
-      "alt": "The dancer five times in a grid, moving in sync, each with one preset: Light Trails with short pale streaks, Long Streaks with longer fading streaks, Neon Trace with cyan trails, Embers with orange trails, Afterimage with a long pale golden haze of earlier poses",
+      "alt": "The dancer five times in a grid, moving in sync, each with one preset: Light Trails with short pale streaks, Light Painting with streaks that hardly fade and fill the stage, Neon Trace with cyan trails, Embers with smoky orange trails, Afterimage with a soft lavender haze of earlier poses",
       "caption": "The five presets on the moving dancer, in sync."
     },
     {
@@ -529,7 +436,7 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 600000,
       "float": "right",
       "alt": "The dancer with Motion Trails while Length runs from 0.5 to 0.98 and back: at 0.5 only a short smear follows her hands, at 0.98 long pale streaks of arms and skirt hang in the air before they fade; the current value is shown at the bottom left",
       "caption": "Length from 0.5 to 0.98 and back."
@@ -560,10 +467,43 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 600000,
       "float": "right",
-      "alt": "The dancer with Motion Trails while Tint runs from 0 to 1 and back: the pale streaks behind her turn green, first at their old ends, then completely, and back to pale; the current value is shown at the bottom left",
-      "caption": "Tint from 0 to 1 and back, with the default green Overlay."
+      "alt": "The dancer with Motion Trails while Tint runs from 0 to 1 and back: the pale streaks behind her turn light blue, first at their old ends, then completely, and back to pale; the current value is shown at the bottom left",
+      "caption": "Tint from 0 to 1 and back, with the default light blue Overlay."
+    },
+    {
+      "name": "kinetic-trace-softness",
+      "effect": "kinetic-trace",
+      "params": {
+        "trail": 0.95
+      },
+      "range": [
+        1.0,
+        5.0
+      ],
+      "layout": "single",
+      "crop": [
+        440,
+        40,
+        1040,
+        1000
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "softness",
+        "label": "Softness",
+        "from": 0,
+        "to": 6,
+        "unit": " px",
+        "decimals": 1
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 600000,
+      "float": "right",
+      "alt": "The dancer turning with Motion Trails at Length 0.95 while Softness rises from 0 to 6 px and back: at 0 her arms leave a comb of sharp separate copies, at higher values the older copies melt into soft continuous streaks",
+      "caption": "Softness from 0 to 6 px and back, at Length 0.95."
     },
     {
       "name": "kinetic-trace-amount",
@@ -591,9 +531,9 @@
       },
       "loop": 0.35,
       "poster": 2.0,
-      "maxBytes": 700000,
+      "maxBytes": 600000,
       "float": "right",
-      "alt": "The dancer with Motion Trails while Amount runs from 0 to 1 and back: at 0 she is alone, then faint short streaks appear that grow brighter and longer up to 1, and fade again; the current value is shown at the bottom left",
+      "alt": "The dancer with Motion Trails while Amount runs from 0 to 1 and back: at 0 she is alone, then the full-length streaks appear faintly and grow stronger up to 1, and fade again; the current value is shown at the bottom left",
       "caption": "Amount from 0 to 1 and back."
     }
   ]

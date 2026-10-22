@@ -30,9 +30,10 @@ it('shows its own Preset row above the Time section and names the applied preset
   expect(view.queryByText('Look')).toBeNull();
 });
 
-it('reads Apply preset… on the defaults, which match no preset', () => {
-  const view = renderCard(getDefaultParams('slit-scan'));
-  expect(view.getByLabelText('Slit Scan preset').textContent).toContain('Apply preset…');
+it('reads Sweep on the defaults (Delay 3 s) and Apply preset… once a value leaves every preset', () => {
+  expect(renderCard(getDefaultParams('slit-scan')).getByLabelText('Slit Scan preset').textContent).toContain('Sweep');
+  cleanup();
+  expect(renderCard({ ...getDefaultParams('slit-scan'), delay: 1 }).getByLabelText('Slit Scan preset').textContent).toContain('Apply preset…');
 });
 
 it('dims Angle with its reason in the radial profiles only', () => {

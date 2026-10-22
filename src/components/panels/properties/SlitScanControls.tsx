@@ -19,6 +19,10 @@ import { slitScanFullResolutionFactor } from '../../../effects/time/slit-scan/ti
 import { SLIT_SCAN_LOOKS, SLIT_SCAN_LOOK_KEYS, applySlitScanLook, slitScanLookOf } from '../../../effects/time/slit-scan/looks';
 import { isParameterNodeDriven } from '../../../services/parameterSources/parameterSourceTargets';
 import { finiteEffectNumber } from '../../../effects/_shared/effectNumberParam';
+import { stepDecimals, type ParamDisplay } from '../../../effects/paramDisplay';
+
+/** Delay reads like the other seconds of the card's family (Time Stack): "3.00", not "3.000". */
+const DELAY_DISPLAY: ParamDisplay = { scale: 1, decimals: 2 };
 
 export function SlitScanControls({ params, onChange, clipId, effectInstanceId, operatorGraph }: EffectControlProps & { operatorGraph?: EffectOperatorGraph }) {
   const motionStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(`${effectInstanceId}:dis`));
@@ -76,7 +80,7 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
             options={parameter.options!} onChange={value => onChange({ ...params, [key]: value })} />
         </ResolveInspectorRow>;
         const property = `effect.${effectInstanceId}.${key}` as AnimatableProperty;
-        if (key === 'delay' && clipId && effectInstanceId) return <ParameterSourceNumberRow key={key} clipId={clipId} property={property} />;
+        if (key === 'delay' && clipId && effectInstanceId) return <ParameterSourceNumberRow key={key} clipId={clipId} property={property} display={DELAY_DISPLAY} />;
         const maximum = key === 'temporalSamples' ? sampleLimit : parameter.max!;
         return <Fragment key={key}>{key === 'angle' && <ResolveInspectorRow label="Scan direction" disabled={inactive} title={inactiveTitle}>
           <InspectorSelect ariaLabel="Slit Scan scan direction"
@@ -85,7 +89,7 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
               { value: '-90', label: 'Bottom → top' }, { value: '180', label: 'Right → left' }, { value: 'custom', label: 'Custom angle', disabled: true }]}
             onChange={value => changeNumber(key, Number(value))} />
         </ResolveInspectorRow>}<ResolveInspectorNumberRow label={parameter.label} value={Math.min(maximum, slitScanNumber(params, key))}
-          defaultValue={Number(parameter.default)} min={parameter.min!} max={maximum} step={parameter.step!} disabled={inactive} title={inactiveTitle}
+          defaultValue={Number(parameter.default)} min={parameter.min!} max={maximum} step={parameter.step!} decimals={stepDecimals(parameter.step!)} disabled={inactive} title={inactiveTitle}
           actions={key === 'timeFactor' ? <><ResolveInspectorIconButton ariaLabel="Match sample resolution"
             title={fullResolutionTitle} disabled={!fullResolution || timeFactorKeyframed}
             active={!!fullResolution && slitScanNumber(params, 'timeFactor') === fullResolution.factor}

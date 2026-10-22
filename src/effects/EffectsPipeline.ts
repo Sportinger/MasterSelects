@@ -518,23 +518,31 @@ export class EffectsPipeline {
 
       const effectBindGroup = this.pipelineCache.createBindGroup(pipelineKey, entries);
       if (!effectBindGroup) continue;
+      const drawEffect = (bindGroup: GPUBindGroup) => {
+        const effectPass = commandEncoder.beginRenderPass({ colorAttachments: [{ view: effectOutput, loadOp: 'clear', storeOp: 'store' }] });
+        effectPass.setPipeline(pipeline);
+        effectPass.setBindGroup(0, bindGroup);
+        effectPass.draw(6);
+        effectPass.end();
+      };
 
-      const effectPass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: effectOutput,
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      });
-      effectPass.setPipeline(pipeline);
-      effectPass.setBindGroup(0, effectBindGroup);
-      effectPass.draw(6);
-      effectPass.end();
-
-      if (feedbackState) {
-        this.feedbackHistory.copyOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
-          outputWidth, outputHeight, pingTexture, pongTexture);
+      // A feedback state that differs from the output (feedbackStateParams) is drawn and kept first;
+      // the output pass after it reads the same committed frame.
+      const primitive = feedbackState && definition.feedbackStateParams ? toPrimitiveEffectParams(effect.params) : undefined;
+      const stateParams = primitive && definition.feedbackStateParams?.(primitive);
+      const stateUniforms = stateParams && definition.packUniforms({ ...primitive, ...stateParams }, outputWidth, outputHeight, timelineTimeSeconds);
+      if (feedbackState && stateUniforms) {
+        const stateBuffer = this.device.createBuffer({ size: stateUniforms.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+        this.device.queue.writeBuffer(stateBuffer, 0, stateUniforms.buffer);
+        const stateBindGroup = this.pipelineCache.createBindGroup(pipelineKey,
+          entries.map(entry => entry.binding === 2 ? { binding: 2, resource: { buffer: stateBuffer } } : entry));
+        if (stateBindGroup) drawEffect(stateBindGroup);
       }
+      const keepOutput = () => feedbackState && this.feedbackHistory.copyOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
+        outputWidth, outputHeight, pingTexture, pongTexture);
+      if (stateUniforms) keepOutput();
+      drawEffect(effectBindGroup);
+      if (!stateUniforms) keepOutput();
 
       effectInput = effectOutput;
       effectOutput = this.getNextOutputView(effectOutput, pingView, pongView);

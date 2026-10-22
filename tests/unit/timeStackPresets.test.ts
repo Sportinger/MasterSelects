@@ -36,16 +36,21 @@ describe('Time Stack presets', () => {
     const params = (id: string) => TIME_STACK_PRESETS.find(preset => preset.id === id)!.params;
     const span = (id: string) => (Number(params(id).count) - 1) * Number(params(id).offset);
     const oldest = (id: string) => Number(params(id).decay) ** (Number(params(id).count) - 1);
-    // Long Exposure: many close copies, still visible at the end of the trail.
-    expect(params('long-exposure').offset).toBeLessThan(0.05);
-    expect(oldest('long-exposure')).toBeGreaterThan(0.05);
+    // Long Exposure: many copies over a long span, still visible at the end: a smear clearly longer than Echo Trail.
+    expect(params('long-exposure').count).toBe(32);
+    expect(span('long-exposure')).toBeGreaterThan(span('echo-trail'));
+    expect(oldest('long-exposure')).toBeGreaterThan(0.15);
     // Stroboscope: equal copies.
     expect(params('stroboscope').decay).toBe(1);
     // Chorus: few copies, far apart, each one a whole figure.
     expect(params('chorus').count).toBeLessThanOrEqual(6);
     expect(params('chorus').offset).toBeGreaterThanOrEqual(0.5);
     expect(span('chorus')).toBeGreaterThan(span('echo-trail'));
+    // Afterglow: Screen adds the copies up, so they are few and fade fast, keeping a dark stage dark
+    // (the summed weight of all copies stays below 2: a 2 % stage lifts to under 4 %).
     expect(params('afterglow').blendMode).toBe('screen');
+    const weights = Array.from({ length: Number(params('afterglow').count) }, (_, index) => Number(params('afterglow').decay) ** index);
+    expect(weights.reduce((sum, weight) => sum + weight, 0)).toBeLessThan(2);
   });
 
   it('blends equal copies at Stroboscope and fading ones at Echo Trail', () => {

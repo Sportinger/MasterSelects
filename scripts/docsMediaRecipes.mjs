@@ -45,6 +45,10 @@ export const HAND_MADE = [
   { path: `${ASSET_DIR}/transitions/`, reason: 'Crossfade filmstrips composed by hand from editor frames' },
   { path: `${ASSET_DIR}/keyframes/real-editor-current.png`, reason: 'a screenshot of the editor with a real project, taken by hand' },
   { path: `${ASSET_DIR}/effects/graphs/glitch-stages.svg`, reason: 'a stage diagram of Glitch drawn by hand as SVG' },
+  // Slit Scan's presets live in its own Preset row (SLIT_SCAN_LOOKS in src/effects/time/slit-scan/looks.ts), not in the
+  // definition, while the shared preset row would reset its other controls; doc-clip reads definition presets only.
+  ...['mp4', 'webp'].map((extension) => ({ path: `${ASSET_DIR}/effects/clips/slit-scan-presets.${extension}`,
+    reason: 'the Slit Scan presets grid, exported with doc-clip from SLIT_SCAN_LOOKS; a recipe once the presets can live in the definition' })),
 ];
 export const handMadeReason = (asset) => HAND_MADE.find((entry) => (entry.path.endsWith('/') ? asset.startsWith(entry.path) : asset === entry.path))?.reason;
 

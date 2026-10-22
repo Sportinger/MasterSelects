@@ -21,7 +21,7 @@ import { ResolveInspectorRow, ResolveInspectorSection } from './resolveInspector
 import { KeyframeToggle } from './shared';
 
 type NumberKey = 'clipBlack' | 'clipWhite' | 'edgeShrink' | 'edgeSoftness' | 'spillSuppression' | 'tolerance' | 'softness';
-const SUFFIX: Partial<Record<NumberKey, string>> = { edgeShrink: 'px', edgeSoftness: 'px' };
+const SUFFIX: Partial<Record<NumberKey, string>> = { edgeShrink: ' px', edgeSoftness: ' px' };
 const LABEL: Record<string, string> = {
   clipBlack: 'Clip Black', clipWhite: 'Clip White', spillSuppression: 'Spill Suppression', edgeSoftness: 'Edge Softness', edgeShrink: 'Shrink / Grow',
 };
@@ -78,7 +78,7 @@ export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId, 
     if (clip && effectInstanceId && getParameterSourceTarget(clip, property)) return <ParameterSourceNumberRow key={key} clipId={clip.id} property={property} />;
     const value = finiteEffectNumber(params[key], definition.default as number);
     return <ResolveInspectorNumberRow key={key} label={label ?? definition.label} ariaLabel={definition.label} value={value} defaultValue={definition.default as number}
-      min={definition.min!} max={definition.max!} step={definition.step!} decimals={2} suffix={SUFFIX[key]}
+      min={definition.min!} max={definition.max!} step={definition.step!} decimals={SUFFIX[key] ? 1 : 2} suffix={SUFFIX[key]}
       keyframeToggle={clipId && effectInstanceId && definition.animatable ? <KeyframeToggle clipId={clipId} property={property as AnimatableProperty} value={value} /> : undefined}
       onChange={next => changeNumber(key, next)} />;
   };
@@ -117,6 +117,8 @@ export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId, 
         : <p className="tracking-panel-status">Screen color is measured from every frame.</p>}
       {greyPick && status('This color is too grey to key. Pick the screen itself, where it is most saturated.')}
       {noScreen && status(noScreen)}
+      {/* The shared preset row resets every control a preset does not name, Screen too. */}
+      {screen !== 'green' && <p className="tracking-panel-status">A preset sets Screen back to Green: choose {screen === 'blue' ? 'Blue' : 'Picked color'} again after one.</p>}
       <ResolveInspectorRow label="View">
         <InspectorSelect ariaLabel="Chroma Key view" value={params.view === 'matte' ? 'matte' : 'result'} options={chromaKey.params.view.options!}
           onChange={value => change('view', value)} />

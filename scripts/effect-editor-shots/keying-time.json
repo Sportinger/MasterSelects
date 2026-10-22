@@ -10,7 +10,7 @@
       "image": "greenscreen_dancer.jpg",
       "preview": 380,
       "top": "tabs",
-      "alt": "Properties, Effects with a Chroma Key card: Preset menu showing Fine Hair, then the Key section (Screen: Green, View: Final result), Matte (Clip Black 0.15, Clip White 0.95), Edge (Shrink / Grow and Softness at 0 px) and Spill (Suppression 1.00, Method: Neutral), beside a strip of the preview with the keyed dancer",
+      "alt": "Properties, Effects with a Chroma Key card: Preset menu showing Fine Hair, then the Key section (Screen: Green, View: Final result), Matte (Clip Black 0.15, Clip White 0.95), Edge (Shrink / Grow and Softness at 0.0 px) and Spill (Suppression 1.00, Method: Neutral), beside a strip of the preview with the keyed dancer",
       "caption": "Chroma Key with the Fine Hair preset. 1 — Preset: pick a starting point. 2 — Screen: the colour to key. 3 — View: the result or the matte. 4 — Clip Black: background away. 5 — Shrink / Grow: the edge in or out.",
       "marks": [
         {
@@ -58,7 +58,7 @@
       "image": "dancer_stage.jpg",
       "preview": 380,
       "top": "tabs",
-      "alt": "Properties, Effects with a Slit Scan card: Preset menu showing Wave Folds, then the Time section (Preview: Result, Delay 2 s, Time factor 1, Profile: Wave / folds, Scan direction: Left → right, Angle 0, Mix 1, Time bands 0) and the closed Wave and Sampling sections, beside the preview",
+      "alt": "Properties, Effects with a Slit Scan card: Preset menu showing Wave Folds, then the Time section (Preview: Result, Delay 2.00, Time factor 1.0, Profile: Wave / folds, Scan direction: Left → right, Angle 0, Mix 1, Time bands 0) and the closed Wave and Sampling sections, beside the preview",
       "caption": "Slit Scan with the Wave Folds preset. 1 — Preset: pick a starting point. 2 — Preview: the result or the time map. 3 — Delay (s): how far back. 4 — Profile: the shape of time. 5 — Time bands: steps instead of a smear.",
       "marks": [
         {
@@ -137,17 +137,18 @@
       "params": {
         "trail": 0.93,
         "tint": 0.5,
-        "color": "#22d3ff"
+        "color": "#22d3ff",
+        "softness": 1
       },
       "image": "../footage/dancer_stage_motion.mp4",
-      "preview": 380,
+      "preview": 0,
       "top": "tabs",
       "hide": [
         "Track Landmarks",
         "Particle Out"
       ],
-      "alt": "Properties, Effects with a Motion Trails card: Preset menu showing Neon Trace, History Loop Reset, then Length 0.93, Tint 0.50, a cyan Overlay swatch and Amount 1.00, beside a strip of the preview at the edge of a dark stage",
-      "caption": "Motion Trails with the Neon Trace preset. 1 — Preset: pick a starting point. 2 — Length: how long the trail lasts. 3 — Tint: how strongly the trail takes on the Overlay colour. 4 — Overlay: the trail's colour. 5 — Amount: how strongly the effect shows.",
+      "alt": "Properties, Effects with a Motion Trails card: Preset menu showing Neon Trace, History Loop Reset, then Length 0.93, Softness 1.0 px, Tint 0.50 and a cyan Overlay swatch",
+      "caption": "Motion Trails with the Neon Trace preset. 1 — Preset: pick a starting point. 2 — Length: how long the trail lasts. 3 — Softness: how much older parts melt together. 4 — Tint: how strongly the trail takes on the Overlay colour. 5 — Overlay: the trail's colour.",
       "marks": [
         {
           "target": "Preset",
@@ -158,16 +159,16 @@
           "label": "Length"
         },
         {
+          "target": "Softness",
+          "label": "Softness"
+        },
+        {
           "target": "Tint",
           "label": "Tint"
         },
         {
           "target": "Overlay",
           "label": "Overlay"
-        },
-        {
-          "target": "Amount",
-          "label": "Amount"
         }
       ]
     }

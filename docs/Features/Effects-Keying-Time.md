@@ -13,6 +13,8 @@ Take a performer off a green or blue screen, or let time itself become the pictu
 | echoes of a movement, like a long exposure | [Time Stack](./effects/time-stack.md) |
 | fading light streaks behind a moving performer | [Motion Trails](./effects/kinetic-trace.md) |
 
+Time Stack and Motion Trails both leave copies of a movement behind. **Time Stack** shows whole earlier frames at fixed distances in time, so you see distinct echoes of the figure, and it can reach back many seconds. **Motion Trails** keeps only what was lighter than the picture now and lets it fade and soften frame by frame, so you see light streaks, not repeated figures; it needs no frame memory and can take a colour of its own.
+
 ## The shared idea
 
 Time Stack and Slit Scan read the past. Both are built around one node, **Sample Past Frame**: it reads the clip at the same spot a number of seconds earlier (its **Delay** input). They differ only in how they choose that delay: Time Stack gives every copy its own, Slit Scan every pixel. Their pages show the recipe: [Time Stack](./effects/time-stack.md#node-setup) and [Slit Scan](./effects/slit-scan.md#node-setup).

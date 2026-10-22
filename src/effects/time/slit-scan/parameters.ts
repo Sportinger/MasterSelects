@@ -78,7 +78,9 @@ export const slitScanParams: Record<string, EffectParam> = {
     { value: 'result', label: 'Result' }, { value: 'time', label: 'Time map' }, { value: 'mask', label: 'Protection mask' },
   ] },
   maskStrength: number('Protection strength', 1, 0, 1, 0.01, 'Subject protection'),
-  delay: number('Delay (s)', 1, 0, 60, 0.01, 'Time'),
+  // 3 s (until 3.2.7: 1 s, where a figure in the middle of the frame barely changes). Every instance stores its
+  // Delay, so saved projects keep theirs.
+  delay: number('Delay (s)', 3, 0, 60, 0.01, 'Time'),
   timeFactor: number('Time factor (×)', 1, 1, 100, 0.1, 'Time'),
   bypassSlowdown: { type: 'boolean', label: 'Bypass slowdown', default: false, group: 'Resources' },
   profile: { type: 'select', label: 'Profile', default: 'linear', group: 'Time', options: [

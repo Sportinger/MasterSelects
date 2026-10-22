@@ -113,5 +113,6 @@ export const EFFECT_DOC_EXTRAS = {
   'tracked-scene': { deeper: [LANDMARK_EFFECTS] },
   stardust: { deeper: [LANDMARK_EFFECTS] },
   'rain-reveal': { deeper: [LANDMARK_EFFECTS] },
-  'kinetic-trace': { deeper: [LANDMARK_EFFECTS] },
+  // History Loop has no section, so the card shows it right under the Preset row.
+  'kinetic-trace': { rows: ['historyLoop', 'trail', 'softness', 'tint', 'color', 'amount'], deeper: [LANDMARK_EFFECTS] },
 };

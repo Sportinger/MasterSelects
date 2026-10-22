@@ -41,7 +41,8 @@ describe('operator group bypass', () => {
     });
     expect(evaluate()[0]).toBe(0);
     graph.groups!.find(group => group.id === 'subject-protection')!.bypassed = true;
-    expect(evaluate()[0]).toBeCloseTo(1);
+    // The far edge of the linear scan reads the full Delay.
+    expect(evaluate()[0]).toBeCloseTo(Number(effect.params.delay));
   });
   it.each(['time-map', 'subject-protection', 'scan-protection'])('retains the Slit Scan %s bypass through owner normalization', id => {
     const effect = { type: 'slit-scan', params: getDefaultParams('slit-scan') };

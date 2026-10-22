@@ -4,8 +4,10 @@ import {
   KINETIC_TRACE_LEGACY_KEEP,
   KINETIC_TRACE_PRESETS,
   kineticTrace,
+  kineticTraceFeedbackState,
   kineticTraceKeep,
   kineticTraceParamNotes,
+  kineticTraceSoftness,
 } from '../../src/effects/time/kinetic-trace';
 import { kineticTrace as trackingExport } from '../../src/effects/tracking';
 
@@ -18,14 +20,36 @@ describe('Motion Trails (kinetic-trace)', () => {
     expect(kineticTrace.uniformSize).toBe(pack(getDefaultParams('kinetic-trace')).length * 4);
   });
 
-  it('packs Length as the visible share kept per frame, independent of Amount', () => {
-    // The output it builds on is mixed by Amount, so keep × Amount = Length.
-    expect(kineticTraceKeep({ amount: 1, trail: 0.9 })).toBeCloseTo(0.9);
-    expect(kineticTraceKeep({ amount: 0.95, trail: 0.9 }) * 0.95).toBeCloseTo(0.9);
-    // Never above 1: static areas would brighten frame after frame.
-    expect(kineticTraceKeep({ amount: 0.5, trail: 0.9 })).toBe(1);
-    expect(kineticTraceKeep({ amount: 0, trail: 0.9 })).toBe(1);
-    expect(pack({ amount: 1, trail: 0.96, tint: 0.4 }).slice(16, 18).map(value => +value.toFixed(4))).toEqual([0.96, 0.4]);
+  it('feeds back the unmixed trace, so Amount is an opacity and Length alone sets the trail', () => {
+    expect(kineticTrace.feedbackStateParams).toBe(kineticTraceFeedbackState);
+    expect(kineticTraceFeedbackState({ amount: 0.3, trail: 0.9 })).toEqual({ amount: 1 });
+    for (const amount of [0, 0.3, 1]) expect(kineticTraceKeep({ amount, trail: 0.9 })).toBeCloseTo(0.9);
+    // The state pass packs Amount 1, the output pass the real Amount, both with the same Length.
+    const state = pack({ amount: 0.3, trail: 0.9, ...kineticTraceFeedbackState({ amount: 0.3, trail: 0.9 }) });
+    const output = pack({ amount: 0.3, trail: 0.9 });
+    expect([state[2], output[2]].map(value => +value.toFixed(4))).toEqual([1, 0.3]);
+    expect(state[16]).toBeCloseTo(output[16]);
+    expect(pack({ amount: 1, trail: 0.96, tint: 0.4, softness: 2 }).slice(16, 19).map(value => +value.toFixed(4))).toEqual([0.96, 0.4, 2]);
+    expect(kineticTraceParamNotes({ amount: 0.2, trail: 0.95 })).toEqual([]);
+  });
+
+  it('lets a trail fade completely in the 8-bit feedback texture', () => {
+    // rgba8unorm rounds: v × keep rounds back to v below 0.5 / (1 - keep) steps; 0.6 of a step more fades it.
+    const run = (keep: number, bias: number) => { let v = 255; for (let n = 0; n < 3000; n++) v = Math.max(0, Math.round(v * keep - bias)); return v; };
+    expect(run(0.97, 0)).toBeGreaterThan(10);
+    expect(run(0.97, 0.6)).toBe(0);
+    expect(run(0.995, 0.6)).toBe(0);
+    expect(kineticTrace.shader).toMatch(/let fade = select\(0\.6 \/ 255\.0, 0\.0, keep >= 1\.0\)/);
+  });
+
+  it('softens the trail by Softness pixels of a 1080-line frame, clamped and reported', () => {
+    expect(kineticTraceSoftness({})).toBe(0);
+    expect(kineticTraceSoftness({ softness: 12 })).toBe(8);
+    expect(kineticTraceSoftness({ softness: -1 })).toBe(0);
+    expect(getDefaultParams('kinetic-trace').softness).toBe(1);
+    expect(kineticTrace.params.softness.legacyDefault).toBe(0);
+    expect(kineticTraceParamNotes({ trail: 0.9, softness: 12 }).join(' ')).toMatch(/Softness 12 is outside 0 to 8 px; it renders as 8 px/);
+    expect(kineticTrace.shader).toMatch(/params\.softness \/ 1080\.0/);
   });
 
   it('renders a Motion Trails saved before Length and Tint exactly as before', () => {
@@ -35,6 +59,10 @@ describe('Motion Trails (kinetic-trace)', () => {
     expect(uniforms[2]).toBeCloseTo(0.8);
     expect(uniforms[16]).toBeCloseTo(0.9);
     expect(uniforms[17]).toBe(0);
+    expect(uniforms[18]).toBe(0);
+    // It fed back its Amount-mixed output and keeps doing so (no unmixed state pass).
+    expect(kineticTraceFeedbackState(saved)).toBeUndefined();
+    expect(kineticTrace.params.color.legacyDefault).toBe('#36f59a');
     expect(kineticTrace.params.trail.legacyDefault).toBeCloseTo(0.9 * 0.8);
     expect(kineticTrace.params.tint.legacyDefault).toBe(0);
     expect(kineticTrace.params.speed.deprecated).toMatch(/no speed/);
@@ -47,7 +75,7 @@ describe('Motion Trails (kinetic-trace)', () => {
     expect(notes).toMatch(/Amount 1.4 is outside 0 to 1; it renders as 1/);
     expect(notes).toMatch(/Length -0.2 is outside 0 to 1; it renders as 0/);
     expect(notes).toMatch(/Tint 2 is outside 0 to 1/);
-    expect(kineticTraceParamNotes({ amount: 0.5, trail: 0.9 }).join(' ')).toMatch(/fades as at Length 0.5/);
+    expect(kineticTraceParamNotes({ amount: 0.5 }).join(' ')).toMatch(/saved before Length/);
     expect(kineticTraceParamNotes({ amount: 1, trail: 0.9, tint: 0, color: '#ff0000' }).join(' ')).toMatch(/At Tint 0 the Overlay colour/);
     expect(kineticTraceParamNotes(getDefaultParams('kinetic-trace'))).toEqual([]);
   });
@@ -75,6 +103,6 @@ describe('Motion Trails (kinetic-trace)', () => {
     expect(shader).toMatch(/if \(params\.count < 0\.5\) \{ return 0\.0; \}/);
     expect(shader).toMatch(/smoothstep\(-0\.02, 0\.02, luminance\(trail\.rgb\) - luminance\(current\.rgb\)\)/);
     // Premultiplied trail: over transparency it fades with its alpha.
-    expect(shader).toMatch(/previous\.rgb \* previous\.a \* keep/);
+    expect(shader).toMatch(/return vec4f\(texel\.rgb \* texel\.a, texel\.a\)/);
   });
 });

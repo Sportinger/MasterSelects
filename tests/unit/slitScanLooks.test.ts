@@ -25,8 +25,9 @@ describe('Slit Scan looks', () => {
       expect(applied).toMatchObject({ temporalStorage: 'hybrid', temporalInterpolation: 'nearest' });
       expect(slitScanLookOf({ ...applied, delay: Number(applied.delay) + 0.5 })).toBe('custom');
     }
-    // A new effect (registry defaults, Delay 1 s) matches no preset; unknown ids change nothing.
-    expect(slitScanLookOf({})).toBe('custom');
+    // A new effect (registry defaults: Linear scan, 0°, Delay 3 s) is the Sweep preset; unknown ids change nothing.
+    expect(slitScanLookOf({})).toBe('sweep');
+    expect(slitScanLookOf({ delay: 1 })).toBe('custom');
     expect(applySlitScanLook(saved, 'nope')).toBe(saved);
   });
 
@@ -43,10 +44,14 @@ describe('Slit Scan looks', () => {
     for (const look of SLIT_SCAN_LOOKS) expect(look.label).toMatch(/^[A-Z][a-z]+( [A-Z][a-z]+)*$/);
   });
 
-  it('keeps the docs presets loop recipe in step with the presets (scripts/doc-clips/keying-time.json)', () => {
-    const shots = JSON.parse(fs.readFileSync('scripts/doc-clips/keying-time.json', 'utf8')) as { clips: Array<{ name: string; presets?: Array<{ name: string; params: Record<string, unknown> }> }> };
-    const recipe = shots.clips.find(clip => clip.name === 'slit-scan-presets')!.presets!;
-    expect(recipe).toEqual(SLIT_SCAN_LOOKS.map(look => ({ name: look.label, params: look.params })));
+  it('keeps the presets loop hand-made while the presets live outside the definition (doc-clip reads definition presets only)', async () => {
+    const shots = JSON.parse(fs.readFileSync('scripts/doc-clips/keying-time.json', 'utf8')) as { clips: Array<{ name: string }> };
+    expect(shots.clips.some(clip => clip.name === 'slit-scan-presets')).toBe(false);
+    const { handMadeReason } = await import('../../scripts/docsMediaRecipes.mjs');
+    for (const extension of ['mp4', 'webp']) {
+      expect(handMadeReason(`docs/Features/assets/effects/clips/slit-scan-presets.${extension}`)).toMatch(/SLIT_SCAN_LOOKS/);
+    }
+    expect(SLIT_SCAN_LOOKS.map(look => look.label)).toEqual(['Sweep', 'Wave Folds', 'Radial Bloom', 'Time Rings', 'Time Steps']);
   });
 
   it('dims Angle in the radial profiles and the Wave section outside the wave profiles, matching the graph', () => {
@@ -80,7 +85,7 @@ describe('Slit Scan looks', () => {
       const graphDelay = Number(effectOperatorParams({ type: 'slit-scan', params: { delay } }).delay);
       expect(slitScanNumber({ delay }, 'delay'), String(delay)).toBe(Math.min(60, Math.max(0, graphDelay)));
     }
-    expect(slitScanNumber({ delay: null }, 'delay')).toBe(1);
+    expect(slitScanNumber({ delay: null }, 'delay')).toBe(3);
     expect(slitScanNumber({ delay: '2.5' }, 'delay')).toBe(2.5);
   });
 });
