@@ -72,6 +72,11 @@ const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'local-uv': 'Position in Cell'
   'source-split:alpha': 'Cell Alpha', tone: 'Tone', 'glyph-index': 'Glyph Index', 'wrapped-index': 'Glyph Index', 'rolled-index': 'Glyph Index', 'safe-count': 'Glyph Count', 'atlas-split:w': 'Glyph Coverage',
   duotone: 'Duotone', ink: 'Ink', background: 'Dark Ground', 'background-lift': 'Ground', 'glyph-result': 'Glyph Cell', mixed: 'Faded Color',
   'mixed-alpha': 'Faded Alpha', 'original-split:rgb': 'Original Color', 'original-split:alpha': 'Original Alpha' };
+/** Retro Matrix: its scroll, text, Phosphor ink and scanlines. */
+const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-vector': 'Scroll Offset', 'scrolled-uv': 'Scrolled Grid', 'index-text-random': 'Text Random',
+  'retro-phosphor-rgb': 'Phosphor', 'background-coverage': 'Coverage', 'retro-ink': 'Ink', 'retro-tone-amount': 'Brightness', 'retro-lit': 'Lit Ink', 'retro-scan-pixel': 'Row Pixel',
+  'retro-scan-pitch': 'Line Pitch', 'retro-scan-lines': 'Lines', 'retro-scan-dip': 'Line Dip', 'retro-scan-fade': 'Line Fade', 'retro-scan-faded': 'Faded Dip',
+  'retro-scan': 'Scanline', 'retro-scanned': 'Glyph Cell' };
 /** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */
 const GRAPH_PORT_LABELS: Record<string, Record<string, string>> = {
   'slit-scan': { 'smooth-or-banded': 'Time Map', 'subject-protected': 'Protection', 'safe-delay': 'Delay (s)',
@@ -302,11 +307,15 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   // brightness pulse has a folder of its own (Pulse).
   if (GLYPH_PRESENTATION_EFFECTS.has(type) && GLYPH_MOVING_EFFECTS.has(type)) {
     const glyph = glyphPresentation();
-    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse' },
+    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse', scroll: 'Scroll', scanlines: 'Scanlines' },
       portLabels: { ...GLYPH_PORTS, 'glyph-index': 'Tone Glyph', 'index-offset': 'Glyph Offset', 'index-time-speed': 'Clock', 'index-time-phase': 'Ticks',
         'index-sweep': 'Sweep', 'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window',
-        'index-cell-random': 'Cell Random', 'index-tick': 'Cell Tick', 'index-jitter': 'Draw', 'symbol-pulse': 'Pulse', 'symbol-alpha': 'Pulsed Coverage' },
-      stage: (node) => /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'
+        'index-cell-random': 'Cell Random', 'index-tick': 'Cell Tick', 'index-jitter': 'Draw', 'symbol-pulse': 'Pulse', 'symbol-alpha': 'Pulsed Coverage',
+        ...(type === 'retro-matrix' ? RETRO_PORTS : {}) },
+      stage: (node) => type === 'retro-matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|scroll-)/.test(node.id) ? 'scroll'
+        : type === 'retro-matrix' && /^(scrolled-uv|sample-unscrolled)$/.test(node.id) ? 'grid'
+        : /^(scanlines-clamped$|retro-scan(?!ned))/.test(node.id) ? 'scanlines'
+        : /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'
         : /^(index-|cell-id-split$)/.test(node.id) ? 'offset' : /^symbol-/.test(node.id) ? 'pulse' : glyph.stage(node) };
   }
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return glyphPresentation();

@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
+import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
 type Ref = { node: string; port: string };
 class Builder {
   nodes: BoundOperatorNode[] = []; edges: OperatorEdge[] = []; layout: EffectOperatorGraph['layout'] = {};
@@ -43,8 +44,27 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   const cellPixels = g.binary('safe-cell-pixels', 'math.multiply.scalar', cellClamped, frameScale);
   const safeCell = g.binary('safe-cell', 'math.max.scalar', cellPixels, g.number('safe-cell-minimum', GLYPH_MIN_CELL_PIXELS)), safeCell2 = g.unary('safe-cell-vec2', 'convert.scalar-to-vec2', safeCell);
   const grid = g.binary('grid', 'math.divide-ieee.vec2', resolution, safeCell2), scaledUv = g.binary('scaled-uv', 'math.multiply.vec2', uv, grid);
-  const cellId = g.unary('cell-id', 'math.floor.vec2', scaledUv), localUv = g.unary('local-uv', 'math.fract.vec2', scaledUv);
-  const half2 = g.unary('half-vec2', 'convert.scalar-to-vec2', half), samplePixel = g.binary('sample-pixel', 'math.add.vec2', cellId, half2), sampleUv = g.binary('sample-uv', 'math.divide-ieee.vec2', samplePixel, grid);
+  // Timeline time × Speed, or the distance a keyframed Speed has travelled (absent: GLYPH_NO_TRAVEL). Built where a
+  // look first needs it: Retro Matrix's scroll moves the cell grid itself, the other moving looks pick characters with it.
+  let motionClock: Ref | undefined;
+  const clock = () => motionClock ??= (() => {
+    const timeRate = g.binary('index-time-rate', 'math.multiply.scalar', time!, speed!);
+    const travel = g.node('index-speed-travel', 'values.number', 'value', { value: GLYPH_SPEED_TRAVEL }, { value: GLYPH_NO_TRAVEL });
+    const keyed = g.node('index-travel-keyed', 'compare.greater.scalar', 'condition'); g.edge(travel, keyed, 'a'); g.edge(g.number('index-travel-floor', GLYPH_NO_TRAVEL / 2), keyed, 'b');
+    const timeSpeed = g.node('index-time-speed', 'select.scalar'); g.edge(timeRate, timeSpeed, 'falseValue'); g.edge(travel, timeSpeed, 'trueValue'); g.edge(keyed, timeSpeed, 'condition');
+    return timeSpeed;
+  })();
+  // Retro Matrix scrolls its text up like a terminal: the rows move on by the clock × Scroll Rate (3 rows a second at
+  // Speed 1), so a character stays whole while it moves, and every cell reads the picture where it is now.
+  let scroll: Ref | undefined;
+  if (variant === 'retro-matrix') {
+    const rows = g.binary('scroll-rows', 'math.multiply.scalar', clock(), g.number('scroll-rate', RETRO_SCROLL_RATE));
+    scroll = g.node('scroll-vector', 'vector.combine.vec2'); g.edge(zero, scroll, 'x'); g.edge(rows, scroll, 'y');
+  }
+  const gridUv = scroll ? g.binary('scrolled-uv', 'math.add.vec2', scaledUv, scroll) : scaledUv;
+  const cellId = g.unary('cell-id', 'math.floor.vec2', gridUv), localUv = g.unary('local-uv', 'math.fract.vec2', gridUv);
+  const half2 = g.unary('half-vec2', 'convert.scalar-to-vec2', half), samplePixel = g.binary('sample-pixel', 'math.add.vec2', cellId, half2);
+  const sampleUv = g.binary('sample-uv', 'math.divide-ieee.vec2', scroll ? g.binary('sample-unscrolled', 'math.subtract.vec2', samplePixel, scroll) : samplePixel, grid);
   const tiny = g.number('tiny', .001), tiny2 = g.unary('tiny-vec2', 'convert.scalar-to-vec2', tiny), almost2 = g.unary('almost-vec2', 'convert.scalar-to-vec2', almost), clampedSourceUv = g.node('clamped-source-uv', 'math.clamp.vec2');
   g.edge(sampleUv, clampedSourceUv, 'value'); g.edge(tiny2, clampedSourceUv, 'min'); g.edge(almost2, clampedSourceUv, 'max');
   const source = g.node('source-sample', 'image.sample', 'image'); g.edge(frame, source, 'image'); g.edge(clampedSourceUv, source, 'uv');
@@ -88,14 +108,14 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
       const radius = g.unary('brand-radius', 'vector.length.vec2', centered);
       offset = g.unary('index-offset', 'math.floor.scalar', g.binary('brand-index-scaled', 'math.multiply.scalar', radius, safeCount));
     } else {
-      // Timeline time × Speed, or the distance a keyframed Speed has travelled (absent: GLYPH_NO_TRAVEL).
-      const timeRate = g.binary('index-time-rate', 'math.multiply.scalar', time!, speed!);
-      const travel = g.node('index-speed-travel', 'values.number', 'value', { value: GLYPH_SPEED_TRAVEL }, { value: GLYPH_NO_TRAVEL });
-      const keyed = g.node('index-travel-keyed', 'compare.greater.scalar', 'condition'); g.edge(travel, keyed, 'a'); g.edge(g.number('index-travel-floor', GLYPH_NO_TRAVEL / 2), keyed, 'b');
-      const timeSpeed = g.node('index-time-speed', 'select.scalar'); g.edge(timeRate, timeSpeed, 'falseValue'); g.edge(travel, timeSpeed, 'trueValue'); g.edge(keyed, timeSpeed, 'condition');
-      animatedTimeSpeed = timeSpeed;
-      const phase = g.binary('index-time-phase', 'math.multiply.scalar', timeSpeed, g.number('index-time-scale', variant === 'matrix' ? 8 : variant === 'glyph-matrix' ? 6 : variant === 'ascii-ghost' ? 5 : variant === 'symbol-matrix' ? 4 : variant === 'retro-matrix' ? 3 : variant === 'pixel-dither' ? 1 : 2));
-      if (variant === 'glyph-matrix') {
+      const timeSpeed = clock(); animatedTimeSpeed = timeSpeed;
+      // Ticks: the clock × the look's own rate (Retro Matrix moves by its scroll instead).
+      const phase = variant === 'retro-matrix' ? zero : g.binary('index-time-phase', 'math.multiply.scalar', timeSpeed, g.number('index-time-scale', variant === 'matrix' ? 8 : variant === 'glyph-matrix' ? 6 : variant === 'ascii-ghost' ? 5 : variant === 'symbol-matrix' ? 4 : variant === 'pixel-dither' ? 1 : 2));
+      if (variant === 'retro-matrix') {
+        // The text: one fixed random character per cell of the scrolled grid (column, line), so it moves with the scroll.
+        const textRandom = g.unary('index-text-random', 'noise.cell-hash.vec2', cellId);
+        offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-text-scaled', 'math.multiply.scalar', textRandom, safeCount));
+      } else if (variant === 'glyph-matrix') {
         const idSplit = g.node('cell-id-split', 'vector.split.vec2', 'x'); g.edge(cellId, idSplit, 'value');
         const yPhase = g.binary('index-y-phase', 'math.multiply.scalar', { node: idSplit.node, port: 'y' }, g.number('index-y-scale', .35));
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-sweep', 'math.add.scalar',
@@ -109,10 +129,6 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
         const jitterKey = g.node('index-jitter-key', 'vector.combine.vec2'); g.edge(cellRandom, jitterKey, 'x'); g.edge(tick, jitterKey, 'y');
         const jitter = g.unary('index-jitter', 'noise.hash2d-pcg.vec2', jitterKey);
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-jitter-scaled', 'math.multiply.scalar', jitter, safeCount));
-      } else if (variant === 'retro-matrix') {
-        const uvParts = g.node('index-uv-split', 'vector.split.vec2', 'y'); g.edge(uv, uvParts, 'value');
-        const rowOffset = g.binary('index-row-offset', 'math.multiply.scalar', { node: uvParts.node, port: 'y' }, safeCount);
-        offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-retro-phase', 'math.subtract.scalar', phase, rowOffset));
       } else if (variant === 'capsule-cloud' || variant === 'ui-collage') {
         const spatialScale = g.unary('index-spatial-scale', 'convert.scalar-to-vec2', g.number('index-spatial-frequency', variant === 'capsule-cloud' ? 12 : 7));
         const spatialCell = g.unary('index-spatial-cell', 'math.floor.vec2', g.binary('index-spatial-uv', 'math.multiply.vec2', uv, spatialScale));
@@ -196,18 +212,36 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   if (variant === 'retro-matrix') {
-    const amberVector = g.node('retro-amber-vector', 'vector.combine.vec3'); g.edge(one, amberVector, 'x'); g.edge(g.number('retro-amber-green', .52), amberVector, 'y'); g.edge(g.number('retro-amber-blue', .08), amberVector, 'z');
-    const amberRgb = g.node('retro-amber-rgb', 'convert.vec3-to-rgb', 'rgb'); g.edge(amberVector, amberRgb, 'value');
-    const amberAlpha = g.node('retro-amber-alpha', 'math.multiply.rgb-scalar'); g.edge(amberRgb, amberAlpha, 'a'); g.edge(inkCoverage(glyphAlpha), amberAlpha, 'b');
-    const toneScale = g.binary('retro-tone-scale', 'math.multiply.scalar', tone, g.number('retro-tone-factor', .7)), toneAmount = g.binary('retro-tone-amount', 'math.add.scalar', g.number('retro-tone-base', .55), toneScale);
-    const amber = g.node('retro-amber', 'math.multiply.rgb-scalar'); g.edge(amberAlpha, amber, 'a'); g.edge(toneAmount, amber, 'b');
-    const uvParts = g.node('retro-uv-split', 'vector.split.vec2', 'y'); g.edge(uv, uvParts, 'value'); const resolutionParts = g.node('retro-resolution-split', 'vector.split.vec2', 'y'); g.edge(resolution, resolutionParts, 'value');
-    const scanPixel = g.binary('retro-scan-pixel', 'math.multiply.scalar', { node: uvParts.node, port: 'y' }, { node: resolutionParts.node, port: 'y' });
-    const scanPhase = g.binary('retro-scan-phase', 'math.multiply.scalar', scanPixel, g.number('retro-pi', 3.14159265359)), scanWave = g.unary('retro-scan-wave', 'math.sin.scalar', scanPhase);
-    const scan = g.binary('retro-scan', 'math.add.scalar', g.number('retro-scan-base', .82), g.binary('retro-scan-modulation', 'math.multiply.scalar', g.number('retro-scan-scale', .18), scanWave));
-    const scanned = g.node('retro-scanned', 'math.multiply.rgb-scalar'); g.edge(amber, scanned, 'a'); g.edge(scan, scanned, 'b');
+    // Phosphor: the colour the characters glow in (amber, as instances saved before it existed render it).
+    const phosphor = g.node('retro-phosphor', 'values.color', 'value', { value: 'phosphor' }, { value: RETRO_PHOSPHOR });
+    const phosphorRgb = g.node('retro-phosphor-rgb', 'convert.vec4-to-rgb', 'rgb'); g.edge(phosphor, phosphorRgb, 'value');
+    const ink = g.node('retro-ink', 'math.multiply.rgb-scalar'); g.edge(phosphorRgb, ink, 'a'); g.edge(inkCoverage(glyphAlpha), ink, 'b');
+    // Brightness: dim characters in the dark, full glow (and a little overdrive) in the light, so the picture reads.
+    const toneScale = g.binary('retro-tone-scale', 'math.multiply.scalar', tone, g.number('tone-factor', RETRO_TONE_FACTOR));
+    const brightness = g.binary('retro-tone-amount', 'math.add.scalar', g.number('tone-base', RETRO_TONE_BASE), toneScale);
+    const lit = g.node('retro-lit', 'math.multiply.rgb-scalar'); g.edge(ink, lit, 'a'); g.edge(brightness, lit, 'b');
+    // Scanlines: one line every Line Spacing pixels of a 1080p frame, moving with the text (the scrolled row coordinate),
+    // so preview, thumbnails and a 4K export show the same lines; lines closer than 3 output pixels fade into an even
+    // dimming instead of a moiré. Scanlines outside 0..1 render clamped (scanlines-clamped, paramRangeNotes).
+    const strengthValue = g.node('scanlines', 'values.number', 'value', { value: 'scanlines' }, { value: RETRO_LEGACY_SCANLINES });
+    const strength = g.node('scanlines-clamped', 'math.clamp.scalar'); g.edge(strengthValue, strength, 'value'); g.edge(zero, strength, 'min'); g.edge(one, strength, 'max');
+    const rowParts = g.node('retro-scan-row', 'vector.split.vec2', 'y'); g.edge(gridUv, rowParts, 'value');
+    const rowPixel = g.binary('retro-scan-pixel', 'math.multiply.scalar', { node: rowParts.node, port: 'y' }, safeCell);
+    const pitch = g.binary('retro-scan-pitch', 'math.multiply.scalar', frameScale, g.number('line-spacing', RETRO_LINE_SPACING));
+    const lines = g.binary('retro-scan-lines', 'math.divide-ieee.scalar', rowPixel, pitch);
+    // sin² (π × lines): 0 on a line, 1 between two lines.
+    const sine = g.unary('retro-scan-sine', 'math.sin.scalar', g.binary('retro-scan-angle', 'math.multiply.scalar', lines, g.number('pi', Math.PI)));
+    const dip = g.binary('retro-scan-dip', 'math.power.scalar', sine, two);
+    const fade = g.node('retro-scan-fade', 'math.smoothstep.scalar'); g.edge(g.number('fade-from', 1.5), fade, 'edge0'); g.edge(g.number('fade-to', 3), fade, 'edge1'); g.edge(pitch, fade, 'value');
+    const fadedDip = g.node('retro-scan-faded', 'math.mix.scalar'); g.edge(half, fadedDip, 'a'); g.edge(dip, fadedDip, 'b'); g.edge(fade, fadedDip, 't');
+    const scan = g.binary('retro-scan', 'math.subtract.scalar', one, g.binary('retro-scan-depth', 'math.multiply.scalar', strength, fadedDip));
+    const scanned = g.node('retro-scanned', 'math.multiply.rgb-scalar'); g.edge(lit, scanned, 'a'); g.edge(scan, scanned, 'b');
     const combine = blend(scanned); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
-    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+    // It draws only in its Phosphor colour: the shared colour nodes (retired Color Source, Dark, Light) stay out of its setup.
+    const unused = new Set(['color-mode', 'color-a', 'color-b', 'color-a-rgb', 'color-b-rgb']);
+    for (const id of unused) delete g.layout[id];
+    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes.filter(node => !unused.has(node.id)),
+      edges: g.edges.filter(edge => !unused.has(edge.from) && !unused.has(edge.to)), layout: g.layout };
   }
   if (variant === 'matrix') {
     const idParts = g.node('matrix-id-split', 'vector.split.vec2', 'x'); g.edge(cellId, idParts, 'value');

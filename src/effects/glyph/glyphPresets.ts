@@ -44,3 +44,16 @@ export const SYMBOL_MATRIX_PRESETS: readonly EffectPreset[] = [
     colorMode: 'duotone', colorA: '#1a0500', colorB: '#ffb347', fontWeight: 800,
   } },
 ];
+
+export const RETRO_MATRIX_PRESETS: readonly EffectPreset[] = [
+  // Fine green text on a dark screen, the classic computer terminal.
+  { id: 'green-screen', name: 'Green Screen', params: { cellSize: 12, rampPreset: 'standard', customRamp: '', roll: 0.3, background: 0.2, phosphor: '#33ff66' } },
+  // Crisp white text without scanlines, like a paper-white monitor.
+  { id: 'paper-white', name: 'Paper White', params: { cellSize: 14, rampPreset: 'detailed', customRamp: '', roll: 0.3, background: 0.15, scanlines: 0, phosphor: '#e8eef8' } },
+  // Large amber digits that crawl up slowly, with deep scanlines.
+  { id: 'teletype', name: 'Teletype', params: { cellSize: 28, rampPreset: 'numeric', customRamp: '', roll: 0.2, background: 0.15, scanlines: 0.8, speed: 0.4, fontWeight: 700 } },
+  // A fast stream of zeros and ones in cold cyan.
+  { id: 'binary-stream', name: 'Binary Stream', params: {
+    cellSize: 10, rampPreset: 'binary', customRamp: '', roll: 0.5, background: 0.12, speed: 3, phosphor: '#66e0ff', fontWeight: 700,
+  } },
+];

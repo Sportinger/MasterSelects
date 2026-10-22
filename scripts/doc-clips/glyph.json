@@ -391,6 +391,231 @@
       "float": "right",
       "alt": "The dancer with Symbol Matrix at three speeds, about two seconds each: at Speed 0 the signs stand still and change only where she moves, at 1 each cell swaps a few times a second and slowly breathes, at 3 they flicker; the speed is shown at the bottom left",
       "caption": "Speed 0, 1 and 3, about two seconds each."
+    },
+    {
+      "name": "retro-matrix",
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        3.5
+      ],
+      "layout": "compare",
+      "crop": [
+        600,
+        100,
+        720,
+        700
+      ],
+      "width": 1200,
+      "loop": 0.35,
+      "poster": 2.2,
+      "maxBytes": 1000000,
+      "alt": "The dancer turning on a dark stage, original left and with Retro Matrix right: she is rebuilt from glowing amber digits on a dark screen with fine scanlines, bright digits 5 to 9 in her dress and dim 1, 2 and 3 on the stage, and the whole text scrolls slowly upwards while the picture stays in place",
+      "caption": "Left: original. Right: Retro Matrix at its default settings."
+    },
+    {
+      "name": "retro-matrix-presets",
+      "kind": "presets",
+      "effect": "retro-matrix",
+      "range": [
+        0.5,
+        3.5
+      ],
+      "crop": [
+        620,
+        120,
+        680,
+        640
+      ],
+      "width": 740,
+      "loop": 0.35,
+      "poster": 2.2,
+      "maxBytes": 800000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Green Screen top left with fine green text, Paper White top right with crisp white text without scanlines, Teletype bottom left with large amber digits that crawl up slowly behind deep scanlines, Binary Stream bottom right with zeros and ones in cold cyan racing upwards",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 640,
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 550000,
+      "float": "right",
+      "name": "retro-matrix-cell-size",
+      "sweep": {
+        "param": "cellSize",
+        "label": "Cell Size",
+        "from": 8,
+        "to": 40,
+        "unit": " px"
+      },
+      "alt": "The dancer with Retro Matrix while Cell Size runs from 8 to 40 px and back: fine scrolling text grows into a few large digits and shrinks again; the current value is shown at the bottom left",
+      "caption": "Cell Size from 8 to 40 px and back."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 640,
+      "loop": 0.35,
+      "poster": 1.4,
+      "maxBytes": 550000,
+      "float": "right",
+      "name": "retro-matrix-amount",
+      "sweep": {
+        "param": "amount",
+        "label": "Amount",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Retro Matrix while Amount runs from 0 to 1 and back: the plain picture fades into glowing amber text and back; the current value is shown at the bottom left",
+      "caption": "Amount from 0 to 1 and back."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 640,
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 550000,
+      "float": "right",
+      "name": "retro-matrix-background",
+      "sweep": {
+        "param": "background",
+        "label": "Background",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Retro Matrix while Background runs from 0 to 1 and back: the digits glow on black, then amber fills the cells until the figure is a bright amber mosaic, and back; the current value is shown at the bottom left",
+      "caption": "Background from 0 to 1 and back."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 640,
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 550000,
+      "float": "right",
+      "name": "retro-matrix-scanlines",
+      "sweep": {
+        "param": "scanlines",
+        "label": "Scanlines",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Retro Matrix while Scanlines runs from 0 to 1 and back: the clean digits get dark horizontal lines that deepen until every character is drawn in separate strokes, and back; the current value is shown at the bottom left",
+      "caption": "Scanlines from 0 to 1 and back."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.2,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 640,
+      "loop": 0.35,
+      "poster": 2.6,
+      "maxBytes": 550000,
+      "float": "right",
+      "name": "retro-matrix-speed",
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          1,
+          3
+        ]
+      },
+      "alt": "The dancer with Retro Matrix at three speeds, about two seconds each: at Speed 0 the text stands still and changes only where she moves, at 1 it scrolls up three rows a second, at 3 it races upwards; the speed is shown at the bottom left",
+      "caption": "Speed 0, 1 and 3, about two seconds each."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 640,
+      "loop": 0.35,
+      "poster": 0.4,
+      "maxBytes": 550000,
+      "float": "right",
+      "name": "retro-matrix-roll",
+      "sweep": {
+        "param": "roll",
+        "label": "Roll",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Retro Matrix while Roll runs from 0 to 1 and back: at 0 each digit follows the brightness, from blank on the stage to 9 in her dress, then the text gets more and more random until any digit can stand anywhere and the figure shows only in the brightness, and back; the current value is shown at the bottom left",
+      "caption": "Roll from 0 to 1 and back."
     }
   ]
 }

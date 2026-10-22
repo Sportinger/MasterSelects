@@ -363,8 +363,9 @@ Brand Generator adds radial character selection and a frame mask; Stitch Poster
 combines atlas coverage with diagonal thread strokes and its paper background.
 Dither Text uses animated threshold noise; Symbol Matrix combines cell-hashed
 character selection with a timeline-driven brightness pulse.
-Pixel Dither uses a radial neon resolve; Retro Matrix uses an amber scanline
-resolve. Both retain the sampled source alpha and composition timeline clock.
+Pixel Dither uses a radial neon resolve; Retro Matrix scrolls its cell grid and lights a
+fixed text in its Phosphor colour with 1080p scanlines. Both retain the sampled source alpha and
+composition timeline clock.
 Capsule Cloud adds signed-distance pill coverage; UI Collage adds cell borders
 and cursor marks. Their character offsets use deterministic spatial hashes.
 Matrix Rain combines hashed column offsets with its animated green head highlight.
@@ -377,13 +378,15 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
 (`src/services/operators/asciiEffectGraph.ts`); cell geometry and clock constants live in
 `src/effects/glyph/glyphGrid.ts`, and `shader.wgsl` is the WGSL twin. A look passes `id`, `name`,
 `entryPoint`, and optionally `animated`, `feedback`, `defaultRamp`, `defaultCellSize`,
-`defaultBackground`, `defaultRoll`, `ignoresColors` and `presets`.
+`defaultBackground`, `defaultRoll`, `ignoresColors`, `presets` and `params` (controls of its own, placed at
+the end of their card section and flagged `lookOwn`, so the Style menu still matches the look with the
+others: `effectStyles.ts` ignores them and starts them at their defaults when switching to the look).
 
 - **Background** (`background`, 0–1, Style group): the ground behind each character is mixed from
   the look's dark ground (source × 0.08, Dark × 0.15, or its own paper/black) towards the
   character colour of the cell. Looks with their own palette (Matrix Rain, Retro Matrix, Pixel Code,
   Number Field, Dither Glow) colour the whole cell with their ink at Background strength (Matrix Rain
-  × the cell tone). New instances start at 0.3 (Stitch Poster at 0, it has its paper), so cards and
+  × the cell tone). New instances start at 0.3 (Stitch Poster at 0, it has its paper; Retro Matrix at 0.2), so cards and
   stills keep about 40 % of the picture's brightness instead of about 10 %. `legacyDefault: 0` keeps
   instances saved before it on the dark ground; it is `graphOnly`, so a node setup saved before it
   hides the row; outside 0–1 it renders clamped (`background-clamped`, reported by `paramRangeNotes`).
@@ -400,8 +403,8 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
   `1 + ceil(Roll × (ramp − 1))` characters around its own (`index-window`), kept inside the ramp
   (`index-window-start`), starting from its own character; the look's offset (Glyph Matrix: the
   diagonal sweep) moves it through that window. Roll 1 is exactly the earlier full-ramp wrap
-  (`legacyDefault: 1`, and the default of every look but Glyph Matrix and Symbol Matrix, which start
-  at 0.2 and 0.4), 0 holds
+  (`legacyDefault: 1`, and the default of every look but Glyph Matrix, Retro Matrix and Symbol Matrix,
+  which start at 0.2, 0.3 and 0.4), 0 holds
   each cell on its tone's character, and any Roll above 0 moves at least two characters. The
   quotient carries + ½ so GPU division never drops a cycle. `graphOnly`; outside 0–1 it renders
   clamped (`roll-clamped`). The moving looks show these nodes in two folders, **Glyph Offset** and
@@ -414,6 +417,18 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
   per tick. A fix for new instances and setups saved without a graph; stored setups keep the old swap.
   Its brightness pulse (`symbol-*` nodes, 0.65 + 0.35 × sin(2 × clock + cell phase)) has its own
   **Pulse** folder; presets: `SYMBOL_MATRIX_PRESETS`.
+- **Retro Matrix scroll** (`src/effects/glyph/retroMatrix.ts`). Its cell grid moves up by
+  `clock × 3` rows (`scroll-rows`, the **Scroll** folder), added to the grid position (`scrolled-uv`) and
+  taken off again for the cell centre (`sample-unscrolled`), so characters stay whole and each reads the
+  picture where it is now. Its text is a fixed Random (Cell) per scrolled cell (`index-text-random`),
+  folded into the Roll window (default 0.3). It glows at Phosphor (`phosphor`, own colour control, amber
+  `#ff8514`) × (0.15 + 1.6 × tone); **Scanlines** (`scanlines`, 0–1, default 0.5, `legacyDefault` 0.36)
+  dims sin²(π × rows / pitch) between lines 3 px of a 1080p frame apart (`retro-scan-*`, the
+  **Scanlines** folder), fading to an even 1 − Scanlines / 2 where the pitch drops below 3 output pixels.
+  This replaces `floor(3 × clock − uv.y × ramp)` with per-pixel `sin(π × pixel row)` scanlines: band
+  borders cut characters in half, nothing scrolled, and the 1-pixel lines differed between preview and
+  export sizes. A fix for new instances and setups saved without a graph; stored setups keep the old
+  look. Its graph leaves out the shared colour nodes it never reads; presets: `RETRO_MATRIX_PRESETS`.
 - **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light;
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).

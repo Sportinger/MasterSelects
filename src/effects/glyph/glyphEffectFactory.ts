@@ -107,8 +107,15 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
       ...FEEDBACK_PARAMETERS,
       reset: { type: 'boolean' as const, label: 'Reset Trail', default: false, group: 'Motion' },
     } : {}),
-    ...options.params,
   };
+  // A look's own controls sit at the end of their card section (Retro Matrix's Phosphor in Color, before Motion).
+  for (const [key, param] of Object.entries(options.params ?? {})) {
+    const entries = Object.entries(rawParams).filter(([existing]) => existing !== key);
+    const last = entries.findLastIndex(([, existing]) => existing.group === param.group);
+    entries.splice(last < 0 ? entries.length : last + 1, 0, [key, param]);
+    for (const existing of Object.keys(rawParams)) delete rawParams[existing];
+    Object.assign(rawParams, Object.fromEntries(entries));
+  }
   for (const key of options.ignoresColors ?? []) {
     rawParams[key] = { ...rawParams[key], deprecated: `${options.name} draws in its own colours: ${COLOR_CONTROL_LABELS[key]} is ignored.` };
   }
@@ -158,7 +165,9 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
         cellSize: 64,
       });
       const colorA = parseColor(values.colorA, '#081018');
-      const colorB = parseColor(values.colorB, '#e8fff5');
+      // A look with a Phosphor colour of its own (Retro Matrix) carries it in the colorB slot, its Scanlines in the last one.
+      const phosphor = options.params?.phosphor;
+      const colorB = phosphor ? parseColor(values.phosphor, String(phosphor.default)) : parseColor(values.colorB, '#e8fff5');
       return new Float32Array([
         width, height,
         glyphCellPixels(numeric(values.cellSize, defaultCellSize), width, height),
@@ -176,7 +185,7 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
         Math.min(Math.max(numeric(values.background, 0), 0), 1),
         numeric(values[GLYPH_SPEED_TRAVEL], GLYPH_NO_TRAVEL),
         Math.min(Math.max(numeric(values.roll, 1), 0), 1),
-        0,
+        options.params?.scanlines ? Math.min(Math.max(numeric(values.scanlines, Number(options.params.scanlines.legacyDefault ?? 0)), 0), 1) : 0,
       ]);
     },
   };

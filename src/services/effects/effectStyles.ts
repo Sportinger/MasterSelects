@@ -7,11 +7,13 @@ import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/ex
 import { EFFECT_GRAPH_PARAM } from '../operators/effectGraph';
 import { startBatch, endBatch } from '../../stores/historyStore';
 
-const parameterKeys = (type: string) => Object.keys(getEffect(type)?.params ?? {}).toSorted().join(',');
+// A look's own controls (EffectParam.lookOwn) do not count: the looks share every other parameter.
+const parameterKeys = (type: string) => Object.entries(getEffect(type)?.params ?? {}).filter(([, param]) => !param.lookOwn)
+  .map(([key]) => key).toSorted().join(',');
 
 /**
- * Other looks of the same engine with exactly the same parameters. Switching
- * keeps every value and keyframe, because parameter IDs are identical.
+ * Other looks of the same engine with exactly the same parameters (apart from a look's own controls).
+ * Switching keeps every value and keyframe, because parameter IDs are identical.
  */
 export function effectStyleOptions(type: string): Array<{ value: string; label: string }> {
   const engine = effectEngine(type);
@@ -30,7 +32,10 @@ export function changeEffectStyle(clipId: string, effectId: string, type: string
   if (effect.type === type) return;
   if (!effectStyleOptions(effect.type).some(option => option.value === type)) throw new Error(`${type} is not a style of ${effect.type}.`);
   // A customized node graph belongs to the previous look; the new style starts from its own default graph.
-  const params = Object.fromEntries(Object.entries(effect.params).filter(([key]) => key !== EFFECT_GRAPH_PARAM));
+  // The new look's own controls start at their defaults; the previous look's stay (unread) for switching back.
+  const ownDefaults = Object.entries(getEffect(type)?.params ?? {}).filter(([key, param]) => param.lookOwn && effect.params[key] === undefined)
+    .map(([key, param]) => [key, param.default]);
+  const params = Object.fromEntries([...Object.entries(effect.params).filter(([key]) => key !== EFFECT_GRAPH_PARAM), ...ownDefaults]);
   const next: Effect = { ...effect, type: type as Effect['type'], params, operatorGraph: undefined,
     name: effect.name === effect.type || effect.name === getEffect(effect.type)?.name ? type : effect.name };
   const batch = startBatch('Change effect style');

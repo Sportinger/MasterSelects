@@ -208,16 +208,22 @@ describe('shared glyph graph variants', () => {
     expect(output[3]).toBe(.6);
   });
 
-  it('builds Retro Matrix with negative row phase, amber tone and scanline resolve', () => {
-    const coords: [number, number] = [.8, .7], time = .41, speed = 1.2;
-    const value = cell(coords, Math.floor(time * speed * 3 - coords[1] * 4)), amount = .79;
-    const { output, samples } = evaluate('retro-matrix', createDefaultRetroMatrixGraph(),
-      { cellSize: 10, amount, speed }, coords, time);
-    const amberBase = [1, .52, .08], amber = amberBase.map(channel => channel * value.alpha * (.55 + value.tone * .7));
-    const scan = .82 + .18 * Math.sin(coords[1] * resolution[1] * 3.14159265359), scanned = amber.map(channel => channel * scan);
-    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, scanned[index], amount));
-    expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
-    expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
+  it('builds Retro Matrix with its upward scroll, fixed text, Phosphor ink and 1080p scanlines', () => {
+    // The grid moves up by time × Speed × 3 rows; each cell of the scrolled grid keeps Random (Cell) of (column, line)
+    // as its text and reads the picture at its current centre. Saved-before values: Roll 1, Background 0, Scanlines .36.
+    const coords: [number, number] = [.8, .7], time = .41, speed = 1.2, amount = .79, scroll = time * speed * 3;
+    const grid: [number, number] = [resolution[0] / 10, resolution[1] / 10], scrolled: [number, number] = [coords[0] * grid[0], coords[1] * grid[1] + scroll];
+    const id: [number, number] = [Math.floor(scrolled[0]), Math.floor(scrolled[1])], local = [scrolled[0] - id[0], scrolled[1] - id[1]];
+    const source = sourceAt([(id[0] + .5) / grid[0], (id[1] + .5 - scroll) / grid[1]]), tone = source[0] * .2126 + source[1] * .7152 + source[2] * .0722;
+    const index = (Math.floor(Math.min(.99999, tone) * 4) + Math.floor(imageCellHash(id) * 4)) % 4;
+    const atlasUv: [number, number] = [(index % 2 + local[0]) / 2, (Math.floor(index / 2) + local[1]) / 2], alpha = atlasAt('', atlasUv)[3];
+    const { output, samples } = evaluate('retro-matrix', createDefaultRetroMatrixGraph(), { cellSize: 10, amount, speed }, coords, time);
+    const phosphor = [1, 0x85 / 255, 0x14 / 255], lit = phosphor.map(channel => channel * alpha * (.15 + tone * 1.6));
+    const scan = 1 - .36 * (.5 - .5 * Math.cos(scrolled[1] * 10 / 3 * 6.28318530718));
+    const expected = sourceAt(coords).slice(0, 3).map((channel, channelIndex) => mix(channel, lit[channelIndex] * scan, amount));
+    expect(samples).toHaveLength(1);
+    samples[0].slice(1).forEach((value, axis) => expect(value).toBeCloseTo(atlasUv[axis], 9));
+    expected.forEach((channel, channelIndex) => expect(output[channelIndex]).toBeCloseTo(channel, 9));
     expect(output[3]).toBe(.6);
   });
 

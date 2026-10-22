@@ -133,6 +133,52 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "retro-matrix-inspector",
+      "effect": "retro-matrix",
+      "params": {
+        "cellSize": 12,
+        "rampPreset": "standard",
+        "customRamp": "",
+        "roll": 0.3,
+        "background": 0.2,
+        "phosphor": "#33ff66"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 240,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1450
+      },
+      "alt": "Properties, Effects with a Retro Matrix card: Style menu, Preset menu showing Green Screen, Cell Size, Amount, Background, Invert Ramp and Scanlines, then Ramp, Custom Ramp, Font and Weight, then Phosphor with a green swatch and #33ff66, then Speed and Roll, beside a narrow strip of the preview with faint green text on a dark screen",
+      "caption": "Retro Matrix with the Green Screen preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Scanlines: the lines of the screen. 4 — Phosphor: the colour of the text. 5 — Speed: how fast it scrolls.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Scanlines",
+          "label": "Scanlines"
+        },
+        {
+          "target": "Phosphor",
+          "label": "Phosphor"
+        },
+        {
+          "target": "Speed",
+          "label": "Speed"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

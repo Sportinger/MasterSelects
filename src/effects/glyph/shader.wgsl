@@ -18,7 +18,7 @@ struct GlyphParams {
   background: f32,
   travel: f32,
   roll: f32,
-  pad1: f32,
+  scanlines: f32, // Retro Matrix only (0 elsewhere)
 };
 
 struct GlyphCell {
@@ -47,10 +47,15 @@ fn rolledIndex(baseIndex: f32, offset: f32) -> f32 {
 }
 
 fn glyphCell(uv: vec2f, indexOffset: f32) -> GlyphCell {
+  return glyphCellShifted(uv, vec2f(0.0), indexOffset);
+}
+
+// A cell of a grid moved by `shift` cells (Retro Matrix's scroll); it reads the picture where it is now.
+fn glyphCellShifted(uv: vec2f, shift: vec2f, indexOffset: f32) -> GlyphCell {
   let grid = params.resolution / max(params.cellSize, 2.0);
-  let id = floor(uv * grid);
-  let local = fract(uv * grid);
-  let sampleUv = (id + 0.5) / grid;
+  let id = floor(uv * grid + shift);
+  let local = fract(uv * grid + shift);
+  let sampleUv = (id + 0.5 - shift) / grid;
   let sourceColor = textureSample(inputTex, texSampler, clamp(sampleUv, vec2f(0.001), vec2f(0.999)));
   let tone = luminance(sourceColor.rgb);
   let baseIndex = glyphIndexFromTone(tone, params.glyphCount, params.invert);
@@ -223,10 +228,20 @@ fn symbolMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn retroMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
-  let base = glyphCell(input.uv, floor(motionTime() * 3.0 - input.uv.y * params.glyphCount));
-  let amber = vec3f(1.0, 0.52, 0.08) * inkCoverage(base.alpha, params.background) * (0.55 + base.tone * 0.7);
-  let scan = 0.82 + 0.18 * sin(input.uv.y * params.resolution.y * PI);
-  return amountBlend(base, amber * scan);
+  // The text scrolls up 3 rows a second × Speed; each cell keeps one random character of its window (column, line).
+  let scroll = vec2f(0.0, motionTime() * 3.0);
+  let grid = params.resolution / max(params.cellSize, 2.0);
+  let line = floor(input.uv * grid + scroll);
+  let cell = glyphCellShifted(input.uv, scroll, floor(glyphCellRandom(line) * params.glyphCount));
+  // Phosphor (colorB slot) × coverage on its Background ground × brightness 0.2 + 1.1 × tone.
+  let lit = params.colorB.rgb * inkCoverage(cell.alpha, params.background) * (0.2 + cell.tone * 1.1);
+  // Scanlines every 3 px of a 1080p frame, moving with the text; closer than 3 output px they fade to an even dimming.
+  let pitch = 3.0 * min(params.resolution.x, params.resolution.y) / 1080.0;
+  let fade = smoothstep(1.5, 3.0, pitch);
+  let row = (input.uv.y * grid.y + scroll.y) * max(params.cellSize, 2.0);
+  let dip = pow(sin(row / pitch * PI), 2.0);
+  let scan = 1.0 - clamp(params.scanlines, 0.0, 1.0) * mix(0.5, dip, fade);
+  return amountBlend(cell, lit * scan);
 }
 
 @fragment

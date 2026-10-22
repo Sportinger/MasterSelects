@@ -84,7 +84,7 @@ describe('glyph engine', () => {
     for (const type of GLYPH_LOOKS) {
       const background = getEffect(type)!.params.background;
       expect(background).toMatchObject({ legacyDefault: 0, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true });
-      expect(background.default).toBe(type === 'stitch-poster' ? 0 : .3);
+      expect(background.default).toBe(type === 'stitch-poster' ? 0 : type === 'retro-matrix' ? .2 : .3);
     }
     // ASCII, no character in the cell: the ground is the source colour × .08, lifted towards the ink.
     const dark = render('ascii', { background: 0 }).output, lifted = render('ascii', { background: .5 }).output;
@@ -196,7 +196,7 @@ describe('glyph engine', () => {
       const roll = getEffect(type)!.params.roll;
       if (!('speed' in getEffect(type)!.params)) { expect(roll, type).toBeUndefined(); continue; }
       expect(roll, type).toMatchObject({ legacyDefault: 1, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true, animatable: true, group: 'Motion' });
-      expect(roll.default, type).toBe(type === 'glyph-matrix' ? .2 : type === 'symbol-matrix' ? .4 : 1);
+      expect(roll.default, type).toBe(type === 'glyph-matrix' ? .2 : type === 'symbol-matrix' ? .4 : type === 'retro-matrix' ? .3 : 1);
     }
     // The test atlas ' .#@' is 2 × 2 glyphs; the source tone (.63) picks '#' (index 2).
     const glyphAt = (params: Record<string, unknown>, time: number) => {
@@ -250,6 +250,46 @@ describe('glyph engine', () => {
     expect(slid / 49).toBeLessThan(.5);
     // Speed 0 holds each cell on one character.
     expect(new Set([0, .4, 1.7].map(time => glyphAt([3, 3], time, 0))).size).toBe(1);
+  });
+
+  it('Retro Matrix scrolls whole characters up row by row, and its scanlines match at every frame size', () => {
+    const plan = compile('retro-matrix', { ...getDefaultParams('retro-matrix'), roll: 1, speed: 1 });
+    // The atlas tile a pixel reads (2 × 2 test atlas) and the scan factor it is lit with (ink 1 on a flat picture).
+    const at = (uv: [number, number], time: number, resolution: [number, number] = [1920, 1080], params?: Record<string, unknown>) => {
+      let glyph = -1;
+      const output = evaluateImageOperatorPlan(params ? compile('retro-matrix', { ...getDefaultParams('retro-matrix'), ...params }) : plan, [0, 0, 0, 0], {
+        uv, resolution, timelineTimeSeconds: time, sampleImage: () => source,
+        sampleResource: (_id, [u, v]) => { glyph = Math.floor(u * 2) + Math.floor(v * 2) * 2; return [0, 0, 0, 1]; } }) as number[];
+      return { glyph, red: output[0] };
+    };
+    // 14 px cells at 1080p; Speed 1 scrolls 3 rows a second, so after 1/3 s each row shows what the row below it showed.
+    const cellUv = (x: number, y: number, inside = .5): [number, number] => [(x + .5) * 14 / 1920, (y + inside) * 14 / 1080];
+    for (const [x, y] of [[3, 10], [7, 22], [40, 50]]) expect(at(cellUv(x, y), 1 / 3).glyph).toBe(at(cellUv(x, y + 1), 0).glyph);
+    // Every pixel of a scrolled cell shows the same character: no seam cuts it (before, bands of uv.y × ramp did).
+    for (const time of [0, .07, .21, 1.9]) {
+      const shift = (time * 3) % 1, rowStart = (5 - shift) * 14 / 1080;
+      const glyphs = new Set(Array.from({ length: 12 }, (_, step) => at([.2, rowStart + (step + .5) / 12 * 14 / 1080], time).glyph));
+      expect(glyphs.size, `t ${time}`).toBe(1);
+    }
+    // Speed 0 holds the text still.
+    expect(at(cellUv(9, 9), 2.5, undefined, { speed: 0 }).glyph).toBe(at(cellUv(9, 9), 0, undefined, { speed: 0 }).glyph);
+    // Scanlines count pixels of a 1080p frame: a 4K frame shows the same lines at the same place as 1080p ...
+    for (const v of [.3011, .4507, .62]) expect(at([.4, v], .4, [3840, 2160], { scanlines: .8 }).red).toBeCloseTo(at([.4, v], .4, [1920, 1080], { scanlines: .8 }).red, 9);
+    // ... and lines closer than 3 output pixels fade into an even dimming of 1 − Scanlines / 2 instead of a moiré.
+    const small = [.3011, .4507, .62].map(v => at([.4, v], .4, [480, 270], { scanlines: .8, roll: 0, background: 0 }).red);
+    const clean = [.3011, .4507, .62].map(v => at([.4, v], .4, [480, 270], { scanlines: 0, roll: 0, background: 0 }).red);
+    small.forEach((red, index) => expect(red).toBeCloseTo(clean[index] * .6, 9));
+    // Scanlines out of range render clamped and say so; instances saved before Scanlines and Phosphor existed keep the earlier look.
+    expect(paramRangeNotes(getEffect('retro-matrix')!.params, { scanlines: 2 }, effectOperatorGraph({ type: 'retro-matrix', params: getDefaultParams('retro-matrix') }))[0].message)
+      .toBe('Scanlines 2 is above the rendered range (0 to 1) and renders as 1.');
+    const loaded = migratePersistedEffectOperatorGraph({ id: 'old', name: 'Retro Matrix', type: 'retro-matrix', enabled: true, params: { cellSize: 14 } }).params;
+    expect([loaded.scanlines, loaded.roll, loaded.background]).toEqual([.36, 1, 0]);
+    // Phosphor colours the characters (amber by default).
+    expect(getEffect('retro-matrix')!.params.phosphor).toMatchObject({ type: 'color', default: '#ff8514', group: 'Color', graphOnly: true });
+    const green = evaluateImageOperatorPlan(compile('retro-matrix', { ...getDefaultParams('retro-matrix'), phosphor: '#00ff00', scanlines: 0 }), [0, 0, 0, 0], {
+      uv: [.31, .47], resolution: [1920, 1080], timelineTimeSeconds: 0, sampleImage: () => source, sampleResource: () => [0, 0, 0, 1] }) as number[];
+    expect([green[0], green[2]]).toEqual([0, 0]);
+    expect(green[1]).toBeGreaterThan(.9);
   });
 
   it('Weight is not keyframeable and draws one of the nine font weights, so no value builds an atlas of its own', () => {
