@@ -38,7 +38,7 @@ export const BLOCKIFY_PRESETS: readonly EffectPreset[] = [
   // Two shades per colour: black, white and six pure colours, dithered in between.
   { id: 'home-computer', name: 'Home Computer', params: { scale: 10, levels: 2, dither: 1 } },
   // Large flat blocks laid half over the original picture.
-  { id: 'block-veil', name: 'Block Veil', params: { scale: 48, levels: 5, dither: 0, amount: 0.5 } },
+  { id: 'block-veil', name: 'Block Veil', params: { scale: 48, levels: 24, dither: 0, amount: 0.5 } },
 ];
 
 export const blockify: EffectDefinition = {

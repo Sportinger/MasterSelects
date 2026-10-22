@@ -24,7 +24,7 @@ Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effect
 
 <figure class="docs-shot docs-shot--detail">
 
-![The dancer on the dark stage four times, labelled: 16-Bit with small blocks and soft colours, Arcade with chunky blocks in pink, olive and grey and a dark red checker in the haze, Home Computer with a white and yellow dotted figure and a few red and blue dots on black, Block Veil with large pale blocks laid half over the clear picture](../assets/effects/presets/blockify.webp)
+![The dancer on the dark stage four times, labelled: 16-Bit with small blocks and soft colours, Arcade with chunky blocks in pink, olive and grey and a dark red checker in the haze, Home Computer with a white and yellow dotted figure and a few red and blue dots on black, Block Veil with large soft blocks in the picture's own browns laid half over it](../assets/effects/presets/blockify.webp)
 
 <figcaption>The four presets on the dancer.</figcaption>
 </figure>
