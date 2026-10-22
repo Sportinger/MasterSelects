@@ -241,7 +241,7 @@ Vertical Pass holds the same recipe as Horizontal Pass, with two differences:
 <figcaption>Inside Straight Alpha Output. 1 — Maximum: never divide by zero. 2 — Divide: the colour back to full strength. 3 — Combine RGB + Alpha: the finished picture.</figcaption>
 </figure>
 
-**Maximum** – the blurred alpha, but never below the Coverage Floor, a tiny 0.000001 (the card rounds it to 0). Fully transparent pixels then stay black and transparent instead of turning into errors.
+**Maximum** – the blurred alpha, but never below the Coverage Floor, a tiny 0.000001. Fully transparent pixels then stay black and transparent instead of turning into errors.
 
 **Divide** – divides the blurred colour by the blurred alpha: the reverse of the Multiply in Premultiplied Source, so half-transparent edges get their real colour back.
 
