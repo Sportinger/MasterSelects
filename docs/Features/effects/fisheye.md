@@ -45,24 +45,24 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ## Controls
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-shot--float-right">
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Fisheye Lens card on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, the Edges section with Lens Feather 0.04, and the Optics and Quality sections below, beside a strip of the preview with the walker inside a round glass ball](../assets/effects/editor/fisheye-inspector.webp)
+![The Fisheye Lens card in Properties → Effects on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, the Edges section with Lens Feather 0.04, and the Optics and Quality sections below](../assets/effects/editor/fisheye-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1379" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 1287" aria-hidden="true" focusable="false">
 <defs><marker id="fisheye-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M587 282 L649 282" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="587" cy="282" r="18" /><text x="587" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M589 387 L658 387" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="589" cy="387" r="18" /><text x="589" y="387" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M584 462 L636 462" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="584" cy="462" r="18" /><text x="584" y="462" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M586 616 L639 616" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="586" cy="616" r="18" /><text x="586" y="616" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M584 994 L633 994" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="584" cy="994" r="18" /><text x="584" y="994" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M50 106 L195 106" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="106" r="18" /><text x="50" y="106" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M50 219 L205 219" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="219" r="18" /><text x="50" y="219" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M50 300 L181 300" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="300" r="18" /><text x="50" y="300" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M50 465 L184 465" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="465" r="18" /><text x="50" y="465" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M50 872 L178 872" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="872" r="18" /><text x="50" y="872" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -119,26 +119,28 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Edge Sampling** – in the **Quality** section, which starts closed. How many reads each pixel averages, a little apart, so the lens rim and fine bent lines stay smooth. 1 is the fastest and shows stair-steps at the rim, 4 is smooth, 8 helps on fine detail at strong settings. Every step from 1 to 8 counts. A preset puts it back to 4. 1 to 8, default 4.
 
+<div class="docs-float-end"></div>
+
 ## Node setup
 
-<figure class="docs-shot docs-shot--graph docs-shot--float-right">
+<figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![The Fisheye Lens graph: Edge Sampling hands the Sample Position to Lens Projection and Lens Resolve; Input Frame feeds Frame Edges; Lens Projection and Frame Edges feed Chromatic Aberration, whose Lens Colour goes to Lens Resolve, which gives the Fisheye Image. Each stage lists the controls it reads as inputs](../assets/effects/graphs/fisheye.webp)
+![The Fisheye Lens graph from left to right: Edge Sampling hands the Sample Position to Lens Projection and Lens Resolve; Input Frame feeds Frame Edges; Lens Projection and Frame Edges feed Chromatic Aberration, whose Lens Colour goes to Lens Resolve, which gives the Fisheye Image. Each stage lists the controls it reads as inputs](../assets/effects/graphs/fisheye.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 1144" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 897" aria-hidden="true" focusable="false">
 <defs><marker id="fisheye-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M90 279 L90 363" marker-end="url(#fisheye-arrow)" />
-<circle class="docs-shot-number" cx="90" cy="279" r="18" /><text x="90" y="279" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M227 1121 L227 1037" marker-end="url(#fisheye-arrow)" />
-<circle class="docs-shot-number" cx="227" cy="1121" r="18" /><text x="227" y="1121" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M227 504 L227 588" marker-end="url(#fisheye-arrow)" />
-<circle class="docs-shot-number" cx="227" cy="504" r="18" /><text x="227" y="504" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M363 22 L363 81" marker-end="url(#fisheye-arrow)" />
-<circle class="docs-shot-number" cx="363" cy="22" r="18" /><text x="363" y="22" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M500 188 L500 272" marker-end="url(#fisheye-arrow)" />
-<circle class="docs-shot-number" cx="500" cy="188" r="18" /><text x="500" y="188" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M22 166 L74 166" marker-end="url(#fisheye-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="166" r="18" /><text x="22" y="166" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M404 22 L404 97" marker-end="url(#fisheye-arrow)" />
+<circle class="docs-shot-number" cx="404" cy="22" r="18" /><text x="404" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M404 874 L404 790" marker-end="url(#fisheye-arrow)" />
+<circle class="docs-shot-number" cx="404" cy="874" r="18" /><text x="404" y="874" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M648 214 L648 298" marker-end="url(#fisheye-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="214" r="18" /><text x="648" y="214" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M893 157 L893 241" marker-end="url(#fisheye-arrow)" />
+<circle class="docs-shot-number" cx="893" cy="157" r="18" /><text x="893" y="157" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -147,7 +149,6 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 Fisheye Lens works in five stages, one folder each in the Nodes tab: **Edge Sampling** places each pixel's reads a little apart, **Lens Projection** works out where each read looks through the lens, **Frame Edges** decides what is read beyond the picture, **Chromatic Aberration** reads red, green and blue at their own places, and **Lens Resolve** adds the vignette, blends the lens with what is outside it and averages the reads. All of it runs in one pass. The picture leaves out the Fisheye Parameters, Constants and Coordinates & Resources folders: the controls arrive at the stages under their card names. Click a folder's header to open it.
 
-<div class="docs-float-end"></div>
 
 ### Edge Sampling
 
@@ -219,35 +220,37 @@ Sequence Index counts the reads of one pixel, 0 to Edge Sampling − 1.
 
 ### Frame Edges
 
-<figure class="docs-shot docs-shot--graph">
+<figure class="docs-shot docs-shot--graph docs-shot--float-right">
 
 <div class="docs-shot-stage">
 
 ![Inside the Frame Edges folder: Frame feeds Premultiplied Source; UV and Frame Edges feed Frame Coordinate Modes; Frame Coverage takes the premultiplied picture, the remapped position, the UV and Edge Feather; Greater Than checks Frame Edges and a Switch picks between the two Frame Coverage results](../assets/effects/graphs/fisheye-frame-edges.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 645" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 1063" aria-hidden="true" focusable="false">
 <defs><marker id="fisheye-frame-edges-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M316 575 L316 491" marker-end="url(#fisheye-frame-edges-arrow)" />
-<circle class="docs-shot-number" cx="316" cy="575" r="18" /><text x="316" y="575" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M316 22 L316 86" marker-end="url(#fisheye-frame-edges-arrow)" />
-<circle class="docs-shot-number" cx="316" cy="22" r="18" /><text x="316" y="22" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M700 621 L700 537" marker-end="url(#fisheye-frame-edges-arrow)" />
-<circle class="docs-shot-number" cx="700" cy="621" r="18" /><text x="700" y="621" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M908 115 L908 199" marker-end="url(#fisheye-frame-edges-arrow)" />
-<circle class="docs-shot-number" cx="908" cy="115" r="18" /><text x="908" y="115" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M446 170 L382 170" marker-end="url(#fisheye-frame-edges-arrow)" />
+<circle class="docs-shot-number" cx="446" cy="170" r="18" /><text x="446" y="170" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M446 390 L382 390" marker-end="url(#fisheye-frame-edges-arrow)" />
+<circle class="docs-shot-number" cx="446" cy="390" r="18" /><text x="446" y="390" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M279 1041 L279 957" marker-end="url(#fisheye-frame-edges-arrow)" />
+<circle class="docs-shot-number" cx="279" cy="1041" r="18" /><text x="279" y="1041" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M482 542 L482 626" marker-end="url(#fisheye-frame-edges-arrow)" />
+<circle class="docs-shot-number" cx="482" cy="542" r="18" /><text x="482" y="542" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Frame Edges. 1 — Premultiplied Source: clean transparent edges. 2 — Frame Coordinate Modes: Clamp, Mirror or Repeat. 3 — Frame Coverage: the soft empty border. 4 — Switch: which of them.</figcaption>
+<figcaption>Inside Frame Edges. 1 — Frame Coordinate Modes: Clamp, Mirror or Repeat. 2 — Premultiplied Source: clean transparent edges. 3 — Frame Coverage: the soft empty border. 4 — Switch: which of them.</figcaption>
 </figure>
 
-**Premultiplied Source** – multiplies each pixel's colour by its alpha, so a cut-out figure keeps clean edges when the lens averages its reads.
-
 **Frame Coordinate Modes** – turns a read position beyond the picture into one inside it: clamped to the border, mirrored or repeated, after **Frame Edges**.
+
+**Premultiplied Source** – multiplies each pixel's colour by its alpha, so a cut-out figure keeps clean edges when the lens averages its reads.
 
 **Frame Coverage** – for Transparent, fades the picture to nothing at its border over Edge Feather, so the empty edges have a smooth rim.
 
 **Switch** – takes Frame Coverage's picture for Transparent and the remapped picture for the other three choices.
+
+<div class="docs-float-end"></div>
 
 ### Chromatic Aberration
 

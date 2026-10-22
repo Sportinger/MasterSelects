@@ -46,7 +46,7 @@ Pick one in the **Preset** row of the effect card. It sets Framing, Strength and
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Guided Perspective card: the Preset menu showing Fill Frame, the Perspective section with the Guides row, its Edit guides button and reset arrow, a note that two vertical guides are applied, the Framing menu on Fill frame, Strength 100 % and Scale 100 %, beside a strip of the preview with the straightened night street](../assets/effects/editor/guided-perspective-inspector.webp)
+![Properties, Effects with a Guided Perspective card: the Preset menu showing Fill Frame, the Perspective section with the Guides row and its Edit guides and Reset buttons, a note that two vertical guides are applied, the Framing menu on Fill frame, Strength 100 % and Scale 100 %, beside a strip of the preview with the straightened night street](../assets/effects/editor/guided-perspective-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 577" aria-hidden="true" focusable="false">
 <defs><marker id="guided-perspective-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -56,8 +56,8 @@ Pick one in the **Preset** row of the effect card. It sets Framing, Strength and
 <circle class="docs-shot-number" cx="568" cy="377" r="18" /><text x="568" y="377" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M569 442 L646 442" marker-end="url(#guided-perspective-inspector-arrow)" />
 <circle class="docs-shot-number" cx="569" cy="442" r="18" /><text x="569" y="442" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M602 480 L644 480" marker-end="url(#guided-perspective-inspector-arrow)" />
-<circle class="docs-shot-number" cx="602" cy="480" r="18" /><text x="602" y="480" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M568 480 L644 480" marker-end="url(#guided-perspective-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="480" r="18" /><text x="568" y="480" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M568 517 L666 517" marker-end="url(#guided-perspective-inspector-arrow)" />
 <circle class="docs-shot-number" cx="568" cy="517" r="18" /><text x="568" y="517" class="docs-shot-number-text">5</text>
 </svg>

@@ -14,7 +14,7 @@
         "width": 1600,
         "height": 1100
       },
-      "alt": "Properties, Effects with a Lens Correction card: the Preset menu showing Action Cam, the Lens menu on Manual, the Geometry section with Framing on Original size, Distortion −28, Fine Distortion 0, Scale 120 and Center X and Y 0.5, the folded Chromatic aberration section and the Vignette section with its switch, Amount and Midpoint, beside a strip of the preview with the straightened night street",
+      "alt": "Properties, Effects with a Lens Correction card: the Preset menu showing Action Cam, the Lens menu on Manual, the Geometry section with Framing on Original size, Distortion −28, Fine Distortion 0, Scale 120 and Center X and Y 0.5, the folded Chromatic aberration section and the Vignette section with its switch, Amount and Midpoint, beside the right edge of the preview, where the shop fronts and a vending machine of the corrected night street stand upright",
       "caption": "Lens Correction with the Action Cam preset. 1 — Preset: pick a starting point. 2 — Lens: a measured lens or Manual. 3 — Framing: keep the size or show the whole photo. 4 — Distortion: straightens bowed lines. 5 — Scale: zooms in or out.",
       "marks": [
         {
@@ -35,7 +35,7 @@
         {
           "target": "Distortion",
           "label": "Distortion",
-          "reach": 35
+          "reach": 68
         },
         {
           "target": "Scale",
@@ -91,7 +91,7 @@
         {
           "target": "Strength",
           "label": "Strength",
-          "reach": 42
+          "reach": 76
         },
         {
           "target": "Scale",
@@ -106,7 +106,9 @@
     {
       "name": "ai-edge-fill-inspector",
       "effect": "ai-edge-fill",
-      "params": {},
+      "params": {
+        "scene": "this street, its buildings, pavement and sky"
+      },
       "image": "neon_rain_street_tilted.jpg",
       "preview": 0,
       "top": "card",
@@ -114,7 +116,7 @@
         "width": 1600,
         "height": 1100
       },
-      "alt": "Properties, Effects with an AI Edge Fill card: the Preset row, the Generate section with Resolution on 2K, the Scene menu on Room, the Scene text field with this room, walls, ceiling and floor, the Generate fill button and a note that Nano Banana Pro on Kie.ai receives the corrected photo and a mask of its empty edges, then the Blend section with Fill Opacity 100 % and Seam Blend 12 px",
+      "alt": "Properties, Effects with an AI Edge Fill card: the Generate section with Resolution on 2K, the Scene menu on Street, the Scene text field with this street, its buildings, pavement and sky, the Generate fill button and a note that Nano Banana Pro on Kie.ai receives the corrected photo and a mask of its empty edges, then the Blend section with Fill Opacity 100 % and Seam Blend 12 px",
       "caption": "AI Edge Fill before its first fill. 1 — Resolution: the size of the generated picture. 2 — Scene: what the empty edges should continue. 3 — Fill: sends the request. 4 — Fill Opacity: how strongly the fill shows. 5 — Seam Blend: matches its colour to the photo.",
       "marks": [
         {
@@ -185,44 +187,46 @@
         "chromaticAberration": 0.012
       },
       "image": "neon_rain_street.jpg",
-      "preview": 380,
-      "top": "tabs",
+      "preview": 0,
+      "top": "card",
       "viewport": {
         "width": 1600,
         "height": 1700
       },
-      "alt": "Properties, Effects with a Fisheye Lens card on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, the Edges section with Lens Feather 0.04, and the Optics and Quality sections below, beside a strip of the preview with the walker inside a round glass ball",
+      "alt": "The Fisheye Lens card in Properties → Effects on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, the Edges section with Lens Feather 0.04, and the Optics and Quality sections below",
       "caption": "Fisheye Lens with the Crystal Ball preset. 1 — Preset: pick a starting point. 2 — Projection: the lens model. 3 — Field of View: how wide the lens sees. 4 — Lens Radius: the size of the lens circle. 5 — Lens Feather: softens the rim of the circle.",
       "marks": [
         {
           "target": "Preset",
           "label": "Preset",
-          "reach": 62
+          "reach": 145
         },
         {
           "target": "Projection",
           "label": "Projection",
-          "reach": 69
+          "reach": 155
         },
         {
           "target": "Field of View",
           "label": "Field of View",
-          "reach": 52
+          "reach": 131
         },
         {
           "target": "Lens Radius",
           "label": "Lens Radius",
-          "reach": 53
+          "reach": 134
         },
         {
           "target": "Lens Feather",
           "label": "Lens Feather",
-          "reach": 49
+          "reach": 128
         }
       ],
       "hide": [
         "Particle Out"
-      ]
+      ],
+      "layout": "float",
+      "gutter": 56
     },
     {
       "name": "bulge-inspector",
@@ -232,44 +236,46 @@
         "radius": 0.3
       },
       "image": "neon_rain_street.jpg",
-      "preview": 380,
-      "top": "tabs",
+      "preview": 0,
+      "top": "card",
       "viewport": {
         "width": 1600,
         "height": 900
       },
-      "alt": "Properties, Effects with a Bulge & Pinch card on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the right side of the night street and, at its left edge, the enlarged umbrella of the walker under the glass",
+      "alt": "The Bulge & Pinch card in Properties → Effects on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror",
       "caption": "Bulge & Pinch with the Magnifying Glass preset. 1 — Preset: pick a starting point. 2 — Amount: bulge above 1, pinch below. 3 — Radius: the size of the area. 4 — Shape: round or stretched with the frame. 5 — Frame Edges: what shows beyond the picture.",
       "marks": [
         {
           "target": "Preset",
           "label": "Preset",
-          "reach": 81
+          "reach": 145
         },
         {
           "target": "Amount",
           "label": "Amount",
-          "reach": 71
+          "reach": 135
         },
         {
           "target": "Radius",
           "label": "Radius",
-          "reach": 43
+          "reach": 141
         },
         {
           "target": "Shape",
           "label": "Shape",
-          "reach": 48
+          "reach": 145
         },
         {
           "target": "Frame Edges",
           "label": "Frame Edges",
-          "reach": 45
+          "reach": 87
         }
       ],
       "hide": [
         "Particle Out"
-      ]
+      ],
+      "layout": "float",
+      "gutter": 56
     }
   ]
 }

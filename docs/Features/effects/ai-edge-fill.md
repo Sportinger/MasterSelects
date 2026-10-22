@@ -8,7 +8,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 ![The tilted night street after Guided Perspective on Whole photo: the shop fronts stand upright, and the photo has become a wedge, narrower at the bottom, with empty triangles at both sides and empty bands along the top and bottom, shown in blue](../assets/effects/ai-edge-fill-input.webp)
 
-<figcaption>What AI Edge Fill fills: a street photo straightened with Guided Perspective on Whole photo. Blue: the empty, transparent edges. A picture of a generated fill follows once fills have been made for these pages (each costs cloud credits).</figcaption>
+<figcaption>What AI Edge Fill fills: a street photo straightened with Guided Perspective on Whole photo. Blue: the empty, transparent edges.</figcaption>
 </figure>
 
 **Use it for:** a straightened photo of the set or the house that has to fill the whole projection · keeping every pixel of a photo after a strong correction · a background plate wider than the photo you have.
@@ -23,7 +23,7 @@ It works on stills, including Canon raw photos (CR2): put it after [Lens Correct
 
 ## Presets
 
-AI Edge Fill has no presets in the **Preset** row yet. Its starting points are the four scenes of the **Scene** menu in the card (Room, Stage, Street, Landscape), since a good fill needs mostly the right scene. Pictures of them follow once fills have been generated for these pages (each costs cloud credits).
+AI Edge Fill has no presets in the **Preset** row yet. Its starting points are the four scenes of the **Scene** menu in the card (Room, Stage, Street, Landscape), since a good fill needs mostly the right scene.
 
 ## Controls
 
@@ -32,7 +32,7 @@ AI Edge Fill has no presets in the **Preset** row yet. Its starting points are t
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with an AI Edge Fill card: the Generate section with Resolution on 2K, the Scene menu on Room, the Scene text field with this room, walls, ceiling and floor, the Generate fill button and a note that Nano Banana Pro on Kie.ai receives the corrected photo and a mask of its empty edges, then the Blend section with Fill Opacity 100 % and Seam Blend 12 px](../assets/effects/editor/ai-edge-fill-inspector.webp)
+![Properties, Effects with an AI Edge Fill card: the Generate section with Resolution on 2K, the Scene menu on Street, the Scene text field with this street, its buildings, pavement and sky, the Generate fill button and a note that Nano Banana Pro on Kie.ai receives the corrected photo and a mask of its empty edges, then the Blend section with Fill Opacity 100 % and Seam Blend 12 px](../assets/effects/editor/ai-edge-fill-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 590 681" aria-hidden="true" focusable="false">
 <defs><marker id="ai-edge-fill-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -82,5 +82,5 @@ AI Edge Fill is one fixed shader with its own card: it has no node graph to open
 - **Photo pixels.** Only transparent pixels take the fill; the photo keeps its resolution and colour even where the model changed it. Seam Blend reduces colour steps, not mistakes in the generated structure.
 - **Frame.** The effect covers the whole composition, so margins outside the photo are filled too; bypassing it returns the photo to its own size. Tilted 3D planes and an enabled composition camera are not supported, and generating refuses masks, colour correction or keyframed geometry before it.
 - **Saved fill.** The PNG is stored as a required project artifact. A started request keeps its task id, so **Resume task** never starts a second generation; **Discard pending task** in the Reset row allows a fresh request but does not cancel a job the service already started.
-- **Saved projects.** Seam Blend used to replace the fill beside the photo with copies of the photo's edge pixels, in four rings; it now shifts the fill's colour and keeps its detail. Saved fills look smoother along the seam: a bug fix. The labels changed (Generation Size is now Resolution), not the stored values. A saved prompt sends the same request as before: the old default prompts are the Room scene word for word, a prompt written by hand stays a Full prompt. A fill made after a [Lens Correction](./lens-correction.md) whose look changed with its 2026-10-22 bug fixes (strong barrel correction, Fit entire photo with a smaller Scale) is marked as out of date.
+- **Saved projects.** Seam Blend used to replace the fill beside the photo with copies of the photo's edge pixels, in four rings; it now shifts the fill's colour and keeps its detail. Saved fills look smoother along the seam: a bug fix. The labels changed (Generation Size is now Resolution), not the stored values. A saved prompt sends the same request as before: the old default prompts are the Room scene word for word, a prompt written by hand stays a Full prompt. A fill made after a [Lens Correction](./lens-correction.md) whose look changed visibly with its 2026-10-22 bug fixes (barrel correction from about Distortion −29, Fit entire photo with a smaller Scale) is marked as made before the update: the card says so and asks you to generate again. A fill task that was already running when you updated still finishes and is marked the same way.
 - **More:** [Effect system: AI Edge Fill](../Effect-System.md#ai-edge-fill) · [Lens Correction](./lens-correction.md) · [Guided Perspective](./guided-perspective.md).

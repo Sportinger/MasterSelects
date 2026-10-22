@@ -1,5 +1,5 @@
 {
-  "about": "The gallery thumbnails of Fisheye Lens and Bulge & Pinch: a preset whose lens shape reads at 130 px, cut around it. node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/distort-thumbs.json",
+  "about": "The gallery thumbnails of Fisheye Lens and Bulge & Pinch: Fisheye shows the whole bent street inside the Peephole's dark-rimmed circle (Lens Radius 0.86 so the whole rim fits), Bulge the Magnifying Glass preset over the walker, cropped wide enough that the untouched street surrounds the glass, so the two read differently side by side. node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/distort-thumbs.json",
   "pairs": [
     {
       "name": "fisheye-thumb",
@@ -8,10 +8,10 @@
       "width": 1920,
       "layout": "single",
       "crop": [
-        400,
-        40,
-        1120,
-        700
+        176,
+        20,
+        1568,
+        980
       ],
       "outWidth": 400,
       "maxBytes": 24000,
@@ -21,11 +21,14 @@
       "right": {
         "effect": "fisheye",
         "params": {
-          "projection": "stereographic",
-          "fieldOfView": 160,
-          "radius": 0.9,
-          "feather": 0.04,
-          "chromaticAberration": 0.012
+          "fieldOfView": 170,
+          "radius": 0.86,
+          "zoom": 0.25,
+          "edgeMode": "mirror",
+          "outside": "transparent",
+          "feather": 0.03,
+          "vignette": 0.6,
+          "vignetteSoftness": 0.35
         }
       }
     },
@@ -36,10 +39,10 @@
       "width": 1920,
       "layout": "single",
       "crop": [
-        560,
-        180,
-        800,
-        500
+        320,
+        140,
+        1280,
+        800
       ],
       "outWidth": 400,
       "maxBytes": 24000,

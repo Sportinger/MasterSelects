@@ -42,24 +42,24 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ## Controls
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-shot--float-right">
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Bulge & Pinch card on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the right side of the night street and, at its left edge, the enlarged umbrella of the walker under the glass](../assets/effects/editor/bulge-inspector.webp)
+![The Bulge & Pinch card in Properties → Effects on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror](../assets/effects/editor/bulge-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 581" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 428" aria-hidden="true" focusable="false">
 <defs><marker id="bulge-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M568 282 L649 282" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="568" cy="282" r="18" /><text x="568" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M568 344 L639 344" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="568" cy="344" r="18" /><text x="568" y="344" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M602 382 L645 382" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="602" cy="382" r="18" /><text x="602" y="382" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M601 494 L649 494" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="601" cy="494" r="18" /><text x="601" y="494" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M550 532 L595 532" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="550" cy="532" r="18" /><text x="550" y="532" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M50 106 L195 106" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="106" r="18" /><text x="50" y="106" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M50 173 L185 173" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="173" r="18" /><text x="50" y="173" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M50 213 L191 213" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="213" r="18" /><text x="50" y="213" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M50 334 L195 334" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="334" r="18" /><text x="50" y="334" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M50 375 L137 375" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="50" cy="375" r="18" /><text x="50" y="375" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -79,6 +79,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 **Shape** – **Circle** keeps the area round on any frame. **Stretch to Frame** stretches it with the frame into an oval as wide as the picture, so on a wide frame it bends more across than up and down; at Radius 0.5 the oval just touches all four edges. Circle, Stretch to Frame, default Circle.
 
 **Frame Edges** – what shows where a pinch reads from beyond the picture: with a large Radius, or with the area near an edge. **Mirror** reflects the picture there, **Clamp** repeats its border pixels as streaks, and **Transparent** leaves those places empty, for a layer below to show through. A bulge only reads from nearer the middle, so with the area inside the frame it never needs this. Mirror, Clamp, Transparent, default Mirror.
+
+<div class="docs-float-end"></div>
 
 ## Node setup
 
