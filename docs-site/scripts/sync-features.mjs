@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { convertPage, preparePage, titleOf } from './lib/convertPage.mjs';
 import { loadEffectCatalog } from './lib/effectCatalog.mjs';
 import { buildSidebar, countSidebarPages, effectGroupIndex, readIndexSections } from './lib/featureIndex.mjs';
-import { assetBudgetIssues } from './lib/media.mjs';
+import { assetBudgetIssues, pageBudgetIssues } from './lib/media.mjs';
 import { buildAnchorRedirects, buildRedirects } from './lib/redirects.mjs';
 import { PAGE_FOLDERS, contentFile, pageSlug } from './lib/routes.mjs';
 
@@ -190,7 +190,14 @@ const prepared = new Map(published.map((file) => [file, preparePage(sources.get(
   checkAsset: (asset, bytes, options) => checkAsset(asset, bytes, options, file),
   warn: (text) => report({ level: 'warn', text: `${file}: ${text}` }),
 })]));
+// Every asset a page uses, for the page budget (an asset counts once per page; the small gallery
+// thumbnails of the catalog pages have their own budget per file).
+const pageAssets = new Map();
 function checkAsset(asset, bytes, options = {}, page) {
+  if (bytes && page && !options.thumb) {
+    if (!pageAssets.has(page)) pageAssets.set(page, new Map());
+    pageAssets.get(page).set(asset, bytes.length);
+  }
   if (!bytes || checkedAssets.has(asset)) return;
   checkedAssets.set(asset, page);
   for (const issue of assetBudgetIssues(asset, bytes, options)) report({ level: 'warn', text: `Budget: ${asset} is ${issue}; used on ${page}.` });
@@ -212,6 +219,9 @@ for (const file of published) {
   const out = file === 'README.md' ? overviewFile : contentFile(pageSlug(file));
   writeIfChanged(path.join(contentDir, out), text);
   written.add(out);
+}
+for (const [page, assets] of pageAssets) {
+  for (const issue of pageBudgetIssues(assets)) report({ level: 'warn', text: `Budget: ${page}: ${issue}.` });
 }
 let removedPages = 0;
 for (const folder of generatedContent) {

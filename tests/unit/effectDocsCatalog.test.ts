@@ -175,6 +175,12 @@ describe('effect docs helpers', () => {
     expect(handWrittenPageProblems(demo, page(good, '**Soft** – gentle.\n\n**Medium** – old.'), files)).toEqual([
       '## Presets has no paragraph for the preset **Hard**', '## Presets describes **Medium**, which is no preset of Demo']);
     expect(handWrittenPageProblems(demo, page(good), { exists: () => false })[0]).toMatch(/has no preset strip assets\/effects\/presets\/demo\.webp/u);
+    // A moving effect shows its presets as one loop of all of them instead of the still strip.
+    const moving = { ...demo, moving: true };
+    expect(handWrittenPageProblems(moving, page(good), files)).toEqual(['## Presets does not show the presets loop ../assets/effects/clips/demo-presets.mp4']);
+    expect(handWrittenPageProblems(moving, page(good).replace('![strip](../assets/effects/presets/demo.webp)',
+      '<video src="../assets/effects/clips/demo-presets.mp4" aria-label="All presets"></video>'), files)).toEqual([]);
+    expect(handWrittenPageProblems(moving, page(good), { exists: () => false })[0]).toMatch(/has no presets loop assets\/effects\/clips\/demo-presets\.mp4: a "kind": "presets" clip/u);
     // A page that still carries the generated table is checked by the table; presets are checked either way.
     expect(handWrittenPageProblems({ ...demo, presets: [] }, `# Demo\n\n${CONTROLS_START}\nx\n${CONTROLS_END}\n`, files)).toEqual([]);
   });

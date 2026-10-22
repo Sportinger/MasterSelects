@@ -15,7 +15,13 @@ For developers and agents who build a new effect or rework an existing one. A re
    - The card uses the shared inspector rows (AGENTS.md, section 9).
 4. **Compare with the reference.** Render the effect with `scripts/effect-lab.mjs` on the shared images, and on the moving footage when it moves. Put the result next to the reference and keep going until a viewer would recognise the look.
 5. **Presets.** Give the effect three to five named presets that show its range. They belong to the effect and are picked in its card. Each one has to look good on its own, so render every preset and look at it.
-6. **The docs page.** Write `docs/Features/effects/<effect-id>.md` by hand, following the [Style guide](./Documentation-Site.md#style-guide) and the [Effect pages](./Documentation-Site.md#effect-pages) contract: the right visual (a [compare slider](./Documentation-Site.md#compare-sliders) on a still or a loop for a filter, the effect alone on black for a generator), the presets, one paragraph per control with its limits, editor pictures with yellow callouts. Then run `node scripts/effect-docs.mjs`.
+6. **The docs page.** Write `docs/Features/effects/<effect-id>.md` by hand, following the [Style guide](./Documentation-Site.md#style-guide) and the [Effect pages](./Documentation-Site.md#effect-pages) contract. Video wherever something changes, stills where nothing does:
+   - the top: a [compare slider](./Documentation-Site.md#compare-sliders) on a still or a loop for a filter, the effect alone on black for a generator;
+   - the presets: one loop of all presets in a grid for a moving effect, a strip of stills for a static one;
+   - one paragraph per control with its limits, and for a moving effect a short loop beside it that sweeps the control;
+   - the inspector picture and the node setup with yellow callouts: the overview, then one section per stage folder with a picture of its inside and a paragraph per marked node.
+
+   Then run `node scripts/effect-docs.mjs`.
 7. **Review rounds.** See below.
 8. **Finish.**
    - Run the targeted tests by name (never the full suite) and `npm run build` once.

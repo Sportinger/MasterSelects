@@ -1,8 +1,10 @@
 // Checks of a hand-written effect page against the registry, shared by scripts/effect-docs.mjs and
 // tests/unit/effectDocsCatalog.test.ts, so a page can never go stale silently:
 //
-//   ## Presets   names every preset of the effect in bold (**Heat Haze**) and shows its preset strip
-//                (assets/effects/presets/<id>.webp, made by scripts/effect-lab.mjs --presets).
+//   ## Presets   names every preset of the effect in bold (**Heat Haze**) and shows them all: a moving
+//                effect its presets loop (assets/effects/clips/<id>-presets.mp4, a "kind": "presets" clip
+//                of scripts/doc-clip.mjs), a static one its preset strip (assets/effects/presets/<id>.webp,
+//                made by scripts/effect-lab.mjs --presets).
 //   ## Controls  a page without a generated controls table (it has moved to paragraphs) gives every
 //                control of the card its own paragraph, in card order: it starts with the card label in
 //                bold and states the limits and default as `node scripts/effect-docs.mjs --controls <id>`
@@ -38,6 +40,17 @@ function boldParagraphs(section) {
   return result;
 }
 
+/**
+ * How a page shows all presets at once: a moving effect as one loop of every preset in sync, a
+ * static one as a strip of stills. Returns { file (relative to docs/Features), label, command }.
+ */
+export function presetsVisual(effect) {
+  const assets = effectAssets(effect.id);
+  return effect.moving
+    ? { file: assets.presetsClip, label: 'presets loop', command: `a "kind": "presets" clip in scripts/doc-clips/<group>.json, node scripts/doc-clip.mjs scripts/doc-clips/<group>.json --only ${effect.id}-presets` }
+    : { file: assets.presets, label: 'preset strip', command: `node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json --only ${effect.id}` };
+}
+
 /** The sentence a control paragraph must contain: its limits and default as the card shows them. */
 export function controlFacts(row) {
   return row.range ? `${row.range}, default ${row.default}` : `default ${row.default}`;
@@ -69,9 +82,9 @@ export function handWrittenPageProblems(effect, markdown, files) {
       const named = boldParagraphs(section).map((paragraph) => paragraph.name);
       for (const preset of presets) if (!named.includes(preset.name)) problems.push(`## Presets has no paragraph for the preset **${preset.name}**`);
       for (const name of named) if (!presets.some((preset) => preset.name === name)) problems.push(`## Presets describes **${name}**, which is no preset of ${effect.name}`);
-      const strip = effectAssets(effect.id).presets;
-      if (!files.exists(strip)) problems.push(`has no preset strip ${strip}: node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json --only ${effect.id}`);
-      else if (!section.includes(`../${strip}`)) problems.push(`## Presets does not show the preset strip ../${strip}`);
+      const shown = presetsVisual(effect);
+      if (!files.exists(shown.file)) problems.push(`has no ${shown.label} ${shown.file}: ${shown.command}`);
+      else if (!section.includes(`../${shown.file}`)) problems.push(`## Presets does not show the ${shown.label} ../${shown.file}`);
     }
   }
   // Pages that still carry the generated table are checked by the table itself.

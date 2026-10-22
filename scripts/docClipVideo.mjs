@@ -1,7 +1,9 @@
 // Shared by the docs clip script (doc-clip.mjs): ffmpeg encoding for docs clips, next to
 // docShotWebp.mjs for still pictures. Every clip is a muted H.264 MP4 (yuv420p, BT.709 limited
 // range, faststart) that fits its byte budget, plus a WebP poster of one of its frames.
-//   encodeEffectClip  editor exports (effect, optionally the original) → layout → seamless loop
+//   encodeEffectClip  editor exports (effect, optionally the original) → layout → seamless loop,
+//                     with the swept value burned in for a control clip (`sweep`)
+//   encodePresetGrid  one export per preset → a labelled grid (2 × 2 for four) → seamless loop
 //   encodeRecording   screencast frames with timestamps → constant frame rate, cropped
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -24,6 +26,43 @@ export function probeVideo(file) {
 }
 
 const even = value => Math.max(2, Math.round(value / 2) * 2);
+
+/** A bold sans font file for burned-in labels (fontconfig picks the system's). */
+function fontFile() {
+  const file = run('fc-match', ['-f', '%{file}', 'sans-serif:bold']).trim();
+  if (!file || !fs.existsSync(file)) throw new Error('No sans-serif font found for clip labels (fc-match sans-serif:bold).');
+  return file;
+}
+// drawtext text: a quoted filter option, so ' : , \ and % are escaped (% opens an expansion).
+const drawtextText = text => String(text).replace(/[\\':,%]/g, match => `\\${match}`);
+
+/**
+ * The swept value of a control clip at clip time `t` (seconds of the export), as an ffmpeg
+ * expression and as a number: `from` → `to` → `from` on a cosine (slow at both ends), one cycle
+ * over `duration`, so the loop starts and ends on `from`.
+ */
+export function sweepValue({ from, to }, duration) {
+  const at = t => from + (to - from) * (0.5 - 0.5 * Math.cos(2 * Math.PI * t / duration));
+  return { at, expression: `(${from}+(${to - from})*(0.5-0.5*cos(2*PI*t/${duration})))` };
+}
+
+/** drawtext filters that burn the swept value in, small, at the bottom left ("Band Size 22 px"). */
+function sweepLabel(clip, { width, duration }) {
+  const sweep = clip.sweep;
+  const size = Math.round(width * (sweep.fontSize ?? 0.034)), margin = Math.round(size * 0.7);
+  const style = `fontfile='${fontFile()}':fontsize=${size}:fontcolor=white:x=${margin}:y=h-th-${margin}:box=1:boxcolor=black@0.55:boxborderw=${Math.round(size * 0.35)}`;
+  const unit = drawtextText(sweep.unit ?? ''), name = drawtextText(sweep.label);
+  // Steps hold each value for an equal share of the clip; a sweep shows the value it has now.
+  if (sweep.steps) {
+    const share = duration / sweep.steps.length;
+    return sweep.steps.map((value, index) => `drawtext=${style}:text='${name} ${drawtextText(value)}${unit}'`
+      + `:enable='between(t\\,${(index * share).toFixed(4)}\\,${((index + 1) * share).toFixed(4)})'`).join(',');
+  }
+  const decimals = sweep.decimals ?? 0, value = sweepValue(sweep, duration).expression;
+  const number = decimals ? `%{eif\\:trunc(round(${value}*${10 ** decimals})/${10 ** decimals})\\:d}.%{eif\\:mod(round(${value}*${10 ** decimals})\\,${10 ** decimals})\\:d\\:${decimals}}`
+    : `%{eif\\:round(${value})\\:d}`;
+  return `drawtext=${style}:text='${name} ${number}${unit}'`;
+}
 // Browser exports are full-range BT.709; docs clips are limited range, tagged BT.709.
 const toLimited = 'scale=in_range=full:out_range=limited:in_color_matrix=bt709:out_color_matrix=bt709,format=yuv420p';
 
@@ -94,6 +133,9 @@ export function writePoster(video, poster, time = 0) {
   return fs.statSync(poster).size;
 }
 
+/** Budget of a control clip (a `sweep`): it plays beside its paragraph, one of several on a page. */
+export const CONTROL_CLIP = { bytes: 700_000, seconds: 8 };
+
 /** Layouts that show the original beside the effect, so they need an export without the effect. */
 export const ORIGINAL_LAYOUTS = ['pair', 'compare', 'split'];
 
@@ -102,10 +144,45 @@ export function encodeEffectClip(clip, { effect, original, output, poster }) {
   const frame = probeVideo(effect);
   if (ORIGINAL_LAYOUTS.includes(clip.layout) && !original) throw new Error(`${clip.name}: layout ${clip.layout} needs the original export`);
   const layout = layoutGraph(clip, frame);
-  const fps = clip.fps ?? Math.round(frame.fps * 1000) / 1000;
-  const graph = `${layout.graph};${loopGraph('c', { duration: frame.frames / frame.fps, fps, crossfade: clip.loop ?? 0.5 })}`;
+  const fps = clip.fps ?? Math.round(frame.fps * 1000) / 1000, duration = frame.frames / frame.fps;
+  // The label is drawn on the export's own time, before the loop: it stays with its frames.
+  const labelled = clip.sweep ? `${layout.graph.replace(/\[c\]$/, '[u]')};[u]${sweepLabel(clip, { width: layout.width, duration })}[c]` : layout.graph;
+  const graph = `${labelled};${loopGraph('c', { duration, fps, crossfade: clip.loop ?? 0.5 })}`;
   const inputArgs = ['-i', effect, ...(original ? ['-i', original] : [])];
-  const encoded = encodeWithinBudget({ inputArgs, graph, output, maxBytes: clip.maxBytes ?? 1_500_000, crf: clip.crf });
+  // A control clip stands beside its paragraph: short and light (Style guide, Budgets).
+  if (clip.sweep && duration - (clip.loop ?? 0.5) > CONTROL_CLIP.seconds + 0.05) {
+    throw new Error(`${clip.name}: a control clip runs at most ${CONTROL_CLIP.seconds} s; shorten its range.`);
+  }
+  const maxBytes = clip.maxBytes ?? (clip.sweep ? CONTROL_CLIP.bytes : 1_500_000);
+  const encoded = encodeWithinBudget({ inputArgs, graph, output, maxBytes, crf: clip.crf });
+  return { ...encoded, ...probeVideo(output), posterBytes: writePoster(output, poster, clip.poster ?? 0) };
+}
+
+/**
+ * Presets grid: `exports` are { file, label }, one export of the same range per preset. Each is
+ * cropped (`crop`), scaled to a cell and labelled with the preset name in a band below it; the
+ * cells fill `columns` (default 2 for four presets, else up to 3) of a grid `width` px wide
+ * (default 960) with `gap` px between them, and the grid loops seamlessly.
+ */
+export function encodePresetGrid(clip, { exports, output, poster }) {
+  const frame = probeVideo(exports[0].file);
+  const [x, y, w, h] = clip.crop ?? [0, 0, frame.width, frame.height];
+  const columns = clip.columns ?? (exports.length === 4 ? 2 : Math.min(exports.length, 3)), rows = Math.ceil(exports.length / columns);
+  const gap = clip.gap ?? 6, cellWidth = even(((clip.width ?? 960) - gap * (columns - 1)) / columns), cellHeight = even(cellWidth * h / w);
+  // The names sit on one line height (not their own glyphs' box), so a name with a descender stays level.
+  const band = even(cellWidth * 0.11), size = Math.round(band * 0.5), font = fontFile();
+  const cells = exports.map(({ label }, index) => `[${index}:v]${toLimited},crop=${w}:${h}:${x}:${y},scale=${cellWidth}:${cellHeight}:flags=lanczos,`
+    + `pad=${cellWidth}:${cellHeight + band}:0:0:color=0x111111,drawtext=fontfile='${font}':text='${drawtextText(label)}':fontsize=${size}:fontcolor=0xf2f2f2`
+    + `:x=(w-tw)/2:y=${cellHeight + Math.round((band - size * 0.74) / 2)}[p${index}]`);
+  // Empty cells of a last, shorter row stay dark.
+  const blanks = Array.from({ length: rows * columns - exports.length }, (_, index) => `color=c=0x111111:s=${cellWidth}x${cellHeight + band}:r=${frame.fps}:d=${frame.duration}[b${index}]`);
+  const inputs = [...exports.map((_, index) => `[p${index}]`), ...blanks.map((_, index) => `[b${index}]`)];
+  const placement = inputs.map((_, index) => `${(index % columns) * (cellWidth + gap)}_${Math.floor(index / columns) * (cellHeight + band + gap)}`).join('|');
+  const width = columns * cellWidth + (columns - 1) * gap, height = rows * (cellHeight + band) + (rows - 1) * gap;
+  const grid = `${[...cells, ...blanks].join(';')};${inputs.join('')}xstack=inputs=${inputs.length}:layout=${placement}:fill=0x111111,crop=${width}:${height}:0:0[c]`;
+  const fps = clip.fps ?? Math.round(frame.fps * 1000) / 1000;
+  const graph = `${grid};${loopGraph('c', { duration: frame.frames / frame.fps, fps, crossfade: clip.loop ?? 0.5 })}`;
+  const encoded = encodeWithinBudget({ inputArgs: exports.flatMap(item => ['-i', item.file]), graph, output, maxBytes: clip.maxBytes ?? 1_500_000, crf: clip.crf });
   return { ...encoded, ...probeVideo(output), posterBytes: writePoster(output, poster, clip.poster ?? 0) };
 }
 

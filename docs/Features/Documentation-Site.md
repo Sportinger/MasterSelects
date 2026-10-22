@@ -18,24 +18,29 @@ Each page type has a fixed template: [Page templates](#page-templates).
 
 **Which visual.**
 
+Video wherever something changes, stills where nothing does.
+
 | The page shows | Medium | Made with |
 |---|---|---|
 | A filter (it changes the clip's picture) whose look is static | a [compare slider](#compare-sliders) on a still: drag the line between original and effect | `scripts/effect-lab.mjs --pairs`, `"layout": "compare"` |
 | A filter that moves or depends on time | a compare slider on a short loop of moving footage | `scripts/doc-clip.mjs`, `"layout": "compare"` |
 | A generator (it draws its own picture or 3D structure: Weave, Flocking, Stick Figure) | the effect alone on black, no compare: a still, or a loop when it moves | `scripts/effect-lab.mjs`, `scripts/doc-clip.mjs` |
-| The presets of an effect | a strip of small stills, one per preset, labelled with its name (no compare) | `scripts/effect-lab.mjs --presets` |
+| The presets of a moving effect | one loop with every preset in a labelled grid (2 × 2 for four), in sync | `scripts/doc-clip.mjs`, `"kind": "presets"` |
+| The presets of a static effect | a strip of small stills, one per preset, labelled with its name | `scripts/effect-lab.mjs --presets` |
+| What a control does | a short loop beside its paragraph: the value runs low → high → low, shown small in the picture | `scripts/doc-clip.mjs`, `"sweep"` |
 | How to do something in the editor (add, drag, trim) | a clip with a visible pointer | `scripts/doc-clip.mjs`, `"kind": "operation"` |
 | A part of the editor (inspector, panel) | a still with yellow numbered callouts | `scripts/effect-editor-shot.mjs` |
-| A node graph | a graph picture | `scripts/effect-graph-shot.mjs` |
+| A node graph, the inside of a stage folder | a graph picture with yellow callouts | `scripts/effect-graph-shot.mjs` |
 | Tracks, time, before and after | an inline SVG diagram | by hand ([Diagrams](#pictures-clips-diagrams-and-galleries)) |
 
-- **No GIFs.** Motion is an MP4 (H.264, muted, no audio) with a WebP poster. The site plays it only while it is on screen and shows the poster under reduced motion.
-- **Motion only where motion is the point.** One still or loop at the top of an effect page; an operation clip only where the page explains how to do something.
+- **No GIFs.** Motion is an MP4 (H.264, muted, no audio) with a WebP poster: it looks like a GIF at a fraction of the size. The site loads a clip only when the reader scrolls to it, plays it only while it is on screen and shows the poster under reduced motion.
+- **Video where something changes:** a moving effect, all presets of a moving effect, every control of a moving effect, editor operations. **Stills where nothing changes:** node graphs and the pictures of their stage folders, inspector excerpts, the presets and controls of a static effect.
 - **Loops** last 3–6 s and run seamlessly (the end fades into the start). They use the shared moving footage `dancer_stage_motion.mp4`, which is not in the repository (`--media <folder>`).
+- **Control loops** sweep one control on the footage from a low to a high value and back while the others stay at their defaults, with the current value small in a corner ("Band Size 22 px"). They stand beside their paragraph (`docs-shot--float-right`, ≤ 8 s, 640–800 px wide); put `<div class="docs-float-end"></div>` before the next one, so each loop starts beside its own text. A sweep beats a recorded slider drag: the picture is large and the value readable, and the inspector picture already shows where the control sits. A control whose sweep would mislead (keyframing Drift Lines' Speed makes its wave jump) shows a few fixed values in turn (`"steps"`).
 - **Stills** use the shared Effect Lab images in `tests/browser/effect-lab/images/` (`dancer_stage`, `harbor_town`, `neon_rain_street`, `greenscreen_dancer`). Pick the one on which the effect reads best.
 - **Operation clips** are recorded in the real editor: the drawn pointer moves in eased arcs and ripples on every click. They are cropped to the panels that matter. Keep the real mouse off the recording window.
 - **Default settings**, unless the caption names the changed values ("Left: original. Right: Radius 12.").
-- **Yellow callouts.** Every picture of the editor points at what the text talks about with yellow numbered circles and arrows (`scripts/docShotFigure.mjs`, through `effect-editor-shot.mjs` and `effect-graph-shot.mjs`): one number per control or step, at most about five per picture. The caption explains every number. On the site the callouts rest at 10 % and light up from their word (`docs-site/src/scripts/docsCallouts.js`): hovering the bold name in the text, or `N — Label` in the caption, brings the callout to full strength and draws a line with right-angle corners from the word to its number. So write the caption as `1 — Preset: what it does. 2 — Band Size.` and use exactly that name in bold in the same section (`**Band Size** – …`).
+- **Yellow callouts.** Every picture of the editor points at what the text talks about with yellow numbered circles and arrows (`scripts/docShotFigure.mjs`, through `effect-editor-shot.mjs` and `effect-graph-shot.mjs`): one number per control or step, at most about five per picture. The caption explains every number. On the site the callouts rest at 10 % and light up from their word (`docs-site/src/scripts/docsCallouts.js`): hovering the bold name in the text, or `N — Label` in the caption, brings the callout to full strength and draws a line with right-angle corners from the word to its number. So write the caption as `1 — Preset: what it does. 2 — Band Size.` and use exactly that name in bold in the same section (`**Band Size** – …`). A picture under a `###` answers to the bold words of its own `###` only, so the pictures of several stage folders can each point at their own "Multiply"; a picture right under a `##` answers to the words of all its `###` sections. Within one picture, give each callout a different name.
 - **Alt text** says what the picture shows; the caption names every callout number.
 - **Look at every new picture and clip yourself** (a contact sheet for a batch) before you commit it. A broken or too dark render is not published: name it in `PICTURE_PENDING` (`scripts/effectDocsCatalog.mjs`) instead.
 
@@ -52,7 +57,7 @@ Each page type has a fixed template: [Page templates](#page-templates).
 0 to 50 pixels, default 10.
 ```
 
-**Presets.** Every effect comes with presets: three to five named starting points that show the range of what it can do. They belong to the effect itself (`presets` in its definition, [Effect system](./Effect-System.md#contracts-and-invariants)) and are picked in the **Preset** row of its card; an effect without presets gets some built, and checked in renders, before its page is written. Name a preset after the picture it makes ("Heat Haze", "Rain Curtain"), not after its values. The page lists every preset under `## Presets`: the preset strip in a `docs-shot docs-shot--detail` figure (`node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json --only <id>`, which reads names and values from the registry), one sentence on the Preset row, then one short paragraph per preset that starts with its name in bold: what it looks like and when to use it.
+**Presets.** Every effect comes with presets: three to five named starting points that show the range of what it can do. They belong to the effect itself (`presets` in its definition, [Effect system](./Effect-System.md#contracts-and-invariants)) and are picked in the **Preset** row of its card; an effect without presets gets some built, and checked in renders, before its page is written. Name a preset after the picture it makes ("Heat Haze", "Rain Curtain"), not after its values. The page lists every preset under `## Presets`: for a moving effect one loop of all presets in sync (a `"kind": "presets"` clip in `scripts/doc-clips/<group>.json`, saved as `assets/effects/clips/<id>-presets.mp4`), for a static effect the preset strip in a `docs-shot docs-shot--detail` figure (`node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json --only <id>`); both read names and values from the registry. Then one sentence on the Preset row and one short paragraph per preset that starts with its name in bold: what it looks like and when to use it.
 
 **Formatting.**
 
@@ -68,10 +73,10 @@ Each page type has a fixed template: [Page templates](#page-templates).
 |---|---|
 | Pictures | WebP ≤ 200 KB and ≤ 1600 px wide |
 | Gallery thumbnails | ≤ 30 KB |
-| Clips | ≤ 1.5 MB and ≤ 12 s |
-| A whole page | about 600 KB per effect page, 1.5 MB per guide |
+| Clips | ≤ 1.5 MB and ≤ 12 s; a control loop ≤ 700 KB and ≤ 8 s |
+| A whole page | pictures and posters about 1 MB together, clips about 5 MB together |
 
-The tools encode to fit, and the sync warns about anything over. Reshoot only when the UI visibly changed: every reshoot stays in the Git history.
+Clips get the larger share because a reader only loads the ones they scroll to. Aim lower where it costs nothing: Drift Lines, with six loops, carries about 4.4 MB of clips and 0.5 MB of pictures and posters. The tools encode to fit, and the sync warns about any asset or page over its budget. Reshoot only when the UI visibly changed: every reshoot stays in the Git history.
 
 **Before you commit.**
 
@@ -168,9 +173,9 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 3. `Group: [<picker label>](../Effects-<Group>.md) · [How to add an effect](../Effects.md#add-an-effect)`. Without an overview page, link the catalog section: `./index.md#print--halftone`.
 4. One picture with a caption. A filter gets a [compare slider](#compare-sliders): a still pair (`scripts/effect-lab.mjs --pairs`, `"layout": "compare"`, saved as `../assets/effects/<id>.webp`) or, when it moves or depends on time (catalog `moving`), a loop pair on moving footage (`scripts/doc-clip.mjs`, `"layout": "compare"`, `../assets/effects/clips/<id>.mp4` with its `.webp` poster). A generator shows its effect alone on black. Pages that still show a split still or a pair with a gap keep it until they are converted; reuse an existing compare pair, make a new one when the page is written or rewritten.
 5. `**Use it for:**` two or three uses, then two to four key controls, one line each in everyday words (`- **Radius** – how soft it gets.`; their full paragraphs follow under `## Controls`), then one `**Tip:**`.
-6. `## Presets`: the preset strip with a caption, one sentence on the **Preset** row, then one short paragraph per preset, its name in bold ([Style guide](#style-guide)). Basic pages list the preset names in one line until the page is written by hand.
-7. `## Controls`: one short paragraph per control, under a `###` for each card section, with its limits and default ([Style guide](#style-guide)). A basic page keeps the generated table until it is written by hand; when you write a page by hand, replace its table (the block with both markers) with paragraphs.
-8. `## Node setup`: a focused graph picture (`scripts/effect-graph-shot.mjs`) only when it teaches something, two or three sentences on its stages and one `**Remix:**` change a reader can follow. Style effects of one engine get two sentences and a link to the engine instead of a graph.
+6. `## Presets`: the presets loop (a moving effect) or the preset strip (a static one) with a caption, one sentence on the **Preset** row, then one short paragraph per preset, its name in bold ([Style guide](#style-guide)). Basic pages list the preset names in one line until the page is written by hand.
+7. `## Controls`: the inspector picture with callouts, then one short paragraph per control, under a `###` for each card section, with its limits and default ([Style guide](#style-guide)); for a moving effect a control loop (`"sweep"`) beside each paragraph. A basic page keeps the generated table until it is written by hand; when you write a page by hand, replace its table (the block with both markers) with paragraphs.
+8. `## Node setup`: the overview graph with a callout on each stage folder and two or three sentences on the stages, then one `###` per stage folder, named like the folder: a picture of its inside, yellow callouts on its three to five important nodes, a caption `1 — Node name: what it does.` and one short paragraph per callout that starts with the same name in bold, in plain words: what the node computes and why it is there. One `**Remix:**` change a reader can follow, in the section of the node it changes. Make the inside pictures as recipes of all the folder's nodes (`?focus=<folder>&only=<its node ids>&cables=avoid&marks=…`, ids from `--list`), so the values it reads from Constants show as value cards; a folder of two or three cards can float beside its text (`layout=float`). Keep them in `scripts/effect-graph-shots/<group>.json`. Style effects of one engine get two sentences and a link to the engine instead of a graph.
 9. `## Technical details`: compact facts (units, transparency, saved projects, limits) and links: [Effect system](./Effect-System.md) (its *Per-effect notes* hold the implementation notes of single effects), [Node Catalog](./Node-Catalog.md).
 
 - The headings stay exactly `## Presets`, `## Controls`, `## Node setup` and `## Technical details`, so links like `../effects/gaussian-blur.md#node-setup` work on every page. Add `###` inside them freely; add no other `##` above `## Presets`.
@@ -253,7 +258,7 @@ The Markdown shortcut `![Glitch on a dancer](../assets/effects/clips/glitch.mp4)
                 "thumb": "assets/effects/thumbs/gaussian-blur.webp" }] }
 ```
 
-Paths are relative to `docs/Features`. Further fields: `basic` (a generated basic page), `clip` (`assets/effects/clips/<id>.mp4`), `engine` (the shared engine of style effects), `moving` (time-based, so it gets a loop; also looks that move with the playhead, `timelineAnimated`), `presets` (preset names in card order), `presetStrip` (`assets/effects/presets/<id>.webp`), `experimental` and `hidden`. Without the catalog, cards show the page title (or the id) and no picture.
+Paths are relative to `docs/Features`. Further fields: `basic` (a generated basic page), `clip` (`assets/effects/clips/<id>.mp4`), `engine` (the shared engine of style effects), `moving` (time-based, so it gets a loop; also looks that move with the playhead, `timelineAnimated`), `presets` (preset names in card order), `presetStrip` (`assets/effects/presets/<id>.webp`), `presetsClip` (`assets/effects/clips/<id>-presets.mp4`), `experimental` and `hidden`. Without the catalog, cards show the page title (or the id) and no picture.
 
 **Budgets** for pictures, thumbnails and clips: [Style guide](#style-guide). `scripts/docShotWebp.mjs` encodes pictures to fit, `scripts/doc-clip.mjs` clips.
 
@@ -284,7 +289,7 @@ A loop is the clip figure with `docs-compare` added (`doc-clip.mjs` prints it):
 - The tags read "Original" and the page title. `data-before="…"` and `data-after="…"` on the figure name them otherwise, for two effects side by side (`data-before="Box Blur" data-after="Gaussian Blur"`).
 - The alt text (or the video's `aria-label`) describes both sides; the slider itself is announced as "Compare original and Gaussian Blur" (the tags' names).
 - The caption names what changed ("Left: original. Right: Radius 12."); it stays true on GitHub too.
-- Not a compare: generators (alone on black), preset strips and a whole frame beside an enlarged detail (`"layout": "detail"`).
+- Not a compare: generators (alone on black), preset strips and loops, control loops and a whole frame beside an enlarged detail (`"layout": "detail"`).
 
 **Making the pair.** Both tools take `"layout": "compare"` and print the figure:
 
@@ -446,15 +451,25 @@ list per docs page (`scripts/doc-clips/analog.json`):
   `split` (one picture, original left of a thin line) or `detail` (the frame | a 3×
   pixel-for-pixel detail at `detail` [x, y]) – and a seamless loop: the last `loop`
   seconds (default 0.5) fade into the first, so the clip ends on the frame it starts with.
+- A **control clip** is an effect clip with `sweep`: `{ "param", "label", "from", "to", "unit",
+  "decimals" }` keys the parameter from → to → from over the range (a cosine, so it eases at
+  both ends; keys every 0.1 s) and burns the current value in at the bottom left; `"steps": [values]`
+  holds each value for an equal share instead. Its `maxBytes` defaults to 700 KB.
+- A **presets clip** (`"kind": "presets"`) exports the same `range` once per preset the
+  effect declares (read from the registry, a fresh effect each, as the Preset row sets it) and
+  lays them out as a grid (`columns`, default 2 for four; `width` of the whole grid, default
+  960) with each name in a band under its cell, in sync, as one seamless loop.
 - An **operation clip** sets dock split ratios (`dock`), opens Properties → Effects and
   records the page with Chrome's screencast while `steps` drive the real mouse:
   `click` or `move` to visible text ("+ Add Effect", "Glitch"), `type`, `drag` the
   slider of a row label to a value, `pause`. Moves are eased with a slight arc (about
   0.5–1.2 s); a drawn pointer follows them (Playwright shows no cursor), with a yellow
-  ripple on clicks. The clip shows the named dock groups (`panels`), cropped together.
+  ripple on clicks. The clip shows the named dock groups (`panels`), cropped together, or
+  the union of `frame` boxes (`"row:Band Size"`, `"preview:0.2,0,0.8,1"` for a part of the
+  preview). A step that finds no target stops the script with a screenshot of the page.
 
 Each clip becomes `<name>.mp4` (H.264, yuv420p, BT.709, faststart, no audio; the
-CRF rises until it fits `maxBytes`, 1.5 MB by default) and a WebP poster (`poster` seconds into the clip), and the script
+CRF rises until it fits `maxBytes`, 1.5 MB by default, 700 KB for a control clip) and a WebP poster (`poster` seconds into the clip), and the script
 prints the figure:
 
 ```html
@@ -498,7 +513,7 @@ The sync reports, without failing:
 - links to a missing page or to a heading the target page does not have (heading ids as Starlight makes them: the github-slugger rules in `docs-site/scripts/lib/slug.mjs`);
 - pictures without alt text, clips without a poster or label;
 - compare figures whose pair cannot be two equal halves (odd width, implausible halves) or whose poster and clip differ in size;
-- assets over their budget;
+- assets over their budget, and pages whose pictures and posters or whose clips add up to more than the page budget;
 - index rows for missing pages, pages listed twice, pages without a row, unknown directives;
 - redirects that wait, or point nowhere.
 

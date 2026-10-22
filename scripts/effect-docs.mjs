@@ -26,7 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CONTROLS_END, CONTROLS_START, LAB_STILL_SKIP, controlDefault, THUMB_TARGET_BYTES, controlsTable, effectAssets, isBasicPage, labPair, pageFile, planEffectDocs, snapshotRegistry } from './effectDocsCatalog.mjs';
 import { EFFECT_DOC_EXTRAS } from './effectDocsExtras.mjs';
-import { controlParagraphSkeletons, handWrittenPageProblems } from './effectDocsPageCheck.mjs';
+import { controlParagraphSkeletons, handWrittenPageProblems, presetsVisual } from './effectDocsPageCheck.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const featuresDir = path.join(root, 'docs', 'Features');
@@ -79,7 +79,8 @@ if (controlsFor !== undefined) {
   console.log(`${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`);
   console.log(`\nParagraphs for a hand-written page (## Controls; keep each limits sentence as it is):\n\n${controlParagraphSkeletons(effect)}`);
   if (effect.presets.length) {
-    console.log(`\nPresets (## Presets, one bold paragraph each; strip: node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json --only ${effect.id}):`);
+    const visual = presetsVisual(effect);
+    console.log(`\nPresets (## Presets, one bold paragraph each; ${visual.label} ../${visual.file}: ${visual.command}):`);
     const shown = (key, value) => {
       const param = effect.params.find((entry) => entry.key === key);
       return param ? `${param.label} ${controlDefault({ ...param, default: value })}` : `${key} ${value}`;
