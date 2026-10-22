@@ -6,6 +6,8 @@
 //     Zoom is exponential, so every wheel movement feels equally fast at any size, and a faster wheel
 //     zooms faster. Dragging with the left button moves the picture; two fingers pinch and move it.
 //   - Keys: Esc closes, + and - zoom, 0 fits, the arrows move. A double click zooms in there or fits.
+//   - The lightbox is one step in the browser history: the mouse's back button (or a phone's back
+//     gesture) closes it instead of leaving the page.
 // Without JavaScript the link still opens the full-size file.
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const SVG = 'http://www.w3.org/2000/svg';
@@ -17,6 +19,16 @@ function wheelPixels(event) {
   const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? innerHeight : 1;
   // A trackpad pinch arrives as a wheel with ctrlKey and small deltas: give it more weight.
   return event.deltaY * unit * (event.ctrlKey ? 6 : 1);
+}
+
+/** Up to two sentences of the name's paragraph (else the caption's note); a closing "… default …"
+    sentence becomes the small limits line. */
+function noteText(detail = '', captionNote = '') {
+  const sentences = detail.split(/(?<=[.!?])\s+(?=[A-Z0-9−–-])/u).filter(Boolean);
+  const limits = sentences.length > 1 && /\bdefault\b/iu.test(sentences.at(-1)) ? sentences.pop() : '';
+  let text = sentences.slice(0, 2).join(' ');
+  if (text.length > 260) text = `${text.slice(0, 257).replace(/\s+\S*$/u, '')} …`;
+  return { text: text || captionNote, limits };
 }
 
 function open(link) {
@@ -77,10 +89,12 @@ function open(link) {
     const note = document.createElement('button');
     note.type = 'button';
     note.className = 'docs-lightbox-note';
-    note.innerHTML = '<span class="docs-lightbox-badge"></span><span class="docs-lightbox-note-text"><strong></strong><span></span></span>';
+    note.innerHTML = '<span class="docs-lightbox-badge"></span><span class="docs-lightbox-note-text"><strong></strong><span></span><small></small></span>';
     note.querySelector('.docs-lightbox-badge').textContent = group.dataset.callout;
     note.querySelector('strong').textContent = group.dataset.label || `Callout ${group.dataset.callout}`;
-    note.querySelector('.docs-lightbox-note-text > span').textContent = group.dataset.note || '';
+    const { text, limits } = noteText(group.dataset.detail, group.dataset.note);
+    note.querySelector('.docs-lightbox-note-text > span').textContent = text;
+    note.querySelector('small').textContent = limits;
     notes.push({ note, group, circle, x, y });
   }
   // Each note goes to the side of its callout; when one side would hold far more, the callouts
@@ -92,8 +106,13 @@ function open(link) {
     from.sort((a, b) => Math.abs(a.x - 0.5) - Math.abs(b.x - 0.5));
     to.push(from.shift());
   }
-  for (const item of left.toSorted((a, b) => a.y - b.y)) sides.left.append(item.note);
-  for (const item of right.toSorted((a, b) => a.y - b.y)) sides.right.append(item.note);
+  if (matchMedia('(max-width: 50rem)').matches) {
+    // Phones: one swipeable strip of notes along the bottom, top to bottom in callout order.
+    for (const item of notes.toSorted((a, b) => a.y - b.y)) sides.left.append(item.note);
+  } else {
+    for (const item of left.toSorted((a, b) => a.y - b.y)) sides.left.append(item.note);
+    for (const item of right.toSorted((a, b) => a.y - b.y)) sides.right.append(item.note);
+  }
   box.classList.toggle('has-left', sides.left.childElementCount > 0);
   box.classList.toggle('has-right', sides.right.childElementCount > 0);
   if (!notes.length) {
@@ -325,18 +344,24 @@ function open(link) {
     clampPan();
     apply();
   };
-  function close() {
+  function close(fromHistory = false) {
+    if (!box.isConnected) return;
     cancelAnimationFrame(frame);
     removeEventListener('keydown', keys, true);
     removeEventListener('resize', resize);
+    removeEventListener('popstate', onBack);
+    if (!fromHistory && history.state?.docsLightbox) history.back();
     box.remove();
     document.documentElement.classList.remove('docs-lightbox-open');
     if (opener instanceof HTMLElement) opener.focus({ preventScroll: true });
   }
-  box.querySelector('.docs-lightbox-close').addEventListener('click', close);
+  const onBack = () => close(true);
+  box.querySelector('.docs-lightbox-close').addEventListener('click', () => close());
   // A click on the dark space around the notes closes as well.
   box.addEventListener('click', (event) => { if (event.target === box || event.target.matches('.docs-lightbox-notes')) close(); });
   box.querySelector('.docs-lightbox-fit').addEventListener('click', () => zoomTo(Math.log(fit), null));
+  history.pushState({ ...history.state, docsLightbox: true }, '');
+  addEventListener('popstate', onBack);
   addEventListener('keydown', keys, true);
   addEventListener('resize', resize);
 

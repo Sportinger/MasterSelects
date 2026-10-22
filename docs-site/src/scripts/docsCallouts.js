@@ -207,6 +207,13 @@ for (const svg of content?.querySelectorAll('.docs-shot-stage > svg.docs-shot-ov
     let words = label ? boldWords(section, label) : [];
     if (label && !words.length) words = boldWords([content], label).slice(0, 1);
     item.words = [...refs.filter((ref) => ref.dataset.callout === item.number), ...words];
+    // The paragraph that explains the name (without the name itself) feeds the lightbox notes.
+    const paragraph = words[0]?.closest('p, li');
+    if (paragraph) {
+      const whole = paragraph.textContent.trim(), name = words[0].textContent.trim();
+      const detail = whole.startsWith(name) ? whole.slice(name.length).replace(/^[\s–—:-]+/u, '') : whole;
+      item.group.dataset.detail = detail.charAt(0).toUpperCase() + detail.slice(1);
+    }
     for (const word of item.words) {
       word.classList.add('docs-callout-word');
       word.addEventListener('pointerenter', (event) => { if (event.pointerType !== 'touch') activate(item, word); });

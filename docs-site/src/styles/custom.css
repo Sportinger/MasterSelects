@@ -407,30 +407,27 @@
    wheel and movable by dragging; the callout names and notes stand left and right of it. */
 .docs-lightbox-open { overflow: hidden; }
 .docs-lightbox {
-  --docs-lightbox-left: 0;
-  --docs-lightbox-right: 0;
   position: fixed;
   inset: 0;
   z-index: 1000;
-  display: grid;
-  grid-template-columns: var(--docs-lightbox-left) minmax(0, 1fr) var(--docs-lightbox-right);
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas: 'bar bar bar' 'left view right';
   background: #0b0c10;
   color: #e8e9ec;
   opacity: 0;
   transition: opacity 0.18s ease;
 }
 .docs-lightbox.is-open { opacity: 1; }
-.docs-lightbox.has-left { --docs-lightbox-left: clamp(12rem, 19vw, 19rem); }
-.docs-lightbox.has-right { --docs-lightbox-right: clamp(12rem, 19vw, 19rem); }
 .docs-lightbox-bar {
-  grid-area: bar;
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.6rem 0.9rem;
+  background: linear-gradient(rgb(11 12 16 / 0.85), rgb(11 12 16 / 0));
+  pointer-events: none;
 }
+.docs-lightbox-bar > * { pointer-events: auto; }
 .docs-lightbox-hint { margin-right: auto; font-size: 0.85rem; color: #9aa0ab; }
 .docs-lightbox-caption { margin: 0 auto 0 0; font-size: 0.9rem; color: #c9ccd4; }
 .docs-lightbox-bar .docs-lightbox-caption + .docs-lightbox-hint { display: none; }
@@ -452,8 +449,8 @@
 .docs-lightbox button:focus { outline: none; }
 .docs-lightbox button:focus-visible { outline: 2px solid #ffd54a; outline-offset: 2px; }
 .docs-lightbox-view {
-  grid-area: view;
-  position: relative;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
   cursor: grab;
   touch-action: none;
@@ -482,23 +479,30 @@
 .docs-lightbox-stage .docs-shot-number-text { font-size: calc(22px * var(--docs-lightbox-k, 1)); }
 .docs-lightbox-stage .docs-shot-arrow { stroke-width: calc(4px * var(--docs-lightbox-k, 1)); }
 .docs-lightbox-notes {
+  position: absolute;
+  top: 3.5rem;
+  bottom: 1rem;
+  z-index: 1;
+  width: clamp(15rem, 22vw, 22rem);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 1rem 0.8rem;
+  gap: 0.55rem;
   overflow-y: auto;
+  pointer-events: none;
 }
-.docs-lightbox-notes--left { grid-area: left; }
-.docs-lightbox-notes--right { grid-area: right; }
+.docs-lightbox-notes--left { left: 1rem; }
+.docs-lightbox-notes--right { right: 1rem; }
 .docs-lightbox-note {
   display: flex;
   align-items: flex-start;
   gap: 0.7rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 10px;
+  background: rgb(11 12 16 / 0.8);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
   color: inherit;
   font: inherit;
   text-align: left;
@@ -506,7 +510,7 @@
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .docs-lightbox-notes--left .docs-lightbox-note { flex-direction: row-reverse; text-align: right; }
-.docs-lightbox-note.is-active { background: rgb(255 213 74 / 0.12); border-color: rgb(255 213 74 / 0.45); }
+.docs-lightbox-note.is-active { background: rgb(40 34 12 / 0.88); border-color: rgb(255 213 74 / 0.6); }
 .docs-lightbox-badge {
   flex: none;
   display: grid;
@@ -521,7 +525,9 @@
 }
 .docs-lightbox-note-text { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.92rem; line-height: 1.35; }
 .docs-lightbox-note-text strong { color: #fff; font-size: 1rem; }
-.docs-lightbox-note-text span { color: #b4b8c2; }
+.docs-lightbox-note-text span { color: #c3c7d0; }
+.docs-lightbox-note-text small { color: #8f95a1; font-size: 0.8rem; }
+.docs-lightbox-note-text small:empty, .docs-lightbox-note-text span:empty { display: none; }
 .docs-lightbox-line {
   position: fixed;
   inset: 0;
@@ -545,15 +551,30 @@
 }
 .docs-lightbox-line circle { fill: #ffd54a; }
 @media (max-width: 50rem) {
-  .docs-lightbox,
-  .docs-lightbox.has-left,
-  .docs-lightbox.has-right {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
-    grid-template-areas: 'bar' 'view' 'left' 'right';
+  /* Phones: the notes form one swipeable strip along the bottom, over the picture. */
+  .docs-lightbox-notes--left {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: 34vh;
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0.6rem 0.6rem;
+    scroll-snap-type: x mandatory;
   }
-  .docs-lightbox-notes { justify-content: flex-start; max-height: 24vh; padding: 0.4rem 0.8rem; }
-  .docs-lightbox-notes--left .docs-lightbox-note { flex-direction: row; text-align: left; }
+  .docs-lightbox-notes--right { display: none; }
+  .docs-lightbox-notes--left .docs-lightbox-note {
+    flex: 0 0 min(80vw, 20rem);
+    flex-direction: row;
+    text-align: left;
+    overflow-y: auto;
+    scroll-snap-align: start;
+  }
   .docs-lightbox-hint { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
