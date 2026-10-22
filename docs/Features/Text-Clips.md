@@ -1,6 +1,6 @@
 # Text Clips
 
-A text clip puts a title, a caption or any text into the picture. Add one from the Media panel's **Add** menu or by right-clicking empty timeline space, then type and style it in the clip's **Text** tab in Properties; animation: [Keyframes](./Keyframes.md), spoken-word captions: [Captions](./Captions.md).
+A text clip puts a title, a caption or any text into the picture. Add one by right-clicking empty space on a video track → **Add Layer → Text**, then type and style it in the clip's **Text** tab in Properties; animation: [Keyframes](./Keyframes.md), spoken-word captions: [Captions](./Captions.md).
 
 Text clips are drawn to a Canvas2D surface, uploaded as a GPU texture and then treated like any other layer for compositing, effects, masks, transforms and keyframes.
 

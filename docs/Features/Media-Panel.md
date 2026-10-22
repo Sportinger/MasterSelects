@@ -1,8 +1,8 @@
 # Media Panel
 
-The Media panel holds everything your project uses: imported files, compositions, text, solids, folders and generated media. Import with the **Import Media** button in its header or by dropping files onto it, then drag items onto the [Timeline](./Timeline.md); proxies for heavy video: [Proxy System](./Proxy-System.md).
+The Media panel holds everything your project uses: imported files, compositions, folders and generated media. Import with the **Import Media** button in its header or by dropping files onto it, then drag items onto the [Timeline](./Timeline.md); proxies for heavy video: [Proxy System](./Proxy-System.md).
 
-It has three views (Classic list, Icons and Board), folders, and an **Add** menu for compositions, text, solids and other generated items.
+It has three views (Classic list, Icons and Board), folders, and a **+ Add** menu for compositions, folders, live inputs and Gaussian splats. Text, solids, blank clips, 3D and motion layers are made on the timeline: right-click empty space on a video track → **Add Layer**.
 
 ---
 
@@ -52,20 +52,15 @@ Click the **Import** button in the panel header. Uses the File System Access API
 
 On touch-first devices, including Android and iPadOS/iOS, the visible Import control is bound directly to the native file input so the browser keeps the required user activation and opens it with one tap. Its media-only filter offers the system photo/video library instead of forcing the Files browser. MasterSelects receives only the photos or videos the user explicitly selects; the browser never gets unrestricted device-file access.
 
-#### Add Dropdown
-Click the **+ Add** button for creating new items:
-- **Composition** - New composition (uses active comp's output resolution)
-- **Folder** - New folder for organization
-- **Text** - New text item (placed in auto-created "Text" folder)
-- **Solid** - New solid color item (placed in auto-created "Solids" folder)
-- **Live Input...** - Create a camera, display, or composition-feedback input
-- **3D** submenu - Mesh primitives, 3D Text, Camera, Light, 3D Effector, and Gaussian Splat import
-  - Mesh primitives: Cube, Sphere, Plane, Cylinder, Torus, Cone (placed in auto-created "Meshes" folder)
-  - 3D Effectors are placed in an auto-created "Effectors" folder
-- **Motion Null** - Creates a motion null on a video track
-- **Adjustment Layer** - Creates an adjustment clip on a video track
-- **Math Scene** - New math scene item (placed in auto-created "Math Scenes" folder)
-- **Motion Shape** - Rectangle, Ellipse, Polygon, or Star (placed in auto-created "Motion Shapes" folder)
+#### Add Menu
+The **+ Add** button in the header and the **Add** submenu of the right-click menu hold the same entries:
+- **Composition**: a new composition (the Composition Settings dialog opens first)
+- **Folder**: a new folder
+- **Import files...**: the same picker as the Import button
+- **Live Input...**: a camera, display or composition-feedback input
+- **Import Gaussian Splat...**: a splat file as a 3D item
+
+Text, Solid and Blank Clip layers, and the **3D** and **Motion** layers, are added on the timeline: right-click empty space on a video track → **Add Layer**. See [Timeline](./Timeline.md) and [Text Clips](./Text-Clips.md).
 
 #### Drag and Drop
 - Drag files or folders from the OS anywhere over the open editor: a large blue overlay covers the workspace.
@@ -128,22 +123,8 @@ When supported (Chrome/Edge):
 | < 500MB | Full thumbnails generated |
 | > 500MB | Thumbnail generation skipped |
 
-### Solid Color Items
-- Created via Add dropdown or context menu
-- Uses active composition dimensions (fallback: 1920x1080)
-- Default duration: 5 seconds
-- Color picker for customization via Solid Settings dialog
-- Placed in auto-created "Solids" folder
-- Drag to timeline to create solid color clips
-
-### Text Items
-- Created via Add dropdown
-- Default text: "New Text", font: Arial 48px white
-- Default duration: 5 seconds
-- Placed in auto-created "Text" folder
-- Drag to timeline to create text clips
-- **Note:** These are defaults for Media Panel text items (Arial, 48px). Timeline text clips use Arial, 72px (from `DEFAULT_TEXT_PROPERTIES` in `stores/timeline/constants.ts`).
-- See [Text Clips](./Text-Clips.md) for full details
+### Solid and Text Items
+Solid and text items that older projects keep in their **Solids** and **Text** folders still work: drag them onto the timeline to make clips. New solids and texts are added on the timeline (right-click empty space on a video track → **Add Layer**); a solid item's color opens in the Solid Settings dialog. See [Text Clips](./Text-Clips.md).
 
 ---
 
@@ -192,10 +173,10 @@ Image and video-capable media items show a cursor-following preview tooltip only
 - Drag files or folders from the OS onto a group to import directly into that folder
 - OS file drops on the Board canvas place the imported top-level files at the drop point instead of waiting for auto-pack placement
 - Drag existing Media Panel items onto groups to move them between folders
-- Context-menu Add actions in Board view place new compositions, folders, text, solids, meshes, cameras, splat effectors, math scenes, and motion shapes at the clicked canvas point
+- Context-menu Add actions in Board view place new compositions, folders, live inputs and splats at the clicked canvas point
 - Cropped image results are placed beside their original Board node when the Board is open
 - Switching to or from Board view morphs folder groups from/to their Classic rows or Icons thumbnails using the same 500ms view transition as media items
-- The board uses the same Add dropdown and context menu as Classic view; new folders appear immediately in Classic, Icons, and Board view
+- The board uses the same **+ Add** menu and context menu as Classic view; new folders appear immediately in Classic, Icons, and Board view
 - The **Generate** board action expands the Media Panel's bottom-right AI generator tray; generated results still import through the normal Media Store path
 
 ### AI Generator Tray
@@ -228,8 +209,8 @@ Video thumbnails are generated per source media file, not per clip instance.
 ## Folder Organization
 
 ### Creating Folders
-1. Add dropdown -> Folder
-2. Or right-click -> New Folder
+1. **+ Add → Folder**
+2. Or right-click → **Add → Folder**
 3. Folders are created expanded by default
 
 ### Folder Features
@@ -265,7 +246,7 @@ Deleting imported media files from the Media Panel performs a project-wide clean
 ## Compositions
 
 ### Creating Compositions
-1. Add dropdown -> Composition
+1. **+ Add → Composition**
 2. The Composition Settings dialog opens before an empty composition is created.
 3. Width, height, frame rate, and duration can be confirmed or customized.
 4. Starts with two Video tracks and one Audio track.
