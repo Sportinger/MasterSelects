@@ -29,7 +29,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Blacklight** – medium blue and fluorescent pink, breathing slowly: a poster under ultraviolet light. The stage turns deep violet and the figure glows pink-white out of it.
 
-**Neon Sign** – teal and fluorescent coral in fine dots, with a quicker, livelier pulse: the figure stays pale and clear on a dark teal stage, with a coral sheen around its light parts. The calmest glow of the four.
+**Neon Sign** – teal and fluorescent coral in fine dots, the softest glow of the four, breathing a little faster than Blacklight: the figure stays pale and clear on a dark teal stage, with a coral sheen around its light parts.
 
 **Embers** – black and fluorescent coral in coarse dots, with a slow, strong glow: the figure glows coral in a smoky, almost black print, and the haze around it breathes. Calm and heavy, good for firelight and night scenes.
 
@@ -77,7 +77,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Registration from 0 to 16 px and back.</figcaption>
 </figure>
 
-**Registration** – how far the two inks slip apart, like two drums of the press that did not line up. At 0 they print exactly on top of each other; 2 to 4 px gives the slight misprint of a real risograph; 10 and more lets the glow ink stand beside every edge of the figure as a glowing fringe. The shadow ink moves up and to the left, the glow ink down and to the right, half the distance each. 0 to 32 px, default 3 px.
+**Registration** – how far the two inks slip apart, like two drums of the press that did not line up. At 0 they print exactly on top of each other; 2 to 4 px gives the slight misprint of a real risograph; 10 and more lets the glow ink stand beside every edge of the figure as a glowing fringe. The shadow ink moves up and to the left, the glow ink down and to the right, half the distance each; far above 30 px the two prints come apart, a range kept for projects saved with the earlier Riso Glow. 0 to 80 px, default 3 px.
 
 ### Glow & Pulse
 

@@ -6,7 +6,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-compare docs-shot--float-left">
 
-![The dancer's face, shoulders and raised arm, original left and with Dithering right: skin, hair and dress turn into a fine checked pattern of a few flat colours, and the dark stage behind her becomes black with sparse grey and red pixels](../assets/effects/dither.webp)
+![The dancer's face, shoulders and raised arm, original left and with Dithering right: skin, hair and dress turn into a fine checked pattern of a few flat colours, and the dark stage becomes a fine checker of grey, red and olive pixels](../assets/effects/dither.webp)
 
 <figcaption>Left: original. Right: Dithering at its default settings, a detail at twice the size.</figcaption>
 </figure>
@@ -23,9 +23,9 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The whole dancer four times, once per preset: Eight Colours as a light figure in fine coloured dots on black, Poster in hard steps of few colours with a coarse checker on the stage, Game Screen in chunky pixels of a few colours, and Big Pixels as a coarse mosaic in which the figure still reads](../assets/effects/presets/dither.webp)
+![The dancer's upper body four times, once per preset: Eight Colours as a light figure in fine dots of pure red, yellow and white on black, Poster in a coarse checker of few colours over the stage and the figure, Game Screen in chunky pixels of a few colours, and Big Pixels as a coarse mosaic in which face and arms still read](../assets/effects/presets/dither.webp)
 
-<figcaption>The four presets on the whole figure.</figcaption>
+<figcaption>The four presets on the upper body, at full size: one pixel of a 1080p frame per screen pixel.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -45,18 +45,18 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Dithering card: Preset menu showing Game Screen, Pixel Size under Pattern, Levels and Amount under Color, beside a strip of the preview turned into chunky pixels of a few colours](../assets/effects/editor/dither-inspector.webp)
+![Properties, Effects with a Dithering card: Preset menu showing Game Screen, Pixel Size under Pattern, Levels and Amount under Color, beside the preview of the dancer in chunky pixels of a few colours, the dark stage a grid of coloured pixels](../assets/effects/editor/dither-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 600" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 438" aria-hidden="true" focusable="false">
 <defs><marker id="dither-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#dither-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M575 387 L659 387" marker-end="url(#dither-inspector-arrow)" />
-<circle class="docs-shot-number" cx="575" cy="387" r="18" /><text x="575" y="387" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M601 503 L685 503" marker-end="url(#dither-inspector-arrow)" />
-<circle class="docs-shot-number" cx="601" cy="503" r="18" /><text x="601" y="503" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M592 540 L676 540" marker-end="url(#dither-inspector-arrow)" />
-<circle class="docs-shot-number" cx="592" cy="540" r="18" /><text x="592" y="540" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M663 206 L747 206" marker-end="url(#dither-inspector-arrow)" />
+<circle class="docs-shot-number" cx="663" cy="206" r="18" /><text x="663" y="206" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M670 283 L754 283" marker-end="url(#dither-inspector-arrow)" />
+<circle class="docs-shot-number" cx="670" cy="283" r="18" /><text x="670" y="283" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M689 367 L773 367" marker-end="url(#dither-inspector-arrow)" />
+<circle class="docs-shot-number" cx="689" cy="367" r="18" /><text x="689" y="367" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M682 395 L766 395" marker-end="url(#dither-inspector-arrow)" />
+<circle class="docs-shot-number" cx="682" cy="395" r="18" /><text x="682" y="395" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -65,11 +65,11 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Pattern
 
-**Pixel Size** – how large the pixels are. Each pixel shows one colour of the picture, and its neighbours form the checked pattern, so the pattern grows with it. 1 px gives a fine grain that blends into a photo from a few metres away, 3 to 6 px a clear retro screen, 12 and more turns a figure into a mosaic. It counts pixels of a 1080p picture, so a 4K export shows the same pattern as the preview, and it always draws whole pixels: where a size does not fit the frame, the card says what renders. 1 to 24 px, default 3 px.
+**Pixel Size** – how large the pixels are. Each pixel shows one colour of the picture, and its neighbours form the checked pattern, so the pattern grows with it. 1 px gives a fine grain that blends into a photo from a few metres away, 3 to 6 px a clear retro screen, 12 and more turns a figure into a mosaic. It counts pixels of a 1080p picture, so a 4K export shows the same pattern as the preview, and it always draws whole pixels: where a size does not fit the frame, the card says what renders. Below 1 px (from keyframes or a tool) it renders 1 px, and the card says so. 1 to 24 px, default 3 px.
 
 ### Color
 
-**Levels** – how many steps each colour channel has, and so how many colours the picture may use: 2 gives black, white and six pure colours, 4 gives 64 colours, 6 the 216 of the early web. Few levels look loud and graphic, many levels quiet and close to the picture. The pattern mixes neighbouring steps so that, from a distance, every part keeps its brightness. On a dark stage that is not quite black this shows as a sparse, coloured checker; more Levels make it finer and calmer. Below 2 it renders 2, and the card says so. 2 to 16, default 4.
+**Levels** – how many steps each colour channel has, and so how many colours the picture may use: 2 gives black, white and six pure colours, 4 gives 64 colours, 6 the 216 of the early web. Few levels look loud and graphic, many levels quiet and close to the picture. The pattern mixes neighbouring steps so that, from a distance, every part keeps its brightness. A dark stage that is not quite black turns into a visible checker of grey and coloured pixels over the whole backdrop, the most visible thing on a projection. More Levels make it finer and calmer; grading the stage to true black before Dithering removes it. Below 2 it renders 2, and the card says so. 2 to 16, default 4.
 
 **Amount** – how much of the dithered picture covers the original. At 1 there are only the few colours; 0.5 lays the pattern softly over the picture's own colours; 0 switches it off. Keyframe it to let a scene turn into pixels on a cue. 0 to 1, default 1.
 
@@ -243,7 +243,7 @@ The picture averaged over boxes of half a cell, in linear light and weighted by 
 
 **sRGB to Linear** – the lower step (Divide by the Steps) as light; the upper step is built the same way, in the folder.
 
-**Divide** – the cell's light above the lower step, divided by the light between the two steps (Step Span): the Upper Share, from 0 to 1. Measured in light, not in screen values, so the pattern keeps the picture's brightness. Because the steps are equal in screen values, the first step above black is already fairly bright in light: a dark, not quite black stage becomes a sparse checker of coloured pixels on black instead of a flat dark tone.
+**Divide** – the cell's light above the lower step, divided by the light between the two steps (Step Span): the Upper Share, from 0 to 1. Measured in light, not in screen values, so the pattern keeps the picture's brightness. Because the steps are equal in screen values, the first step above black is already fairly bright in light: a dark, not quite black stage becomes a visible checker of grey and coloured pixels instead of a flat dark tone.
 
 ### Dither
 

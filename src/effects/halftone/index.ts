@@ -114,8 +114,9 @@ export const risoGlow = createCatalogEffect({
   // Riso's print (same parameter ids) with a fluorescent Glow Ink that breathes. Card: Dot Size and Registration under
   // Pattern, Glow and Speed under Glow & Pulse, then the two inks and Amount under Color.
   params: {
-    // How far the two inks slip apart, in 1080p pixels (0: in register). Effects saved without a value had 14.
-    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 32, step: 0.5, unit: ' px', renderMin: 0, group: 'Pattern', legacyDefault: 14 },
+    // How far the two inks slip apart, in 1080p pixels (0: in register). Effects saved without a value had 14; the range
+    // up to 80 is kept for saved projects (the earlier Riso Glow allowed 80), so a saved slip stays in the card and tools.
+    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 80, step: 0.5, unit: ' px', renderMin: 0, group: 'Pattern', legacyDefault: 14 },
     // The cells of both dot screens, in 1080p pixels. A graph saved before Dot Size does not read it (graphOnly).
     dotSize: { type: 'number', label: 'Dot Size', default: 6, min: 2, max: 40, step: 1, unit: ' px', renderMin: 2, graphOnly: true, group: 'Pattern' },
     // How brightly the Glow Ink shines at the top of its pulse (0: a plain two-ink print). Reaches the twin through the Angle slot.

@@ -73,7 +73,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Pattern
 
-**Dot Size** – how far apart the dots sit, and so how large the largest dot gets. 4–8 px gives a fine press screen that reads as a photo from a few metres away, 14 a clear pattern of dots, 30 and more turns a figure into a graphic of large circles. Every cell of the grid prints one round dot, so detail smaller than a cell disappears. It counts pixels of a 1080p picture, so a 4K export shows the same dots as the preview, only sharper. 2 to 80 px, default 14 px.
+**Dot Size** – how far apart the dots sit, and so how large the largest dot gets. 4–8 px gives a fine press screen that reads as a photo from a few metres away, 14 a clear pattern of dots, 30 and more turns a figure into a graphic of large circles. Every cell of the grid prints one round dot, so detail smaller than a cell disappears. It counts pixels of a 1080p picture, so a 4K export shows the same dots as the preview, only sharper. Below 2 px (from keyframes or a tool) it renders 2 px, and the card says so. 2 to 80 px, default 14 px.
 
 **Angle** – how the grid of dots is turned, counter-clockwise. 0° gives straight rows and columns, 45° the diagonal screen of black-and-white newspapers, 15° or 75° looks like one ink of a colour print. The dots stay round at every angle. The grid looks the same every 90°, so 45° and −45° match. −180 to 180°, default 0°.
 

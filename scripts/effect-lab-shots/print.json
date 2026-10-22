@@ -6,7 +6,7 @@
    "caption": "Left: original. Right: Halftone at its default settings."},
   {"name": "dither", "out": "docs/Features/assets/effects/dither.webp", "image": "dancer_stage", "width": 3840, "crop": [1440, 220, 800, 880],
    "layout": "compare", "outWidth": 1600, "left": {"effect": "original"}, "right": {"effect": "dither", "params": {}},
-   "alt": "The dancer's face, shoulders and raised arm, original left and with Dithering right: skin, hair and dress turn into a fine checked pattern of a few flat colours, and the dark stage behind her becomes black with sparse grey and red pixels",
+   "alt": "The dancer's face, shoulders and raised arm, original left and with Dithering right: skin, hair and dress turn into a fine checked pattern of a few flat colours, and the dark stage becomes a fine checker of grey, red and olive pixels",
    "caption": "Left: original. Right: Dithering at its default settings, a detail at twice the size."},
   {"name": "riso", "out": "docs/Features/assets/effects/riso.webp", "image": "dancer_stage", "width": 3840, "crop": [1360, 120, 1200, 1320],
    "maxBytes": 120000, "layout": "compare", "outWidth": 1600, "left": {"effect": "original"}, "right": {"effect": "riso", "params": {}},
@@ -14,7 +14,7 @@
    "caption": "Left: original. Right: Riso at its default settings, a detail."},
   {"name": "riso-glow", "out": "docs/Features/assets/effects/riso-glow.webp", "image": "dancer_stage", "width": 1920, "crop": [0, 40, 1240, 1000],
    "layout": "compare", "outWidth": 1600, "left": {"effect": "original"}, "right": {"effect": "riso-glow", "params": {}, "times": [0]},
-   "alt": "The dancer and the lamp on a dark stage, original left and with Riso Glow right: a print of pink and indigo dots on a deep plum ground, where her skin, dress and the lamp give off a soft pink glow",
+   "alt": "The dancer and the lamp on a dark stage, original left and with Riso Glow right: a print of pink and indigo dots on a deep indigo ground, where her skin, dress and the lamp give off a soft pink glow",
    "caption": "Left: original. Right: Riso Glow at its default settings, at the top of its pulse."},
   {"name": "paper-print", "out": "docs/Features/assets/effects/paper-print.webp", "image": "dancer_stage", "width": 1920, "crop": [600, 120, 640, 760],
    "layout": "compare", "outWidth": 1280, "left": {"effect": "original"}, "right": {"effect": "paper-print", "params": {}},
@@ -23,8 +23,8 @@
  ],
  "strips": [
   {"effect": "halftone", "image": "dancer_stage", "width": 1920, "crop": [440, 30, 1040, 1040], "cellWidth": 520, "columns": 3},
-  {"effect": "dither", "image": "dancer_stage", "width": 1920, "crop": [440, 30, 1040, 1040], "cellWidth": 520, "columns": 2},
-  {"effect": "riso", "image": "dancer_stage", "width": 1920, "crop": [440, 30, 1040, 1040], "cellWidth": 520, "columns": 3, "maxBytes": 120000},
+  {"effect": "dither", "image": "dancer_stage", "width": 1920, "crop": [720, 110, 460, 460], "cellWidth": 460, "columns": 2},
+  {"effect": "riso", "image": "dancer_stage", "width": 1920, "crop": [760, 120, 340, 340], "cellWidth": 340, "columns": 3, "maxBytes": 150000},
   {"effect": "paper-print", "image": "dancer_stage", "width": 1920, "crop": [440, 30, 1040, 1040], "cellWidth": 520, "columns": 2}
  ]
 }

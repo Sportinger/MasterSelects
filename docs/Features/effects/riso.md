@@ -23,9 +23,9 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The whole dancer five times, once per preset: Zine in blue and pink dots with pink fringes on a violet stage, Postcard in teal and red on a dark teal stage, Art Print in fine green and pink dots on a dark aubergine stage, Gig Poster in bold black and red dots, and Off Register in large burgundy dots with aqua fringes beside every edge on navy](../assets/effects/presets/riso.webp)
+![The dancer's upper body five times, once per preset: Zine in blue and pink dots with pink fringes on a violet stage, Postcard in teal and red on a dark teal stage, Art Print in fine green and pink dots on a dark aubergine stage, Gig Poster in bold black and red dots, and Off Register in large burgundy dots with aqua fringes beside every edge on navy](../assets/effects/presets/riso.webp)
 
-<figcaption>The five presets on the whole figure.</figcaption>
+<figcaption>The five presets on the upper body, at full size: one pixel of a 1080p frame per screen pixel.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
