@@ -19,7 +19,7 @@ describe('Dither image graphs', () => {
 
   it('matches the four-level Bayer quantization order', () => {
     const params = { scale: 3, amount: .72 }, uv: [number, number] = [.63, .41], resolution: [number, number] = [64, 37];
-    const color = sample(uv), threshold = bayer4([uv[0] * resolution[0] / Math.max(params.scale, 1), uv[1] * resolution[1] / Math.max(params.scale, 1)]);
+    const color = sample(uv), cell = Math.max(Math.round(Math.max(params.scale, 1) * (Math.min(...resolution) / 1080)), 1), threshold = bayer4([uv[0] * resolution[0] / cell, uv[1] * resolution[1] / cell]);
     const expected = color.slice(0, 3).map(value => mix(value, Math.floor(Math.min(.999, Math.max(0, value + threshold - .5)) * 4) / 3, params.amount)).concat(color[3]);
     const actual = evaluateImageOperatorPlan(compileImageOperatorGraph(createDefaultDitherGraph('dither'), params), [0, 0, 0, 0], { uv, resolution, sampleImage: sample });
     expected.forEach((value, index) => expect(actual[index]).toBeCloseTo(value, 10));

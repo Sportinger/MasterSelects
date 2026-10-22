@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { halftone, patternHalftone } from '../../src/effects/halftone';
 import { createDefaultHalftoneGraph } from '../../src/services/operators/halftoneEffectGraphs';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+/** Pattern sizes count pixels of a 1080p frame (patternReferenceFrame.ts): size × shorter side / 1080, at least one pixel. */
+const px = (size: number, resolution: readonly number[]) => Math.max(size * (Math.min(resolution[0], resolution[1]) / 1080), 1);
 
 const sample = ([u, v]: [number, number]): [number, number, number, number] => [u, v, .2 + u * .3, .25 + v * .5];
 const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 function reference(type: 'halftone' | 'pattern-halftone', uv: [number, number], params: Record<string, number | string>) {
   const angle = Number(params.angle) * Math.PI / 180, x = uv[0] - .5, y = uv[1] - .5;
   const rotated: [number, number] = [x * Math.cos(angle) - y * Math.sin(angle) + .5, x * Math.sin(angle) + y * Math.cos(angle) + .5];
-  const cell = rotated.map((value, axis) => value * [64, 37][axis] / Math.max(Number(params.scale), 2) % 1 - .5) as [number, number];
+  const cell = rotated.map((value, axis) => value * [64, 37][axis] / px(Math.max(Number(params.scale), 2), [64, 37]) % 1 - .5) as [number, number];
   const color = sample(uv), tone = color[0] * .2126 + color[1] * .7152 + color[2] * .0722;
   const radius = type === 'halftone' ? Math.sqrt(Math.max(0, 1 - tone)) * .68 : (1 - tone) * .72;
   const shape = params.shape, distance = type === 'halftone' || shape === 'circle' ? Math.hypot(...cell)

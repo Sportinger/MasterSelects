@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { measureInReferenceFrame } from './patternReferenceFrame';
 
 const node = (id: string, operator: string, bindings: BoundOperatorNode['bindings'] = {}, constants?: BoundOperatorNode['constants']): BoundOperatorNode =>
   ({ id, operator, operatorVersion: 1, bindings, ...(constants ? { constants } : {}) });
@@ -29,6 +30,7 @@ export function createDefaultPixelPosterGraph(): EffectOperatorGraph {
     edge('four-rgb', 'rgb', 'poster', 'b'), edge('sampled-split', 'rgb', 'mixed', 'a'), edge('poster', 'value', 'mixed', 'b'),
     edge('amount', 'value', 'mixed', 't'), edge('mixed', 'value', 'combine', 'rgb'), edge('sampled-split', 'alpha', 'combine', 'alpha'),
     edge('combine', 'image', 'output', 'image')];
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes, edges,
-    layout: Object.fromEntries(nodes.map((item, index) => [item.id, { x: (index % 9) * 340, y: Math.floor(index / 9) * 360 }])) };
+  // Block Size counts pixels of a 1080p frame (patternReferenceFrame.ts).
+  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes, edges,
+    layout: Object.fromEntries(nodes.map((item, index) => [item.id, { x: (index % 9) * 340, y: Math.floor(index / 9) * 360 }])) }, 'grid', { minimumPixels: 1 });
 }

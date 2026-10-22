@@ -14,14 +14,16 @@ describe('catalog color and clock reuse', () => {
     expect(colorToRgba('invalid', '#f8fafc')).toEqual([248 / 255, 250 / 255, 252 / 255, 1]);
   });
 
-  it('opts only timeline-clock catalogs out of wall-clock continuous rendering', () => {
+  it('keeps every catalog look on the timeline clock, never on the wall clock', () => {
     expect(blockMosaic.requiresContinuousRender).toBe(false);
     // Block Mosaic's WGSL reference: resolution, scale, amount, levels, grout, then the timeline time.
     expect(blockMosaic.packUniforms({}, 640, 360, 2.75)?.[6]).toBe(2.75);
     vi.spyOn(performance, 'now').mockReturnValue(4_000);
-    const legacy = createCatalogEffect({ id: 'legacy-clock', name: 'Legacy', category: 'pixel', shader, entryPoint: 'blockifyFragment', animated: true });
-    expect(legacy.requiresContinuousRender).toBe(true);
-    expect(legacy.packUniforms({}, 640, 360, 2.75)?.[5]).toBe(4);
+    // Catalog looks render through graphs that read the timeline time: animated ones hold still while paused.
+    const animated = createCatalogEffect({ id: 'timeline-clock', name: 'Animated', category: 'pixel', shader, entryPoint: 'blockifyFragment', animated: true });
+    expect(animated.requiresContinuousRender).toBe(false);
+    expect('timelineAnimated' in animated && animated.timelineAnimated).toBe(true);
+    expect(animated.packUniforms({}, 640, 360, 2.75)?.[5]).toBe(2.75);
   });
 
   it('assembles the shared hash source exactly once into the common effect shader', () => {

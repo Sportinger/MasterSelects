@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { measureInReferenceFrame } from './patternReferenceFrame';
 
 type Ref = { node: string; port: string };
 class Builder {
@@ -55,5 +56,6 @@ export function createDefaultPaperPrintGraph(): EffectOperatorGraph {
   const mixed = g.node('mixed', 'math.mix.rgb'); g.edge({ node: split.node, port: 'rgb' }, mixed, 'a'); g.edge(printColor, mixed, 'b'); g.edge(amount, mixed, 't');
   const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: split.node, port: 'alpha' }, combine, 'alpha');
   const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+  // Press Grain counts pixels of a 1080p frame (patternReferenceFrame.ts).
+  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'effective-scale', { minimumPixels: 1 });
 }

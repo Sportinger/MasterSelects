@@ -3,13 +3,16 @@ import { colorToRgba } from '../../effects/_shared/catalogColor';
 import { imageDegreesToRadians } from './imageAngleSemantics';
 import { resolveImageOperatorChoice, type ImageOperatorCompileContext } from './imageOperatorChoice';
 import type { ImageOperatorPlan } from './imageOperatorPlanTypes';
+import { rateTravelValues } from './imageRateTravel';
 
 /** Uniform sources recorded during lowering; these never specialize shader code. */
 export interface ImageOperatorValueBinding {
   slot: number;
   binding: string;
-  kind: 'number' | 'boolean' | 'choice' | 'color' | 'degrees-radians';
+  kind: 'number' | 'boolean' | 'choice' | 'color' | 'degrees-radians' | 'rate-travel';
   fallback?: number | string;
+  /** rate-travel: the runtime-only travel parameter of the rate in `binding`; fills `slot` and `slot + 1` (imageRateTravel.ts). */
+  travel?: string;
 }
 
 export function validateImageOperatorValues(graph: EffectOperatorGraph, params: Record<string, unknown>, context: ImageOperatorCompileContext): void {
@@ -38,6 +41,8 @@ export function bindImageOperatorValues(plan: ImageOperatorPlan, params: Record<
       values.splice(source.slot, 4, ...color);
     } else if (source.kind === 'choice') values[source.slot] = resolveImageOperatorChoice(source.binding, params, context);
     else if (source.kind === 'boolean') values[source.slot] = raw === true ? 1 : 0;
+    else if (source.kind === 'rate-travel') values.splice(source.slot, 2, ...rateTravelValues({ rate: source.binding, travel: source.travel!,
+      fallback: typeof source.fallback === 'number' ? source.fallback : 1 }, params));
     else {
       const value = typeof raw === 'number' ? raw : source.fallback as number;
       values[source.slot] = source.kind === 'degrees-radians' ? imageDegreesToRadians(value) : value;

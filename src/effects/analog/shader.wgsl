@@ -41,9 +41,14 @@ fn crystalFragment(input: VertexOutput) -> @location(0) vec4f {
   return source(input.uv + refraction + shimmer);
 }
 
+// Pattern sizes count pixels of a 1080p frame (shorter side), as the graphs do (patternReferenceFrame.ts).
+fn referencePixels(size: f32) -> f32 {
+  return max(size * (min(params.resolution.x, params.resolution.y) / 1080.0), 1.0);
+}
+
 @fragment
 fn glassDispersionFragment(input: VertexOutput) -> @location(0) vec4f {
-  let grid = max(params.scale, 4.0);
+  let grid = referencePixels(max(params.scale, 4.0));
   let cell = floor(input.uv * params.resolution / grid);
   let direction = normalize(vec2f(hash(cell) - 0.5, hash(cell + 31.0) - 0.5) + vec2f(0.001));
   let pulse = 0.6 + 0.4 * sin(params.time * params.speed + hash(cell) * TAU);

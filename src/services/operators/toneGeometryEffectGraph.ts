@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { measureInReferenceFrame } from './patternReferenceFrame';
 type Ref = { node: string; port: string };
 class Builder {
   nodes: BoundOperatorNode[] = []; edges: OperatorEdge[] = []; layout: EffectOperatorGraph['layout'] = {};
@@ -35,5 +36,6 @@ export function createDefaultToneGeometryGraph(): EffectOperatorGraph {
   const rgb = { node: sampleSplit.node, port: 'rgb' }, tone = g.node('tone', 'color.luminance-rec709.rgb'); g.edge(rgb, tone, 'rgb'); const size = g.binary('size', 'math.multiply.scalar', g.binary('inverse-tone', 'math.subtract.scalar', one, tone), g.number('size-factor', .65));
   const low = g.binary('edge-low', 'math.subtract.scalar', size, g.number('edge-width', .04)), high = g.binary('edge-high', 'math.add.scalar', size, g.number('edge-width-high', .04)), edgeNode = g.node('edge', 'math.smoothstep.scalar'); g.edge(low, edgeNode, 'edge0'); g.edge(high, edgeNode, 'edge1'); g.edge(distance, edgeNode, 'value'); const mark = g.binary('mark', 'math.subtract.scalar', one, edgeNode);
   const aRgb = g.node('color-a-rgb', 'convert.vec4-to-rgb', 'rgb'), bRgb = g.node('color-b-rgb', 'convert.vec4-to-rgb', 'rgb'); g.edge(colorA, aRgb, 'value'); g.edge(colorB, bRgb, 'value'); const ink = g.node('ink', 'math.mix.rgb'); g.edge(bRgb, ink, 'a'); g.edge(aRgb, ink, 'b'); g.edge(mark, ink, 't'); const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(rgb, mixed, 'a'); g.edge(ink, mixed, 'b'); g.edge(amount, mixed, 't'); const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sampleSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+  // Scale counts pixels of a 1080p frame (patternReferenceFrame.ts).
+  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'safe-scale', { minimumPixels: 1 });
 }

@@ -27,7 +27,7 @@ export const crystal = createCatalogEffect({
   experimental: 'Facets are squares of the frame (they stretch with its shape) with hard seams, and strong Refraction doubles edges into ghost copies.',
 });
 export const glassDispersion = createCatalogEffect({
-  id: 'glass-dispersion', name: 'Glass Dispersion', category: 'analog', shader, entryPoint: 'glassDispersionFragment', animated: true,
+  id: 'glass-dispersion', name: 'Glass Dispersion', category: 'analog', shader, entryPoint: 'glassDispersionFragment', scaleFloor: 4, animated: true,
   params: {
     scale: { type: 'number', label: 'Cell Size (px)', default: 14, min: 4, max: 80, step: 1, group: 'Pattern' },
     amount: { type: 'number', label: 'Dispersion', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style' },
@@ -35,7 +35,7 @@ export const glassDispersion = createCatalogEffect({
   },
   retired: { angle: NO_ANGLE('Glass Dispersion'), ...NO_COLORS('Glass Dispersion') },
   paramWarnings: floorNote('Cell Size', 4),
-  experimental: 'Cells are sized in output pixels (the look changes with the resolution) and each cell splits red and blue its own way, so strong Dispersion reads as blocks of RGB noise.',
+  experimental: 'Each cell splits red and blue its own way, so strong Dispersion reads as blocks of RGB noise.',
 });
 const ribbonScanParams: Record<string, EffectParam> = {
   scale: { type: 'number', label: 'Ribbons', default: 14, min: RIBBON_SCAN_MIN_RIBBONS, max: 80, step: 1, group: 'Pattern' },

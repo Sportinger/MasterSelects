@@ -19,7 +19,7 @@ describe('Riso image graphs', () => {
 
   it.each([['riso', riso], ['riso-glow', risoGlow]] as const)('matches the %s legacy operation order', (type, definition) => {
     const params = { scale: 8, amount: .7, speed: 1.3, colorA: definition.params.colorA.default as string, colorB: definition.params.colorB.default as string };
-    const uv: [number, number] = [.63, .41], resolution: [number, number] = [64, 37], time = .75, offset = params.scale / resolution[0] * .35;
+    const uv: [number, number] = [.63, .41], resolution: [number, number] = [64, 37], time = .75, offset = params.scale * (Math.min(...resolution) / 1080) / resolution[0] * .35;
     const color = sample(uv), a = 1 - luma(sample([uv[0] - offset, uv[1]])), b = 1 - luma(sample([uv[0] + offset, uv[1]]));
     const colorA = colorToRgba(params.colorA, params.colorA), colorB = colorToRgba(params.colorB, params.colorB), paper = [.96, .93, .85];
     const glow = type === 'riso-glow' ? .55 + .45 * Math.sin(time * params.speed * 2) : 0;
@@ -36,10 +36,10 @@ describe('Riso image graphs', () => {
     const params = { scale: 8, amount: 1, colorA: riso.params.colorA.default as string, colorB: riso.params.colorB.default as string };
     const plan = compileImageOperatorGraph(createDefaultRisoGraph('riso'), params, { parameterSchema: riso.params });
     const at = (u: number, darkLeft: boolean) => evaluateImageOperatorPlan(plan, [0, 0, 0, 0], {
-      uv: [u, .5], resolution: [64, 36], timelineTimeSeconds: 0,
+      uv: [u, .5], resolution: [1920, 1080], timelineTimeSeconds: 0,
       sampleImage: ([x]: [number, number]): [number, number, number, number] => ((x < .5) === darkLeft ? [0, 0, 0, 1] : [1, 1, 1, 1]),
     });
-    const dark = at(.52, true), warm = at(.48, false), paper = at(.1, false);
+    const dark = at(.501, true), warm = at(.499, false), paper = at(.1, false);
     expect(paper.slice(0, 3).map(value => Number(value.toFixed(2)))).toEqual([.96, .93, .85]);
     // #2046b3 is blue: blue is its strongest channel. #ef476f is pink: red is.
     expect(dark[2]).toBeGreaterThan(dark[0]);

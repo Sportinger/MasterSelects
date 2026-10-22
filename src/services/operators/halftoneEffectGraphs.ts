@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { measureInReferenceFrame } from './patternReferenceFrame';
 
 export type EditableHalftoneEffectType = 'halftone' | 'pattern-halftone';
 type Ref = { node: string; port: string };
@@ -65,5 +66,6 @@ export function createDefaultHalftoneGraph(type: EditableHalftoneEffectType): Ef
   const mixed = g.node('mixed-color', 'math.mix.rgb'); g.edge(rgb, mixed, 'a'); g.edge(ink, mixed, 'b'); g.edge(amount, mixed, 't');
   const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: split.node, port: 'alpha' }, combine, 'alpha');
   const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+  // Cell Size counts pixels of a 1080p frame (patternReferenceFrame.ts).
+  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'safe-scale', { minimumPixels: 1 });
 }

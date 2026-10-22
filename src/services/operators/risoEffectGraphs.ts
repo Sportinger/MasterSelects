@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { measureInReferenceFrame } from './patternReferenceFrame';
 
 export type EditableRisoEffectType = 'riso' | 'riso-glow';
 type Ref = { node: string; port: string };
@@ -59,5 +60,6 @@ export function createDefaultRisoGraph(type: EditableRisoEffectType): EffectOper
   g.edge({ node: originalSplit.node, port: 'rgb' }, mixed, 'a'); g.edge(risoColor, mixed, 'b'); g.edge(amount, mixed, 't');
   const combined = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combined, 'rgb'); g.edge({ node: originalSplit.node, port: 'alpha' }, combined, 'alpha');
   const output = g.node('output', 'image.output', ''); g.edge(combined, output, 'image');
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+  // Registration counts pixels of a 1080p frame (patternReferenceFrame.ts); sub-pixel offsets stay.
+  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'scale');
 }

@@ -1846,7 +1846,7 @@ preserved, and shimmer/pulse animation reads composition timeline time. Both are
 marked experimental (an `experimental` note on the effect definition: the effect
 list shows "(Experimental)", the inspector and tool results give the reason):
 Crystal's facets are squares of the frame with hard seams and strong Refraction
-ghosts edges; Glass Dispersion's cells are sized in output pixels and split red and
+ghosts edges; Glass Dispersion's cells (pixels of a 1080p frame since 2026-10-22) split red and
 blue per cell into RGB blocks. Their Amount defaults are 0.3 (0.75 before 2026-10).
 
 Holo (`holoRecipe.ts`) mixes linearly from the source (Amount 0) to a bounded foil
@@ -1887,6 +1887,41 @@ Mosaic and Drift Lines expose timeline-driven hash/wave displacement and
 sampled-alpha paths; displaced samples determine alpha rather than the original
 undisplaced pixel.
 
+### Two-tone-pattern engine
+
+The 25 looks of the `two-tone-pattern` engine (`effectEngineMembers('two-tone-pattern')` in
+`src/effects/effectCatalogGroups.ts`, built with `createCatalogEffect`) share three rules since the
+2026-10-22 engine pass. `tests/unit/patternEngineLooks.test.ts` checks them for every look.
+
+- **Timeline clock.** Every look renders through its node graph, which reads `image.timeline-time`, so
+  `createCatalogEffect` marks animated looks `timelineAnimated` and never `requiresContinuousRender`: a
+  paused playhead no longer re-renders an unchanged frame. (The `clock: 'timeline'` option is gone; it
+  is the only clock.) The WGSL twins receive the timeline time as well.
+- **Sizes in 1080p pixels.** Cell, dot, block, grain, stitch, brick and registration sizes count pixels
+  of a 1080p frame: `measureInReferenceFrame` (`src/services/operators/patternReferenceFrame.ts`)
+  rewires a recipe's clamped size node to size × shorter side / 1080 (`frame-scale`), at least one
+  output pixel (`<size>-pixels`). Half-quality previews, thumbnails, 1080p and 4K exports show the same
+  pattern. Measured: Halftone, Pattern Halftone, Dithering, Riso and Riso Glow (Registration, no pixel
+  floor), Paper Print, Pixel Poster, Cross Stitch, Tone Geometry, Glitch Grid, Scatter Mosaic, Glass
+  Dispersion, Crosshatch, Kilim, Vector Engraving, Embroidery, Toy Bricks and the Outline edge step.
+  Dithering rounds to whole pixels (`wholePixels`; a 1.5-pixel Bayer cell beats into a plaid) and its
+  card says so for frames where Pixel Size is not whole. A size thinner than one pixel of a small frame
+  gets a card note (`scaleFloor` → `thinScaleNotes`). Drift Lines measures its bands the same way; the
+  rebuilt analog looks (CRT Screen, Film Prism, Glitch, Holo, Ribbon Scan) and Crystal Glass, Wave Lines
+  and Contour Map were already frame-relative. Dither Studio still draws in output pixels.
+- **Keyframed Speed travels.** The Speed of every animated look declares
+  `integratedAs: 'speedTravel'` (`CATALOG_SPEED_TRAVEL`), so a keyframed Speed writes the distance it
+  has travelled. The image graph compiler lowers a Multiply of Time and such a rate parameter
+  (`src/services/operators/imageRateTravel.ts`) to travel + rate × time with two uniform slots (travel 0
+  without keys, rate 0 with keys), so a Speed ramp moves the pattern smoothly instead of jumping, and
+  adding or removing keys only rebinds values. The graphs still read Time × Speed; saved graphs get
+  the smooth ramp too (a bug fix; unkeyed Speed renders exactly as before).
+
+Saved projects store their graph and keep their look: the 1080p measure applies to looks added from
+now on (at 1080p it is the old size). The shared base controls (Scale, Amount, Angle, Ink, Paper,
+Speed) are read by every look that shows them or retired with a reason; Film Prism's Prism Angle
+acts in the Prism shape only, which its card says.
+
 ### Drift Lines
 
 `createDriftLinesGraph` (`src/services/operators/motionHalftoneEffectGraphs.ts`) and its shader twin
@@ -1894,7 +1929,8 @@ undisplaced pixel.
 screen) and count bands across it from the top edge, so Angle 0 is the original horizontal recipe. The
 band height is **Band Size** (`scale`) × shorter side / 1080 (`DRIFT_LINES_REFERENCE_HEIGHT`), at least one
 pixel; preview qualities, thumbnails and 4K exports show the same bands. Each band shifts along its own
-direction by sin(band × 0.71 + timeline time × Speed × 2) × **Drift** × 6 % of the frame width, and
+direction by sin(band × 0.71 + timeline time × Speed × 2) × **Drift** × 6 % of the frame width (a
+keyframed Speed uses the distance it has travelled instead of time × Speed), and
 every second band is shaded to 0.64–0.82 of its brightness. Band Size below 2 is clamped by the
 `scale-clamped` node (`renderMin`, reported by `paramRangeNotes`); bands under one output pixel are
 reported by `driftLinesWarnings`. The parameter ids stay the engine's (`scale`, `amount`, `angle`,
@@ -1907,7 +1943,7 @@ presentation plan (Bands, Drift Wave, Shifted Sample, Line Shading & Alpha). Its
 
 Each ink filters the paper towards its own colour where it prints: the print colour is
 `paper × mix(1, inkA, a) × mix(1, inkB, b)`, with `a` and `b` the coverage of the dark and the warm
-ink (1 − luminance, read 0.35 × Registration pixels to the left and to the right). The default inks (#2046b3 blue,
+ink (1 − luminance, read 0.35 × Registration pixels of a 1080p frame to the left and to the right). The default inks (#2046b3 blue,
 #ef476f pink) therefore print blue, pink and, where both overlap, a deep violet. The recipe
 (`risoEffectGraphs.ts`) and its WGSL reference (`src/effects/halftone/shader.wgsl`) share this
 formula; `tests/unit/imageRisoGraphs.test.ts` checks that each default ink prints in its own colour.
@@ -1941,8 +1977,8 @@ most of the picture from about Amount 0.5; new Wave Lines start at Amount 0.3 (t
 catalog default 0.75 before 2026-10), saved ones keep their value.
 
 Crystal Glass (Facets, at least 4 across each axis, so facets stretch with the frame
-shape), Glass Dispersion (Cell Size in output pixels, so the pattern changes with
-the resolution) and Wave Lines keep their graphs; their unused catalog controls are
+shape), Glass Dispersion (Cell Size in pixels of a 1080p frame since 2026-10-22, see the
+two-tone-pattern engine notes) and Wave Lines keep their graphs; their unused catalog controls are
 retired and values below a shader floor are reported instead of being silently
 raised. The controls of CRT Screen, Glitch, Film Prism, Holo, Ribbon Scan, Crystal
 Glass, Glass Dispersion, Wave Lines and Pixel Sort use the shared Resolve inspector

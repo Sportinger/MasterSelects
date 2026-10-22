@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { DRIFT_LINES_REFERENCE_HEIGHT } from '../../effects/halftone/driftLines';
+import { measureInReferenceFrame } from './patternReferenceFrame';
 
 export type EditableMotionHalftoneEffectType = 'glitch-grid' | 'scatter-mosaic' | 'drift-lines';
 type Ref = { node: string; port: string };
@@ -57,7 +58,8 @@ export function createDefaultMotionHalftoneGraph(type: EditableMotionHalftoneEff
   const sampled = g.node('sample', 'image.sample', 'image'); g.edge(frame, sampled, 'image'); g.edge(clamped, sampled, 'uv');
   const outputImage = sampled;
   const output = g.node('output', 'image.output', ''); g.edge(outputImage, output, 'image');
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+  // Cells count pixels of a 1080p frame (patternReferenceFrame.ts).
+  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'safe-scale', { minimumPixels: 1 });
 }
 
 /**

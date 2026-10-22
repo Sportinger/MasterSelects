@@ -18,6 +18,15 @@ fn source(uv: vec2f) -> vec4f {
   return textureSample(inputTex, texSampler, clamp(uv, vec2f(0.001), vec2f(0.999)));
 }
 
+// Pattern sizes count pixels of a 1080p frame (shorter side), as the graphs do (patternReferenceFrame.ts).
+fn frameScale() -> f32 {
+  return min(params.resolution.x, params.resolution.y) / 1080.0;
+}
+
+fn referencePixels(size: f32) -> f32 {
+  return max(size * frameScale(), 1.0);
+}
+
 fn rotated(uv: vec2f) -> vec2f {
   let a = params.angle * PI / 180.0;
   let p = uv - 0.5;
@@ -44,7 +53,7 @@ fn inkMix(tone: f32, pattern: f32, alpha: f32) -> vec4f {
 @fragment
 fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
-  let threshold = bayer4(input.uv * params.resolution / max(params.scale, 1.0));
+  let threshold = bayer4(input.uv * params.resolution / max(round(max(params.scale, 1.0) * frameScale()), 1.0));
   let quantized = floor(clamp(color.rgb + threshold - 0.5, vec3f(0.0), vec3f(0.999)) * 4.0) / 3.0;
   return vec4f(mix(color.rgb, quantized, params.amount), color.a);
 }
@@ -62,7 +71,7 @@ fn ditherStudioFragment(input: VertexOutput) -> @location(0) vec4f {
 @fragment
 fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
   let uv = rotated(input.uv);
-  let cells = max(params.scale, 2.0);
+  let cells = referencePixels(max(params.scale, 2.0));
   let cell = fract(uv * params.resolution / cells) - 0.5;
   let tone = luminance(source(input.uv).rgb);
   let dotRadius = sqrt(max(0.0, 1.0 - tone)) * 0.68;
@@ -73,7 +82,7 @@ fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn patternHalftoneFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = fract(rotated(input.uv) * params.resolution / max(params.scale, 2.0)) - 0.5;
+  let cell = fract(rotated(input.uv) * params.resolution / referencePixels(max(params.scale, 2.0))) - 0.5;
   let color = source(input.uv);
   let radius = (1.0 - luminance(color.rgb)) * 0.72;
   var distance = length(cell);
@@ -84,7 +93,7 @@ fn patternHalftoneFragment(input: VertexOutput) -> @location(0) vec4f {
 }
 
 fn risoColor(uv: vec2f, glow: f32) -> vec3f {
-  let offset = vec2f(params.scale / params.resolution.x, 0.0) * 0.35;
+  let offset = vec2f(params.scale * frameScale() / params.resolution.x, 0.0) * 0.35;
   let a = 1.0 - luminance(source(uv - offset).rgb);
   let b = 1.0 - luminance(source(uv + offset).rgb);
   let paper = vec3f(0.96, 0.93, 0.85);
@@ -110,7 +119,7 @@ fn risoGlowFragment(input: VertexOutput) -> @location(0) vec4f {
 fn paperPrintFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
   let pixel = floor(input.uv * params.resolution);
-  let grain = noise2d(pixel / max(params.scale, 1.0)) - 0.5;
+  let grain = noise2d(pixel / referencePixels(max(params.scale, 1.0))) - 0.5;
   let pressed = smoothstep(0.15, 0.85, luminance(color.rgb) + grain * 0.3);
   let printColor = mix(params.colorA.rgb, params.colorB.rgb, pressed) * (0.92 + grain * 0.08);
   return vec4f(mix(color.rgb, printColor, params.amount), color.a);
@@ -118,7 +127,7 @@ fn paperPrintFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn pixelPosterFragment(input: VertexOutput) -> @location(0) vec4f {
-  let grid = max(params.scale, 2.0);
+  let grid = referencePixels(max(params.scale, 2.0));
   let uv = (floor(input.uv * params.resolution / grid) + 0.5) * grid / params.resolution;
   let color = source(uv);
   let poster = floor(color.rgb * 5.0) / 4.0;
@@ -128,7 +137,7 @@ fn pixelPosterFragment(input: VertexOutput) -> @location(0) vec4f {
 @fragment
 fn toneGeometryFragment(input: VertexOutput) -> @location(0) vec4f {
   let uv = rotated(input.uv + vec2f(sin(params.time * params.speed) * 0.002, 0.0));
-  let cell = fract(uv * params.resolution / max(params.scale, 3.0)) - 0.5;
+  let cell = fract(uv * params.resolution / referencePixels(max(params.scale, 3.0))) - 0.5;
   let color = source(input.uv);
   let size = (1.0 - luminance(color.rgb)) * 0.65;
   var dist = max(abs(cell.x), abs(cell.y));
@@ -140,7 +149,7 @@ fn toneGeometryFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn crossStitchFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = fract(input.uv * params.resolution / max(params.scale, 3.0)) - 0.5;
+  let cell = fract(input.uv * params.resolution / referencePixels(max(params.scale, 3.0))) - 0.5;
   let color = source(input.uv);
   let line = min(abs(cell.x - cell.y), abs(cell.x + cell.y));
   let stitch = (1.0 - smoothstep(0.04, 0.1, line)) * step(length(cell), 0.62);
@@ -150,7 +159,7 @@ fn crossStitchFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn glitchGridFragment(input: VertexOutput) -> @location(0) vec4f {
-  let cell = floor(input.uv * params.resolution / max(params.scale, 2.0));
+  let cell = floor(input.uv * params.resolution / referencePixels(max(params.scale, 2.0)));
   let tick = floor(params.time * params.speed * 8.0);
   let jump = (hash(cell + tick) - 0.5) * params.amount;
   let enabledCell = step(0.82, hash(vec2f(cell.y, tick)));
@@ -160,7 +169,7 @@ fn glitchGridFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn scatterMosaicFragment(input: VertexOutput) -> @location(0) vec4f {
-  let grid = max(params.scale, 3.0);
+  let grid = referencePixels(max(params.scale, 3.0));
   let cell = floor(input.uv * params.resolution / grid);
   let jitter = vec2f(hash(cell), hash(cell + 17.0)) - 0.5;
   let drift = sin(params.time * params.speed + hash(cell) * TAU);

@@ -189,13 +189,14 @@ describe('image graph lifecycle parity', () => {
     if (type === 'crt-screen' || type === 'ribbon-scan' || type === 'wave-lines' || type === 'glitch' || type === 'film-prism'
       || type === 'crystal' || type === 'glass-dispersion' || type === 'holo' || type === 'riso-glow'
       || type === 'glitch-grid' || type === 'scatter-mosaic' || type === 'drift-lines') {
-      const sampled = evaluateCompositionClipEffects([effect], keys, 1)[0];
+      // A keyed Speed moves by the distance it has travelled (EffectParam.integratedAs), so each time renders with its own evaluated values.
+      const at = (time: number) => evaluate(evaluateCompositionClipEffects([effect], keys, time)[0], time).value;
       const seekTimes = type === 'wave-lines' || type === 'film-prism' || type === 'crystal' || type === 'glass-dispersion' || type === 'holo' || type === 'riso-glow'
         || type === 'scatter-mosaic' || type === 'drift-lines' ? [0, .8]
         : type === 'glitch-grid' ? [0, 1.9] : type === 'glitch' ? [0, 1.2] : [.25, 1.25];
-      // Glitch changes in bursts: a single pixel may sit unglitched at both times, so it scans a second of states.
-      if (type === 'glitch') expect(new Set(Array.from({ length: 12 }, (_, step) => JSON.stringify(evaluate(sampled, step / 12).value))).size).toBeGreaterThan(1);
-      else expect(evaluate(sampled, seekTimes[0]).value).not.toEqual(evaluate(sampled, seekTimes[1]).value);
+      // Glitch and Glitch Grid change in bursts: a single pixel may sit unglitched at both times, so they scan four seconds of states.
+      if (type === 'glitch' || type === 'glitch-grid') expect(new Set(Array.from({ length: 48 }, (_, step) => JSON.stringify(at(step / 12)))).size).toBeGreaterThan(1);
+      else expect(at(seekTimes[0])).not.toEqual(at(seekTimes[1]));
     }
     const serialized = createSerializableTimelineState(useTimelineStore.getState());
     await useTimelineStore.getState().loadState(JSON.parse(JSON.stringify(serialized)));

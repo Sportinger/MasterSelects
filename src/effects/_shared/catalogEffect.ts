@@ -15,8 +15,9 @@ export interface CatalogEffectOptions {
   shader: string;
   entryPoint: string;
   params?: Record<string, EffectParam>;
+  /** The look moves with the timeline (Speed). Every catalog look renders through its node graph, which reads
+   * the timeline time (image.timeline-time): it holds still while paused, so it never re-renders on the wall clock. */
   animated?: boolean;
-  clock?: 'timeline';
   variantMap?: Record<string, number>;
   /** Shared base parameters this effect never reads, with the reason tools return; kept hidden so saved values still load. */
   retired?: Record<string, string>;
@@ -26,7 +27,13 @@ export interface CatalogEffectOptions {
   experimental?: string;
   /** Named starting points picked in the effect card (EffectPreset). */
   presets?: readonly EffectPreset[];
+  /** Scale counts pixels of a 1080p frame and renders at least one output pixel (patternReferenceFrame.ts):
+   * the floor its recipe clamps Scale to first. A frame too small for one pixel gets a card note. */
+  scaleFloor?: number;
 }
+/** Runtime-only distance a keyframed Speed has travelled (EffectParam.integratedAs); never stored. */
+export const CATALOG_SPEED_TRAVEL = 'speedTravel';
+
 const BASE_PARAMS: Record<string, EffectParam> = {
   scale: {
     type: 'number', label: 'Scale', default: 14, min: 2, max: 80, step: 1,
@@ -62,6 +69,14 @@ export function ignoredBaseParams(name: string, keys: readonly BaseParam[]): Rec
   return Object.fromEntries(keys.map(key => [key, `${name} has no ${BASE_PARAM_NAMES[key]}; the value is ignored.`]));
 }
 
+/** The note for a Scale (in 1080p pixels) that is thinner than one pixel of a small frame: it renders one pixel. */
+export function thinScaleNotes(label: string, floor: number, params: Record<string, Primitive>, width = 1920, height = 1080): string[] {
+  const scale = Math.max(typeof params.scale === 'number' && Number.isFinite(params.scale) ? params.scale : floor, floor);
+  const shortSide = Math.min(width, height);
+  if (!(shortSide > 0) || scale * shortSide / 1080 >= 1) return [];
+  return [`${label} ${Number(scale.toPrecision(4))} px is thinner than one pixel on this ${width}×${height} frame; it renders 1 pixel.`];
+}
+
 function numberParam(params: Record<string, Primitive>, key: string, fallback: number): number {
   const value = params[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -80,6 +95,11 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
       animatable: true, group: 'Motion',
     };
   }
+  // A keyframed Speed moves by the distance it has travelled (the area under its curve), not Speed × time,
+  // so a ramp never makes the pattern jump: the graph compiler lowers Time × Speed to that distance.
+  if (options.animated && params.speed?.type === 'number' && !params.speed.deprecated) {
+    params.speed = { ...params.speed, integratedAs: CATALOG_SPEED_TRAVEL };
+  }
 
   return {
     id: options.id,
@@ -89,11 +109,14 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
     entryPoint: options.entryPoint,
     uniformSize: 64,
     params,
-    // A timeline clock holds still while paused: no continuous rendering, but the picture still moves.
-    requiresContinuousRender: options.clock === 'timeline' ? false : options.animated,
-    ...(options.animated && options.clock === 'timeline' ? { timelineAnimated: true } : {}),
+    // Timeline clock: the picture moves with the playhead and holds still while paused (no continuous rendering).
+    requiresContinuousRender: false,
+    ...(options.animated ? { timelineAnimated: true } : {}),
     ...(options.presets ? { presets: options.presets } : {}),
-    ...(options.paramWarnings ? { paramWarnings: options.paramWarnings } : {}),
+    ...(options.paramWarnings || options.scaleFloor !== undefined ? { paramWarnings: (values: Record<string, Primitive>, width?: number, height?: number) => [
+      ...(options.paramWarnings?.(values, width, height) ?? []),
+      ...(options.scaleFloor !== undefined && !params.scale?.deprecated ? thinScaleNotes(params.scale?.label ?? 'Scale', options.scaleFloor, values, width, height) : []),
+    ] } : {}),
     ...(options.experimental ? { experimental: options.experimental } : {}),
     packUniforms: (values, width, height, timelineTimeSeconds = 0) => {
       const colorA = colorToRgba(values.colorA, '#111827');
@@ -107,7 +130,7 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
         numberParam(values, 'scale', 14),
         numberParam(values, 'amount', 0.75),
         numberParam(values, 'angle', 0),
-        options.clock === 'timeline' ? timelineTimeSeconds : typeof performance === 'undefined' ? 0 : performance.now() / 1_000,
+        timelineTimeSeconds,
         numberParam(values, 'speed', 0),
         variant,
         ...colorA,

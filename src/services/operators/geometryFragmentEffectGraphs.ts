@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge, OperatorValue } from '../../types/operatorGraph';
+import { measureInReferenceFrame } from './patternReferenceFrame';
 
 export type EditableGeometryFragmentEffectType = 'contour-map' | 'crosshatch' | 'kilim' | 'vector-tiling' | 'embroidery' | 'outline' | 'bricks';
 type Ref = { node: string; port: string };
@@ -208,6 +209,11 @@ function bricks(g: GraphBuilder, c: ReturnType<typeof common>) {
   finish(g, c.sourceColor, styled, c.amount, { node: sampledColor.node, port: 'alpha' });
 }
 
+const REFERENCE_SIZE: Partial<Record<EditableGeometryFragmentEffectType, { node: string; consumers?: readonly string[] }>> = {
+  crosshatch: { node: 'safe-scale' }, kilim: { node: 'safe-scale' }, 'vector-tiling': { node: 'safe-scale' }, embroidery: { node: 'safe-scale' },
+  bricks: { node: 'brick-size' }, outline: { node: 'one', consumers: ['one-vec2'] },
+};
+
 export function createDefaultGeometryFragmentGraph(type: EditableGeometryFragmentEffectType): EffectOperatorGraph {
   const g = new GraphBuilder(), c = common(g, {
     tone: type === 'contour-map' || type === 'crosshatch' || type === 'kilim',
@@ -220,5 +226,8 @@ export function createDefaultGeometryFragmentGraph(type: EditableGeometryFragmen
   else if (type === 'embroidery') embroidery(g, c);
   else if (type === 'outline') outline(g, c);
   else bricks(g, c);
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+  const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+  // Pattern sizes and the Outline edge step count pixels of a 1080p frame (patternReferenceFrame.ts); Contour Map Scale is a level count.
+  const size = REFERENCE_SIZE[type];
+  return size ? measureInReferenceFrame(graph, size.node, { minimumPixels: 1, ...(size.consumers ? { consumers: size.consumers } : {}) }) : graph;
 }

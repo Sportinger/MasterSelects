@@ -58,10 +58,15 @@ fn contourMapFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(mix(color.rgb, bandColor * (0.72 + line * 0.28), params.amount), color.a);
 }
 
+// Pattern sizes count pixels of a 1080p frame (shorter side), as the graphs do (patternReferenceFrame.ts).
+fn referencePixels(size: f32) -> f32 {
+  return max(size * (min(params.resolution.x, params.resolution.y) / 1080.0), 1.0);
+}
+
 @fragment
 fn vectorTilingFragment(input: VertexOutput) -> @location(0) vec4f {
   let uv = rotatedGeometry(input.uv);
-  let grid = params.resolution / max(params.scale, 3.0);
+  let grid = params.resolution / referencePixels(max(params.scale, 3.0));
   let cell = fract(uv * grid) - 0.5;
   let tone = toneAt((floor(uv * grid) + 0.5) / grid);
   let engraving = 1.0 - smoothstep(0.025, 0.09, abs(cell.y - sin(cell.x * 10.0) * (1.0 - tone) * 0.18));
@@ -73,7 +78,7 @@ fn vectorTilingFragment(input: VertexOutput) -> @location(0) vec4f {
 fn crosshatchFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
   let tone = luminance(color.rgb);
-  let pixel = input.uv * params.resolution / max(params.scale, 2.0);
+  let pixel = input.uv * params.resolution / referencePixels(max(params.scale, 2.0));
   let first = 1.0 - smoothstep(0.06, 0.15, abs(fract(pixel.x + pixel.y) - 0.5));
   let second = 1.0 - smoothstep(0.06, 0.15, abs(fract(pixel.x - pixel.y) - 0.5));
   let third = 1.0 - smoothstep(0.05, 0.13, abs(fract(pixel.x * 0.5) - 0.5));
@@ -83,7 +88,7 @@ fn crosshatchFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn embroideryFragment(input: VertexOutput) -> @location(0) vec4f {
-  let grid = params.resolution / max(params.scale, 3.0);
+  let grid = params.resolution / referencePixels(max(params.scale, 3.0));
   let cell = fract(input.uv * grid) - 0.5;
   let wave = sin(cell.x * TAU + params.time * params.speed * 2.0) * 0.16;
   let thread = 1.0 - smoothstep(0.04, 0.12, abs(cell.y - wave));
@@ -94,7 +99,7 @@ fn embroideryFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn kilimFragment(input: VertexOutput) -> @location(0) vec4f {
-  let grid = input.uv * params.resolution / max(params.scale, 4.0);
+  let grid = input.uv * params.resolution / referencePixels(max(params.scale, 4.0));
   let cell = fract(grid) - 0.5;
   let diamond = step(abs(cell.x) + abs(cell.y), 0.38 + 0.12 * sin(floor(grid.y) * 1.7));
   let stripe = step(0.5, fract(floor(grid.x) * 0.5 + floor(grid.y) * 0.25));
@@ -105,7 +110,7 @@ fn kilimFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn outlineFragment(input: VertexOutput) -> @location(0) vec4f {
-  let pixel = 1.0 / params.resolution;
+  let pixel = referencePixels(1.0) / params.resolution;
   let horizontal = toneAt(input.uv + vec2f(pixel.x, 0.0)) - toneAt(input.uv - vec2f(pixel.x, 0.0));
   let vertical = toneAt(input.uv + vec2f(0.0, pixel.y)) - toneAt(input.uv - vec2f(0.0, pixel.y));
   let edge = smoothstep(0.04, 0.24, length(vec2f(horizontal, vertical)) * (1.0 + 0.25 * sin(params.time * params.speed)));
@@ -115,7 +120,7 @@ fn outlineFragment(input: VertexOutput) -> @location(0) vec4f {
 
 @fragment
 fn bricksFragment(input: VertexOutput) -> @location(0) vec4f {
-  let brickSize = max(params.scale, 5.0);
+  let brickSize = referencePixels(max(params.scale, 5.0));
   var grid = input.uv * params.resolution / vec2f(brickSize * 1.6, brickSize);
   grid.x += floor(grid.y) * 0.5;
   let id = floor(grid);

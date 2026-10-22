@@ -1,6 +1,6 @@
 # Scatter Mosaic
 
-<!-- effect-docs: basic page sha=1069a3d391ab, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=4e2f8b04de88, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Breaks the image into tiles that sample from randomly jittered, drifting positions; Scale sets tile size, Amount the scatter distance.
 
@@ -32,4 +32,4 @@ Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effect
 
 ## Technical details
 
-Scatter Mosaic is one look of the pattern engine; its looks share one node setup. It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+Scatter Mosaic is one look of the pattern engine; its looks share one node setup. It changes over time: its picture depends on the playback time or on earlier frames. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).

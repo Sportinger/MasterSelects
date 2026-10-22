@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultMotionHalftoneGraph, type EditableMotionHalftoneEffectType } from '../../src/services/operators/motionHalftoneEffectGraphs';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+/** Pattern sizes count pixels of a 1080p frame (patternReferenceFrame.ts): size × shorter side / 1080, at least one pixel. */
+const px = (size: number, resolution: readonly number[]) => Math.max(size * (Math.min(resolution[0], resolution[1]) / 1080), 1);
 
 type Rgba = [number, number, number, number];
 const fract = (value: number) => value - Math.floor(value);
@@ -10,7 +12,7 @@ const sample = ([u, v]: [number, number]): Rgba => { const x = clamp(u), y = cla
 
 function reference(type: EditableMotionHalftoneEffectType, uv: [number, number], resolution: [number, number], time: number,
   params: { scale: number; amount: number; speed: number }): Rgba {
-  const grid = Math.max(params.scale, type === 'scatter-mosaic' ? 3 : 2);
+  const grid = px(Math.max(params.scale, type === 'scatter-mosaic' ? 3 : 2), resolution);
   if (type === 'glitch-grid') {
     const cell: [number, number] = [Math.floor(uv[0] * resolution[0] / grid), Math.floor(uv[1] * resolution[1] / grid)], tick = Math.floor(time * params.speed * 8);
     const jump = (hash([cell[0] + tick, cell[1] + tick]) - .5) * params.amount;
@@ -51,7 +53,7 @@ describe('motion halftone image graphs', () => {
   });
 
   it.each(['glitch-grid', 'scatter-mosaic', 'drift-lines'] as const)('matches the %s legacy operation order and sampled alpha', type => {
-    const params = { scale: 9.5, amount: .83, speed: 1.35, angle: 0 }, uv: [number, number] = [.63, .41], resolution: [number, number] = [64, 37], time = 1.375;
+    const params = { scale: 9.5, amount: .83, speed: 1.35, angle: 0 }, uv: [number, number] = [.63, .42], resolution: [number, number] = [1920, 1110], time = 1.375;
     const plan = compileImageOperatorGraph(createDefaultMotionHalftoneGraph(type), params);
     const actual = evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv, resolution, timelineTimeSeconds: time, sampleImage: sample });
     const expected = reference(type, uv, resolution, time, params);

@@ -12,6 +12,7 @@ import { resolveImageOperatorChoice, type ImageOperatorCompileContext } from './
 import { IMAGE_FRAME_HISTORY_RESOURCE_ID, type ImageOperatorResourceSampling } from './imageOperatorResources';
 import { imageDegreesToRadians } from './imageAngleSemantics';
 import { validateImageOperatorValues, type ImageOperatorValueBinding } from './imageOperatorValueBindings';
+import { rateTravelOperands, rateTravelValues, type RateTravelOperands } from './imageRateTravel';
 import { commonPureImageBranchValues, hasUpstreamImageDerivative, kernelInvariantValues } from './imageOperatorScopes';
 import { lowerMarchingSquaresTopology } from './imageOperatorJointLowering';
 import type { ImageOperatorExternalResource } from './imageOperatorExternalResources';
@@ -109,6 +110,21 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     const linked = source(target, input);
     return visit(linked.node, linked.output);
   }
+  /** Time × a rate that integrates: travelled distance + rate without travel × time (imageRateTravel.ts). */
+  const lowerRateTravel = (nodeId: string, operands: RateTravelOperands) => {
+    const slotKey = `travel:${operands.travel}:${operands.rate}`;
+    let slot = parameterSlots.get(slotKey);
+    if (slot === undefined) {
+      slot = parameterValues.length;
+      if (slot + 1 >= IMAGE_OPERATOR_PARAMETER_CAPACITY) throw new Error(`Image operator program exceeds ${IMAGE_OPERATOR_PARAMETER_CAPACITY} parameter slots.`);
+      parameterSlots.set(slotKey, slot); parameterValues.push(...rateTravelValues(operands, params));
+      valueBindings.push({ slot, binding: operands.rate, kind: 'rate-travel', travel: operands.travel, fallback: operands.fallback });
+    }
+    const travelled = emit({ nodeId, operation: 'parameter', type: 'scalar', inputs: [], value: slot });
+    const rate = emit({ nodeId, operation: 'parameter', type: 'scalar', inputs: [], value: slot + 1 });
+    const time = emit({ nodeId, operation: 'time', type: 'scalar', inputs: [] });
+    return emit({ nodeId, operation: 'add-scalar', type: 'scalar', inputs: [travelled, emit({ nodeId, operation: 'multiply-scalar', type: 'scalar', inputs: [rate, time] })] });
+  };
   const lowerResource = createImageOperatorResourceLowering({ multipleHistories: graph.nodes.filter(node => node.operator === 'image.sample-history').length > 1, context, params, namedImages, parameterSlots, parameterValues,
     state: { resourceInputs, resourceSampling, externalResources, fieldResources }, emit, source, visitSource, connected: (target, input) => !!incoming.get(`${target.id}:${input}`)?.length, activePixelLoad: () => activePixelLoad });
   function visit(current: BoundOperatorNode, output: string): number {
@@ -131,8 +147,10 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     let register: number;
     const resourceRegister = lowerResource(current, output);
     if (resourceRegister !== undefined) { visiting.delete(visitKey); registers.set(cacheKey, resourceRegister); return resourceRegister; }
-    const pointwise = pointwiseLoweringFor(current.operator, output);
-    if (pointwise) register = lowerPointwiseNode(pointwise, current, input => visitSource(current, input), emit);
+    const travel = rateTravelOperands(current, incoming, nodes, context);
+    const pointwise = travel ? undefined : pointwiseLoweringFor(current.operator, output);
+    if (travel) register = lowerRateTravel(current.id, travel);
+    else if (pointwise) register = lowerPointwiseNode(pointwise, current, input => visitSource(current, input), emit);
     else switch (current.operator) {
       case 'image.frame': register = emit({ nodeId: current.id, operation: 'input', type: 'image', inputs: [] }); break;
       case 'image.normalized-uv': register = emit({ nodeId: current.id, operation: 'uv', type: 'vec2', inputs: [] }); break;

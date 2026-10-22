@@ -4,6 +4,8 @@ import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/
 import { effectOperatorGraph, effectOperatorParams, isImageGraphEffectType, isLocalImageEffectType } from '../../src/services/operators/effectGraphOwner';
 import { getDefaultParams } from '../../src/effects';
 import type { Effect } from '../../src/types/effects';
+/** Pattern sizes count pixels of a 1080p frame (patternReferenceFrame.ts): size × shorter side / 1080, at least one pixel. */
+const px = (size: number, resolution: readonly number[]) => Math.max(size * (Math.min(resolution[0], resolution[1]) / 1080), 1);
 
 type Rgba = [number, number, number, number];
 const sample = ([u, v]: [number, number]): Rgba => [u, v, u * .3 + v * .7, .25 + v * .5];
@@ -11,7 +13,7 @@ const fract = (value: number) => value - Math.floor(value);
 const hash = ([u, v]: [number, number]) => fract(Math.sin((u * 127.1 + v * 311.7) * 12.9898 + (u * 269.5 + v * 183.3) * 78.233) * 43758.5453);
 const clamp = (value: number) => Math.max(.001, Math.min(.999, value));
 function reference(uv: [number, number], resolution: [number, number], time: number, scale: number, amount: number, speed: number): Rgba {
-  const grid = Math.max(scale, 4), cell: [number, number] = [Math.floor(uv[0] * resolution[0] / grid), Math.floor(uv[1] * resolution[1] / grid)];
+  const grid = px(Math.max(scale, 4), resolution), cell: [number, number] = [Math.floor(uv[0] * resolution[0] / grid), Math.floor(uv[1] * resolution[1] / grid)];
   const raw: [number, number] = [hash(cell) - .5 + .001, hash([cell[0] + 31, cell[1] + 31]) - .5 + .001];
   const length = Math.hypot(raw[0], raw[1]), direction: [number, number] = [raw[0] / length, raw[1] / length];
   const pulse = .6 + .4 * Math.sin(time * speed + hash(cell) * (Math.PI * 2));

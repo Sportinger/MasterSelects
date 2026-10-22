@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultPixelPosterGraph } from '../../src/services/operators/pixelPosterEffectGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+/** Pattern sizes count pixels of a 1080p frame (patternReferenceFrame.ts): size × shorter side / 1080, at least one pixel. */
+const px = (size: number, resolution: readonly number[]) => Math.max(size * (Math.min(resolution[0], resolution[1]) / 1080), 1);
 
 type Rgba = [number, number, number, number];
 const sample = ([u, v]: [number, number]): Rgba => [u, v, u * .25 + v * .5, .2 + u * .7];
@@ -18,7 +20,7 @@ describe('Pixel Poster image graph', () => {
 
   it('matches the legacy pixel-center order, source clamp, posterization and sampled alpha', () => {
     const params = { amount: .64, scale: 11 }, uv: [number, number] = [.03, .97], resolution: [number, number] = [47, 29];
-    const grid = Math.max(params.scale, 2), sampledUv: [number, number] = [0, 1].map(axis => {
+    const grid = px(Math.max(params.scale, 2), resolution), sampledUv: [number, number] = [0, 1].map(axis => {
       const value = (Math.floor(uv[axis] * resolution[axis] / grid) + .5) * grid / resolution[axis];
       return Math.max(.001, Math.min(.999, value));
     }) as [number, number];

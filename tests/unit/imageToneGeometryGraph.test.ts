@@ -3,6 +3,8 @@ import { getEffect } from '../../src/effects';
 import { createDefaultToneGeometryGraph } from '../../src/services/operators/toneGeometryEffectGraph';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+/** Pattern sizes count pixels of a 1080p frame (patternReferenceFrame.ts): size × shorter side / 1080, at least one pixel. */
+const referencePx = (size: number, resolution: readonly number[]) => Math.max(size * (Math.min(resolution[0], resolution[1]) / 1080), 1);
 
 type Rgba = [number, number, number, number];
 const sample = ([u, v]: [number, number]): Rgba => [u, v, .3 + u * .2, .25 + v * .5];
@@ -24,7 +26,7 @@ describe('Tone Geometry image graph', () => {
     const uv: [number, number] = [0, .72], resolution: [number, number] = [47, 29], time = 1.3;
     const drift = Math.sin(time * params.speed) * .002, radians = params.angle * Math.PI / 180, px = uv[0] + drift - .5, py = uv[1] - .5;
     const rotated: [number, number] = [px * Math.cos(radians) - py * Math.sin(radians) + .5, px * Math.sin(radians) + py * Math.cos(radians) + .5];
-    const cell: [number, number] = [fract(rotated[0] * resolution[0] / Math.max(params.scale, 3)) - .5, fract(rotated[1] * resolution[1] / Math.max(params.scale, 3)) - .5];
+    const cell: [number, number] = [fract(rotated[0] * resolution[0] / referencePx(Math.max(params.scale, 3), resolution)) - .5, fract(rotated[1] * resolution[1] / referencePx(Math.max(params.scale, 3), resolution)) - .5];
     const sampled = sample([.001, uv[1]]), tone = sampled[0] * .2126 + sampled[1] * .7152 + sampled[2] * .0722, size = (1 - tone) * .65;
     const distance = variant === 0 ? Math.max(Math.abs(cell[0]), Math.abs(cell[1])) : variant === 1 ? Math.hypot(...cell) : Math.max(Math.abs(cell[0]), cell[1] * .75 - .15);
     const mark = 1 - smoothstep(size - .04, size + .04, distance), a = [0x20 / 255, 0x40 / 255, 0x60 / 255], b = [0xe0 / 255, 0xc0 / 255, 0x80 / 255];

@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { measureInReferenceFrame } from './patternReferenceFrame';
 
 type Ref = { node: string; port: string };
 class Builder {
@@ -59,5 +60,6 @@ export function createDefaultGlassDispersionGraph(): EffectOperatorGraph {
   const color = g.node('color', 'convert.vec3-to-rgb', 'rgb'); g.edge(channels, color, 'value');
   const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(color, combine, 'rgb'); g.edge({ node: alpha.node, port: 'alpha' }, combine, 'alpha');
   const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
-  return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+  // Cell Size counts pixels of a 1080p frame (patternReferenceFrame.ts).
+  return measureInReferenceFrame({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout }, 'grid', { minimumPixels: 1 });
 }

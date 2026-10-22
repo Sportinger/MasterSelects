@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultPaperPrintGraph } from '../../src/services/operators/paperPrintEffectGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
+/** Pattern sizes count pixels of a 1080p frame (patternReferenceFrame.ts): size × shorter side / 1080, at least one pixel. */
+const px = (size: number, resolution: readonly number[]) => Math.max(size * (Math.min(resolution[0], resolution[1]) / 1080), 1);
 
 const fract = (value: number) => value - Math.floor(value);
 const hash = ([u, v]: [number, number]) => fract(Math.sin((u * 127.1 + v * 311.7) * 12.9898 + (u * 269.5 + v * 183.3) * 78.233) * 43758.5453);
@@ -29,7 +31,7 @@ describe('Paper Print image graph', () => {
     const params = { amount: .72, scale: 18, colorA: '#204060', colorB: '#e0c080' };
     const plan = compileImageOperatorGraph(createDefaultPaperPrintGraph(), params);
     const uv: [number, number] = [.37, .62], resolution: [number, number] = [47, 29], color: [number, number, number, number] = [.2, .6, .35, .43];
-    const grain = noise([Math.floor(uv[0] * resolution[0]) / 18, Math.floor(uv[1] * resolution[1]) / 18]) - .5;
+    const grain = noise([Math.floor(uv[0] * resolution[0]) / px(18, resolution), Math.floor(uv[1] * resolution[1]) / px(18, resolution)]) - .5;
     const luma = color[0] * .2126 + color[1] * .7152 + color[2] * .0722, pressed = smoothstep(.15, .85, luma + grain * .3);
     const inkA = [0x20 / 255, 0x40 / 255, 0x60 / 255], inkB = [0xe0 / 255, 0xc0 / 255, 0x80 / 255];
     const factor = .92 + grain * .08;
