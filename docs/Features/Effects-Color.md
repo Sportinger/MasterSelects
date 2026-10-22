@@ -46,6 +46,9 @@ Every colour effect is a small node graph of the same shape:
 [Invert](./effects/invert.md) is the smallest of them: it has no controls, one working folder
 (**Invert RGB**) and needs no clamp, so its last folder is called **Alpha & Image**.
 
+[Posterize](./effects/posterize.md) has the longest path: **Step Input**, **Hard Steps**, **Soft Steps**,
+**Spread to 0–1** and **Colour & Alpha**, from what gets stepped to the colour it keeps.
+
 Black stays black and white stays white unless you ask for it, and colours keep their shade when you
 push them. The blocks **Brightness Curve**, **Contrast Curve**, **Exposure (Stops)**, **White
 Balance**, **Saturation (Gamut-Safe)** and **Hue Rotate (OkLCh)** are also in **right-click →

@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { POSTERIZE_PARAMS, THRESHOLD_PARAMS } from '../../src/effects/stylize/pointwiseParams';
-import { createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { createDefaultPosterizeGraph, createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { POSTERIZE_PRESETS } from '../../src/effects/stylize/posterize';
+import { organizeEffectFamilyGraph } from '../../src/services/operators/effectFamilyPresentation';
+import { effectPortLabels } from '../../src/services/operators/effectPresentationPlans';
+import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
 import { setOperatorParameter } from '../../src/services/operators/effectGraphEditing';
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
@@ -61,5 +65,48 @@ describe('pointwise effect graph ownership', () => {
     expect(saved.params.levels).toBe(12);
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'levels')).toMatchObject({ bindings: { value: 'levels' } });
     expect(() => setOperatorParameter(clip.id, canonical.id, 'levels', 'value', 33)).toThrow('outside its supported range');
+  });
+
+  it('gives Posterize four presets that each make the look their name promises', () => {
+    const presets = Object.fromEntries(POSTERIZE_PRESETS.map(preset => [preset.name, preset.params]));
+    expect(Object.keys(presets)).toEqual(['Stencil', 'Screen Print', 'Pop Art', 'Banded Light']);
+    // Every preset names Brightness Only: its stored default (off) is not what a new Posterize starts with.
+    for (const params of Object.values(presets)) expect(typeof params.brightnessOnly).toBe('boolean');
+    const plan = (name: string) => compileImageOperatorGraph(createDefaultPosterizeGraph(), { ...getDefaultParams('posterize'), ...presets[name] });
+    const greys = Array.from({ length: 101 }, (_, index) => index / 100);
+    const tones = (name: string) => new Set(greys.map(value => evaluateImageOperatorPlan(plan(name), [value, value, value, 1])[0].toFixed(3))).size;
+    // Banded Light: eight hard bands; Stencil: black or full, with a short rounded ramp between them.
+    expect(tones('Banded Light')).toBe(8);
+    const stencil = greys.map(value => evaluateImageOperatorPlan(plan('Stencil'), [value, value, value, 1])[0]);
+    expect(stencil.filter(value => value > 0.001 && value < 0.999).length).toBeLessThanOrEqual(6);
+    // Stencil keeps the hue of a light colour (it scales the colour to full brightness); Pop Art pushes each channel apart.
+    const [r, g, b] = evaluateImageOperatorPlan(plan('Stencil'), [0.8, 0.6, 0.2, 1]);
+    expect([r, g / r, b / r].map(value => +value.toFixed(3))).toEqual([1, 0.75, 0.25]);
+    expect(evaluateImageOperatorPlan(plan('Pop Art'), [0.8, 0.6, 0.2, 0.5])).toEqual([1, 1, 0, 0.5]);
+    // Screen Print: four tones with rounded steps, so a grey between two inks gets an in-between value.
+    const print = evaluateImageOperatorPlan(plan('Screen Print'), [0.5, 0.5, 0.5, 1])[0];
+    expect(print).toBeGreaterThan(1 / 3); expect(print).toBeLessThan(2 / 3);
+  });
+
+  it('opens the Posterize recipe as a path of named stage folders instead of one Color Processing folder', () => {
+    const graph = createDefaultPosterizeGraph();
+    const organized = organizeEffectFamilyGraph(graph, recognizeOperatorCompositions(graph), 'posterize', createDefaultPosterizeGraph);
+    const folders = Object.fromEntries((organized.groups ?? []).map(group => [group.label, group.nodeIds.toSorted()]));
+    expect(Object.keys(folders)).toEqual(expect.arrayContaining(['Parameters', 'Constants', 'Step Input', 'Hard Steps', 'Soft Steps', 'Spread to 0–1', 'Colour & Alpha']));
+    expect(Object.keys(folders)).not.toContain('Color Processing');
+    expect(folders.Parameters).toEqual(['brightness-only', 'brightness-only-share', 'effective-levels', 'levels', 'ramp-width', 'softness']);
+    expect(folders['Step Input']).toEqual(['brightness', 'brightness-rgb', 'posterize-input']);
+    expect(folders['Hard Steps']).toEqual(['hard', 'scaled']);
+    expect(folders['Spread to 0–1']).toEqual(['clamped', 'denominator', 'divide']);
+    expect(folders['Colour & Alpha']).toContain('combine');
+    expect(folders['Soft Steps']).toEqual(expect.arrayContaining(['ramp', 'smooth', 'soft', 'steps']));
+    // Every computing card sits in a folder: the overview reads Input → stages → Output.
+    const grouped = new Set(Object.values(folders).flat());
+    expect(graph.nodes.filter(node => !['frame', 'split', 'output'].includes(node.id) && !grouped.has(node.id)).map(node => node.id)).toEqual([]);
+    expect(effectPortLabels('posterize')).toMatchObject({ 'effective-levels': 'Levels', 'ramp-width': 'Ramp Width', clamped: 'Posterized RGB', hard: 'Hard Step' });
+    // Threshold keeps its own plan; an edited Posterize is not the recipe and gets no folders.
+    expect(effectPortLabels('threshold')).not.toHaveProperty('effective-levels');
+    const edited = { ...graph, nodes: graph.nodes.filter(node => node.id !== 'kept-colour') };
+    expect(organizeEffectFamilyGraph(edited, recognizeOperatorCompositions(edited), 'posterize', createDefaultPosterizeGraph).groups ?? []).toEqual([]);
   });
 });

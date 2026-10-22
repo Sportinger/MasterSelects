@@ -69,7 +69,6 @@ export const RECIPE_PENDING = {
     'lens-correction.webp',
     'levels.webp',
     'motion-blur.webp',
-    'posterize.webp',
     'radial-blur.webp',
     'saturation.webp',
     'scanlines.webp',

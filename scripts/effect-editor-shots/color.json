@@ -249,6 +249,41 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "posterize-inspector",
+      "effect": "posterize",
+      "params": {
+        "levels": 4,
+        "softness": 0.35,
+        "brightnessOnly": true
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Posterize card: the Preset menu showing Screen Print, Levels at 4, Softness at 0.35 and Brightness Only switched on, beside a strip of the preview with the posterized dancer",
+      "caption": "Posterize with the Screen Print preset. 1 — Preset: pick a starting point. 2 — Levels: how many tones. 3 — Softness: rounds the steps. 4 — Brightness Only: keeps the colours.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Levels",
+          "label": "Levels"
+        },
+        {
+          "target": "Softness",
+          "label": "Softness"
+        },
+        {
+          "target": "Brightness Only",
+          "label": "Brightness Only"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

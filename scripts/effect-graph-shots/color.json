@@ -39,6 +39,14 @@
     "temperature?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@temperature-finish",
     "invert?plumbing=hide&marks=one:above,organized-invert-processing:above,organized-invert-finish:above@invert",
     "invert?focus=invert-rgb&only=invert-r&cables=avoid&layout=float&marks=invert-r:above@invert-rgb",
-    "invert?focus=alpha-and-image&only=combine,image&cables=avoid&layout=float&marks=combine:above,image:above@invert-finish"
+    "invert?focus=alpha-and-image&only=combine,image&cables=avoid&layout=float&marks=combine:above,image:above@invert-finish",
+    "posterize?plumbing=hide&marks=organized-posterize-controls:below,organized-posterize-input:above,organized-posterize-hard:above,organized-posterize-soft:below,organized-posterize-spread:above,organized-posterize-finish:above@posterize",
+    "posterize?focus=parameters&only=levels,effective-levels,softness,ramp-width,brightness-only,brightness-only-share&constants=hide&cables=avoid&layout=float&marks=effective-levels:above,ramp-width:above,brightness-only-share:above@posterize-parameters",
+    "posterize?focus=step-input&only=brightness,brightness-rgb,posterize-input&cables=avoid&layout=float&marks=brightness:above,posterize-input:above@posterize-input",
+    "posterize?focus=hard-steps&only=scaled,hard&cables=avoid&layout=float&marks=scaled:above,hard:above@posterize-hard",
+    "posterize?focus=soft-steps&only=shifted,base,within,ramp-distance,ramp-offset,ramp-position,ramp-clamped&cables=avoid&marks=base:above,within:above,ramp-offset:above,ramp-clamped:above@posterize-soft-edge",
+    "posterize?focus=soft-steps&only=ramp-square,ramp-double,ramp-falloff,ramp,smooth,soft-active,soft,steps&constants=hide&cables=avoid&marks=ramp:above:32,smooth:above:32,soft:below,steps:above@posterize-soft-ramp",
+    "posterize?focus=spread-to-0-1&only=denominator,divide,clamped&cables=avoid&layout=float&marks=denominator:below,clamped:above@posterize-spread",
+    "posterize?focus=colour-and-alpha&only=posterized-brightness,brightness-safe,brightness-gain,kept-colour-raw,kept-colour,result-rgb,combine&constants=hide&cables=avoid&marks=brightness-gain:above,kept-colour-raw:above,result-rgb:above,combine:above@posterize-finish"
   ]
 }

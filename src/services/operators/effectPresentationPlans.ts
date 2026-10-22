@@ -95,6 +95,22 @@ const INVERT_PRESENTATION: EffectPresentationPlan = {
   portLabels: { one: 'White Level', 'invert-r': 'Inverted R', 'invert-g': 'Inverted G', 'invert-b': 'Inverted B' },
 };
 
+/** Posterize (v2 recipe): its 30-odd cards read as a path of stages instead of one Color Processing
+ * folder: the Levels/Softness/Brightness Only guards sit with their controls, then what gets stepped,
+ * the hard staircase, the Softness ramp, the spread back to 0-1 and the colour kept by Brightness Only. */
+const POSTERIZE_STAGES: readonly [RegExp, string][] = [
+  [/^(effective-levels|ramp-width|brightness-only-share)$/, 'controls'], [/^(brightness|brightness-rgb|posterize-input)$/, 'input'],
+  [/^(scaled|hard)$/, 'hard'], [/^(denominator|divide|clamped)$/, 'spread'],
+  [/^(posterized-brightness|brightness-safe|brightness-gain|kept-colour(-raw)?|result-rgb|combine)$/, 'finish'],
+];
+const POSTERIZE_PRESENTATION: EffectPresentationPlan = {
+  labels: { input: 'Step Input', hard: 'Hard Steps', soft: 'Soft Steps', spread: 'Spread to 0–1', finish: 'Colour & Alpha' },
+  stage: ({ id }) => POSTERIZE_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'soft',
+  portLabels: { ...POINTWISE_PORTS, 'effective-levels': 'Levels', 'ramp-width': 'Ramp Width', 'brightness-only-share': 'Brightness Only',
+    brightness: 'Brightness', 'posterize-input': 'Step Input', scaled: 'Scaled', clamped: 'Posterized RGB', 'brightness-gain': 'Brightness Gain',
+    'kept-colour': 'Kept Colour', 'half-rgb': 'Half', 'two-rgb': 'Two', 'three-rgb': 'Three', base: 'Lower Step', within: 'Within Step', 'ramp-clamped': 'Ramp Position' },
+};
+
 /** The CRT Screen graph saved before the 2026-10 rebuild keeps the stage folders it opened with. */
 const LEGACY_CRT_PLAN: EffectPresentationPlan = {
   labels: { curvature: 'Screen Curvature', sampling: 'Clamped Image Sampling', scan: 'Scanlines',
@@ -298,9 +314,10 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     singleCardStages: ['controls'],
     stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
-  // Threshold and Posterize name their hard step and soft ramp (Softness, 2026-10-21).
+  // Threshold names its hard step and soft ramp (Softness, 2026-10-21); Posterize has stage folders.
   if (type === 'invert') return INVERT_PRESENTATION;
-  if (COLORS.has(type)) return type === 'threshold' || type === 'posterize' ? { ...ORIGINAL_COLOR_PRESENTATION, portLabels: POINTWISE_PORTS } : ORIGINAL_COLOR_PRESENTATION;
+  if (type === 'posterize') return POSTERIZE_PRESENTATION;
+  if (COLORS.has(type)) return type === 'threshold' ? { ...ORIGINAL_COLOR_PRESENTATION, portLabels: POINTWISE_PORTS } : ORIGINAL_COLOR_PRESENTATION;
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
     labels: { grid: 'Cell Grid', source: 'Cell Sampling & Tone', index: 'Glyph Selection', atlas: 'Atlas Sampling', appearance: 'Ink & Appearance', feedback: 'Feedback Resolve' },
     stage: ({ id }) => /^(tiny-vec2|almost-vec2)$/.test(id) ? 'sources'
