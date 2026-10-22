@@ -379,7 +379,7 @@ Their atlas nodes keep ramp, custom text,
 font, and weight bound to the existing effect parameters; animated weight
 therefore follows the same preview, export, and saved-project timeline. Number
 Field adds quantized tone ink, Grid Glyph rules box-filtered lines along the cell borders, Pixel Code
-uses deterministic hashed cell selection, and Word Mosaic adds its connector band.
+draws a random character inside a Scramble window, and Word Mosaic adds its connector band.
 Glyph Matrix advances character selection with timeline time and cell position;
 Data Hatching combines its animated character offset with diagonal hatch coverage.
 Brand Generator adds radial character selection and a frame mask; Stitch Poster
@@ -401,7 +401,7 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
 (`src/services/operators/asciiEffectGraph.ts`); cell geometry and clock constants live in
 `src/effects/glyph/glyphGrid.ts`, and the graph is the reference: `shader.wgsl` is not compiled for these looks (graph-owned effects skip their shader) and is out of date, so do not copy its maths. A look passes `id`, `name`,
 `entryPoint`, and optionally `animated`, `feedback`, `defaultRamp`, `defaultCellSize`,
-`defaultBackground`, `defaultRoll`, `ignoresColors`, `presets` and `params` (controls of its own, placed at
+`defaultBackground`, `defaultRoll`, `ignoresColors`, `presets`, `warnings` (card notes of its own) and `params` (controls of its own, placed at
 the end of their card section and flagged `lookOwn`, so the Style menu still matches the look with the
 others: `effectStyles.ts` ignores them and starts them at their defaults when switching to the look).
 
@@ -507,7 +507,19 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   without a graph; stored setups keep it. Its graph leaves out the unread Color Source node, so the card no longer shows
   it (it used to, doing nothing). Presets: `NUMBER_FIELD_PRESETS`; with the Numeric ramp and 10 steps, or a ramp of n
   characters and n steps (Paint by Numbers), the character index equals the step. Test: `tests/unit/numberField.test.ts`.
-- **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light (Matrix Rain draws in its Rain Color);
+- **Pixel Code scramble** (`src/effects/glyph/pixelCode.ts`, the **Scramble** folder, `index-*`, `scramble-clamped`). Each cell
+  draws one character of the Roll window (above) built from **Scramble** (`scramble`, 0–1, default 0.5, `legacyDefault` 1, `graphOnly`,
+  `lookOwn`, clamped by `scramble-clamped`): Random (Cell) of the cell number × the window, floored (`index-cell-random`, `index-draw`,
+  `index-offset`), moves it on from its own character inside the window (`rolled-index`; the window and dark hold are shared with the
+  moving looks through `rollWindow` / `rollInto` in `asciiEffectGraph.ts`). It used to add floor(sine hash of the cell × ramp) to the
+  tone's character and wrap over the whole ramp: the f32 sine hash drew diagonal stripes across the frame, Black Level never cleared
+  the stage (the dark cells drew too) and Invert Ramp only reshuffled the cells. Scramble 1 is that full-ramp draw with Random (Cell);
+  with Black Level above 0, cells at or below it keep their own character. The ink is mix(**Shadow**, **Highlight**, tone)
+  (`shadow`, `highlight`, own `graphOnly` colours, default `#0c2f52` / `#5cffc4`, `legacyDefault` the earlier fixed (.08, .3, .48) and
+  (.28, .95, .72) as `#144d7a` / `#47f2b8`, within half a step of 255; `code-color`). Its graph leaves out the shared colour nodes. A
+  fix for new instances and setups saved without a graph; stored setups keep the sine hash. `pixelCodeWarnings` notes Invert Ramp
+  at Scramble 1 and Black Level 0, where it only reshuffles. Presets: `PIXEL_CODE_PRESETS`. Test: `tests/unit/pixelCode.test.ts`.
+- **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light (Matrix Rain draws in its Rain Color, Pixel Code between Shadow and Highlight);
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).
 - **Transparency.** Input and output are straight alpha. Each cell takes the alpha of its centre

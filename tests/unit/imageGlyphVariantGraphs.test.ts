@@ -80,11 +80,12 @@ describe('shared glyph graph variants', () => {
     }
   });
 
-  it('builds Pixel Code with deterministic cell hash indexing and its legacy code ink', () => {
+  it('builds Pixel Code with Random (Cell) indexing over the whole ramp and its legacy code ink', () => {
+    // Saved before Scramble, Shadow and Highlight existed: every cell draws any character, in deep blue to mint.
     const graph = createDefaultPixelCodeGraph(), base = cell();
-    const value = cell(uv, Math.floor(hash2d(base.id) * 4));
+    const value = cell(uv, Math.floor(imageCellHash(base.id) * 4));
     const { output, samples } = evaluate('pixel-code', graph, { cellSize: 10, amount: .7 });
-    const dark = [.08, .3, .48], light = [.28, .95, .72];
+    const dark = [0x14, 0x4d, 0x7a].map(channel => channel / 255), light = [0x47, 0xf2, 0xb8].map(channel => channel / 255);
     const code = dark.map((channel, index) => mix(channel, light[index], value.tone) * value.alpha);
     const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, code[index], .7));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);

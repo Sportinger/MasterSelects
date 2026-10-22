@@ -20,7 +20,7 @@ What each style changes; everything else works the same.
 | code that rains down in streaks with bright heads, the figure glowing in it | [Matrix Rain](./effects/matrix.md) |
 | characters, each in its own ruled box, like a type case or a table of figures | [Grid Glyph](./effects/grid-glyph.md) |
 | figures in a few flat colours, like a picture to paint by numbers | [Number Field](./effects/number-field.md) |
-| random code from deep blue to mint | [Pixel Code](./effects/pixel-code.md) |
+| zeros and ones that write the picture, denser and lighter where it is bright | [Pixel Code](./effects/pixel-code.md) |
 | rows of characters joined like words | [Word Mosaic](./effects/word-mosaic.md) |
 | characters only along the edges | [Inscribe](./effects/inscribe.md) |
 | characters in a flickering dither | [Dither Text](./effects/dither-text.md) |
@@ -56,7 +56,7 @@ drawn and coloured.
   any font. **Font** and **Weight** change the lettering. While a Custom Ramp is typed, the card dims Ramp.
 - **Amount** – fades from the untouched picture (0) to the full look (1).
 - **Color Source** – **Source** takes the picture's colours; **Duotone** draws between **Dark** and
-  **Light**. Pixel Code uses its own colours, Matrix Rain its **Rain Color**, Retro Matrix its **Phosphor** colour,
+  **Light**. Pixel Code uses its own **Shadow** and **Highlight**, Matrix Rain its **Rain Color**, Retro Matrix its **Phosphor** colour,
   Number Field and Dither Glow always draw between Dark and Light; their cards hide what they do not use,
   and dim Dark and Light while Color Source is Source.
 - **Invert Ramp** swaps light and dense characters;
@@ -70,7 +70,8 @@ drawn and coloured.
   still and the card says that Speed then does nothing.
 - Retro Matrix adds **Scanlines** (the lines of an old screen) and **Phosphor**, Symbol Matrix
   **Twinkle** (how deep its signs breathe), Matrix Rain **Rain Color** and **Trail** (how long its falling tails are), Grid Glyph
-  **Line Width** and **Line Glow** (its ruled lines), Number Field **Steps** (how many flat colours); see their pages.
+  **Line Width** and **Line Glow** (its ruled lines), Number Field **Steps** (how many flat colours), Pixel Code
+  **Scramble** (how random its characters are); see their pages.
 
 **Tip:** bright, contrasty footage reads best. For pure characters on black, set **Background** to 0 and **Black Level** to about 0.2;
 for a projection, raise **Cell Size** to 24 or more. The **Style** menu in the card switches to another look

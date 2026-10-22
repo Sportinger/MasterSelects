@@ -332,6 +332,56 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "pixel-code-inspector",
+      "effect": "pixel-code",
+      "params": {
+        "cellSize": 14,
+        "rampPreset": "numeric",
+        "customRamp": "",
+        "scramble": 0.25,
+        "background": 0.3,
+        "blackLevel": 0.08,
+        "fontFamily": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        "fontWeight": 700,
+        "shadow": "#2b0a5a",
+        "highlight": "#ffd23f"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1500
+      },
+      "alt": "Properties, Effects with a Pixel Code card: Style menu, Preset menu showing Heat Map, Cell Size, then Amount, Background, Black Level and Invert Ramp, then Ramp, an empty Custom Ramp, Font, Weight and Scramble at 0.25, then Shadow in deep violet and Highlight in yellow, beside a strip of the preview where the dancer's dress is written in yellow figures on a violet field of dim ones",
+      "caption": "Pixel Code with the Heat Map preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Black Level: clears the dark stage. 4 — Scramble: how random the characters are. 5 — Shadow: the colour of the code in the dark, Highlight below it in the light.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Black Level",
+          "label": "Black Level"
+        },
+        {
+          "target": "Scramble",
+          "label": "Scramble"
+        },
+        {
+          "target": "Shadow",
+          "label": "Shadow"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

@@ -65,6 +65,28 @@
       },
       "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with Number Field right: the picture is rebuilt from the digits 1 to 9, the brighter the part the higher the digit, coloured in five flat steps from near-black to pale mint, so her dress becomes a block of bright 7s and 8s on stepped grey ground while the dark stage holds faint 1s",
       "caption": "Left: original. Right: Number Field at its default settings."
+    },
+    {
+      "name": "pixel-code",
+      "out": "docs/Features/assets/effects/pixel-code.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        760,
+        150,
+        480,
+        360
+      ],
+      "layout": "compare",
+      "outWidth": 1600,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "pixel-code"
+      },
+      "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with Pixel Code right: the picture is written in small zeros and ones, dense and mint green where her dress and arm are lit, sparse dim blue zeros on the dark stage, so the figure appears in the colour and the density of the code",
+      "caption": "Left: original. Right: Pixel Code at its default settings."
     }
   ],
   "strips": [
@@ -96,6 +118,19 @@
     },
     {
       "effect": "number-field",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        800,
+        170,
+        420,
+        315
+      ],
+      "cellWidth": 600,
+      "columns": 2
+    },
+    {
+      "effect": "pixel-code",
       "image": "dancer_stage",
       "width": 1920,
       "crop": [

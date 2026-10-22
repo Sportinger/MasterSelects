@@ -82,6 +82,11 @@ const GRID_LINE_PORTS = { 'grid-line-pixels': 'Line Pixels', 'grid-half-width': 
 /** Number Field: the colour step of every cell (Steps) and the flat colour it gives. */
 const NUMBER_FIELD_PORTS = { 'tone-steps-rounded': 'Whole Steps', 'steps-clamped': 'Step Count', 'tone-steps-last': 'Last Step', 'quantized-tone-scaled': 'Tone × Steps',
   'quantized-tone-floor': 'Band', 'quantized-tone-band': 'Step Number', 'quantized-tone': 'Step Tone', 'number-ink': 'Step Color', 'background-coverage': 'Coverage', 'number-mark': 'Glyph Cell' };
+/** Pixel Code: the random draw inside each cell's Scramble window, and its Shadow-to-Highlight ink. */
+const PIXEL_CODE_PORTS = { 'glyph-index': 'Tone Glyph', 'index-cell-random': 'Cell Random', 'index-draw': 'Random × Window', 'index-offset': 'Draw',
+  'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window', 'rolled-index': 'Glyph Index',
+  'index-roll-lit': 'Lit', 'index-roll-levelled': 'Black Level Set', 'index-roll-dark': 'Dark Scramble', 'index-roll-cell': 'Cell Scramble',
+  'code-shadow-rgb': 'Shadow', 'code-highlight-rgb': 'Highlight', 'code-color': 'Code Color', 'background-coverage': 'Coverage', 'code-mark': 'Glyph Cell' };
 /** Retro Matrix: its scroll, text, Phosphor ink and scanlines. */
 const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-wrapped': 'Wrapped Scroll', 'scroll-vector': 'Scroll Offset', 'scrolled-uv': 'Scrolled Grid',
   'index-text-turns': 'Text Turns', 'index-text-line': 'Text Line', 'index-text-cell': 'Text Cell', 'index-text-random': 'Text Random',
@@ -359,6 +364,12 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     const glyph = glyphPresentation();
     return { ...glyph, labels: { ...glyph.labels, steps: 'Color Steps' }, portLabels: { ...GLYPH_PORTS, ...NUMBER_FIELD_PORTS },
       stage: (node) => /^(tone-steps|steps-clamped$|quantized-tone)/.test(node.id) ? 'steps' : glyph.stage(node) };
+  }
+  // Pixel Code: the random draw inside each cell's window (Scramble) has a folder of its own, Scramble.
+  if (type === 'pixel-code') {
+    const glyph = glyphPresentation();
+    return { ...glyph, labels: { ...glyph.labels, scramble: 'Scramble' }, portLabels: { ...GLYPH_PORTS, ...PIXEL_CODE_PORTS },
+      stage: (node) => /^(scramble-clamped$|rolled-index$|shifted-index$|index-)/.test(node.id) ? 'scramble' : glyph.stage(node) };
   }
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return glyphPresentation();
   return undefined;

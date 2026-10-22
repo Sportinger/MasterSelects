@@ -37,6 +37,8 @@ export interface GlyphEffectOptions {
   ignoresColors?: readonly GlyphColorControl[];
   params?: Record<string, EffectParam>;
   presets?: readonly EffectPreset[];
+  /** Card notes of the look's own (a control another one makes ineffective, as Invert Ramp at Pixel Code's Scramble 1). */
+  warnings?: (values: Record<string, number | boolean | string>) => string[];
   category?: EffectCategory;
 }
 
@@ -168,6 +170,7 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
       ...glyphCellWarnings(values, width, height, defaultCellSize),
       ...asciiRampWarnings(values.rampPreset ?? defaultRamp, values.customRamp),
       ...(options.motionOnlyByRoll ? rollHoldWarnings(values) : []),
+      ...(options.warnings?.(values) ?? []),
     ],
     ...(options.presets ? { presets: options.presets } : {}),
     glyphAtlas: (values) => ({
