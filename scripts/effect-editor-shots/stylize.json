@@ -215,6 +215,52 @@
       },
       "caption": "Acuarela with the Loose Wash preset. 1 — Preset: pick a starting point. 2 — Wash: how flat the colour gets. 3 — Edges: the darker paint along every border. 4 — Granulation: pigment in the paper grain. 5 — Flow: lets the wet paint drift.",
       "layout": "float"
+    },
+    {
+      "name": "rom1-inspector",
+      "effect": "rom1",
+      "params": {
+        "trail": 0.95,
+        "strength": 0.35,
+        "gainX": 0.9,
+        "gainY": 0,
+        "density": 1
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 0,
+      "alt": "Properties, Effects with a Rom1 card: the Preset menu showing Light Trails, then History Loop, Opacity, Trail, Gain, Speed, Detail, Strength, Density, Gain X, Gain Y and the Reset box",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Trail",
+          "label": "Trail"
+        },
+        {
+          "target": "Strength",
+          "label": "Strength"
+        },
+        {
+          "target": "Density",
+          "label": "Density"
+        },
+        {
+          "target": "Gain X",
+          "label": "Gain X"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "viewport": {
+        "width": 1600,
+        "height": 1200
+      },
+      "caption": "Rom1 with the Light Trails preset. 1 — Preset: pick a starting point. 2 — Trail: how long the smoke stays. 3 — Strength: how far it flows each frame. 4 — Density: how large the currents are. 5 — Gain X: the sideways share of the flow.",
+      "layout": "float"
     }
   ]
 }

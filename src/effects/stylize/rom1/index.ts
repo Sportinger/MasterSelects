@@ -3,9 +3,17 @@
 
 import shader from './shader.wgsl?raw';
 import { finiteUniform as finite } from '../../_shared/effectUniformParams';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { FEEDBACK_PARAMETERS } from '../../_shared/feedbackParameters';
-import { rom1ParamWarnings } from './warnings';
+import { rom1ParamWarnings, ROM1_TRAIL_DEFAULT, ROM1_TRAIL_MAX } from './warnings';
+
+/** Named starting points (Preset row, docs presets loop); each was rendered on the moving dancer and the neon street. */
+export const ROM1_PRESETS: readonly EffectPreset[] = [
+  { id: 'soft-echo', name: 'Soft Echo', params: { trail: 0.85, strength: 0.2 } },
+  { id: 'light-trails', name: 'Light Trails', params: { trail: 0.95, strength: 0.35, gainX: 0.9, gainY: 0, density: 1 } },
+  { id: 'dripping-light', name: 'Dripping Light', params: { trail: 0.97, gain: 0.03, strength: 0.35, gainX: 0, gainY: 0.9, density: 1.5 } },
+  { id: 'smoke-storm', name: 'Smoke Storm', params: { trail: 0.99, speed: 10, strength: 0.5, density: 3 } },
+];
 
 export const rom1: EffectDefinition = {
   id: 'rom1',
@@ -18,6 +26,7 @@ export const rom1: EffectDefinition = {
   usesFeedback: true,
   requiresContinuousRender: true,
 
+  presets: ROM1_PRESETS,
   paramWarnings: rom1ParamWarnings,
 
   params: {
@@ -29,6 +38,15 @@ export const rom1: EffectDefinition = {
       min: 0,
       max: 1,
       step: 0.01,
+      animatable: true,
+    },
+    trail: {
+      type: 'number',
+      label: 'Trail',
+      default: ROM1_TRAIL_DEFAULT,
+      min: 0,
+      max: ROM1_TRAIL_MAX,
+      step: 0.005,
       animatable: true,
     },
     gain: {
@@ -116,7 +134,7 @@ export const rom1: EffectDefinition = {
       width,
       height,
       Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,
-      0,
+      finite(params.trail, ROM1_TRAIL_DEFAULT),
     ]);
   },
 };

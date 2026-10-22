@@ -7,7 +7,7 @@ import { isFullscreenEffectDefinition } from '../../src/effects/types';
 import { getEffectOperator } from '../../src/services/operators/operatorRegistry';
 import { effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { withLegacyLookParams } from '../../src/effects/looks/legacyLookParams';
-import { createDefaultRom1Graph } from '../../src/services/operators/rom1EffectGraph';
+import { createRom1GraphBefore20261022 } from '../../src/services/operators/rom1EffectGraph';
 import { clampSmokeGainGraph, kneeRom1GainGraph, rom1GainLift } from '../../src/services/operators/smokeGainUpgrade';
 import { createSavedRom1GraphBeforeGainKnee } from '../fixtures/rom1GraphBeforeGainKnee';
 import { createLegacyAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
@@ -99,7 +99,8 @@ describe('stylize clamp notes', () => {
     const resolved = effectOperatorGraph({ ...effect('rom1', getDefaultParams('rom1')), operatorGraph: loaded });
     expect(resolved.edges.find(edge => edge.to === 'gain-rgb')?.from).toBe('gain-knee');
     expect(kneeRom1GainGraph(kneeRom1GainGraph(before))).toBe(kneeRom1GainGraph(before));
-    expect(createDefaultRom1Graph().nodes.map(item => item.id).toSorted()).toEqual(kneeRom1GainGraph(before).nodes.map(item => item.id).toSorted());
+    // The knee turns it into the recipe saved before 2026-10-22, which then upgrades to the premultiplied trail.
+    expect(createRom1GraphBefore20261022().nodes.map(item => item.id).toSorted()).toEqual(kneeRom1GainGraph(before).nodes.map(item => item.id).toSorted());
     // On a black opaque frame with empty history the Rom1 output is the lift itself. Up to 0.25 it is
     // the old linear lift, so saved looks stay the same; above it eases toward 0.5 and never whitens.
     const lift = (graph: EffectOperatorGraph, gain: number) => evaluateImageOperatorPlan(

@@ -30,8 +30,19 @@ function noise2d(g: Graph, id: string, point: Ref, zero: Ref, one: Ref, two: Ref
     mix('row-one', h01, h11, { node: fadeParts.node, port: 'x' }), { node: fadeParts.node, port: 'y' });
 }
 
-/** Granular four-octave expansion of the legacy ROM1 feedback shader. */
-export function createDefaultRom1Graph(): EffectOperatorGraph {
+/**
+ * Granular four-octave expansion of the ROM1 feedback shader. Since 2026-10-22 the trail is kept premultiplied
+ * (a cut-out layer's smoke fades in alpha, not to black); opaque layers render as before.
+ */
+export function createDefaultRom1Graph(): EffectOperatorGraph { return createRom1Graph('premultiplied'); }
+
+/**
+ * The recipe saved before 2026-10-22: it faded the trail's straight colour together with its alpha, so smoke outside
+ * a cut-out layer turned dark. Untouched saved copies upgrade on load (upgradeRom1Graph); only recognition uses it.
+ */
+export function createRom1GraphBefore20261022(): EffectOperatorGraph { return createRom1Graph('straight'); }
+
+function createRom1Graph(recipe: 'straight' | 'premultiplied'): EffectOperatorGraph {
   const g = new Graph(), frame = g.node('frame', 'image.frame', 'image'), history = g.node('history', 'image.frame-history', 'image');
   const uv = g.node('uv', 'image.normalized-uv', 'uv'), time = g.node('time', 'image.timeline-time');
   const bind = (id: string) => g.node(id, 'values.number', 'value', { value: id });
@@ -78,27 +89,77 @@ export function createDefaultRom1Graph(): EffectOperatorGraph {
   const edgeX = g.binary('edge-x', 'math.min.scalar', { node: warpedParts.node, port: 'x' }, g.binary('one-minus-x', 'math.subtract.scalar', one, { node: warpedParts.node, port: 'x' }));
   const edgeY = g.binary('edge-y', 'math.min.scalar', { node: warpedParts.node, port: 'y' }, g.binary('one-minus-y', 'math.subtract.scalar', one, { node: warpedParts.node, port: 'y' }));
   const edgeMask = g.node('edge-mask', 'math.smoothstep.scalar'); g.edge(g.number('edge-low', -.005), edgeMask, 'edge0'); g.edge(g.number('edge-high', .025), edgeMask, 'edge1'); g.edge(g.binary('edge', 'math.min.scalar', edgeX, edgeY), edgeMask, 'value');
-  const maskedFeedback = g.node('feedback-masked', 'math.multiply.image-scalar'); g.edge(feedback, maskedFeedback, 'a'); g.edge(edgeMask, maskedFeedback, 'b');
   const split = (id: string, image: Ref) => { const out = g.node(`${id}-split`, 'vector.split.rgba', 'rgb'); g.edge(image, out, 'image'); return out; };
-  const sourceParts = split('source', source), wetParts = split('wet', wet), feedbackParts = split('feedback', maskedFeedback);
   const numericAlpha = (id: string, image: Ref) => { const value = g.unary(`${id}-vec4`, 'convert.image-to-vec4', image, 'image'); const parts = g.node(`${id}-components`, 'vector.split.vec4', 'w'); g.edge(value, parts, 'value'); return { node: parts.node, port: 'w' }; };
+  const safeGain = g.binary('safe-gain', 'math.max.scalar', gain, zero), gainRgb = g.unary('gain-rgb', 'convert.scalar-to-rgb', safeGain, 'value', 'rgb');
+  // Trail (2026-10-22): the share kept per frame, 0 to 0.995; the recipe before it kept a fixed 0.98.
+  const decay = recipe === 'straight' ? g.number('feedback-decay', .98) : g.node('trail-clamped', 'math.clamp.scalar');
+  if (recipe !== 'straight') { g.edge(bind('trail'), decay, 'value'); g.edge(zero, decay, 'min'); g.edge(g.number('trail-max', .995), decay, 'max'); }
+  const opacityClamp = g.node('opacity-clamp', 'math.clamp.scalar'); g.edge(opacity, opacityClamp, 'value'); g.edge(zero, opacityClamp, 'min'); g.edge(one, opacityClamp, 'max');
+  const finish = { g, frame, source, wet, feedback, edgeMask, split, numericAlpha, gainRgb, decay, opacityClamp, zero, one, tiny };
+  if (recipe === 'straight') finishStraight(finish); else finishPremultiplied(finish);
+  // Gain passes a knee instead of lifting every pixel to white (smokeGainUpgrade.ts, also for saved graphs).
+  return kneeRom1GainGraph({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout });
+}
+
+interface Rom1Finish {
+  g: Graph; frame: Ref; source: Ref; wet: Ref; feedback: Ref; edgeMask: Ref; gainRgb: Ref; decay: Ref; opacityClamp: Ref; zero: Ref; one: Ref; tiny: Ref;
+  split: (id: string, image: Ref) => Ref; numericAlpha: (id: string, image: Ref) => Ref;
+}
+
+function output(g: Graph, rgb: Ref, alpha: Ref) {
+  const vector = g.unary('water-rgb-vector', 'convert.rgb-to-vec3', rgb, 'rgb'), parts = g.node('water-rgb-parts', 'vector.split.vec3', 'x'); g.edge(vector, parts, 'value');
+  const value = g.node('water-value', 'vector.combine.vec4'); for (const component of ['x', 'y', 'z'] as const) g.edge({ node: parts.node, port: component }, value, component); g.edge(alpha, value, 'w');
+  return value;
+}
+
+/** Before 2026-10-22: straight colour, decayed and kept brighter like the alpha. */
+function finishStraight({ g, source, wet, feedback, edgeMask, split, numericAlpha, gainRgb, decay, opacityClamp, zero, one }: Rom1Finish) {
+  const maskedFeedback = g.node('feedback-masked', 'math.multiply.image-scalar'); g.edge(feedback, maskedFeedback, 'a'); g.edge(edgeMask, maskedFeedback, 'b');
+  const sourceParts = split('source', source), wetParts = split('wet', wet), feedbackParts = split('feedback', maskedFeedback);
   const sourceAlpha = numericAlpha('source-alpha', source), feedbackAlpha = numericAlpha('feedback-alpha', maskedFeedback);
   const wetMix = g.node('wet-mix', 'math.mix.rgb'); g.edge({ node: sourceParts.node, port: 'rgb' }, wetMix, 'a'); g.edge({ node: wetParts.node, port: 'rgb' }, wetMix, 'b'); g.edge(g.number('wet-factor', .18), wetMix, 't');
-  const safeGain = g.binary('safe-gain', 'math.max.scalar', gain, zero), gainRgb = g.unary('gain-rgb', 'convert.scalar-to-rgb', safeGain, 'value', 'rgb');
   const alphaGain = g.node('alpha-gain', 'math.multiply.rgb-scalar'); g.edge(gainRgb, alphaGain, 'a'); g.edge(sourceAlpha, alphaGain, 'b');
   const liftedRaw = g.binary('lifted-raw', 'math.add.rgb', wetMix, alphaGain), lifted = g.node('lifted', 'math.clamp.rgb-scalar');
   g.edge(liftedRaw, lifted, 'value'); g.edge(zero, lifted, 'min'); g.edge(one, lifted, 'max');
-  const decay = g.number('feedback-decay', .98), advected = g.node('advected', 'math.multiply.rgb-scalar'); g.edge({ node: feedbackParts.node, port: 'rgb' }, advected, 'a'); g.edge(decay, advected, 'b');
+  const advected = g.node('advected', 'math.multiply.rgb-scalar'); g.edge({ node: feedbackParts.node, port: 'rgb' }, advected, 'a'); g.edge(decay, advected, 'b');
   const waterRgb = g.node('water-rgb', 'math.max.rgb'); g.edge(lifted, waterRgb, 'a'); g.edge(advected, waterRgb, 'b');
   const decayedAlpha = g.binary('feedback-alpha-decayed', 'math.multiply.scalar', feedbackAlpha, decay);
   const alphaMax = g.binary('water-alpha-max', 'math.max.scalar', sourceAlpha, decayedAlpha);
   const waterAlpha = g.node('water-alpha', 'math.clamp.scalar'); g.edge(alphaMax, waterAlpha, 'value'); g.edge(zero, waterAlpha, 'min'); g.edge(one, waterAlpha, 'max');
-  const waterVector = g.unary('water-rgb-vector', 'convert.rgb-to-vec3', waterRgb, 'rgb'), waterParts = g.node('water-rgb-parts', 'vector.split.vec3', 'x'); g.edge(waterVector, waterParts, 'value');
-  const waterValue = g.node('water-value', 'vector.combine.vec4'); for (const component of ['x', 'y', 'z'] as const) g.edge({ node: waterParts.node, port: component }, waterValue, component); g.edge(waterAlpha, waterValue, 'w');
-  const sourceValue = g.unary('source-value', 'convert.image-to-vec4', source, 'image');
-  const opacityClamp = g.node('opacity-clamp', 'math.clamp.scalar'); g.edge(opacity, opacityClamp, 'value'); g.edge(zero, opacityClamp, 'min'); g.edge(one, opacityClamp, 'max');
+  const waterValue = output(g, waterRgb, waterAlpha), sourceValue = g.unary('source-value', 'convert.image-to-vec4', source, 'image');
   const mixed = g.node('mixed', 'math.mix.vec4'); g.edge(sourceValue, mixed, 'a'); g.edge(waterValue, mixed, 'b'); g.edge(opacityClamp, mixed, 't');
-  const result = g.unary('result', 'convert.vec4-to-image', mixed, 'value', 'image'), output = g.node('output', 'image.output', ''); g.edge(result, output, 'image');
-  // Gain passes a knee instead of lifting every pixel to white (smokeGainUpgrade.ts, also for saved graphs).
-  return kneeRom1GainGraph({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout });
+  const result = g.unary('result', 'convert.vec4-to-image', mixed, 'value', 'image'), out = g.node('output', 'image.output', ''); g.edge(result, out, 'image');
+}
+
+/**
+ * Premultiplied: colour × alpha is decayed and kept brighter, so a trail outside a cut-out fades in alpha and keeps its
+ * colour; Opacity blends premultiplied and the result is divided back to straight colour. With alpha 1 everywhere every
+ * step equals the straight recipe.
+ */
+function finishPremultiplied({ g, source, wet, feedback, edgeMask, split, numericAlpha, gainRgb, decay, opacityClamp, zero, one, tiny }: Rom1Finish) {
+  const sourceParts = split('source', source), wetParts = split('wet', wet), feedbackParts = split('feedback', feedback);
+  const sourceAlpha = numericAlpha('source-alpha', source), wetAlpha = numericAlpha('wet-alpha', wet), rawFeedbackAlpha = numericAlpha('feedback-alpha', feedback);
+  const feedbackAlpha = g.binary('feedback-alpha-masked', 'math.multiply.scalar', rawFeedbackAlpha, edgeMask);
+  const premultiplied = (id: string, rgb: Ref, alpha: Ref) => { const out = g.node(id, 'math.multiply.rgb-scalar'); g.edge(rgb, out, 'a'); g.edge(alpha, out, 'b'); return out; };
+  const sourceP = premultiplied('source-premultiplied', { node: sourceParts.node, port: 'rgb' }, sourceAlpha);
+  const wetP = premultiplied('wet-premultiplied', { node: wetParts.node, port: 'rgb' }, wetAlpha);
+  const feedbackP = premultiplied('feedback-premultiplied', { node: feedbackParts.node, port: 'rgb' }, feedbackAlpha);
+  const wetMix = g.node('wet-mix', 'math.mix.rgb'); g.edge(sourceP, wetMix, 'a'); g.edge(wetP, wetMix, 'b'); g.edge(g.number('wet-factor', .18), wetMix, 't');
+  const alphaGain = g.node('alpha-gain', 'math.multiply.rgb-scalar'); g.edge(gainRgb, alphaGain, 'a'); g.edge(sourceAlpha, alphaGain, 'b');
+  // The lift stays within the source's own coverage (1 on an opaque layer, as before).
+  const liftedRaw = g.binary('lifted-raw', 'math.add.rgb', wetMix, alphaGain), lifted = g.node('lifted', 'math.clamp.rgb-scalar');
+  g.edge(liftedRaw, lifted, 'value'); g.edge(zero, lifted, 'min'); g.edge(sourceAlpha, lifted, 'max');
+  const advected = g.node('advected', 'math.multiply.rgb-scalar'); g.edge(feedbackP, advected, 'a'); g.edge(decay, advected, 'b');
+  const waterRgb = g.node('water-rgb', 'math.max.rgb'); g.edge(lifted, waterRgb, 'a'); g.edge(advected, waterRgb, 'b');
+  const decayedAlpha = g.binary('feedback-alpha-decayed', 'math.multiply.scalar', feedbackAlpha, decay);
+  const alphaMax = g.binary('water-alpha-max', 'math.max.scalar', sourceAlpha, decayedAlpha);
+  const waterAlpha = g.node('water-alpha', 'math.clamp.scalar'); g.edge(alphaMax, waterAlpha, 'value'); g.edge(zero, waterAlpha, 'min'); g.edge(one, waterAlpha, 'max');
+  const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceP, mixed, 'a'); g.edge(waterRgb, mixed, 'b'); g.edge(opacityClamp, mixed, 't');
+  const mixedAlpha = g.node('mixed-alpha', 'math.mix.scalar'); g.edge(sourceAlpha, mixedAlpha, 'a'); g.edge(waterAlpha, mixedAlpha, 'b'); g.edge(opacityClamp, mixedAlpha, 't');
+  const coverage = g.binary('mixed-alpha-safe', 'math.max.scalar', mixedAlpha, tiny);
+  const straight = g.node('straight', 'math.divide-ieee.rgb-scalar'); g.edge(mixed, straight, 'a'); g.edge(coverage, straight, 'b');
+  const straightClamped = g.node('straight-clamped', 'math.clamp.rgb-scalar'); g.edge(straight, straightClamped, 'value'); g.edge(zero, straightClamped, 'min'); g.edge(one, straightClamped, 'max');
+  const value = output(g, straightClamped, mixedAlpha);
+  const result = g.unary('result', 'convert.vec4-to-image', value, 'value', 'image'), out = g.node('output', 'image.output', ''); g.edge(result, out, 'image');
 }

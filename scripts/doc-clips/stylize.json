@@ -435,6 +435,320 @@
       "float": "right",
       "alt": "The dancer turning with Acuarela at Bleed 20, close up, at two Flow values for about 1.6 seconds each: at Flow 0 the wobble of her outline and the wet patches hold still on the screen while she moves through them, at Flow 2 the wobbly edges crawl and the wet areas drift on their own; the value is shown at the bottom left",
       "caption": "Flow 0 and 2 at Bleed 20, close up, about 1.6 seconds each."
+    },
+    {
+      "name": "rom1",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        420,
+        60,
+        1000,
+        960
+      ],
+      "width": 960,
+      "float": "left",
+      "alt": "The dancer turning on a dark stage, original left and with Rom1 right: her white dress, arms and red hair leave soft, smoky trails that flow sideways and upwards in streaky currents and slowly fade, so every turn hangs in the air for a moment",
+      "caption": "Left: original. Right: Rom1 at its default settings.",
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 1000000
+    },
+    {
+      "name": "rom1-presets",
+      "kind": "presets",
+      "effect": "rom1",
+      "range": [
+        0.3,
+        5.5
+      ],
+      "crop": [
+        400,
+        60,
+        1040,
+        900
+      ],
+      "width": 960,
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 1200000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Soft Echo top left with short, faint trails, Light Trails top right with her arms and dress streaking sideways, Dripping Light bottom left with trails that run up and down in streaks, Smoke Storm bottom right with large swirling smoke that fills the stage",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "rom1-opacity",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "opacity",
+        "label": "Opacity",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Opacity runs from 0 to 1 and back: the clean footage gains smoky trails and loses them again; the current value is shown at the bottom left",
+      "caption": "Opacity from 0 to 1 and back."
+    },
+    {
+      "name": "rom1-gain",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "gain",
+        "label": "Gain",
+        "from": 0,
+        "to": 0.3,
+        "decimals": 3
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Gain runs from 0 to 0.3 and back: the whole picture brightens and washes out towards a milky grey, the trails turn pale, then the colour comes back; the current value is shown at the bottom left",
+      "caption": "Gain from 0 to 0.3 and back."
+    },
+    {
+      "name": "rom1-speed",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "from": 0,
+        "to": 16,
+        "decimals": 1
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Speed runs from 0 to 16 and back: the trails start to flow and smear further and further into large swirling shapes, then calm down again; the current value is shown at the bottom left",
+      "caption": "Speed from 0 to 16 and back."
+    },
+    {
+      "name": "rom1-strength",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "strength",
+        "label": "Strength",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Strength runs from 0 to 1 and back: the trails start to flow and smear further and further into large swirling shapes, then calm down again; the current value is shown at the bottom left",
+      "caption": "Strength from 0 to 1 and back."
+    },
+    {
+      "name": "rom1-trail",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "trail",
+        "label": "Trail",
+        "from": 0.5,
+        "to": 0.995,
+        "decimals": 3
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Trail runs from 0.5 to 0.995 and back: at first only a faint smear clings to her edges, then long smoky trails build up behind every movement and fade again; the current value is shown at the bottom left",
+      "caption": "Trail from 0.5 to 0.995 and back."
+    },
+    {
+      "name": "rom1-detail",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "detail",
+        "label": "Detail",
+        "from": 0.5,
+        "to": 8,
+        "decimals": 1
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Detail runs from 0.5 to 8 and back: the smoke changes from broad, slow sweeps to finer, more broken streaks and back; the current value is shown at the bottom left",
+      "caption": "Detail from 0.5 to 8 and back."
+    },
+    {
+      "name": "rom1-density",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "density",
+        "label": "Density",
+        "from": 0.5,
+        "to": 16,
+        "decimals": 1
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Density runs from 0.5 to 16 and back: the smoke changes from broad, slow sweeps to finer, more broken streaks and back; the current value is shown at the bottom left",
+      "caption": "Density from 0.5 to 16 and back."
+    },
+    {
+      "name": "rom1-gain-x",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "gainX",
+        "label": "Gain X",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Gain X runs from 0 to 1 and back: the trails spread more and more to the sides and narrow again; the current value is shown at the bottom left",
+      "caption": "Gain X from 0 to 1 and back."
+    },
+    {
+      "name": "rom1-gain-y",
+      "effect": "rom1",
+      "params": {},
+      "range": [
+        0.3,
+        5.3
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "gainY",
+        "label": "Gain Y",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.6,
+      "poster": 3.0,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Rom1 while Gain Y runs from 0 to 1 and back: the trails spread more and more up and down and narrow again; the current value is shown at the bottom left",
+      "caption": "Gain Y from 0 to 1 and back."
     }
   ]
 }

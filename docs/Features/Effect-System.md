@@ -493,7 +493,12 @@ An automatic key on a clip without that screen colour keys nothing; the inspecto
 `addEffect`/`updateEffect` say so, checked on the clip's thumbnails.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
-feedback decay, and final RGBA mixing as shared nodes. Its source lift passes Gain through a
+feedback decay (the Trail control, 0 to 0.995, default 0.98: the fixed value before
+2026-10-22), and final RGBA mixing as shared nodes. Since 2026-10-22 it keeps the trail
+premultiplied (colour × alpha decays and keeps the brighter value, divided back to
+straight colour at the end), so smoke beside a cut-out layer fades in alpha instead of
+turning dark; untouched saved graphs upgrade on load (`upgradeRom1Graph`), opaque layers
+render the same pixels. Its source lift passes Gain through a
 knee: the lift equals Gain up to 0.25, then eases as `0.25 + 0.25 (1 - exp(-(Gain - 0.25) / 0.25))`
 toward 0.5 (`rom1GainLift`), so saved looks with typical Gain stay the same and large values
 wash the frame out instead of turning it white; saved graphs get the knee nodes on load. Detail changes frequency,

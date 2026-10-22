@@ -139,6 +139,8 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly density: number;
     readonly gainX: number;
     readonly gainY: number;
+    /** Share of the trail kept per frame; hosts built before 2026-10-22 send none (0.98). */
+    readonly trail?: number;
     readonly reset: boolean;
     readonly historyLoop?: 'reset' | 'continuous';
   }[];

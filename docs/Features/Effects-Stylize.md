@@ -30,7 +30,7 @@ These effects are built in four different ways, each the way its look needs:
   the blurs, they first weigh each colour by its transparency (**Premultiplied Source**), so
   transparent edges stay clean.
 - **With the previous frame.** Rom1 builds every frame on its own last result, so its trails grow
-  while the clip plays.
+  while the clip plays and fade by its **Trail**.
 - **One fixed shader.** Sheen has no node setup to open.
 
 Inside a graph, each stage is a folder with a plain name, such as **Bright Pass** or **Edge

@@ -779,7 +779,8 @@ describe('worker software painter', () => {
     );
 
     expect(first ? Array.from(first) : null).toEqual([100, 50, 0, 255]);
-    expect(second ? Array.from(second) : null).toEqual([98, 49, 0, 250]);
+    // The trail outside the (now transparent) layer fades in alpha and keeps its colour (premultiplied since 2026-10-22).
+    expect(second ? Array.from(second) : null).toEqual([100, 50, 0, 250]);
   });
 
   // Directional blurs follow the shared contract (effects/blur/blurSampling.ts) in one stage of

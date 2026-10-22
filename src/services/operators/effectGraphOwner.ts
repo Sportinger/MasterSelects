@@ -50,7 +50,8 @@ import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultGlowGraph } from './glowBloomEffectGraph';
 import { upgradeGlowGraph } from './glowGraphUpgrade';
 import { createEarlierStylizeGraph, stylizePresentation, upgradePointwiseStylizeGraph } from './stylizeRecipes';
-import { clampSmokeGainGraph, kneeRom1GainGraph } from './smokeGainUpgrade';
+import { clampSmokeGainGraph } from './smokeGainUpgrade';
+import { upgradeRom1Graph } from './rom1GraphUpgrade';
 import { withLegacySheenParams } from '../../effects/stylize/sheen/legacy';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
@@ -258,7 +259,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
         : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved)
-          : effectType === 'rom1' ? kneeRom1GainGraph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved)
+          : effectType === 'rom1' ? upgradeRom1Graph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved)
             : effectType === 'contrast' ? flattenContrastGraph(saved) : upgradePointwiseStylizeGraph(effectType, saved);
     // Stylize effects saved with their earlier recipe (before 2026-10-21) keep it and its folder plan
     // (its own presentation type, e.g. 'glow-earlier').

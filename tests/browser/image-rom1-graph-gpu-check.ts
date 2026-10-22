@@ -11,7 +11,7 @@ const width = 19, height = 13, bytesPerRow = 256;
 const definition = rom1 as FullscreenEffectDefinition;
 const defaults = Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.default]));
 const numericBounds = (bound: 'min' | 'max') => Object.fromEntries(
-  ['opacity', 'gain', 'speed', 'detail', 'strength', 'density', 'gainX', 'gainY'].map(id => [id, definition.params[id][bound]]),
+  ['opacity', 'gain', 'speed', 'detail', 'strength', 'density', 'gainX', 'gainY', 'trail'].map(id => [id, definition.params[id][bound]]),
 );
 const cases = [
   { name: 'defaults-t0', params: {}, time: 0, history: 'varying' },
