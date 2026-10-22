@@ -2511,10 +2511,17 @@ commits one undoable change; Cancel or Escape leaves the effect unchanged. Switc
 the selected clip or composition cancels the draft session.
 
 The effect derives a projective transform from the guide vanishing points and fits
-the entire photo with uniform scale. **Scale** can crop transparent borders;
+the entire photo with uniform scale. **Framing** on **Fill frame** (`fillFrame`)
+instead enlarges the result just enough that the four frame corners land inside the
+corrected photo (a bisection on the strength-blended matrix, in
+`guidedPerspectiveFillScale`), so no transparent border is left; it follows a
+keyframed Strength frame by frame, and when more than 20× would be needed it keeps
+the whole photo and reports it. **Scale** zooms on top of either framing;
 **Strength** blends the transform back toward the original geometry, so lines stay
 straight at any Strength (saved projects with Strength below 100 render this
-corrected blend). Both support keyframes. Slanted borders get a one-pixel soft edge;
+corrected blend). Both support keyframes. Presets set Framing and Strength and keep
+the drawn guides. The card's reset arrow in the Guides row removes the guides and
+their correction in one undo step. Slanted borders get a one-pixel soft edge;
 out-of-range Scale, Strength or matrix values are clamped and reported.
 Guides and correction persist in the project and render during export. Duplicate,
 short, incomplete, and unstable guide pairs are rejected with an explanation.

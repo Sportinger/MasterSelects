@@ -51,6 +51,16 @@ export const EFFECT_DOC_EXTRAS = {
       { key: 'vignetteEnabled', range: 'On or off', before: 'vignette' },
     ],
   },
+  // Guided Perspective's own card (GuidedPerspectiveControls): the Guides row (Edit guides, Reset) draws the
+  // hidden guides in the Preview, and Fill Frame is the Framing menu.
+  'guided-perspective': {
+    rows: [
+      { key: 'guides', range: '2 to 8 lines per direction (Edit guides, Reset)', default: 'none', before: 'strength' },
+      { key: 'fillFrame', label: 'Framing', range: 'Whole photo or Fill frame', default: 'Whole photo', before: 'strength' },
+      { key: 'strength', range: '0 to 100 %', default: '100 %' },
+      { key: 'scale', range: '50 to 300 %', default: '100 %' },
+    ],
+  },
   'ai-edge-fill': {
     rows: [
       'resolution',

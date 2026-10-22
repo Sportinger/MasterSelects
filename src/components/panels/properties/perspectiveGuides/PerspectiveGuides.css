@@ -4,6 +4,8 @@
     background: var(--bg-tertiary); color: var(--text-primary); cursor: pointer;
     font: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent;
   }
+  /* The guides' reset sits under the other rows' reset arrows (the last action column). */
+  .perspective-guides-row > .resolve-inspector-row-actions > .resolve-inspector-icon-button { grid-column: -2; }
   .perspective-action:hover { background: var(--bg-hover); }
   .perspective-action:disabled { opacity: .45; cursor: default; }
   .perspective-action:focus { outline: none; }

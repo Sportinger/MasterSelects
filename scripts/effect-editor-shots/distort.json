@@ -44,6 +44,57 @@
       ]
     },
     {
+      "name": "guided-perspective-inspector",
+      "effect": "guided-perspective",
+      "params": {
+        "guides": "[{\"axis\":\"vertical\",\"x1\":0.217,\"y1\":0.12,\"x2\":0.1447,\"y2\":0.86},{\"axis\":\"vertical\",\"x1\":0.7885,\"y1\":0.12,\"x2\":0.8622,\"y2\":0.86}]",
+        "matrix0": 1.180074,
+        "matrix1": -0.1800771,
+        "matrix2": 0.01192044,
+        "matrix3": 0,
+        "matrix4": 1,
+        "matrix5": -0.06619634,
+        "matrix6": 0,
+        "matrix7": -0.360147,
+        "matrix8": 1.203914,
+        "fillFrame": true
+      },
+      "image": "neon_rain_street_tilted.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 900
+      },
+      "alt": "Properties, Effects with a Guided Perspective card: the Preset menu showing Fill Frame, the Perspective section with the Guides row and its Edit guides and Reset buttons, a note that two vertical guides are applied, the Framing menu on Fill frame, Strength 100 % and Scale 100 %, beside a strip of the preview with the straightened night street",
+      "caption": "Guided Perspective with two guides and the Fill Frame preset. 1 — Preset: pick a starting point. 2 — Guides: draw the lines in the Preview. 3 — Framing: whole photo or fill the frame. 4 — Strength: how much of the lean is removed. 5 — Scale: zooms in or out.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Guides",
+          "label": "Guides"
+        },
+        {
+          "target": "Framing",
+          "label": "Framing"
+        },
+        {
+          "target": "Strength",
+          "label": "Strength"
+        },
+        {
+          "target": "Scale",
+          "label": "Scale"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
       "name": "twirl-inspector",
       "effect": "twirl",
       "params": {

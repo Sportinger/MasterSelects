@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { guidedPerspective, guidedPerspectiveMatrix, guidedPerspectiveWarnings } from '../../src/effects/distort/guided-perspective';
+import { guidedPerspective, guidedPerspectiveFillScale, guidedPerspectiveMatrix, guidedPerspectiveScale, guidedPerspectiveWarnings,
+  MAX_FILL_SCALE } from '../../src/effects/distort/guided-perspective';
+import { resolveEffectPreset } from '../../src/services/effects/effectPresets';
 import { IDENTITY, invertMatrix, multiplyMatrix, parsePerspectiveGuides, solveGuidedPerspective, transformGuidePoint,
   type Matrix3, type PerspectiveGuide } from '../../src/effects/distort/guided-perspective/guideGeometry';
 
@@ -106,5 +108,52 @@ describe('Guided Perspective', () => {
     const full = guidedPerspectiveMatrix({ ...values, strength: 100 });
     const p = transformGuidePoint(inverse, .3, .6), q = transformGuidePoint(full as Matrix3, .3, .6);
     expect(q[0]).toBeCloseTo(p[0], 12); expect(q[1]).toBeCloseTo(p[1], 12);
+  });
+  it('Fill Frame enlarges just enough that the corrected photo covers every frame corner', () => {
+    const { inverse } = solveGuidedPerspective(vertical, 16 / 9);
+    const values = Object.fromEntries(inverse.map((value, i) => [`matrix${i}`, value]));
+    const covers = (m: number[], scale: number, margin: number) => [[0, 0], [1, 0], [0, 1], [1, 1]].every(([x, y]) => {
+      const u = (x - .5) / scale + .5, v = (y - .5) / scale + .5, w = m[6] * u + m[7] * v + m[8];
+      const s = [(m[0] * u + m[1] * v + m[2]) / w, (m[3] * u + m[4] * v + m[5]) / w];
+      return w > 0 && s.every(c => c >= margin && c <= 1 - margin);
+    });
+    for (const strength of [100, 80, 50]) {
+      const fill = guidedPerspectiveFillScale({ ...values, strength })!;
+      const m = guidedPerspectiveMatrix({ ...values, strength });
+      expect(fill).toBeGreaterThan(1);
+      expect(covers(m, fill, -1e-9)).toBe(true);
+      expect(covers(m, fill * .99, 0)).toBe(false);
+    }
+    // A weaker correction needs less enlargement; Scale multiplies on top; off keeps Scale alone.
+    expect(guidedPerspectiveFillScale({ ...values, strength: 50 })!).toBeLessThan(guidedPerspectiveFillScale(values)!);
+    expect(guidedPerspectiveScale({ ...values, fillFrame: true, scale: 120 })).toBeCloseTo(guidedPerspectiveFillScale(values)! * 1.2, 9);
+    expect(guidedPerspectiveScale({ ...values, scale: 120 })).toBeCloseTo(1.2, 9);
+    expect(guidedPerspective.packUniforms({ ...values, fillFrame: true }, 1920, 1080)![12]).toBeCloseTo(guidedPerspectiveFillScale(values)!, 5);
+    // Without guides nothing needs filling; saved effects without the parameter keep the whole photo.
+    expect(guidedPerspectiveFillScale({ fillFrame: true })).toBe(1);
+    expect(guidedPerspective.packUniforms(values, 1920, 1080)![12]).toBe(1);
+    expect(guidedPerspectiveWarnings({ ...values, fillFrame: true })).toEqual([]);
+  });
+  it('Fill Frame says so and keeps the whole photo when no enlargement up to the limit covers the frame', () => {
+    // The photo's footprint misses the frame centre: no enlargement fills it.
+    const shifted = { matrix2: .8, fillFrame: true };
+    expect(guidedPerspectiveFillScale(shifted)).toBeUndefined();
+    expect(guidedPerspectiveScale(shifted)).toBe(1);
+    expect(guidedPerspectiveWarnings(shifted)).toEqual([expect.stringContaining(`more than ${MAX_FILL_SCALE}×`)]);
+  });
+  it('presets change framing and strength but keep the drawn guides and their correction', () => {
+    const { inverse } = solveGuidedPerspective(vertical, 16 / 9);
+    const drawn = { guides: JSON.stringify(vertical), ...Object.fromEntries(inverse.map((value, i) => [`matrix${i}`, value])) };
+    expect(guidedPerspective.presets?.map(preset => preset.name)).toEqual(['Whole Photo', 'Fill Frame', 'Natural Lean', 'Soft Correction']);
+    for (const preset of guidedPerspective.presets!) {
+      const values = resolveEffectPreset({ type: 'guided-perspective', params: { ...drawn, scale: 140, strength: 30 } }, preset);
+      expect(values.guides).toBeUndefined();
+      expect(Object.keys(values).some(key => key.startsWith('matrix'))).toBe(false);
+      expect(values.scale).toBe(100);
+      const result = { ...drawn, scale: 140, strength: 30, ...values };
+      expect(guidedPerspectiveWarnings(result)).toEqual([]);
+      // Fill presets leave no transparent border on the drawn correction.
+      if (result.fillFrame) expect(guidedPerspectiveFillScale(result)).toBeGreaterThan(1);
+    }
   });
 });

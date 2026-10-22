@@ -21,6 +21,36 @@
       },
       "alt": "The rainy night street as a strong wide-angle lens bends it, original left and with Lens Correction right: on the left the shop fronts at both edges bow outward like a barrel; on the right they stand straight and upright, the street runs straight to the vanishing point and the picture is slightly enlarged",
       "caption": "Left: a shot from a strong wide-angle lens. Right: Distortion −28, Scale 120 (the Action Cam preset)."
+    },
+    {
+      "name": "guided-perspective",
+      "out": "docs/Features/assets/effects/guided-perspective.webp",
+      "image": "neon_rain_street_tilted",
+      "width": 1920,
+      "layout": "compare",
+      "outWidth": 1600,
+      "maxBytes": 190000,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "guided-perspective",
+        "params": {
+          "guides": "[{\"axis\":\"vertical\",\"x1\":0.217,\"y1\":0.12,\"x2\":0.1447,\"y2\":0.86},{\"axis\":\"vertical\",\"x1\":0.7885,\"y1\":0.12,\"x2\":0.8622,\"y2\":0.86}]",
+          "matrix0": 1.180074,
+          "matrix1": -0.1800771,
+          "matrix2": 0.01192044,
+          "matrix3": 0,
+          "matrix4": 1,
+          "matrix5": -0.06619634,
+          "matrix6": 0,
+          "matrix7": -0.360147,
+          "matrix8": 1.203914,
+          "fillFrame": true
+        }
+      },
+      "alt": "The rainy night street photographed with the camera tilted up, original left and with Guided Perspective right: on the left the house edges on both sides lean in towards the top; on the right they stand upright and parallel, and the picture is enlarged so it still fills the frame",
+      "caption": "Left: a photo taken with the camera tilted up. Right: two vertical guides along the house edges, with the Fill Frame preset."
     }
   ],
   "strips": [
@@ -36,6 +66,32 @@
       ],
       "cellWidth": 480,
       "backdrop": "#3c6ec8"
+    },
+    {
+      "effect": "guided-perspective",
+      "image": "neon_rain_street_tilted",
+      "width": 1920,
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "cellWidth": 480,
+      "backdrop": "#3c6ec8",
+      "params": {
+        "guides": "[{\"axis\":\"vertical\",\"x1\":0.217,\"y1\":0.12,\"x2\":0.1447,\"y2\":0.86},{\"axis\":\"vertical\",\"x1\":0.7885,\"y1\":0.12,\"x2\":0.8622,\"y2\":0.86}]",
+        "matrix0": 1.180074,
+        "matrix1": -0.1800771,
+        "matrix2": 0.01192044,
+        "matrix3": 0,
+        "matrix4": 1,
+        "matrix5": -0.06619634,
+        "matrix6": 0,
+        "matrix7": -0.360147,
+        "matrix8": 1.203914
+      },
+      "note": "params: the guides and correction drawn on the tilted street, under every preset (presets keep the drawn guides)."
     }
   ]
 }
