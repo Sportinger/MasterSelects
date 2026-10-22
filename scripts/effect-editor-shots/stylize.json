@@ -4,31 +4,45 @@
       "name": "glow-inspector",
       "effect": "glow",
       "params": {
-        "amount": 2.5,
-        "threshold": 0.95,
-        "radius": 80
+        "amount": 4,
+        "threshold": 0.85,
+        "softness": 0.6,
+        "radius": 70
       },
       "image": "neon_rain_street.jpg",
       "preview": 380,
-      "alt": "Properties, Effects with a Glow card at its default values (Amount 2.5, Threshold 0.95, Softness 0.5, Radius 80, Color white) beside the glowing night street in the preview",
+      "alt": "Properties, Effects with a Glow card: the Preset menu showing Neon Bloom, Amount 4, Threshold 0.85, Softness 0.6, Radius 70 px and a white Color swatch, beside a strip of the preview where the neon signs bloom",
       "marks": [
         {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
           "target": "Amount",
-          "label": "Amount: how bright"
+          "label": "Amount"
         },
         {
           "target": "Threshold",
-          "label": "Threshold: what glows"
+          "label": "Threshold"
+        },
+        {
+          "target": "Softness",
+          "label": "Softness"
         },
         {
           "target": "Radius",
-          "label": "Radius: how far it spreads"
+          "label": "Radius"
+        },
+        {
+          "target": "Color",
+          "label": "Color"
         }
       ],
       "top": "tabs",
       "hide": [
         "Particle Out"
-      ]
+      ],
+      "caption": "Glow with the Neon Bloom preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how bright. 3 \u2014 Threshold: what glows. 4 \u2014 Softness: how gently light joins in. 5 \u2014 Radius: how far it spreads. 6 \u2014 Color: the tint of the halo."
     }
   ]
 }

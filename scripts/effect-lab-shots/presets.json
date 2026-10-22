@@ -68,6 +68,18 @@
       ],
       "cellWidth": 480,
       "maxBytes": 120000
+    },
+    {
+      "effect": "glow",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        380,
+        0,
+        1080,
+        1080
+      ],
+      "cellWidth": 420
     }
   ]
 }

@@ -79,11 +79,15 @@ export function effectPortLabels(type: string): Record<string, string> | undefin
 
 const GLOW_PORTS: Record<string, string> = { 'source-split:rgb': 'Source Color', 'source-alpha': 'Source Alpha', 'bright-cache': 'Bright Light',
   'tap-weight': 'Tap Weight', 'up-uv': 'Up Read Position', 'down-uv': 'Down Read Position', 'level-weight': 'Level Weight',
-  'top-level-weight': 'Top Level Weight', 'glow-core-weight': 'Level 0 Weight', 'glow-light': 'Glow Light', 'glow-amount': 'Glow Amount', 'glow-tinted': 'Tinted Glow', 'color-rgb': 'Glow Color', 'glow-scaled': 'Glow',
+  'top-level-weight': 'Top Level Weight', 'level-short-side': 'Short Side', 'level-radius': 'Radius (> 0)', 'glow-core-weight': 'Level 0 Weight', 'glow-light': 'Glow Light', 'glow-amount': 'Glow Amount', 'glow-tinted': 'Tinted Glow', 'color-rgb': 'Glow Color', 'glow-scaled': 'Glow',
   'resolve-premultiplied': 'Premultiplied Source', 'glow-negative': '−Glow', 'euler-rgb': 'e', 'one-rgb': 'One', 'resolve-falloff': 'exp(−Glow)',
   'resolve-room': 'Room (1 − Picture)', 'resolve-remaining': 'Room × exp(−Glow)', 'resolve-result': 'Picture screened with Glow',
+  'bright-peak': 'Brightest Channel', 'bright-threshold': 'Threshold (≥ 0)', 'bright-knee': 'Softness × Headroom', 'bright-ramp-start': 'Ramp Start',
+  'bright-ramp-end': 'Ramp End', 'bright-contribution': 'Glow Share', 'level-reach-px': 'Radius × Short Side', 'level-fineness': 'Fineness',
+  'level-fine-fade': 'Fine Fade', 'level-position-shifted': 'Octaves + 1', 'glow-light-sum': 'Light Sum', 'glow-weight-safe': 'Weight Sum (≥ 1)', 'zero-rgb': 'Zero',
   ...Object.fromEntries(Array.from({ length: 10 }, (_, index) => [[`down-${index + 1}-cache`, `Level ${index + 1} (1/${2 ** (index + 1)} size)`],
-    [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`]]).flat()) };
+    [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`], [`up-${index + 1}-level-split:rgb`, `Level ${index + 1} Light`],
+    [`up-${index + 1}-weights`, 'Weight Sum'], [`up-${index + 1}-alpha`, 'Weight Sum'], [`up-${index + 1}-weight-sum`, 'Smaller Levels Weight']]).flat()) };
 // Threshold and Posterize: the hard step and the soft ramp that Softness blends in.
 const POINTWISE_PORTS = { compare: 'Above Level', hard: 'Hard Step', ramp: 'Soft Ramp', soft: 'Softness On', smooth: 'Soft Steps', steps: 'Steps' };
 
@@ -246,8 +250,8 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : /^(opacity-limited|gain|darkening|gap|source-split|shaded|combine)$/.test(id) ? 'finish' : 'lines',
   };
   if (type === 'glow') return {
-    labels: { bright: 'Bright Pass (ramp to white)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid: Halve the Light',
-      up: 'Pyramid: Add Levels Back Up', finish: 'Glow Resolve & Alpha' },
+    labels: { bright: 'Bright Pass (ramp to white)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid Down (halve the light)',
+      up: 'Pyramid Up (add levels back)', finish: 'Glow Resolve & Alpha' },
     portLabels: GLOW_PORTS,
     stage: ({ id }) => /^(bright-|source-)/.test(id) ? 'bright'
       : /^(tap-|texel$|one-vec2$|up-offset$|up-uv$|down-offset$|down-uv$|level-|top-level-|finest-)/.test(id) ? 'kernel'

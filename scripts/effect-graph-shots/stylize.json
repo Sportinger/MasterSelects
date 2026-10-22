@@ -1,7 +1,12 @@
 {
   "shots": [
     "threshold?focus=color-processing&only=luma,compare,hard&rows=1&layout=float@threshold-step",
-    "glow?focus=glow-resolve-and-alpha&only=resolve-premultiplied,resolve-room,resolve-falloff,resolve-remaining,resolve-result&rows=1&layout=float@glow-resolve",
+    "glow?plumbing=hide&omit=output&cables=avoid&marks=organized-glow-bright:below,organized-glow-kernel:above,organized-glow-down:right,organized-glow-up:right,organized-glow-finish:above@glow",
+    "glow?focus=bright-pass-ramp-to-white&only=bright-peak,bright-ramp-start,bright-contribution,bright-energy,bright-light,bright-image,bright-cache&cables=avoid&marks=bright-peak:below,bright-contribution:above,bright-light:above,bright-cache:above@glow-bright-pass",
+    "glow?focus=tap-kernel-and-level-weight&only=level-reach-ratio,level-log,level-position,level-position-shifted,level-radius-weight,level-weight&cables=avoid&marks=level-log:above,level-radius-weight:above,level-weight:below@glow-level-weight",
+    "glow?focus=pyramid-down-halve-the-light&only=down-1-sample,down-1-reduce,compound-shared-down-1-weight-vec4,down-1-cache&cables=avoid&marks=down-1-reduce:below,compound-shared-down-1-weight-vec4:below,down-1-cache:below@glow-pyramid-down",
+    "glow?focus=pyramid-up-add-levels-back&only=up-1-sample,up-1-reduce,compound-shared-up-1-weight-vec4,up-1-split,up-1-level,up-1-level-split,up-1-level-light,up-1-light,up-1-packed,up-1-cache&cables=avoid&marks=up-1-level:below,up-1-level-light:below,up-1-packed:below,up-1-cache:below@glow-pyramid-up",
+    "glow?focus=glow-resolve-and-alpha&only=glow-spread,glow-light,glow-tinted,glow-scaled,glow-negative,resolve-falloff,resolve-remaining,resolve-result&cables=avoid&marks=glow-spread:below,glow-light:above,resolve-falloff:below,resolve-result:below@glow-resolve",
     "grain?focus=film-response-midtones&only=response-luma,response-bell,response-inverse,response-midtone,response&rows=1@grain-film-response",
     "vignette?plumbing=hide&omit=output@vignette",
     "edge-detect?plumbing=hide&omit=output@edge-detect",

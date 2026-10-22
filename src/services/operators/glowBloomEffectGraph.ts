@@ -91,12 +91,10 @@ export function createDefaultGlowGraph(): EffectOperatorGraph {
     const upper: GraphPort = level === GLOW_LEVELS - 1 ? [`down-${GLOW_LEVELS}-cache`, 'image'] : [`up-${level + 1}-cache`, 'image'];
     const tent = filterTaps(g, `up-${level}`, upper, 'up-uv');
     const tentSplit = g.add(`up-${level}-split`, 'vector.split.rgba', { image: tent });
-    let tentRgb: GraphPort = [tentSplit, 'rgb'];
-    let tentWeight: GraphPort = g.add(`up-${level}-weight-sum`, 'convert.alpha-to-scalar', { alpha: [tentSplit, 'alpha'] });
-    if (level === GLOW_LEVELS - 1) {
-      tentRgb = g.add(`up-${level}-top-light`, 'math.multiply.rgb-scalar', { a: tentRgb, b: 'top-level-weight' });
-      tentWeight = 'top-level-weight';
-    }
+    // The smallest level carries no weight sum yet: it joins by the top level weight instead.
+    const top = level === GLOW_LEVELS - 1;
+    const tentRgb: GraphPort = top ? g.add(`up-${level}-top-light`, 'math.multiply.rgb-scalar', { a: [tentSplit, 'rgb'], b: 'top-level-weight' }) : [tentSplit, 'rgb'];
+    const tentWeight: GraphPort = top ? 'top-level-weight' : g.add(`up-${level}-weight-sum`, 'convert.alpha-to-scalar', { alpha: [tentSplit, 'alpha'] });
     const own = g.add(`up-${level}-level`, 'image.sample', { image: [`down-${level}-cache`, 'image'], uv: ['uv', 'uv'] });
     const weight = 'level-weight';
     const ownLight = g.add(`up-${level}-level-light`, 'math.multiply.rgb-scalar', { a: splitRgb(g, `up-${level}-level-split`, [own, 'image']), b: weight });

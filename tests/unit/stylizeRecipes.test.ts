@@ -505,6 +505,17 @@ describe('Glow', () => {
     expect(glowLevelWeights(40, 2160).slice(0, 2)).toEqual([0, 0]);
   });
 
+  it('has no dead nodes: every card of the recipe feeds the output (no dangling folder ports)', () => {
+    const graph = createStylizeRecipeGraph('glow');
+    const reached = new Set(['output']), queue = ['output'];
+    while (queue.length) {
+      const id = queue.pop()!;
+      for (const edge of graph.edges) if (edge.to === id && !reached.has(edge.from)) { reached.add(edge.from); queue.push(edge.from); }
+    }
+    const bound = new Set(graph.nodes.filter(node => Object.keys(node.bindings ?? {}).length).map(node => node.id));
+    expect(graph.nodes.map(node => node.id).filter(id => !reached.has(id) && !bound.has(id))).toEqual([]);
+  });
+
   it('tints the halo with Color and carries it onto transparent surroundings', () => {
     const out = render('glow', { amount: 3, radius: 300, color: '#ff0000' }, width, height, dot(0, 6));
     const halo = at(out, width, 71, 35);

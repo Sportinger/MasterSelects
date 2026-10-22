@@ -5,8 +5,19 @@
 // reference of that ring recipe and is only used to prewarm the generic effect layout.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { GLOW_DEFAULTS, glowParamNotes } from './glowBloom';
+
+export const GLOW_PRESETS: readonly EffectPreset[] = [
+  // A small, crisp halo around the lamps and neon only; the rest of the picture stays sharp.
+  { id: 'tight-halo', name: 'Tight Halo', params: { amount: 3, threshold: 0.9, radius: 18 } },
+  // Neon and practical lights bloom strongly, as through a lens in a rainy night.
+  { id: 'neon-bloom', name: 'Neon Bloom', params: { amount: 4, threshold: 0.85, softness: 0.6, radius: 70 } },
+  // Bright skin and costumes join in too: a soft, wide, dreamy haze over the whole scene.
+  { id: 'dream-glow', name: 'Dream Glow', params: { amount: 1.6, threshold: 0.55, softness: 1, radius: 160 } },
+  // A cool blue halo, like moonlight or a cold follow spot, on warm footage too.
+  { id: 'moonlight', name: 'Moonlight', params: { amount: 2.5, threshold: 0.7, softness: 0.8, radius: 120, color: '#9cc4ff' } },
+];
 
 const RING_ONLY = 'Only Glows saved with the earlier ring version read it; the bloom chooses its own sampling, so it has no effect here.';
 
@@ -56,6 +67,7 @@ export const glow: EffectDefinition = {
       min: 0,
       max: 300,
       step: 1,
+      unit: ' px',
       animatable: true,
     },
     color: { type: 'color', label: 'Color', default: '#ffffff', graphOnly: true },
@@ -82,6 +94,8 @@ export const glow: EffectDefinition = {
       deprecated: RING_ONLY,
     },
   },
+
+  presets: GLOW_PRESETS,
 
   paramWarnings: (params, width, height) => glowParamNotes(params, width, height),
 

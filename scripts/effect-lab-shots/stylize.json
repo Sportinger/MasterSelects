@@ -6,24 +6,46 @@
       "image": "neon_rain_street",
       "width": 1920,
       "crop": [
-        470,
+        540,
         0,
-        790,
-        890
+        840,
+        960
       ],
-      "zoom": 1,
-      "gap": 8,
+      "layout": "compare",
       "left": {
         "effect": "original"
       },
       "right": {
         "effect": "glow",
+        "params": {}
+      },
+      "alt": "The rainy night street with neon signs, original left and with Glow at its default values right: the pink spiral, the cyan and orange signs and the shop lights get soft halos in their own colours, and the lamps in the distance bloom into the wet air",
+      "caption": "Left: original. Right: the default values (Amount 2.5, Threshold 0.95, Radius 80 px)."
+    },
+    {
+      "name": "glow-threshold",
+      "out": "docs/Features/assets/effects/glow-threshold.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        460,
+        40,
+        760,
+        1000
+      ],
+      "layout": "compare",
+      "left": {
+        "effect": "glow",
+        "params": {}
+      },
+      "right": {
+        "effect": "glow",
         "params": {
-          "amount": 2.5,
-          "threshold": 0.95,
-          "radius": 80
+          "threshold": 0.55
         }
-      }
+      },
+      "alt": "The dancer on the dark stage with Glow twice: at Threshold 0.95 left only the spotlight and the brightest folds of her dress glow, at Threshold 0.55 right her whole dress, arms and face shine with a soft white halo",
+      "caption": "Left: Threshold 0.95, the default. Right: Threshold 0.55."
     }
   ]
 }
