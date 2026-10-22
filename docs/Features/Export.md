@@ -93,13 +93,13 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 
 - Source preparation tries project handles, project RAW paths, original media handles,
   media Files and clip Files in order until it actually reads nonempty bytes. A File
-  returned by a handle can still fail later with `NotReadableError`; that failure now
+  returned by a handle can still fail later with `NotReadableError`; that failure
   continues to the next file candidate before trying URLs. URL fallback includes the
   video's `currentSrc`, skips duplicate URLs and rejects HTTP errors and empty bodies.
   Failures remain logged. If every source is unavailable, export still fails explicitly;
   this cannot reconstruct missing or revoked media. Clips sharing a source reuse one
   preparation read per export run.
-- Export canvas capture snapshots the submitted GPU image immediately, without a per-frame `queue.onSubmittedWorkDone()` round trip. The retained `VideoFrame` remains valid if canvas cleanup happens afterward; capture no longer reads a nullable canvas field after yielding.
+- Export canvas capture snapshots the submitted GPU image immediately, without a per-frame `queue.onSubmittedWorkDone()` round trip. The retained `VideoFrame` remains valid if canvas cleanup happens afterward; capture does not read a nullable canvas field after yielding.
 - A canvas capture failure still permits pixel readback, but disables repeated direct-capture attempts only for that export canvas. Initializing a new export retries the direct path.
 - `tests/browser/export-canvas-probe.html` is a dev-only synthetic WebGPU check: it compares immediate/waited capture, verifies alternating frame pixels, encodes H.264, and reproduces the former cleanup race without changing a project. Its timings are not whole-editor export benchmarks.
 - Uses WebCodecs sequential decoding for a single clip.

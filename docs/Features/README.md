@@ -174,7 +174,7 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | [Media Downloads](./Download-Panel.md) | yt-dlp-backed downloads, platform mapping, and cookie retry behavior |
 | [Screen Capture](./Screen-Capture.md) | Screen/window/tab recording, audio mixing, recovery, and diagnostics; the WebCodecs crop/scale tier is currently disabled |
 | [Projects and saving](./Project-Persistence.md) | Continuous saving, project handoff, storage backends, media relinking, archives and recovery |
-| [Export](./Export.md) | WebCodecs fast/precise export, animated GIF, FFmpeg intermediates, image frame/sequence export, audio-only export, FCPXML, and project-persistent presets |
+| [Export](./Export.md) | The Export panel: WebCodecs Fast, HTMLVideo Precise, FFmpeg CPU and HAP GPU video, animated GIF, stills and image sequences, audio-only, FCPXML, and project presets |
 | [Native Helper](./Native-Helper.md) | Local HTTP/WebSocket APIs, auth startup token, and helper-backed flows |
 
 <!-- planned:
@@ -190,7 +190,7 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | [Audio](./Audio.md) | Playback sync, clip audio state, waveform/spectral display, recording, and export |
 | [Audio Intelligence](./Audio-Intelligence.md) | Persisted audio analysis as source-time evidence for the Analysis workspace, Agent Timeline, AI tools, and non-destructive audio edits |
 | [Tempo and Metronome](./Tempo-And-Metronome.md) | Editable tempo track with BPM/meter flags and ramps, tempo-driven grid and snapping, MIDI content that follows tempo, and a metronome click |
-| [Score Tracks](./Score-Tracks.md) | Audio-section score tracks with pencil-drawn score clips and a detached score-editor window |
+| [Score Tracks](./Score-Tracks.md) | Score tracks with pencil-drawn score clips and a notation editor window that plays the sheet |
 | [MuScriptor Music-to-MIDI](./MuScriptor.md) | Local Native Helper audio-to-MIDI transcription, model setup, instrument mapping, and atomic timeline commit |
 
 <!-- planned:
@@ -234,7 +234,7 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 
 | Document | Description |
 |---|---|
-| [Editor and panels](./UI-Panels.md) | Dock layout, panel catalog, properties tabs, shared touch support, and workspace surfaces |
+| [Editor and panels](./UI-Panels.md) | Menus, the panels and how to add them, built-in layouts, properties tabs, settings, and touch support |
 | [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Current shortcut registry, playback controls, and preset behavior |
 | [Android App](./Android-App.md) | Bundled offline editor, Android file import and export, build/signing instructions, and device limits |
 

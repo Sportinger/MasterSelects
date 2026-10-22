@@ -1,24 +1,6 @@
 # AI Integration
 
-[← Back to Index](./README.md)
-
 Model-powered editing through the private hosted-agent kernel and shared public editor tool catalog, plus multi-provider AI video/image/audio generation, local scene description, transcription, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
-
----
-
-## Table of Contents
-
-- [FlashBoard Chat](#flashboard-chat)
-- [Chat Providers](#chat-providers)
-- [Media Generator Tray](#media-generator-tray)
-- [AI Segmentation and MatAnyone2](#ai-segmentation-and-matanyone2)
-- [AI Editor Tools](#ai-editor-tools)
-- [AI Visual Feedback System](#ai-visual-feedback-system)
-- [AI Bridge Architecture](#ai-bridge-architecture)
-- [Hosted AI Safety And Audit](#hosted-ai-safety-and-audit)
-- [Transcription](#transcription)
-- [Scene Description](#scene-description)
-- [Configuration](#configuration)
 
 ---
 
