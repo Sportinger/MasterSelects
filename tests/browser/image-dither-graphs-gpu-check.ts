@@ -3,6 +3,7 @@ import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDef
 import { dither, ditherStudio } from '../../src/effects/halftone';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { createDefaultDitherGraph, type EditableDitherEffectType } from '../../src/services/operators/ditherEffectGraphs';
+import { createDefaultDitheringGraph } from '../../src/services/operators/ditheringEffectGraph';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
@@ -17,8 +18,13 @@ const amountCases: Case[] = [
 ];
 const fixtures: Fixture[] = [
   { type: 'dither', definition: dither as FullscreenEffectDefinition, cases: [
-    ...amountCases, { name: 'scale-minimum', params: { scale: 1, amount: 1 } },
-    { name: 'scale-maximum', params: { scale: 24, amount: 1 } },
+    ...amountCases, { name: 'amount-earlier-default', params: { amount: 0.75 } }, { name: 'scale-minimum', params: { scale: 1, amount: 1 } },
+    { name: 'scale-maximum', params: { scale: 24, amount: 1 } }, { name: 'scale-even', params: { scale: 2, amount: 1 } },
+    { name: 'levels-two', params: { levels: 2 } }, { name: 'levels-sixteen', params: { levels: 16 } },
+    { name: 'levels-between', params: { levels: 5.5, scale: 3 } }, { name: 'levels-below-range', params: { levels: 1 } },
+    // The 29-pixel test frame makes Pixel Size × 29 / 1080 whole pixels: cells of 2, 3, 4 and 11 pixels with their four reads.
+    { name: 'cells-two', params: { scale: 75 } }, { name: 'cells-three', params: { scale: 112, levels: 3 } },
+    { name: 'cells-four', params: { scale: 150, levels: 2 } }, { name: 'cells-eleven', params: { scale: 400, levels: 6, amount: 0.6 } },
   ] },
   { type: 'dither-studio', definition: ditherStudio as FullscreenEffectDefinition, cases: [
     ...amountCases, { name: 'scale-minimum', params: { scale: 2, amount: 1 } },
@@ -74,15 +80,17 @@ async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTexture
   } catch (error) { const validation = popped ? null : await pop(); if (validation) throw new Error(validation.message, { cause: error }); throw error;
   } finally { uniform?.destroy(); }
 }
+/** The current recipe of each effect (Dithering's own; Dither Studio's in ditherEffectGraphs.ts). */
+const graphOf = (type: EditableDitherEffectType) => type === 'dither' ? createDefaultDitheringGraph() : createDefaultDitherGraph(type);
 function directGraph(type: EditableDitherEffectType): EffectOperatorGraph {
-  const graph = structuredClone(createDefaultDitherGraph(type));
+  const graph = structuredClone(graphOf(type));
   const frame = graph.nodes.find(node => node.operator === 'image.frame'), output = graph.nodes.find(node => node.operator === 'image.output');
   if (!frame || !output) throw new Error(`${type} graph lacks image boundaries`);
   graph.edges = graph.edges.filter(edge => edge.to !== output.id);
   graph.edges.push({ id: `${type}-test-direct`, from: frame.id, output: 'image', to: output.id, input: 'image' }); return graph;
 }
 function bypassGraph(type: EditableDitherEffectType): EffectOperatorGraph {
-  const graph = structuredClone(createDefaultDitherGraph(type));
+  const graph = structuredClone(graphOf(type));
   const amount = graph.nodes.find(node => node.operator === 'values.number' && node.bindings?.value === 'amount');
   const mixEdge = amount && graph.edges.find(edge => edge.from === amount.id && edge.input === 't');
   const mix = mixEdge && graph.nodes.find(node => node.id === mixEdge.to && node.operator === 'math.mix.rgb');
@@ -101,7 +109,7 @@ export async function checkDitherGraphsGpu(device: GPUDevice): Promise<number> {
     for (const fixture of fixtures) {
       let processed: Uint8Array | undefined;
       for (const item of fixture.cases) {
-        const values = resolved(fixture.definition, item.params), plan = compileImageOperatorGraph(createDefaultDitherGraph(fixture.type), values,
+        const values = resolved(fixture.definition, item.params), plan = compileImageOperatorGraph(graphOf(fixture.type), values,
           { parameterSchema: fixture.definition.params });
         const packed = fixture.definition.packUniforms(values, width, height, 0);
         if (!packed) throw new Error(`${fixture.type} legacy definition did not provide uniforms`);

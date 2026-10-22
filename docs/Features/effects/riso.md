@@ -1,6 +1,6 @@
 # Riso
 
-<!-- effect-docs: basic page sha=a983a7074da8, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=aeb98aa50851, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Simulates two-ink risograph printing on cream paper with misregistered layers; Registration sets the offset, Dark and Warm Ink pick the colors.
 
@@ -29,7 +29,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 | Warm Ink | a colour | `#ef476f` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
 
 ## Technical details
 

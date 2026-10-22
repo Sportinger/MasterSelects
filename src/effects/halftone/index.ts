@@ -2,6 +2,7 @@ import shader from './shader.wgsl?raw';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { DRIFT_LINES_PRESETS, driftLinesWarnings } from './driftLines';
 import { HALFTONE_PRESETS } from './halftonePresets';
+import { DITHER_PRESETS } from './ditherPresets';
 
 /** Dither cells are whole output pixels (patternReferenceFrame.ts wholePixels): say when Pixel Size rounds on this frame. */
 function ditherWholePixelNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080): string[] {
@@ -9,6 +10,14 @@ function ditherWholePixelNotes(params: Record<string, number | boolean | string>
   const pixels = size * Math.min(width, height) / 1080, whole = Math.round(pixels);
   if (pixels < 1 || Math.abs(pixels - whole) < 1e-6) return [];
   return [`Pixel Size ${Number(size.toPrecision(4))} px is ${Number(pixels.toPrecision(3))} pixels on this ${width}×${height} frame; dither cells are whole pixels, so it renders ${whole}.`];
+}
+
+/** A graph-less Dithering saved before Levels (no `levels` value, hasEarlierDitheringParams) renders its earlier recipe: say so in the card. */
+function ditherNotes(params: Record<string, number | boolean | string>, width?: number, height?: number): string[] {
+  const earlier = params.levels === undefined
+    ? ['This Dithering was saved before Levels and keeps its earlier look (each pixel stepped to four levels); add Dithering again to use Levels and the presets as designed.']
+    : [];
+  return [...earlier, ...ditherWholePixelNotes(params, width, height)];
 }
 
 const select = (label: string, values: string[], defaultValue = values[0]) => ({
@@ -20,9 +29,21 @@ const select = (label: string, values: string[], defaultValue = values[0]) => ({
 });
 export const dither = createCatalogEffect({
   id: 'dither', name: 'Dithering', category: 'halftone', shader, entryPoint: 'ditherFragment', scaleFloor: 1,
-  params: { scale: { type: 'number', label: 'Pixel Size', default: 3, min: 1, max: 24, step: 1, group: 'Pattern' } },
+  // Same parameter ids as the other looks of the engine; Levels is its own, so the Style menu of the other looks
+  // (styles share every parameter, effectStyles.ts) does not offer Dithering.
+  params: {
+    scale: { type: 'number', label: 'Pixel Size', default: 3, min: 1, max: 24, step: 1, unit: ' px', group: 'Pattern' },
+    // Steps per colour channel (equal sRGB steps): 4 gives 64 colours, 2 the eight pure colours. A saved graph from before
+    // Levels does not read it, so the card hides it there (graphOnly); below 2 renders 2 and the card says so (renderMin).
+    levels: { type: 'number', label: 'Levels', default: 4, min: 2, max: 16, step: 1, renderMin: 2, graphOnly: true, group: 'Color' },
+    // The dithered picture alone by default; effects saved without an Amount keep the earlier 0.75.
+    amount: catalogBaseParam('amount', { group: 'Color', default: 1, legacyDefault: 0.75 }),
+  },
+  cardEnd: ['levels', 'amount'],
+  variantParam: 'levels',
   retired: ignoredBaseParams('Dithering', ['angle', 'colorA', 'colorB']),
-  paramWarnings: ditherWholePixelNotes,
+  paramWarnings: ditherNotes,
+  presets: DITHER_PRESETS,
 });
 export const ditherStudio = createCatalogEffect({
   id: 'dither-studio', name: 'Dither Studio', category: 'halftone', shader, entryPoint: 'ditherStudioFragment',

@@ -1,6 +1,6 @@
 # Contour Map
 
-<!-- effect-docs: basic page sha=988611537c7f, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=f2232e814b23, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Turns brightness into banded elevation zones between Ink and Paper with lines at each band, like a topographic map; Scale sets band count.
 
@@ -29,7 +29,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
 
 ## Technical details
 

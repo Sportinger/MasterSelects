@@ -15,7 +15,8 @@ class Builder {
   binary(id: string, operator: string, a: Ref, b: Ref) { const out = this.node(id, operator); this.edge(a, out, 'a'); this.edge(b, out, 'b'); return out; }
 }
 
-/** Shared granular construction for Dithering and Dither Studio. */
+/** Dither Studio's recipe, and the earlier Dithering recipe that graph-less Dithering effects saved before Levels keep
+ * (effectGraphOwner.ts; the current Dithering recipe is createDefaultDitheringGraph in ditheringEffectGraph.ts). */
 export function createDefaultDitherGraph(type: EditableDitherEffectType): EffectOperatorGraph {
   const g = new Builder(), frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const resolution = g.node('resolution', 'image.resolution'), scale = g.node('scale', 'values.number', 'value', { value: 'scale' });

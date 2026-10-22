@@ -50,12 +50,40 @@ fn inkMix(tone: f32, pattern: f32, alpha: f32) -> vec4f {
   return vec4f(mix(params.colorA.rgb, params.colorB.rgb, step(0.5, threshold)), alpha);
 }
 
+fn linearToSrgb(c: vec3f) -> vec3f {
+  return sign(c) * select(1.055 * pow(abs(c), vec3f(1.0 / 2.4)) - 0.055, abs(c) * 12.92, abs(c) <= vec3f(0.0031308));
+}
+
+// Dithering (createDefaultDitheringGraph in ditheringEffectGraph.ts): cells of Pixel Size whole pixels, each read as one
+// colour (four points a quarter cell from its centre, in linear light and weighted by alpha), stepped to Levels equal
+// sRGB steps per channel; the share of the upper step is measured in linear light and decided by the cell's Bayer threshold.
 @fragment
 fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
-  let color = source(input.uv);
-  let threshold = bayer4(input.uv * params.resolution / max(round(max(params.scale, 1.0) * frameScale()), 1.0));
-  let quantized = floor(clamp(color.rgb + threshold - 0.5, vec3f(0.0), vec3f(0.999)) * 4.0) / 3.0;
-  return vec4f(mix(color.rgb, quantized, params.amount), color.a);
+  let own = source(input.uv);
+  let size = max(round(max(params.scale, 1.0) * frameScale()), 1.0);
+  let cells = input.uv * params.resolution / vec2f(size);
+  let center = (floor(cells) + vec2f(0.5)) * size;
+  let reach = min(size * 0.25, (size - 1.0) * 0.5);
+  var light = vec3f(0.0);
+  var alpha = 0.0;
+  for (var tap = 0; tap < 4; tap++) {
+    let side = vec2f(select(-1.0, 1.0, (tap & 1) == 1), select(-1.0, 1.0, tap >= 2));
+    let point = source((center + side * reach) / params.resolution);
+    light += srgbToLinear(point.rgb) * point.a;
+    alpha += point.a;
+  }
+  let picked = mix(light / max(alpha, 0.001), srgbToLinear(own.rgb), step(alpha, 0.001));
+  let cell = clamp(picked, vec3f(0.0), vec3f(1.0));
+  let steps = max(params.variant, 2.0) - 1.0;
+  let lowerIndex = floor(linearToSrgb(cell) * steps);
+  let lower = lowerIndex / steps;
+  let upper = clamp((lowerIndex + vec3f(1.0)) / steps, vec3f(0.0), vec3f(1.0));
+  let lowerLinear = srgbToLinear(lower);
+  let span = max(srgbToLinear(upper) - lowerLinear, vec3f(1e-6));
+  let share = (cell - lowerLinear) / span;
+  let stepUp = floor(share + vec3f(bayer4(cells)));
+  let dithered = clamp((lowerIndex + stepUp) / steps, vec3f(0.0), vec3f(1.0));
+  return vec4f(mix(own.rgb, dithered, params.amount), own.a);
 }
 
 @fragment

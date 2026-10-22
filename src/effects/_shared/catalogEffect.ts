@@ -32,6 +32,8 @@ export interface CatalogEffectOptions {
   scaleFloor?: number;
   /** Parameter ids the card shows last, in this order (Halftone: Ink, Paper, then Amount). */
   cardEnd?: readonly string[];
+  /** A number parameter of the look's own that the shader twin reads from the variant slot (Dithering's Levels). */
+  variantParam?: string;
 }
 /** Runtime-only distance a keyframed Speed has travelled (EffectParam.integratedAs); never stored. */
 export const CATALOG_SPEED_TRAVEL = 'speedTravel';
@@ -124,7 +126,9 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
     packUniforms: (values, width, height, timelineTimeSeconds = 0) => {
       const colorA = colorToRgba(values.colorA, '#111827');
       const colorB = colorToRgba(values.colorB, '#f8fafc');
-      const variantValue = values.variant ?? values.kernel ?? values.shape ?? '';
+      const variantValue = options.variantParam
+        ? numberParam(values, options.variantParam, Number(params[options.variantParam]?.default ?? 0))
+        : values.variant ?? values.kernel ?? values.shape ?? '';
       const variant = typeof variantValue === 'number'
         ? variantValue
         : options.variantMap?.[String(variantValue)] ?? 0;

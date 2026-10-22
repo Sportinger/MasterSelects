@@ -4,6 +4,11 @@
    "alt": "Properties, Effects with a Halftone card: Style menu, Preset menu showing Newsprint, then Dot Size and Angle under Pattern, Ink, Paper and Amount under Color, beside a strip of the preview printed in fine black dots",
    "caption": "Halftone with the Newsprint preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Angle: 45° turns the screen like a newspaper's. 4 — Ink. 5 — Amount.",
    "marks": [{"target": "Preset", "label": "Preset"}, {"target": "Dot Size", "label": "Dot Size"}, {"target": "Angle", "label": "Angle"}, {"target": "Ink", "label": "Ink"}, {"target": "Amount", "label": "Amount"}],
+   "hide": ["Particle Out"]},
+  {"name": "dither-inspector", "effect": "dither", "params": {"scale": 6, "levels": 4, "amount": 1}, "image": "dancer_stage.jpg", "preview": 380, "top": "tabs",
+   "alt": "Properties, Effects with a Dithering card: Preset menu showing Game Screen, Pixel Size under Pattern, Levels and Amount under Color, beside a strip of the preview turned into chunky pixels of a few colours",
+   "caption": "Dithering with the Game Screen preset. 1 — Preset: pick a starting point. 2 — Pixel Size. 3 — Levels: steps per colour channel. 4 — Amount.",
+   "marks": [{"target": "Preset", "label": "Preset"}, {"target": "Pixel Size", "label": "Pixel Size"}, {"target": "Levels", "label": "Levels"}, {"target": "Amount", "label": "Amount"}],
    "hide": ["Particle Out"]}
  ]
 }

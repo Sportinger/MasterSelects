@@ -33,6 +33,8 @@ export const EFFECT_DOC_EXTRAS = {
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
   'stick-figure': { thumb: { region: [0, 0, 1, 1] } },
+  // The still is a detail at twice the size: the card shows the dithered face and raised arm.
+  dither: { thumb: { region: [0.6, 0.06, 0.34, 0.38] } },
   'ai-edge-fill': {
     rows: [
       'resolution',

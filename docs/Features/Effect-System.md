@@ -1871,10 +1871,11 @@ subtractive paper blend and source-alpha path as editable graph operations. Riso
 Glow adds its pulse from composition timeline time; colors and controls remain
 owned by the catalog schema.
 
-Dithering and Dither Studio expose their Bayer/checker thresholds, four-level
-quantization, ink selection and source-alpha path as editable graph operations.
-Dither Studio's Bayer 2, Bayer 4 and Checker choices remain bound to the
-catalog-owned Kernel schema rather than copied into saved graph data.
+Dithering and Dither Studio expose their Bayer/checker thresholds, quantization,
+ink selection and source-alpha path as editable graph operations (Dithering's own
+recipe: [Dithering](#dithering)). Dither Studio's Bayer 2, Bayer 4 and Checker
+choices remain bound to the catalog-owned Kernel schema rather than copied into
+saved graph data.
 
 Pixel Press (`paper-print`) and Pixel Poster expose their source sampling,
 noise/posterization arithmetic and final amount blend as editable graph
@@ -1934,6 +1935,29 @@ of the cell exactly up to π/4 and then closes the corners (`HALFTONE_DOT`, with
 to half an edge so black prints solid and white clean. `createCatalogEffect({ cardEnd })` puts Ink,
 Paper and Amount last in its card. `tests/unit/imageHalftoneGraphs.test.ts` checks the reference, round
 dots at 45° on 16:9, solid black and clean white, coverage, the one-pixel edge and cut-out edges.
+
+### Dithering
+
+`createDefaultDitheringGraph` (`src/services/operators/ditheringEffectGraph.ts`, WGSL twin
+`ditherFragment`) cuts the frame into cells of **Pixel Size** (`scale`, 1080p pixels rounded to whole
+pixels, at least one) and gives each cell one colour: four bilinear reads on its diagonals,
+min(size / 4, (size − 1) / 2) pixels from the centre (`DITHER_TAPS`; the exact average for cells of
+1, 2 and 4 pixels), averaged in linear light and weighted by alpha; where the four reads are all
+transparent (summed alpha at most `DITHER_ALPHA_FLOOR`, 0.001) the pixel's own colour is used. Each
+channel is then stepped to **Levels** (`levels`, at least 2: `levels-clamped`, reported by
+`paramRangeNotes`) equal sRGB steps: index = floor(sRGB × steps) + floor(share + Bayer), where the share
+of the upper step is measured in linear light and the 4 × 4 Bayer threshold belongs to the cell. Over
+one Bayer tile the dithered light matches the cell's light within a 32nd of a step; black and white
+stay pure. Amount (default 1) mixes with the pixel's own colour; the pixel's alpha is kept. The shader
+twin reads Levels from the variant slot (`createCatalogEffect({ variantParam })`). Levels is
+`graphOnly`, and its own parameter takes Dithering out of the Style menu of the other looks (styles
+share every parameter). A graph-less Dithering saved before Levels (`hasEarlierDitheringParams`: its
+params lack `levels`) keeps the earlier recipe, `createDefaultDitherGraph('dither')` in
+`ditherEffectGraphs.ts`: each pixel's own colour stepped to four levels by floor(4 × (c + Bayer − 0.5))
+/ 3, which lifts black and clips white; its card hides Levels and says so (`paramWarnings`). Five presets live in `src/effects/halftone/ditherPresets.ts`.
+Tests: `tests/unit/imageDitheringGraph.test.ts` (reference, pure black and white, tone, one colour per
+cell, cut-out edges, Levels limits, the earlier recipe), the GPU parity suite
+`tests/browser/image-graph-probe.html?suite=dither-graphs`.
 
 ### Drift Lines
 

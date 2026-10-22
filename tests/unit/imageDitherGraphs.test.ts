@@ -17,7 +17,7 @@ describe('Dither image graphs', () => {
     expect(graph.nodes.find(node => node.id === 'kernel')?.bindings).toEqual(type === 'dither-studio' ? { value: 'kernel' } : undefined);
   });
 
-  it('matches the four-level Bayer quantization order', () => {
+  it('keeps the earlier Dithering recipe (graph-less saves before Levels) on its four-level Bayer quantization', () => {
     const params = { scale: 3, amount: .72 }, uv: [number, number] = [.63, .41], resolution: [number, number] = [64, 37];
     const color = sample(uv), cell = Math.max(Math.round(Math.max(params.scale, 1) * (Math.min(...resolution) / 1080)), 1), threshold = bayer4([uv[0] * resolution[0] / cell, uv[1] * resolution[1] / cell]);
     const expected = color.slice(0, 3).map(value => mix(value, Math.floor(Math.min(.999, Math.max(0, value + threshold - .5)) * 4) / 3, params.amount)).concat(color[3]);

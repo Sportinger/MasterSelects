@@ -72,6 +72,7 @@ import { createDefaultHalftoneGraph, type EditableHalftoneEffectType } from './h
 import { createDefaultHoloGraph } from './holoRecipe';
 import { createDefaultRisoGraph, type EditableRisoEffectType } from './risoEffectGraphs';
 import { createDefaultDitherGraph, type EditableDitherEffectType } from './ditherEffectGraphs';
+import { createDefaultDitheringGraph, hasEarlierDitheringParams } from './ditheringEffectGraph';
 import { createDefaultPaperPrintGraph } from './paperPrintEffectGraph';
 import { createDefaultPixelPosterGraph } from './pixelPosterEffectGraph';
 import { createDefaultToneGeometryGraph } from './toneGeometryEffectGraph';
@@ -225,7 +226,9 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'glass-dispersion' ? createDefaultGlassDispersionGraph
         : effectType === 'holo' ? createDefaultHoloGraph
         : effectType === 'riso' || effectType === 'riso-glow' ? () => createDefaultRisoGraph(effectType)
-        : effectType === 'dither' || effectType === 'dither-studio' ? () => createDefaultDitherGraph(effectType)
+        // A graph-less Dithering saved before Levels keeps the look it was saved with (the earlier recipe).
+        : effectType === 'dither' ? (hasEarlierDitheringParams(effect.params) ? () => createDefaultDitherGraph('dither') : createDefaultDitheringGraph)
+        : effectType === 'dither-studio' ? () => createDefaultDitherGraph(effectType)
         : effectType === 'paper-print' ? createDefaultPaperPrintGraph
         : effectType === 'pixel-poster' ? createDefaultPixelPosterGraph
         : effectType === 'tone-geometry' ? createDefaultToneGeometryGraph

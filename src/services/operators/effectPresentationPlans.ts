@@ -227,6 +227,21 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : /^(darkness|inverse-tone|dot-|paper-|dots-touch$|radius|edge-low$|edge-high$|distance$|edge$|mark$)/.test(id) ? 'dot'
         : /^(color-a-rgb|color-b-rgb|ink-color|mixed-color|combine)$/.test(id) ? 'finish' : 'screen',
   };
+  // Dithering (createDefaultDitheringGraph): the big pixels, each cell's colour, its two nearest steps, the Bayer step, the mix.
+  if (type === 'dither') return {
+    labels: { grid: 'Pixel Grid (Pixel Size)', cell: 'Cell Colour', levels: 'Levels', dither: 'Dither', finish: 'Mix (Amount)' },
+    portLabels: { cells: 'Cell Position', 'cell-center-pixels': 'Cell Centre (px)', 'tap-reach': 'Reach (px)', 'safe-scale-pixels': 'Pixel Size (px)',
+      'tap-diagonal': 'Diagonal', 'tap-anti-diagonal': 'Anti-diagonal', 'cell-light': 'Cell Light', 'sample-split:rgb': 'Pixel RGB',
+      'sample-split:alpha': 'Pixel Alpha', 'levels-clamped': 'Levels', steps: 'Steps', 'level-lower': 'Lower Step', 'step-lower': 'Lower Step (sRGB)',
+      'step-upper': 'Upper Step (sRGB)', 'step-lower-linear': 'Lower Light', 'step-upper-linear': 'Upper Light', 'step-span': 'Step Span',
+      share: 'Upper Share', threshold: 'Bayer Threshold', 'step-up': 'Step Up', 'level-index': 'Step', dithered: 'Dithered RGB',
+      'tap-4-alpha-sum': 'Alpha of All Points', 'tap-4-light-sum': 'Light of All Points', 'cell-average': 'Average Light', 'no-reads': 'All Transparent' },
+    portLabelsApply: graph => graph.nodes.some(node => node.id === 'share'),
+    stage: ({ id }) => /^(sample|sample-split|clamped-uv|min-uv|max-uv|cell-size-less-one|cell-average|cell-alpha|no-reads|own-linear|cell-picked|cell-light)$|^tap-/.test(id) ? 'cell'
+      : /^(levels-clamped|steps|cell-srgb|level-position|level-lower|level-upper|one-rgb|span-floor|above-lower|share)$|^step-(lower|upper|span)/.test(id) ? 'levels'
+        : /^(threshold|threshold-rgb|share-raised|step-up|level-index|dithered-raw|dithered)$/.test(id) ? 'dither'
+          : /^(mixed-color|combine)$/.test(id) ? 'finish' : 'grid',
+  };
   if (type === 'vignette') return {
     labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
     portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither' },
