@@ -1,9 +1,6 @@
 # Score Tracks
 
-Infrastructure for the upcoming scorewriter (issue #366): a `score` track type
-that lives in the timeline's audio section, holds data-only score clips, and
-opens a detached score-editor window. The notation surface itself is not built
-yet — the current editor window is a placeholder that proves the wiring.
+A score track holds music notation on the timeline. You draw a score clip on it, double-click the clip, and write notes in a score editor window that opens beside the editor: notes, rests, chords, ties, tuplets and articulations, with automatic beaming. The window plays the sheet with the track's instrument, a piano by default; the timeline's own playback and export do not play score clips yet. For tempo and bars see [Tempo and Metronome](./Tempo-And-Metronome.md).
 
 ## Creating a score track
 
@@ -20,7 +17,7 @@ Audio / MIDI entries. Score tracks:
   advanced audio layer) with a beamed-note glyph (`ScoreTrackTypeIcon`) as the
   badge; only the MIDI instrument selector stays MIDI-specific,
 - join the audible mute/solo group (`isAudibleTrack`) so their M/S buttons
-  behave like the other musical lanes, even though they emit no audio yet,
+  behave like the other musical lanes, although timeline playback does not sound them yet,
 - use the `stack` overlap policy like MIDI: overlapping score clips coexist,
 - reject external media drops, like MIDI tracks.
 
@@ -45,13 +42,12 @@ A score clip's notation lives in `clip.scoreData` (`ScoreData` in
 Chord/Rest slots with enharmonic pitch spelling (`step/alter/octave`),
 exact-fraction beat positions (tuplet-safe rational time), ties, dots,
 articulations, stem overrides, and per-measure tuplets. The framework-free
-model logic ported from the kikoromantest score editor lives in
+model logic lives in
 `src/services/score/` — `ScoreModel` (slot CRUD + `toScoreData`/`fromScoreData`),
 `restFill` (measures always fully filled with rests), `tupletOps`,
 `CollisionDetector`, `NoteEntryCoordinator` (beat entry with tie splitting
 across barlines and Sibelius-style erosion), plus `fraction`, `pitchSpelling`,
-`musicUtils`, and `beatMap` utilities. VexFlow 5 is installed for the upcoming
-rendering phase.
+`musicUtils`, and `beatMap` utilities. VexFlow 5 draws the notation ([Notation rendering](#notation-rendering-srcservicesscorerender)).
 
 `scoreData` is wired through every persistence path like `midiData`: in-memory
 serialize/load, project save/load, copy/paste (deep-cloned), and history —
@@ -71,7 +67,7 @@ window per clip). The boot lazy-loads `ScoreEditor.tsx`; a clip without
 `scoreData` opens as an empty four-measure sheet and materializes into the
 store on the first edit.
 
-The editor is a full scorewriter (ported from kikoromantest). Two tools:
+The editor is a full scorewriter. Two tools:
 **entry** (default — hover shows a translucent ghost note, click places it
 with overwrite/chord/split-and-tie-overflow semantics; a blue cursor line
 marks the keyboard insertion point) and **selection** (Esc — click notes,
@@ -141,7 +137,7 @@ tracks, and `setTrackMidiInstrument` accepts both types. Editing auditions
 through the exact piano-roll path: `previewMidiNote(track.midiInstrument,
 midi, velocity, trackId)` fires on note click-select, every entry (mouse,
 letter keys, chord adds, tuplet placements), and every pitch change (arrows,
-octave jumps, drags). `midiPlaybackScheduler.preview` now routes score tracks
+octave jumps, drags). `midiPlaybackScheduler.preview` routes score tracks
 through their track bus (volume/pan/EQ/FX/master) instead of the bare
 destination fallback.
 
@@ -152,7 +148,7 @@ same-pitch tie chains merged into single sustained notes, seconds at
 `score.tempo` — and `ScorePlayer` schedules them on a host synth
 (`createSynthForInstrument` + the shared AudioContext, GM samples preloaded
 before start). ⏹ stops immediately (`stopAll`). Timeline transport/export
-playback of score clips is still a later, separate step.
+playback of score clips is not built yet.
 
 ## Kernel boundary note
 

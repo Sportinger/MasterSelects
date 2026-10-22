@@ -1,9 +1,8 @@
 # Audio
 
-[<- Back to Index](./README.md)
+Audio clips play in sync with the picture; you set their volume, fades and effects in Properties and balance tracks in the **Audio Mixer** (the **Audio** layout opens both). Mixing and recording in depth: [Audio Workstation](./Audio-Workstation.md); export: [Export](./Export.md).
 
-Audio in MasterSelects is split into two paths:
-live playback sync for timeline editing, and offline audio processing for export.
+Audio is split into two paths: live playback sync while you edit, and offline audio processing for export.
 
 ---
 
@@ -80,7 +79,7 @@ absolute-speed handling is not used as the primary playback path.
 - `preservesPitch` is applied from the clip setting, defaulting to on.
 - Scrubbing is snippet-based and throttled; it is not continuous time-stretched scrub audio.
 - Current drift is corrected when the element gets too far from the expected time.
-- Audio decoding consumes freshly owned bytes from file/fetch reads directly. Warming several long WAV files no longer creates another complete encoded-audio copy on the UI thread.
+- Audio decoding consumes freshly owned bytes from file/fetch reads directly. Warming several long WAV files creates no extra complete encoded-audio copy on the UI thread.
 - Same-source sequential audio clips can hand off to the previous element, and upcoming clips may be pre-buffered before they hit the playhead.
 - Nested composition mixdown audio and proxy audio are synced through the same runtime path.
 - Audio-only nested compositions remain part of the mixdown even without a linked video half. Linked video/audio pairs contribute once; nested clips use the shared clip renderer for trim, reverse, speed, automation, and audio processing.

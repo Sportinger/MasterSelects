@@ -1,8 +1,8 @@
 # Masks
 
-[Back to Index](./README.md)
+A mask cuts a clip down to a shape you draw: a rectangle, an ellipse or a free pen path, with a soft edge (feather), invert and an animatable path. Draw one in the clip's **Masks** tab in Properties; while that tab is open, `R`, `E` and `P` pick the rectangle, ellipse and pen tools (with the Tools panel open they also work after clicking the Preview). Animation: [Keyframes](./Keyframes.md).
 
-MasterSelects supports per-clip vector masks with preview-overlay editing, selectable vertices, bezier handle modes, and GPU compositing through the layer pipeline.
+Masks are vector shapes per clip, edited on an overlay in the Preview with selectable points and Bezier handles, and composited on the GPU.
 
 ## At A Glance
 

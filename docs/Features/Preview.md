@@ -1,8 +1,8 @@
 # Preview & Playback
 
-[Back to Index](./README.md)
+The Preview shows your composition at the playhead: press play or scrub to watch it, and switch to **Edit** to move and scale layers directly in the picture; masks are drawn from the clip's **Masks** tab ([Masks](./Masks.md)). Clips and playhead: [Timeline](./Timeline.md); output to projectors and extra screens: **Output → New Output Window**.
 
-WebGPU-backed preview with RAM preview caching, source monitor playback, edit overlays, multi-preview targets, and output windows.
+Behind it are WebGPU rendering, RAM preview caching, the Source Monitor, edit overlays, several preview targets and output windows.
 
 ---
 

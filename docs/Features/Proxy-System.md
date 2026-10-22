@@ -1,8 +1,6 @@
 # Proxy System
 
-[Back to Index](./README.md)
-
-JPEG image proxy generation and playback for smoother scrubbing of large video files.
+Proxies are small JPEG copies of a video's frames that make scrubbing and playback of large or heavy files smooth. Generate one from the Media panel, then switch the timeline's **Proxy** button on to play from proxies. Related: [Media Panel](./Media-Panel.md).
 
 ---
 
@@ -40,7 +38,7 @@ Proxy generation is handled by `ProxyGeneratorWebCodecs`.
 ### Current Settings
 
 - Maximum width: 1280 px
-- Proxy frame rate: 30 fps
+- Proxy frame rate: the source frame rate, at most 30 fps (a 25 fps clip keeps 25, a 60 fps clip gets 30)
 - Decode batch size: 30 samples
 - Image format: JPEG
 - JPEG quality: 0.82

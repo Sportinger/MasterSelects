@@ -1,14 +1,14 @@
-[Back to Documentation Index](./README.md)
-
 # Story Workflow
 
-Story turns a prompt and stored project sources into a reviewable production package before any video generation is started. It is available on the landing page and as the editor's dockable Story panel. The private kernel owns story and prompt planning; the public editor owns source retrieval, review state, image generation calls, and deterministic persistence. Existing `seedance*` source, store, route, and persistence names remain internal compatibility identifiers; Seedance 2.5 is shown only when it identifies the concrete video generator.
+Story turns a prompt and your project's sources into a production package you can review (a direction, a treatment with a scene map, master looks and keyframes) before any video is generated. Start it from the **Chat** workspace or the Media panel's chat by switching the prompt path to **Story**. From the Media panel's or AI Studio's chat, the run opens in the dockable **Story** panel (View → Panels → AI → Story); in the Chat workspace it runs inside the chat page. Related: [AI Studio](./AI-Studio.md) and [FlashBoard](./FlashBoard.md).
+
+The private kernel owns story and prompt planning; the editor owns source retrieval, review state, image generation calls and saving. Internal `seedance*` source, store, route and persistence names are compatibility identifiers; Seedance 2.5 is named only where it is the actual video generator.
 
 ## Editor Story Panel
 
 The Media Panel keeps the normal chat composer. Its prompt-path control contains only `Auto` and `Story`; selecting Story and pressing the shared Chat button starts the workflow with the current prompt and referenced video sources, or all project videos when none are referenced. The editor then activates a real dockable Story panel and displays the active run there.
 
-Story contains direction selection, treatment and scene map, source review, master looks, keyframes, progress, errors, and final review. It does not mirror Media chat, create another input box, or render the landing-page background. One editor-level controller owns the run so docking, moving, or reopening Story preserves the same state. The controller's automatic resume is disabled on the factory-start layout because the landing page already owns its workflow there.
+Story contains direction selection, treatment and scene map, source review, master looks, keyframes, progress, errors, and final review. It does not mirror Media chat, create another input box, or render the Chat workspace background. One editor-level controller owns the run so docking, moving, or reopening Story preserves the same state. The controller does not resume automatically in the Chat workspace, because the Chat panel runs the workflow there itself.
 
 ## Workflow
 
