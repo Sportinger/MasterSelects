@@ -15,6 +15,11 @@
     "quadtree-zoom?focus=cell-size-and-split&only=short-side,pixel-scale,minimum-px,pixel-unfloored,pixel,partition&cables=avoid&marks=pixel-scale:below,minimum-px:above:30,partition:above@quadtree-zoom-split",
     "quadtree-zoom?focus=cell-colour&only=half-size-product,half-size,half-vector,center,center-sample,sampled-color,center-alpha,original-sample,original-color,cell-color&rows=2&cables=avoid&marks=center:below,center-sample:below,center-alpha:above,cell-color:below@quadtree-zoom-colour",
     "quadtree-zoom?focus=tile-edges&only=local,edge-distance,border,inverse-border,border-gain,style,styled&cables=avoid&marks=edge-distance:below,border:below,style:below,styled:below@quadtree-zoom-edges",
-    "quadtree-zoom?focus=mix-with-original&only=amount-clamped,mixed,combined&layout=float&cables=avoid&marks=amount-clamped:below,mixed:above,combined:below@quadtree-zoom-mix"
+    "quadtree-zoom?focus=mix-with-original&only=amount-clamped,mixed,combined&layout=float&cables=avoid&marks=amount-clamped:below,mixed:above,combined:below@quadtree-zoom-mix",
+    "voronoi?plumbing=hide&omit=output,frame&marks=organized-voronoi-seeds:above,organized-voronoi-colour:above,organized-voronoi-edges:left,organized-voronoi-mix:above",
+    "voronoi?focus=seeds-and-distance-field&only=seeds,jump-flood&layout=float&cables=avoid&marks=seeds:below,jump-flood:below@voronoi-seeds",
+    "voronoi?focus=cell-colour&only=current-seed,current-components,current-seed-pixel,valid,source-pixel,nearest-sample,nearest-color,seed-alpha,cell-color&cables=avoid&marks=current-seed:above,source-pixel:above,seed-alpha:below,cell-color:below@voronoi-colour",
+    "voronoi?focus=cell-edges&only=right-seed,down-seed,neighbor-distance,border-condition,border,style-scale,styled&cables=avoid&marks=down-seed:above:30,neighbor-distance:above:30,border:above,styled:below@voronoi-edges",
+    "voronoi?focus=mix-with-original&only=amount-clamped,mixed,combined&layout=float&cables=avoid&marks=amount-clamped:below,mixed:above,combined:below@voronoi-mix"
   ]
 }

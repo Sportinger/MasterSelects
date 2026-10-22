@@ -1,6 +1,6 @@
 import type { EffectPresentationPlan } from './effectPresentationPlans';
 
-/** Folder names and port labels of the Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify, Block Mosaic and Quadtree Zoom recipes. */
+/** Folder names and port labels of the Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify, Block Mosaic, Quadtree Zoom and Voronoi recipes. */
 const READ = /-(mirrored-uv|clamped-uv|edge-uv|sample|low-px|high-uv|high-px|low-min|high-min|inside-px|inside-centered|coverage|weight|read)$/;
 const STRAIGHT = /^cell-(split|alpha|alpha-floor|safe-alpha|rgb)$/;
 const COMMON_PORTS = { 'source-cache': 'Premultiplied Source', 'result:image': 'Result', 'one-vec2': '(1, 1)' };
@@ -68,6 +68,19 @@ export function mirrorPixelPresentationPlan(type: string): EffectPresentationPla
     stage: ({ id }) => /^(short-side|pixel-scale|minimum-px|pixel-unfloored|pixel|partition)$/.test(id) ? 'split'
       : /^(half-size|half-vector|center|sampled-color|original-sample|original-color|cell-color)/.test(id) ? 'colour'
         : /^(amount-clamped|mixed|combined)$/.test(id) ? 'mix' : 'shade',
+  };
+  // Voronoi (voronoiEffectGraph.ts): seeds and their distance field, the nearest seed's colour, the cell edges, then the mix.
+  if (type === 'voronoi') return {
+    labels: { seeds: 'Seeds & Distance Field', colour: 'Cell Colour', edges: 'Cell Edges', mix: 'Mix with Original' },
+    portLabels: { seeds: 'Seed Field', 'jump-flood': 'Nearest Seed Field', pixel: 'Pixel', 'current-seed': 'Seed Record', 'current-seed-pixel': 'Seed Pixel', 'current-components:x': 'Seed X', 'current-components:y': 'Seed Y',
+      valid: 'Has Seed', 'source-pixel': 'Read Pixel', 'nearest-color:rgb': 'Seed Colour', 'nearest-color:alpha': 'Seed Alpha', 'seed-alpha': 'Seed Alpha',
+      'original-color:rgb': 'Original', 'original-color:alpha': 'Alpha', 'cell-color': 'Cell Colour', 'right-pixel': 'Right Pixel', 'down-pixel': 'Pixel Below',
+      'right-seed': 'Right Seed', 'down-seed': 'Seed Below', 'neighbor-distance': 'Seed Distance', border: 'Edge', 'style-scale': 'Shade',
+      styled: 'Shaded Cell', mixed: 'Mixed', 'amount-clamped': 'Amount (0–1)' },
+    stage: ({ id }) => /^(seeds|jump-flood)$/.test(id) ? 'seeds'
+      : /^(amount-clamped|mixed|combined)$/.test(id) ? 'mix'
+        : /^(pixel|current-seed|current-components|current-seed-pixel|valid|source-pixel|nearest-sample|nearest-color|original-sample|original-color|seed-alpha|cell-color)$/.test(id)
+          ? 'colour' : 'edges',
   };
   return undefined;
 }

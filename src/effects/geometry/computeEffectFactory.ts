@@ -15,6 +15,11 @@ interface ComputeEffectOptions {
   colors?: boolean;
 }
 
+/** Voronoi's Cell Size in 1080p pixels (voronoiSeedCompute), shared by the effect card and its Voronoi Seeds node. */
+export const VORONOI_CELL_SIZE_PARAM: EffectParam = {
+  type: 'number', label: 'Cell Size', default: 24, min: 4, max: 96, step: 1, unit: ' px', animatable: true, group: 'Structure',
+};
+
 /** Canonical compute-effect parameter schema shared by catalog definitions and operator metadata. */
 export function createComputeEffectParameterSchema(options: Pick<ComputeEffectOptions, 'params' | 'animated' | 'colors'> = {}): Record<string, EffectParam> {
   const rawParams: Record<string, EffectParam> = {

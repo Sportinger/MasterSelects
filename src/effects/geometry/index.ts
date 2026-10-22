@@ -1,17 +1,43 @@
 import shader from './shader.wgsl?raw';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { createGlyphEffect } from '../glyph/glyphEffectFactory';
-import { createComputeEffect } from './computeEffectFactory';
+import { createComputeEffect, VORONOI_CELL_SIZE_PARAM } from './computeEffectFactory';
 import type { ComputeEffectDefinition, EffectPreset } from '../types';
 import { amountWarnings, cellSizeWarnings } from '../pixel/cellGridParams';
 
-export const voronoi = createComputeEffect({
-  id: 'voronoi',
-  name: 'Voronoi',
-  entryPoint: 'voronoiResolveCompute',
-  animated: true,
-  computeMode: 'jump-flood',
-});
+/** Voronoi's named starting points (the Preset row of its card; docs/Features/effects/voronoi.md). */
+export const VORONOI_PRESETS: readonly EffectPreset[] = [
+  { id: 'stained-glass', name: 'Stained Glass', params: { scale: 40, amount: 1, speed: 0 } },
+  { id: 'fine-crackle', name: 'Fine Crackle', params: { scale: 10, amount: 1, speed: 0.5 } },
+  { id: 'glass-veil', name: 'Glass Veil', params: { scale: 28, amount: 0.5, speed: 0.5 } },
+  { id: 'drifting-shards', name: 'Drifting Shards', params: { scale: 64, amount: 1, speed: 2 } },
+];
+
+export const voronoi: ComputeEffectDefinition = {
+  ...createComputeEffect({
+    id: 'voronoi',
+    name: 'Voronoi',
+    entryPoint: 'voronoiResolveCompute',
+    animated: true,
+    computeMode: 'jump-flood',
+    params: {
+      // 1080p pixels (voronoiSeedCompute), so preview quality, 4K and export show the same cells.
+      scale: VORONOI_CELL_SIZE_PARAM,
+      // The shared compute schema's Threshold never reached the Voronoi resolve: retired, not shown.
+      threshold: { type: 'number', label: 'Threshold', default: 0.45, min: 0, max: 1, step: 0.01, group: 'Style', hidden: true,
+        deprecated: 'Voronoi has no Threshold; the value is ignored.' },
+    },
+  }),
+  // The seeds drift with timeline time (Speed), so a paused playhead holds still and export matches the preview.
+  requiresContinuousRender: false,
+  timelineAnimated: true,
+  paramWarnings: values => [
+    ...(typeof values.scale === 'number' && values.scale < 4
+      ? [`scale: ${values.scale} is below 4 px; Voronoi uses cells of 4 px (of a 1080p frame).`] : []),
+    ...amountWarnings(values.amount),
+  ],
+  presets: VORONOI_PRESETS,
+};
 export const pixelSort: ComputeEffectDefinition = {
   ...createComputeEffect({
     id: 'pixel-sort',

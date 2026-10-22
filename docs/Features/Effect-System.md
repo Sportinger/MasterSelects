@@ -2907,7 +2907,7 @@ Notes for developers; each effect page adds its own formula and limits.
 
 ### Pixel & Mosaic notes
 
-Notes for developers on Pixelate, Blockify, Block Mosaic and Quadtree Zoom; each effect page adds its own limits.
+Notes for developers on Pixelate, Blockify, Block Mosaic, Quadtree Zoom and Voronoi; each effect page adds its own limits.
 
 - **Cell grid.** Pixel Size, Block Size, Tile Size and Grout Width are pixels of a 1080p frame,
   rounded to whole rendered pixels, so preview, export and 4K show the same blocks relative to the
@@ -2931,8 +2931,15 @@ Notes for developers on Pixelate, Blockify, Block Mosaic and Quadtree Zoom; each
   find no detail (`imageOperatorQuadtreeWgsl.ts`, CPU oracle `imageQuadtreePartitionSemantics.ts`,
   legacy `compute.wgsl` kept in parity): blocks only ever split further, so a figure between the
   corners no longer vanishes into a large block.
+- **Voronoi** (2026-10-22). Cell Size is scaled by the shorter frame side over 1080 inside the
+  fixed seed pass (`voronoiSeedCompute`, at least 4 such pixels and 2 rendered ones), and each seed
+  is clamped to the pixels of its own cell, so a fractional cell size cannot drop a cell. The cell
+  colour mixes from the pixel's own colour to the seed sample by the seed's alpha, Amount is
+  clamped to 0–1 (both in the graph and the legacy resolve, reported in the card), the seeds drift
+  with timeline time (`timelineAnimated`), and the shared compute schema's Threshold, which the
+  resolve never read, is retired (`deprecated`). The recipe opens in four stage folders.
 - **Code.** The recipes live in `src/services/operators/cellGridRecipes.ts` (Quadtree Zoom:
-  `quadtreeEffectGraph.ts`). More:
+  `quadtreeEffectGraph.ts`; Voronoi: `voronoiEffectGraph.ts`). More:
   [Effect system: editable mirror, split and pixel graphs](./Effect-System.md#editable-mirror-split-and-pixel-graphs),
   [Node Catalog](./Node-Catalog.md) and [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 

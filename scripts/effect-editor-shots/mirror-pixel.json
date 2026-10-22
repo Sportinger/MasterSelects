@@ -64,6 +64,23 @@
         { "target": "Speed", "label": "Speed" }
       ],
       "hide": ["Particle Out"]
+    },
+    {
+      "name": "voronoi-inspector",
+      "effect": "voronoi",
+      "params": { "scale": 40, "amount": 1, "speed": 0 },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Voronoi card: Preset menu showing Stained Glass, then Cell Size 40 px, Amount 1 and Speed 0, beside a strip of the preview with the harbour broken into irregular cells of flat colour",
+      "caption": "Voronoi with the Stained Glass preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Amount. 4 — Speed.",
+      "marks": [
+        { "target": "Preset", "label": "Preset" },
+        { "target": "Cell Size", "label": "Cell Size" },
+        { "target": "Amount", "label": "Amount" },
+        { "target": "Speed", "label": "Speed" }
+      ],
+      "hide": ["Particle Out"]
     }
   ]
 }

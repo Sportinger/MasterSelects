@@ -153,11 +153,17 @@ struct JumpStep {
 fn voronoiSeedCompute(@builtin(global_invocation_id) invocation: vec3u) {
   if (invocation.x >= u32(params.resolution.x) || invocation.y >= u32(params.resolution.y)) { return; }
   let pixel = vec2i(invocation.xy);
-  let cellSize = max(4.0, params.scale);
+  // Cell Size counts pixels of a 1080p frame (cellGridParams.cellPixelScale), so preview quality, 4K and export
+  // show the same cells; at least 4 such pixels and never below 2 rendered pixels.
+  let cellSize = max(2.0, max(4.0, params.scale) * min(params.resolution.x, params.resolution.y) / 1080.0);
   let cell = floor(vec2f(pixel) / cellSize);
   let jitter = random2(cell);
   let motion = 0.14 * sin(params.time * params.speed + jitter * 6.2831853);
-  let seed = vec2i(clamp((cell + clamp(jitter + motion, vec2f(0.08), vec2f(0.92))) * cellSize, vec2f(0.0), params.resolution - 1.0));
+  // The seed stays on a pixel of its own cell, so a fractional cell size cannot lose a cell to its neighbour.
+  let cellFirst = ceil(cell * cellSize);
+  let cellLast = ceil((cell + 1.0) * cellSize) - 1.0;
+  let seedRaw = floor((cell + clamp(jitter + motion, vec2f(0.08), vec2f(0.92))) * cellSize);
+  let seed = vec2i(clamp(clamp(seedRaw, cellFirst, cellLast), vec2f(0.0), params.resolution - 1.0));
   let value = select(vec4f(-1.0), vec4f(vec2f(seed), 1.0, 0.0), all(pixel == seed));
   textureStore(seedOutput, pixel, value);
 }
@@ -198,6 +204,8 @@ fn voronoiResolveCompute(@builtin(global_invocation_id) invocation: vec3u) {
   let sampled = loadClamped(sourcePixel);
   let original = loadClamped(pixel);
   let border = select(0.0, 1.0, any(abs(seed.xy - rightSeed.xy) > vec2f(0.5)) || any(abs(seed.xy - downSeed.xy) > vec2f(0.5)));
-  let styled = sampled.rgb * (0.82 + 0.18 * border);
-  textureStore(outputTex, pixel, vec4f(mix(original.rgb, styled, params.amount), original.a));
+  // Parity with voronoiEffectGraph: a transparent seed leaves the pixel its own colour; Amount stays in 0..1.
+  let cellColor = mix(original.rgb, sampled.rgb, sampled.a);
+  let styled = cellColor * (0.82 + 0.18 * border);
+  textureStore(outputTex, pixel, vec4f(mix(original.rgb, styled, clamp(params.amount, 0.0, 1.0)), original.a));
 }
