@@ -54,7 +54,8 @@ const DIRECTIONAL_PORTS = { ...BLUR_PORTS, 'amount-positive': 'Amount ≥ 0', di
   'coarse-image': 'Coarse Average', 'result:image': 'Blurred Image', 'fine-sequence:index': 'Fine Tap', 'coarse-sequence:index': 'Coarse Tap',
   'taper-t': 'Position t', taper: 'Taper', 'covered-weight': 'Box Weight', 'coarse-weight': 'Tap Weight', 'coarse-count-here': 'Taps Here',
   'coarse-sample:image': 'Coarse Sample', 'radial-log-scale': 'Zoom Range', 'radial-longest': 'Longest Zoom', 'spin-arc': 'Spin Arc',
-  'spin-start': 'Spin Start', 'zoom-end-scale': 'End Scale' };
+  'spin-start': 'Spin Start', 'zoom-end-scale': 'End Scale', 'fine-half-cells': 'Half Box (cells)', 'fine-pairs': 'Tap Pairs', 'fine-count': 'Fine Taps',
+  'fine-slot': 'Slot', 'fine-ring': 'Ring', 'fine-covered': 'Covered Share', 'fine-tap-weight': 'Fine Weight', 'fine-u': 'Read Offset' };
 const UV_DISTORT_PORTS = { 'source-cache': 'Premultiplied Source', 'edge-uv': 'Sample UV', 'result:image': 'Distorted Image',
   'space-center': 'Centre', 'space-scale': 'Shape Scale', 'space-p': 'Offset', 'space-r': 'Distance / Radius', 'one-vec2': '(1, 1)',
   'bulge-scale': 'Lens Scale', 'bulge-moved': 'Moved Offset', 'twirl-angle': 'Turn Angle', 'twirl-moved': 'Moved Offset',

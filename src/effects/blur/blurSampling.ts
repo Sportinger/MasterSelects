@@ -23,8 +23,12 @@
  * Every sample path is a one-parameter transform group T(u): a translation (Motion), a
  * log-scale about the centre (Zoom, Radial Zoom) or a rotation about the centre (Radial
  * Spin). Stage A averages each pixel of the premultiplied source over a short box
- * u in [-h/2, h/2] with taps at most one pixel apart into an rgba16float cache. Stage B sums
- * coarse taps h apart over the full range and samples that cache. Because T(a) after T(b)
+ * u in [-h/2, h/2] with taps at most one pixel apart into an rgba16float cache; its outermost
+ * pair is weighted by the share of its pixel cell the box covers. Stage B sums coarse taps h apart
+ * over the full range and samples that cache, its partial last box weighted by its covered share.
+ * The coarse count sqrt(2 * longest px) is not rounded, so h follows the amount: every tap position
+ * and weight is a continuous function of the amount and an animated amount never jumps (the 3.2.7
+ * recipe rounded both counts up and jumped where they stepped). Because T(a) after T(b)
  * equals T(a + b), the boxes tile the range exactly: streaks stay continuous at any length
  * with about 2 * sqrt(2 * length) taps per pixel instead of one tap per pixel of streak length.
  * - Motion: the direction is the on-screen angle in pixels; the streak reaches
@@ -101,7 +105,7 @@ export interface DirectionalBlurPlan {
   center: [number, number];
   /** Start of the coarse range and its signed length for the pixel at `pixel` (px). */
   range: (pixel: [number, number]) => { start: number; length: number };
-  /** Coarse taps over the longest range, box length h (group units) shared by every pixel. */
+  /** Coarse boxes over the longest range (not a whole number), box length h (group units) shared by every pixel. */
   coarseTaps: number;
   step: number;
   /** Pixels moved per group unit at `pixel` (1 for translations). */
@@ -129,7 +133,8 @@ export function directionalBlurPlan(type: DirectionalBlurType, params: Direction
   // Coarse taps balance both stages (~sqrt(2 * longest streak in px) each); every pixel shares the box length.
   const finish = (plan: Omit<DirectionalBlurPlan, 'coarseTaps' | 'step'>, signedLongest: number, signedLongestPx: number): DirectionalBlurPlan => {
     const longest = Math.abs(signedLongest), longestPx = Math.abs(signedLongestPx);
-    const coarseTaps = clamp(Math.ceil(Math.sqrt(2 * longestPx)), 1, DIRECTIONAL_MAX_COARSE_TAPS);
+    // Not rounded: the box length follows the amount continuously; stage B weights its partial last box.
+    const coarseTaps = clamp(Math.sqrt(2 * longestPx), 1, DIRECTIONAL_MAX_COARSE_TAPS);
     return { ...plan, coarseTaps, step: longest / coarseTaps };
   };
   if (type === 'motion-blur') {
@@ -179,15 +184,30 @@ export function transformDirectionalPixel(plan: DirectionalBlurPlan, pixel: [num
   return [plan.center[0] + dx * cos - dy * sin, plan.center[1] + dx * sin + dy * cos];
 }
 
-/** Stage A tap count at a pixel: enough for at most one pixel between taps. */
-export function directionalFineTaps(plan: DirectionalBlurPlan, pixel: [number, number]): number {
-  return clamp(Math.ceil(plan.step * plan.speed(pixel)), 1, DIRECTIONAL_MAX_FINE_TAPS);
+/**
+ * Stage A taps at a pixel: the box of length h in one-pixel cells from the centre out (wider cells
+ * beyond DIRECTIONAL_MAX_FINE_TAPS), a pair per ring. The outermost pair counts with the share of
+ * its cell the box covers and sits at the centre of that share, so the box grows continuously with
+ * the amount and even a box under a pixel blurs a little (taps spread evenly over a rounded-up
+ * count jumped whenever the count did).
+ */
+export function directionalFineTaps(plan: DirectionalBlurPlan, pixel: [number, number]): Array<{ u: number; weight: number }> {
+  const step = Math.max(plan.step, 1e-9), reachPx = step * plan.speed(pixel);
+  const cell = Math.max(reachPx / DIRECTIONAL_MAX_FINE_TAPS, 1), halfCells = reachPx * 0.5 / cell;
+  const pairs = clamp(Math.ceil(halfCells), 1, DIRECTIONAL_MAX_FINE_TAPS / 2);
+  const unitsPerCell = step * 0.5 / Math.max(halfCells, 1e-9);
+  return Array.from({ length: 2 * pairs }, (_, index) => {
+    const slot = index + 0.5 - pairs, distance = Math.abs(slot), ring = distance - 0.5;
+    const covered = clamp(halfCells - ring, 0, 1);
+    return { u: slot * ((ring + 0.5 * covered) / distance) * unitsPerCell, weight: Math.max(covered, 1e-6) };
+  });
 }
 
 /**
  * Stage B taps for one pixel: tap k sits at the centre of the part of box k that lies inside
  * the range, weighted by that covered share and the taper, so a range that is not a whole
- * number of boxes (Radial zoom) still changes smoothly.
+ * number of boxes still changes smoothly. A partial last box keeps the full stage A box, so it
+ * spills a trace (its share times its taper) up to half a box past the range end.
  */
 export function directionalCoarseTaps(plan: DirectionalBlurPlan, pixel: [number, number]): Array<{ u: number; weight: number }> {
   const { start, length } = plan.range(pixel), span = Math.abs(length), sign = length < 0 ? -1 : 1;
@@ -220,7 +240,8 @@ export function blurBudgetNotes(type: string, params: Record<string, unknown>, w
   }
   if (!isDirectional(type)) return [];
   const requested = finite(params.amount, Number.NaN);
-  if (type !== 'zoom-blur' && requested < 0) return [`${type === 'motion-blur' ? 'Length' : 'Amount'} ${requested} is below 0: `
+  // Motion Blur's card shows Length in percent of the frame (displayScale 100): the note uses the same unit.
+  if (type !== 'zoom-blur' && requested < 0) return [`${type === 'motion-blur' ? `Length ${Number((requested * 100).toPrecision(6))}%` : `Amount ${requested}`} is below 0: `
     + `${type === 'motion-blur' ? 'Motion' : 'Radial'} Blur leaves the picture unchanged (as in earlier versions).`];
   const plan = directionalBlurPlan(type, params, width, height);
   const farthest = Math.hypot(Math.max(plan.center[0], width - plan.center[0]), Math.max(plan.center[1], height - plan.center[1]));

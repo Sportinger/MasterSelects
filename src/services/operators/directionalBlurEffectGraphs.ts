@@ -6,6 +6,7 @@ import {
 import { BlurGraphBuilder, normalizeNodes, premultipliedSourceCache, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
 
 export type EditableDirectionalBlurEffectType = 'motion-blur' | 'radial-blur' | 'zoom-blur';
+type DirectionalBlurRecipe = 'covered' | 'even';
 
 /**
  * Two-stage Motion, Zoom and Radial Blur (contract: `effects/blur/blurSampling.ts`).
@@ -47,7 +48,7 @@ function speed(g: BlurGraphBuilder, type: EditableDirectionalBlurEffectType, pre
   return g.unary(`${prefix}-speed`, 'vector.length.vec2', relative);
 }
 
-function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): EffectOperatorGraph {
+function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType, recipe: DirectionalBlurRecipe): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
   g.number('zero', 0); g.number('one', 1); g.number('two', 2); g.number('half', .5);
@@ -112,8 +113,12 @@ function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): Effec
     longestPx = g.binary('longest-px', 'math.multiply.scalar', longest, farthest);
   }
 
-  // Coarse taps ~ sqrt(2 * longest streak in px); every pixel shares the box length `step`.
-  const coarseNeeded = g.unary('coarse-needed', 'math.ceil.scalar', g.unary('coarse-root', 'math.sqrt.scalar', g.binary('longest-px-double', 'math.multiply.scalar', longestPx, 'two')));
+  // Coarse taps ~ sqrt(2 * longest streak in px); every pixel shares the box length `step`. The
+  // covered recipe keeps the root unrounded, so the box length follows the amount continuously and
+  // stage B's partial last box (weighted by its covered share) grows in; the even recipe (3.2.7)
+  // rounded it up, so the box length jumped whenever the count did.
+  const coarseRoot = g.unary('coarse-root', 'math.sqrt.scalar', g.binary('longest-px-double', 'math.multiply.scalar', longestPx, 'two'));
+  const coarseNeeded = recipe === 'even' ? g.unary('coarse-needed', 'math.ceil.scalar', coarseRoot) : coarseRoot;
   g.number('coarse-limit', DIRECTIONAL_MAX_COARSE_TAPS);
   const coarseCount = g.add('coarse-count', 'math.clamp.scalar', { value: coarseNeeded, min: 'one', max: 'coarse-limit' });
   const step = g.binary('step', 'math.max.scalar', g.binary('step-raw', 'math.divide-ieee.scalar', longest, coarseCount), 'tiny');
@@ -123,12 +128,36 @@ function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): Effec
   const fineSpeed = speed(g, type, 'fine', finePixel);
   const fineReach = fineSpeed ? g.binary('fine-reach', 'math.multiply.scalar', step, fineSpeed) : step;
   g.number('fine-limit', DIRECTIONAL_MAX_FINE_TAPS);
-  const fineCount = g.add('fine-count', 'math.clamp.scalar', { value: g.unary('fine-needed', 'math.ceil.scalar', fineReach), min: 'one', max: 'fine-limit' });
   const fineSequence = g.add('fine-sequence', 'image.sequence-index');
-  const fineShare = g.binary('fine-share', 'math.divide-ieee.scalar', g.binary('fine-entry', 'math.add.scalar', [fineSequence, 'index'], 'half'), fineCount);
-  const fineU = g.binary('fine-u', 'math.multiply.scalar', g.binary('fine-centered', 'math.subtract.scalar', fineShare, 'half'), step);
+  let fineCount: string, fineU: string, fineWeight: GraphPort = 'one';
+  if (recipe === 'even') {
+    fineCount = g.add('fine-count', 'math.clamp.scalar', { value: g.unary('fine-needed', 'math.ceil.scalar', fineReach), min: 'one', max: 'fine-limit' });
+    const fineShare = g.binary('fine-share', 'math.divide-ieee.scalar', g.binary('fine-entry', 'math.add.scalar', [fineSequence, 'index'], 'half'), fineCount);
+    fineU = g.binary('fine-u', 'math.multiply.scalar', g.binary('fine-centered', 'math.subtract.scalar', fineShare, 'half'), step);
+  } else {
+    // One-pixel cells (wider beyond the tap limit) from the centre out, a pair per ring; the
+    // outermost pair counts with the share of its cell the box covers and sits at the centre of
+    // that share, so the box grows continuously and even a box under a pixel blurs a little.
+    g.number('fine-pair-limit', DIRECTIONAL_MAX_FINE_TAPS / 2);
+    const cell = g.binary('fine-cell', 'math.max.scalar', g.binary('fine-cell-raw', 'math.divide-ieee.scalar', fineReach, 'fine-limit'), 'one');
+    const halfCells = g.binary('fine-half-cells', 'math.divide-ieee.scalar', g.binary('fine-reach-half', 'math.multiply.scalar', fineReach, 'half'), cell);
+    const pairs = g.add('fine-pairs', 'math.clamp.scalar', { value: g.unary('fine-pairs-needed', 'math.ceil.scalar', halfCells), min: 'one', max: 'fine-pair-limit' });
+    fineCount = g.binary('fine-count', 'math.multiply.scalar', pairs, 'two');
+    // Signed slot t = index + 1/2 - pairs (±1/2, ±3/2 …); its ring is |t| - 1/2.
+    const slot = g.binary('fine-slot', 'math.subtract.scalar', g.binary('fine-entry', 'math.add.scalar', [fineSequence, 'index'], 'half'), pairs);
+    const slotDistance = g.unary('fine-slot-distance', 'math.abs.scalar', slot);
+    const ring = g.binary('fine-ring', 'math.subtract.scalar', slotDistance, 'half');
+    const covered = g.add('fine-covered', 'math.clamp.scalar', { value: g.binary('fine-covered-raw', 'math.subtract.scalar', halfCells, ring), min: 'zero', max: 'one' });
+    const centre = g.binary('fine-cell-centre', 'math.add.scalar', ring, g.binary('fine-covered-half', 'math.multiply.scalar', covered, 'half'));
+    const offsetCells = g.binary('fine-offset-cells', 'math.multiply.scalar', slot, g.binary('fine-cell-reach', 'math.divide-ieee.scalar', centre, slotDistance));
+    // Cells to group units: half a box (step / 2) spans `halfCells` cells.
+    const unitsPerCell = g.binary('fine-units-per-cell', 'math.divide-ieee.scalar', g.binary('fine-step-half', 'math.multiply.scalar', step, 'half'),
+      g.binary('fine-half-cells-safe', 'math.max.scalar', halfCells, 'tiny'));
+    fineU = g.binary('fine-u', 'math.multiply.scalar', offsetCells, unitsPerCell);
+    fineWeight = g.binary('fine-tap-weight', 'math.max.scalar', covered, 'covered-floor');
+  }
   const fineSample = g.add('fine-sample', 'image.sample', { image: [premultipliedSourceCache(g), 'image'], uv: transform(g, type, 'fine', finePixel, fineU) });
-  const fineReduce = g.add('fine-reduce', 'image.sequence-reduce', { sample: [fineSample, 'image'], weight: 'one', count: fineCount });
+  const fineReduce = g.add('fine-reduce', 'image.sequence-reduce', { sample: [fineSample, 'image'], weight: fineWeight, count: fineCount });
   const cache = g.add('fine-cache', 'image.materialize', { image: normalizeNodes(g, 'fine', fineReduce) });
 
   // Stage B: coarse taps one box apart over this pixel's range; a partial last box is weighted by its share.
@@ -163,10 +192,19 @@ function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): Effec
   return g.graph();
 }
 
-export function createDefaultMotionBlurGraph(): EffectOperatorGraph { return createTwoStageBlurGraph('motion-blur'); }
-export function createDefaultRadialBlurGraph(): EffectOperatorGraph { return createTwoStageBlurGraph('radial-blur'); }
-export function createDefaultZoomBlurGraph(): EffectOperatorGraph { return createTwoStageBlurGraph('zoom-blur'); }
+export function createDefaultMotionBlurGraph(): EffectOperatorGraph { return createTwoStageBlurGraph('motion-blur', 'covered'); }
+export function createDefaultRadialBlurGraph(): EffectOperatorGraph { return createTwoStageBlurGraph('radial-blur', 'covered'); }
+export function createDefaultZoomBlurGraph(): EffectOperatorGraph { return createTwoStageBlurGraph('zoom-blur', 'covered'); }
 
 export function createDefaultDirectionalBlurGraph(type: EditableDirectionalBlurEffectType): EffectOperatorGraph {
-  return createTwoStageBlurGraph(type);
+  return createTwoStageBlurGraph(type, 'covered');
+}
+
+/**
+ * The two-stage recipe released in 3.2.7: stage A spread a rounded-up tap count evenly over its box
+ * and the coarse count was rounded up, so an animated amount jumped wherever a count stepped and a
+ * streak under about a pixel rendered the source unchanged. Kept to recognize untouched saved graphs.
+ */
+export function createEvenTapDirectionalBlurGraph(type: EditableDirectionalBlurEffectType): EffectOperatorGraph {
+  return createTwoStageBlurGraph(type, 'even');
 }
