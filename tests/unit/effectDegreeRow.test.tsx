@@ -123,7 +123,8 @@ describe('effect rows with a degree display unit', () => {
     render(<ResolveEffectParamRow paramName="amount" definition={getEffect('twirl')!.params.amount} value={Math.PI / 2}
       effect={{ id: 'twirl-1', params: { amount: Math.PI / 2, radius: .5 } }} clipId="clip-1" onChange={vi.fn()} />);
     const field = screen.getByRole('textbox', { name: 'Twist' }) as HTMLInputElement;
-    expect(screen.getByRole('button', { name: /· Source/ })).toBeTruthy();
+    // The source-aware row; its source line stays hidden while nothing drives it (inspectorRowActions.test.tsx).
+    expect(field.closest('.parameter-source-control')).toBeTruthy();
     expect(Number(field.value)).toBeCloseTo(90, 9);
     expect(field.dataset.suffix).toBe('°');
     fireEvent.change(field, { target: { value: '180' } });

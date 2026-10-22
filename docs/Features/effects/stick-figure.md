@@ -27,7 +27,7 @@ Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.m
 <figcaption>The four presets alone on black.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets the whole figure at once, pose, proportions, line and colour, in one undo step, and the row then shows its name until you change something. Every other control returns to its default too, so a preset also brings the figure back to the centre at Scale 1, facing right, fully opaque and planted on the ground: pick the preset first, then place the figure. The action lane stays as it is, and a joint with keyframes keeps them; the card says so.
+Pick one in the **Preset** row of the effect card. It sets the whole figure at once, pose, proportions, line and colour, in one undo step, and the row then shows its name until you change something. Every other control returns to its default too, so a preset also makes the figure fully opaque. Where the figure stands (Pelvis X and Y, **Ground** and **Ground Y**), its Scale and its Facing stay as you set them, so you can place the figure on its floor first and then try presets: the new pose stands on the same floor. The action lane stays as it is, and a joint with keyframes keeps them; the card says so.
 
 **Arabesque** – a dancer on one straight leg, the other stretched far behind, one arm stretched forward at head height and the other out behind, drawn in thin white lines with a ring head. A clean starting point for dance sketches.
 
@@ -55,8 +55,8 @@ Pick one in the **Preset** row of the effect card. It sets the whole figure at o
 <circle class="docs-shot-number" cx="132" cy="600" r="18" /><text x="132" y="600" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M538 700 L478 700" marker-end="url(#stick-figure-inspector-arrow)" />
 <circle class="docs-shot-number" cx="538" cy="700" r="18" /><text x="538" y="700" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M133 763 L217 763" marker-end="url(#stick-figure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="133" cy="763" r="18" /><text x="133" y="763" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M133 762 L217 762" marker-end="url(#stick-figure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="133" cy="762" r="18" /><text x="133" y="762" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -77,18 +77,18 @@ Angles are in degrees. Lengths and positions are in figure pixels: pixels of a 1
 
 ![The Pose section of the Stick Figure card with the Arabesque preset: Pelvis X, Pelvis Y and Lift at 0 px, Spine Lean 20°, Head Tilt −20°, Shoulder L 118°, Elbow L 10°, Shoulder R −85°, Elbow R 6°, Hip L 0°, Knee L 0°, Hip R −100°, Knee R 0°, each with a slider, a keyframe diamond and a reset arrow; the other sections are folded](../assets/effects/editor/stick-figure-pose.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 1236" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 923" aria-hidden="true" focusable="false">
 <defs><marker id="stick-figure-pose-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M128 179 L212 179" marker-end="url(#stick-figure-pose-arrow)" />
-<circle class="docs-shot-number" cx="128" cy="179" r="18" /><text x="128" y="179" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M162 293 L246 293" marker-end="url(#stick-figure-pose-arrow)" />
-<circle class="docs-shot-number" cx="162" cy="293" r="18" /><text x="162" y="293" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M106 350 L190 350" marker-end="url(#stick-figure-pose-arrow)" />
-<circle class="docs-shot-number" cx="106" cy="350" r="18" /><text x="106" y="350" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M109 464 L193 464" marker-end="url(#stick-figure-pose-arrow)" />
-<circle class="docs-shot-number" cx="109" cy="464" r="18" /><text x="109" y="464" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M145 807 L229 807" marker-end="url(#stick-figure-pose-arrow)" />
-<circle class="docs-shot-number" cx="145" cy="807" r="18" /><text x="145" y="807" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M128 178 L212 178" marker-end="url(#stick-figure-pose-arrow)" />
+<circle class="docs-shot-number" cx="128" cy="178" r="18" /><text x="128" y="178" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M162 244 L246 244" marker-end="url(#stick-figure-pose-arrow)" />
+<circle class="docs-shot-number" cx="162" cy="244" r="18" /><text x="162" y="244" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M106 277 L190 277" marker-end="url(#stick-figure-pose-arrow)" />
+<circle class="docs-shot-number" cx="106" cy="277" r="18" /><text x="106" y="277" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M109 343 L193 343" marker-end="url(#stick-figure-pose-arrow)" />
+<circle class="docs-shot-number" cx="109" cy="343" r="18" /><text x="109" y="343" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M145 541 L229 541" marker-end="url(#stick-figure-pose-arrow)" />
+<circle class="docs-shot-number" cx="145" cy="541" r="18" /><text x="145" y="541" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 

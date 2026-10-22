@@ -1,5 +1,5 @@
 // Stick Figure presets: whole figures (pose, proportions, line and colour) that read on black.
-// Every other card control returns to its default; the action lane is kept (EffectPreset).
+// Every other card control returns to its default; position, scale and facing (presetKeeps) and the action lane are kept.
 
 import type { EffectPreset } from '../../types';
 

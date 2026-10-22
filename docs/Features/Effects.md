@@ -112,11 +112,15 @@ come along.
 
 ## Let a setting follow something else
 
-Some settings, such as Gaussian Blur's Radius or Hue Shift's Shift, have a **Source** button next
-to their value. It reads *Fixed*, *Keys* or *Node*. Instead of a fixed number or keyframes, a small
-node can drive the setting: a slow wobble (LFO), random drift (Noise), the playing time, or the
-loudness of a sound clip (Audio Envelope). Choose one in the Source menu; the button beside it
-opens that node in the Nodes tab. More: [Parameter sources](./Node-Workspace.md#procedural-parameter-sources).
+Some settings, such as Gaussian Blur's Radius or Hue Shift's Shift, have a small **source** icon
+(two dots joined by a line) before their keyframe diamond. Instead of a fixed number or keyframes, a
+small node can drive the setting: a slow wobble, random drift, the playing time, or the loudness of a
+sound clip. Click the icon, open the **Source** menu and choose **New Oscillator** for a wobble,
+**New Value** or **New Keyframes**, or a node the clip already has; the Nodes tab opens on the new node
+so you can set its speed and range. **Fixed (keep keys)** holds the value and ignores its keyframes
+without deleting them; **Local value / keyframes** switches back. While a node drives the setting or
+it is fixed, the icon is lit and a line under the row says so (*Node · Source* with **Go to source**,
+or *Fixed · Source*). More: [Parameter sources](./Node-Workspace.md#procedural-parameter-sources).
 
 ## Styles and presets
 
@@ -135,8 +139,12 @@ the old look and are reset. The row under the menu names each of these changes t
 something you set.
 
 **Presets.** Effects that come with presets have a **Preset** row under **Style**. A preset is a
-named starting point: it sets all controls of the card at once, and one undo takes it back. A control
-with keyframes keeps them, and the card says so. Each effect page shows its presets.
+named starting point: it sets the controls of the card at once, and one undo takes it back. What
+belongs to your shot stays as it is: the screen colour of a key, a measured lens, where a figure
+stands, and quality settings. A control with keyframes keeps them, and the card says so. An effect
+saved by an earlier version, or one you changed in the Nodes tab, may lack some controls a preset
+sets; the card names them and offers **Update node setup** to bring the effect up to date. That also
+replaces your own changes in the Nodes tab; **Undo** brings them back. Each effect page shows its presets.
 
 **Your own effects.** To reuse an effect you have set up, open the **Nodes** tab, click **Effect
 presets**, give it a name and click **Save effect copy**. Under **Saved effects**, **Add copy** adds

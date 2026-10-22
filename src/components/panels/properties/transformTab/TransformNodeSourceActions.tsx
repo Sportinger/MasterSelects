@@ -6,17 +6,7 @@ import { createParameterSourceEvaluator } from '../../../../services/parameterSo
 import { getControlOperator } from '../../../../services/parameterSources/controlOperators';
 import { setParameterSourceBinding } from '../../../../services/parameterSources/parameterSourceActions';
 import { requestNodeAnimation } from '../../../../services/nodeGraph/nodeWorkspaceNavigation';
-import { ResolveInspectorIconButton } from '../resolveInspector/ResolveInspectorPrimitives';
-
-function NodeSourceIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
-      <circle cx="4" cy="4.5" r="2" />
-      <circle cx="12" cy="11.5" r="2" />
-      <path d="M6 4.5h2.5a2 2 0 0 1 2 2v3" />
-    </svg>
-  );
-}
+import { ResolveInspectorIconButton, ResolveNodeSourceIcon } from '../resolveInspector/ResolveInspectorPrimitives';
 
 function UnlinkIcon() {
   return (
@@ -71,7 +61,7 @@ export function TransformNodeSourceActions({ clipId, properties, sources }: {
         }}
         title={goTitle}
       >
-        <NodeSourceIcon />
+        <ResolveNodeSourceIcon />
       </ResolveInspectorIconButton>
       <ResolveInspectorIconButton
         ariaLabel={`Use local value for ${driven.join(', ')}`}

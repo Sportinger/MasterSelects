@@ -32,8 +32,9 @@ const length = (key: SkeletonNumericKey, max = 400) => number(key, 'Proportions'
 
 /** Lengths and offsets are pixels at a 1080 px tall frame; the figure scales with the resolution. */
 export const STICK_FIGURE_PARAMS = {
-  rootX: position('rootX', 'Pose'),
-  rootY: position('rootY', 'Pose'),
+  // Where the figure stands, how big and which way it faces are set for the shot: presets keep them.
+  rootX: { ...position('rootX', 'Pose'), presetKeeps: true },
+  rootY: { ...position('rootY', 'Pose'), presetKeeps: true },
   lift: position('lift', 'Pose'),
   spine: angle('spine'), head: angle('head'),
   shoulderL: angle('shoulderL'), elbowL: angle('elbowL'), shoulderR: angle('shoulderR'), elbowR: angle('elbowR'),
@@ -42,18 +43,19 @@ export const STICK_FIGURE_PARAMS = {
   upperArm: length('upperArm'), forearm: length('forearm'), thigh: length('thigh'), shin: length('shin'),
   thickness: length('thickness', 100),
   // At or below 0 the figure has no size (reported by stickFigureWarnings).
-  scale: { type: 'number', label: 'Scale', default: 1, min: 0.05, max: 5, step: 0.01, animatable: true, group: 'Proportions' },
+  scale: { type: 'number', label: 'Scale', default: 1, min: 0.05, max: 5, step: 0.01, animatable: true, group: 'Proportions', presetKeeps: true },
   groundMode: {
-    type: 'select', label: 'Ground', default: DEFAULTS.groundMode, group: 'Ground',
+    // Ground and Ground Y are the stage floor of the shot: presets keep them, like the figure's position.
+    type: 'select', label: 'Ground', default: DEFAULTS.groundMode, group: 'Ground', presetKeeps: true,
     options: [
       { value: 'plant', label: 'Plant lowest point' },
       { value: 'floor', label: 'Keep above ground' },
       { value: 'off', label: 'Off' },
     ],
   },
-  groundY: position('groundY', 'Ground'),
+  groundY: { ...position('groundY', 'Ground'), presetKeeps: true },
   facing: {
-    type: 'select', label: 'Facing', default: 'right', group: 'Style',
+    type: 'select', label: 'Facing', default: 'right', group: 'Style', presetKeeps: true,
     options: [{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }],
   },
   // Keyframeable turnaround: 1 = as Facing says, -1 = turned around, in between a 2D squash.

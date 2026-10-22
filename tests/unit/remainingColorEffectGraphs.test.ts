@@ -96,7 +96,7 @@ describe('remaining editable color effect graphs', () => {
     const saved = useTimelineStore.getState().clips[0].effects[0];
     expect(saved.params.temperature).toBe(0.6);
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'temperature')).toMatchObject({ bindings: { value: 'temperature' } });
-    expect(() => setOperatorParameter(clip.id, canonical.id, 'temperature', 'value', 1.1)).toThrow('outside its supported range');
+    expect(() => setOperatorParameter(clip.id, canonical.id, 'temperature', 'value', 4.5)).toThrow('outside its supported range'); // past the render range ±4 (renderRangeWritePaths.test.ts)
   });
 
   it('takes Hue Shift past its -0.5..0.5 turn slider on every write path (Shift wraps), and still limits other params', async () => {

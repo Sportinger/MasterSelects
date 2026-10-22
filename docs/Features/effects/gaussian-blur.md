@@ -46,12 +46,12 @@ Pick one in the **Preset** row of the effect card. It sets Radius in one undo st
 
 ![Properties, Effects with a Gaussian Blur card: the Preset menu showing Out of Focus and the Radius row at 10 px, beside a strip of the preview where the harbour town has gone soft](../assets/effects/editor/gaussian-blur-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 421" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 393" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#gaussian-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M561 344 L645 344" marker-end="url(#gaussian-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="561" cy="344" r="18" /><text x="561" y="344" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M565 281 L649 281" marker-end="url(#gaussian-blur-inspector-arrow)" />
+<circle class="docs-shot-number" cx="565" cy="281" r="18" /><text x="565" y="281" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M561 343 L645 343" marker-end="url(#gaussian-blur-inspector-arrow)" />
+<circle class="docs-shot-number" cx="561" cy="343" r="18" /><text x="561" y="343" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 

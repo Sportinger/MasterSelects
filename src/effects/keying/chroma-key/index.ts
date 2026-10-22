@@ -42,6 +42,7 @@ export const chromaKey: EffectDefinition = {
       label: 'Screen',
       default: 'green',
       graphOnly: true,
+      presetKeeps: true,
       options: [
         { value: 'green', label: 'Green' },
         { value: 'blue', label: 'Blue' },
@@ -49,7 +50,7 @@ export const chromaKey: EffectDefinition = {
       ],
     },
     // graphOnly: a Chroma Key graph edited before the screen-matte rebuild does not read these; tools say so.
-    screenColor: { type: 'color', label: 'Screen color', default: CHROMA_KEY_DEFAULT_SCREEN_COLOR, animatable: false, graphOnly: true },
+    screenColor: { type: 'color', label: 'Screen color', default: CHROMA_KEY_DEFAULT_SCREEN_COLOR, animatable: false, graphOnly: true, presetKeeps: true },
     clipBlack: { type: 'number', label: 'Clip Black', default: 0.3, min: 0, max: 1, step: 0.01, animatable: true, graphOnly: true },
     clipWhite: { type: 'number', label: 'Clip White', default: 0.85, min: 0, max: 1, step: 0.01, animatable: true, graphOnly: true },
     edgeShrink: { type: 'number', label: 'Shrink / Grow', default: 0, min: -CHROMA_KEY_MAX_EDGE_PX, max: CHROMA_KEY_MAX_EDGE_PX, step: 0.1, animatable: true, graphOnly: true },
@@ -67,6 +68,7 @@ export const chromaKey: EffectDefinition = {
       label: 'View',
       default: 'result',
       graphOnly: true,
+      presetKeeps: true,
       options: [{ value: 'result', label: 'Final result' }, { value: 'matte', label: 'Matte' }],
     },
     // Animatable as before the rebuild: an edited old graph still reads them (and their keyframes); the new

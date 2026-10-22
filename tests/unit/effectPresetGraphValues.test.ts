@@ -88,7 +88,7 @@ describe('presets of a graph effect', () => {
       const result = applyEffectPreset('weave-clip', 'fx', 'nest');
       expect(result.changed).toEqual(['weave_value']);
       expect(result.kept).toEqual([{ key: 'reveal_value', label: 'Reveal', reason: 'missing' }]);
-      expect(effectPresetNotice(result)).toBe("Nest: Reveal is not in this effect's edited graph.");
+      expect(effectPresetNotice(result)).toBe("Nest: Reveal is not in this effect's saved node setup.");
     });
   });
 });

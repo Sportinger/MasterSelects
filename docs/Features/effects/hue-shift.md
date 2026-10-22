@@ -44,12 +44,12 @@ Pick one in the **Preset** row of the effect card. It sets Shift in one undo ste
 
 ![Properties, Effects with a Hue Shift card: the Preset menu showing Third Turn and Shift at 120°, beside a strip of the preview with the night street, its pink sign turned yellow and its orange sign green](../assets/effects/editor/hue-shift-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 421" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 393" aria-hidden="true" focusable="false">
 <defs><marker id="hue-shift-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#hue-shift-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M581 344 L665 344" marker-end="url(#hue-shift-inspector-arrow)" />
-<circle class="docs-shot-number" cx="581" cy="344" r="18" /><text x="581" y="344" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M565 281 L649 281" marker-end="url(#hue-shift-inspector-arrow)" />
+<circle class="docs-shot-number" cx="565" cy="281" r="18" /><text x="565" y="281" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M581 343 L665 343" marker-end="url(#hue-shift-inspector-arrow)" />
+<circle class="docs-shot-number" cx="581" cy="343" r="18" /><text x="581" y="343" class="docs-shot-number-text">2</text>
 </svg>
 
 </div>
@@ -64,7 +64,7 @@ Pick one in the **Preset** row of the effect card. It sets Shift in one undo ste
 <figcaption>Shift from −180° to 180° and back, through the original in the middle (the label counts turns: 0.5 = 180°).</figcaption>
 </figure>
 
-**Shift** – how far every colour turns round the colour wheel. Going up, red turns orange, then yellow, green, cyan, blue, violet and back to red; going down, the other way. 10–30° either way changes the mood but still looks like real light; 120° and −120° give each colour another one; 180° gives the opposite colours. Greys, black and white have no colour, so they stay as they are, and each colour keeps its brightness and its strength. −180 to 180°, default 0°. The ends meet: 180° and −180° look the same, so the slider covers every colour, and a small shift either way is a small value. Type any value for more: 360° looks like 0°, 450° like 90°. The line under the row (**Fixed · Source**) shows where Shift comes from, a fixed value, keyframes or a node, and lets you drive it from a node such as an LFO for a running colour cycle.
+**Shift** – how far every colour turns round the colour wheel. Going up, red turns orange, then yellow, green, cyan, blue, violet and back to red; going down, the other way. 10–30° either way changes the mood but still looks like real light; 120° and −120° give each colour another one; 180° gives the opposite colours. Greys, black and white have no colour, so they stay as they are, and each colour keeps its brightness and its strength. −180 to 180°, default 0°. The ends meet: 180° and −180° look the same, so the slider covers every colour, and a small shift either way is a small value. Type any value for more: 360° looks like 0°, 450° like 90°. For a running colour cycle, click the small source icon before the keyframe diamond and choose **New Oscillator** in the Source menu; the Nodes tab opens on the oscillator to set its speed. The row then has a line under it (Node · Source) with Go to source, and the same menu switches back to the local value or keyframes.
 
 <div class="docs-float-end"></div>
 

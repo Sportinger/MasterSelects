@@ -3,10 +3,11 @@ import shader from './shader.wgsl?raw';
 import { LENS_PROFILE_OPTIONS, lensProfileUniforms } from './lensProfile';
 import { lensFullImageScale, lensKnee, lensStretchRange } from './lensFrameFit';
 
+// The profile group describes the camera that shot the picture (a CR2's measured lens), so presets keep it.
 const number = (label: string, value: number, min: number, max: number, step: number, group: string): EffectParam =>
-  ({ type: 'number', label, default: value, min, max, step, animatable: true, group });
+  ({ type: 'number', label, default: value, min, max, step, animatable: true, group, ...group === 'profile' ? { presetKeeps: true } : {} });
 export const LENS_CORRECTION_PARAMS: Record<string, EffectParam> = {
-  profile: { type: 'select', label: 'Lens', default: 'manual', options: LENS_PROFILE_OPTIONS, group: 'profile' },
+  profile: { type: 'select', label: 'Lens', default: 'manual', options: LENS_PROFILE_OPTIONS, group: 'profile', presetKeeps: true },
   focalLength: number('Focal Length', 24, 24, 105, 0.1, 'profile'),
   aperture: number('Aperture', 4, 4, 22, 0.1, 'profile'),
   focusDistance: number('Focus Distance', 1000, 0.45, 1000, 0.05, 'profile'),

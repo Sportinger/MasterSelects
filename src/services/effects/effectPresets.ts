@@ -26,6 +26,15 @@ function presetControls(effect: EffectParamOwner): Array<[string, EffectParam]> 
   return Object.entries(effectParamDefinitions(effect)).filter(([, definition]) => !definition.hidden && !definition.deprecated);
 }
 
+/**
+ * Whether a preset that does not name this control leaves it as it is: setup controls (`presetKeeps`:
+ * Chroma Key's Screen, a measured lens profile, a figure's position) and quality controls (Edge
+ * Sampling), which describe the shot or the render cost rather than the look.
+ */
+export const presetKeepsControl = (definition: EffectParam) => definition.presetKeeps ?? definition.quality === true;
+/** Controls a preset resets when it leaves them out: not text (a typed word stays), retired or kept. */
+const resetByPresets = (definition: EffectParam) => definition.type !== 'text' && !definition.deprecated && !presetKeepsControl(definition);
+
 type GraphValue = { key: string; label: string; value?: number };
 const graphValuesOf = (effect: EffectParamOwner): GraphValue[] => {
   if (!hasEffectOperatorGraph(effect.type)) return [];
@@ -54,17 +63,18 @@ const hasEditedGraph = (effect: EffectParamOwner) => !!effect.operatorGraph || e
  * The shown controls are judged once on the target: the current values with every control at its
  * default and the preset's values in place, so a preset that switches a mode (a Form) resets the
  * controls of that mode, also of a mode it leaves by not naming it. Text controls (a typed word, a
- * ramp) keep what the user wrote unless the preset names them. A graph effect's exposed graph values
+ * ramp), setup controls (`presetKeeps`) and quality controls keep their value unless the preset names
+ * them (presetKeepsControl). A graph effect's exposed graph values
  * (`<node>_value`) that any of its presets names return to the default graph's value when this preset
  * leaves them out, so the result never depends on the preset picked before.
  */
 export function resolveEffectPreset(effect: EffectParamOwner, preset: EffectPreset): Record<string, Primitive> {
   const definitions = getEffect(effect.type)?.params ?? {};
   const defaults = Object.fromEntries(Object.entries(definitions)
-    .filter(([, definition]) => definition.type !== 'text' && !definition.deprecated).map(([key, definition]) => [key, definition.default]));
+    .filter(([, definition]) => resetByPresets(definition)).map(([key, definition]) => [key, definition.default]));
   const target = { ...effect, params: { ...effect.params, ...defaults, ...preset.params } };
   const values: Record<string, Primitive> = Object.fromEntries(presetControls(target)
-    .flatMap(([key, definition]): Array<[string, Primitive]> => key in preset.params || definition.type === 'text' ? [] : [[key, definition.default]]));
+    .flatMap(([key, definition]): Array<[string, Primitive]> => key in preset.params || !resetByPresets(definition) ? [] : [[key, definition.default]]));
   const named = new Set(effectPresets(effect.type).flatMap(candidate => Object.keys(candidate.params)).filter(key => !definitions[key]));
   for (const { key, value } of defaultGraphValues(effect.type)) if (named.has(key) && value !== undefined && !(key in preset.params)) values[key] = value;
   for (const [key, value] of Object.entries(preset.params)) if (!definitions[key]?.deprecated) values[key] = value;
@@ -80,20 +90,20 @@ const currentValue = (effect: EffectParamOwner, key: string, definition: EffectP
   effect.params[key] ?? definition?.legacyDefault ?? definition?.default ?? defaultGraphValues(effect.type).find(value => value.key === key)?.value;
 
 /**
- * resolveEffectPreset overwrites every non-text control with a default or the preset's value, so its
- * answer depends only on the rest of the params (text controls, a stored graph, graph values, retired
- * params) and the instance's graph. Graph values a preset names are overwritten too. A slider drag makes a new params object per frame but leaves that
+ * resolveEffectPreset overwrites every control it resets with a default or the preset's value, so its
+ * answer depends only on the rest of the params (text and kept controls, a stored graph, graph values,
+ * retired params) and the instance's graph. Graph values a preset names are overwritten too. A slider drag makes a new params object per frame but leaves that
  * rest alone, so the card keeps one answer per rest (a few per effect type) instead of rebuilding the
  * control list for every preset on every frame.
  */
 type ResolvedPresets = { type: string; graph: unknown; rest: Array<[string, unknown]>; values: Array<Record<string, Primitive>> };
 const resolvedCache = new WeakMap<readonly EffectPreset[], ResolvedPresets[]>();
 const RESOLVED_PER_TYPE = 8;
-/** Keys resolveEffectPreset always sets: every non-text control and every graph value a preset of the type names. */
+/** Keys resolveEffectPreset always sets: every control presets reset (resetByPresets) and every graph value a preset of the type names. */
 function overwrittenKeys(type: string): Set<string> {
   const definitions = getEffect(type)?.params ?? {};
   const graphValues = effectPresets(type).flatMap(preset => Object.keys(preset.params)).filter(key => !definitions[key]);
-  return new Set([...Object.entries(definitions).filter(([, definition]) => definition.type !== 'text' && !definition.deprecated).map(([key]) => key), ...graphValues]);
+  return new Set([...Object.entries(definitions).filter(([, definition]) => resetByPresets(definition)).map(([key]) => key), ...graphValues]);
 }
 const overwrittenCache = new WeakMap<readonly EffectPreset[], Map<string, Set<string>>>();
 function resolvedPresetValues(effect: EffectParamOwner, presets: readonly EffectPreset[]): Array<Record<string, Primitive>> {
@@ -114,14 +124,33 @@ function resolvedPresetValues(effect: EffectParamOwner, presets: readonly Effect
   return values;
 }
 
-/** The preset whose values the instance shows right now, if any (the card names it in its Preset row). */
+/**
+ * Keys a preset names that this instance cannot set: a graphOnly control its stored graph does not read,
+ * or a graph value (`<node>_value`) that graph does not expose. Only a stored graph (an edited one, or a
+ * node setup saved by an earlier version) can lack them; the effect's current graph reads all of them.
+ */
+function unsetPresetKeys(effect: EffectParamOwner, preset: EffectPreset): string[] {
+  if (!hasEditedGraph(effect)) return [];
+  const definitions = getEffect(effect.type)?.params ?? {};
+  const named = Object.keys(preset.params).filter(key => !definitions[key]?.deprecated);
+  const bound = named.some(key => definitions[key]?.graphOnly) ? graphBoundParameters(effect) : undefined;
+  const exposed = named.some(key => !definitions[key]) ? new Set(graphValuesOf(effect).map(value => value.key)) : undefined;
+  return named.filter(key => definitions[key] ? !!definitions[key].graphOnly && !!bound && !bound.has(key) : !exposed?.has(key));
+}
+
+/**
+ * The preset whose values the instance shows right now, if any (the card names it in its Preset row).
+ * A preset that names a control the instance's stored graph lacks never matches: the card would name
+ * a look it cannot show.
+ */
 export function matchingEffectPreset(effect: EffectParamOwner): EffectPreset | undefined {
   const presets = effectPresets(effect.type);
   if (!presets.length) return undefined;
   const definitions = getEffect(effect.type)?.params ?? {};
   const resolved = resolvedPresetValues(effect, presets);
-  return presets.find((_, index) => Object.entries(resolved[index])
+  const match = presets.find((_, index) => Object.entries(resolved[index])
     .every(([key, value]) => Object.is(currentValue(effect, key, definitions[key]), value)));
+  return match && !unsetPresetKeys(effect, match).length ? match : undefined;
 }
 
 export interface EffectPresetResult {
@@ -130,44 +159,73 @@ export interface EffectPresetResult {
   changed: string[];
   /**
    * Controls left as they were, with the reason the card shows ("Amount has keyframes"); 'missing':
-   * a graph value (or a graphOnly control) the preset names that this instance's edited graph no
-   * longer exposes or reads.
+   * a graph value (or a graphOnly control) the preset names that this instance's stored graph (edited,
+   * or saved by an earlier version) does not expose or read.
    */
   kept: Array<{ key: string; label: string; reason: 'keyframes' | 'node' | 'missing' }>;
-  /** The instance runs an edited graph (the card then says a missing value is not in its edited graph). */
+  /** The instance runs a stored graph rather than the effect's current graph. */
   graphEdited?: boolean;
+  /**
+   * The effect's current graph has every missing control: applying the preset with `currentGraph`
+   * swaps it in (the card offers it, Undo brings the stored graph back).
+   */
+  upgradable?: boolean;
+  /** The stored graph was replaced by the effect's current graph (applyEffectPreset `currentGraph`). */
+  graphReplaced?: boolean;
 }
 
-/** One line for the card: which controls kept their animation, or undefined when none did. */
+/**
+ * One line for the card, or undefined when the preset simply applied: which controls kept their
+ * animation or are missing from the stored graph, and when nothing changed at all, that it did not.
+ */
 export function effectPresetNotice(result: EffectPresetResult): string | undefined {
-  if (!result.kept.length) return undefined;
+  const replaced = result.graphReplaced ? 'the node setup is updated (Undo brings back the old one)' : '';
+  if (!result.kept.length) {
+    if (replaced) return `${result.preset.name}: ${replaced}.`;
+    return result.changed.length ? undefined : `${result.preset.name}: the card already has these values.`;
+  }
   const names = (reason: EffectPresetResult['kept'][number]['reason']) => result.kept.filter(item => item.reason === reason).map(item => item.label);
   const join = (labels: string[]) => labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels[0];
+  const missing = names('missing');
   const parts = [
+    replaced,
     names('keyframes').length ? `${join(names('keyframes'))} kept ${names('keyframes').length > 1 ? 'their' : 'its'} keyframes` : '',
     names('node').length ? `${join(names('node'))} stayed driven by ${names('node').length > 1 ? 'their nodes' : 'its node'}` : '',
-    names('missing').length ? `${join(names('missing'))} ${names('missing').length > 1 ? 'are' : 'is'} not in this effect's ${result.graphEdited ? 'edited ' : ''}graph` : '',
+    // When `upgradable`, the card puts its Update node setup button right after this line.
+    missing.length ? `${join(missing)} ${missing.length > 1 ? 'are' : 'is'} not in this effect's ${result.graphEdited ? 'saved node setup' : 'graph'}` : '',
   ].filter(Boolean);
-  return `${result.preset.name}: ${parts.join('; ')}.`;
+  return `${result.preset.name}${result.changed.length || replaced ? '' : ' changed nothing'}: ${parts.join('; ')}.`;
+}
+
+/** The instance on the effect's current graph: no stored graph, so its default graph renders. */
+function onCurrentGraph<T extends EffectParamOwner>(effect: T): T {
+  const { [EFFECT_GRAPH_PARAM]: _stored, ...params } = effect.params;
+  void _stored;
+  return { ...effect, params, operatorGraph: undefined };
 }
 
 /**
  * Applies a preset in one undo step, as if the user set each control in the card. A control with
  * keyframes or a node driving it keeps its animation; the result names it, so nothing changes silently.
+ * A control the instance's stored graph lacks is named too; when the effect's current graph has all of
+ * them the result is `upgradable`, and `currentGraph: true` first swaps in that graph (same undo step).
  */
-export function applyEffectPreset(clipId: string, effectId: string, presetId: string): EffectPresetResult {
+export function applyEffectPreset(clipId: string, effectId: string, presetId: string, options: { currentGraph?: boolean } = {}): EffectPresetResult {
   assertExclusiveTimelineMutationAllowed();
   const state = readTimelineRuntimeState(useTimelineStore);
-  const clip = state.clips.find(candidate => candidate.id === clipId), effect = clip?.effects.find(candidate => candidate.id === effectId);
-  if (!clip || !effect || state.isExporting || state.tracks.find(track => track.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
-  const preset = effectPresets(effect.type).find(candidate => candidate.id === presetId);
-  if (!preset) throw new Error(`${presetId} is not a preset of ${effect.type}.`);
+  const clip = state.clips.find(candidate => candidate.id === clipId), stored = clip?.effects.find(candidate => candidate.id === effectId);
+  if (!clip || !stored || state.isExporting || state.tracks.find(track => track.id === clip.trackId)?.locked) throw new Error('The clip is unavailable, locked or exporting.');
+  const preset = effectPresets(stored.type).find(candidate => candidate.id === presetId);
+  if (!preset) throw new Error(`${presetId} is not a preset of ${stored.type}.`);
+  const replace = !!options.currentGraph && hasEditedGraph(stored);
+  const effect = replace ? onCurrentGraph(stored) : stored;
   const definitions = getEffect(effect.type)?.params ?? {};
-  const result: EffectPresetResult = { preset, changed: [], kept: [], graphEdited: hasEditedGraph(effect) };
+  const result: EffectPresetResult = { preset, changed: [], kept: [], graphEdited: hasEditedGraph(effect), ...replace ? { graphReplaced: true } : {} };
   const numbers: Array<[string, number]> = [], others: Record<string, Primitive> = {};
   const resolved = resolvedPresetValues(effect, effectPresets(effect.type))[effectPresets(effect.type).indexOf(preset)];
-  // A card control only a graph reads (graphOnly) that this instance's edited graph does not read (a
-  // Weave whose Reveal node was unbound): setting it would change nothing, so the result names it.
+  // A card control only a graph reads (graphOnly) that this instance's stored graph does not read (a
+  // Weave whose Reveal node was unbound, a glyph look saved before its Background): setting it would
+  // change nothing, so the result names it.
   const bound = graphBoundParameters(effect);
   for (const [key, value] of Object.entries(resolved)) {
     const unread = definitions[key]?.graphOnly && bound && !bound.has(key);
@@ -187,11 +245,19 @@ export function applyEffectPreset(clipId: string, effectId: string, presetId: st
     if (typeof value === 'number') numbers.push([key, value]); else others[key] = value;
     result.changed.push(key);
   }
-  if (!result.changed.length) return result;
+  const missing = result.kept.filter(item => item.reason === 'missing').map(item => item.key);
+  if (missing.length && result.graphEdited) {
+    // The current graph judged with the preset's values in place (a Weave's Form decides what it reads).
+    const current = onCurrentGraph(effect), currentBound = graphBoundParameters({ ...current, params: { ...current.params, ...preset.params } });
+    result.upgradable = missing.every(key => definitions[key] ? currentBound?.has(key) ?? true
+      : defaultGraphValues(effect.type).some(value => value.key === key));
+  }
+  if (!result.changed.length && !replace) return result;
   const batch = startBatch(`Apply preset ${preset.name}`);
   // In a project repository session the edits must run inside the batch's gesture to form one undo step.
   const repository = getEditorRepositorySession() !== null && batch.batchId !== null;
   const apply = () => {
+    if (replace) state.updateClip(clip.id, { effects: clip.effects.map(candidate => candidate.id === effectId ? { ...candidate, ...effect } : candidate) });
     // Numbers go through the card's own path (parameter sources in constant mode included).
     for (const [key, value] of numbers) state.setPropertyValue(clip.id, `effect.${effect.id}.${key}` as AnimatableProperty, value);
     if (Object.keys(others).length) state.updateClipEffect(clip.id, effect.id, others);

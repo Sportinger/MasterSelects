@@ -3,6 +3,53 @@
     min-width: 0;
   }
 
+  /* Effect control labels can be long ('Line Brightness', 'Shadow Pigment', 'Vignette Correction'):
+     they wrap to a second line inside the label column instead of being cut, so the columns stay
+     aligned at every docked width; only a label longer than two lines still ends in an ellipsis. */
+  .effects-tab .resolve-inspector-row-label {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: break-word;
+    line-height: 13px;
+  }
+
+  /* In the stacked layout (ResolveInspectorNarrow.css) the label line grows with a second line
+     instead of running into the row above. */
+  @container (max-width: 280px) {
+    .effects-tab .resolve-inspector-row {
+      grid-template-rows: minmax(18px, auto) auto;
+    }
+
+    /* The 22 px action buttons keep overhanging their 18 px line as before, so one-line rows keep
+       their height; only a second label line makes the row taller. */
+    .effects-tab .resolve-inspector-row > .resolve-inspector-row-actions {
+      height: 18px;
+      align-content: center;
+    }
+  }
+
+  /* A card with a three-action row (a source icon or other extra action before the keyframe diamond)
+     gives every row the same three-slot action column, keyframe and reset in the last two slots, so
+     sliders and values stay in one column also in a narrow dock. */
+  .effects-tab .effect-params:has(.resolve-inspector-row--extra-action) .resolve-inspector-row {
+    --resolve-inspector-action-width: 67px;
+  }
+
+  .effects-tab .effect-params:has(.resolve-inspector-row--extra-action) .resolve-inspector-row > .resolve-inspector-row-actions {
+    grid-template-columns: repeat(3, 18px);
+  }
+
+  .effects-tab .effect-params:has(.resolve-inspector-row--extra-action) .resolve-inspector-row > .resolve-inspector-row-actions > .keyframe-toggle {
+    grid-column: 2;
+  }
+
+  .effects-tab .effect-params:has(.resolve-inspector-row--extra-action) .resolve-inspector-row > .resolve-inspector-row-actions > .resolve-inspector-reset-button {
+    grid-column: 3;
+  }
+
   .effects-tab .effect-param-value {
     flex: 1;
     width: 100%;
@@ -70,10 +117,37 @@
   padding: var(--sp-1) var(--sp-2) var(--sp-2);
 }
 
-/* The Preset row's note on controls that kept their keyframes or their node (EffectPresetRow). */
+/* The Preset row's note on controls that kept their keyframes or their node, or that the saved node
+   graph lacks (EffectPresetRow). */
 .effects-tab .effect-preset-notice {
   margin: 2px 0 6px;
   color: var(--text-muted);
   font-size: var(--font-xs);
   line-height: 1.45;
+}
+
+/* "Update node setup": a small bordered text button in the note; pointer clicks blur it, keyboard focus shows the accent ring. */
+.effects-tab .effect-preset-upgrade {
+  margin-left: 2px;
+  padding: 0 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 16px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.effects-tab .effect-preset-upgrade:hover {
+  background: var(--surface-control-hover);
+}
+
+.effects-tab .effect-preset-upgrade:focus {
+  outline: none;
+}
+
+.effects-tab .effect-preset-upgrade:focus-visible {
+  box-shadow: var(--focus-ring) !important;
 }

@@ -1,5 +1,5 @@
 // Generic effect parameter rows in the shared Resolve inspector design (AGENTS.md section 9):
-// slider + number + reset for numbers, InspectorSelect for choices, a checkbox for switches,
+// slider + number + reset for numbers, InspectorSelect for choices, a checkbox + reset for switches,
 // swatch + hex + reset for colours (ResolveInspectorColorRow) and a text field + reset for typed text. Effects opt in through
 // RESOLVE_ROW_EFFECTS (resolveEffectRows.ts) as their inspector is revised.
 import { useTimelineStore } from '../../../stores/timeline';
@@ -58,8 +58,11 @@ function ResolveEffectParamControl({ paramName, definition, value, effect, clipI
     <InspectorSelect ariaLabel={definition.label} value={String(value)} options={definition.options ?? []}
       onChange={next => { set(next); onParamCommit?.(paramName, 'select', 'select'); }} />
   </ResolveInspectorRow>;
-  // Pointer focus on the checkbox is cleared by the Effects tab; the colour swatch blurs itself after a pointer pick.
-  if (definition.type === 'boolean') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title}>
+  // Pointer focus on the checkbox is cleared by the Effects tab; the colour swatch and the reset buttons blur themselves after a pointer click.
+  if (definition.type === 'boolean') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title}
+    actions={<ResolveInspectorIconButton ariaLabel={`Reset ${definition.label}`} className="resolve-inspector-reset-button" disabled={inactive}
+      onClick={event => { if (event.detail > 0) event.currentTarget.blur(); set(definition.default === true); onParamCommit?.(paramName, 'checkbox', 'reset'); }}>
+      <ResolveResetIcon /></ResolveInspectorIconButton>}>
     <input type="checkbox" className="resolve-effect-checkbox" aria-label={definition.label} checked={value === true}
       onChange={event => { set(event.target.checked); onParamCommit?.(paramName, 'checkbox', 'click'); }} />
   </ResolveInspectorRow>;

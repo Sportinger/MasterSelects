@@ -78,7 +78,8 @@ export function KeyframeChannelEditor({ clip, node, channelId, keys, parameters,
   const range = { min: parameter?.min ?? Math.min(-1, value * 2), max: parameter?.max ?? Math.max(1, value * 2), step: parameter?.step ?? 0.01 };
   // A cyclic parameter (Hue Shift) keeps keys past one turn: its slider is one turn, its field has no limit.
   const ValueRow = parameter?.wraps ? ResolveWrappingNumberRow : ResolveInspectorNumberRow;
-  const limits = parameter?.wraps ? {} : { hardMin: parameter?.min, hardMax: parameter?.max };
+  // Typed keys may go past the slider up to the render range (renderMin/renderMax), like the card's field.
+  const limits = parameter?.wraps ? {} : { hardMin: parameter?.hardMin, hardMax: parameter?.hardMax, numberMin: parameter?.hardMin, numberMax: parameter?.hardMax };
   const selectedLocal = selected ? keyframeTimeToClipLocal(clip, selected, state.getSourceTimeForClip) : null;
   const isCable = [channel.property, ...channel.targets.map(t => t.property)].some(p => clip.effects.some(e => e.type === 'face-cables' && p.startsWith(`effect.${e.id}.`)));
   const addKey = (newValue: number) => safely('Set animation keyframe', () => {

@@ -58,6 +58,10 @@ export interface EffectParam {
   // Cyclic: values past min/max go round again (Hue Shift: 1.25 turns = 0.25), so nothing clamps
   // them. min/max are only the slider; typed values, keyframes and nodes may go beyond on both sides.
   wraps?: boolean;
+  // Set up for the shot rather than part of a look (Chroma Key's Screen, a measured lens profile, a
+  // figure's position): a preset that does not name it leaves it as it is, and the card's preset match
+  // ignores it (effectPresets.ts). Quality controls (`quality`) are kept the same way unless this says false.
+  presetKeeps?: boolean;
   // Value an instance saved before this parameter existed renders with (its params lack the key).
   // New effects store `default` explicitly (getDefaultParams), so only old saves and presets get this.
   legacyDefault?: number | boolean | string;
@@ -77,8 +81,8 @@ export interface EffectParam {
 
 /**
  * A named starting point of an effect, picked in its card ("Preset"). Applying it sets every visible
- * control to the preset's value, or to its default when the preset leaves it out (text controls stay
- * unless named), in one undo step. Visibility is judged once on the target (every control at its
+ * control to the preset's value, or to its default when the preset leaves it out (text controls, setup
+ * controls marked `presetKeeps` and quality controls stay unless named), in one undo step. Visibility is judged once on the target (every control at its
  * default, the preset's values in place), so a preset that switches a mode resets that mode's controls,
  * and the result never depends on the preset picked before. Controls with keyframes or a node driving them keep
  * their animation and are named in the card instead (src/services/effects/effectPresets.ts). The docs

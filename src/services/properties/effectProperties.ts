@@ -60,6 +60,8 @@ function createEffectDescriptor(
       max: param.max,
       step: param.step,
       ...(param.wraps ? { wraps: true } : {}),
+      ...(param.renderMin !== undefined ? { renderMin: param.renderMin } : {}),
+      ...(param.renderMax !== undefined ? { renderMax: param.renderMax } : {}),
       aliases: [effectDefinition.name, effectDefinition.id, paramName],
       options: param.options,
     },

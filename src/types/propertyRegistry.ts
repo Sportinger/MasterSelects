@@ -82,6 +82,12 @@ export interface PropertyDescriptor<T = PropertyValue> {
     minMagnitude?: number;
     /** Cyclic value: min/max describe one turn for sliders and are not a limit. */
     wraps?: boolean;
+    /**
+     * Range the value renders in when it may go past the slider's min/max (EffectParam.renderMin and
+     * renderMax): typed values, keyframes and tools may use it. Undefined: min/max are the limit.
+     */
+    renderMin?: number;
+    renderMax?: number;
     step?: number;
     unit?: string;
     aliases?: string[];
