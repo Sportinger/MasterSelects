@@ -4,6 +4,16 @@ export const ANALOG_DISPLAY_PARAMETER_IDS = ['amount', 'crtAmount', 'curvature',
 export type AnalogDisplayParameterId = typeof ANALOG_DISPLAY_PARAMETER_IDS[number];
 
 export interface AnalogDisplayResolveRef { node: string; port: string }
+
+/** What the island's outputs carry (node id or `id:port`), so its stage folders hand on "Tube Position", not "Add: Value". */
+export function analogDisplayPortLabels(prefix: string): Record<string, string> {
+  const labels: Record<string, string> = { zero: 'Zero', one: 'One', half: 'Half', two: 'Two', tiny: 'Tiny', 'point-twelve': 'Warp Scale',
+    'bloom-scale': 'Bloom Scale', 'signal-clamp': 'Signal Amount', active: 'Tube Active', original: 'Original', 'display-uv': 'Tube Position',
+    'display-split:x': 'Tube X', 'display-split:y': 'Tube Y', inside: 'Inside the Tube', 'decoded-rgb': 'Picture on the Tube',
+    'crt-bloom': 'With Bloom', 'scan-factor': 'Scanline Shade', 'crt-scan': 'With Scanlines', 'mask-factor': 'Mask', 'crt-mask': 'With Mask',
+    'field-inside': 'Flicker on the Tube', 'crt-field': 'With Flicker', 'analog-clamp': 'Tube Picture', processed: 'Processed' };
+  return Object.fromEntries(Object.entries(labels).map(([id, label]) => [`${prefix}-${id}`, label]));
+}
 export interface AnalogDisplayResolveIsland {
   nodes: BoundOperatorNode[]; edges: OperatorEdge[]; layout: EffectOperatorGraph['layout']; groups: OperatorGroup[];
   output: AnalogDisplayResolveRef;
@@ -19,6 +29,8 @@ class Builder {
   readonly edges: OperatorEdge[] = [];
   readonly layout: EffectOperatorGraph['layout'] = {};
   private readonly members: string[] = [];
+  private readonly stages: OperatorGroup[] = [];
+  private current?: OperatorGroup;
   private readonly rows = new Map<number, number>();
   private readonly prefix: string;
   private readonly anchor: { x: number; y: number };
@@ -29,7 +41,7 @@ class Builder {
     const id = `${this.prefix}-${name}`;
     this.nodes.push({ id, operator, operatorVersion: 1, bindings, ...(constants ? { constants } : {}) });
     const row = this.rows.get(column) ?? 0; this.rows.set(column, row + 1);
-    this.layout[id] = { x: this.anchor.x + column * 300, y: this.anchor.y + row * 180 }; this.members.push(id);
+    this.layout[id] = { x: this.anchor.x + column * 300, y: this.anchor.y + row * 180 }; (this.current?.nodeIds ?? this.members).push(id);
     const port = operator === 'image.sample' || operator === 'convert.vec4-to-image' || operator === 'vector.combine.rgba' || operator === 'control.select.image'
       ? 'image' : operator === 'vector.combine.vec2' || operator === 'vector.combine.vec3' || operator === 'vector.combine.vec4' ? 'value'
         : operator === 'image.normalized-uv' ? 'uv'
@@ -60,15 +72,30 @@ class Builder {
   sample(name: string, image: AnalogDisplayResolveRef, uv: AnalogDisplayResolveRef, column: number) {
     const result = this.node(name, 'image.sample', column); this.connect(image, result, 'image'); this.connect(uv, result, 'uv'); return result;
   }
-  group(): OperatorGroup { return { id: `${this.prefix}-group`, label: 'Analog Display Resolve', color: '#10b981', nodeIds: this.members }; }
+  /** The nodes made from here on go into this stage folder inside Analog Display Resolve (made on first use). */
+  stage(id: string, label: string) {
+    const groupId = `${this.prefix}-${id}`;
+    this.current = this.stages.find(stage => stage.id === groupId);
+    if (!this.current) {
+      this.current = { id: groupId, label, color: '#10b981', nodeIds: [], parentId: `${this.prefix}-group`, collapsedByDefault: true };
+      this.stages.push(this.current);
+    }
+  }
+  groups(): OperatorGroup[] {
+    return [{ id: `${this.prefix}-group`, label: 'Analog Display Resolve', color: '#10b981', nodeIds: this.members }, ...this.stages];
+  }
 }
 
-/** Flat, reusable image island matching analogResolveCompute without persisting resource handles. */
+/** Reusable image island matching analogResolveCompute without persisting resource handles. Its nodes sit in one
+ * stage folder each (tube curvature and edges, bloom, scanlines, phosphor mask, field flicker…) inside Analog Display Resolve. */
 export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIslandOptions): AnalogDisplayResolveIsland {
   const g = new Builder(options.prefix, options.anchor ?? { x: 0, y: 0 });
+  g.stage('constants', 'Constants');
   const zero = g.scalar('zero', 0), one = g.scalar('one', 1), half = g.scalar('half', .5), two = g.scalar('two', 2);
   const tiny = g.scalar('tiny', .0001), pointTwelve = g.scalar('point-twelve', .12), bloomScale = g.scalar('bloom-scale', .2);
+  g.stage('coordinates', 'Coordinates & Resources');
   const uv = g.node('uv', 'image.normalized-uv', 0), resolution = g.node('resolution', 'image.resolution', 0), time = g.node('time', 'image.timeline-time', 0);
+  g.stage('controls', 'Controls');
   const parameter = (id: AnalogDisplayParameterId) => g.bound(id, options.parameterValues?.[id]);
   const amountRaw = parameter('amount'), crtAmountRaw = parameter('crtAmount'), curvature = parameter('curvature'), bloom = parameter('bloom');
   const scanlines = parameter('scanlines'), maskStrength = parameter('maskStrength'), flicker = parameter('flicker');
@@ -77,7 +104,10 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   const signalAmount = g.node('signal-clamp', 'math.clamp.scalar', 1); g.connect(options.signalAmount, signalAmount, 'value'); g.connect(zero, signalAmount, 'min'); g.connect(one, signalAmount, 'max');
   const activeAmount = g.binary('active-amount', 'math.max.scalar', signalAmount, crtAmount, 2);
   const active = g.binary('active', 'compare.greater.scalar', activeAmount, tiny, 3);
+  g.stage('mix', 'Mix & Output');
   const original = g.sample('original', options.source, uv, 1);
+
+  g.stage('tube', 'Tube Curvature');
 
   const uv2 = g.binary('uv-two', 'math.multiply.vec2-scalar', uv, two, 2), one2 = g.unary('one-vec2', 'convert.scalar-to-vec2', one, 1);
   const centered = g.binary('centered', 'math.subtract.vec2', uv2, one2, 3);
@@ -91,6 +121,7 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   const curvedHalf = g.binary('curved-half', 'math.multiply.vec2', curved, half2, 10), displayUv = g.binary('display-uv', 'math.add.vec2', curvedHalf, half2, 11);
   const displaySplit = g.unary('display-split', 'vector.split.vec2', displayUv, 12), dx = { node: displaySplit.node, port: 'x' }, dy = { node: displaySplit.node, port: 'y' };
   // Tube coverage, anti-aliased over one output pixel: clamp(distance to the edge in pixels + 0.5, 0, 1).
+  g.stage('edges', 'Tube Edges');
   const resolutionSplit = g.unary('resolution-split', 'vector.split.vec2', resolution, 12);
   const edgeCoverage = (id: string, inset: AnalogDisplayResolveRef, axis: 'x' | 'y') => {
     const pixels = g.binary(`${id}-px`, 'math.multiply.scalar', inset, { node: resolutionSplit.node, port: axis }, 13);
@@ -103,12 +134,14 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   const insideX = g.binary('inside-x', 'math.multiply.scalar', sx0, sx1, 14), insideY = g.binary('inside-y', 'math.multiply.scalar', sy0, sy1, 14);
   const inside = g.binary('inside', 'math.multiply.scalar', insideX, insideY, 15);
 
+  g.stage('picture', 'Picture on the Tube');
   const sourceDisplay = g.sample('source-display', options.source, displayUv, 13), decodedDisplay = g.sample('decoded-display', options.decoded, displayUv, 13);
   const sourceSplit = g.unary('source-display-split', 'vector.split.rgba', sourceDisplay, 14, 'image');
   const decodedSplit = g.unary('decoded-display-split', 'vector.split.rgba', decodedDisplay, 14, 'image');
   const decodedRgb = g.node('decoded-rgb', 'math.mix.rgb', 15); g.connect({ node: sourceSplit.node, port: 'rgb' }, decodedRgb, 'a');
   g.connect({ node: decodedSplit.node, port: 'rgb' }, decodedRgb, 'b'); g.connect(signalAmount, decodedRgb, 't');
 
+  g.stage('bloom', 'Bloom');
   // Bloom reach as a share of the frame width: 1.75 / 360 (written against the former 360-wide raster; saved graphs keep it).
   const width360 = g.scalar('decoded-width', 360), offsetPixels = g.scalar('bloom-offset-pixels', 1.75);
   const offsetX = g.binary('bloom-offset-x', 'math.divide-ieee.scalar', offsetPixels, width360, 3), offset = g.vec2('bloom-offset', offsetX, zero, 4);
@@ -132,6 +165,7 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   bloomRgb = g.binary('bloom-rgb', 'math.multiply.rgb-scalar', bloomRgb, bloomScale, 21);
   let crt = g.binary('crt-bloom', 'math.add.rgb', decodedRgb, bloomRgb, 22);
 
+  g.stage('scanlines', 'Scanlines');
   const scanScale = g.scalar('scan-scale', 576), pi = g.scalar('pi', Math.PI), scanBase = g.scalar('scan-base', .58), scanRange = g.scalar('scan-range', .42);
   const scanPosition = g.binary('scan-position', 'math.multiply.scalar', dy, scanScale, 16), scanPhase = g.unary('scan-phase', 'math.fract.scalar', scanPosition, 17);
   const scanAngle = g.binary('scan-angle', 'math.multiply.scalar', scanPhase, pi, 18), scanSine = g.unary('scan-sine', 'math.sin.scalar', scanAngle, 19);
@@ -140,6 +174,7 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   const scanFactor = g.node('scan-factor', 'math.mix.scalar', 22); g.connect(one, scanFactor, 'a'); g.connect(scanProfile, scanFactor, 'b'); g.connect(scanAmount, scanFactor, 't');
   crt = g.binary('crt-scan', 'math.multiply.rgb-scalar', crt, scanFactor, 23);
 
+  g.stage('mask', 'Phosphor Mask');
   const uvPixels = g.binary('pixel-position', 'math.multiply.vec2', uv, resolution, 3), pixelFloor = g.unary('pixel-floor', 'math.floor.vec2', uvPixels, 4);
   const pixelSplit = g.unary('pixel-split', 'vector.split.vec2', pixelFloor, 5), pixelX = { node: pixelSplit.node, port: 'x' };
   const three = g.scalar('three', 3), xThird = g.binary('pixel-third', 'math.divide-ieee.scalar', pixelX, three, 6), thirdFloor = g.unary('pixel-third-floor', 'math.floor.scalar', xThird, 7);
@@ -155,6 +190,7 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   const maskFactor = g.node('mask-factor', 'math.mix.rgb', 15); g.connect(oneRgb, maskFactor, 'a'); g.connect(maskRgb, maskFactor, 'b'); g.connect(maskAmount, maskFactor, 't');
   crt = g.binary('crt-mask', 'math.multiply.rgb', crt, maskFactor, 24);
 
+  g.stage('flicker', 'Field Flicker');
   const tau = g.scalar('tau', Math.PI * 2), fieldRate = g.scalar('field-rate', 49.73), flickerScale = g.scalar('flicker-scale', .055);
   let fieldAngle = g.binary('field-time-tau', 'math.multiply.scalar', time, tau, 5); fieldAngle = g.binary('field-angle', 'math.multiply.scalar', fieldAngle, fieldRate, 6);
   const fieldSine = g.unary('field-sine', 'math.sin.scalar', fieldAngle, 7), fieldHalfSine = g.binary('field-half-sine', 'math.multiply.scalar', half, fieldSine, 8);
@@ -163,6 +199,7 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   flickerAmount = g.binary('flicker-wave-product', 'math.multiply.scalar', flickerAmount, fieldWave, 12);
   const fieldFlicker = g.binary('field-flicker', 'math.subtract.scalar', one, flickerAmount, 13), fieldInside = g.binary('field-inside', 'math.multiply.scalar', fieldFlicker, inside, 16);
   crt = g.binary('crt-field', 'math.multiply.rgb-scalar', crt, fieldInside, 25);
+  g.stage('mix', 'Mix & Output');
   const analog = g.node('analog-rgb', 'math.mix.rgb', 26); g.connect(decodedRgb, analog, 'a'); g.connect(crt, analog, 'b'); g.connect(crtAmount, analog, 't');
   const zeroRgb = g.unary('zero-rgb', 'convert.scalar-to-rgb', zero, 25), clamped = g.node('analog-clamp', 'math.clamp.rgb', 27);
   g.connect(analog, clamped, 'value'); g.connect(zeroRgb, clamped, 'min'); g.connect(oneRgb, clamped, 'max');
@@ -170,5 +207,5 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   const mixed = g.node('mixed-rgb', 'math.mix.rgb', 28); g.connect({ node: originalSplit.node, port: 'rgb' }, mixed, 'a'); g.connect(clamped, mixed, 'b'); g.connect(amount, mixed, 't');
   const processed = g.node('processed', 'vector.combine.rgba', 29); g.connect(mixed, processed, 'rgb'); g.connect({ node: originalSplit.node, port: 'alpha' }, processed, 'alpha');
   const output = g.node('active-select', 'control.select.image', 30); g.connect(original, output, 'falseValue'); g.connect(processed, output, 'trueValue'); g.connect(active, output, 'condition');
-  return { nodes: g.nodes, edges: g.edges, layout: g.layout, groups: [g.group()], output };
+  return { nodes: g.nodes, edges: g.edges, layout: g.layout, groups: g.groups(), output };
 }

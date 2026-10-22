@@ -22,12 +22,18 @@ const context = { namedImages: [
 ] };
 
 describe('Analog Display Resolve image island', () => {
-  it('is a flat, grouped graph built only from registered generic operators', () => {
+  it('is a grouped graph built only from registered generic operators, one stage folder per part of the tube', () => {
     const { island } = fixture();
     expect(island.nodes).toHaveLength(144);
     expect(island.edges).toHaveLength(227);
     expect(island.output).toEqual({ node: 'resolve-active-select', port: 'image' });
-    expect(island.groups[0].nodeIds).toHaveLength(island.nodes.length);
+    const [folder, ...stages] = island.groups;
+    expect(folder).toMatchObject({ id: 'resolve-group', label: 'Analog Display Resolve', nodeIds: [] });
+    expect(stages.map(stage => stage.label)).toEqual(['Constants', 'Coordinates & Resources', 'Controls', 'Mix & Output', 'Tube Curvature',
+      'Tube Edges', 'Picture on the Tube', 'Bloom', 'Scanlines', 'Phosphor Mask', 'Field Flicker']);
+    expect(stages.every(stage => stage.parentId === folder.id && stage.collapsedByDefault)).toBe(true);
+    // Every node sits in exactly one stage folder.
+    expect(stages.flatMap(stage => stage.nodeIds).toSorted()).toEqual(island.nodes.map(node => node.id).toSorted());
     expect(island.layout['resolve-zero']).toEqual({ x: 600, y: 200 });
     const bindings = island.nodes.filter(node => Object.keys(node.bindings).length).map(node => node.bindings.value as string).toSorted();
     expect(bindings).toEqual(['amount', 'bloom', 'crtAmount', 'curvature', 'flicker', 'maskStrength', 'scanlines'].toSorted());

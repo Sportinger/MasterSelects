@@ -1,5 +1,5 @@
 import shader from './shader.wgsl?raw';
-import type { ComputeEffectDefinition } from '../../types';
+import type { ComputeEffectDefinition, EffectPreset } from '../../types';
 import { ANALOG_SIGNAL_LAB_PARAMS } from './parameters';
 
 type Primitive = number | boolean | string;
@@ -30,10 +30,25 @@ function analogSignalParamWarnings(values: Record<string, Primitive>): string[] 
   });
 }
 
+/** One point on each part of the chain: the antenna, the tape, the tube and a signal that is lost. */
+const ANALOG_SIGNAL_LAB_PRESETS: EffectPreset[] = [
+  { id: 'snowy-reception', name: 'Snowy Reception', params: { signalStrength: 0.35, rfNoise: 0.55, impulseNoise: 0.2, ghostLevel: 0.45,
+    ghostDelayUs: 3.5, multipathDrift: 0.3, syncInstability: 0.3, colorLock: 0.65, crtAmount: 0.35 } },
+  { id: 'worn-vhs', name: 'Worn VHS', params: { rfAmount: 0, vhsAmount: 1, tapeSpeed: 'lp', tracking: 0.3, dropout: 0.15, tapeWear: 0.25,
+    chromaBleed: 0.6, headSwitching: 0.7, crtAmount: 0.2 } },
+  { id: 'tube-television', name: 'Tube Television', params: { signalStrength: 0.95, rfNoise: 0.08, ghostLevel: 0.06, crtAmount: 1,
+    scanlines: 0.6, maskStrength: 0.5, bloom: 0.4, curvature: 0.45, flicker: 0.15 } },
+  { id: 'rolling-picture', name: 'Rolling Picture', params: { signalStrength: 0.15, rfNoise: 0.65, impulseNoise: 0.25, tuning: 0.3,
+    interference: 0.3, syncInstability: 0.85, colorLock: 0.3, crtAmount: 0.35 } },
+];
+
 export const analogSignalLab: ComputeEffectDefinition = {
   pipelineKind: 'compute', computeMode: 'analog-signal', id: 'analog-signal-lab', name: 'Analog Signal Lab', category: 'analog',
   shader, entryPoint: 'analogResolveCompute', uniformSize: 160, workgroupSize: [8, 8], requiresContinuousRender: false,
+  // Its noise, rolling and tape faults move with the timeline clock and hold still while paused.
+  timelineAnimated: true,
   params: ANALOG_SIGNAL_LAB_PARAMS,
+  presets: ANALOG_SIGNAL_LAB_PRESETS,
   paramWarnings: analogSignalParamWarnings,
   packUniforms: (values, width, height, timelineTimeSeconds = 0) => new Float32Array([
     width, height, Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,

@@ -2,6 +2,7 @@ import type { BoundOperatorNode, EffectOperatorGraph } from '../../types/operato
 import { mirrorPixelPresentationPlan } from './mirrorPixelPresentation';
 import { FILM_PRISM_SPECTRUM } from '../../effects/analog/filmPrismLimits';
 import { createLegacyCrtScreenGraph } from './legacyCrtScreenGraph';
+import { analogDisplayPortLabels } from './analogDisplayResolveGraph';
 import { acuarelaPresentationPlan } from './acuarelaPresentation';
 import { linesLookPresentationPlan } from './linesLookPresentation';
 import { rom1PresentationPlan } from './rom1Presentation';
@@ -119,6 +120,8 @@ const MATRIX_RAIN_PORTS = { 'rain-ground-tone': 'Glow', 'background-tone': 'Back
   'rain-ground-light': 'Ground Light', 'rain-ground': 'Ground', 'rain-lit': 'Glyph Cell' };
 /** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */
 const GRAPH_PORT_LABELS: Record<string, Record<string, string>> = {
+  // Analog Signal Lab: the stage folders of its default display island (prefix "display").
+  'analog-signal-lab': analogDisplayPortLabels('display'),
   'slit-scan': { 'smooth-or-banded': 'Time Map', 'subject-protected': 'Protection', 'safe-delay': 'Delay (s)',
     'masked-delay': 'Protected Time', 'sample-delay': 'Delay per Pixel', 'centered-uv': 'Offset from Center',
     coordinate: 'Scan Position', linear: 'Linear Scan', 'out-from-center': 'Out from Center', 'radius-distance': 'Distance',

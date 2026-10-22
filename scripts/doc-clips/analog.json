@@ -101,8 +101,247 @@
       "width": 960,
       "float": "left",
       "alt": "The dancer, original left and through Analog Signal Lab as a worn VHS tape right: softer, warm cream colours kept, noise streaks crawling through the dark background and along the bottom edge where the video heads switch",
-      "caption": "Left: original. Right: a worn VHS tape (RF / Antenna Stage 0, VHS Stage 1, Tape Speed LP, Tracking Error 0.3).",
+      "caption": "Left: original. Right: the Worn VHS preset.",
       "loop": 0.35
+    },
+    {
+      "name": "analog-signal-lab-presets",
+      "kind": "presets",
+      "effect": "analog-signal-lab",
+      "range": [
+        0.5,
+        3.5
+      ],
+      "crop": [
+        440,
+        120,
+        1000,
+        900
+      ],
+      "width": 960,
+      "loop": 0.35,
+      "poster": 1.2,
+      "maxBytes": 1300000,
+      "alt": "The dancing figure four times in a grid, moving in sync, each with one preset: Snowy Reception top left with grain and a faint ghost to the right of her, Worn VHS top right softer with warm smeared colour and noise streaks at the bottom edge, Tube Television bottom left on a curved screen with scanlines and glowing highlights, Rolling Picture bottom right drowned in noise, torn sideways and slipping up and down",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "analog-signal-lab-signal-strength",
+      "effect": "analog-signal-lab",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        480,
+        140,
+        900,
+        900
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "signalStrength",
+        "label": "Signal Strength",
+        "from": 1,
+        "to": 0.1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 420000,
+      "float": "right",
+      "alt": "The dancer close up while Signal Strength runs from 1 down to 0.1 and back: the clean picture fills with grain and snow, colour fades and the picture starts to tear and roll at the weakest values; the current value is shown at the bottom left",
+      "caption": "Signal Strength from 1 down to 0.1 and back."
+    },
+    {
+      "name": "analog-signal-lab-ghost-level",
+      "effect": "analog-signal-lab",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        480,
+        140,
+        900,
+        900
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "ghostLevel",
+        "label": "Ghost Level",
+        "from": 0,
+        "to": 0.8,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 420000,
+      "float": "right",
+      "alt": "The dancer close up while Ghost Level runs from 0 to 0.8 and back: a second, fainter copy of her appears a little to the right and grows stronger; the current value is shown at the bottom left",
+      "caption": "Ghost Level from 0 to 0.8 and back, Ghost Delay 1.8 µs."
+    },
+    {
+      "name": "analog-signal-lab-sync-instability",
+      "effect": "analog-signal-lab",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        480,
+        140,
+        900,
+        900
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "syncInstability",
+        "label": "Sync Instability",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 420000,
+      "float": "right",
+      "alt": "The dancer close up while Sync Instability runs from 0 to 1 and back: the lines start to wobble sideways and at high values the picture tears and jumps; the current value is shown at the bottom left",
+      "caption": "Sync Instability from 0 to 1 and back."
+    },
+    {
+      "name": "analog-signal-lab-luma-bandwidth",
+      "effect": "analog-signal-lab",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        480,
+        140,
+        900,
+        900
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "lumaBandwidth",
+        "label": "Luma Bandwidth",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 420000,
+      "float": "right",
+      "alt": "The dancer close up while Luma Bandwidth runs from 0 to 1 and back: at 0 the picture is smeared sideways, at 1 her outline and the folds of the dress are crisp; the current value is shown at the bottom left",
+      "caption": "Luma Bandwidth from 0 to 1 and back."
+    },
+    {
+      "name": "analog-signal-lab-tracking",
+      "effect": "analog-signal-lab",
+      "params": {
+        "rfAmount": 0,
+        "vhsAmount": 1
+      },
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        480,
+        140,
+        900,
+        900
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "tracking",
+        "label": "Tracking Error",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 420000,
+      "float": "right",
+      "alt": "The dancer close up on tape (VHS Stage 1, RF / Antenna Stage 0) while Tracking Error runs from 0 to 1 and back: a band of noise and torn lines rises through the picture and grows; the current value is shown at the bottom left",
+      "caption": "Tracking Error from 0 to 1 and back, with VHS Stage 1 and RF / Antenna Stage 0."
+    },
+    {
+      "name": "analog-signal-lab-tape-wear",
+      "effect": "analog-signal-lab",
+      "params": {
+        "rfAmount": 0,
+        "vhsAmount": 1
+      },
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        480,
+        140,
+        900,
+        900
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "tapeWear",
+        "label": "Tape Wear",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 420000,
+      "float": "right",
+      "alt": "The dancer close up on tape (VHS Stage 1, RF / Antenna Stage 0) while Tape Wear runs from 0 to 1 and back: the picture gets softer, colours wash out and white dropout streaks flicker across it; the current value is shown at the bottom left",
+      "caption": "Tape Wear from 0 to 1 and back, with VHS Stage 1 and RF / Antenna Stage 0."
+    },
+    {
+      "name": "analog-signal-lab-curvature",
+      "effect": "analog-signal-lab",
+      "params": {
+        "crtAmount": 1
+      },
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "curvature",
+        "label": "Curvature",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 420000,
+      "float": "right",
+      "alt": "The whole stage on a tube (CRT Stage 1) while Curvature runs from 0 to 1 and back: the flat picture bulges into a rounded screen with dark corners; the current value is shown at the bottom left",
+      "caption": "Curvature from 0 to 1 and back, with CRT Stage 1."
     },
     {
       "name": "add-glitch",
