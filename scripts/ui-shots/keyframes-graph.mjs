@@ -1,7 +1,8 @@
 // Docs picture: the timeline in Graph mode for docs/Features/Keyframes.md (assets/keyframes/graph-mode.webp).
 // Needs a running editor (Vite dev server, default http://localhost:5173): it makes a new project, adds a
 // 6 s solid, gives its Position X four Bezier keys and Position Y two, selects the second X key (its
-// handles show), zooms the 6 s across a 1200 px window (2x pixels, saved at the 1600 px docs budget), switches the timeline to Graph mode and crops the timeline area.
+// handles show), zooms the 6 s across a 1200 px window (narrower squeezes the toolbar), switches the timeline to Graph mode and
+// crops the timeline area at the 1600 px docs budget; the page opens it full size in the lightbox.
 //   node scripts/ui-shots/keyframes-graph.mjs [--base http://localhost:5204] [--out <file.webp>]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,9 +15,9 @@ const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i
 const base = arg('--base', 'http://localhost:5173');
 const out = path.resolve(repoRoot, arg('--out', 'docs/Features/assets/keyframes/graph-mode.webp'));
 
-const browser = await chromium.launch({ channel: 'chrome', headless: false, args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--window-size=1200,1000'] });
+const browser = await chromium.launch({ channel: 'chrome', headless: false, args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--window-size=1200,1300'] });
 try {
-  const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, deviceScaleFactor: 2 });
   await page.goto(`${base}/editor`);
   await page.getByRole('button', { name: /New project/ }).click({ timeout: 60000 });
   await page.locator('form input').first().fill('Keyframes graph');
@@ -41,6 +42,11 @@ try {
       key('kf-y2', 'position.y', 5.5, -0.2, {}),
     ];
     useTimelineStore.setState((current) => ({ clipKeyframes: new Map(current.clipKeyframes).set(clipId, keys) }));
+    // Graph mode squeezes the tracks into a 48 px band per section: a Video track at that height
+    // keeps its header and clip name whole, and the empty Audio track would only add a cramped header.
+    state.setTrackHeight(track.id, 48);
+    const audio = state.tracks.find((candidate) => candidate.type === 'audio');
+    if (audio) state.removeTrack(audio.id);
     const next = useTimelineStore.getState();
     next.selectClip(clipId);
     next.selectKeyframe('kf-x2');
@@ -51,8 +57,8 @@ try {
   await page.waitForTimeout(1200);
   const timeline = await page.locator('.timeline-curve-mode-toggle').boundingBox();
   const top = Math.max(0, Math.round(timeline.y - 12));
-  const png = await page.screenshot({ clip: { x: 0, y: top, width: 1200, height: 850 - top } });
-  const webp = await encodeDocShotWebp(page, png, { maxBytes: 120000, maxPixelWidth: 1600 }); // the docs width budget;
+  const png = await page.screenshot({ clip: { x: 0, y: top, width: 1200, height: 950 - top } });
+  const webp = await encodeDocShotWebp(page, png, { maxBytes: 120000, maxPixelWidth: 1600 });
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, webp.buffer);
   console.log(`${path.relative(repoRoot, out)} ${webp.width}x${webp.height} ${webp.size} bytes`);

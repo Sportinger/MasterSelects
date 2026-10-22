@@ -1,6 +1,6 @@
 # Keyframes
 
-Keyframes animate a clip's properties over time. Click the diamond beside a value in Properties to set a key at the playhead, move the playhead and change the value, and the property moves between the keys; shape the motion in **Graph** mode under the timeline. Where the clips sit: [Timeline](./Timeline.md).
+Keyframes animate a clip's properties over time. Click the diamond beside a value in Properties to set a key at the playhead, move the playhead and change the value, and the property moves between the keys; shape the motion in **Graph** mode: the **Graph** button at the right of the timeline toolbar, or `G`, switches the timeline to it. Where the clips sit: [Timeline](./Timeline.md).
 
 Keyframes work on transform values, speed, numeric effect parameters, color, masks, text bounds, camera and light settings, custom-node parameters, vector-animation state and inputs, and numeric motion-shape properties.
 
@@ -191,11 +191,13 @@ When recording is enabled:
 ### Curve Editor
 
 <figure class="docs-shot">
-  <img src="./assets/keyframes/graph-mode.webp" alt="The timeline in Graph mode below a solid clip: the Graph list on the left holds Position X (active) and Position Y; on the right the orange Position X curve runs through four keys, and the selected key at the playhead shows its two cyan Bezier handles. The grey Position Y curve runs behind it." />
-  <figcaption>Graph mode: the <strong>Graph list</strong> picks the property, the orange <strong>curve</strong> shows its values over time, the <strong>selected key</strong> (red) shows its cyan <strong>Bezier handles</strong>, and inactive properties stay grey behind it.</figcaption>
+
+![The timeline in Graph mode below a solid clip: the Graph list on the left holds Position X (active) and Position Y; on the right the orange Position X curve runs through four keys, and the selected key at the playhead shows its two cyan Bezier handles. The grey Position Y curve runs behind it.](./assets/keyframes/graph-mode.webp)
+
+  <figcaption>Graph mode: the <strong>Graph list</strong> picks the property, the orange <strong>curve</strong> shows its values over time, the <strong>selected key</strong> (red) shows its cyan <strong>Bezier handles</strong>, and inactive properties stay grey behind it. The tracks above shrink to a thin band; the square in the clip is the solid's type icon.</figcaption>
 </figure>
 
-- Double-click a property row or keyframe diamond to open Graph mode.
+- The **Graph** button at the right of the timeline toolbar, or `G`, switches the timeline to Graph mode; double-clicking a property row or keyframe diamond opens it too.
 - Graph mode shows the selected clip's animated numeric properties as selectable curve series; only one property is expanded in the track header at a time.
 - The active curve renders a value axis that auto-scales to its current keyframes.
 - Selected keyframes expose Bezier handles.
