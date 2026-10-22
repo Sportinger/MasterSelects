@@ -323,6 +323,9 @@ export function applyWorkerSoftwarePixelEffects(
     const bloom = prepareWorkerSoftwareBloom(sourceData, width, height, adjustment);
     return (x: number, y: number) => applyWorkerSoftwareBloom(bloom, sourceData, x, y);
   });
+  // Decided once per frame: a layer without resampling or feedback effects must not pay for their
+  // per-pixel calls (each builds arrays and an input object), the export readback path runs this every frame.
+  const resamplesSource = hasWorkerSoftwareSourceResamplingEffects(layer.pixelEffects);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const targetIndex = (y * width + x) * 4;
@@ -331,28 +334,32 @@ export function applyWorkerSoftwarePixelEffects(
       let g = sourceData[sourceIndex + 1] / 255 + brightness;
       let b = sourceData[sourceIndex + 2] / 255 + brightness;
       let alpha = sourceData[sourceIndex + 3] / 255;
-      const sourceResampled = applyWorkerSoftwareSourceResamplingEffects(
-        sourceData,
-        width,
-        height,
-        x,
-        y,
-        layer.pixelEffects,
-        timelineTime,
-      );
-      if (sourceResampled) {
-        [r, g, b, alpha] = sourceResampled;
+      if (resamplesSource) {
+        const sourceResampled = applyWorkerSoftwareSourceResamplingEffects(
+          sourceData,
+          width,
+          height,
+          x,
+          y,
+          layer.pixelEffects,
+          timelineTime,
+        );
+        if (sourceResampled) {
+          [r, g, b, alpha] = sourceResampled;
+        }
       }
-      [r, g, b, alpha] = applyWorkerSoftwareFeedbackEffects({
-        frame: feedbackFrame,
-        sourceData,
-        width,
-        height,
-        x,
-        y,
-        current: [r, g, b, alpha],
-        timelineTime,
-      });
+      if (feedbackFrame) {
+        [r, g, b, alpha] = applyWorkerSoftwareFeedbackEffects({
+          frame: feedbackFrame,
+          sourceData,
+          width,
+          height,
+          x,
+          y,
+          current: [r, g, b, alpha],
+          timelineTime,
+        });
+      }
       for (const adjustment of exposureAdjustments) {
         [r, g, b] = applyExposureAdjustment([r, g, b], adjustment);
       }

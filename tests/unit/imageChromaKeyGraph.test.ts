@@ -15,6 +15,7 @@ import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/work
 import { applyWorkerSoftwarePixelEffects } from '../../src/services/render/workerSoftwarePixelEffects';
 import { getDefaultParams } from '../../src/effects';
 import type { Layer } from '../../src/types/layers';
+import { fastestMs, referenceFrameMs } from '../helpers/cpuFrameBudget';
 
 type Rgba = [number, number, number, number];
 const SCREEN: [number, number, number] = [60 / 255, 150 / 255, 70 / 255];
@@ -258,18 +259,21 @@ describe('Chroma Key with values tools and keyframes can send', () => {
     }
     const settings = { screen: 'green', screenColor: SCREEN, clipBlack: .3, clipWhite: .85, spillSuppression: 1, view: 'result' } as const;
     const out = new Float64Array(4);
-    const started = performance.now();
-    const keyer = prepareChromaKeyCpu(chromaKeyCpuScreen(data, settings, width, height), settings);
     let alpha = 0;
-    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-      const offset = (y * width + x) * 4;
-      chromaKeyCpuKey(keyer, data[offset] / 255, data[offset + 1] / 255, data[offset + 2] / 255, 1, x, y, out);
-      alpha += out[3];
-    }
-    const elapsed = performance.now() - started;
+    const keyed = fastestMs(() => {
+      const keyer = prepareChromaKeyCpu(chromaKeyCpuScreen(data, settings, width, height), settings);
+      alpha = 0;
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        const offset = (y * width + x) * 4;
+        chromaKeyCpuKey(keyer, data[offset] / 255, data[offset + 1] / 255, data[offset + 2] / 255, 1, x, y, out);
+        alpha += out[3];
+      }
+    });
     expect(alpha / (width * height)).toBeCloseTo(499 / 1920, 2);
-    // The array-per-pixel version took about 1.2 s here; scalar work is well under a quarter of that.
-    expect(elapsed).toBeLessThan(300);
+    // Measured against a scalar reference pass over the same frame on this machine (cpuFrameBudget.ts), so a
+    // slow CI runner does not fail it. Screen estimate plus key take about 6x that pass; the array-per-pixel
+    // version took about 50x (1.2 s against about 23 ms on a developer machine).
+    expect(keyed).toBeLessThan(25 * referenceFrameMs(data));
   });
 });
 
@@ -308,11 +312,12 @@ describe('Chroma Key on the worker CPU path of a loaded project', () => {
 
   it('keys a 1080p frame of a loaded project within a frame budget', () => {
     const plan = workerSoftwareEffectPlanForLayer(layer(loaded()))!, data = frame(1920, 1080);
-    const started = performance.now();
-    renderPlan(plan, data, 1920, 1080);
-    // The graph interpreter took about a minute for this frame; the whole worker pixel pass with the scalar
-    // keyer takes about 0.3-0.4 s here (the key itself under 0.1 s). The budget leaves room for a loaded machine.
-    expect(performance.now() - started).toBeLessThan(1000);
+    const rendered = fastestMs(() => renderPlan(plan, data, 1920, 1080));
+    // Measured against a scalar reference pass over the same frame on this machine (cpuFrameBudget.ts), so a
+    // slow CI runner does not fail it. The whole worker pixel pass with the scalar keyer (frame copy, screen
+    // estimate, key, byte write-back) takes about 12x that pass; the graph interpreter took about a minute
+    // for this frame, over 2000x.
+    expect(rendered).toBeLessThan(50 * referenceFrameMs(data));
   });
 
   it('keeps two keys on one layer off the CPU keyer: the second would measure the source, not the first key\'s output', () => {
