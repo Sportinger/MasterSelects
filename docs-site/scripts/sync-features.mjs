@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { convertPage, preparePage, titleOf } from './lib/convertPage.mjs';
 import { loadEffectCatalog } from './lib/effectCatalog.mjs';
 import { buildSidebar, countSidebarPages, effectGroupIndex, readIndexSections } from './lib/featureIndex.mjs';
-import { assetBudgetIssues, pageBudgetIssues } from './lib/media.mjs';
+import { assetBudgetIssues, devServerServesAsset, pageBudgetIssues } from './lib/media.mjs';
 import { buildAnchorRedirects, buildRedirects } from './lib/redirects.mjs';
 import { PAGE_FOLDERS, contentFile, pageSlug } from './lib/routes.mjs';
 
@@ -255,12 +255,15 @@ const listAssets = (base) => (fs.existsSync(path.join(base, 'assets')) ? fs.read
 const assetFiles = sourceRef ? gitFiles.filter((name) => name.startsWith('assets/')) : listAssets(featuresDir);
 let assetsWritten = 0;
 let assetsRemoved = 0;
+const newAssets = [];
 if (assetFiles.length) {
   const wanted = new Set(assetFiles);
   for (const relativePath of assetFiles) {
     const destination = path.join(siteDir, 'public', relativePath);
     const content = sourceRef ? readAsset(relativePath) : fs.readFileSync(path.join(featuresDir, relativePath));
-    if (fs.existsSync(destination) && fs.statSync(destination).size === content.length && fs.readFileSync(destination).equals(content)) continue;
+    const existed = fs.existsSync(destination);
+    if (existed && fs.statSync(destination).size === content.length && fs.readFileSync(destination).equals(content)) continue;
+    if (!existed) newAssets.push(relativePath);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, content);
     assetsWritten += 1;
@@ -302,7 +305,10 @@ function restartCommand(url) {
   const flags = address ? ` --port ${address.port || 4321}${address.hostname && address.hostname !== 'localhost' ? ` --host ${address.hostname}` : ''}` : '';
   return `cd ${siteDir} && npx astro dev stop && npx astro dev${flags}`;
 }
-const restartNeeded = devServer && (removedPages > 0 || configChanged);
+// A new asset the running dev server does not serve (devServerServesAsset) needs a restart too.
+const newAssetMissing = devServer && newAssets.length > 0 && !(await devServerServesAsset(devServerUrl, newAssets.at(-1)));
+if (newAssetMissing) report({ level: 'warn', text: `The running astro dev answers 404 for the new ${newAssets.at(-1)} (its file watcher missed the new files, often for lack of inotify watches).` });
+const restartNeeded = devServer && (removedPages > 0 || configChanged || newAssetMissing);
 
 // A figure that stays as written is checked again by the general pass: report each problem once.
 const uniqueWarnings = [...new Set(warnings)];
