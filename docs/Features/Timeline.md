@@ -1,14 +1,8 @@
 # Timeline
 
-[<- Back to Index](./README.md)
+The Timeline is where you arrange your clips over time: video, audio, images, text and other clips sit on tracks, and you drag them in from the Media panel, move, trim and split them, and play them back. Keys for every tool: [Keyboard Shortcuts](./Keyboard-Shortcuts.md); animation: [Keyframes](./Keyframes.md).
 
-The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
-
-Right-button scrubbing scrolls the viewport at either edge and follows its current scroll offset. Moving clips to another track preserves their original start times even with snapping disabled; occupied destinations do not silently shift or trim the selection. Reversed, trimmed clip thumbnails use the visible source interval in both software and worker rendering paths.
-
-Holding or releasing Shift during an edge trim changes only snapping. Selected clips and linked audio/video retain the same trim scope in the live preview and committed edit.
-
-Section resize observations update only the element that changed, so an audio or video child resize does not re-sample a transient parent split height during track-property edits.
+It holds video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting and Slot Grid playback.
 
 ---
 
@@ -434,6 +428,14 @@ The toolbar and wheel gestures drive playback and navigation:
 The timeline navigator below the tracks provides the same scroll and zoom control in a dedicated bar. Releasing its scroll thumb or zoom handles never falls through to the track's click-to-jump action.
 
 ---
+
+## Editing details
+
+Right-button scrubbing scrolls the viewport at either edge and follows its current scroll offset. Moving clips to another track preserves their original start times even with snapping disabled; occupied destinations do not silently shift or trim the selection. Reversed, trimmed clip thumbnails use the visible source interval in both software and worker rendering paths.
+
+Holding or releasing Shift during an edge trim changes only snapping. Selected clips and linked audio/video retain the same trim scope in the live preview and committed edit.
+
+Section resize observations update only the element that changed, so an audio or video child resize does not re-sample a transient parent split height during track-property edits.
 
 ## Performance Features
 

@@ -1,9 +1,8 @@
 # Audio
 
-[<- Back to Index](./README.md)
+Audio clips play in sync with the picture; you set their volume, fades and effects in Properties and balance tracks in the **Audio Mixer** (the **Audio** layout opens both). Mixing and recording in depth: [Audio Workstation](./Audio-Workstation.md); export: [Export](./Export.md).
 
-Audio in MasterSelects is split into two paths:
-live playback sync for timeline editing, and offline audio processing for export.
+Audio is split into two paths: live playback sync while you edit, and offline audio processing for export.
 
 ---
 

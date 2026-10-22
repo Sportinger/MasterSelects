@@ -1,12 +1,8 @@
-[Back to Index](./README.md)
-
 # Text Clips
 
-Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and then treated like regular timeline layers for compositing, effects, masks, transforms, and keyframes.
+A text clip puts a title, a caption or any text into the picture. Add one from the Media panel's **Add** menu or by right-clicking empty timeline space, then type and style it in the clip's **Text** tab in Properties; animation: [Keyframes](./Keyframes.md), spoken-word captions: [Captions](./Captions.md).
 
-Paused previews containing only static text, images or solids redraw when requested, then immediately return to idle. Playback, scrubbing, continuously animated effects and video decoder settling retain their render cadence; changing text still refreshes the preview immediately.
-
-A new text clip's first frame never shows another clip's raster. Moving the paused playhead onto a new clip renders it at once instead of waiting behind the GPU fence of the edit that created it, and when a raster's GPU upload is not ready yet the preview stays empty for that frame rather than re-presenting the previous clip's picture. Such a raster gets follow-up frames (about one second at display rate); if it still cannot be uploaded, the preview logs `Preview raster source is still not ready` with the clip IDs.
+Text clips are drawn to a Canvas2D surface, uploaded as a GPU texture and then treated like any other layer for compositing, effects, masks, transforms and keyframes.
 
 ## Creation
 
@@ -130,6 +126,12 @@ Text inside nested compositions is render-only, so its raster keeps only the pix
 Static text uploads to the GPU only when its raster changes, and animated text stops re-rasterizing once its keyframes hold. System fonts such as Arial count as ready, so held animated frames with them stay cached too.
 
 A new text clip asks the preview for a frame only after it is in the timeline store, and that request survives skipped frames (see [GPU Engine: Render Loop](./GPU-Engine.md#render-loop)). A text raster drawn synchronously before its Google font finished loading (undo/redo, transitions, animated frames, edits) is redrawn once the font arrives (`src/services/text/textFontRefresh.ts`): the layer cache and compositor bindings are invalidated and a frame is requested, so an idle preview does not keep the fallback face. A font that fails to load logs `Text font did not load` once per family and weight.
+
+## Preview details
+
+Paused previews containing only static text, images or solids redraw when requested, then immediately return to idle. Playback, scrubbing, continuously animated effects and video decoder settling retain their render cadence; changing text still refreshes the preview immediately.
+
+A new text clip's first frame never shows another clip's raster. Moving the paused playhead onto a new clip renders it at once instead of waiting behind the GPU fence of the edit that created it, and when a raster's GPU upload is not ready yet the preview stays empty for that frame rather than re-presenting the previous clip's picture. Such a raster gets follow-up frames (about one second at display rate); if it still cannot be uploaded, the preview logs `Preview raster source is still not ready` with the clip IDs.
 
 ## Automation
 

@@ -1,35 +1,8 @@
 # Media Panel
 
-[← Back to Index](./README.md)
+The Media panel holds everything your project uses: imported files, compositions, text, solids, folders and generated media. Import with the **Import Media** button in its header or by dropping files onto it, then drag items onto the [Timeline](./Timeline.md); proxies for heavy video: [Proxy System](./Proxy-System.md).
 
-Import, organize, and manage media assets with folder structure, proxy generation, and three view modes.
-
-Dragging a board item into the timeline restores the board's starting pan and zoom after edge auto-pan, keeping its layout and viewing position stable.
-
-New compositions are selected and revealed automatically: Classic view scrolls to the item, Icons view opens its parent folder, and Board view centers it. This also applies to compositions created from an existing media item.
-
-When a Board drop overlaps another item, both its placement preview and committed position use the nearest free grid position while respecting item size and folder bounds.
-
-Dragging an existing Text, Camera, or Mesh media item onto the timeline preserves its saved text/font/color, camera optics/resolution, or mesh primitive/color respectively. Timeline copy/paste also preserves clip effects, keyframes, and node graphs. Editing a timeline instance does not save a reusable Media preset or write its changes back to the source media item.
-
----
-
-## Table of Contents
-
-- [Importing Media](#importing-media)
-- [View Modes](#view-modes)
-- [AI Generator Tray](#ai-generator-tray)
-- [Source Thumbnail Cache](#source-thumbnail-cache)
-- [Folder Organization](#folder-organization)
-- [Deleting Media](#deleting-media)
-- [Compositions](#compositions)
-- [Proxy Generation](#proxy-generation)
-- [Selection](#selection)
-- [Context Menu](#context-menu)
-- [Media Properties](#media-properties)
-- [Drag to Timeline](#drag-to-timeline)
-- [Project Integration](#project-integration)
-- [Media Relinking](#media-relinking)
+It has three views (Classic list, Icons and Board), folders, and an **Add** menu for compositions, text, solids and other generated items.
 
 ---
 
@@ -703,6 +676,16 @@ Double-clicking a file that has lost access triggers a single-file reload attemp
 | Proxy available | Blue "P" badge |
 
 ---
+
+## Editing details
+
+Dragging a board item into the timeline restores the board's starting pan and zoom after edge auto-pan, keeping its layout and viewing position stable.
+
+New compositions are selected and revealed automatically: Classic view scrolls to the item, Icons view opens its parent folder, and Board view centers it. This also applies to compositions created from an existing media item.
+
+When a Board drop overlaps another item, both its placement preview and committed position use the nearest free grid position while respecting item size and folder bounds.
+
+Dragging an existing Text, Camera, or Mesh media item onto the timeline preserves its saved text/font/color, camera optics/resolution, or mesh primitive/color respectively. Timeline copy/paste also preserves clip effects, keyframes, and node graphs. Editing a timeline instance does not save a reusable Media preset or write its changes back to the source media item.
 
 ## Store Architecture
 
