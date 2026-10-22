@@ -23,7 +23,8 @@ describe('Analog Signal legacy Display Resolve migration', () => {
     expect(migrated.edges).toContainEqual(expect.objectContaining({ from: 'decode', output: 'signalAmount', to: 'resolve-signal-clamp', input: 'value' }));
     expect(migrated.layout['resolve-zero']).toEqual({ x: 900, y: 240 });
     expect(migrated.groups?.find(group => group.id === 'legacy-group')?.nodeIds).toEqual(expect.arrayContaining(['frame', 'resolve-zero', 'output']));
-    expect(migrated.groups?.find(group => group.id === 'resolve-group')?.nodeIds).toHaveLength(144);
+    // The island's nodes sit in the stage folders inside its Analog Display Resolve folder.
+    expect(migrated.groups?.filter(group => group.parentId === 'resolve-group').flatMap(group => group.nodeIds)).toHaveLength(144);
     expect(migrated.nodes.find(item => item.id === 'resolve-amount')).toMatchObject({ bindings: { value: 'mix-key' } });
     expect(migrated.nodes.find(item => item.id === 'resolve-crtAmount')).toMatchObject({ bindings: { value: 'crt-key' }, constants: { value: .4 } });
     expect(migrateAnalogSignalGraph(migrated)).toEqual(migrated);

@@ -38,7 +38,7 @@ const ANALOG_SIGNAL_LAB_PRESETS: EffectPreset[] = [
     chromaBleed: 0.6, headSwitching: 0.7, crtAmount: 0.2 } },
   { id: 'tube-television', name: 'Tube Television', params: { signalStrength: 0.95, rfNoise: 0.08, ghostLevel: 0.06, crtAmount: 1,
     scanlines: 0.6, maskStrength: 0.5, bloom: 0.4, curvature: 0.45, flicker: 0.15 } },
-  { id: 'rolling-picture', name: 'Rolling Picture', params: { signalStrength: 0.15, rfNoise: 0.65, impulseNoise: 0.25, tuning: 0.3,
+  { id: 'rolling-picture', name: 'Rolling Picture', params: { signalStrength: 0.25, rfNoise: 0.45, impulseNoise: 0.2, tuning: 0.3,
     interference: 0.3, syncInstability: 0.85, colorLock: 0.3, crtAmount: 0.35 } },
 ];
 
