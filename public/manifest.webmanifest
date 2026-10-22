@@ -4,7 +4,7 @@
   "short_name": "MasterSelects",
   "description": "Browser-based video, audio, motion and 3D editor. Installed, it keeps access to your project and media folders.",
   "start_url": "/editor",
-  "scope": "/",
+  "scope": "/editor",
   "display": "standalone",
   "orientation": "any",
   "theme_color": "#0f0f0f",

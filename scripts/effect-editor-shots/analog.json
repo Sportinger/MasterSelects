@@ -34,6 +34,45 @@
       "gutter": 56,
       "layout": "float",
       "width": 1800
+    },
+    {
+      "name": "analog-signal-lab-inspector",
+      "effect": "analog-signal-lab",
+      "params": {},
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with the Analog Signal Lab card at its defaults: the Preset menu, then the sections Signal (Mix, Channel Seed), PAL Encode / Decode, RF Channel, Reception, Multipath, Receiver, VHS Transport and CRT Display, each control a slider with a value field and reset, beside a strip of the preview with the dancer",
+      "caption": "Analog Signal Lab at its defaults. 1 — Preset: pick a starting point. 2 — Mix: original to signal. 3 — RF / Antenna Stage: the antenna part. 4 — VHS Stage: the tape part. 5 — CRT Stage: the tube part.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Mix",
+          "label": "Mix"
+        },
+        {
+          "target": "RF / Antenna Stage",
+          "label": "RF / Antenna Stage"
+        },
+        {
+          "target": "VHS Stage",
+          "label": "VHS Stage"
+        },
+        {
+          "target": "CRT Stage",
+          "label": "CRT Stage"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ],
+      "viewport": {
+        "width": 1600,
+        "height": 3300
+      }
     }
   ]
 }

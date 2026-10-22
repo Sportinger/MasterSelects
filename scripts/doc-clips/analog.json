@@ -91,16 +91,15 @@
         0.5,
         5.5
       ],
-      "layout": "pair",
+      "layout": "compare",
       "crop": [
-        380,
-        140,
-        840,
-        940
+        240,
+        0,
+        1440,
+        1080
       ],
-      "width": 960,
-      "float": "left",
-      "alt": "The dancer, original left and through Analog Signal Lab as a worn VHS tape right: softer, warm cream colours kept, noise streaks crawling through the dark background and along the bottom edge where the video heads switch",
+      "width": 1280,
+      "alt": "The dancer, original left and through Analog Signal Lab's Worn VHS preset right: softer, warm cream colours, noise speckles crawling through the dark background",
       "caption": "Left: original. Right: the Worn VHS preset.",
       "loop": 0.35
     },
@@ -113,16 +112,16 @@
         3.5
       ],
       "crop": [
-        440,
-        120,
-        1000,
-        900
+        0,
+        0,
+        1920,
+        1080
       ],
       "width": 960,
       "loop": 0.35,
       "poster": 1.2,
       "maxBytes": 1300000,
-      "alt": "The dancing figure four times in a grid, moving in sync, each with one preset: Snowy Reception top left with grain and a faint ghost to the right of her, Worn VHS top right softer with warm smeared colour and noise streaks at the bottom edge, Tube Television bottom left on a curved screen with scanlines and glowing highlights, Rolling Picture bottom right drowned in noise, torn sideways and slipping up and down",
+      "alt": "The dancing figure on the whole stage four times in a grid, moving in sync, each with one preset: Snowy Reception top left with coloured grain and a faint ghost to the right of her, Worn VHS top right softer and warmer with a torn, noisy strip along the bottom edge, Tube Television bottom left on a curved screen with dark rounded corners and fine lines, Rolling Picture bottom right in heavy snow, torn sideways and slipping up and down",
       "caption": "The four presets on the moving dancer, in sync."
     },
     {
