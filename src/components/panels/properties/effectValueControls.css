@@ -31,6 +31,25 @@
     }
   }
 
+  /* A card with a three-action row (a source icon or other extra action before the keyframe diamond)
+     gives every row the same three-slot action column, keyframe and reset in the last two slots, so
+     sliders and values stay in one column also in a narrow dock. */
+  .effects-tab .effect-params:has(.resolve-inspector-row--extra-action) .resolve-inspector-row {
+    --resolve-inspector-action-width: 67px;
+  }
+
+  .effects-tab .effect-params:has(.resolve-inspector-row--extra-action) .resolve-inspector-row > .resolve-inspector-row-actions {
+    grid-template-columns: repeat(3, 18px);
+  }
+
+  .effects-tab .effect-params:has(.resolve-inspector-row--extra-action) .resolve-inspector-row > .resolve-inspector-row-actions > .keyframe-toggle {
+    grid-column: 2;
+  }
+
+  .effects-tab .effect-params:has(.resolve-inspector-row--extra-action) .resolve-inspector-row > .resolve-inspector-row-actions > .resolve-inspector-reset-button {
+    grid-column: 3;
+  }
+
   .effects-tab .effect-param-value {
     flex: 1;
     width: 100%;
