@@ -34,13 +34,15 @@ try {
   const box = await page.evaluate(() => {
     const parts = [...document.querySelectorAll('.dock-tab-add-menu, .dock-tab-add-submenu')].filter((element) => element.getBoundingClientRect().width > 0);
     const plusButton = document.querySelector('button[class*="dock-tab-add"]:focus, button[class*="dock-tab-add"][aria-expanded="true"]');
-    const boxes = [...parts, plusButton].filter(Boolean).map((element) => element.getBoundingClientRect());
+    // The Preview tab beside the + belongs in the picture, so the reader sees whose + it is.
+    const previewTab = document.querySelector('[role=tab][title="Preview"]');
+    const boxes = [...parts, plusButton, previewTab].filter(Boolean).map((element) => element.getBoundingClientRect());
     return { left: Math.min(...boxes.map((b) => b.left)), top: Math.min(...boxes.map((b) => b.top)),
       right: Math.max(...boxes.map((b) => b.right)), bottom: Math.max(...boxes.map((b) => b.bottom)) };
   });
   const pad = 12;
-  // The left edge stays tight: the Preview toolbar's Raster button sits just beside the menu.
-  const clip = { x: box.left - 2, y: box.top - pad - 28, width: box.right - box.left + 2 + pad, height: box.bottom - box.top + 2 * pad + 28 };
+  // Start at the Preview tab's own left edge: a step further left shows the neighbouring panel.
+  const clip = { x: box.left - 1, y: box.top - pad, width: box.right - box.left + 1 + pad, height: box.bottom - box.top + 2 * pad };
   const png = await page.screenshot({ clip });
   const webp = await encodeDocShotWebp(page, png, { maxBytes: 80000, maxPixelWidth: 1600 });
   fs.mkdirSync(path.dirname(out), { recursive: true });

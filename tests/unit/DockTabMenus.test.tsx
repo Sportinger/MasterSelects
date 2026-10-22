@@ -98,7 +98,12 @@ describe('DockTabMenus', () => {
     const categoryMenu = screen.getByRole('menu', { name: 'Add panel category' });
     const nodesItem = within(categoryMenu).getAllByRole('menuitem')[0];
     expect(nodesItem).toHaveTextContent('Nodes');
-    expect(nodesItem).toHaveAttribute('title', 'Nodes (focus existing)');
+    // Nodes is multi-instance: an open Nodes panel does not make the entry "open",
+    // because clicking it adds another Nodes panel instead of focusing the first.
+    expect(nodesItem).toHaveAttribute('title', 'Add another Nodes');
+    expect(nodesItem).not.toHaveClass('is-current');
+    expect(nodesItem).toHaveTextContent('+1');
+    expect(nodesItem).not.toHaveTextContent('open');
     expect(nodesItem).not.toHaveAttribute('aria-haspopup');
     fireEvent.click(nodesItem);
     expect(onAddPanelType).toHaveBeenCalledWith('node-workspace');

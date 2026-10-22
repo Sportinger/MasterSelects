@@ -108,9 +108,9 @@ Every panel can be added from the **+** at the end of a tab bar, or swapped in w
 
 <figure class="docs-shot docs-shot--float-right">
 
-![The + menu of the Preview tab bar: Nodes (open) and the groups Editing, Color, Audio, AI, 3D, Live and Capture & Output; Editing is open and lists Preview (+1), Multi Preview, Timeline (open), Curves (+1), Media (open), Layers (open), Tools, Properties (open), History, Annotations, Notebook, Stats and Transitions](./assets/ui-panels/add-panel-menu.webp)
+![The + menu of the Preview tab bar: Nodes (+1) and the groups Editing, Color, Audio, AI, 3D, Live and Capture & Output; Editing is open and lists Preview (+1), Multi Preview, Timeline (open), Curves (+1), Media (open), Layers (open), Tools, Properties (open), History, Annotations, Notebook, Stats and Transitions](./assets/ui-panels/add-panel-menu.webp)
 
-<figcaption>The <strong>+</strong> menu with Editing open. Blue entries marked <strong>open</strong> are already in the layout and come to the front; <strong>+1</strong> adds another copy of a panel that can be open more than once.</figcaption>
+<figcaption>The <strong>+</strong> menu with Editing open. Blue entries marked <strong>open</strong> are already in the layout and come to the front; <strong>+1</strong> marks panels that can be open more than once, and each click adds one.</figcaption>
 </figure>
 
 Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once; every other panel exists once: **+** brings the open one to the front, and **Change to** moves it into the clicked slot. A few more panel types (AI Scene Description and the separate Waveform, Histogram and Vectorscope panels) load only from older saved layouts. Feature pages: [Preview](./Preview.md), [Timeline](./Timeline.md), [Media Panel](./Media-Panel.md), [Keyframes](./Keyframes.md), [Notebook](./Documents.md), [Annotations](./Annotations.md), [Image Mode](./Image-Mode.md) (Layers, Tools), [Slot Grid](./Slot-Grid.md), [Export](./Export.md), [Screen Capture](./Screen-Capture.md), [Media Discovery](./Media-Discovery.md) (Discover), [AI Studio](./AI-Studio.md), [Story Workflow](./Seedance-Preproduction.md), [Color Correction](./Color-Correction.md).
@@ -149,7 +149,7 @@ Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once;
 - Three views: Classic list, Large icons and Board, switched with the segmented control in the header
 - Reorderable column headers in the Classic list
 - Folder breadcrumb in the Icons view
-- The header **Import** button and the right-click **Add** submenu offer Composition, Folder, Import files..., Live Input... and Import Gaussian Splat...; text, solids, blank clips, 3D and motion layers are created from the timeline's right-click menu
+- The **+ Add** button in the header and the right-click **Add** submenu offer Composition, Folder, Import files..., Live Input... and Import Gaussian Splat...; **Import** opens the file picker directly; text, solids, blank clips, 3D and motion layers are created from the timeline's right-click menu
 - Dragging files or folders from the OS recreates the folder structure inside the project
 - Dropping multiple OS files directly on the timeline asks whether to place them side by side or stacked on new layers, while still importing through the Media Panel file path first
 - Drag-to-timeline support
@@ -161,7 +161,7 @@ Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once;
 
 - Presets, Output (name, container, method), Video or Image, Audio, Range & Summary and Render Quality, top to bottom, with the green **Export** button at the bottom
 - Methods: WebCodecs Fast, HTMLVideo Precise, FFmpeg CPU and HAP GPU; FCPXML is a container choice
-- Files dropped onto the panel form a batch queue
+- Video, audio or image items dragged from the Media panel onto it form a batch queue
 - Details: [Export](./Export.md)
 
 ### MIDI Mapping Panel
@@ -661,7 +661,7 @@ Lower preview quality reduces GPU workload and memory use on engine-backed previ
 
 ### Integrations
 
-The only key you can enter is the optional YouTube Data API v3 key. AI features use authenticated hosted services rather than user-entered provider keys in Preferences.
+The only key you can enter is the optional YouTube Data API v3 key. AI features use authenticated hosted services rather than user-entered provider keys in Settings.
 
 ---
 
