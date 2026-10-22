@@ -175,12 +175,12 @@ Sharpen does two things at once. It makes a soft copy of the picture and adds th
 
 ![Inside the Premultiplied Source folder: Frame goes into Split RGB + Alpha; Alpha to Scalar and Multiply scale the colour by the alpha; Combine RGB + Alpha joins it with the alpha again, and Cache Image keeps the result](../assets/effects/graphs/sharpen-premultiplied-source.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 377" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 478" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-premultiplied-source-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 262 L521 262" marker-end="url(#sharpen-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="262" r="18" /><text x="437" y="262" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M762 134 L846 134" marker-end="url(#sharpen-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="134" r="18" /><text x="762" y="134" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M589 455 L589 371" marker-end="url(#sharpen-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="455" r="18" /><text x="589" y="455" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M914 22 L914 106" marker-end="url(#sharpen-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="22" r="18" /><text x="914" y="22" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -229,18 +229,18 @@ This is the horizontal pass of [Gaussian Blur](./gaussian-blur.md#horizontal-pas
 
 ![Inside the Row Darkest & Brightest folder, reduced to the brightest half: Source Brightness plus Share × (Tap − Source) by Add is the covered tap; 64 × (Tap − Source) goes through Exponential; Multiply and Combine Vector pack the weighted brightness into an image for Kernel Sum (Rect), whose weight is Tap Alpha times Row Tap Share; Split Vector, Maximum and Divide turn the sums into the row's brightest](../assets/effects/graphs/sharpen-rows.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 951" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 980" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-rows-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M156 192 L240 192" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="156" cy="192" r="18" /><text x="156" y="192" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M995 342 L917 342" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="995" cy="342" r="18" /><text x="995" y="342" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M156 373 L240 373" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="156" cy="373" r="18" /><text x="156" y="373" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M22 749 L64 749" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="749" r="18" /><text x="22" y="749" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M509 741 L593 741" marker-end="url(#sharpen-rows-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="741" r="18" /><text x="509" y="741" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M327 80 L327 110" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="327" cy="80" r="18" /><text x="327" y="80" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M995 354 L947 354" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="995" cy="354" r="18" /><text x="995" y="354" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M327 535 L327 451" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="327" cy="535" r="18" /><text x="327" y="535" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M22 773 L70 773" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="773" r="18" /><text x="22" y="773" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M850 764 L766 764" marker-end="url(#sharpen-rows-arrow)" />
+<circle class="docs-shot-number" cx="850" cy="764" r="18" /><text x="850" y="764" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -267,14 +267,14 @@ The folder reads every tap of the window along the row from the Premultiplied So
 
 ![Inside the Vertical Blur Pass folder: Zero and Offset (texels) go into Combine Vector, divided by Resolution and added to UV it is the read position; Sample Image reads the rows cache there, Sequence Reduce adds up the reads with their Weight over the Tap Count, Image to RGBA and Split Vector hand over the blurred brightness and alpha](../assets/effects/graphs/sharpen-vertical-pass.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 642" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 663" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-vertical-pass-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M112 259 L196 259" marker-end="url(#sharpen-vertical-pass-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="259" r="18" /><text x="112" y="259" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M599 259 L683 259" marker-end="url(#sharpen-vertical-pass-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="259" r="18" /><text x="599" y="259" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M274 468 L358 468" marker-end="url(#sharpen-vertical-pass-arrow)" />
-<circle class="docs-shot-number" cx="274" cy="468" r="18" /><text x="274" y="468" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M264 108 L264 192" marker-end="url(#sharpen-vertical-pass-arrow)" />
+<circle class="docs-shot-number" cx="264" cy="108" r="18" /><text x="264" y="108" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 108 L752 192" marker-end="url(#sharpen-vertical-pass-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="108" r="18" /><text x="752" y="108" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M427 640 L427 556" marker-end="url(#sharpen-vertical-pass-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="640" r="18" /><text x="427" y="640" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
@@ -299,14 +299,14 @@ The same recipe as the horizontal pass, down the columns:
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 524" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-unsharp-mask-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M274 270 L358 270" marker-end="url(#sharpen-unsharp-mask-arrow)" />
-<circle class="docs-shot-number" cx="274" cy="270" r="18" /><text x="274" y="270" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M437 270 L521 270" marker-end="url(#sharpen-unsharp-mask-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="270" r="18" /><text x="437" y="270" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M599 270 L683 270" marker-end="url(#sharpen-unsharp-mask-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="270" r="18" /><text x="599" y="270" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M762 210 L846 210" marker-end="url(#sharpen-unsharp-mask-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="210" r="18" /><text x="762" y="210" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M427 435 L427 351" marker-end="url(#sharpen-unsharp-mask-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="435" r="18" /><text x="427" y="435" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M589 105 L589 189" marker-end="url(#sharpen-unsharp-mask-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="105" r="18" /><text x="589" y="105" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M752 105 L752 189" marker-end="url(#sharpen-unsharp-mask-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="105" r="18" /><text x="752" y="105" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M914 45 L914 129" marker-end="url(#sharpen-unsharp-mask-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="45" r="18" /><text x="914" y="45" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -329,16 +329,16 @@ The same recipe as the horizontal pass, down the columns:
 
 ![Inside the Window Darkest & Brightest folder, reduced to the brightest half: Source Brightness plus Share × (Row − Source) by Add is the covered row value; 64 × (Row − Source) goes through Exponential; Multiply and Combine Vector pack the weighted brightness into an image for Kernel Sum (Rect), weighted by the Column Tap Share; Split Vector, Maximum and Divide give the Brightest Nearby](../assets/effects/graphs/sharpen-window.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 902" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 901" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-window-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M168 202 L252 202" marker-end="url(#sharpen-window-arrow)" />
-<circle class="docs-shot-number" cx="168" cy="202" r="18" /><text x="168" y="202" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M168 391 L252 391" marker-end="url(#sharpen-window-arrow)" />
-<circle class="docs-shot-number" cx="168" cy="391" r="18" /><text x="168" y="391" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M22 691 L67 691" marker-end="url(#sharpen-window-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="691" r="18" /><text x="22" y="691" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M538 682 L622 682" marker-end="url(#sharpen-window-arrow)" />
-<circle class="docs-shot-number" cx="538" cy="682" r="18" /><text x="538" y="682" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M332 82 L332 112" marker-end="url(#sharpen-window-arrow)" />
+<circle class="docs-shot-number" cx="332" cy="82" r="18" /><text x="332" y="82" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M332 541 L332 457" marker-end="url(#sharpen-window-arrow)" />
+<circle class="docs-shot-number" cx="332" cy="541" r="18" /><text x="332" y="541" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M22 689 L71 689" marker-end="url(#sharpen-window-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="689" r="18" /><text x="22" y="689" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M860 680 L776 680" marker-end="url(#sharpen-window-arrow)" />
+<circle class="docs-shot-number" cx="860" cy="680" r="18" /><text x="860" y="680" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -363,22 +363,20 @@ The same soft maximum and minimum, now down a column of the row results, so toge
 
 ![Inside the Halo Limit folder, reduced to the brightening half: Range × Overshoot, at least the Margin Floor by Maximum, is the margin; Brightest Nearby plus the margin by Add, at least Source Brightness, is the Ceiling; Sharpened Brightness minus the Ceiling by Subtract, at least zero, is the excess; 1 + Excess ÷ Scale goes through Natural Logarithm and times the Roll-off Scale is the rolled-off excess; Clamp keeps the Sharpened Brightness between Floor and Ceiling, and Add puts the two together](../assets/effects/graphs/sharpen-halo-limit.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 817" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 889" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-halo-limit-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M112 270 L196 270" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="270" r="18" /><text x="112" y="270" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M274 270 L358 270" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="274" cy="270" r="18" /><text x="274" y="270" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M599 270 L683 270" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="270" r="18" /><text x="599" y="270" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M437 436 L521 436" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="436" r="18" /><text x="437" y="436" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M599 486 L683 486" marker-end="url(#sharpen-halo-limit-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="486" r="18" /><text x="599" y="486" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M264 435 L264 351" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="264" cy="435" r="18" /><text x="264" y="435" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M427 105 L427 189" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="105" r="18" /><text x="427" y="105" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M752 105 L752 189" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="105" r="18" /><text x="752" y="105" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M752 867 L752 783" marker-end="url(#sharpen-halo-limit-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="867" r="18" /><text x="752" y="867" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Halo Limit, reduced to the brightening half (the darkening half mirrors it; the fixed values are left out). 1 — Maximum: the margin. 2 — Add: the Ceiling. 3 — Subtract: what passes the Ceiling. 4 — Natural Logarithm: rolls it off. 5 — Clamp: the part within range.</figcaption>
+<figcaption>Inside Halo Limit, reduced to the brightening half (the darkening half mirrors it; the fixed values are left out). 1 — Maximum: the margin. 2 — Add: the Ceiling. 3 — Subtract: what passes the Ceiling. 4 — Multiply: rolls it off.</figcaption>
 </figure>
 
 **Maximum** – the margin the result may go past the range: 5 % of the range between darkest and brightest nearby (**Overshoot**), but at least 0.04 (**Margin Floor**). Without it, flat areas could not gain any contrast at all.
@@ -387,9 +385,9 @@ The same soft maximum and minimum, now down a column of the row results, so toge
 
 **Subtract** – how far the sharpened brightness goes past the Ceiling (zero when it stays below). That excess is what would become a bright outline.
 
-**Natural Logarithm** – rolls the excess off: Scale × ln(1 + excess ÷ Scale), with Scale half the margin. It keeps growing, only slower and slower, so a stronger Amount still adds a little contrast and neighbouring pixels never swap their order. A step edge keeps a halo of about 18 % of the step at Amount 1 and about 26 % at Amount 5; a plain unsharp mask overshoots by 40 % and more.
+**Multiply** – rolls the excess off: the Roll-off Scale times the Natural Logarithm of 1 + excess ÷ Scale, with Scale half the margin. It keeps growing, only slower and slower, so a stronger Amount still adds a little contrast and neighbouring pixels never swap their order. A step edge keeps a halo of about 18 % of the step at Amount 1 and about 26 % at Amount 5; a plain unsharp mask overshoots by 40 % and more.
 
-**Clamp** – the sharpened brightness kept between Floor and Ceiling. A second Add puts the rolled-off excess on top; the darkening half takes off what falls below the Floor the same way.
+A Clamp keeps the sharpened brightness between Floor and Ceiling, and the last Add puts the rolled-off excess on top; the darkening half takes off what falls below the Floor the same way.
 
 **Remix:** select **Overshoot** (0.05) in this folder and set it to 0.5 for a punchier look with visible halos, or to 0 to keep only the Margin Floor and the thinnest outlines.
 
@@ -403,14 +401,14 @@ The same soft maximum and minimum, now down a column of the row results, so toge
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 652" aria-hidden="true" focusable="false">
 <defs><marker id="sharpen-apply-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M112 270 L196 270" marker-end="url(#sharpen-apply-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="270" r="18" /><text x="112" y="270" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M437 270 L521 270" marker-end="url(#sharpen-apply-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="270" r="18" /><text x="437" y="270" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M599 298 L683 298" marker-end="url(#sharpen-apply-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="298" r="18" /><text x="599" y="298" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M762 256 L846 256" marker-end="url(#sharpen-apply-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="256" r="18" /><text x="762" y="256" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M264 105 L264 189" marker-end="url(#sharpen-apply-arrow)" />
+<circle class="docs-shot-number" cx="264" cy="105" r="18" /><text x="264" y="105" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M589 105 L589 189" marker-end="url(#sharpen-apply-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="105" r="18" /><text x="589" y="105" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M752 105 L752 189" marker-end="url(#sharpen-apply-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="105" r="18" /><text x="752" y="105" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M914 105 L914 189" marker-end="url(#sharpen-apply-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="105" r="18" /><text x="914" y="105" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 

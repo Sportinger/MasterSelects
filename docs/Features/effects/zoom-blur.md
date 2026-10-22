@@ -107,27 +107,23 @@ Zoom Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup),
 
 <div class="docs-shot-stage">
 
-![Inside the Blur Range folder, reduced to its recipe: Center X and Center Y combine into the centre, times Resolution in pixels; the Farthest corner goes through Length into Farthest (px); Amount times Zoom Scale Per Amount, plus One and at least Min Scale by Maximum, gives the End Scale, its Natural Logarithm the Range Length and Absolute the Longest Range](../assets/effects/graphs/zoom-blur-blur-range.webp)
+![Inside the Blur Range folder, reduced to its recipe: Amount times Zoom Scale Per Amount, plus One and at least Min Scale by Maximum, gives the End Scale, its Natural Logarithm the Range Length and Absolute the Longest Range](../assets/effects/graphs/zoom-blur-blur-range.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 882" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 517" aria-hidden="true" focusable="false">
 <defs><marker id="zoom-blur-blur-range-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M112 586 L196 586" marker-end="url(#zoom-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="586" r="18" /><text x="112" y="586" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M112 424 L196 424" marker-end="url(#zoom-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="112" cy="424" r="18" /><text x="112" y="424" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M437 451 L521 451" marker-end="url(#zoom-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="451" r="18" /><text x="437" y="451" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M599 430 L683 430" marker-end="url(#zoom-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="430" r="18" /><text x="599" y="430" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M762 430 L846 430" marker-end="url(#zoom-blur-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="430" r="18" /><text x="762" y="430" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M264 432 L264 348" marker-end="url(#zoom-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="264" cy="432" r="18" /><text x="264" y="432" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M589 102 L589 186" marker-end="url(#zoom-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="102" r="18" /><text x="589" y="102" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M752 102 L752 186" marker-end="url(#zoom-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="102" r="18" /><text x="752" y="102" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M914 102 L914 186" marker-end="url(#zoom-blur-blur-range-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="102" r="18" /><text x="914" y="102" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Blur Range, reduced to its recipe (how the farthest corner is found is left out). 1 — Length: the farthest corner. 2 — Multiply: how much farther out the streak reaches. 3 — Maximum: never past the centre. 4 — Natural Logarithm: the range of the streak. 5 — Absolute: the longest range.</figcaption>
+<figcaption>Inside Blur Range, reduced to the range of the streak (the distance to the farthest corner is left out). 1 — Multiply: how much farther out the streak reaches. 2 — Maximum: never past the centre. 3 — Natural Logarithm: the range of the streak. 4 — Absolute: the longest range.</figcaption>
 </figure>
-
-**Length** – the distance from the centre to the farthest corner of the frame, in pixels (Farthest (px)). The streak is longest there, so the later stages plan their reads for it.
 
 **Multiply** – Amount times Zoom Scale Per Amount (0.5): how much farther out than the pixel the streak reaches, as a share of the pixel's distance from the centre. **Add** puts One in front of it: the End Scale, 1.15 at the default.
 
@@ -135,7 +131,7 @@ Zoom Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup),
 
 **Natural Logarithm** – the logarithm of the End Scale is the Range Length, so equal steps along the streak are equal steps in size, as in a real zoom. Zoom Blur's range is the same for every pixel; the streak in pixels grows with the distance from the centre because each step scales that distance.
 
-**Absolute** – the Range Length without its sign: the Longest Range, which the tap counts are planned for, also when a negative Amount streaks inward.
+**Absolute** – the Range Length without its sign: the Longest Range, which the tap counts are planned for, also when a negative Amount streaks inward. Beside this chain the folder measures the distance from the centre to the farthest corner of the frame in pixels (Farthest (px)): the streak is longest there, so the later stages plan their reads for it.
 
 **Remix:** for twice as long streaks, set the **Value** Zoom Scale Per Amount to 1. Amount 1 then streaks each pixel all the way out to twice its distance from the centre, beyond what the card's slider reaches.
 
@@ -179,12 +175,12 @@ Zoom Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup),
 
 ![Inside the Premultiplied Source folder: Frame goes into Split RGB + Alpha; Alpha to Scalar and Multiply scale the colour by the alpha; Combine RGB + Alpha joins it with the alpha again, and Cache Image keeps the result](../assets/effects/graphs/zoom-blur-premultiplied-source.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 377" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 478" aria-hidden="true" focusable="false">
 <defs><marker id="zoom-blur-premultiplied-source-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 262 L521 262" marker-end="url(#zoom-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="262" r="18" /><text x="437" y="262" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M762 134 L846 134" marker-end="url(#zoom-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="134" r="18" /><text x="762" y="134" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M589 455 L589 371" marker-end="url(#zoom-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="455" r="18" /><text x="589" y="455" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M914 22 L914 106" marker-end="url(#zoom-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="22" r="18" /><text x="914" y="22" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -237,35 +233,31 @@ Zoom Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup),
 
 <div class="docs-shot-stage">
 
-![Inside the Stage B folder, reduced to its recipe: Streak length divided by Box Length gives the number of pieces; minus the Coarse Tap and clamped it gives the covered share, at least Covered Floor by Maximum the Box Weight; One times the Box Weight by Multiply gives the Tap Weight; the Read offset goes through Exponential and scales the Offset around the Centre; Sample Image reads the Short Boxes at the Read position, Sequence Reduce adds up the weighted reads over Taps Here and Normalize by Weight divides by the summed weight](../assets/effects/graphs/zoom-blur-stage-b.webp)
+![Inside the Stage B folder, reduced to its recipe: Streak length divided by Box Length gives the number of pieces; minus the Coarse Tap and clamped it gives the covered share, at least Covered Floor by Maximum the Box Weight; One times the Box Weight by Multiply gives the Tap Weight; Sample Image reads the Short Boxes at the Read position, Sequence Reduce adds up the weighted reads over Taps Here and Normalize by Weight divides by the summed weight](../assets/effects/graphs/zoom-blur-stage-b.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 688" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 531" aria-hidden="true" focusable="false">
 <defs><marker id="zoom-blur-stage-b-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M204 250 L204 250" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="204" cy="250" r="18" /><text x="204" y="250" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M448 166 L448 250" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="166" r="18" /><text x="448" y="166" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M691 125 L691 209" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="691" cy="125" r="18" /><text x="691" y="125" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M204 483 L204 483" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="204" cy="483" r="18" /><text x="204" y="483" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M813 166 L813 250" marker-end="url(#zoom-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="813" cy="166" r="18" /><text x="813" y="166" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M204 67 L204 151" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="67" r="18" /><text x="204" y="67" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 67 L448 151" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="67" r="18" /><text x="448" y="67" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M691 22 L691 106" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="22" r="18" /><text x="691" y="22" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M813 67 L813 151" marker-end="url(#zoom-blur-stage-b-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="67" r="18" /><text x="813" y="67" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
-<figcaption>Inside Stage B, reduced to its recipe (how the read offset and position are worked out is left out). 1 — Divide: how many pieces fit. 2 — Clamp: how much of a piece lies on the streak. 3 — Multiply: the weight of a read. 4 — Exponential: the next piece along the ray. 5 — Sequence Reduce: adds up the pieces.</figcaption>
+<figcaption>Inside Stage B, reduced to its recipe (how the read offset and position are worked out is left out). 1 — Divide: how many pieces fit. 2 — Clamp: how much of a piece lies on the streak. 3 — Multiply: the weight of a read. 4 — Sequence Reduce: adds up the pieces.</figcaption>
 </figure>
 
 **Divide** – the Streak length divided by the Box Length: how many pieces fit on this pixel's streak. In Zoom Blur every pixel has the same range, so that is the Coarse Taps, rarely a whole number: the last piece counts only with the share of it that fits (Clamp), so the blur grows smoothly with Amount.
 
-**Clamp** – how much of piece number Coarse Tap lies on the streak, between 0 and 1. Here every piece counts fully; the Clamp matters in Radial Blur's Zoom, whose streak differs from pixel to pixel, and after a remix of the range.
+**Clamp** – how much of piece number Coarse Tap lies on the streak, between 0 and 1: 1 for every piece but the last, which counts only the share of it that fits, so the blur grows smoothly with Amount.
 
 **Multiply** – One times the Box Weight: the Tap Weight of a read. Every piece along the streak counts the same, which gives Zoom Blur its hard, even rays; Radial Blur's Zoom puts a fade into this input instead.
 
-**Exponential** – like in Stage A, turns the read's place along the range into a scale around the centre, so each tap lands one piece farther out on the ray.
-
-**Sequence Reduce** – reads one cached short piece per tap (**Sample Image** on the Short Boxes), adds them up with their Tap Weights, and Normalize by Weight divides by the summed weight, so the streak keeps the picture's brightness.
+**Sequence Reduce** – reads one cached short piece per tap (**Sample Image** on the Short Boxes). The Read position is left out of the picture: as in Stage A, an Exponential turns the tap's place along the range into a scale around the centre, so each tap lands one piece farther out on the ray. Sequence Reduce adds them up with their Tap Weights, and Normalize by Weight divides by the summed weight, so the streak keeps the picture's brightness.
 
 ### Straight Alpha Output
 
@@ -275,14 +267,14 @@ Zoom Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup),
 
 ![Inside the Straight Alpha Output folder: the Coarse Average goes into Split RGB + Alpha; Alpha to Scalar and the Coverage Floor feed Maximum; Divide divides the colour by it, and Combine RGB + Alpha joins colour and alpha into the Blurred Image](../assets/effects/graphs/zoom-blur-straight-alpha.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 409" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 515" aria-hidden="true" focusable="false">
 <defs><marker id="zoom-blur-straight-alpha-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 132 L521 132" marker-end="url(#zoom-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="132" r="18" /><text x="437" y="132" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M599 294 L683 294" marker-end="url(#zoom-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="294" r="18" /><text x="599" y="294" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M762 177 L846 177" marker-end="url(#zoom-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="177" r="18" /><text x="762" y="177" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M589 22 L589 83" marker-end="url(#zoom-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="22" r="18" /><text x="589" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 491 L752 407" marker-end="url(#zoom-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="491" r="18" /><text x="752" y="491" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M914 59 L914 143" marker-end="url(#zoom-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="59" r="18" /><text x="914" y="59" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 

@@ -79,18 +79,18 @@ Pick one in the **Preset** row of the effect card. It sets Radius in one undo st
 
 ![The Gaussian Blur graph: Radius feeds Radius & Tap Count, Input Frame feeds Premultiplied Source (cached); Sigma, Pairs, Stride, Tap Count and the premultiplied picture feed Horizontal Pass, its result and the same numbers feed Vertical Pass, and Straight Alpha Output turns the result back into a normal picture](../assets/effects/graphs/gaussian-blur.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 617" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 720" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M150 308 L234 308" marker-end="url(#gaussian-blur-arrow)" />
-<circle class="docs-shot-number" cx="150" cy="308" r="18" /><text x="150" y="308" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M150 512 L234 512" marker-end="url(#gaussian-blur-arrow)" />
-<circle class="docs-shot-number" cx="150" cy="512" r="18" /><text x="150" y="512" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M344 178 L428 178" marker-end="url(#gaussian-blur-arrow)" />
-<circle class="docs-shot-number" cx="344" cy="178" r="18" /><text x="344" y="178" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M538 321 L622 321" marker-end="url(#gaussian-blur-arrow)" />
-<circle class="docs-shot-number" cx="538" cy="321" r="18" /><text x="538" y="321" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M733 269 L817 269" marker-end="url(#gaussian-blur-arrow)" />
-<circle class="docs-shot-number" cx="733" cy="269" r="18" /><text x="733" y="269" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M314 155 L314 239" marker-end="url(#gaussian-blur-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="155" r="18" /><text x="314" y="155" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M314 698 L314 614" marker-end="url(#gaussian-blur-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="698" r="18" /><text x="314" y="698" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M509 22 L509 96" marker-end="url(#gaussian-blur-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="22" r="18" /><text x="509" y="22" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M703 155 L703 239" marker-end="url(#gaussian-blur-arrow)" />
+<circle class="docs-shot-number" cx="703" cy="155" r="18" /><text x="703" y="155" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M897 155 L897 239" marker-end="url(#gaussian-blur-arrow)" />
+<circle class="docs-shot-number" cx="897" cy="155" r="18" /><text x="897" y="155" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -115,14 +115,14 @@ Gaussian Blur works in five stages, one folder each in the Nodes tab: **Radius &
 <circle class="docs-shot-number" cx="902" cy="99" r="18" /><text x="902" y="99" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M115 434 L115 518" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
 <circle class="docs-shot-number" cx="115" cy="434" r="18" /><text x="115" y="434" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M587 678 L587 674" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
-<circle class="docs-shot-number" cx="587" cy="678" r="18" /><text x="587" y="678" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M587 486 L587 518" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
+<circle class="docs-shot-number" cx="587" cy="486" r="18" /><text x="587" y="486" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M902 758 L902 674" marker-end="url(#gaussian-blur-radius-tap-count-arrow)" />
 <circle class="docs-shot-number" cx="902" cy="758" r="18" /><text x="902" y="758" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Radius & Tap Count, the folder that turns Radius into reads. The number cards are values from the Constants folder, shown where they plug in. 1 — Smallest Component: the shorter side of the frame. 2 — Maximum: the Sigma. 3 — Multiply: the Reach. 4 — Minimum: the pairs of reads. 5 — Add: the Tap Count.</figcaption>
+<figcaption>Inside Radius & Tap Count, the folder that turns Radius into reads. The number cards are values from the Constants folder, shown where they plug in; the One that Add adds and the lower Maximum keeps the stride at is left out. 1 — Smallest Component: the shorter side of the frame. 2 — Maximum: the Sigma. 3 — Multiply: the Reach. 4 — Minimum: the pairs of reads. 5 — Add: the Tap Count.</figcaption>
 </figure>
 
 **Smallest Component** – the shorter side of the frame. Divided by 1080 it says how much larger or smaller this frame is than a 1080p one; the next Multiply turns Radius into pixels of this frame, so a 4K export, a portrait frame and a thumbnail show the same blur.
@@ -143,12 +143,12 @@ Gaussian Blur works in five stages, one folder each in the Nodes tab: **Radius &
 
 ![Inside the Premultiplied Source folder: Frame goes into Split RGB + Alpha; Alpha to Scalar and Multiply scale the colour by the alpha; Combine RGB + Alpha joins it with the alpha again, and Cache Image keeps the result](../assets/effects/graphs/gaussian-blur-premultiplied-source.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 377" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 478" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-premultiplied-source-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 262 L521 262" marker-end="url(#gaussian-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="262" r="18" /><text x="437" y="262" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M762 134 L846 134" marker-end="url(#gaussian-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="134" r="18" /><text x="762" y="134" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M589 455 L589 371" marker-end="url(#gaussian-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="455" r="18" /><text x="589" y="455" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M914 22 L914 106" marker-end="url(#gaussian-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="22" r="18" /><text x="914" y="22" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -167,22 +167,22 @@ Gaussian Blur works in five stages, one folder each in the Nodes tab: **Radius &
 
 ![Inside the Horizontal Pass folder: Tap Index, Pairs and Stride feed Pair Tap Offsets; Sigma and the offsets feed two Gaussian Falloff nodes, which feed Merge Pair Weights; Sample Image reads the Premultiplied Source at the Read Position; Sequence Reduce adds up the reads over the Tap Count, Normalize by Weight divides by the summed weight and Cache Image keeps the result](../assets/effects/graphs/gaussian-blur-horizontal-pass.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 684" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 717" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-horizontal-pass-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M86 188 L170 188" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="86" cy="188" r="18" /><text x="86" y="188" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M226 116 L310 116" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="226" cy="116" r="18" /><text x="226" y="116" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M365 207 L449 207" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="365" cy="207" r="18" /><text x="365" y="207" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M504 179 L588 179" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="504" cy="179" r="18" /><text x="504" y="179" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M644 169 L728 169" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
-<circle class="docs-shot-number" cx="644" cy="169" r="18" /><text x="644" y="169" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M230 60 L230 144" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="60" r="18" /><text x="230" y="60" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M369 22 L369 79" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="22" r="18" /><text x="369" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M508 60 L508 144" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="508" cy="60" r="18" /><text x="508" y="60" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M648 60 L648 144" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="648" cy="60" r="18" /><text x="648" y="60" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M787 60 L787 144" marker-end="url(#gaussian-blur-horizontal-pass-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="60" r="18" /><text x="787" y="60" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Horizontal Pass, reduced to its recipe (the read position is left out). 1 — Pair Tap Offsets: where to read. 2 — Gaussian Falloff: the weight of a neighbour. 3 — Merge Pair Weights: two pixels in one read. 4 — Sequence Reduce: adds up the reads. 5 — Normalize by Weight: turns the sum into an average.</figcaption>
+<figcaption>Inside Horizontal Pass, reduced to its recipe (how the read position is worked out is left out). 1 — Pair Tap Offsets: where to read. 2 — Gaussian Falloff: the weight of a neighbour. 3 — Merge Pair Weights: two pixels in one read. 4 — Sequence Reduce: adds up the reads. 5 — Normalize by Weight: turns the sum into an average.</figcaption>
 </figure>
 
 **Pair Tap Offsets** – lists the reads along the row: the pixel itself and, for every pair, the distance of its near and far pixel. It holds a small node setup of its own; its › opens it.
@@ -205,10 +205,10 @@ Gaussian Blur works in five stages, one folder each in the Nodes tab: **Radius &
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 595" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-vertical-pass-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M150 308 L234 308" marker-end="url(#gaussian-blur-vertical-pass-arrow)" />
-<circle class="docs-shot-number" cx="150" cy="308" r="18" /><text x="150" y="308" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M733 308 L817 308" marker-end="url(#gaussian-blur-vertical-pass-arrow)" />
-<circle class="docs-shot-number" cx="733" cy="308" r="18" /><text x="733" y="308" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M314 145 L314 229" marker-end="url(#gaussian-blur-vertical-pass-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="145" r="18" /><text x="314" y="145" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M897 470 L897 386" marker-end="url(#gaussian-blur-vertical-pass-arrow)" />
+<circle class="docs-shot-number" cx="897" cy="470" r="18" /><text x="897" y="470" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -231,14 +231,14 @@ Vertical Pass holds the same recipe as Horizontal Pass, with two differences:
 
 ![Inside the Straight Alpha Output folder: the Vertical Pass result goes into Split RGB + Alpha; Alpha to Scalar and the Coverage Floor feed Maximum; Divide divides the colour by it, and Combine RGB + Alpha joins colour and alpha into the Blurred Image](../assets/effects/graphs/gaussian-blur-straight-alpha.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 409" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 515" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-straight-alpha-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 132 L521 132" marker-end="url(#gaussian-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="132" r="18" /><text x="437" y="132" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M599 294 L683 294" marker-end="url(#gaussian-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="294" r="18" /><text x="599" y="294" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M762 177 L846 177" marker-end="url(#gaussian-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="177" r="18" /><text x="762" y="177" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M589 22 L589 83" marker-end="url(#gaussian-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="22" r="18" /><text x="589" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 491 L752 407" marker-end="url(#gaussian-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="491" r="18" /><text x="752" y="491" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M914 59 L914 143" marker-end="url(#gaussian-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="59" r="18" /><text x="914" y="59" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 

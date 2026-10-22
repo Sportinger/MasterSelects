@@ -184,12 +184,12 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 ![Inside the Premultiplied Source folder: Frame goes into Split RGB + Alpha; Alpha to Scalar and Multiply scale the colour by the alpha; Combine RGB + Alpha joins it with the alpha again, and Cache Image keeps the result](../assets/effects/graphs/radial-blur-premultiplied-source.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 377" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 478" aria-hidden="true" focusable="false">
 <defs><marker id="radial-blur-premultiplied-source-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 262 L521 262" marker-end="url(#radial-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="262" r="18" /><text x="437" y="262" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M762 134 L846 134" marker-end="url(#radial-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="134" r="18" /><text x="762" y="134" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M589 455 L589 371" marker-end="url(#radial-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="455" r="18" /><text x="589" y="455" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M914 22 L914 106" marker-end="url(#radial-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="22" r="18" /><text x="914" y="22" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -262,7 +262,7 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 <figcaption>Inside Stage B, reduced to its recipe (how the read position is worked out is left out). 1 — Clamp: how much of a piece lies on the streak. 2 — Subtract: the Zoom fade. 3 — Switch: fade or even. 4 — Multiply: the weight of a read. 5 — Sequence Reduce: adds up the pieces.</figcaption>
 </figure>
 
-**Clamp** – how much of piece number Coarse Tap still lies on this pixel's streak, between 0 and 1. Every Zoom streak has its own length, rarely a whole number of pieces, so the last piece counts only its covered share and the blur grows smoothly when Amount changes.
+**Clamp** – how much of piece number Coarse Tap still lies on this pixel's streak, between 0 and 1. In both modes the streak is rarely a whole number of pieces (in Zoom its length also changes from pixel to pixel), so the last piece counts only its covered share and the blur grows smoothly when Amount changes.
 
 **Subtract** – One minus half the Position t: the Zoom fade. The read at the pixel counts fully, the one nearest the centre half, which keeps the middle of the picture from washing out over the edges.
 
@@ -281,14 +281,14 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 ![Inside the Straight Alpha Output folder: the Coarse Average goes into Split RGB + Alpha; Alpha to Scalar and the Coverage Floor feed Maximum; Divide divides the colour by it, and Combine RGB + Alpha joins colour and alpha into the Blurred Image](../assets/effects/graphs/radial-blur-straight-alpha.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 409" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 515" aria-hidden="true" focusable="false">
 <defs><marker id="radial-blur-straight-alpha-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 132 L521 132" marker-end="url(#radial-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="132" r="18" /><text x="437" y="132" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M599 294 L683 294" marker-end="url(#radial-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="294" r="18" /><text x="599" y="294" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M762 177 L846 177" marker-end="url(#radial-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="177" r="18" /><text x="762" y="177" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M589 22 L589 83" marker-end="url(#radial-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="22" r="18" /><text x="589" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 491 L752 407" marker-end="url(#radial-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="491" r="18" /><text x="752" y="491" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M914 59 L914 143" marker-end="url(#radial-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="59" r="18" /><text x="914" y="59" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 

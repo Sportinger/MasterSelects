@@ -169,12 +169,12 @@ Motion Blur works in six stages, one folder each in the Nodes tab. **Blur Range*
 
 ![Inside the Premultiplied Source folder: Frame goes into Split RGB + Alpha; Alpha to Scalar and Multiply scale the colour by the alpha; Combine RGB + Alpha joins it with the alpha again, and Cache Image keeps the result](../assets/effects/graphs/motion-blur-premultiplied-source.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 377" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 478" aria-hidden="true" focusable="false">
 <defs><marker id="motion-blur-premultiplied-source-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 262 L521 262" marker-end="url(#motion-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="262" r="18" /><text x="437" y="262" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M762 134 L846 134" marker-end="url(#motion-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="134" r="18" /><text x="762" y="134" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M589 455 L589 371" marker-end="url(#motion-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="455" r="18" /><text x="589" y="455" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M914 22 L914 106" marker-end="url(#motion-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="22" r="18" /><text x="914" y="22" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -191,24 +191,24 @@ Motion Blur works in six stages, one folder each in the Nodes tab. **Blur Range*
 
 <div class="docs-shot-stage">
 
-![Inside the Stage A folder, reduced to its recipe: Half Box (px) divided by Cell (px) gives the half box in cells; minus the Ring and clamped between 0 and 1 it is the share of that ring's cell the piece covers, at least a tiny floor by Maximum the Fine Weight; Fine Taps sets how many reads; the Read position goes through Mirror Repeat into Sample Image, which reads the Premultiplied Source; Sequence Reduce adds up the weighted reads, Normalize by Weight turns the sum into an average and Cache Image keeps the Short Boxes](../assets/effects/graphs/motion-blur-stage-a.webp)
+![Inside the Stage A folder, reduced to its recipe: Half Box (px) divided by Cell (px) gives the half box in cells; minus the Ring and clamped between 0 and 1 it is the share of that ring's cell the piece covers, at least a tiny floor by Maximum the Fine Weight; Fine Taps sets how many reads; the Read position goes through Mirror Repeat into Sample Image, which reads the Premultiplied Source (left out of the picture); Sequence Reduce adds up the weighted reads, Normalize by Weight turns the sum into an average and Cache Image keeps the Short Boxes](../assets/effects/graphs/motion-blur-stage-a.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 569" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 511" aria-hidden="true" focusable="false">
 <defs><marker id="motion-blur-stage-a-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M204 64 L204 148" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="204" cy="64" r="18" /><text x="204" y="64" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M448 148 L448 148" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="148" r="18" /><text x="448" y="148" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M448 502 L448 418" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="502" r="18" /><text x="448" y="502" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M691 351 L691 267" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="691" cy="351" r="18" /><text x="691" y="351" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M935 319 L935 235" marker-end="url(#motion-blur-stage-a-arrow)" />
-<circle class="docs-shot-number" cx="935" cy="319" r="18" /><text x="935" y="319" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M204 22 L204 89" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="22" r="18" /><text x="204" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 22 L448 89" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M448 444 L448 360" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="444" r="18" /><text x="448" y="444" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M691 293 L691 209" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="293" r="18" /><text x="691" y="293" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M935 260 L935 176" marker-end="url(#motion-blur-stage-a-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="260" r="18" /><text x="935" y="260" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Stage A, reduced to its recipe (how the read position is worked out is left out, and so are the fixed values). 1 — Divide: the half piece in cells. 2 — Clamp: how much of a cell counts. 3 — Mirror Repeat: mirrors at the frame edge. 4 — Sequence Reduce: adds up the reads. 5 — Cache Image: keeps the short pieces.</figcaption>
+<figcaption>Inside Stage A, reduced to its recipe (how the read position is worked out is left out, and so are the fixed values and the Premultiplied Source that Sample Image reads). 1 — Divide: the half piece in cells. 2 — Clamp: how much of a cell counts. 3 — Mirror Repeat: mirrors at the frame edge. 4 — Sequence Reduce: adds up the reads. 5 — Cache Image: keeps the short pieces.</figcaption>
 </figure>
 
 **Divide** – half the Box Length in cells of one pixel: how far the piece reaches to each side of this pixel. Only a piece longer than 256 px gets cells wider than a pixel (Cell), so a pixel never reads more than 256 times here. The number of reads (Fine Taps) is twice the rings needed to reach the end of the piece.
@@ -251,7 +251,7 @@ Motion Blur works in six stages, one folder each in the Nodes tab. **Blur Range*
 
 **Exponential** – the taper: exp(−2 · (2t − 1)²), 1 in the middle of the streak and about 0.14 at both ends. The white value cards Two, One and Taper Gain shape it. Because the ends fade, a moving edge melts away instead of stopping at a hard line.
 
-**Multiply** – the taper times the Box Weight: the Tap Weight of a read. In Motion Blur every piece is whole, so the Box Weight is 1; it matters in [Radial Blur](./radial-blur.md), whose streaks have a different length at every pixel and whose last piece counts only its covered share.
+**Multiply** – the taper times the Box Weight: the Tap Weight of a read. The Box Weight is 1 for every whole piece. The streak is rarely a whole number of pieces, so the last piece counts only the share of it that fits, and the streak grows smoothly with Length.
 
 **Mirror Repeat** – as in Stage A, mirrors reads outside the frame back in, so both stages agree at the edge.
 
@@ -267,14 +267,14 @@ Motion Blur works in six stages, one folder each in the Nodes tab. **Blur Range*
 
 ![Inside the Straight Alpha Output folder: the Coarse Average goes into Split RGB + Alpha; Alpha to Scalar and the Coverage Floor feed Maximum; Divide divides the colour by it, and Combine RGB + Alpha joins colour and alpha into the Blurred Image](../assets/effects/graphs/motion-blur-straight-alpha.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 409" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 515" aria-hidden="true" focusable="false">
 <defs><marker id="motion-blur-straight-alpha-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 132 L521 132" marker-end="url(#motion-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="132" r="18" /><text x="437" y="132" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M599 294 L683 294" marker-end="url(#motion-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="294" r="18" /><text x="599" y="294" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M762 177 L846 177" marker-end="url(#motion-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="177" r="18" /><text x="762" y="177" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M589 22 L589 83" marker-end="url(#motion-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="22" r="18" /><text x="589" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 491 L752 407" marker-end="url(#motion-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="491" r="18" /><text x="752" y="491" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M914 59 L914 143" marker-end="url(#motion-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="59" r="18" /><text x="914" y="59" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 

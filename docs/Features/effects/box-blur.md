@@ -139,12 +139,12 @@ Box Blur works in five stages, one folder each in the Nodes tab: **Radius & Tap 
 
 ![Inside the Premultiplied Source folder: Frame goes into Split RGB + Alpha; Alpha to Scalar and Multiply scale the colour by the alpha; Combine RGB + Alpha joins it with the alpha again, and Cache Image keeps the result](../assets/effects/graphs/box-blur-premultiplied-source.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 377" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 478" aria-hidden="true" focusable="false">
 <defs><marker id="box-blur-premultiplied-source-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 262 L521 262" marker-end="url(#box-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="262" r="18" /><text x="437" y="262" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M762 134 L846 134" marker-end="url(#box-blur-premultiplied-source-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="134" r="18" /><text x="762" y="134" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M589 455 L589 371" marker-end="url(#box-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="455" r="18" /><text x="589" y="455" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M914 22 L914 106" marker-end="url(#box-blur-premultiplied-source-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="22" r="18" /><text x="914" y="22" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -178,7 +178,7 @@ Box Blur works in five stages, one folder each in the Nodes tab: **Radius & Tap 
 </svg>
 </div>
 
-<figcaption>Inside Horizontal Pass, reduced to its recipe (the read position is left out). 1 — Pair Tap Offsets: where to read. 2 — Subtract: how far inside the Reach. 3 — Clamp: the weight, 0 to 1. 4 — Sequence Reduce: adds up the reads. 5 — Normalize by Weight: turns the sum into an average.</figcaption>
+<figcaption>Inside Horizontal Pass, reduced to its recipe (how the read position is worked out is left out). 1 — Pair Tap Offsets: where to read. 2 — Subtract: how far inside the Reach. 3 — Clamp: the weight, 0 to 1. 4 — Sequence Reduce: adds up the reads. 5 — Normalize by Weight: turns the sum into an average.</figcaption>
 </figure>
 
 **Pair Tap Offsets** – lists the reads along the row: the pixel itself and, for every pair, the distance of its near and far pixel. It holds a small node setup of its own; its › opens it.
@@ -203,10 +203,10 @@ Box Blur works in five stages, one folder each in the Nodes tab: **Radius & Tap 
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 595" aria-hidden="true" focusable="false">
 <defs><marker id="box-blur-vertical-pass-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M150 308 L234 308" marker-end="url(#box-blur-vertical-pass-arrow)" />
-<circle class="docs-shot-number" cx="150" cy="308" r="18" /><text x="150" y="308" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M733 308 L817 308" marker-end="url(#box-blur-vertical-pass-arrow)" />
-<circle class="docs-shot-number" cx="733" cy="308" r="18" /><text x="733" y="308" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M314 145 L314 229" marker-end="url(#box-blur-vertical-pass-arrow)" />
+<circle class="docs-shot-number" cx="314" cy="145" r="18" /><text x="314" y="145" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M897 470 L897 386" marker-end="url(#box-blur-vertical-pass-arrow)" />
+<circle class="docs-shot-number" cx="897" cy="470" r="18" /><text x="897" y="470" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -227,14 +227,14 @@ Vertical Pass holds the same recipe as Horizontal Pass, with two differences:
 
 ![Inside the Straight Alpha Output folder: the Vertical Pass result goes into Split RGB + Alpha; Alpha to Scalar and the Coverage Floor feed Maximum; Divide divides the colour by it, and Combine RGB + Alpha joins colour and alpha into the Blurred Image](../assets/effects/graphs/box-blur-straight-alpha.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 409" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 515" aria-hidden="true" focusable="false">
 <defs><marker id="box-blur-straight-alpha-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M437 132 L521 132" marker-end="url(#box-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="437" cy="132" r="18" /><text x="437" y="132" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M599 294 L683 294" marker-end="url(#box-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="599" cy="294" r="18" /><text x="599" y="294" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M762 177 L846 177" marker-end="url(#box-blur-straight-alpha-arrow)" />
-<circle class="docs-shot-number" cx="762" cy="177" r="18" /><text x="762" y="177" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M589 22 L589 83" marker-end="url(#box-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="22" r="18" /><text x="589" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 491 L752 407" marker-end="url(#box-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="491" r="18" /><text x="752" y="491" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M914 59 L914 143" marker-end="url(#box-blur-straight-alpha-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="59" r="18" /><text x="914" y="59" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
