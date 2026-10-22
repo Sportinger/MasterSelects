@@ -353,7 +353,7 @@ based on Curve Param, Strand Index or constants retain GPU cloth/rod simulation
 and reuse their color buffer while those values stay unchanged. Position-based
 colors evaluate geometry on the CPU so they match the final deformed curves.
 
-**Knit Sphere ? Yarn Profile ? Flyaways (optional) ? Strand Render ? Scene Output**
+**Knit Sphere → Yarn Profile → Flyaways (optional) → Strand Render → Scene Output**
 builds a hollow ball of closed horizontal yarn rings. All rings circulate in the
 same direction. A small stationary oval patch at the lower front (+Z) forms the same loose
 stockinette loops as Knit. At one visible edge the incoming yarn bows and folds
@@ -620,7 +620,7 @@ them and expose values. There is no Weave-specific toolset.
 
 Legacy graphs stored in effect parameters are cached per effect and stored revision. Switching between custom Weave graphs no longer reuses the first loaded graph or contaminates the default graph.
 
-Yarn Profile ? **Surface Feed** moves ply, fiber and flyaway detail along arc length in local units per source second (positive follows the curve). It can show feed through a guided knitting zone while the straight ends stay in place. Zero preserves existing scenes. This is surface transport: it does not advect connected color fields, conserve yarn length, or calculate tension/friction. Curve Contact remains a frame-local contact correction, not a continuous collision guarantee.
+Yarn Profile → **Surface Feed** moves ply, fiber and flyaway detail along arc length in local units per source second (positive follows the curve). It can show feed through a guided knitting zone while the straight ends stay in place. Zero preserves existing scenes. This is surface transport: it does not advect connected color fields, conserve yarn length, or calculate tension/friction. Curve Contact remains a frame-local contact correction, not a continuous collision guarantee.
 
 ## Built-in Weave presets
 

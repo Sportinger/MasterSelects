@@ -1652,7 +1652,7 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   dimensions remain unchanged, including 4K. Full-size
   export uses originals regardless of the preview Proxy switch. There is no
   rolling-history mode or playback-only temporal sampling fallback.
-- **GPU history ? resident video volume** (Sampling ? Frame storage): the default
+- **GPU history → resident video volume** (Sampling → Frame storage): the default
   TouchDesigner-style history for both preview and export. All distinct source
   frames required by the current temporal window stay resident in tiled GPU
   texture-array pages. The effect graph samples them directly with binary time
