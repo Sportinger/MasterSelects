@@ -20,15 +20,15 @@
       "sweep": {
         "param": "position",
         "label": "Position",
-        "from": 0,
-        "to": 1,
+        "from": 0.15,
+        "to": 0.85,
         "decimals": 2
       },
       "loop": 0.35,
       "poster": 0.33,
       "maxBytes": 600000,
-      "alt": "The silver title ACT ONE on a transparent layer, shown over black, while Sheen's Position (Glint preset) runs from 0 to 1 and back: a thin bright glint, leaning to the right, slides across the letters from left to right and back; the light appears only on the letters, never on the empty background between them; the current value is shown at the bottom left",
-      "caption": "Glint on a title layer: Position from 0 to 1 and back.",
+      "alt": "The silver title ACT ONE on a transparent layer, shown over black, while Sheen's Position (Glint preset) runs from 0.15 to 0.85 and back, the part of the layer the letters cover: a thin bright glint, leaning to the right, slides across the letters from left to right and back; the light appears only on the letters, never on the empty background between them; the current value is shown at the bottom left",
+      "caption": "Glint on a title layer: Position from 0.15 to 0.85 and back, where the letters are.",
       "source": "title_act_one.png",
       "crop": [
         240,
@@ -86,15 +86,15 @@
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -105,26 +105,27 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Mix runs from 0 to 1 and back: the photo fades into the watercolour painting and back; the current value is shown at the bottom left",
-      "caption": "Mix from 0 to 1 and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Mix runs from 0 to 1 and back: the photo fades into the watercolour painting and back; the current value is shown at the bottom left",
+      "caption": "Mix from 0 to 1 and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-wash",
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -136,26 +137,27 @@
         "decimals": 1
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Wash runs from 0 to 12 px and back: the fine folds of her dress and the strands of her hair melt into broader, flatter patches of colour and sharpen again; the current value is shown at the bottom left",
-      "caption": "Wash from 0 to 12 px and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Wash runs from 0 to 12 px and back: the fine folds of her dress and the strands of her hair melt into broader, flatter patches of colour and sharpen again; the current value is shown at the bottom left",
+      "caption": "Wash from 0 to 12 px and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-bleed",
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -167,26 +169,29 @@
         "decimals": 1
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Bleed runs from 0 to 30 px and back: her outline starts to wobble and colour runs out over the edges of the dress and arms in wet patches, then settles again; the current value is shown at the bottom left",
-      "caption": "Bleed from 0 to 30 px and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Bleed runs from 0 to 30 px and back: her outline starts to wobble and colour runs out over the edges of the dress and arms in wet patches, then settles again; the current value is shown at the bottom left",
+      "caption": "Bleed from 0 to 30 px and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-edges",
       "effect": "acuarela",
-      "params": {},
+      "params": {
+        "wash": 2
+      },
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -197,26 +202,29 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Edges runs from 0 to 2 and back: at 0 the painting looks pale and soft, then darker paint gathers along every fold, arm and hair edge, and fades again; the current value is shown at the bottom left",
-      "caption": "Edges from 0 to 2 and back."
+      "alt": "The dancer close up on a still photo, with Acuarela at Wash 2 px while Edges runs from 0 to 2 and back: at 0 the painting looks pale and soft, then darker paint gathers along every fold, arm and hair edge, and fades again; the current value is shown at the bottom left",
+      "caption": "Edges from 0 to 2 and back, at Wash 2 px, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-simplify",
       "effect": "acuarela",
-      "params": {},
+      "params": {
+        "wash": 2
+      },
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -227,26 +235,27 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Simplify runs from 0 to 1 and back: the soft gradients of her dress and skin step into a few flat tones like layered glazes, then smooth out again; the current value is shown at the bottom left",
-      "caption": "Simplify from 0 to 1 and back."
+      "alt": "The dancer close up on a still photo, with Acuarela at Wash 2 px while Simplify runs from 0 to 1 and back: the soft gradients of her dress and skin step into a few flat tones like layered glazes, then smooth out again; the current value is shown at the bottom left",
+      "caption": "Simplify from 0 to 1 and back, at Wash 2 px, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-blooms",
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -257,26 +266,27 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Blooms runs from 0 to 2 and back: ragged rings with dark rims and lighter centres appear on the flat background and grow stronger, then fade again; the current value is shown at the bottom left",
-      "caption": "Blooms from 0 to 2 and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Blooms runs from 0 to 2 and back: ragged rings with dark rims and lighter centres appear on the flat background and grow stronger, then fade again; the current value is shown at the bottom left",
+      "caption": "Blooms from 0 to 2 and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-shadow-pigment",
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -287,26 +297,27 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Shadow Pigment runs from 0 to 1 and back: the black of the stage lifts to a dark blue-grey indigo paint and sinks back to near black; the current value is shown at the bottom left",
-      "caption": "Shadow Pigment from 0 to 1 and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Shadow Pigment runs from 0 to 1 and back: the black of the stage lifts to a dark blue-grey indigo paint and sinks back to near black; the current value is shown at the bottom left",
+      "caption": "Shadow Pigment from 0 to 1 and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-granulation",
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -317,26 +328,27 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Granulation runs from 0 to 2 and back: fine speckled pigment settles into the grain of the paper, most of all on the dress, then smooths out again; the current value is shown at the bottom left",
-      "caption": "Granulation from 0 to 2 and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Granulation runs from 0 to 2 and back: fine speckled pigment settles into the grain of the paper, most of all on the dress, then smooths out again; the current value is shown at the bottom left",
+      "caption": "Granulation from 0 to 2 and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-paper",
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -347,26 +359,27 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Paper runs from 0 to 2 and back: the relief of the paper, lit from one side, rises over the light dress and arms and sinks again; the dark stage hides most of it; the current value is shown at the bottom left",
-      "caption": "Paper from 0 to 2 and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Paper runs from 0 to 2 and back: the relief of the paper, lit from one side, rises over the light dress and arms and sinks again; the dark stage hides most of it; the current value is shown at the bottom left",
+      "caption": "Paper from 0 to 2 and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-grain-size",
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -378,26 +391,27 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Grain Size runs from 0.25 to 4 and back: the paper grain grows from a fine sand into a coarse, cloudy texture and shrinks again; the current value is shown at the bottom left",
-      "caption": "Grain Size from 0.25 to 4× and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Grain Size runs from 0.25 to 4 and back: the paper grain grows from a fine sand into a coarse, cloudy texture and shrinks again; the current value is shown at the bottom left",
+      "caption": "Grain Size from 0.25 to 4× and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-lift",
       "effect": "acuarela",
       "params": {},
       "range": [
-        0.5,
-        3.3
+        0,
+        4
       ],
       "layout": "single",
       "crop": [
-        520,
-        120,
-        680,
-        680
+        660,
+        80,
+        640,
+        640
       ],
       "width": 640,
       "sweep": {
@@ -408,11 +422,12 @@
         "decimals": 2
       },
       "loop": 0.35,
-      "poster": 1.2,
+      "poster": 2.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer close up with Acuarela while Lift runs from 0 to 1 and back: the whole painting fades towards white paper until only a faint wash is left, then the colour comes back; the current value is shown at the bottom left",
-      "caption": "Lift from 0 to 1 and back."
+      "alt": "The dancer close up on a still photo, with Acuarela while Lift runs from 0 to 1 and back: the whole painting fades towards white paper until only a faint wash is left, then the colour comes back; the current value is shown at the bottom left",
+      "caption": "Lift from 0 to 1 and back, on a still photo.",
+      "source": "dancer_stage.jpg"
     },
     {
       "name": "acuarela-flow",
@@ -488,7 +503,7 @@
       "loop": 0.6,
       "poster": 3.0,
       "maxBytes": 1200000,
-      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Soft Echo top left with faint trails beside her and her face clear, Light Trails top right with her arms and dress streaking sideways, Dripping Light bottom left with trails that run up and down in streaks, Smoke Storm bottom right with large swirling smoke that fills the stage",
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Soft Echo top left with faint trails beside her and her face clear, Light Trails top right with her arms and dress streaking sideways and her face readable, Dripping Light bottom left with long vertical streaks hanging below and above her, Smoke Storm bottom right with large swirling smoke that fills the stage",
       "caption": "The four presets on the moving dancer, in sync."
     },
     {
@@ -615,7 +630,8 @@
       "name": "rom1-density",
       "effect": "rom1",
       "params": {
-        "strength": 0.15
+        "strength": 0.4,
+        "trail": 0.97
       },
       "range": [
         0.3,
@@ -632,16 +648,18 @@
       "sweep": {
         "param": "density",
         "label": "Density",
-        "from": 1,
-        "to": 16,
-        "decimals": 1
+        "steps": [
+          1,
+          4,
+          16
+        ]
       },
       "loop": 0.6,
       "poster": 3.0,
       "maxBytes": 280000,
       "float": "right",
-      "alt": "The dancer with Rom1 at Strength 0.15 while Density runs from 1 to 16 and back: the smoke changes from a few broad, slow sweeps to many smaller currents and back; the current value is shown at the bottom left",
-      "caption": "Density from 1 to 16 and back, at Strength 0.15."
+      "alt": "The dancer with Rom1 at Strength 0.4 and Trail 0.97 at three Density values for about 1.7 seconds each: at 1 her trails flow in a few broad, smooth sweeps, at 4 they ripple in wavy currents, at 16 they break into many small ragged shreds; the value is shown at the bottom left",
+      "caption": "Density 1, 4 and 16 at Strength 0.4, about 1.7 seconds each."
     },
     {
       "name": "rom1-gain-x",

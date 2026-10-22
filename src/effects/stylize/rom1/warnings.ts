@@ -5,6 +5,11 @@ type Params = Record<string, number | boolean | string>;
 export const ROM1_TRAIL_DEFAULT = 0.98;
 /** At 1 a trail would never fade; the graph keeps it at or below this. */
 export const ROM1_TRAIL_MAX = 0.995;
+/**
+ * Smallest fade per frame (three quarters of an 8-bit step), so every trail reaches zero on 8-bit
+ * history. The graph (rom1EffectGraph.ts), the shader and the software preview all use it.
+ */
+export const ROM1_TRAIL_FADE_FLOOR = 0.75 / 255;
 
 export function rom1ParamWarnings(params: Params): string[] {
   const notes: string[] = [];

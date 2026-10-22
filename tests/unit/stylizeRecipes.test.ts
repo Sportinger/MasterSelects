@@ -34,6 +34,24 @@ function plan(type: string, params: Record<string, unknown> = {}, operatorGraph 
   return compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
 }
 
+/**
+ * One pixel of a plan with cached passes: each cache texel is the pass program evaluated at that
+ * uv (the reads of these recipes land on texel centres). Memoized per uv, so wide windows stay quick.
+ */
+function evaluatePixel(compiled: ReturnType<typeof plan>, source: (uv: [number, number]) => Pixel, uv: [number, number],
+  resolution: [number, number], memo = new Map<string, Pixel>()): Pixel {
+  const passes = compiled.passes ?? [];
+  const sampleResource = (id: string, at: [number, number]): Pixel => {
+    const key = `${id}:${at[0]}:${at[1]}`, known = memo.get(key);
+    if (known) return known;
+    const pass = passes.find(item => item.outputResource === id)!;
+    const texel = evaluateImageOperatorPlan(pass.program, source(at), { uv: at, resolution, sampleImage: source, sampleResource }) as Pixel;
+    memo.set(key, texel);
+    return texel;
+  };
+  return evaluateImageOperatorPlan(compiled, source(uv), { uv, resolution, sampleImage: source, sampleResource }) as Pixel;
+}
+
 /** Straight-alpha RGBA8 raster through the software pass runtime (real resource sizes, linear filtering). */
 function render(type: string, params: Record<string, unknown>, width: number, height: number,
   pixel: (x: number, y: number) => Pixel, time = 0): Float64Array {
@@ -89,8 +107,15 @@ describe('stylize recipes: ownership and saved projects', () => {
   it.each([['edge-detect', createWholeTapEdgeDetectGraph], ['sharpen', createSpreadWindowSharpenGraph]] as const)(
     '%s of 3.2.7 opens with the same stage folders as the current recipe', (type, released) => {
       const folders = (operatorGraph: ReturnType<typeof released>) => (effectOperatorGraph({ type, params: getDefaultParams(type) as Effect['params'], operatorGraph },
-        { inspectionOnly: true }).groups ?? []).map(group => group.label).filter(label => !/^(Pair Tap Offsets|Merge Pair Weights)$/.test(label));
+        { inspectionOnly: true }).groups ?? []).map(group => group.label).filter(label => !/^(Pair Tap Offsets|Merge Pair Weights|Normalize by Weight)$/.test(label));
       const current = folders(createStylizeRecipeGraph(type)!);
+      if (type === 'edge-detect') {
+        // The current window runs as two passes; the 3.2.7 window (one 2D reduction) keeps its Window Taps folder.
+        expect(current.slice(3)).toEqual(['Line Width (sigma & window)', 'Horizontal Pass (row brightness & x slope)', 'Vertical Pass (window sums)',
+          'Gradient & Edge Strength', 'Line Color & Alpha']);
+        expect(folders(released()).slice(3)).toEqual(['Line Width (sigma & window)', 'Window Taps (premultiplied brightness)', 'Gradient & Edge Strength', 'Line Color & Alpha']);
+        return;
+      }
       expect(current.length).toBeGreaterThan(5);
       expect(folders(released())).toEqual(current);
     });
@@ -343,10 +368,10 @@ describe('Edge Detect', () => {
     const resolution: [number, number] = [height * 16 / 9, height];
     const source = ([u]: [number, number]): Pixel => (u < 0.5 ? [0.2, 0.2, 0.2, 1] : [0.2 + contrast, 0.2 + contrast, 0.2 + contrast, 1]);
     const compiled = plan('edge-detect', { width, strength: 0.25 });
-    let best = 0;
+    let best = 0; const memo = new Map<string, Pixel>();
     for (let x = resolution[0] / 2 - 3; x <= resolution[0] / 2 + 2; x++) {
       const uv: [number, number] = [(x + 0.5) / resolution[0], 0.5];
-      best = Math.max(best, evaluateImageOperatorPlan(compiled, source(uv), { uv, resolution, sampleImage: source })[0]);
+      best = Math.max(best, evaluatePixel(compiled, source, uv, resolution, memo)[0]);
     }
     return best;
   };
@@ -385,7 +410,7 @@ describe('Edge Detect', () => {
     }
   });
 
-  it('draws the same line at 1080p and at 4K: past 8 taps per side the window spreads its taps instead of ending at 8 px', () => {
+  it('draws the same line at 1080p and at 4K: the window reaches two sigma at every frame size instead of ending at 8 px', () => {
     // Line brightness across a vertical step, at positions measured in 1080p pixels from the step.
     const profile = (graph: ReturnType<typeof createStylizeRecipeGraph>, width: number, height: number) => {
       const resolution: [number, number] = [height * 16 / 9, height], scale = height / 1080;
@@ -394,23 +419,63 @@ describe('Edge Detect', () => {
         const t = Math.min(1, Math.max(0, ((u - 0.5) * resolution[0] / scale + 1.5) / 3)), v = 0.2 + 0.5 * t * t * (3 - 2 * t);
         return [v, v, v, 1];
       };
-      const compiled = plan('edge-detect', { width, strength: 0.5 }, graph);
+      const compiled = plan('edge-detect', { width, strength: 0.5 }, graph), memo = new Map<string, Pixel>();
       return Array.from({ length: 31 }, (_, index) => {
         const uv: [number, number] = [0.5 + (index - 15 + 0.5) * scale / resolution[0], 0.5];
-        return evaluateImageOperatorPlan(compiled, source(uv), { uv, resolution, sampleImage: source })[0];
+        return evaluatePixel(compiled, source, uv, resolution, memo)[0];
       });
     };
     const largest = (a: number[], b: number[]) => Math.max(...a.map((value, index) => Math.abs(value - b[index])));
     for (const width of [3, 5]) {
       const current = createStylizeRecipeGraph('edge-detect');
       expect(largest(profile(current, width, 1080), profile(current, width, 2160))).toBeLessThan(0.02);
-      expect(largest(profile(current, width, 540), profile(current, width, 2160))).toBeLessThan(0.04);
+      // At 540p the 3 px soft step itself is only 1.5 pixels wide, so the pixel grid shifts the tail a little.
+      expect(largest(profile(current, width, 540), profile(current, width, 2160))).toBeLessThan(0.045);
     }
     // The 3.2.7 window ended at 8 px: at 4K, Width 3 drew a clearly thinner line than at 1080p.
     const released = createWholeTapEdgeDetectGraph();
     expect(largest(profile(released, 3, 1080), profile(released, 3, 2160))).toBeGreaterThan(0.08);
     // No note claims a cut window any more.
     expect((getEffect('edge-detect') as FullscreenEffectDefinition).paramWarnings!({ ...getDefaultParams('edge-detect'), width: 6 } as Record<string, number>, 3840, 2160)).toEqual([]);
+  });
+
+  it('lets the same fine texture through at 4K as in the 1080p and 540p previews: every tap reads a whole pixel (no point-sampled spread taps)', () => {
+    // Fine noise at 4K; the smaller frames are its box-downsampled copies (what a preview renders).
+    const hash = (x: number, y: number) => { let h = (x * 374761393 + y * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    const texel = (scale: number, x: number, y: number) => {
+      let sum = 0;
+      for (let j = 0; j < scale; j++) for (let i = 0; i < scale; i++) sum += 0.5 + 0.25 * (hash(x * scale + i, y * scale + j) - 0.5);
+      return sum / (scale * scale);
+    };
+    const meanLine = (width: number, scale: number) => {
+      const resolution: [number, number] = [3840 / scale, 2160 / scale], compiled = plan('edge-detect', { width, strength: 1 });
+      const source = ([u, v]: [number, number]): Pixel => {
+        const x = Math.min(resolution[0] - 1, Math.max(0, u * resolution[0] - 0.5)), y = Math.min(resolution[1] - 1, Math.max(0, v * resolution[1] - 0.5));
+        const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+        const value = (texel(scale, x0, y0) * (1 - fx) + texel(scale, x0 + 1, y0) * fx) * (1 - fy) + (texel(scale, x0, y0 + 1) * (1 - fx) + texel(scale, x0 + 1, y0 + 1) * fx) * fy;
+        return [value, value, value, 1];
+      };
+      let total = 0;
+      for (let k = 0; k < 24; k++) {
+        const px = Math.floor((400 + (k * 37) % 800) / scale), py = Math.floor((300 + (k * 53) % 600) / scale);
+        total += evaluatePixel(compiled, source, [(px + 0.5) / resolution[0], (py + 0.5) / resolution[1]], resolution)[0];
+      }
+      return total / 24;
+    };
+    // Before (one 2D window of 8 spread taps per side) Width 6 read 0.050 at 4K against 0.018 at 1080p.
+    for (const width of [4, 6]) {
+      const uhd = meanLine(width, 1), hd = meanLine(width, 2), preview = meanLine(width, 4);
+      expect(Math.abs(uhd / hd - 1)).toBeLessThan(0.2);
+      expect(Math.abs(preview / hd - 1)).toBeLessThan(0.2);
+    }
+    // Wider lines let less fine texture through, at 4K as everywhere.
+    expect(meanLine(6, 1)).toBeLessThan(meanLine(3, 1));
+  }, 120_000);
+
+  it('says when a Width needs more than 64 taps per side and starts spreading them', () => {
+    const notes = (width: number, w: number, h: number) => (getEffect('edge-detect') as FullscreenEffectDefinition).paramWarnings!({ ...getDefaultParams('edge-detect'), width } as Record<string, number>, w, h);
+    expect(notes(6, 7680, 4320)).toEqual([]);
+    expect(notes(24, 3840, 2160).join(' ')).toContain('1.5 px apart');
   });
 
   it('changes smoothly when an animated Width starts spreading the taps (2 sigma = 8 px)', () => {
@@ -429,9 +494,9 @@ describe('Edge Detect', () => {
 
   it('finds no edges in a flat picture and keeps transparent surroundings transparent', () => {
     const flat = (): Pixel => [0.4, 0.4, 0.4, 1];
-    expect(evaluateImageOperatorPlan(plan('edge-detect'), flat(), { uv: [0.5, 0.5], resolution: [320, 180], sampleImage: flat })[0]).toBeLessThan(1e-4);
+    expect(evaluatePixel(plan('edge-detect'), flat, [0.5, 0.5], [320, 180])[0]).toBeLessThan(1e-4);
     const empty = (): Pixel => [0, 0, 0, 0];
-    expect(evaluateImageOperatorPlan(plan('edge-detect'), empty(), { uv: [0.5, 0.5], resolution: [320, 180], sampleImage: empty })[3]).toBe(0);
+    expect(evaluatePixel(plan('edge-detect'), empty, [0.5, 0.5], [320, 180])[3]).toBe(0);
   });
 });
 

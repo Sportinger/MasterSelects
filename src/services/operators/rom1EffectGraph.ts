@@ -1,8 +1,8 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { kneeRom1GainGraph } from './smokeGainUpgrade';
+import { ROM1_TRAIL_FADE_FLOOR } from '../../effects/stylize/rom1/warnings';
 
-/** Smallest fade per frame (three quarters of an 8-bit step), so every trail reaches zero on 8-bit history. */
-export const ROM1_TRAIL_FADE_FLOOR = 0.75 / 255;
+export { ROM1_TRAIL_FADE_FLOOR };
 
 type Ref = { node: string; port: string };
 class Graph {

@@ -901,11 +901,14 @@ strong Sharpen differs by up to about 60 levels on fine detail. Sharpens saved
 earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
 **Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,
-since 2026-10-21) is a derivative-of-Gaussian gradient of premultiplied brightness
-in one window reduction: σ = **Width** pixels of a 1080p frame (at least 0.7 px),
-window ±2σ with at most 8 taps per side: one pixel apart up to 2σ = 8 px, beyond that
-2σ / 8 px apart with bilinear reads, so a Width covers the same share of the frame at
-any resolution. Dividing by the window's own second moment makes it exact for
+since 2026-10-21) is a derivative-of-Gaussian gradient of premultiplied brightness:
+σ = **Width** pixels of a 1080p frame (at least 0.7 px), window ±2σ. The Gaussian is
+separable, so the window runs as a horizontal pass (Sequence Reduce of brightness, its
+x moment and spread, cached in an rgba16float Cache Image) and a vertical pass over the
+cached rows; every tap reads one whole pixel (texel centre), up to 64 per side, so the
+window averages all the texture it covers and a Width draws the same line, with the same
+fine-texture speckle, at any resolution (past 64 taps the taps spread apart and the
+parameter notes say so). Dividing by the window's own second moment makes it exact for
 brightness ramps at any Width and resolution, so a step of contrast c gives a
 response of about `x = c × 4 × Strength` (the brightness of the earlier Sobel); the
 line strength is `1 − exp(−x)`, linear for faint edges and rolling off softly instead
@@ -916,9 +919,9 @@ the brighter side. Lines are composited over the background premultiplied: alpha
 `edge + source alpha × (1 − edge)`, colour = `(line × edge + background × source
 alpha × (1 − edge)) / alpha`, so transparent surroundings stay transparent and a
 layer's outline shows outside it in its full line colour. Cost grows with Width:
-(2⌈2σ⌉ + 1)² taps, 25 at the default on 1080p, at most 289, plus two colour taps. The
-outermost ring counts with the share of it 2σ covers (`clamp(min(2σ, 8) − |offset| + 1, 0, 1)`
-per axis, in taps), so an animated Width changes smoothly; Edge Detects saved with 3.2.7 keep whole taps
+2 × (2⌈2σ⌉ + 1) taps, 10 at the default on 1080p, 98 at Width 6 on 4K, plus two colour
+taps. The outermost tap counts with the share of it 2σ covers (`clamp(min(2σ, 64) − |offset| + 1, 0, 1)`
+per pass, in taps), so an animated Width changes smoothly; Edge Detects saved with 3.2.7 keep whole taps
 out to ⌈2σ⌉, at most ±8 px (their lines jump a step whenever 2σ passes a whole pixel, and wide
 lines come out thinner in large frames), open with the current folders, and their card offers
 the current recipe. Edge Detects saved earlier

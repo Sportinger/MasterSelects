@@ -61,13 +61,13 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Acuarela with the Loose Wash preset. 1 — Preset: pick a starting point. 2 — Wash: how flat the colour gets. 3 — Edges: the darker paint along every border. 4 — Granulation: pigment in the paper grain. 5 — Flow: lets the wet paint drift.</figcaption>
 </figure>
 
-The card sorts the controls into **Paint**, **Paper** and **Motion** sections that fold away; the preview updates while you drag.
+The card sorts the controls into **Paint**, **Paper** and **Motion** sections that fold away; the preview updates while you drag. The loops beside Mix, Paint and Paper run on a still photo of the dancer, so only the control changes; Flow, which is about movement, runs on the moving dancer.
 
 ### General
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-mix.mp4" poster="../assets/effects/clips/acuarela-mix.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Mix runs from 0 to 1 and back: the photo fades into the watercolour painting and back; the current value is shown at the bottom left"></video>
-<figcaption>Mix from 0 to 1 and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-mix.mp4" poster="../assets/effects/clips/acuarela-mix.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Mix runs from 0 to 1 and back: the photo fades into the watercolour painting and back; the current value is shown at the bottom left"></video>
+<figcaption>Mix from 0 to 1 and back, on a still photo.</figcaption>
 </figure>
 
 **Mix** – how much of the painting covers the original. 1 is the full watercolour, 0.5 lays it half over the photo, so faces get some detail back. At 0 the picture is untouched and the effect costs nothing. 0 to 1, default 1.
@@ -77,8 +77,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 ### Paint
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-wash.mp4" poster="../assets/effects/clips/acuarela-wash.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Wash runs from 0 to 12 px and back: the fine folds of her dress and the strands of her hair melt into broader, flatter patches of colour and sharpen again; the current value is shown at the bottom left"></video>
-<figcaption>Wash from 0 to 12 px and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-wash.mp4" poster="../assets/effects/clips/acuarela-wash.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Wash runs from 0 to 12 px and back: the fine folds of her dress and the strands of her hair melt into broader, flatter patches of colour and sharpen again; the current value is shown at the bottom left"></video>
+<figcaption>Wash from 0 to 12 px and back, on a still photo.</figcaption>
 </figure>
 
 **Wash** – how far the colour flattens into washes. The wash stops at the borders of shapes, so they stay sharp while their inside turns into one colour. 1–2 keeps fine detail, 5 is a classic watercolour, 8 and more paints loose patches and wipes out small features such as eyes. Even 0 still smooths by half a pixel. 0 to 12 px, default 5.5 px.
@@ -86,8 +86,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-bleed.mp4" poster="../assets/effects/clips/acuarela-bleed.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Bleed runs from 0 to 30 px and back: her outline starts to wobble and colour runs out over the edges of the dress and arms in wet patches, then settles again; the current value is shown at the bottom left"></video>
-<figcaption>Bleed from 0 to 30 px and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-bleed.mp4" poster="../assets/effects/clips/acuarela-bleed.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Bleed runs from 0 to 30 px and back: her outline starts to wobble and colour runs out over the edges of the dress and arms in wet patches, then settles again; the current value is shown at the bottom left"></video>
+<figcaption>Bleed from 0 to 30 px and back, on a still photo.</figcaption>
 </figure>
 
 **Bleed** – how wet the paint is. A few large wet patches lie over the frame; there the outlines wobble and colour runs across the borders. 0 keeps every edge dry and still, 8 gives a gentle wobble, 20 and more lets colour flood out of shapes. The wobble stops growing at 16 px (the card says so); higher values only widen the bleeding. 0 to 30 px, default 8 px.
@@ -95,8 +95,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-edges.mp4" poster="../assets/effects/clips/acuarela-edges.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Edges runs from 0 to 2 and back: at 0 the painting looks pale and soft, then darker paint gathers along every fold, arm and hair edge, and fades again; the current value is shown at the bottom left"></video>
-<figcaption>Edges from 0 to 2 and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-edges.mp4" poster="../assets/effects/clips/acuarela-edges.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela at Wash 2 px while Edges runs from 0 to 2 and back: at 0 the painting looks pale and soft, then darker paint gathers along every fold, arm and hair edge, and fades again; the current value is shown at the bottom left"></video>
+<figcaption>Edges from 0 to 2 and back, at Wash 2 px, on a still photo.</figcaption>
 </figure>
 
 **Edges** – the darker paint that gathers along the border of every wash, as it does when real watercolour dries. Without it (0) the painting looks pale and flat; 1 to 1.5 is natural; 2 draws a clear dark rim, almost like ink. The darkest pooled paint is a deeper tone of the same colour, never black. 0 to 2, default 1.2.
@@ -104,8 +104,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-simplify.mp4" poster="../assets/effects/clips/acuarela-simplify.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Simplify runs from 0 to 1 and back: the soft gradients of her dress and skin step into a few flat tones like layered glazes, then smooth out again; the current value is shown at the bottom left"></video>
-<figcaption>Simplify from 0 to 1 and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-simplify.mp4" poster="../assets/effects/clips/acuarela-simplify.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela at Wash 2 px while Simplify runs from 0 to 1 and back: the soft gradients of her dress and skin step into a few flat tones like layered glazes, then smooth out again; the current value is shown at the bottom left"></video>
+<figcaption>Simplify from 0 to 1 and back, at Wash 2 px, on a still photo.</figcaption>
 </figure>
 
 **Simplify** – how far the brightness steps into a few flat tones, like glazes laid one over another. 0 keeps the photo's smooth gradients, 0.5 hints at the steps, 1 gives six clear tones; the colours stay as they are. 0 to 1, default 0.5.
@@ -113,8 +113,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-blooms.mp4" poster="../assets/effects/clips/acuarela-blooms.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Blooms runs from 0 to 2 and back: ragged rings with dark rims and lighter centres appear on the flat background and grow stronger, then fade again; the current value is shown at the bottom left"></video>
-<figcaption>Blooms from 0 to 2 and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-blooms.mp4" poster="../assets/effects/clips/acuarela-blooms.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Blooms runs from 0 to 2 and back: ragged rings with dark rims and lighter centres appear on the flat background and grow stronger, then fade again; the current value is shown at the bottom left"></video>
+<figcaption>Blooms from 0 to 2 and back, on a still photo.</figcaption>
 </figure>
 
 **Blooms** – a few stains with a lighter inside and a dark, ragged rim, where water ran back into drying paint. They appear only in flat areas such as a sky or a dark stage, never on busy detail. 0.5 is a hint, 1–2 makes them a strong part of the picture. They stay in place on the frame. 0 to 2, default 0.5.
@@ -122,8 +122,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-shadow-pigment.mp4" poster="../assets/effects/clips/acuarela-shadow-pigment.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Shadow Pigment runs from 0 to 1 and back: the black of the stage lifts to a dark blue-grey indigo paint and sinks back to near black; the current value is shown at the bottom left"></video>
-<figcaption>Shadow Pigment from 0 to 1 and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-shadow-pigment.mp4" poster="../assets/effects/clips/acuarela-shadow-pigment.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Shadow Pigment runs from 0 to 1 and back: the black of the stage lifts to a dark blue-grey indigo paint and sinks back to near black; the current value is shown at the bottom left"></video>
+<figcaption>Shadow Pigment from 0 to 1 and back, on a still photo.</figcaption>
 </figure>
 
 **Shadow Pigment** – watercolour has no true black. This lifts the darkest parts, the pooled edges too, to a dark indigo paint. 0 keeps the black of the footage, 1 paints all shadows in indigo, softer and cooler. 0 to 1, default 0.5.
@@ -133,8 +133,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 ### Paper
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-granulation.mp4" poster="../assets/effects/clips/acuarela-granulation.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Granulation runs from 0 to 2 and back: fine speckled pigment settles into the grain of the paper, most of all on the dress, then smooths out again; the current value is shown at the bottom left"></video>
-<figcaption>Granulation from 0 to 2 and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-granulation.mp4" poster="../assets/effects/clips/acuarela-granulation.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Granulation runs from 0 to 2 and back: fine speckled pigment settles into the grain of the paper, most of all on the dress, then smooths out again; the current value is shown at the bottom left"></video>
+<figcaption>Granulation from 0 to 2 and back, on a still photo.</figcaption>
 </figure>
 
 **Granulation** – pigment that settles in the valleys of the paper, as coarse paint does. It shows most in the mid tones and on dense paint; light skin and white stay cleaner. 0 gives smooth washes, 0.6 a fine speckle, 2 a strong, sandy grain. 0 to 2, default 0.6.
@@ -142,8 +142,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-paper.mp4" poster="../assets/effects/clips/acuarela-paper.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Paper runs from 0 to 2 and back: the relief of the paper, lit from one side, rises over the light dress and arms and sinks again; the dark stage hides most of it; the current value is shown at the bottom left"></video>
-<figcaption>Paper from 0 to 2 and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-paper.mp4" poster="../assets/effects/clips/acuarela-paper.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Paper runs from 0 to 2 and back: the relief of the paper, lit from one side, rises over the light dress and arms and sinks again; the dark stage hides most of it; the current value is shown at the bottom left"></video>
+<figcaption>Paper from 0 to 2 and back, on a still photo.</figcaption>
 </figure>
 
 **Paper** – the relief of the paper, lit from one side, as if the painting lay under a lamp. It shows on light and middle tones; dense dark paint hides it. 0 turns it off, 0.6 is a subtle texture, 2 a rough, handmade sheet. 0 to 2, default 0.6.
@@ -151,8 +151,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-grain-size.mp4" poster="../assets/effects/clips/acuarela-grain-size.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Grain Size runs from 0.25 to 4 and back: the paper grain grows from a fine sand into a coarse, cloudy texture and shrinks again; the current value is shown at the bottom left"></video>
-<figcaption>Grain Size from 0.25 to 4× and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-grain-size.mp4" poster="../assets/effects/clips/acuarela-grain-size.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Grain Size runs from 0.25 to 4 and back: the paper grain grows from a fine sand into a coarse, cloudy texture and shrinks again; the current value is shown at the bottom left"></video>
+<figcaption>Grain Size from 0.25 to 4× and back, on a still photo.</figcaption>
 </figure>
 
 **Grain Size** – how coarse the paper is, for Granulation and Paper together. 1 is a standard cold-pressed sheet; 0.5 is smooth hot-pressed paper, 2–4 a rough sheet whose grain reads even on a large projection. 0.25 to 4×, default 1×.
@@ -160,8 +160,8 @@ The card sorts the controls into **Paint**, **Paper** and **Motion** sections th
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/acuarela-lift.mp4" poster="../assets/effects/clips/acuarela-lift.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up with Acuarela while Lift runs from 0 to 1 and back: the whole painting fades towards white paper until only a faint wash is left, then the colour comes back; the current value is shown at the bottom left"></video>
-<figcaption>Lift from 0 to 1 and back.</figcaption>
+<video src="../assets/effects/clips/acuarela-lift.mp4" poster="../assets/effects/clips/acuarela-lift.webp" width="640" height="640" autoplay muted loop playsinline preload="none" aria-label="The dancer close up on a still photo, with Acuarela while Lift runs from 0 to 1 and back: the whole painting fades towards white paper until only a faint wash is left, then the colour comes back; the current value is shown at the bottom left"></video>
+<figcaption>Lift from 0 to 1 and back, on a still photo.</figcaption>
 </figure>
 
 **Lift** – lets the white paper shine through, like a wash that was lifted with a sponge. 0.1 softens the darkest tones a little, 0.4 gives a pale, airy page, 1 leaves only a faint tint (80 % paper). 0 to 1, default 0.1.

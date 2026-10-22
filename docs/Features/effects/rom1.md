@@ -21,7 +21,7 @@ Group: [Light & Stylize](../Effects-Stylize.md) · [How to add an effect](../Eff
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/rom1-presets.mp4" poster="../assets/effects/clips/rom1-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Soft Echo top left with faint trails beside her and her face clear, Light Trails top right with her arms and dress streaking sideways, Dripping Light bottom left with trails that run up and down in streaks, Smoke Storm bottom right with large swirling smoke that fills the stage"></video>
+<video src="../assets/effects/clips/rom1-presets.mp4" poster="../assets/effects/clips/rom1-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Soft Echo top left with faint trails beside her and her face clear, Light Trails top right with her arms and dress streaking sideways and her face readable, Dripping Light bottom left with long vertical streaks hanging below and above her, Smoke Storm bottom right with large swirling smoke that fills the stage"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
@@ -29,9 +29,9 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Soft Echo** – short, faint trails beside the figure at Opacity 0.6. Face and costume stay clear; a gentle afterglow for dance and slow movement.
 
-**Light Trails** – the flow runs sideways only, so arms, lights and a dress streak across the frame. Strong on turns and on lights passing by.
+**Light Trails** – the flow runs sideways only, so arms, lights and a dress streak across the frame; at Opacity 0.8 the face stays readable. Strong on turns and on lights passing by.
 
-**Dripping Light** – the flow runs up and down only, and the picture is lifted a little: light seems to drip and climb, like rain running down a window.
+**Dripping Light** – the flow runs up and down only, fast and far (Speed 10, Strength 0.5), and the picture is lifted a little: every movement leaves long vertical streaks that hang and run like rain down a window.
 
 **Smoke Storm** – long trails in fast, wide currents: the figure dissolves into swirling smoke. For a breakdown, a dream or a transition between scenes.
 
@@ -112,11 +112,11 @@ Rom1 makes every frame from its own last one: it pushes that frame a little alon
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/rom1-density.mp4" poster="../assets/effects/clips/rom1-density.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Rom1 at Strength 0.15 while Density runs from 1 to 16 and back: the smoke changes from a few broad, slow sweeps to many smaller currents and back; the current value is shown at the bottom left"></video>
-<figcaption>Density from 1 to 16 and back, at Strength 0.15.</figcaption>
+<video src="../assets/effects/clips/rom1-density.mp4" poster="../assets/effects/clips/rom1-density.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The dancer with Rom1 at Strength 0.4 and Trail 0.97 at three Density values for about 1.7 seconds each: at 1 her trails flow in a few broad, smooth sweeps, at 4 they ripple in wavy currents, at 16 they break into many small ragged shreds; the value is shown at the bottom left"></video>
+<figcaption>Density 1, 4 and 16 at Strength 0.4, about 1.7 seconds each.</figcaption>
 </figure>
 
-**Density** – how many currents cross the frame, together with **Detail** (the two multiply): at the defaults, 4 × 4, about 16 across the width. 1–2 makes a few wide streams, 8–16 many smaller ones, and very high values break the smoke into grain. 0 to 100, default 4.
+**Density** – how many currents cross the frame, together with **Detail** (the two multiply): at the defaults, 4 × 4, about 16 across the width. 1 makes a few broad, smooth sweeps, 4 wavy currents, 16 many small, ragged ones; very high values break the smoke into grain. 0 to 100, default 4.
 
 <div class="docs-float-end"></div>
 
@@ -480,5 +480,5 @@ Rom1 works in nine stages, one folder each in the Nodes tab. **Noise Scale**, **
 - **Transparency.** The smoke is kept as colour × transparency: beside a cut-out layer it fades in transparency and keeps its colour.
 - **Limits.** Gain above 1 or below 0, Opacity outside 0–1, Trail above 0.995 or below 0, and Speed, Detail or Density at or below 0 are reported in the card and the tool result.
 - **Saved projects.** A Rom1 saved before 2026-10-22 opens with Trail 0.98, the value it always used. Its untouched node setup is upgraded to the colour × transparency smoke: a bug fix, since smoke beside a cut-out layer used to turn dark; on an opaque layer it paints the same pixels. An edited node setup keeps its own recipe.
-- **Software preview.** The worker software preview runs Rom1 on the CPU with the same math.
+- **Software preview.** The worker software preview runs Rom1 on the CPU with the same math, including the fade floor on its 8-bit history, so trails fade out there as in the GPU preview and the export.
 - **More:** [Effect system](../Effect-System.md#editable-keying-and-feedback-graphs) · [Light & Stylize notes](../Effect-System.md#light--stylize-notes) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

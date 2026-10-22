@@ -47,27 +47,31 @@ Pick one in the **Preset** row of the effect card. It sets all four controls in 
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside a strip of the preview where the harbour town stays lit only in a round patch at the centre and fades to black towards every edge](../assets/effects/editor/vignette-inspector.webp)
+![Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside the preview where the harbour town stays lit in a round pool in the middle of the frame and fades to black towards the left and right edges and the sky](../assets/effects/editor/vignette-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 422" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 332" aria-hidden="true" focusable="false">
 <defs><marker id="vignette-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M639 224 L723 224" marker-end="url(#vignette-inspector-arrow)" />
-<circle class="docs-shot-number" cx="639" cy="224" r="18" /><text x="639" y="224" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M631 274 L715 274" marker-end="url(#vignette-inspector-arrow)" />
-<circle class="docs-shot-number" cx="631" cy="274" r="18" /><text x="631" y="274" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M625 334 L709 334" marker-end="url(#vignette-inspector-arrow)" />
-<circle class="docs-shot-number" cx="625" cy="334" r="18" /><text x="625" y="334" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M700 176 L784 176" marker-end="url(#vignette-inspector-arrow)" />
+<circle class="docs-shot-number" cx="700" cy="176" r="18" /><text x="700" y="176" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M742 215 L778 215" marker-end="url(#vignette-inspector-arrow)" />
+<circle class="docs-shot-number" cx="742" cy="215" r="18" /><text x="742" y="215" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M675 239 L795 239" marker-end="url(#vignette-inspector-arrow)" />
+<circle class="docs-shot-number" cx="675" cy="239" r="18" /><text x="675" y="239" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M738 262 L774 262" marker-end="url(#vignette-inspector-arrow)" />
+<circle class="docs-shot-number" cx="738" cy="262" r="18" /><text x="738" y="262" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M641 286 L761 286" marker-end="url(#vignette-inspector-arrow)" />
+<circle class="docs-shot-number" cx="641" cy="286" r="18" /><text x="641" y="286" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Softness: how gradually it fades in.</figcaption>
+<figcaption>Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Size: where the darkening begins. 4 — Softness: how gradually it fades in. 5 — Roundness: a circle or the frame's shape.</figcaption>
 </figure>
 
 **Preset** – a starting point for all four controls; see [Presets](#presets).
 
 **Amount** – how dark the edges get. 0.3 is barely noticeable, the default 0.5 a clear but natural darkening, and at 1 the darkest part goes fully black, for a spotlight or an iris. Only the colour gets darker; transparent parts stay transparent. 0 to 1, default 0.5.
 
-**Size** – where the darkening begins, measured from the middle (0) to the corners (1). At the default 0.5 it begins about where a circle would touch the top and bottom of a 16:9 frame; at 0.1–0.2 only the middle stays bright. The slider ends at 1, where the darkening starts at the corners and nothing darkens any more; the number field still takes up to 1.5 for Vignettes saved before 2026-10-21, and a Size of 1 or more that arrives from keyframes or the AI tools gets a note in the card. Animate it for an iris that opens or closes. 0 to 1, default 0.5.
+**Size** – where the darkening begins, measured from the middle (0) to the corners (1). At the default 0.5 it begins about where a circle would touch the top and bottom of a 16:9 frame; at 0.1–0.2 only the middle stays bright. The slider ends at 1, where the darkening starts at the corners. Animate it for an iris that opens or closes. 0 to 1, default 0.5.
 
 **Softness** – how gradually the darkening fades in, from where Size begins to how far it reaches. At 1 it fades over the whole frame, gentle as a lens; around 0.5 it is a clear soft ring; at 0 it is a hard edge, only one and a half pixels wide, for an iris or a keyhole. Size plus Softness above 1 means the corners are only partly dark. 0 to 1, default 0.5.
 
@@ -220,6 +224,7 @@ A dark, smooth gradient has only a few 8-bit steps to go through, so a wide vign
 - **Falloff.** `gain = max(0, 1 − Amount · smoothstep(Size, Size + max(Softness, 1.5 px), distance))`, applied to the colour; alpha is kept.
 - **Dither.** Triangular, at most half an 8-bit step, fixed per pixel, and only where the gain differs from 1 (full from a darkening of 1/16).
 - **Warnings.** Size at or above 1 (nothing darkens), Softness below 0, Roundness outside 0–1 and Amount above 1 are reported in the effect card and the tool result.
+- **Size above 1.** The slider and the AI keyframe tool stop at 1. The number field and the AI effect-update tool still take up to 1.5, for Vignettes saved before 2026-10-21, whose corners sit at about 1.41; on the current Vignette a Size of 1 or more darkens nothing, and the card and the tool result say so.
 - **Saved projects.** A Vignette saved before 2026-10-21 keeps its earlier look (its Roundness 0.5–2 stretched the frame-shaped oval vertically, and its Size reached to about 1.41 at the corners); its card offers **Use the new Vignette (resets its shape)**, which resets Size, Softness and Roundness and removes their keyframes, in one undo step.
 - **Transitions.** The Vignette Bloom transition uses the current Vignette (Roundness 0, with Size and Softness ÷ √2, which gives the transition its familiar falloff).
 - **Software preview.** Without a graph (as transitions create it) the worker software renderer uses the current pixel distance without the dither.

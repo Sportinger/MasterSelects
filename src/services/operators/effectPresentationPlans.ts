@@ -280,14 +280,21 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : includes('strength scaled clamped inverse invert selected rgba image', id) ? 'finish' : 'sampling',
   };
   if (type === 'edge-detect') return {
-    labels: { scale: 'Line Width (sigma & window)', window: 'Window Taps (premultiplied brightness)', gradient: 'Gradient & Edge Strength', finish: 'Line Color & Alpha' },
+    // The 3.2.7 recipe (one 2D window, `tap-*`) shares this plan: its taps sit in Window Taps.
+    labels: { scale: 'Line Width (sigma & window)', horizontal: 'Horizontal Pass (row brightness & x slope)', vertical: 'Vertical Pass (window sums)',
+      window: 'Window Taps (premultiplied brightness)', gradient: 'Gradient & Edge Strength', finish: 'Line Color & Alpha' },
     portLabels: { sigma: 'Sigma (px)', reach: 'Reach (taps)', 'window-size': 'Window Size', 'tap-moment': 'Moments', edge: 'Edge', 'line-color': 'Line Color',
-      'two-sigma': '2 Sigma (px)', 'reach-needed': 'Whole Taps', 'reach-covered': 'Covered Reach (taps)', 'tap-spacing': 'Tap Spacing (px)', 'tap-spacing-wide': '2 Sigma, at least 8 (px)',
-      'tap-x-px': 'Tap X (px)', 'tap-y-px': 'Tap Y (px)', 'tap-coverage': 'Tap Share', 'tap-weight': 'Gaussian Weight', 'tap-weight-covered': 'Tap Weight',
-      'window-reduce:sum': 'Window Sums', 'gradient-sums': 'Gradient (x, y)', vivid: 'Picture Colour (full brightness)', 'edge-premultiplied': 'Premultiplied Line + Background' },
+      'two-sigma': '2 Sigma (px)', 'reach-needed': 'Whole Taps', 'reach-covered': 'Covered Reach (taps)', 'tap-spacing': 'Tap Spacing (px)', 'tap-spacing-wide': '2 Sigma, at least 64 (px)',
+      'tap-weight': 'Gaussian Weight', 'window-reduce:sum': 'Window Sums', 'vertical-reduce:sum': 'Window Sums',
+      'horizontal-offset-px': 'Tap X (px)', 'vertical-offset-px': 'Tap Y (px)', 'horizontal-weight': 'Tap Weight', 'vertical-weight': 'Tap Weight',
+      'horizontal-coverage': 'Tap Share', 'vertical-coverage': 'Tap Share', 'horizontal-luma': 'Premultiplied Brightness',
+      'horizontal-moment': 'Row Moments', 'horizontal-average': 'Row Moments / Weight', 'horizontal-cache': 'Row Moments (cached)',
+      'vertical-row': 'Cached Row', 'vertical-moment': 'Window Moments',
+      'gradient-sums': 'Gradient (x, y)', vivid: 'Picture Colour (full brightness)', 'edge-premultiplied': 'Premultiplied Line + Background' },
     stage: ({ id }) => /^(pixel-scale|short-side|width-safe|sigma|two-sigma|reach|window-size|tap-spacing)/.test(id) ? 'scale'
-      : /^(tap-|window-reduce|window-index)/.test(id) ? 'window'
-        : /^(window-|gradient-(sums|length|normalized)|edge-contrast|edge-raw|edge-falloff|edge-negative|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',
+      : /^horizontal-/.test(id) ? 'horizontal' : /^vertical-/.test(id) ? 'vertical'
+        : /^(tap-|window-reduce|window-index)/.test(id) ? 'window'
+          : /^(window-|gradient-(sums|length|normalized)|edge-contrast|edge-raw|edge-falloff|edge-negative|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',
   };
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
     labels: { premultiply: 'Premultiplied Source (cached)', space: 'Centre, Shape & Radius', phase: 'Phase & Speed', edges: 'Frame Edges & Sampling',

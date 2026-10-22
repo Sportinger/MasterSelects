@@ -11,8 +11,8 @@ import { rom1ParamWarnings, ROM1_TRAIL_DEFAULT, ROM1_TRAIL_MAX } from './warning
 export const ROM1_PRESETS: readonly EffectPreset[] = [
   // Opacity 0.6 keeps the face readable: the trails stay a faint glow beside the figure, not stepped copies over it.
   { id: 'soft-echo', name: 'Soft Echo', params: { opacity: 0.6, trail: 0.8, strength: 0.12 } },
-  { id: 'light-trails', name: 'Light Trails', params: { trail: 0.95, strength: 0.35, gainX: 0.9, gainY: 0, density: 1 } },
-  { id: 'dripping-light', name: 'Dripping Light', params: { trail: 0.97, gain: 0.03, strength: 0.35, gainX: 0, gainY: 0.9, density: 1.5 } },
+  { id: 'light-trails', name: 'Light Trails', params: { opacity: 0.8, trail: 0.95, strength: 0.25, gainX: 1, gainY: 0, density: 1 } },
+  { id: 'dripping-light', name: 'Dripping Light', params: { trail: 0.97, gain: 0.05, speed: 10, strength: 0.5, gainX: 0, gainY: 1, density: 1 } },
   { id: 'smoke-storm', name: 'Smoke Storm', params: { trail: 0.99, speed: 10, strength: 0.5, density: 3 } },
 ];
 

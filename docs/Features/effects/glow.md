@@ -36,9 +36,9 @@ Pick one in the **Preset** row of the effect card. It sets all five controls in 
 
 **Neon Bloom** – lights bloom strongly, as through a lens on a rainy night. The classic look for neon signs, practicals and headlights.
 
-**Dream Glow** – the Threshold drops so far that bright skin and costumes join in: the whole figure shines in a soft, wide haze. For memories, dreams and slow scenes.
+**Dream Glow** – a soft, wide haze over the whole street. The Threshold drops so far that on a figure bright skin and costumes join in and the whole figure shines (the Threshold compare under Controls shows this on the dancer). For memories, dreams and slow scenes.
 
-**Moonlight** – a cool blue halo, like moonlight or a cold follow spot. It turns warm lights cold around their edges without regrading the picture.
+**Moonlight** – a cooler, bluish halo around every light, like moonlight or a cold follow spot. On coloured neon the shift is gentle; around warm or white lights the edges turn clearly cold, without regrading the picture.
 
 ## Controls
 

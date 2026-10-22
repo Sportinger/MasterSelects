@@ -54,7 +54,7 @@
         "intensity": 1.2
       },
       "image": "dancer_stage.jpg",
-      "preview": 680,
+      "preview": 800,
       "alt": "Properties, Effects with a Sheen card: the Preset menu showing Golden Beam, Position 0.5, Angle -60 degrees, Width 0.16, Softness 0.7, Intensity 1.2, Highlights 0.6 and a golden Color swatch, beside the preview where a warm golden beam crosses the dancer's dress and arm",
       "marks": [
         {
@@ -94,8 +94,8 @@
         "roundness": 1
       },
       "image": "harbor_town.jpg",
-      "preview": 560,
-      "alt": "Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside a strip of the preview where the harbour town stays lit only in a round patch at the centre and fades to black towards every edge",
+      "preview": 800,
+      "alt": "Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside the preview where the harbour town stays lit in a round pool in the middle of the frame and fades to black towards the left and right edges and the sky",
       "marks": [
         {
           "target": "Preset",
@@ -103,18 +103,30 @@
         },
         {
           "target": "Amount",
-          "label": "Amount"
+          "label": "Amount",
+          "reach": 36
+        },
+        {
+          "target": "Size",
+          "label": "Size",
+          "reach": 120
         },
         {
           "target": "Softness",
-          "label": "Softness"
+          "label": "Softness",
+          "reach": 36
+        },
+        {
+          "target": "Roundness",
+          "label": "Roundness",
+          "reach": 120
         }
       ],
       "top": "tabs",
       "hide": [
         "Particle Out"
       ],
-      "caption": "Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Softness: how gradually it fades in."
+      "caption": "Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Size: where the darkening begins. 4 — Softness: how gradually it fades in. 5 — Roundness: a circle or the frame's shape."
     },
     {
       "name": "edge-detect-inspector",

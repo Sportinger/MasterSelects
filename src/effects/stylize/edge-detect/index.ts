@@ -15,7 +15,7 @@ export const EDGE_DETECT_PRESETS: readonly EffectPreset[] = [
   // Lines in the picture's colours on white, like a coloured-pencil drawing.
   { id: 'coloured-pencil', name: 'Coloured Pencil', params: { strength: 2, width: 1, colorize: 0.6, invert: true } },
   // Thick white contours that keep only the big shapes, like a chalk drawing or a cartoon.
-  { id: 'bold-contours', name: 'Bold Contours', params: { strength: 1.5, width: 3, colorize: 0, invert: false } },
+  { id: 'bold-contours', name: 'Bold Contours', params: { strength: 1.2, width: 4.5, colorize: 0, invert: false } },
 ];
 
 export const edgeDetect: EffectDefinition = {

@@ -49,18 +49,18 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![Properties, Effects with a Sheen card: the Preset menu showing Golden Beam, Position 0.5, Angle -60 degrees, Width 0.16, Softness 0.7, Intensity 1.2, Highlights 0.6 and a golden Color swatch, beside the preview where a warm golden beam crosses the dancer's dress and arm](../assets/effects/editor/sheen-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 434" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 387" aria-hidden="true" focusable="false">
 <defs><marker id="sheen-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M673 198 L757 198" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="673" cy="198" r="18" /><text x="673" y="198" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M665 241 L749 241" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="665" cy="241" r="18" /><text x="665" y="241" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M677 294 L761 294" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="677" cy="294" r="18" /><text x="677" y="294" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M663 347 L747 347" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="663" cy="347" r="18" /><text x="663" y="347" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M679 399 L763 399" marker-end="url(#sheen-inspector-arrow)" />
-<circle class="docs-shot-number" cx="679" cy="399" r="18" /><text x="679" y="399" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M700 176 L784 176" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="700" cy="176" r="18" /><text x="700" y="176" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M693 215 L777 215" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="693" cy="215" r="18" /><text x="693" y="215" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M704 262 L788 262" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="704" cy="262" r="18" /><text x="704" y="262" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M691 310 L775 310" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="310" r="18" /><text x="691" y="310" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M706 357 L790 357" marker-end="url(#sheen-inspector-arrow)" />
+<circle class="docs-shot-number" cx="706" cy="357" r="18" /><text x="706" y="357" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -70,8 +70,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 **Preset** – a starting point for all controls; see [Presets](#presets).
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/sheen-position.mp4" poster="../assets/effects/clips/sheen-position.webp" width="960" height="266" autoplay muted loop playsinline preload="none" aria-label="The silver title ACT ONE on a transparent layer, shown over black, while Sheen's Position (Glint preset) runs from 0 to 1 and back: a thin bright glint, leaning to the right, slides across the letters from left to right and back; the light appears only on the letters, never on the empty background between them; the current value is shown at the bottom left"></video>
-<figcaption>Glint on a title layer: Position from 0 to 1 and back.</figcaption>
+<video src="../assets/effects/clips/sheen-position.mp4" poster="../assets/effects/clips/sheen-position.webp" width="960" height="266" autoplay muted loop playsinline preload="none" aria-label="The silver title ACT ONE on a transparent layer, shown over black, while Sheen's Position (Glint preset) runs from 0.15 to 0.85 and back, the part of the layer the letters cover: a thin bright glint, leaning to the right, slides across the letters from left to right and back; the light appears only on the letters, never on the empty background between them; the current value is shown at the bottom left"></video>
+<figcaption>Glint on a title layer: Position from 0.15 to 0.85 and back, where the letters are.</figcaption>
 </figure>
 
 **Position** – where the band is on its way across the layer. At 0 it waits just outside one edge, at 1 just outside the other, so a keyframe from 0 to 1 is one complete sweep that starts and ends with no light at all. Near both ends only the tip of the band touches a corner, so the light seems to arrive a little late and leave a little early. Half a second reads as a glint, three seconds and more as a slow beam. On a title layer, as in the loop above, the light falls only on the letters and stops cleanly at their edges; where the band crosses empty layer around the title, nothing shows. 0 to 1, default 0.5.

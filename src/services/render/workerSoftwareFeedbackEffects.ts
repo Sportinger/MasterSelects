@@ -1,4 +1,5 @@
 import { rom1GainLift } from '../operators/smokeGainUpgrade';
+import { ROM1_TRAIL_DEFAULT, ROM1_TRAIL_FADE_FLOOR, ROM1_TRAIL_MAX } from '../../effects/stylize/rom1/warnings';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import { transitionFrameHistory, type FrameHistoryDiscontinuity, type FrameHistoryLoopPolicy, type FrameHistoryState } from '../../effects/frameHistoryTransition';
 
@@ -357,14 +358,20 @@ function applyRom1Effect(input: {
   // Premultiplied trail (rom1EffectGraph.ts): smoke outside a cut-out fades in alpha instead of turning dark.
   const sourceAlpha = input.current[3], wetAlpha = wetSource[3], feedbackAlpha = feedback[3] * edgeMask;
   const opacity = clamp01(params.opacity);
-  const decay = Math.min(Math.max(params.trail ?? 0.98, 0), 0.995);
-  const waterAlpha = clamp01(Math.max(sourceAlpha, feedbackAlpha * decay));
+  const decay = Math.min(Math.max(params.trail ?? ROM1_TRAIL_DEFAULT, 0), ROM1_TRAIL_MAX);
+  // The history is 8-bit (rounded on write), as on the GPU: each frame fades by at least
+  // ROM1_TRAIL_FADE_FLOOR, or a high Trail rounds back to the same value and leaves a grey ghost.
+  const fade = (premultiplied: number) => {
+    const decayed = premultiplied * decay;
+    return decayed - Math.max(ROM1_TRAIL_FADE_FLOOR - (premultiplied - decayed), 0);
+  };
+  const waterAlpha = clamp01(Math.max(sourceAlpha, fade(feedbackAlpha)));
   const mixedAlpha = mix(sourceAlpha, waterAlpha, opacity);
   const coverage = Math.max(mixedAlpha, 0.001);
   const channel = (index: number) => {
     const source = input.current[index] * sourceAlpha;
     const lifted = Math.min(Math.max(mix(source, wetSource[index] * wetAlpha, 0.18) + gain * sourceAlpha, 0), sourceAlpha);
-    const water = Math.max(lifted, feedback[index] * feedbackAlpha * decay);
+    const water = Math.max(lifted, fade(feedback[index] * feedbackAlpha));
     return clamp01(mix(source, water, opacity) / coverage);
   };
   return [channel(0), channel(1), channel(2), mixedAlpha];
