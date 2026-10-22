@@ -1617,12 +1617,15 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
-- **Look** (top of the Time section) applies a starting point: Sweep (left → right, the
-  defaults), Falling time (top → bottom), Center out, Wave folds, Radial bloom, Time
-  rings or Time steps (12 bands). A look sets only Profile, Angle, Delay, Time bands,
-  Mix, Waves, Phase and Speed; it reads **Custom** once any of them changes, and while
-  any of them has keyframes or a node source (the inspector names those values, which
-  keep animating).
+- **Preset** (Slit Scan's own row at the top of the card, `looks.ts`) applies one of five starting
+  points: Sweep (left → right, 3 s), Wave Folds, Radial Bloom, Time Rings or Time Steps (12 bands).
+  A preset sets only Profile, Angle, Delay, Time bands, Mix, Waves, Phase and Speed, so storage,
+  sampling, 3D geometry, time fields and protection keep their settings (the shared preset row would
+  return them to their defaults). The row reads **Apply preset…** once any of these values changes,
+  and while any of them has keyframes or a node source (the card names those values, which keep
+  animating). The card dims Angle in Radial scan and Time rings and the Wave section outside Wave /
+  folds and Time rings, which do not read them; Time bands between 0 and 2 render as off and the
+  card and tool results say so.
 - **Radial scan** and **Time rings** live in the Wave & Profile folder of the graph.
   Earlier graphs kept them in the Protected Center folder, whose mute (the default for
   new effects) routed the profile back to Wave, so Radial scan and Time rings rendered as

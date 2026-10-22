@@ -61,19 +61,16 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
   const renderGroup = (group: string, section: { enabled?: boolean; onEnabledChange?: (enabled: boolean) => void } = {}) => <ResolveInspectorSection key={group} title={group}
       bypassGroupId={({ 'Time map': 'time-map', 'Subject protection': 'subject-protection', 'Protected center': 'scan-protection' } as Record<string, string>)[group]}
       defaultOpen={group === 'Time'} {...section}>
-      {group === 'Time' && <ResolveInspectorRow label="Look">
-        <InspectorSelect ariaLabel="Slit Scan look" value={slitScanLookOf(params, animatedLookKeys ? animatedLookKeys.split(',') : [])}
-          options={[...SLIT_SCAN_LOOKS.map(item => ({ value: item.id, label: item.label })), { value: 'custom', label: 'Custom', disabled: true }]}
-          onChange={value => onChange(applySlitScanLook(params, value))} />
-      </ResolveInspectorRow>}
-      {group === 'Time' && animatedLookLabels && <p className="tracking-panel-status" role="status">
-        Animated, so a Look leaves it as it is: {animatedLookLabels}.</p>}
       {group === 'Time' && delayOutOfRange && <p className="tracking-panel-status" role="status">
         Delay {rawDelay} s is outside 0–60 s and is used as {slitScanNumber(params, 'delay')} s.</p>}
       {Object.entries(slitScanParams).filter(([key, parameter]) => parameter.group === group && !['temporalMode', 'temporalResolution'].includes(key)).map(([key, parameter]) => {
         if (key === 'temporalMemory' && params.temporalStorage !== 'resident') return null;
         if (key === 'temporalBatch' && !originalHistory) return null;
         if (key === 'seamEdgeProtection' && !(Number(params.seamSmoothing) > 0)) return null;
+        // A control the current Profile does not read is dimmed with the reason, like the shared effect rows.
+        const inactive = !!parameter.activeWhen && !parameter.activeWhen.values.includes(String(params[parameter.activeWhen.param] ?? slitScanParams[parameter.activeWhen.param].default));
+        const inactiveTitle = inactive ? parameter.activeWhen!.note : undefined;
+        const inactiveNote = inactive ? <div className="resolve-effect-row-note">{parameter.activeWhen!.note}</div> : null;
         if (parameter.type === 'select') return <ResolveInspectorRow key={key} label={parameter.label}>
           <InspectorSelect ariaLabel={`Slit Scan ${parameter.label}`} value={String(params[key] ?? parameter.default)}
             options={parameter.options!} onChange={value => onChange({ ...params, [key]: value })} />
@@ -81,14 +78,14 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
         const property = `effect.${effectInstanceId}.${key}` as AnimatableProperty;
         if (key === 'delay' && clipId && effectInstanceId) return <ParameterSourceNumberRow key={key} clipId={clipId} property={property} />;
         const maximum = key === 'temporalSamples' ? sampleLimit : parameter.max!;
-        return <Fragment key={key}>{key === 'angle' && <ResolveInspectorRow label="Scan direction">
+        return <Fragment key={key}>{key === 'angle' && <ResolveInspectorRow label="Scan direction" disabled={inactive} title={inactiveTitle}>
           <InspectorSelect ariaLabel="Slit Scan scan direction"
             value={[0, 90, -90, 180].includes(slitScanNumber(params, key)) ? String(slitScanNumber(params, key)) : 'custom'}
             options={[{ value: '0', label: 'Left → right' }, { value: '90', label: 'Top → bottom' },
               { value: '-90', label: 'Bottom → top' }, { value: '180', label: 'Right → left' }, { value: 'custom', label: 'Custom angle', disabled: true }]}
             onChange={value => changeNumber(key, Number(value))} />
         </ResolveInspectorRow>}<ResolveInspectorNumberRow label={parameter.label} value={Math.min(maximum, slitScanNumber(params, key))}
-          defaultValue={Number(parameter.default)} min={parameter.min!} max={maximum} step={parameter.step!}
+          defaultValue={Number(parameter.default)} min={parameter.min!} max={maximum} step={parameter.step!} disabled={inactive} title={inactiveTitle}
           actions={key === 'timeFactor' ? <><ResolveInspectorIconButton ariaLabel="Match sample resolution"
             title={fullResolutionTitle} disabled={!fullResolution || timeFactorKeyframed}
             active={!!fullResolution && slitScanNumber(params, 'timeFactor') === fullResolution.factor}
@@ -106,7 +103,7 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
             <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8Z" /><circle cx="8" cy="8" r="2" /></svg>
           </ResolveInspectorIconButton> : undefined}
           keyframeToggle={parameter.animatable && clipId && effectInstanceId ? <KeyframeToggle clipId={clipId} property={property} value={slitScanNumber(params, key)} /> : undefined}
-          hardMin={parameter.min} hardMax={maximum} onChange={value => changeNumber(key, key === 'temporalSamples' ? Math.round(value) : value)} /></Fragment>;
+          hardMin={parameter.min} hardMax={maximum} onChange={value => changeNumber(key, key === 'temporalSamples' ? Math.round(value) : value)} />{inactiveNote}</Fragment>;
       })}
       {group === 'Sampling' && (params.scanSmoothingPreview === true || Number(params.scanSmoothing) > 0) && motionStatus &&
         <ResolveInspectorRow label="Motion analysis"><span role="status" title={motionStatus}>{motionStatus}</span></ResolveInspectorRow>}
@@ -117,7 +114,18 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
   </ResolveInspectorSection>;
   // The look of the scan first (Time, Wave); storage and sampling technicalities below, collapsed. The wrapper is
   // no container of its own: rows size by the Properties tab like every effect card (ResolveInspectorNarrow.css).
+  // Slit Scan's own Preset row: its presets set only the Time and Wave values (looks.ts), so it does not use
+  // the shared row, which would return storage, 3D geometry and time fields to their defaults.
   return <div className="effects-tab effect-sections">
+    <div className="effect-preset-row">
+      <ResolveInspectorRow label="Preset">
+        <InspectorSelect ariaLabel="Slit Scan preset" value={slitScanLookOf(params, animatedLookKeys ? animatedLookKeys.split(',') : [])}
+          options={[{ value: 'custom', label: 'Apply preset…', disabled: true }, ...SLIT_SCAN_LOOKS.map(item => ({ value: item.id, label: item.label }))]}
+          onChange={value => onChange(applySlitScanLook(params, value))} />
+      </ResolveInspectorRow>
+      {animatedLookLabels && <p className="effect-preset-notice" role="status">
+        Animated, so a preset leaves it as it is: {animatedLookLabels}.</p>}
+    </div>
     {renderGroup('Time')}
     {renderGroup('Wave')}
     {renderGroup('Sampling')}

@@ -90,7 +90,10 @@ const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-
 /** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */
 const GRAPH_PORT_LABELS: Record<string, Record<string, string>> = {
   'slit-scan': { 'smooth-or-banded': 'Time Map', 'subject-protected': 'Protection', 'safe-delay': 'Delay (s)',
-    'masked-delay': 'Protected Time', 'sample-delay': 'Delay per Pixel' },
+    'masked-delay': 'Protected Time', 'sample-delay': 'Delay per Pixel', 'centered-uv': 'Offset from Center',
+    coordinate: 'Scan Position', linear: 'Linear Scan', 'out-from-center': 'Out from Center', 'radius-distance': 'Distance',
+    'spatial-profile': 'Profile Time', 'protection-mask': 'Center Protection', 'time-map-mix-0': 'Field Time',
+    'time-map-mix-1': 'Field Time', 'subject-clamp': 'Subject Mask', 'rgb-time-preview': 'Time Map Preview' },
   'time-stack': { 'decay-clamped': 'Decay', opacity: 'Opacity', delay: 'Delay', history: 'Past Frame' },
 };
 

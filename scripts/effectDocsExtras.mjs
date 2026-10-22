@@ -95,7 +95,6 @@ export const EFFECT_DOC_EXTRAS = {
     omitSections: ['Resources'],
     omit: ['temporalMode', 'temporalResolution'],
     rows: [
-      { section: 'Time', before: 'preview', label: 'Look', range: 'Sweep, Falling time, Center out, Wave folds, Radial bloom, Time rings, Time steps', default: 'Sweep' },
       { section: 'Time', before: 'angle', label: 'Scan direction', range: 'Left → right, Top → bottom, Bottom → top, Right → left', default: 'Left → right' },
       { section: 'Motion compensation', before: 'temporalMotionStrength', label: 'Motion compensation (section switch)', range: 'off or DIS optical flow', default: 'off' },
       { section: 'Preview quality', before: 'temporalPreview', label: 'Quality', range: 'Small preview · 160 px, Full size', default: 'Full size' },

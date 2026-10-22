@@ -41,6 +41,54 @@
         "width": 1600,
         "height": 1150
       }
+    },
+    {
+      "name": "slit-scan-inspector",
+      "effect": "slit-scan",
+      "params": {
+        "profile": "wave",
+        "angle": 0,
+        "delay": 2,
+        "bands": 0,
+        "mix": 1,
+        "waves": 2,
+        "phase": 0,
+        "speed": 0.15
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Slit Scan card: Preset menu showing Wave Folds, then the Time section (Preview: Result, Delay 2 s, Time factor 1, Profile: Wave / folds, Scan direction: Left → right, Angle 0, Mix 1, Time bands 0) and the closed Wave and Sampling sections, beside the preview",
+      "caption": "Slit Scan with the Wave Folds preset. 1 — Preset: pick a starting point. 2 — Preview: the result or the time map. 3 — Delay (s): how far back. 4 — Profile: the shape of time. 5 — Time bands: steps instead of a smear.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Preview",
+          "label": "Preview"
+        },
+        {
+          "target": "Delay (s)",
+          "label": "Delay"
+        },
+        {
+          "target": "Profile",
+          "label": "Profile"
+        },
+        {
+          "target": "Time bands",
+          "label": "Time bands"
+        }
+      ],
+      "viewport": {
+        "width": 2000,
+        "height": 980
+      },
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

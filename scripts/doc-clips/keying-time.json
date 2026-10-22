@@ -1,0 +1,386 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "dancer_stage_motion.mp4",
+  "clips": [
+    {
+      "name": "slit-scan",
+      "effect": "slit-scan",
+      "params": {
+        "profile": "linear",
+        "angle": 0,
+        "delay": 3
+      },
+      "range": [
+        0.8,
+        5.8
+      ],
+      "layout": "compare",
+      "crop": [
+        460,
+        60,
+        920,
+        960
+      ],
+      "width": 960,
+      "float": "left",
+      "loop": 0.35,
+      "poster": 2.6,
+      "maxBytes": 1000000,
+      "alt": "The dancer turning on a dark stage, original left and with Slit Scan right: every strip of the picture further right shows a moment further back, so her arms and skirt stretch into pleated, rippling smears and a hand trails behind her",
+      "caption": "Left: original. Right: Slit Scan with the Sweep preset: the right edge of the frame is 3 s behind the left."
+    },
+    {
+      "name": "slit-scan-presets",
+      "kind": "presets",
+      "effect": "slit-scan",
+      "presets": [
+        {
+          "name": "Sweep",
+          "params": {
+            "profile": "linear",
+            "angle": 0,
+            "delay": 3,
+            "bands": 0,
+            "mix": 1,
+            "waves": 2,
+            "phase": 0,
+            "speed": 0.15
+          }
+        },
+        {
+          "name": "Wave Folds",
+          "params": {
+            "profile": "wave",
+            "angle": 0,
+            "delay": 2,
+            "bands": 0,
+            "mix": 1,
+            "waves": 2,
+            "phase": 0,
+            "speed": 0.15
+          }
+        },
+        {
+          "name": "Radial Bloom",
+          "params": {
+            "profile": "radial",
+            "angle": 0,
+            "delay": 3,
+            "bands": 0,
+            "mix": 1,
+            "waves": 2,
+            "phase": 0,
+            "speed": 0.15
+          }
+        },
+        {
+          "name": "Time Rings",
+          "params": {
+            "profile": "rings",
+            "angle": 0,
+            "delay": 2,
+            "bands": 0,
+            "mix": 1,
+            "waves": 3,
+            "phase": 0,
+            "speed": 0.25
+          }
+        },
+        {
+          "name": "Time Steps",
+          "params": {
+            "profile": "linear",
+            "angle": 0,
+            "delay": 2,
+            "bands": 12,
+            "mix": 1,
+            "waves": 2,
+            "phase": 0,
+            "speed": 0.15
+          }
+        }
+      ],
+      "range": [
+        0.8,
+        5.8
+      ],
+      "crop": [
+        420,
+        0,
+        1080,
+        1000
+      ],
+      "width": 960,
+      "columns": 3,
+      "loop": 0.35,
+      "poster": 2.6,
+      "maxBytes": 1400000,
+      "alt": "The dancer five times in a grid, moving in sync, each with one preset: Sweep with pleated sideways smears, Wave Folds with hands floating apart from the body, Radial Bloom with limbs smeared outwards from the middle, Time Rings breaking her into rings that close in on the centre, Time Steps cutting her into upright strips from different moments",
+      "caption": "The five presets on the moving dancer, in sync."
+    },
+    {
+      "name": "slit-scan-delay",
+      "effect": "slit-scan",
+      "params": {},
+      "range": [
+        1.2,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        40,
+        1080,
+        920
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "delay",
+        "label": "Delay",
+        "from": 0,
+        "to": 3,
+        "unit": " s",
+        "decimals": 1
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with Slit Scan while Delay runs from 0 to 3 s and back: at 0 she is the plain picture, then her arms and skirt stretch into longer and longer pleated smears and gather again; the current value is shown at the bottom left",
+      "caption": "Delay from 0 to 3 s and back."
+    },
+    {
+      "name": "slit-scan-angle",
+      "effect": "slit-scan",
+      "params": {
+        "delay": 2
+      },
+      "range": [
+        1.2,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        40,
+        1080,
+        920
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "angle",
+        "label": "Angle",
+        "from": 0,
+        "to": 180,
+        "unit": "°",
+        "decimals": 0
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with Slit Scan at Delay 2 s while Angle turns from 0° to 180° and back: the smears run sideways, then up and down, then sideways the other way; the current angle is shown at the bottom left",
+      "caption": "Angle from 0° to 180° and back, at Delay 2 s."
+    },
+    {
+      "name": "slit-scan-mix",
+      "effect": "slit-scan",
+      "params": {
+        "delay": 2
+      },
+      "range": [
+        1.2,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        40,
+        1080,
+        920
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "mix",
+        "label": "Mix",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with Slit Scan at Delay 2 s while Mix runs from 0 to 1 and back: the smeared picture fades in over the plain one as a ghost and becomes solid; the current value is shown at the bottom left",
+      "caption": "Mix from 0 to 1 and back, at Delay 2 s."
+    },
+    {
+      "name": "slit-scan-bands",
+      "effect": "slit-scan",
+      "params": {
+        "delay": 2
+      },
+      "range": [
+        1.2,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        40,
+        1080,
+        920
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "bands",
+        "label": "Time bands",
+        "steps": [
+          0,
+          3,
+          8,
+          24
+        ]
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with Slit Scan at Delay 2 s and Time bands 0, 3, 8 and 24, about a second each: the smooth smear becomes three, eight and twenty-four upright strips, each from one moment; the value is shown at the bottom left",
+      "caption": "Time bands 0, 3, 8 and 24, at Delay 2 s."
+    },
+    {
+      "name": "slit-scan-waves",
+      "effect": "slit-scan",
+      "params": {
+        "profile": "wave",
+        "delay": 2
+      },
+      "range": [
+        1.2,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        40,
+        1080,
+        920
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "waves",
+        "label": "Waves",
+        "from": 0.5,
+        "to": 6,
+        "decimals": 1
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with the Wave / folds profile at Delay 2 s while Waves runs from 0.5 to 6 and back: one broad fold becomes many narrow upright folds that cut her into repeated slices; the current value is shown at the bottom left",
+      "caption": "Waves from 0.5 to 6 and back, Wave / folds at Delay 2 s."
+    },
+    {
+      "name": "slit-scan-phase",
+      "effect": "slit-scan",
+      "params": {
+        "profile": "wave",
+        "delay": 2,
+        "speed": 0
+      },
+      "range": [
+        1.2,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        40,
+        1080,
+        920
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "phase",
+        "label": "Phase",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with the Wave / folds profile at Delay 2 s and Speed 0 while Phase runs from 0 to 1 and back: the folds slide sideways across her body by one whole wave and back; the current value is shown at the bottom left",
+      "caption": "Phase from 0 to 1 and back, Wave / folds at Delay 2 s, Speed 0."
+    },
+    {
+      "name": "slit-scan-speed",
+      "effect": "slit-scan",
+      "params": {
+        "profile": "rings",
+        "delay": 2,
+        "waves": 3
+      },
+      "range": [
+        1.2,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        40,
+        1080,
+        920
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          0.25,
+          1
+        ],
+        "unit": " cycles/s"
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with the Time rings profile at Delay 2 s and Speed 0, 0.25 and 1 cycles/s, about one and a half seconds each: the rings stand still, then drift slowly inwards, then race inwards; the value is shown at the bottom left",
+      "caption": "Speed 0, 0.25 and 1 cycles/s, Time rings at Delay 2 s."
+    },
+    {
+      "name": "slit-scan-time-map",
+      "effect": "slit-scan",
+      "params": {
+        "preview": "time",
+        "profile": "rings",
+        "delay": 2,
+        "waves": 3,
+        "speed": 0.25
+      },
+      "range": [
+        1.2,
+        5.2
+      ],
+      "layout": "single",
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "poster": 1.5,
+      "maxBytes": 500000,
+      "float": "right",
+      "alt": "Preview set to Time map with the Time Rings preset: black and white rings across the whole frame that slowly close in on the centre",
+      "caption": "Preview → Time map with the Time Rings preset: black is now, white the full Delay."
+    }
+  ]
+}
