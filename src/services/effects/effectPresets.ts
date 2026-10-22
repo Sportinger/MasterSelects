@@ -191,8 +191,8 @@ export function effectPresetNotice(result: EffectPresetResult): string | undefin
     replaced,
     names('keyframes').length ? `${join(names('keyframes'))} kept ${names('keyframes').length > 1 ? 'their' : 'its'} keyframes` : '',
     names('node').length ? `${join(names('node'))} stayed driven by ${names('node').length > 1 ? 'their nodes' : 'its node'}` : '',
-    missing.length ? `${join(missing)} ${missing.length > 1 ? 'are' : 'is'} not in this effect's ${result.graphEdited ? 'saved node ' : ''}graph${
-      result.upgradable ? ` (Use current graph adds ${missing.length > 1 ? 'them' : 'it'})` : ''}` : '',
+    // When `upgradable`, the card puts its Use current graph button right after this line.
+    missing.length ? `${join(missing)} ${missing.length > 1 ? 'are' : 'is'} not in this effect's ${result.graphEdited ? 'saved node ' : ''}graph` : '',
   ].filter(Boolean);
   return `${result.preset.name}${result.changed.length || replaced ? '' : ' changed nothing'}: ${parts.join('; ')}.`;
 }

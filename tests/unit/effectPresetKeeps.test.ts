@@ -76,7 +76,7 @@ describe('presets that cannot do what they say', () => {
     const result = applyEffectPreset('preset-clip', 'fx', 'green-terminal');
     expect(result.kept.filter(item => item.reason === 'missing').map(item => item.key)).toEqual(['background', 'blackLevel']);
     expect(result.upgradable).toBe(true);
-    expect(effectPresetNotice(result)).toBe("Green Terminal: Background and Black Level are not in this effect's saved node graph (Use current graph adds them).");
+    expect(effectPresetNotice(result)).toBe("Green Terminal: Background and Black Level are not in this effect's saved node graph.");
     expect(effect().operatorGraph).toBeDefined();
     expect(matchingEffectPreset(effect())).toBeUndefined();
   });
