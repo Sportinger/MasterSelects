@@ -637,7 +637,10 @@ touching all four edges at the same distance) to a true circle (1, the default).
 The darkening starts at Size and is complete at Size + Softness (smoothstep, never
 narrower than 1.5 px), `gain = 1 − Amount × falloff`; a dither of at most half an
 8-bit step, only where the gain changes the picture, keeps dark gradients free of
-banding. One fullscreen pass; alpha is kept. Vignettes saved before 2026-10-21 keep
+banding. One fullscreen pass; alpha is kept. A Size at or above 1 starts past the
+corners and darkens nothing, which `vignetteParamNotes` reports in the card and the
+tool result (the slider keeps 0–1.5 for the earlier recipe). Presets: Soft Frame, Old
+Lens, Spotlight, Iris. Vignettes saved before 2026-10-21 keep
 their earlier graph, where Roundness (0.5–2) stretched a UV ellipse vertically. UV-dependent node previews show
 the spatial field instead of inventing a single numeric value. Adding a UV
 dependency to another image graph also routes it through the contextual

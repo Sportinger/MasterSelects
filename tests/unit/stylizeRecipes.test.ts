@@ -194,6 +194,16 @@ describe('Vignette', () => {
     }
   });
 
+  it('says when Size starts the darkening at or past the corners, where it changes nothing', () => {
+    const notes = (getEffect('vignette') as FullscreenEffectDefinition).paramWarnings!;
+    expect(notes({ ...getDefaultParams('vignette'), size: 1.2 } as Record<string, number>, 1920, 1080).join(' ')).toMatch(/nothing darkens/);
+    expect(notes({ ...getDefaultParams('vignette'), size: 0.95 } as Record<string, number>, 1920, 1080)).toEqual([]);
+    for (const size of [1, 1.2, 1.5]) for (const uv of [[0.5 / 1920, 0.5 / 1080], [0.999, 0.5]] as [number, number][]) {
+      expect(gain({ amount: 1, size, softness: 1, roundness: 0 }, uv, [1920, 1080])).toBeCloseTo(1, 3);
+    }
+    expect(gain({ amount: 1, size: 0.95, softness: 0.1 }, [0.5 / 1920, 0.5 / 1080], [1920, 1080])).toBeLessThan(0.9);
+  });
+
   it('looks the same at every resolution', () => {
     for (const uv of [[0.1, 0.2], [0.8, 0.9], [0.3, 0.5]] as [number, number][]) {
       expect(Math.abs(gain({ amount: 0.7 }, uv, [960, 540]) - gain({ amount: 0.7 }, uv, [3840, 2160]))).toBeLessThan(0.006);

@@ -8,8 +8,11 @@
     "glow?focus=pyramid-up-add-levels-back&only=up-1-sample,up-1-reduce,compound-shared-up-1-weight-vec4,up-1-split,up-1-level,up-1-level-split,up-1-level-light,up-1-light,up-1-packed,up-1-cache&cables=avoid&marks=up-1-level:below,up-1-level-light:below,up-1-packed:below,up-1-cache:below@glow-pyramid-up",
     "glow?focus=glow-resolve-and-alpha&only=glow-spread,glow-light,glow-tinted,glow-scaled,glow-negative,resolve-falloff,resolve-remaining,resolve-result&cables=avoid&marks=glow-spread:below,glow-light:above,resolve-falloff:below,resolve-result:below@glow-resolve",
     "grain?focus=film-response-midtones&only=response-luma,response-bell,response-inverse,response-midtone,response&rows=1@grain-film-response",
-    "vignette?plumbing=hide&omit=output@vignette",
     "edge-detect?plumbing=hide&omit=output@edge-detect",
-    "scanlines?plumbing=hide&omit=output@scanlines"
+    "scanlines?plumbing=hide&omit=output@scanlines",
+    "vignette?plumbing=hide&omit=output&cables=avoid&marks=organized-vignette-shape:above,organized-vignette-falloff:above,organized-vignette-dither:below,shaded:above@vignette",
+    "vignette?focus=distance-and-roundness&only=round,axis-span,axis-blend,axis-scale,centered,scaled,scaled-length,distance&cables=avoid&marks=centered:below,axis-scale:above,scaled:below,scaled-length:above,distance:below@vignette-distance",
+    "vignette?focus=falloff-size-softness-amount&only=feather,outer-edge,falloff,darkening,gain-raw,gain&cables=avoid&marks=feather:below,falloff:below,darkening:below,gain-raw:above@vignette-falloff",
+    "vignette?focus=anti-banding-dither&only=dither-a,dither-b,dither-sum,dither-centered,dither-reach,dither-active,dither-scaled,dither,dither-rgb,dithered&cables=avoid&marks=dither-a:below,dither-centered:above,dither-active:below,dithered:above@vignette-dither"
   ]
 }

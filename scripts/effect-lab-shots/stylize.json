@@ -89,6 +89,49 @@
       },
       "alt": "The dancer with Sheen twice: at Highlights 0 left the band lights the dark stage behind her as a grey haze as much as her dress, at Highlights 1 right the dark stage stays dark and only her light dress, arms and face catch the band",
       "caption": "Left: Highlights 0, the same light everywhere. Right: Highlights 1, only bright surfaces catch it."
+    },
+    {
+      "name": "vignette",
+      "out": "docs/Features/assets/effects/vignette.webp",
+      "image": "harbor_town",
+      "width": 1920,
+      "layout": "compare",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "vignette",
+        "params": {}
+      },
+      "alt": "The harbour town in daylight, original left and with Vignette at its default values right: the sky, the mountains and the boats darken softly towards all four corners, while the houses and the harbour in the middle keep their brightness",
+      "caption": "Left: original. Right: the default values (Amount 0.5, Size 0.5, Softness 0.5, Roundness 1)."
+    },
+    {
+      "name": "vignette-roundness",
+      "out": "docs/Features/assets/effects/vignette-roundness.webp",
+      "image": "harbor_town",
+      "width": 1920,
+      "layout": "compare",
+      "left": {
+        "effect": "vignette",
+        "params": {
+          "amount": 1,
+          "size": 0.45,
+          "softness": 0.25,
+          "roundness": 1
+        }
+      },
+      "right": {
+        "effect": "vignette",
+        "params": {
+          "amount": 1,
+          "size": 0.45,
+          "softness": 0.25,
+          "roundness": 0
+        }
+      },
+      "alt": "The harbour town with a strong Vignette twice: at Roundness 1 left the light falls in a circle that leaves the left and right thirds of the frame dark, at Roundness 0 right it is a wide oval that follows the frame and darkens mostly the corners",
+      "caption": "Amount 1, Size 0.45, Softness 0.25. Left: Roundness 1, a circle. Right: Roundness 0, the shape of the frame."
     }
   ]
 }

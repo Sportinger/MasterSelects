@@ -92,6 +92,12 @@
         1080
       ],
       "cellWidth": 420
+    },
+    {
+      "effect": "vignette",
+      "image": "harbor_town",
+      "width": 1920,
+      "cellWidth": 420
     }
   ]
 }

@@ -231,7 +231,10 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   };
   if (type === 'vignette') return {
     labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
-    portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither' },
+    portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither',
+      'half-diagonal': 'Half Diagonal (px)', 'gain-change': 'Darkening Depth', shaded: 'Darkened Color',
+      'circle-scale': 'Circle Scale', 'frame-scale': 'Frame Scale (√2)', center: 'Centre (0.5, 0.5)', 'corner-distance': 'Corner Distance',
+      'minimum-feather': 'Minimum Feather', pixel: 'Pixel Position', 'dither-b-pixel': 'Shifted Pixel' },
     stage: ({ id }) => /^(minimum-feather|feather|falloff|outer-edge|gain|darkening)/.test(id) ? 'falloff' : /^(pixel$|dither)/.test(id) ? 'dither'
       : /^(source-split|shaded|dithered|clamped|combine)$/.test(id) ? 'finish' : 'shape',
   };

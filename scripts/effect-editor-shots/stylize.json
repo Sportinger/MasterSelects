@@ -87,6 +87,46 @@
         "Particle Out"
       ],
       "caption": "Sheen with the Golden Beam preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Position: where the band is. 3 \u2014 Angle: which way it travels. 4 \u2014 Width: how far the light reaches. 5 \u2014 Softness: how gently it fades. 6 \u2014 Intensity: how bright."
+    },
+    {
+      "name": "vignette-inspector",
+      "effect": "vignette",
+      "params": {
+        "amount": 0.95,
+        "size": 0.12,
+        "softness": 0.5,
+        "roundness": 1
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 560,
+      "alt": "Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside a strip of the preview where the dancer's lit dress and arm fade into a dark stage",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Size",
+          "label": "Size"
+        },
+        {
+          "target": "Softness",
+          "label": "Softness"
+        },
+        {
+          "target": "Roundness",
+          "label": "Roundness"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "caption": "Vignette with the Spotlight preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how dark the edges get. 3 \u2014 Size: where the darkening begins. 4 \u2014 Softness: how gradually it fades in. 5 \u2014 Roundness: circle or frame shape."
     }
   ]
 }
