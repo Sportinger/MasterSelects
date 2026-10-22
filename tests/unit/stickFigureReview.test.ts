@@ -22,6 +22,8 @@ import { createControlNode } from '../../src/services/parameterSources/controlOp
 import { projectParameterSources } from '../../src/services/parameterSources/parameterSourceProjection';
 import { gaitPose } from '../../src/services/rig/skeletonRig';
 import type { Effect } from '../../src/types/effects';
+import type { Keyframe } from '../../src/types/keyframes';
+import { resolveEffectPreset } from '../../src/services/effects/effectPresets';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const BASE = { spine: 4, head: -4, shoulderL: 30, elbowL: 35, shoulderR: -25, elbowR: 20, hipL: 16, kneeL: 18, hipR: -12, kneeR: 6 };
@@ -57,6 +59,25 @@ describe('body-scaled stick figure actions', () => {
     expect(rootX(2, [walk()])).toBeCloseTo(220);
     expect(parseSkeletonActions(serializeSkeletonActions([walk({ bodyScaled: true })]))[0].bodyScaled).toBe(true);
     expect(parseSkeletonActions(JSON.stringify([walk(), { ...walk({ id: 'x' }), bodyScaled: 'yes' }])).every(item => item.bodyScaled === undefined)).toBe(true);
+  });
+
+  it('keeps a finished walk where it ended when Scale is keyframed later: each action uses the size at its own start', () => {
+    const key = (time: number, value: number) => ({ id: `s${time}`, clipId: 'c', time, property: 'effect.fx.scale', value, easing: 'linear' }) as Keyframe;
+    const keys = [key(2.5, 1), key(3.5, 2)];
+    const at = (time: number) => {
+      // The runtime sees the keyframed Scale of `time` (as after keyframe evaluation).
+      const scale = time <= 2.5 ? 1 : time >= 3.5 ? 2 : 1 + (time - 2.5);
+      const effect = { id: 'fx', name: 'Stick Figure', type: 'stick-figure', enabled: true,
+        params: { ...getDefaultParams('stick-figure'), scale, actions: serializeSkeletonActions([walk({ bodyScaled: true })]) } } as Effect;
+      return applyStickFigureActions({ id: 'c', startTime: 0 }, [effect], time, keys)[0].params.rootX as number;
+    };
+    expect(at(2.2)).toBeCloseTo(220);
+    expect(at(3)).toBeCloseTo(220);
+    expect(at(4)).toBeCloseTo(220);
+    // A walk that starts at Scale 2 travels twice as far.
+    const late = { id: 'fx', name: 'Stick Figure', type: 'stick-figure', enabled: true,
+      params: { ...getDefaultParams('stick-figure'), scale: 2, actions: serializeSkeletonActions([walk({ bodyScaled: true, start: 4 })]) } } as Effect;
+    expect(applyStickFigureActions({ id: 'c', startTime: 0 }, [late], 6, keys)[0].params.rootX).toBeCloseTo(440);
   });
 });
 
@@ -107,6 +128,14 @@ describe('stick figure notes and presets', () => {
         expect(uniforms[index + 1]).toBeLessThan(1080);
       }
     }
+  });
+});
+
+describe('stick figure presets and placement', () => {
+  it('returns the figure to the centre at Scale 1 (the shared preset rule resets every control it does not name)', () => {
+    // Pinned on purpose: when presets can keep placement controls, flip this and the Presets paragraph.
+    const placed = { type: 'stick-figure', params: { ...getDefaultParams('stick-figure') as Record<string, number | string>, rootX: 600, groundY: 430, scale: 1.6, facing: 'left', opacity: 0.5, groundMode: 'off' } };
+    expect(resolveEffectPreset(placed, STICK_FIGURE_PRESETS[1])).toMatchObject({ rootX: 0, groundY: 144, scale: 1, facing: 'right', opacity: 1, groundMode: 'plant' });
   });
 });
 

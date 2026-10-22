@@ -21,15 +21,15 @@ Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](..
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/weave-presets.mp4" poster="../assets/effects/clips/weave-presets.webp" width="962" height="646" autoplay muted loop playsinline preload="none" aria-label="Four Weave presets on black in a grid, in sync: Veil top left, a pale, loose and crooked net; Red Sail top right, an even red cloth that billows hard in the wind; Nest bottom left, a round patch of brown, fuzzy wool; Qualle bottom right, a cream knitted jellyfish whose bell pulses and whose long ribbons curl"></video>
+<video src="../assets/effects/clips/weave-presets.mp4" poster="../assets/effects/clips/weave-presets.webp" width="962" height="646" autoplay muted loop playsinline preload="none" aria-label="Four Weave presets on black in a grid, in sync: Burlap top left, a pale, coarse and crooked weave whose corners have frayed away; Red Sail top right, an even red cloth that bows and sways in strong gusts; Nest bottom left, a round patch of brown, fuzzy wool; Qualle bottom right, a cream knitted jellyfish whose bell pulses and whose long ribbons curl"></video>
 <figcaption>The four presets on black, in sync.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Veil** – pale yarn in a loose, crooked net: the threads wander and bunch, leaving uneven gaps, and the sheet drifts in a light wind. It weaves itself in a little faster than the default. Soft and fragile, good as a veil in front of a face.
+**Burlap** – pale, coarse yarn in a crooked weave: the threads wander and bunch, leaving uneven gaps, and the corners have frayed away, so it reads as a rough, torn piece of sacking. It weaves itself in a little faster than the default and drifts in a light wind.
 
-**Red Sail** – an even, deep red cloth in a strong, gusting wind: it billows like a sail and its free edges sway. It is woven in after two seconds; strong on a dark stage and under warm light.
+**Red Sail** – an even, deep red cloth in strong wind: it bows to one side and sways with each gust. It is woven in after two seconds; strong on a dark stage and under warm light.
 
 **Nest** – only a round patch of brown wool grows, very uneven, with a swollen, frayed rim. It looks like a bird's nest or a woven basket seen from above.
 
@@ -109,14 +109,14 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Wind 0, 0.5 and 2, two and a half seconds each.</figcaption>
 </figure>
 
-**Wind** – how hard the wind blows into the sheet, which is held at its four corners. Because the sheet is turned three quarters to the camera, its bellying shows as a sideways bow of the threads, and the gusts make it breathe. At 0 it hangs flat and still; 0.5 bows it gently; at 2 it bellies out hard and its free edges sway with every gust. The bow grows quickly at first and then slowly, because the corners hold the cloth: above 1 it mostly gusts harder. The sheet's motion is simulated from the start of the clip, so a keyframe on Wind makes the sail jump to another shape instead of a gust building up. 0 to 2, default 0.35.
+**Wind** – how hard the wind blows into the sheet, which is held at its four corners. Because the sheet is turned three quarters to the camera, its bellying shows as a sideways bow of the threads, and the gusts make it breathe. At 0 it hangs flat and still; 0.5 bows it gently; at 2 it bellies out hard and its free edges sway with every gust. The bow grows quickly at first and then slowly, because the corners hold the cloth: above 1 it mostly gusts harder. The sheet's motion is simulated from the start of the clip, and keyframes on Wind act inside that simulation: a gust you key in builds up, the cloth swings out and settles again, as in real air. Dragging Wind with the playhead far into the clip takes a moment per step, because the cloth is simulated again from the start. Values beyond the slider (from tools) are drawn and named in the card. 0 to 2, default 0.35.
 
 <div class="docs-float-end"></div>
 
 ### Jellyfish Pulse
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/weave-pulse-rate.mp4" poster="../assets/effects/clips/weave-pulse-rate.webp" width="960" height="504" autoplay muted loop playsinline preload="none" aria-label="The Qualle jellyfish at three pulse rates side by side, in sync: at 0 the bell stays still and only the ribbons drift, at 0.4 Hz it contracts slowly, at 1.2 Hz quickly"></video>
+<video src="../assets/effects/clips/weave-pulse-rate.mp4" poster="../assets/effects/clips/weave-pulse-rate.webp" width="840" height="440" autoplay muted loop playsinline preload="none" aria-label="The Qualle jellyfish at three pulse rates side by side, in sync: at 0 the bell stays still and only the ribbons drift, at 0.4 Hz it contracts slowly, at 1.2 Hz quickly"></video>
 <figcaption>Pulse Rate 0, 0.4 and 1.2 Hz, side by side.</figcaption>
 </figure>
 
@@ -136,7 +136,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 ### Return Curls
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/weave-curl-strength.mp4" poster="../assets/effects/clips/weave-curl-strength.webp" width="440" height="654" autoplay muted loop playsinline preload="none" aria-label="The Qualle jellyfish while Curl Strength runs from 0 to 0.25 and back: the smooth hanging ribbons begin to swirl and loop outwards on both sides, then settle into calm loops again; the value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/weave-curl-strength.mp4" poster="../assets/effects/clips/weave-curl-strength.webp" width="480" height="554" autoplay muted loop playsinline preload="none" aria-label="The Qualle jellyfish while Curl Strength runs from 0 to 0.25 and back: the smooth hanging ribbons begin to swirl and loop outwards on both sides, then settle into calm loops again; the value is shown at the bottom left"></video>
 <figcaption>Curl Strength from 0 to 0.25 and back.</figcaption>
 </figure>
 
@@ -336,17 +336,17 @@ Weave works in five stages, one folder each in the Nodes tab. **Weave Pattern** 
 
 <div class="docs-float-end"></div>
 
-### Qualle
+### Qualle form
 
-The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit Body** knits the bell and the closed courses of yarn, **Tail Shape** draws the loose loops in behind it, **Loose Returns**, **Return Length** and **Return Curls** let the ribbons wander and curl on both sides, **Jellyfish Pulse** contracts the bell and sends the wave down the body, **Soft Head & Yarn Motion** keeps it breathing, **Cream Yarn** gives it its fibres, and **Upright Pose** stands it up in the frame. Its folders share many values, so its overview in the Nodes tab is a dense web of cables; the three folders that hold the card controls and the pose are shown here. It is the ribbon motion of the animation *Qualle*, and only the ribbon values were taken over (the piece's metamorphosis, scan overlay and particle wake were left out).
+The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit Body** knits the bell and the closed courses of yarn, **Tail Shape** draws the loose loops in behind it, **Loose Returns**, **Return Length** and **Return Curls** let the ribbons wander and curl on both sides, **Jellyfish Pulse** contracts the bell and sends the wave down the body, **Soft Head & Yarn Motion** keeps it breathing, **Cream Yarn** gives it its fibres, and **Upright Pose** stands it up in the frame. Its folders share many values, so even with every folder closed its overview in the Nodes tab is a dense web of cables; the three folders that hold the card controls and the pose follow, each on its own. It is the ribbon motion of the animation *Qualle*, and only the ribbon values were taken over (the piece's metamorphosis, scan overlay and particle wake were left out).
 
-#### Jellyfish Pulse
+### Jellyfish Pulse
 
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![Inside the Jellyfish Pulse folder, the path of one beat: Clip Time times Pulse Rate counts the pulses, Fraction keeps the place within one, a Multiply and a Subtract turn it into a phase that starts later further down the body, Cosine makes it a wave, two more cards sharpen it into a Power, and a last Multiply scales it by Pulse Size](../assets/effects/graphs/weave-jellyfish-pulse.webp)
+![Inside the Jellyfish Pulse folder, the path of one beat: Clip Time times Pulse Rate counts the pulses, Fraction keeps the place within one, a Multiply and a Subtract turn it into a phase that starts later further down the body, Cosine makes it a wave, two more cards sharpen it into a Power, and, below, a Multiply weighs Pulse Size by Beat on the Bell](../assets/effects/graphs/weave-jellyfish-pulse.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 452" aria-hidden="true" focusable="false">
 <defs><marker id="weave-jellyfish-pulse-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -361,18 +361,18 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 </svg>
 </div>
 
-<figcaption>Inside Jellyfish Pulse (Pulse Rate, Pulse Size), the beat. 1 — Fraction: the place within one pulse. 2 — Cosine: a smooth wave. 3 — Power: a short, sharp contraction. 4 — Multiply: times Pulse Size.</figcaption>
+<figcaption>Inside Jellyfish Pulse (Pulse Rate, Pulse Size), the beat. 1 — Fraction: the place within one pulse. 2 — Cosine: a smooth wave. 3 — Power: a short, sharp contraction. 4 — Multiply: Pulse Size times Beat on the Bell.</figcaption>
 </figure>
 
 **Fraction** – the pulses counted so far (Clip Time times **Pulse Rate**) without their whole part: where the bell is within the current pulse, from 0 to 1. Further down the body the phase starts a little later (**Delay down the Body**), so the contraction runs down the ribbons as a wave.
 
 **Cosine** – turns that phase into a smooth rise and fall.
 
-**Power** – sharpens the wave into a short contraction followed by a long, slow release, the rhythm of a swimming jellyfish.
+**Power** – sharpens the wave into a short contraction followed by a long, slow release, the rhythm of a swimming jellyfish. Its exponent and the card that uses the beat lie outside this picture.
 
-**Multiply** – scales the beat by **Pulse Size** and by how close a point is to the bell (**Beat on the Bell**); the result pulls the bell in and stretches the body.
+**Multiply** – **Pulse Size** times how close a point is to the bell (**Beat on the Bell**): how strongly each point follows the beat. Further on, outside this picture, the beat from Power is multiplied by it, which pulls the bell in and stretches the body.
 
-#### Return Curls
+### Return Curls
 
 <figure class="docs-shot docs-shot--graph">
 
@@ -404,13 +404,13 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 
 **Multiply** – Curl Strength times the Ramp: how far an evolving curl noise may push each point. Two more Multiply cards split it between the outgoing and the incoming side of the ribbons, so they curl on both sides.
 
-#### Upright Pose
+### Upright Pose
 
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![Inside the Upright Pose folder: Split Vector takes each point's position apart; Multiply cards scale it by 0.42 and swap depth and height, Add lifts it, Combine Vector puts the point back together and Set Position moves the jellyfish body there](../assets/effects/graphs/weave-upright-pose.webp)
+![Inside the Upright Pose folder: Split Vector takes each point's position apart; Multiply cards scale it by the value card Scale 0.42 and turn its height into depth with Flipped Scale −0.42, Add lifts it by Lift 0.22, Combine Vector puts the point back together and Set Position moves the jellyfish body there](../assets/effects/graphs/weave-upright-pose.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 618" aria-hidden="true" focusable="false">
 <defs><marker id="weave-upright-pose-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -430,9 +430,9 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 
 **Split Vector** – takes each point of the jellyfish body apart into X, Y and Z. The piece lies along its length; the Qualle form stands it up itself, because a preset cannot carry a clip transform.
 
-**Multiply** – the body's length becomes its height, scaled by 0.42 so the jellyfish is about three quarters of the frame tall; the other two Multiply cards scale its width and turn its height into depth.
+**Multiply** – the body's length becomes its height, scaled by **Scale** 0.42 so the jellyfish is about three quarters of the frame tall; the other two Multiply cards scale its width by the same Scale and turn its height into depth with **Flipped Scale** −0.42.
 
-**Combine Vector** – puts the point back together, lifted by 0.22 (**Add**), so the bell sits near the top of the frame and the ribbons hang below it.
+**Combine Vector** – puts the point back together, raised by **Lift** 0.22 (the **Add** card before it), so the bell sits near the top of the frame and the ribbons hang below it.
 
 **Set Position** – moves every point of the body there, before the yarn is twisted around it.
 
@@ -441,6 +441,6 @@ The **Qualle** form is a graph of about 160 nodes in nine folders: **Closed Knit
 - **Size.** The sheet is 1.6 × 0.96 scene units, about two thirds of the frame wide with the default camera; the Qualle stands about three quarters of the frame tall. Scale and move them with the clip's Transform.
 - **Time.** Weave runs in the time of its clip: the weave-in, the wind and the pulse start at the clip's start, and trimming or splitting the clip continues the motion instead of restarting it. Preview, scrubbing and export show the same frame for the same moment.
 - **Transparency.** The threads are drawn as an extra 3D layer above the clip with the clip's transform and blend mode; around them the clip shows through. On a transparent clip only the threads remain.
-- **Saved projects.** A Weave keeps the graph it was saved with. While that graph is one of the two forms as they are now, Form keeps working. Once you change the node setup in the Nodes tab, or switch a folder off with the switch in its card section, the graph is the Weave's own: Form leaves the card and only the controls that graph uses stay. Weaves saved before Form existed keep their look this way, with their Reveal, Weave Speed and Irregularity.
+- **Saved projects.** A Weave keeps the graph it was saved with. While that graph is one of the two forms as they are now, Form keeps working, and moving cards, renaming or folding folders in the Nodes tab is kept until you switch Form. Once you change the node setup in the Nodes tab, or switch a folder off with the switch in its card section, the graph is the Weave's own: Form leaves the card and only the controls that graph uses stay. Weaves saved before Form existed keep their look this way, with their Reveal, Weave Speed and Irregularity. Such a Weave, or one built from another built-in graph such as Jellyfish, has no Form, so the presets can change little or nothing on it; the card says so. Its own exposed values keep the graph's names and ranges.
 - **3D scene.** After adding the effect the preview can show "Preparing 3D scene" for a few seconds.
 - **More:** [Weave](../Weave.md) (all nodes, knots, ropes and the other built-in Weave graphs) · [Node Catalog](../Node-Catalog.md#curve-graphs-weave) · [Styles and presets](../Effects.md#styles-and-presets).

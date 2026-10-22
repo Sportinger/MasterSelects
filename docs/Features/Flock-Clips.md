@@ -118,7 +118,7 @@ params, invalidation class, bypass contract, instance limits) and map to
 | Guidance | Path (circle, figure-8, helix, line, 4-point spline), Follow Path, Obstacle (box/sphere/capsule/plane), Boundary (contain/wrap/reflect/kill) |
 | Selection | Group, ID Fraction, Region, Speed, Age, Combine (and/or/xor) |
 | Values | Value, Math, Remap, Oscillator, Source Time, Audio Level (existing loudness analysis), Palette |
-| Simulation | Simulation (step rate, speed/acceleration limits, turn smoothing, neighbor limit, cell candidate budget, planar mode, warm-up) |
+| Simulation | Simulation (step rate, pace (how far each step carries the swarm: the presets' card Speed, 0 to 4), speed/acceleration limits, turn smoothing, neighbor limit, cell candidate budget, planar mode, warm-up) |
 | Render | Points, Instances (krill/fish/arrow/tetra/cube/sphere or an imported model), Neighbor Links, Trails, Curves, Endpoint Glyphs (dot/ring/square/cube/cross/diamond), Velocity Vectors |
 | Output | Scene Output |
 

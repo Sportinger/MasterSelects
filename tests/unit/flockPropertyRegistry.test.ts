@@ -78,9 +78,9 @@ describe('flock property registry', () => {
 
     const red = `flock.node.${pointsId}.color.r`;
     expect(registry.getDescriptor(red, clip)?.ui).toMatchObject({ min: 0, max: 255, step: 1 });
-    expect(registry.readValue(clip, red)).toBe(0x9f);
+    expect(registry.readValue(clip, red)).toBe(0xb4);
     const recolored = registry.writeValue<number>(clip, red, 255);
-    expect(recolored.flock?.nodes.find((node) => node.id === pointsId)?.params.color).toBe('#ffd8ff');
+    expect(recolored.flock?.nodes.find((node) => node.id === pointsId)?.params.color).toBe('#ffe2ff');
   });
 
   it('keeps structural integers non-animatable and rejects unsupported paths', () => {

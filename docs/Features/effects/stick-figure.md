@@ -27,7 +27,7 @@ Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.m
 <figcaption>The four presets alone on black.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets the whole figure at once, pose, proportions, line and colour, in one undo step, and the row then shows its name until you change something. The action lane stays as it is, and a joint with keyframes keeps them; the card says so.
+Pick one in the **Preset** row of the effect card. It sets the whole figure at once, pose, proportions, line and colour, in one undo step, and the row then shows its name until you change something. Every other control returns to its default too, so a preset also brings the figure back to the centre at Scale 1, facing right, fully opaque and planted on the ground: pick the preset first, then place the figure. The action lane stays as it is, and a joint with keyframes keeps them; the card says so.
 
 **Arabesque** – a dancer on one straight leg, the other stretched far behind, one arm reaching forward and up past the face and the other out behind, drawn in thin white lines with a ring head. A clean starting point for dance sketches.
 
@@ -229,6 +229,6 @@ Other rig nodes work the same way: **Limb IK** bends an arm or a leg so the hand
 - **Drawing.** The joints are worked out on the CPU and drawn on the GPU as rounded lines with a one-pixel soft edge. Actions and nodes are plain functions of the clip time, so scrubbing, playback and the export show the same pose.
 - **Transparency.** The figure is drawn over the clip; on a Blank clip only the figure remains, with soft edges, ready to lay over other footage.
 - **Limits.** Positions and lengths stay within ±100 000 figure pixels, also after Scale. The card and the tool results, `createRig` included, say when a value is clamped, when lines are thinner than a pixel, when Pelvis Y cannot move a planted figure, and when the whole figure lies outside its layer.
-- **Travel.** Actions add their travel to Pelvis X in the facing direction and keep it afterwards. Actions added since 22 October 2026 travel and jump in proportion to the figure's legs and Scale; actions saved before keep their distances in pixels, so older choreographies stay where they were. With Ground Plant, the feet of Walk and Run slip a little on the floor.
+- **Travel.** Actions add their travel to Pelvis X in the facing direction and keep it afterwards. Actions you add now travel and jump in proportion to the figure's legs and Scale, measured where each action starts, so a Scale keyframe after a finished walk does not move the figure; action lanes from older projects keep their distances in pixels. With Ground Plant, the feet of Walk and Run slip a little on the floor.
 - **Saved projects.** Figures saved before the walking stance keep their saved pose; a figure without pose values shows the rig's rest pose.
 - **More:** [Node Workspace](../Node-Workspace.md#stick-figures-and-rig-nodes) · [Effect system](../Effect-System.md) · [Styles and presets](../Effects.md#styles-and-presets).

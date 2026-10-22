@@ -10,7 +10,7 @@
       "image": "dancer_stage.jpg", "preview": 0, "top": "card", "gutter": 70, "layout": "float", "viewport": { "width": 1600, "height": 1700 }, "hide": ["Particle Out"],
       "marks": [{ "target": "Preset", "label": "Preset" }, { "target": "Cohesion", "label": "Cohesion" }, { "target": "Turbulence", "label": "Turbulence" },
         { "target": "Size", "label": "Size" }, { "target": "Warm-up", "label": "Warm-up" }],
-      "alt": "The Flocking card in Properties, Effects, with the default swarm: Preset menu showing Free Swarm and a sentence about it, Open Nodes, then the sections Population (a slider and 4000), Behavior (Cohesion, Separation, Alignment, Speed 45, Turbulence 18 with sliders), Appearance (Size and a pale blue Color), the folded More controls, Time & Quality (Step rate 60 Hz, Warm-up 0 s, Loop Continuous) and the folded Simulation status",
+      "alt": "The Flocking card in Properties, Effects, with the default swarm: Preset menu showing Free Swarm and a sentence about it, Open Nodes, then a Population row (a slider and 4000), the sections Behavior (Cohesion, Separation, Alignment, Speed 1.00, Turbulence 18 with sliders), Appearance (Size and a pale blue Color), the folded More controls, Time & Quality (Step rate 60 Hz, Warm-up 0 s, Loop Continuous) and the folded Simulation status",
       "caption": "Flocking with its default swarm." }
   ]
 }

@@ -74,6 +74,12 @@ export const SIMULATION_OPERATORS: FlockOperatorDescriptor[] = [
       ], 'topology'),
       numberParam('maxSpeed', 'Max Speed', 45, 'behavior', { min: 0 }),
       numberParam('minSpeed', 'Min Speed', 8, 'behavior', { min: 0 }),
+      numberParam('pace', 'Pace', 1, 'behavior', {
+        min: 0,
+        max: 4,
+        step: 0.01,
+        description: 'Runs the swarm\'s motion faster or slower without changing its shape: 2 flies twice as fast, 0.5 half as fast, 0 stops it. Particles with a lifetime also age faster.',
+      }),
       numberParam('maxAcceleration', 'Max Acceleration', 120, 'behavior', { min: 0, advanced: true }),
       numberParam('turnRate', 'Turn Smoothing', 6, 'behavior', { min: 0.1, max: 60, advanced: true }),
       integerParam('neighborLimit', 'Neighbors Sampled', 24, 'topology', {

@@ -262,10 +262,13 @@ export function skeletonActionTravel(instance: SkeletonActionInstance, body = 1)
  * jump with it).
  */
 export function applySkeletonActions(base: Pose, baseLift: number, actions: readonly SkeletonActionInstance[], time: number,
-  body = 1): ActionPoseResult {
+  bodyOf: number | ((instance: SkeletonActionInstance) => number) = 1): ActionPoseResult {
   let pose = { ...base }, lift = baseLift, advance = 0;
   for (const instance of actions) {
     const definition = SKELETON_ACTIONS[instance.action];
+    // A body scale per action (its figure size where it starts), so a later Scale keyframe does not
+    // move a figure whose walk has already finished.
+    const body = typeof bodyOf === 'function' ? bodyOf(instance) : bodyOf;
     const progress = Math.max(0, Math.min(1, (time - instance.start) / instance.duration));
     advance += skeletonActionTravel(instance, body) * (definition.gait ? progress : smooth(progress));
     const weight = skeletonActionWeight(instance, time);

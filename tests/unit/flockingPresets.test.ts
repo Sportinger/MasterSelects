@@ -29,7 +29,15 @@ describe('Flocking presets', () => {
     const boundary = (id: string) => createFlockPresetDefinition(id).nodes.find(node => node.operator === 'flock.boundary')!.params;
     expect(boundary('technical-network')).toMatchObject({ mode: 'contain' });
     expect((boundary('technical-network').size as number[])[2]).toBeLessThanOrEqual(80);
-    expect((boundary('violet-filaments').size as number[])[0]).toBeLessThanOrEqual(72);
+    // Violet fills about half the frame and stays inside it (the frame test below holds the limit).
+    expect((boundary('violet-filaments').size as number[])[0]).toBeGreaterThanOrEqual(90);
+    // Speed is the simulation's Pace on every card preset: 1 as designed, the card shows it as Speed.
+    for (const id of FLOCKING_CARD_PRESET_IDS) {
+      const definition = createFlockPresetDefinition(id);
+      const speed = definition.exposed.find(item => item.label === 'Speed')!;
+      expect(definition.nodes.find(node => node.id === speed.nodeId)?.operator, id).toBe('flock.simulation');
+      expect(speed.param, id).toBe('pace');
+    }
   });
 
 

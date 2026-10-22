@@ -6,6 +6,8 @@ import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
 import { getDefaultParams } from '../../src/effects';
 import { createDefaultWeaveGraph } from '../../src/services/operators/geometry/weaveGraph';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
+import { listBuiltInWeavePresets } from '../../src/services/operators/geometry/weavePresets';
+import { instantiateEffectPreset } from '../../src/services/nodeGraph/effectPresetLibrary';
 
 /** The Woven Cloth as Weaves saved it before Form existed: Reach 1.7, Wind and Color fixed in the graph. */
 function earlierSavedGraph(): EffectOperatorGraph {
@@ -46,5 +48,19 @@ describe('Weave card', () => {
     render(<EffectsTab clipId="clip:weave-card" effects={[weave({ operatorGraph: earlierSavedGraph() })]} />);
     for (const label of ['Form', 'Pulse Rate', 'Wind']) expect(screen.queryByText(label), label).toBeNull();
     for (const label of ['Weave Speed', 'Reveal', 'Irregularity']) expect(screen.getAllByText(label), label).toHaveLength(1);
+    // Its presets cannot set Form or Color: the card says so instead of applying them silently.
+    expect(screen.getAllByText(/runs its own graph/)).toHaveLength(1);
+  });
+
+  it('keeps the Jellyfish graph\'s own rows working: no Form, nothing folded or dimmed, the graph\'s labels and ranges', () => {
+    const template = listBuiltInWeavePresets().find(preset => preset.id === 'builtin:weave:jellyfish-reference')!;
+    const jelly = instantiateEffectPreset(template) as Effect;
+    const { container } = render(<EffectsTab clipId="clip:weave-card" effects={[jelly]} />);
+    for (const label of ['Form', 'Qualle controls', 'Woven Cloth controls', 'Acts on the Qualle form only.']) expect(screen.queryByText(label), label).toBeNull();
+    for (const label of ['Pulse Rate (Hz)', 'Pulse Strength', 'Curl Strength', 'Irregularity']) expect(screen.getAllByText(label), label).toHaveLength(1);
+    const slider = container.querySelector('[aria-label="Pulse Rate (Hz) slider"]')!;
+    expect(slider.getAttribute('aria-disabled')).not.toBe('true');
+    expect(container.querySelector('[aria-label="Curl Strength slider"]')!.getAttribute('aria-valuemax')).toBe('0.5');
+    expect(container.querySelector('[aria-label="Irregularity slider"]')!.getAttribute('aria-valuemax')).toBe('1');
   });
 });

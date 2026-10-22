@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultWeaveGraph, geometryParameterReader, validateWeaveGraph } from '../../src/services/operators/geometry/weaveGraph';
+import { createDefaultWeaveGraph, geometryParameterReader, validateWeaveGraph, type SimulationClock } from '../../src/services/operators/geometry/weaveGraph';
+import { sampleSimulationTrack, windVelocity } from '../../src/services/operators/geometry/simulationForces';
+import type { Keyframe } from '../../src/types/keyframes';
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { evaluateGeometryProgram } from '../../src/services/operators/geometry/geometryEvaluation';
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
 import { compileClothSpec, isClothSpec, type ClothSpec } from '../../src/services/operators/geometry/clothProgram';
 import { CLOTH_STEP_RATE, ClothSimulation } from '../../src/services/operators/geometry/clothSolver';
 import { bindToCloth, clothGridAt, sampleClothGrid } from '../../src/services/operators/geometry/clothSurface';
-import { weaveSimulationTime } from '../../src/services/operators/geometry/strandsLayerSource';
+import { weaveSimulationClock, weaveSimulationTime } from '../../src/services/operators/geometry/strandsLayerSource';
 import { addableEffectOperators } from '../../src/services/operators/effectGraphOwner';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
@@ -100,5 +102,31 @@ describe('Weave cloth', () => {
     expect(weaveSimulationTime(clip, 1.5)).toBeCloseTo(5.5, 9);
     expect(weaveSimulationTime({ ...clip, speed: 2, outPoint: 16 }, 1.5)).toBeCloseTo(7, 9);
     expect(weaveSimulationTime({}, 1.5)).toBe(1.5);
+  });
+
+  it('simulates a keyframed Wind once for the whole clip, so a keyed gust builds up instead of restarting the cloth', () => {
+    const graph = createDefaultWeaveGraph(), cloth = graph.nodes.find(node => node.id === 'cloth')!;
+    const key = (time: number, value: number) => ({ id: `w${time}`, clipId: 'c', time, property: 'effect.fx.wind', value, easing: 'linear' }) as Keyframe;
+    const keys = [key(0.5, 0), key(1.5, 2)];
+    const specAt = (time: number, clock?: SimulationClock) => compileClothSpec(graph, cloth, geometryParameterReader({ wind: 0.35 }, 'fx', keys, time, clock));
+    // Every frame reads the same spec (one cached simulation); the course rides along as a track.
+    expect(JSON.stringify(specAt(0.2))).toBe(JSON.stringify(specAt(2.7)));
+    const wind = specAt(1).winds[0];
+    expect(wind.strengthTrack).toMatchObject({ start: 0.5, rate: 30 });
+    expect(sampleSimulationTrack(wind.strengthTrack!, 1)).toBeCloseTo(1, 6);
+    expect(sampleSimulationTrack(wind.strengthTrack!, 0)).toBe(0);
+    expect(sampleSimulationTrack(wind.strengthTrack!, 9)).toBe(2);
+    expect(windVelocity(specAt(1), 0.4)).toEqual([0, 0, 0]);
+    expect(isClothSpec(specAt(1))).toBe(true);
+    // Before the gust the sheet hangs as without wind; after it, it has moved.
+    const still = { ...specAt(0), winds: [{ ...wind, strength: 0, strengthTrack: undefined }] };
+    delete still.winds[0].strengthTrack;
+    const before = clothGridAt(small({ ...specAt(0) }), 0.4).positions, calm = clothGridAt(small(still), 0.4).positions;
+    expect(Array.from(before).every((value, index) => Math.abs(value - calm[index]) < 1e-9)).toBe(true);
+    const after = clothGridAt(small({ ...specAt(0) }), 2.5).positions, calmAfter = clothGridAt(small(still), 2.5).positions;
+    expect(Array.from(after).some((value, index) => Math.abs(value - calmAfter[index]) > 1e-3)).toBe(true);
+    // A trimmed clip keys in clip time; the track runs in the clip's source time.
+    const trimmed = weaveSimulationClock({ inPoint: 4, outPoint: 10, duration: 6, reversed: false, speed: 1 });
+    expect(specAt(1, trimmed).winds[0].strengthTrack!.start).toBeCloseTo(4.5, 6);
   });
 });

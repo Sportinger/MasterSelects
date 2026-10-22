@@ -70,6 +70,10 @@ function withUprightPose(graph: EffectOperatorGraph): EffectOperatorGraph {
   add('pose-scale', 'values.number', x + 280, y + 200, { value: POSE.scale });
   add('pose-flip', 'values.number', x + 280, y + 340, { value: -POSE.scale });
   add('pose-lift', 'values.number', x + 280, y + 480, { value: POSE.lift });
+  // Named value cards, so the Nodes tab says which number is which (layout and names are not part of
+  // the recipe: a Qualle saved without them still follows Form).
+  for (const [id, label, min, max] of [['pose-scale', 'Scale', 0, 1], ['pose-flip', 'Flipped Scale', -1, 0],
+    ['pose-lift', 'Lift', -1, 1]] as const) graph.nodes.find(node => node.id === id)!.valueControl = { label, min, max, step: 0.01 };
   add('pose-across', 'math.multiply.scalar', x + 560, y - 140);
   add('pose-height', 'math.multiply.scalar', x + 560, y);
   add('pose-up', 'math.add.scalar', x + 840, y);

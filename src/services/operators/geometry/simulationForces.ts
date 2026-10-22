@@ -5,7 +5,29 @@ import type { GeometryParameterReader } from './geometryProgram';
 
 const FORCE_LIMIT = 8;
 
-export interface SimulationWind { direction: [number, number, number]; strength: number; gust: number }
+/**
+ * A keyframed number over simulation time: `values[i]` at `start + i / rate` seconds, held before
+ * the first and after the last sample. Constant for the whole clip, so a simulation keyed by its
+ * spec is computed once while the solver still sees the course at every step.
+ */
+export interface SimulationTrack { start: number; rate: number; values: number[] }
+/** Samples per second of a track, and the most a track carries (a longer course is sampled more coarsely). */
+export const SIMULATION_TRACK_RATE = 30;
+export const SIMULATION_TRACK_LIMIT = 18_000;
+export interface SimulationWind {
+  direction: [number, number, number]; strength: number; gust: number;
+  /** Keyframed Strength; when present the solver reads it per step and `strength` is its first value. */
+  strengthTrack?: SimulationTrack;
+}
+
+/** The value of a track at simulation time `time` (linear between samples). */
+export function sampleSimulationTrack(track: SimulationTrack, time: number): number {
+  const { values } = track, position = (time - track.start) * track.rate;
+  if (!(position > 0)) return values[0];
+  if (position >= values.length - 1) return values[values.length - 1];
+  const index = Math.floor(position), alpha = position - index;
+  return values[index] + (values[index + 1] - values[index]) * alpha;
+}
 export interface SimulationTurbulence { strength: number; frequency: number }
 /** Force inputs shared by the geometry simulations (Cloth Sheet, Rod Simulation). */
 export interface SimulationForces { gravity: number; drag: number; winds: SimulationWind[]; turbulence: SimulationTurbulence[] }
@@ -34,8 +56,13 @@ export function compileSimulationForces(graph: EffectOperatorGraph, owner: Bound
     else if (force.operator === 'forces.wind') {
       const direction = read(force, 'direction');
       if (!Array.isArray(direction) || direction.length !== 3) throw new Error('Wind direction must be a vector.');
+      // A keyframed Strength travels as its whole course (read.track), so every frame of the clip
+      // shares one simulation and a gust keyed in builds up instead of restarting the cloth.
+      const track = read.track?.(force, 'strength');
+      if (track && !track.values.every(Number.isFinite)) throw new Error('Wind strength must be a finite number.');
       forces.winds.push({ direction: direction.map(value => finite(value, 'Wind direction')) as [number, number, number],
-        strength: finite(read(force, 'strength'), 'Wind strength'), gust: finite(read(force, 'gust'), 'Gusts') });
+        strength: track ? track.values[0] : finite(read(force, 'strength'), 'Wind strength'), gust: finite(read(force, 'gust'), 'Gusts'),
+        ...(track ? { strengthTrack: track } : {}) });
     } else if (force.operator === 'forces.turbulence') {
       forces.turbulence.push({ strength: finite(read(force, 'strength'), 'Turbulence strength'),
         frequency: finite(read(force, 'frequency'), 'Turbulence frequency') });
@@ -54,16 +81,24 @@ const exact = (value: Record<string, unknown>, keys: readonly string[]) => Objec
 export function isSimulationForces(value: Record<string, unknown>): boolean {
   if (!number(value.gravity) || !number(value.drag) || value.drag < 0 || value.drag > 1e6) return false;
   const winds = value.winds, turbulence = value.turbulence;
-  return Array.isArray(winds) && winds.length <= FORCE_LIMIT && winds.every(wind => record(wind) && exact(wind, ['direction', 'strength', 'gust'])
-      && Array.isArray(wind.direction) && wind.direction.length === 3 && wind.direction.every(number) && number(wind.strength) && number(wind.gust))
+  return Array.isArray(winds) && winds.length <= FORCE_LIMIT && winds.every(wind => record(wind) && exact(wind, ['direction', 'strength', 'gust', 'strengthTrack'])
+      && Array.isArray(wind.direction) && wind.direction.length === 3 && wind.direction.every(number) && number(wind.strength) && number(wind.gust)
+      && (wind.strengthTrack === undefined || isSimulationTrack(wind.strengthTrack)))
     && Array.isArray(turbulence) && turbulence.length <= FORCE_LIMIT
     && turbulence.every(item => record(item) && exact(item, ['strength', 'frequency']) && number(item.strength) && number(item.frequency));
 }
 
+const isSimulationTrack = (value: unknown): boolean => record(value) && exact(value, ['start', 'rate', 'values']) && number(value.start)
+  && number(value.rate) && value.rate > 0 && value.rate <= 1000 && Array.isArray(value.values) && value.values.length > 0
+  && value.values.length <= SIMULATION_TRACK_LIMIT && value.values.every(number);
+
 /** Gusting wind of all Wind nodes at simulation time `time` (seconds); the same at every point. */
 export function windVelocity(forces: SimulationForces, time: number): [number, number, number] {
   const wind: [number, number, number] = [0, 0, 0], modulation = periodicWindModulation(time);
-  for (const item of forces.winds) windForce(item.direction, item.strength, item.gust, modulation).forEach((value, axis) => { wind[axis] += value; });
+  for (const item of forces.winds) {
+    const strength = item.strengthTrack ? sampleSimulationTrack(item.strengthTrack, time) : item.strength;
+    windForce(item.direction, strength, item.gust, modulation).forEach((value, axis) => { wind[axis] += value; });
+  }
   return wind;
 }
 

@@ -6,6 +6,13 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Flocking has no card parameters above its swarm controls: no separator line over the Preset row. */
+.effect-extra-controls:has(> .flock-tab) {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
 .flock-tab .control-row select {
   flex: 1;
   min-width: 0;

@@ -3,6 +3,7 @@ import { readCurveWake, CURVE_WAKE_NUMBERS, type CurveWakeSpec } from './curveWa
 import { readCurveLabels, CURVE_LABEL_NUMBERS, type CurveLabelSpec } from './curveLabels';
 import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
 import { expandOperatorCompositions } from '../operatorComposition';
+import type { SimulationTrack } from './simulationForces';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
 import { getEffectOperator } from '../operatorRegistry';
 import { applyOperatorGroupBypasses } from '../operatorGroupBypass';
@@ -86,7 +87,14 @@ export interface GeometryStrandRender { nodeId: string; width: number; color: st
   wake?: CurveWakeSpec; labels?: CurveLabelSpec; flyaways?: YarnFlyaways; subdivision?: number; materials?: GeometryFiberMaterial[] }
 export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStrandRender; pointCount: number; strandCount: number }
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
-export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
+export type GeometryParameterReader = ((node: BoundOperatorNode, parameter: string) => OperatorValue) & {
+  /**
+   * The keyframed course of a number parameter over simulation time, or undefined when it has no
+   * keyframes. Simulations read forces from it at every step, so a keyed force builds up physically
+   * and the simulation is not restarted on every frame (simulationForces.ts).
+   */
+  track?: (node: BoundOperatorNode, parameter: string) => SimulationTrack | undefined;
+};
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit', 'geometry.knit-sphere', 'geometry.knit-cycle', 'geometry.knit-passage']);
 const MODIFIERS = new Set(['geometry.curve-wake', 'geometry.curve-labels', 'geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',

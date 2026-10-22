@@ -259,7 +259,9 @@ export function prepareCpuStepParams(resolved: FlockResolvedStep): CpuStepParams
   return {
     step: resolved.step,
     time: resolved.time,
-    dt: resolved.dt,
+    // Pace scales how far each step moves the swarm (positions, steering, age), not its clock:
+    // births and time fields stay on the source time.
+    dt: resolved.dt * flockPace(sim.n.pace),
     simTime: resolved.step * resolved.dt,
     maxSpeed: Math.max(0, sim.n.maxSpeed ?? 45),
     minSpeed: Math.max(0, Math.min(sim.n.minSpeed ?? 0, sim.n.maxSpeed ?? 45)),
@@ -309,4 +311,10 @@ export function prepareCpuStepParams(resolved: FlockResolvedStep): CpuStepParams
         }
       : null,
   };
+}
+
+/** Simulation Pace: 1 as designed; values outside 0–4 (from tools or saved data) are held at the limit. */
+export const FLOCK_PACE_LIMIT = 4;
+export function flockPace(value: number | undefined): number {
+  return value === undefined || !Number.isFinite(value) ? 1 : Math.min(FLOCK_PACE_LIMIT, Math.max(0, value));
 }

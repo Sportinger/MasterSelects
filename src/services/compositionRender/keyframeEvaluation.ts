@@ -52,7 +52,7 @@ export function evaluateCompositionClipEffects(
 ): Effect[] {
   const withSurfaces = (result: Effect[]) => {
     // Stick Figure action lanes sit between keyframes and node sources, as on the timeline.
-    result = applyStickFigureActions(surfaceClip, result, localTime);
+    result = applyStickFigureActions(surfaceClip, result, localTime, keyframes);
     if (surfaceClip?.nodeGraph?.parameterSources && typeof surfaceClip.startTime === 'number') {
       result = applyParameterSourcesToEffects({ ...surfaceClip, startTime: surfaceClip.startTime, effects: effects ?? [] }, keyframes ?? [], localTime, result);
     }

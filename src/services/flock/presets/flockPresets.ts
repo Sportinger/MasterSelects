@@ -18,7 +18,9 @@ function exposeCore(builder: FlockGraphBuilder, ids: { emitter: string; rules: s
     .expose(ids.rules, 'cohesion', 'Behavior')
     .expose(ids.rules, 'separation', 'Behavior')
     .expose(ids.rules, 'alignment', 'Behavior')
-    .expose(ids.sim, 'maxSpeed', 'Behavior', 'Speed');
+    // Speed is the simulation's Pace (the swarm flies faster or slower as a whole); a Max Speed cap
+    // the steering forces never reach would leave most of its range without effect.
+    .expose(ids.sim, 'pace', 'Behavior', 'Speed');
   if (ids.turbulence) builder.expose(ids.turbulence, 'strength', 'Behavior', 'Turbulence');
 }
 
@@ -31,7 +33,8 @@ function freeSwarm(): FlockDefinition {
   const boundary = b.add('flock.boundary', { shape: 'sphere', size: [72, 72, 72], mode: 'contain' }, [COL.beh, 200]);
   const compose = b.add('flock.compose', {}, [COL.beh + 160, -80]);
   const sim = b.add('flock.simulation', {}, [COL.sim, 0]);
-  const points = b.add('flock.render-points', { size: 6, color: '#b4e2ff', opacity: 1 }, [COL.ren, 0]);
+  // Half-strength points: where the swarm crowds they add up to a bright pale blue, not clipped white.
+  const points = b.add('flock.render-points', { size: 6, color: '#b4e2ff', opacity: 0.5 }, [COL.ren, 0]);
   const output = b.add('flock.output', {}, [COL.out, 0]);
   b.connect(emitter, 'spawn', sim, 'spawn')
     .connect(rules, 'behavior', compose, 'behavior')
@@ -208,19 +211,19 @@ function shrimpPullback(): FlockDefinition {
 /** Showcase B: dense violet clusters, long curved filaments and sparse geometric markers. */
 function violetFilaments(): FlockDefinition {
   const b = new FlockGraphBuilder();
-  // Fewer, dimmer points in deep violets, so the cloud stays violet instead of adding up to white, and a
-  // smaller sphere that keeps it inside the frame; longer, wider filaments read at docs size.
-  const emitter = b.add('flock.emitter', { count: 9000, shape: 'sphere', size: [70, 60, 70], seed: 5 }, [COL.pop, 0]);
+  // Dim points in deep violets, so the cloud stays violet instead of adding up to white, in a sphere
+  // that fills about half the frame; longer, wider filaments read at docs size.
+  const emitter = b.add('flock.emitter', { count: 9000, shape: 'sphere', size: [100, 86, 100], seed: 5 }, [COL.pop, 0]);
   const rules = b.add('flock.rules', { cohesion: 0.5, separation: 1.2, alignment: 0.9, neighborRadius: 8, separationRadius: 2.5 }, [COL.beh, -240]);
-  const cluster = b.add('flock.cluster', { clusters: 9, spread: 60, wander: 0.12, strength: 10, radius: 32 }, [COL.beh, -80]);
+  const cluster = b.add('flock.cluster', { clusters: 9, spread: 85, wander: 0.12, strength: 10, radius: 32 }, [COL.beh, -80]);
   const turbulence = b.add('flock.turbulence', { strength: 14, frequency: 0.03, evolution: 0.2 }, [COL.beh, 80]);
   const compose = b.add('flock.compose', {}, [COL.beh + 180, 0]);
-  const boundary = b.add('flock.boundary', { shape: 'sphere', size: [68, 68, 68], mode: 'contain' }, [COL.beh, 240]);
+  const boundary = b.add('flock.boundary', { shape: 'sphere', size: [104, 104, 104], mode: 'contain' }, [COL.beh, 240]);
   const sim = b.add('flock.simulation', { maxSpeed: 26, minSpeed: 5 }, [COL.sim, 0]);
   const palette = b.add('flock.palette', { mode: 'position', frequency: 0.012, color1: '#4a12a8', color2: '#9a4dff', color3: '#c98bff', color4: '#2c0b66' }, [COL.sim + 120, -260]);
-  const points = b.add('flock.render-points', { size: 3.6, colorMode: 'palette', opacity: 0.7, distanceFade: 0.3 }, [COL.ren, -260]);
+  const points = b.add('flock.render-points', { size: 3.6, colorMode: 'palette', opacity: 0.45, distanceFade: 0.3 }, [COL.ren, -260]);
   const trails = b.add('flock.trails', { sampleFraction: 0.06, maxTrails: 900, samples: 60, interval: 2, salt: 13 }, [COL.ren - 150, -40]);
-  const curves = b.add('flock.render-curves', { colorMode: 'palette', width: 2.6, taper: 0.3, opacity: 1 }, [COL.ren + 60, -60]);
+  const curves = b.add('flock.render-curves', { colorMode: 'palette', width: 2.6, taper: 0.3, opacity: 0.75 }, [COL.ren + 60, -60]);
   const glyphs = b.add('flock.render-glyphs', { glyph: 'cube', anchor: 'trail-head', size: 4, sizeMode: 'world', sampleFraction: 0.18, color: '#e4c4ff', opacity: 0.85 }, [COL.ren + 60, 100]);
   const tails = b.add('flock.render-glyphs', { glyph: 'dot', anchor: 'trail-tail', size: 3, sampleFraction: 0.35, color: '#b070ff', opacity: 0.6 }, [COL.ren + 60, 240]);
   const output = b.add('flock.output', {}, [COL.out, 0]);

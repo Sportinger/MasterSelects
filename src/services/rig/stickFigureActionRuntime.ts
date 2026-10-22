@@ -1,4 +1,6 @@
 import type { Effect } from '../../types/effects';
+import type { Keyframe } from '../../types/keyframes';
+import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { useTimelineStore } from '../../stores/timeline';
 import {
   createDefaultSkeletonShape,
@@ -45,6 +47,31 @@ export function stickFigureBodyScale(params: Params): number {
   return (skeleton.thigh + skeleton.shin) / DEFAULT_LEG;
 }
 
+/**
+ * The body scale each action travels and jumps with: the figure's size at the action's own start,
+ * from the keyframes of Scale and the leg lengths. Without keys that is the current size; with keys a
+ * finished walk keeps its distance when Scale changes later.
+ */
+function bodyScaleAtActionStart(effect: Effect, keyframes: readonly Keyframe[]): (instance: SkeletonActionInstance) => number {
+  const keyed = BODY_KEYS.filter(key => keyframes.some(item => item.property === `effect.${effect.id}.${key}`));
+  const current = stickFigureBodyScale(effect.params);
+  if (!keyed.length) return () => current;
+  const cache = new Map<number, number>();
+  return instance => {
+    let body = cache.get(instance.start);
+    if (body === undefined) {
+      const params: Params = { ...effect.params };
+      for (const key of keyed) {
+        const property = `effect.${effect.id}.${key}` as Keyframe['property'];
+        params[key] = interpolateKeyframes([...keyframes], property, instance.start, numberParam(effect.params, key));
+      }
+      cache.set(instance.start, body = stickFigureBodyScale(params));
+    }
+    return body;
+  };
+}
+const BODY_KEYS = ['scale', 'thigh', 'shin'] as const;
+
 /** Limb angles that put the striking hand or foot on the target joint (or as close as it reaches). */
 function aimLimb(clipId: string, timelineTime: number, clipTime: number, params: Params,
   instance: SkeletonActionInstance, limb: SkeletonLimb): Partial<Record<SkeletonAngleKey, number>> {
@@ -69,7 +96,8 @@ function aimLimb(clipId: string, timelineTime: number, clipTime: number, params:
  * angles, add their travel to Pelvis X and their jump height to Lift; aimed actions bend the
  * striking limb toward their target around the contact. Effects without actions pass through.
  */
-export function applyStickFigureActions(clip: { id?: string; startTime?: number } | undefined, effects: Effect[], clipTime: number): Effect[] {
+export function applyStickFigureActions(clip: { id?: string; startTime?: number } | undefined, effects: Effect[], clipTime: number,
+  keyframes: readonly Keyframe[] = []): Effect[] {
   if (!effects.some(effect => effect.type === STICK_FIGURE_EFFECT && typeof effect.params.actions === 'string'
     && effect.params.actions.length > 2)) return effects;
   return effects.map(effect => {
@@ -77,7 +105,8 @@ export function applyStickFigureActions(clip: { id?: string; startTime?: number 
     const actions = parseSkeletonActions(effect.params.actions);
     if (!actions.length) return effect;
     const base = Object.fromEntries(SKELETON_ANGLE_KEYS.map(key => [key, numberParam(effect.params, key)])) as Record<SkeletonAngleKey, number>;
-    const result = applySkeletonActions(base, numberParam(effect.params, 'lift'), actions, clipTime, stickFigureBodyScale(effect.params));
+    const result = applySkeletonActions(base, numberParam(effect.params, 'lift'), actions, clipTime,
+      bodyScaleAtActionStart(effect, keyframes));
     // Travel goes the way the figure faces; Pelvis X is a screen position.
     const facing = Math.sign(figureMirror(effect.params)) || 1;
     const params: Params = { ...effect.params, ...result.pose, lift: result.lift,

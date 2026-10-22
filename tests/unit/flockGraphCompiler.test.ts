@@ -43,7 +43,7 @@ describe('flock presets', () => {
   it('exposes the default clip controls', () => {
     const definition = createFlockPresetDefinition('free-swarm');
     expect(definition.exposed.map((exposed) => exposed.param)).toEqual(
-      expect.arrayContaining(['count', 'cohesion', 'separation', 'alignment', 'maxSpeed', 'strength', 'size', 'color']),
+      expect.arrayContaining(['count', 'cohesion', 'separation', 'alignment', 'pace', 'strength', 'size', 'color']),
     );
   });
 });

@@ -7,7 +7,7 @@ import { useDockStore } from '../../src/stores/dockStore';
 import { useNodeWorkspaceNavigation } from '../../src/services/nodeGraph/nodeWorkspaceNavigation';
 import { flockRuntime } from '../../src/engine/flock/runtime/flockRuntimeApi';
 import type { FlockDefinition } from '../../src/types/flock';
-import { populationFromSlider } from '../../src/components/panels/properties/flock/flockControlUtils';
+import { populationFromSlider, populationStep, presetFlockValue } from '../../src/components/panels/properties/flock/flockControlUtils';
 
 const initialTimeline = useTimelineStore.getState();
 const initialDock = useDockStore.getState();
@@ -64,7 +64,9 @@ describe('FlockTab', () => {
   it('renders exposed controls grouped as authored', async () => {
     await renderTab(clipId);
     // Sections of the shared inspector: a disclosure button per authored group.
-    expect(screen.getByRole('button', { name: 'Population' })).toBeInTheDocument();
+    // Population is a single row of the same name: a plain row, not a section of one.
+    expect(screen.queryByRole('button', { name: 'Population' })).toBeNull();
+    expect(screen.getByRole('slider', { name: 'Population slider' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Behavior' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Cohesion' })).toBeInTheDocument();
@@ -104,9 +106,33 @@ describe('FlockTab', () => {
     expect(populationFromSlider(Math.log10(347))).toBe(350);
   });
 
-  it('shows whole numbers for Speed and Turbulence, and no remove button on the preset\'s own controls', async () => {
+  it('steps Population up from a power of ten with the keyboard (1000 used to stay 1000)', async () => {
     await renderTab(clipId);
-    expect(screen.getByRole('slider', { name: 'Speed' })).toHaveTextContent(/^45$/);
+    editNumber('Population', '1000');
+    const emitterId = nodeIdFor(clipId, 'flock.emitter');
+    const count = () => getDefinition(clipId).nodes.find((node) => node.id === emitterId)?.params.count;
+    expect(count()).toBe(1000);
+    act(() => { fireEvent.keyDown(screen.getByRole('slider', { name: 'Population slider' }), { key: 'ArrowUp' }); });
+    expect(count()).toBe(1100);
+    expect(populationStep(1000, -1)).toBe(990);
+    expect(populationStep(10_000, 1)).toBe(11_000);
+  });
+
+  it('resets each control to the value of the swarm\'s preset, as the page describes it', async () => {
+    await renderTab(clipId);
+    const turbulenceId = nodeIdFor(clipId, 'flock.turbulence');
+    editNumber('Turbulence', '30');
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Reset Turbulence' })); });
+    expect(getDefinition(clipId).nodes.find((node) => node.id === turbulenceId)?.params.strength).toBe(18);
+    const network = useTimelineStore.getState().addFlockClip('video-1', 20, { presetId: 'technical-network' })!;
+    const definition = getDefinition(network);
+    const emitter = definition.exposed.find((item) => item.param === 'count')!;
+    expect(presetFlockValue(definition, emitter)).toBe(1800);
+  });
+
+  it('shows Speed as a pace (1.00), Turbulence as a whole number, and no remove button on the preset\'s own controls', async () => {
+    await renderTab(clipId);
+    expect(screen.getByRole('slider', { name: 'Speed' })).toHaveTextContent(/^1\.00$/);
     expect(screen.getByRole('slider', { name: 'Turbulence' })).toHaveTextContent(/^18$/);
     expect(screen.queryByRole('button', { name: /^Remove control/ })).toBeNull();
     expect(screen.queryByText(/nodes · /)).toBeNull();

@@ -101,7 +101,7 @@ export const EFFECT_DOC_EXTRAS = {
       cableRow('Behavior', 'Cohesion', '0 to 10', '1'),
       cableRow('Behavior', 'Separation', '0 to 10', '1.6'),
       cableRow('Behavior', 'Alignment', '0 to 10', '1.2'),
-      cableRow('Behavior', 'Speed', '0 and up', '45'),
+      cableRow('Behavior', 'Speed', '0 to 4', '1'),
       cableRow('Behavior', 'Turbulence', '0 and up', '18'),
       cableRow('Appearance', 'Size', '0 to 200 px', '6 px'),
       cableRow('Appearance', 'Color', 'a colour', '`#b4e2ff`'),

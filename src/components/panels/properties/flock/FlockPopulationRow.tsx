@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { LabeledValue } from '../LabeledValue';
 import { HandleOnlyRange } from '../transformTab/HandleOnlyRange';
 import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveResetIcon } from '../resolveInspector/ResolveInspectorPrimitives';
-import { FLOCK_POPULATION_HINT, FLOCK_POPULATION_SLIDER, populationFromSlider } from './flockControlUtils';
+import { FLOCK_POPULATION_HINT, FLOCK_POPULATION_SLIDER, populationFromSlider, populationStep } from './flockControlUtils';
 
 const log = Math.log10;
 
@@ -33,7 +33,13 @@ export function FlockPopulationRow({ label, value, defaultValue, min, max, onCom
   </>}>
     <div className="resolve-inspector-slider-value">
       <HandleOnlyRange aria-label={`${label} slider`} value={log(Math.max(1, shown))} min={sliderMin} max={sliderMax} step={0.02}
-        onChange={position => { const next = populationFromSlider(position); if (dragging.current) hold(next); else if (clamp(next) !== value) onCommit(clamp(next)); }} onDragStart={() => { dragging.current = true; }}
+        onChange={position => {
+          const next = populationFromSlider(position);
+          if (dragging.current) { hold(next); return; }
+          // A key step that rounds back to the same count (Arrow Up at 1000) moves to the next count instead.
+          const stepped = clamp(next) !== value ? clamp(next) : clamp(populationStep(value, Math.sign(position - log(Math.max(1, value)))));
+          if (stepped !== value) onCommit(stepped);
+        }} onDragStart={() => { dragging.current = true; }}
         onDragEnd={() => { dragging.current = false; release(); }} />
       <LabeledValue label="" ariaLabel={label} className="resolve-inspector-field resolve-inspector-field--plain"
         value={shown} defaultValue={defaultValue} min={min} max={max} decimals={0} sensitivity={Math.max(1, shown / 200)}

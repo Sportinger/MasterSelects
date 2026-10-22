@@ -95,9 +95,31 @@ export function isPresetFlockControl(definition: FlockDefinition, exposed: { nod
   if (!signatures) {
     const built = preset.create();
     signatures = new Set(built.exposed.map((item) => controlSignature(built, item)));
+    // Swarms made before Speed became the simulation's Pace show Max Speed as their Speed.
+    if (signatures.has('flock.simulation:pace')) signatures = new Set([...signatures, 'flock.simulation:maxSpeed']);
     presetSignatures.set(presetId, signatures);
   }
   return signatures.has(controlSignature(definition, exposed));
+}
+
+const presetValues = new Map<string, ReadonlyMap<string, unknown>>();
+/**
+ * The value the swarm's preset gives a control (Free Swarm's Turbulence 18, Technical Network's
+ * Population 1800), so its reset arrow returns to the preset's look; undefined for a control the
+ * preset does not show (added through Add) or a swarm without a preset.
+ */
+export function presetFlockValue(definition: FlockDefinition, exposed: { nodeId: string; param: string }): unknown {
+  const presetId = definition.presetId;
+  const preset = presetId ? getFlockPreset(presetId) : undefined;
+  if (!presetId || !preset) return undefined;
+  let values = presetValues.get(presetId);
+  if (!values) {
+    const built = preset.create();
+    values = new Map(built.exposed.map((item) => [controlSignature(built, item),
+      built.nodes.find((node) => node.id === item.nodeId)?.params[item.param]]));
+    presetValues.set(presetId, values);
+  }
+  return values.get(controlSignature(definition, exposed));
 }
 
 export function getFlockNumberSensitivity(descriptor: FlockParamDescriptor, min?: number, max?: number): number {
@@ -154,3 +176,10 @@ export function populationFromSlider(position: number): number {
   return Math.round(count / unit) * unit;
 }
 
+/** The next count on the slider's two-significant-digit grid in `direction` (+1 up, −1 down): 1000 → 1100, 1000 → 990. */
+export function populationStep(count: number, direction: number): number {
+  if (!direction) return count;
+  const below = direction < 0 ? count - 1e-9 : count;
+  const unit = 10 ** Math.max(0, Math.floor(Math.log10(Math.max(1, below))) - 1);
+  return Math.max(1, Math.round(count / unit) * unit + Math.sign(direction) * unit);
+}

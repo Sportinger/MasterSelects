@@ -208,7 +208,7 @@ recipe of a form (`weaveRecipeForm`: same nodes, values, bindings, cables and sw
 folders, compositions expanded) still follows Form. A graph edited in the Nodes tab, or
 with a folder switched off with **Byp**, is the Weave's own: it decides alone, Form
 leaves the card and only the controls it binds stay; so does a recipe saved by an earlier
-version, which keeps that look. The card's presets (Veil, Red Sail, Nest, Qualle)
+version, which keeps that look. The card's presets (Burlap, Red Sail, Nest, Qualle)
 set Form and the values. The rows of the other form stay in the card, folded into one
 closed section (**Qualle controls** or **Woven Cloth controls**, `foldInactiveParamSections`
 for sections whose every row is inactive through `activeWhen`) with the reason shown once,
@@ -227,7 +227,7 @@ threads in white wool and a 40 × 27 cloth):
 | **Handmade** | Each thread meanders along its length (uneven spacing), each thread gets its own tension (crimp varies), and slubs thicken the yarn in places. Meander and tension follow Irregularity squared, so 1 keeps the look and 3 is clearly crooked. | **Irregularity** (1 = default look, 0 = machine-perfect, up to 3) |
 | **Reveal by Shape** | A growing sphere with a noisy front scales the yarn radius. Its reach (1.15) is the sphere radius at Reveal 1, just past the sheet's corners, so the whole range grows the net. | **Reveal** (0–1) |
 | **Yarn** | Yarn Profile (plies and fibers twisted along curve length) and Flyaways (stray loops and free ends). Fiber Material's colour is bound to the card. | **Color** |
-| **Wind Cloth** | A simulated cloth sheet in gusty, swirling wind; Surface Bind places the woven curves on it. Cloth Sheet's **Turn** (32°) turns the finished sheet about its upright axis (x′ = x cos + z sin, z′ = z cos − x sin) without changing its motion; a Cloth Sheet saved without Turn stays head-on. The wind node's strength is bound to the card (a simulation reads its force values from the node, so Wind has no Value node and is not node-drivable). | **Wind** (0–2, 0.35) |
+| **Wind Cloth** | A simulated cloth sheet in gusty, swirling wind; Surface Bind places the woven curves on it. Cloth Sheet's **Turn** (32°) turns the finished sheet about its upright axis (x′ = x cos + z sin, z′ = z cos − x sin) without changing its motion; a Cloth Sheet saved without Turn stays head-on. The wind node's strength is bound to the card (a simulation reads its force values from the node, so Wind has no Value node and is not node-drivable). Keyframed Wind reaches the solver as its whole course (a `SimulationTrack` from `GeometryParameterReader.track`), so one simulation serves every frame and a keyed gust builds up physically; other keyframed force values still re-simulate from the clip start. | **Wind** (0–2, 0.35) |
 
 Reveal, Weave Speed and Irregularity keep their Value nodes, exposed under the same
 parameter keys (`reveal_value`, …), so saved graphs, keyframes and node drivers keep

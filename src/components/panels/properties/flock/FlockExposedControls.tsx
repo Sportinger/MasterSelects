@@ -22,6 +22,7 @@ import {
   getFlockNumberDecimals,
   getFlockNumberSensitivity,
   isPresetFlockControl,
+  presetFlockValue,
   isStructuralFlockParam,
 } from './flockControlUtils';
 
@@ -80,6 +81,9 @@ function FlockNumberControl({ ctx, exposed, descriptor }: ControlProps) {
   const fallback = typeof descriptor.default === 'number' ? descriptor.default : 0;
   const value = readAnimated(ctx, property) ?? fallback;
   const range = flockSliderRange(exposed, descriptor, value);
+  // Reset returns to the preset's value (the look the page and the Preset row describe).
+  const preset = presetFlockValue(ctx.clip.flock!, exposed);
+  const resetValue = typeof preset === 'number' && Number.isFinite(preset) ? preset : fallback;
 
   return (
     <div data-flock-control={exposed.id}>
@@ -88,7 +92,7 @@ function FlockNumberControl({ ctx, exposed, descriptor }: ControlProps) {
         ariaLabel={exposed.label}
         title={descriptor.description}
         value={value}
-        defaultValue={fallback}
+        defaultValue={resetValue}
         min={range.min}
         max={range.max}
         step={range.step}
@@ -269,8 +273,10 @@ function FlockStructuralControl({ ctx, exposed, descriptor }: ControlProps) {
   };
   const isPopulation = exposed.param === 'count' || exposed.param.endsWith('__count');
   if (isPopulation && typeof rawValue === 'number') {
+    const preset = presetFlockValue(ctx.clip.flock!, exposed);
+    const resetValue = typeof preset === 'number' && Number.isFinite(preset) ? preset : typeof descriptor.default === 'number' ? descriptor.default : 4000;
     return <div data-flock-control={exposed.id}>
-      <FlockPopulationRow label={exposed.label} value={rawValue} defaultValue={typeof descriptor.default === 'number' ? descriptor.default : 4000}
+      <FlockPopulationRow label={exposed.label} value={rawValue} defaultValue={resetValue}
         min={exposed.min ?? descriptor.min ?? 1} max={exposed.max ?? descriptor.max ?? 100_000} onCommit={commit}
         actions={<RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />} />
     </div>;
@@ -363,11 +369,16 @@ export function FlockExposedControls({ ctx }: { ctx: FlockControlContext }) {
     <>
       {[...groups.entries()].map(([group, controls]) => (
         <div key={group} className="flock-control-group" data-flock-group={group}>
-          <ResolveInspectorSection title={group}>
-            {controls.map((exposed) => (
-              <FlockExposedControl key={exposed.id} ctx={ctx} exposed={exposed} />
-            ))}
-          </ResolveInspectorSection>
+          {/* A group holding one control of the same name (Population) is a plain row, not a section of one. */}
+          {controls.length === 1 && controls[0].label === group
+            ? <div className="inspector-section resolve-inspector-section flock-control-single">
+              <div className="inspector-section-content"><FlockExposedControl ctx={ctx} exposed={controls[0]} /></div>
+            </div>
+            : <ResolveInspectorSection title={group}>
+              {controls.map((exposed) => (
+                <FlockExposedControl key={exposed.id} ctx={ctx} exposed={exposed} />
+              ))}
+            </ResolveInspectorSection>}
         </div>
       ))}
     </>

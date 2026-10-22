@@ -30,7 +30,7 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
 
     const keyframes = clipKeyframes.get(clipId) || [];
     const withSurfaces = (effects: typeof clip.effects) => appendSurfaceEffects(bindCableRenderTime(pauseIncompleteOperatorEffects(
-      applyParameterSourcesToEffects(clip, keyframes, clipLocalTime, applyStickFigureActions(clip, effects, clipLocalTime))), clipLocalTime, clip.videoInspectorSections?.stabilization), clip, clipLocalTime, keyframes);
+      applyParameterSourcesToEffects(clip, keyframes, clipLocalTime, applyStickFigureActions(clip, effects, clipLocalTime, keyframes))), clipLocalTime, clip.videoInspectorSections?.stabilization), clip, clipLocalTime, keyframes);
     // Keyframes, then the distance keyed rates have travelled on the timeline clock (shared with compositions).
     return withSurfaces(evaluateEffectKeyframes(clip.effects, keyframes, clipLocalTime, clip.startTime));
   },

@@ -14,20 +14,20 @@ Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](..
 - **Preset** – the kind of swarm: points, krill, a school on a path, a network.
 - **Population** – how many there are.
 - **Cohesion**, **Separation** and **Alignment** – how they flock: together, apart, in step.
-- **Speed** – how fast they fly.
+- **Speed** – how fast the whole swarm moves.
 
 **Tip:** the swarm starts with the clip as a round ball that unfolds over the first two seconds. To have it formed on the first frame, set **Warm-up** to 3 s.
 
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/flocking-presets.mp4" poster="../assets/effects/clips/flocking-presets.webp" width="962" height="972" autoplay muted loop playsinline preload="none" aria-label="Six Flocking swarms on black in a grid, in sync: Free Swarm, a cloud of pale points; Krill Cloud, orange krill swimming in clusters; Follow Path, a school tracing a figure eight with fine trails; Technical Network, points joined by blue lines in a flat band; Violet Filaments, a violet cloud with curved filaments and small wire cubes; and Lilac Sculpture from More swarms, a lilac sheet settling in folds inside a lit white box"></video>
-<figcaption>The five presets and the Lilac Sculpture (under More swarms), in sync.</figcaption>
+<video src="../assets/effects/clips/flocking-presets.mp4" poster="../assets/effects/clips/flocking-presets.webp" width="960" height="450" autoplay muted loop playsinline preload="none" aria-label="Five Flocking swarms on black in a grid of three and two, in sync: Free Swarm, a cloud of pale blue points; Krill Cloud, orange krill swimming in clusters; Follow Path, a school tracing a figure eight with fine trails; Technical Network, points joined by blue lines in a flat band; Violet Filaments, a violet cloud with curved filaments and small wire cubes"></video>
+<figcaption>The five presets on black, in sync.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. A preset builds a whole swarm, so it replaces the swarm and every value in the card in one undo step; when you have keyframed values of the swarm, the card asks first, because those keyframes go with it. Each preset brings its own controls: Krill Cloud adds Line Density, Follow Path a Path Strength.
 
-**Free Swarm** – fine pale points that flock together, fold, split and gather again, like starlings at dusk or dust in a beam of light. A quiet, living haze around a figure; the default.
+**Free Swarm** – fine pale blue points that flock together, fold, split and gather again, like starlings at dusk or dust in a beam of light. Where they crowd they glow brighter but stay blue. A quiet, living haze around a figure; the default.
 
 **Krill Cloud** – thousands of small orange krill that swim in step and gather in drifting clusters, joined by faint lines. Warm and organic: under water, a shoal, a crowd.
 
@@ -35,9 +35,9 @@ Pick one in the **Preset** row of the effect card. A preset builds a whole swarm
 
 **Technical Network** – points joined to their neighbours by blue lines, with small square markers, drifting in a flat band held by an invisible box. A data sculpture for surveillance, networks and digital space.
 
-**Violet Filaments** – a violet cloud in clusters, with long curved filaments and small wire cubes at their tips, brightest where the points crowd. Rich and slow, for a large projection surface.
+**Violet Filaments** – a violet cloud in clusters that fills about half the frame, with long curved filaments and small wire cubes at their tips, brightest where the points crowd. Rich and slow, for a large projection surface.
 
-Under **More swarms** (the last cell of the grid shows the Lilac Sculpture) the menu offers four larger scenes, made for a big frame or a camera move rather than for the default picture: **Vortex** (a swirling shell of points), **Shrimp Pullback** (one large shrimp inside a huge swarm, made for a camera move) and two sculptures, Terracotta and Lilac, which are not swarms but a sheet of colour settling in folds inside a lit box.
+Under **More swarms** the menu offers four larger scenes, made for a big frame or a camera move rather than for the default picture: **Vortex** (a swirling shell of points), **Shrimp Pullback** (one large shrimp inside a huge swarm, made for a camera move) and two sculptures, Terracotta and Lilac, which are not swarms but a sheet of colour settling in folds inside a lit box.
 
 ## Controls
 
@@ -45,20 +45,20 @@ Under **More swarms** (the last cell of the grid shows the Lilac Sculpture) the 
 
 <div class="docs-shot-stage">
 
-![The Flocking card in Properties, Effects, with the default swarm: Preset menu showing Free Swarm and a sentence about it, Open Nodes, then the sections Population (a slider and 4000), Behavior (Cohesion, Separation, Alignment, Speed 45, Turbulence 18 with sliders), Appearance (Size and a pale blue Color), the folded More controls, Time & Quality (Step rate 60 Hz, Warm-up 0 s, Loop Continuous) and the folded Simulation status](../assets/effects/editor/flocking-inspector.webp)
+![The Flocking card in Properties, Effects, with the default swarm: Preset menu showing Free Swarm and a sentence about it, Open Nodes, then a Population row (a slider and 4000), the sections Behavior (Cohesion, Separation, Alignment, Speed 1.00, Turbulence 18 with sliders), Appearance (Size and a pale blue Color), the folded More controls, Time & Quality (Step rate 60 Hz, Warm-up 0 s, Loop Continuous) and the folded Simulation status](../assets/effects/editor/flocking-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 1102" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 1026" aria-hidden="true" focusable="false">
 <defs><marker id="flocking-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M137 138 L221 138" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="137" cy="138" r="18" /><text x="137" y="138" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M111 444 L195 444" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="111" cy="444" r="18" /><text x="111" y="444" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M98 600 L182 600" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="98" cy="600" r="18" /><text x="98" y="600" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M152 708 L236 708" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="152" cy="708" r="18" /><text x="152" y="708" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M114 948 L198 948" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="114" cy="948" r="18" /><text x="114" y="948" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M137 112 L221 112" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="137" cy="112" r="18" /><text x="137" y="112" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M111 367 L195 367" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="111" cy="367" r="18" /><text x="111" y="367" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M98 523 L182 523" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="98" cy="523" r="18" /><text x="98" y="523" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M152 631 L236 631" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="152" cy="631" r="18" /><text x="152" y="631" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M114 871 L198 871" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="114" cy="871" r="18" /><text x="114" y="871" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -110,11 +110,11 @@ The rows below are those of the default swarm, Free Swarm. Other presets show ot
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/flocking-speed.mp4" poster="../assets/effects/clips/flocking-speed.webp" width="840" height="268" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm at three speeds side by side, in sync, each fixed from the clip start: at 10 the cloud hovers almost still; at the default 45 it turns calmly; at 120 the points race around inside their sphere"></video>
-<figcaption>Speed 10, 45 (default) and 120, side by side.</figcaption>
+<video src="../assets/effects/clips/flocking-speed.mp4" poster="../assets/effects/clips/flocking-speed.webp" width="840" height="268" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm at three speeds side by side, in sync, each fixed from the clip start: at 0.3 the swarm is still a round ball that unfolds only slowly; at the default 1 it folds and drifts calmly; at 3 it has long gathered into a dense cloud that keeps turning and throwing out tails"></video>
+<figcaption>Speed 0.3, 1 (default) and 3, side by side.</figcaption>
 </figure>
 
-**Speed** – the top speed of a particle. At 10 the cloud hovers, rounded and slow; 45 is a calm flight in which a particle crosses the picture in about five seconds; at 120 the points race and the cloud stretches out to the edges of its space. 0 and up, default 45.
+**Speed** – how fast the whole swarm moves, as a multiple of the preset's own pace. Every particle flies, steers and turns that many times faster, so the swarm keeps its shape and character and only its tempo changes: at 0.3 the swarm stays a round ball that unfolds only slowly, 1 is the calm flight of the preset, and at 3 it gathers early into a dense cloud that keeps turning and throwing out tails. At 0 it stands still. Above 4 the steps get too large to stay smooth, so the card stops there and a tool that asks for more is refused with that reason. Keyframes ease the tempo up or down without a jump. 0 to 4, default 1.
 
 <div class="docs-float-end"></div>
 
@@ -138,7 +138,7 @@ The rows below are those of the default swarm, Free Swarm. Other presets show ot
 
 <div class="docs-float-end"></div>
 
-**Color** – the colour of the points. Pale colours glow on black, and you can keyframe it to let the swarm change colour on a cue; a warm colour reads well under stage light: a colour, default `#b4e2ff`.
+**Color** – the colour of the points. The points add up where they crowd, so a saturated colour keeps its hue in the dense core while a very pale one turns white there; you can keyframe it to let the swarm change colour on a cue, and a warm colour reads well under stage light: a colour, default `#b4e2ff`.
 
 ### More controls
 
@@ -180,7 +180,7 @@ The folded **Simulation status** section shows how much memory the swarm needs a
 <figcaption>The Free Swarm in the Nodes tab (Open Nodes, then Expand all). 1 — Emitter: places the particles. 2 — Turbulence: a moving current. 3 — Flock Rules: cohesion, separation, alignment. 4 — Simulation: moves every particle, step by step. 5 — Points: draws them.</figcaption>
 </figure>
 
-The swarm is a node setup of its own: **Open Nodes** in the card shows it in the Nodes tab, as the green Flock group of the clip. Its nodes work on particles, not on pixels: the **Emitter** places them, **Flock Rules** and **Turbulence** steer them, the **Boundary** keeps them in a sphere, the **Simulation** moves them step by step and **Points** draws them. The values in the card are values of these nodes.
+The swarm is a node setup of its own: **Open Nodes** in the card shows it in the Nodes tab, as the green Flock group of the clip. Its nodes work on particles, not on pixels: the Emitter places them, Flock Rules and Turbulence steer them, the Boundary keeps them in a sphere, the Simulation moves them step by step and Points draws them. The values in the card are values of these nodes.
 
 **Emitter** – places the particles when the clip starts: 4000 of them, at random in a ball. Its **Count** is the card's Population; it can also fill a box, a disc, a line or a grid, let particles be born in bursts and die after a lifetime.
 
@@ -188,7 +188,7 @@ The swarm is a node setup of its own: **Open Nodes** in the card shows it in the
 
 **Flock Rules** – the three classic rules of a flock: steer towards the neighbours (**Cohesion**), keep a distance from them (**Separation**) and fly their way (**Alignment**). Each particle looks only at neighbours within 12 units, except right behind it. **Compose Behavior** adds these forces to Turbulence, and the **Boundary** pushes particles back into a sphere, so the swarm stays in the picture.
 
-**Simulation** – moves every particle one small step at a time, 60 times per second, never faster than **Max Speed** (the card's Speed). It runs on the graphics card and keeps checkpoints, so jumping back in the timeline is quick.
+**Simulation** – moves every particle one small step at a time, 60 times per second, never faster than its **Max Speed**; its **Pace** (the card's Speed) makes each step carry the swarm further or less far. It runs on the graphics card and keeps checkpoints, so jumping back in the timeline is quick.
 
 **Points** – draws every particle as a soft dot that adds light, in the card's Size and Color. Other draw nodes give the presets their looks: Instances (krill, fish, arrows), Neighbor Links, Trails and Curves, Endpoint Glyphs.
 
@@ -199,6 +199,7 @@ The swarm is a node setup of its own: **Open Nodes** in the card shows it in the
 - **3D.** The swarm is drawn into the shared 3D scene, with depth against other 3D layers, and moves with the clip's transform. The clip's own picture stays underneath unchanged. One swarm per clip: adding Flocking again selects the existing one.
 - **Time.** The swarm is simulated from the start of the clip in fixed steps, so scrubbing, playback and export show the same swarm at the same moment. Keyframes of swarm values count in the swarm's own time and survive splits, trims and speed changes. Population, Step rate and Warm-up restart the simulation and cannot be keyframed.
 - **First frames.** After adding the effect or changing a structural value, the preview shows "Preparing simulation" while it calculates up to the playhead.
-- **Saved projects.** A clip stores its whole swarm. Changed presets only affect swarms built from them afterwards; a saved swarm keeps its look.
+- **Saved projects.** A clip stores its whole swarm. Changed presets only affect swarms built from them afterwards; a saved swarm keeps its look. Swarms made before Speed became the simulation's Pace show the Simulation's Max Speed as their Speed row, which only caps the fastest particles.
+- **Reset.** The reset arrow of a row returns it to the value of the swarm's preset (Free Swarm's Turbulence 18, Technical Network's Population 1800), not to the node's general default.
 - **Removing** the effect deletes the swarm and its keyframes; switching it off only hides the swarm.
 - **More:** [Flock Clips](../Flock-Clips.md) (node catalogue, simulation, rendering, AI tools) · [Node Workspace](../Node-Workspace.md) · [Effect system](../Effect-System.md).

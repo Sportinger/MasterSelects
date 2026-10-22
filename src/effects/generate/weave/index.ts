@@ -30,15 +30,34 @@ export const WEAVE_PARAMS: Record<string, EffectParam> = {
 
 /** Named starting points of the card (values that differ from the defaults). */
 export const WEAVE_PRESETS: readonly EffectPreset[] = [
-  // A loose, crooked net of pale yarn that drifts in a light wind: a veil.
-  { id: 'veil', name: 'Veil', params: { color: '#d9d2c4', weave_value: 1.5, irregularity_value: 2.8, wind: 0.6 } },
-  // An even, deep red cloth in a strong, gusting wind: it billows like a sail.
+  // Pale, coarse yarn in a crooked weave whose corners have frayed away: a rough piece of burlap.
+  { id: 'burlap', name: 'Burlap', params: { color: '#d9d2c4', weave_value: 1.5, reveal_value: 0.6, irregularity_value: 2.8, wind: 0.6 } },
+  // An even, deep red cloth that bows and sways in strong gusts.
   { id: 'red-sail', name: 'Red Sail', params: { color: '#b0261e', weave_value: 2, irregularity_value: 0.4, wind: 2 } },
   // Only a round patch grows, very uneven, in brown wool with a swollen, frayed rim: a bird's nest.
   { id: 'nest', name: 'Nest', params: { color: '#7d5b3a', weave_value: 2, reveal_value: 0.32, irregularity_value: 2.5, wind: 0.2 } },
   // Roman's jellyfish: a knitted bell with long cream ribbons that pulse and curl.
   { id: 'qualle', name: 'Qualle', params: { form: 'qualle', color: '#eee2cf' } },
 ];
+
+/** What a value beyond a card range does (tools may set one): said, not left to surprise. */
+const RANGE_NOTES: Record<string, { below?: string; above?: string }> = {
+  weave_value: { below: 'a negative Weave Speed never weaves anything in, so the sheet stays empty' },
+  irregularity_value: { below: 'Irregularity acts squared, so a negative value looks like the same positive one',
+    above: 'above 3 the threads bunch into knots and leave large holes' },
+  wind: { below: 'a negative Wind blows the sheet backwards, away from the camera',
+    above: 'above 2 the wind blows the sheet out of shape and beyond the frame' },
+  'curl-strength_value': { below: 'a negative Curl Strength curls the ribbons the other way',
+    above: 'above 0.25 the ribbons swirl past the edges of the frame' },
+};
+function weaveRangeNotes(params: Record<string, number | boolean | string>): string[] {
+  return Object.entries(RANGE_NOTES).flatMap(([key, note]) => {
+    const value = params[key], definition = WEAVE_PARAMS[key];
+    if (typeof value !== 'number' || !Number.isFinite(value) || definition.min === undefined || definition.max === undefined) return [];
+    const text = value < definition.min ? note.below : value > definition.max ? note.above : undefined;
+    return text ? [`${definition.label} ${value} is outside its range ${definition.min} to ${definition.max}: ${text}.`] : [];
+  });
+}
 
 export const weave: EffectDefinition = {
   id: 'weave',
@@ -51,6 +70,6 @@ export const weave: EffectDefinition = {
   presets: WEAVE_PRESETS,
   // The weave-in, the wind and the pulse follow the playhead and hold while paused (docs show loops).
   timelineAnimated: true,
-  paramWarnings: params => generatorChoiceWarnings(WEAVE_PARAMS, params, ['form']),
+  paramWarnings: params => [...generatorChoiceWarnings(WEAVE_PARAMS, params, ['form']), ...weaveRangeNotes(params)],
   packUniforms: () => null,
 };

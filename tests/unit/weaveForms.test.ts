@@ -120,6 +120,24 @@ describe('Weave forms', () => {
     expect(weaveRecipeForm(bypassed)).toBeUndefined();
   });
 
+  it('keeps node positions, folder names and folding and value ranges of a pinned recipe until Form changes', () => {
+    const saved = migratePersistedEffectOperatorGraph({ id: 'fx', name: 'Weave', type: 'weave' as const, enabled: true, params: defaults() });
+    const moved = structuredClone(saved.operatorGraph!);
+    moved.layout!.reveal = { x: 9999, y: 7777 };
+    const folder = moved.groups!.find(group => group.id === 'wind-cloth')!;
+    folder.label = 'My Wind';
+    folder.collapsedByDefault = true;
+    node(moved, 'reach').valueControl = { label: 'Reach', min: 0, max: 10, step: 0.01 };
+    expect(weaveRecipeForm(moved)).toBe('cloth');
+    const resolved = effectOperatorGraph({ ...saved, operatorGraph: moved });
+    expect(resolved.layout?.reveal).toEqual({ x: 9999, y: 7777 });
+    expect(resolved.groups?.find(group => group.id === 'wind-cloth')).toMatchObject({ label: 'My Wind', collapsedByDefault: true });
+    expect(node(resolved, 'reach').valueControl?.max).toBe(10);
+    // Form still switches the recipe.
+    const switched = effectOperatorGraph({ ...saved, operatorGraph: moved, params: { ...saved.params, form: 'qualle' } });
+    expect(switched.nodes.some(item => item.id === 'pose')).toBe(true);
+  });
+
   it('turns the Woven Cloth three quarters, so the wind bows the sheet sideways in the picture', () => {
     const graph = createDefaultWeaveGraph();
     expect(node(graph, 'cloth').constants?.turn).toBe(WEAVE_CLOTH_TURN);
@@ -156,8 +174,17 @@ describe('Weave forms', () => {
     expect(QUALLE_CARD_CONTROLS['curl-strength_value'].max).toBe(0.25);
   });
 
+  it('names values beyond a control range (from tools) instead of drawing them without a word', () => {
+    const notes = (params: Params) => getEffect('weave')!.paramWarnings!({ ...defaults(), ...params }, 1920, 1080);
+    expect(notes({})).toEqual([]);
+    expect(notes({ weave_value: -1 }).join(' ')).toMatch(/Weave Speed -1 is outside its range 0 to 10: .*stays empty/);
+    expect(notes({ irregularity_value: -2 }).join(' ')).toMatch(/same positive one/);
+    expect(notes({ wind: 30 }).join(' ')).toMatch(/Wind 30 is outside/);
+    expect(notes({ 'curl-strength_value': 0.4 }).join(' ')).toMatch(/past the edges of the frame/);
+  });
+
   it('declares presets the Preset row can apply to a fresh Weave', () => {
-    expect(WEAVE_PRESETS.map(preset => preset.name)).toEqual(['Veil', 'Red Sail', 'Nest', 'Qualle']);
+    expect(WEAVE_PRESETS.map(preset => preset.name)).toEqual(['Burlap', 'Red Sail', 'Nest', 'Qualle']);
     const fresh = { type: 'weave', params: defaults() };
     for (const preset of WEAVE_PRESETS) {
       expect(Object.keys(preset.params).filter(key => !(key in WEAVE_PARAMS))).toEqual([]);

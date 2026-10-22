@@ -5,6 +5,7 @@ import { EFFECT_OPERATORS } from '../operatorRegistry';
 import { pointwiseLoweringFor } from '../fields/pointwiseLowering';
 import { isCurveOperator } from './curveOperators';
 import { compileGeometryGraph, type GeometryParameterReader } from './geometryProgram';
+import { SIMULATION_TRACK_LIMIT, SIMULATION_TRACK_RATE, type SimulationTrack } from './simulationForces';
 import { createQualleGraph } from './qualleGraph';
 import { expandOperatorCompositions } from '../operatorComposition';
 
@@ -38,15 +39,44 @@ export function geometryOwnerOperators(): OperatorDefinition[] {
 }
 
 /** Reads literal node values, effect-bound values and their keyframes at `time`. */
-export function geometryParameterReader(params: OperatorParameters, effectId = '', keys: Keyframe[] = [], time = 0): GeometryParameterReader {
-  return (node, parameter) => {
-    // A bound value missing from the params (a Weave saved before the parameter was bound) renders the
-    // node's own value, not the operator default (Wind would otherwise blow at 5 instead of 0.35).
+export function geometryParameterReader(params: OperatorParameters, effectId = '', keys: Keyframe[] = [], time = 0,
+  clock: SimulationClock = IDENTITY_CLOCK): GeometryParameterReader {
+  // A bound value missing from the params (a Weave saved before the parameter was bound) renders the
+  // node's own value, not the operator default (Wind would otherwise blow at 5 instead of 0.35).
+  const filledFor = (node: BoundOperatorNode, parameter: string) => {
     const binding = node.bindings[parameter], own = node.constants?.[parameter];
-    const filled = typeof binding === 'string' && params[binding] === undefined && own !== undefined ? { ...params, [binding]: own } : params;
-    return sampleOperatorParameter(node, parameter, filled, effectId, keys, time);
+    return typeof binding === 'string' && params[binding] === undefined && own !== undefined ? { ...params, [binding]: own } : params;
   };
+  const read: GeometryParameterReader = (node, parameter) => sampleOperatorParameter(node, parameter, filledFor(node, parameter), effectId, keys, time);
+  read.track = (node, parameter) => {
+    const binding = node.bindings[parameter];
+    if (typeof binding !== 'string') return undefined;
+    const property = `effect.${effectId}.${binding}`, own = keys.filter(key => key.property === property), times = own.map(key => key.time);
+    if (times.length < 2) return undefined;
+    // The same keys, base value and clip timing give the same track: computed once, not per frame.
+    const cacheKey = JSON.stringify([property, own, filledFor(node, parameter)[binding] ?? null, clock.toSimulation(0), clock.toSimulation(1)]);
+    const cached = trackCache.get(cacheKey);
+    if (cached) return cached;
+    const ends = [Math.min(...times), Math.max(...times)].map(clock.toSimulation), start = Math.min(...ends), span = Math.max(...ends) - start;
+    if (!Number.isFinite(start) || !Number.isFinite(span)) return undefined;
+    const rate = span > 0 ? Math.min(SIMULATION_TRACK_RATE, (SIMULATION_TRACK_LIMIT - 1) / span) : SIMULATION_TRACK_RATE;
+    const filled = filledFor(node, parameter), count = Math.min(SIMULATION_TRACK_LIMIT, Math.ceil(span * rate - 1e-9) + 1);
+    const values = Array.from({ length: count }, (_, index) => {
+      const clipTime = clock.toClip(Math.min(start + span, start + index / rate));
+      return Number(sampleOperatorParameter(node, parameter, filled, effectId, keys, clipTime ?? time));
+    });
+    const track = { start, rate, values };
+    if (trackCache.size >= 16) trackCache.delete(trackCache.keys().next().value!);
+    trackCache.set(cacheKey, track);
+    return track;
+  };
+  return read;
 }
+const trackCache = new Map<string, SimulationTrack>();
+
+/** How a clip's keyframe time (clip-local seconds) maps to the source time its simulations run on. */
+export interface SimulationClock { toSimulation(clipTime: number): number; toClip(simulationTime: number): number | null }
+const IDENTITY_CLOCK: SimulationClock = { toSimulation: time => time, toClip: time => time };
 
 type Spec = [id: string, operator: string, x: number, y: number, constants?: Record<string, OperatorValue>];
 const WAVE_NODES: Spec[] = [
@@ -329,7 +359,15 @@ export function weaveOperatorGraph(params: OperatorParameters): EffectOperatorGr
     if (storedRecipeForms.size >= 8) storedRecipeForms.delete(storedRecipeForms.keys().next().value!);
     storedRecipeForms.set(stored, form);
   }
-  return form ? weaveRecipeGraph(params.form) : graph;
+  // The stored graph itself while it is the recipe of the current Form, so the Nodes tab keeps what
+  // the recipe signature leaves out (layout, folder names and folding, value ranges); a fresh recipe
+  // only when Form changed.
+  return form && form !== weaveForm(params.form) ? weaveRecipeGraph(params.form) : graph;
+}
+
+/** The Form a value names; an unknown or missing Form is the Woven Cloth (weaveRecipeGraph). */
+export function weaveForm(value: unknown): WeaveForm {
+  return (WEAVE_FORMS as readonly unknown[]).includes(value) ? value as WeaveForm : 'cloth';
 }
 
 /** Owner validation: structure first, then a full lowering with the effect's current values. */

@@ -4,7 +4,7 @@ import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 import type { TimelineClip } from '../../../types/timeline';
 import { effectOperatorGraph, effectOperatorParams } from '../effectGraphOwner';
 import { compileGeometryGraph, type GeometryProgram } from './geometryProgram';
-import { geometryParameterReader, WEAVE_EFFECT_TYPE } from './weaveGraph';
+import { geometryParameterReader, WEAVE_EFFECT_TYPE, type SimulationClock } from './weaveGraph';
 import { createFlockClipTimeMap } from '../../flock/time/flockTimeMapper';
 import { applyParameterSourcesToEffects } from '../../parameterSources/parameterSourceRendering';
 import type { ParameterSourceClip } from '../../parameterSources/parameterSourceTargets';
@@ -43,9 +43,15 @@ type ClipTiming = Partial<Pick<TimelineClip, 'inPoint' | 'outPoint' | 'duration'
  * continues the motion instead of restarting it. Speed keyframes are not followed yet.
  */
 export function weaveSimulationTime(clip: ClipTiming, clipLocalTime: number): number {
+  return weaveSimulationClock(clip).toSimulation(clipLocalTime);
+}
+
+/** The clip's keyframe time to simulation (source) time and back; keyed forces are sampled through it. */
+export function weaveSimulationClock(clip: ClipTiming): SimulationClock {
   const { inPoint, outPoint, duration } = clip;
-  if (inPoint === undefined || outPoint === undefined || duration === undefined) return clipLocalTime;
-  return createFlockClipTimeMap({ inPoint, outPoint, duration, reversed: clip.reversed, speed: clip.speed }).toSourceTime(clipLocalTime);
+  if (inPoint === undefined || outPoint === undefined || duration === undefined) return { toSimulation: time => time, toClip: time => time };
+  const map = createFlockClipTimeMap({ inPoint, outPoint, duration, reversed: clip.reversed, speed: clip.speed });
+  return { toSimulation: map.toSourceTime, toClip: map.toClipLocalTime };
 }
 
 export const renderingWeaveEffects = (clip: Pick<TimelineClip, 'effects'>): Effect[] =>
@@ -58,7 +64,7 @@ export const renderingWeaveEffects = (clip: Pick<TimelineClip, 'effects'>): Effe
 export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effects'> & Partial<Pick<TimelineClip, 'nodeGraph' | 'colorCorrection'>>
   & { startTime?: number } & ClipTiming, time: number,
   keyframes: readonly Keyframe[] | undefined): Array<{ effectId: string; source: { type: 'strands'; strands: StrandsLayerSourceData } }> {
-  const clipTime = Number.isFinite(time) ? time : 0, simulationTime = weaveSimulationTime(clip, clipTime);
+  const clipTime = Number.isFinite(time) ? time : 0, clock = weaveSimulationClock(clip), simulationTime = clock.toSimulation(clipTime);
   // Parameter sources drive exposed graph values (Reveal, Weave Speed, …) like any effect parameter.
   const effects = clip.nodeGraph?.parameterSources
     ? applyParameterSourcesToEffects({ ...clip, startTime: clip.startTime ?? 0 } as ParameterSourceClip, keyframes ?? [], clipTime, renderingWeaveEffects(clip))
@@ -67,7 +73,7 @@ export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effect
     try {
       // Keyframes use clip time; Time nodes read the composition clock like image graphs.
       const program = compileGeometryGraph(weaveGraphOf(effect),
-        geometryParameterReader(effectOperatorParams(effect), effect.id, [...keyframes ?? []], clipTime), undefined,
+        geometryParameterReader(effectOperatorParams(effect), effect.id, [...keyframes ?? []], clipTime, clock), undefined,
         { time: (clip.startTime ?? 0) + clipTime, simulationTime });
       return program.render ? [{ effectId: effect.id, source: { type: 'strands' as const, strands: { clipId: clip.id, effectId: effect.id, program } } }] : [];
     } catch {

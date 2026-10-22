@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { endBatch, startBatch } from '../../../../stores/historyStore';
 import type { TimelineClip } from '../../../../types/timeline';
@@ -177,6 +177,27 @@ function PrecomputeBlock({ clip }: { clip: TimelineClip }) {
   );
 }
 
+/**
+ * A number row that restarts the swarm (Warm-up, Loop length): a drag shows the value it would
+ * set and commits once, on release, so the swarm is not resimulated on every drag step.
+ */
+function CommitOnReleaseNumberRow({ value, onCommitValue, ...row }: Omit<ComponentProps<typeof ResolveInspectorNumberRow>, 'onChange' | 'onDragStart' | 'onDragEnd'>
+  & { onCommitValue: (value: number) => void }) {
+  const [draft, setDraft] = useState<number | null>(null);
+  const dragging = useRef(false), pending = useRef<number | null>(null);
+  return <ResolveInspectorNumberRow {...row} value={draft ?? value}
+    onDragStart={() => { dragging.current = true; }}
+    onDragEnd={() => {
+      dragging.current = false;
+      const next = pending.current;
+      pending.current = null; setDraft(null);
+      if (next !== null && next !== value) onCommitValue(next);
+    }}
+    onChange={(next) => {
+      if (dragging.current) { pending.current = next; setDraft(next); } else if (next !== value) onCommitValue(next);
+    }} />;
+}
+
 /** Simulation clock, loop, memory, host capability, runtime status and precompute. */
 export function FlockTimeQualitySection({ clip }: { clip: TimelineClip }) {
   const setFlockGraphParam = useTimelineStore((state) => state.setFlockGraphParam);
@@ -207,7 +228,7 @@ export function FlockTimeQualitySection({ clip }: { clip: TimelineClip }) {
                 onChange={(next) => withBatch('Set flock step rate', () => setFlockGraphParam(clip.id, simulation.id, 'stepRate', next))}
               />
             </ResolveInspectorRow>
-            <ResolveInspectorNumberRow
+            <CommitOnReleaseNumberRow
               label="Warm-up"
               title="Seconds simulated before the clip starts, so the swarm is already formed on its first frame."
               value={warmup}
@@ -220,7 +241,7 @@ export function FlockTimeQualitySection({ clip }: { clip: TimelineClip }) {
               suffix=" s"
               hardMin={0}
               hardMax={30}
-              onChange={(value) => setFlockGraphParam(clip.id, simulation.id, 'warmup', value)}
+              onCommitValue={(value) => withBatch('Set flock warm-up', () => setFlockGraphParam(clip.id, simulation.id, 'warmup', value))}
             />
           </>
         )}
@@ -233,7 +254,7 @@ export function FlockTimeQualitySection({ clip }: { clip: TimelineClip }) {
           />
         </ResolveInspectorRow>
         {definition.time.loop === 'reset' && (
-          <ResolveInspectorNumberRow
+          <CommitOnReleaseNumberRow
             label="Loop length"
             value={definition.time.loopSeconds}
             defaultValue={10}
@@ -245,7 +266,7 @@ export function FlockTimeQualitySection({ clip }: { clip: TimelineClip }) {
             suffix=" s"
             hardMin={0.1}
             numberMax={Number.POSITIVE_INFINITY}
-            onChange={(value) => setFlockTimeSettings(clip.id, { loopSeconds: value })}
+            onCommitValue={(value) => withBatch('Set flock loop length', () => setFlockTimeSettings(clip.id, { loopSeconds: value }))}
           />
         )}
       </ResolveInspectorSection>

@@ -3,7 +3,8 @@ import type { EffectParam } from '../../effects/types';
 import { FEEDBACK_HISTORY_LOOP_KEY } from '../../effects/_shared/feedbackParameters';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { effectOperatorGraph, isImageGraphEffectType } from './effectGraphOwner';
-import { WEAVE_EFFECT_TYPE, weaveBoundParameters } from './geometry/weaveGraph';
+import { WEAVE_EFFECT_TYPE, weaveBoundParameters, weaveRecipeForm } from './geometry/weaveGraph';
+import { exposedGraphValues } from './exposedGraphValueList';
 import { isCurrentStylizeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_EFFECT_TYPES } from './stylizeRecipes';
 import { Logger } from '../logger';
 
@@ -42,12 +43,37 @@ export function graphBoundParameters(effect: EffectParamOwner): ReadonlySet<stri
  * `graphOnly` parameter that the graph does not read is hidden.
  */
 export function effectParamDefinitions(effect: EffectParamOwner): Record<string, EffectParam> {
-  const definitions = getEffect(effect.type)?.params ?? {};
+  const definitions = ownGraphDefinitions(effect) ?? getEffect(effect.type)?.params ?? {};
   if (!Object.values(definitions).some(conditional)) return definitions;
   const bound = graphBoundParameters(effect);
   if (!bound) return definitions;
   return Object.fromEntries(Object.entries(definitions).map(([name, definition]) => [name, !conditional(definition) ? definition
     : definition.deprecated ? { ...definition, hidden: !bound.has(name) } : { ...definition, hidden: definition.hidden || !bound.has(name) }]));
+}
+
+const ownGraphCache = new WeakMap<EffectOperatorGraph, Record<string, EffectParam>>();
+/**
+ * A Weave whose graph follows no Form (edited in the Nodes tab, a built-in graph such as Jellyfish, or
+ * an earlier recipe) has no Form either: its card rows act whatever Form says (no activeWhen), and a
+ * row the graph exposes keeps the graph's own label and range (Jellyfish's Irregularity 0-1).
+ */
+function ownGraphDefinitions(effect: EffectParamOwner): Record<string, EffectParam> | undefined {
+  const graph = effect.operatorGraph;
+  if (effect.type !== WEAVE_EFFECT_TYPE || !graph || weaveRecipeForm(graph)) return undefined;
+  let own = ownGraphCache.get(graph);
+  if (!own) {
+    const exposed = new Map(exposedGraphValues(graph).map(value => [value.key, value]));
+    own = Object.fromEntries(Object.entries(getEffect(effect.type)?.params ?? {}).map(([name, definition]) => {
+      const { activeWhen: _activeWhen, unit: _unit, ...rest } = definition;
+      void _activeWhen;
+      const value = exposed.get(name);
+      // The graph's label carries its own unit ("Pulse Rate (Hz)").
+      return [name, value ? { ...rest, label: value.label, min: value.min, max: value.max, step: value.step }
+        : { ...rest, ...(_unit ? { unit: _unit } : {}) }];
+    }));
+    ownGraphCache.set(graph, own);
+  }
+  return own;
 }
 
 /** Tool warnings for parameters that are accepted but do nothing on this instance. */
@@ -71,6 +97,8 @@ export function unusedParamWarnings(effect: EffectParamOwner, names: readonly st
  * throws is logged and reported, never dropped silently.
  */
 export function effectDefinitionNotes(effect: EffectParamOwner, width: number, height: number): string[] {
+  const own = ownWeaveGraphNote(effect);
+  if (own) return [own];
   const definition = getEffect(effect.type);
   if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
   const recipe = STYLIZE_RECIPE_EFFECT_TYPES.has(effect.type);
@@ -86,4 +114,14 @@ export function effectDefinitionNotes(effect: EffectParamOwner, width: number, h
   try { graph = effectOperatorGraph(effect, { inspectionOnly: true }); } catch { graph = undefined; }
   if (isCurrentStylizeGraph(effect.type, graph)) return notes;
   return [`This ${definition.name} runs an edited graph, so its own nodes decide how these values act; the standard recipe would say: ${notes.join(' ')}`];
+}
+
+/**
+ * A Weave running its own graph (edited in the Nodes tab, a built-in graph, or a recipe of an earlier
+ * version) has no Form, and the presets only set controls of a Form: say so, instead of letting the
+ * Preset row apply nothing or name a look the graph does not have.
+ */
+function ownWeaveGraphNote(effect: EffectParamOwner): string | undefined {
+  if (effect.type !== WEAVE_EFFECT_TYPE || !effect.operatorGraph || weaveRecipeForm(effect.operatorGraph)) return undefined;
+  return 'This Weave runs its own graph (edited, built-in or from an earlier version): it has no Form, and the presets act only on a Weave that follows a Form, so they may change little or nothing here.';
 }
