@@ -5,8 +5,14 @@ import { EFFECT_OPERATORS } from '../operatorRegistry';
 import { pointwiseLoweringFor } from '../fields/pointwiseLowering';
 import { isCurveOperator } from './curveOperators';
 import { compileGeometryGraph, type GeometryParameterReader } from './geometryProgram';
+import { createQualleGraph } from './qualleGraph';
+import { expandOperatorCompositions } from '../operatorComposition';
 
 export const WEAVE_EFFECT_TYPE = 'weave';
+/** Fibre colour of a new Woven Cloth (the card's Color default). */
+export const WEAVE_CLOTH_COLOR = '#8a857c';
+/** Wind strength of a new Woven Cloth (the card's Wind default). */
+export const WEAVE_CLOTH_WIND = 0.35;
 const FIELD_SIGNALS = new Set(['number', 'boolean', 'vec2', 'vec3', 'vec4']);
 /** Shared force nodes Cloth Sheet and Rod Simulation read (the same identities cables and particles use). */
 const SIMULATION_FORCE_OPERATORS = ['forces.wind', 'forces.gravity', 'forces.turbulence', 'forces.drag'];
@@ -26,7 +32,13 @@ export function geometryOwnerOperators(): OperatorDefinition[] {
 
 /** Reads literal node values, effect-bound values and their keyframes at `time`. */
 export function geometryParameterReader(params: OperatorParameters, effectId = '', keys: Keyframe[] = [], time = 0): GeometryParameterReader {
-  return (node, parameter) => sampleOperatorParameter(node, parameter, params, effectId, keys, time);
+  return (node, parameter) => {
+    // A bound value missing from the params (a Weave saved before the parameter was bound) renders the
+    // node's own value, not the operator default (Wind would otherwise blow at 5 instead of 0.35).
+    const binding = node.bindings[parameter], own = node.constants?.[parameter];
+    const filled = typeof binding === 'string' && params[binding] === undefined && own !== undefined ? { ...params, [binding]: own } : params;
+    return sampleOperatorParameter(node, parameter, filled, effectId, keys, time);
+  };
 }
 
 type Spec = [id: string, operator: string, x: number, y: number, constants?: Record<string, OperatorValue>];
@@ -91,19 +103,24 @@ const FABRIC_NODES: Spec[] = [
   ['render', 'render.strands', 2600, 80, { width: 0.0035, color: '#e8e2d6' }],
   ['output', 'scene.output', 2920, 80],
   ['flyaways', 'geometry.flyaways', 1640, 80, { density: 3, length: 0.08, lift: 2.5, hair: 0.35, seed: 0 }],
-  ['fiber', 'material.fiber', 1960, 80, { preset: 'custom', color: '#8a857c' }],
+  ['fiber', 'material.fiber', 1960, 80, { preset: 'custom', color: WEAVE_CLOTH_COLOR }],
 ];
 /** Wind Cloth: the woven sheet is held at its corners and billows like a sail in gusty, swirling wind (no gravity). */
 const CLOTH_NODES: Spec[] = [
-  ['wind', 'forces.wind', 1320, 620, { direction: [0.2, 0, 1], strength: 0.35, gust: 0.5 }],
+  ['wind', 'forces.wind', 1320, 620, { direction: [0.2, 0, 1], strength: WEAVE_CLOTH_WIND, gust: 0.5 }],
   ['swirl', 'forces.turbulence', 1320, 860, { strength: 0.15, frequency: 1.5 }],
   ['cloth', 'geometry.cloth-sheet', 1640, 620, { columns: 40, rows: 24, width: 1.6, height: 0.96, pin: 'corners', stretch: 0.9, bend: 0.6,
     damping: 0.5, substeps: 6, preroll: 2 }],
   ['bind', 'geometry.surface-bind', 2280, 80, { height: 1 }],
 ];
-/** Reveal by Shape: a growing sphere with a noisy front scales the yarn radius (0 hides, >1 swells the front). */
+/**
+ * Reveal by Shape: a growing sphere with a noisy front scales the yarn radius (0 hides, >1 swells the front).
+ * Reach is the sphere radius at Reveal 1: just past the sheet's corners (half diagonal 0.93, noise 0.08,
+ * edge 0.12), so the whole range of Reveal grows the net. 1.7 fitted the earlier, larger sheet and left
+ * Reveal above 0.55 without effect on this one.
+ */
 const REVEAL_NODES: Spec[] = [
-  ['reveal', 'values.number', 0, 380], ['reach', 'values.number', 0, 520, { value: 1.7 }],
+  ['reveal', 'values.number', 0, 380], ['reach', 'values.number', 0, 520, { value: 1.15 }],
   ['reveal-radius', 'math.multiply.scalar', 260, 420],
   ['reveal-shape', 'field.shape-distance', 520, 380, { shape: 'sphere', center: [0, 0, 0], size: 0.5 }],
   ['reveal-noise', 'field.noise', 520, 620, { frequency: 3, amplitude: 0.08, octaves: 3, seed: 0 }],
@@ -198,6 +215,14 @@ export function createDefaultWeaveGraph(): EffectOperatorGraph {
   const irregularity = nodes.find(node => node.id === 'hand-amount')!;
   irregularity.bindings = { value: 'irregularity_value' };
   irregularity.exposed = { label: 'Irregularity', min: 0, max: 3, step: 0.01 };
+  // Named graph-local values, so their cards read as what they are in the Nodes tab.
+  for (const [id, label, max] of [['reach', 'Reach', 3], ['weave-rate', 'Weave Rate', 2], ['weave-one', 'Finished', 1], ['hand-wobble-scale', 'Wobble Scale', 0.05]] as const) {
+    nodes.find(node => node.id === id)!.valueControl = { label, min: 0, max, step: 0.01 };
+  }
+  // Wind and Color are card controls bound straight to their node parameters (a simulation reads its
+  // force values from the node, so Wind has no Value node).
+  nodes.find(node => node.id === 'wind')!.bindings = { strength: 'wind' };
+  nodes.find(node => node.id === 'fiber')!.bindings = { color: 'color' };
   return { version: 1, schemaVersion: 1, domain: 'geometry', nodes,
     edges: FABRIC_LINKS.map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
     layout: Object.fromEntries(specs.map(([id, , x, y]) => [id, { x, y }])),
@@ -217,11 +242,83 @@ export function validateWeaveGraph(graph: EffectOperatorGraph, allowIncomplete =
   return errors;
 }
 
+/** The forms of a Weave without an edited graph (the card's Form); each is a recipe graph. */
+export const WEAVE_FORMS = ['cloth', 'qualle'] as const;
+export type WeaveForm = typeof WEAVE_FORMS[number];
+const WEAVE_RECIPES: Record<WeaveForm, () => EffectOperatorGraph> = { cloth: createDefaultWeaveGraph, qualle: createQualleGraph };
+
+/** The recipe graph of a Form; an unknown or missing Form (saved before Form existed) is the Woven Cloth. */
+export function weaveRecipeGraph(form: unknown): EffectOperatorGraph {
+  return (WEAVE_RECIPES[form as WeaveForm] ?? createDefaultWeaveGraph)();
+}
+
+/**
+ * What a graph draws, without its layout, labels and folding: nodes with their operator, values and
+ * bindings, the cables, and which nodes and folders are switched off. Compositions are expanded, so a
+ * graph saved in packed form compares equal to the recipe it was saved from.
+ */
+function weaveGraphSignature(graph: EffectOperatorGraph): string {
+  const sorted = (value: Record<string, unknown> | undefined) => JSON.stringify(Object.entries(value ?? {}).toSorted(([a], [b]) => a.localeCompare(b)));
+  const expanded = expandOperatorCompositions(graph);
+  return JSON.stringify([
+    expanded.nodes.map(node => [node.id, node.operator, sorted(node.constants), sorted(node.bindings), !!node.bypassed, node.enabled ?? '',
+      node.exposed ? [node.exposed.label, node.exposed.min, node.exposed.max] : ''].join('|')).toSorted(),
+    expanded.edges.map(edge => `${edge.from}.${edge.output}>${edge.to}.${edge.input}`).toSorted(),
+    (expanded.groups ?? []).filter(group => group.bypassed).map(group => group.id).toSorted(),
+  ]);
+}
+let recipeSignatures: Map<string, WeaveForm> | undefined;
+const recipeFormByGraph = new WeakMap<EffectOperatorGraph, WeaveForm | null>();
+/**
+ * The Form whose current recipe a stored graph is, or undefined for a graph edited in the Nodes tab
+ * (or the recipe of an earlier version). Saving pins every Weave to the graph it renders; a pinned
+ * recipe still follows Form, so Form keeps working after a save, an undo or a reload, while a Weave
+ * saved with an earlier recipe keeps its own look.
+ */
+export function weaveRecipeForm(graph: EffectOperatorGraph): WeaveForm | undefined {
+  let form = recipeFormByGraph.get(graph);
+  if (form === undefined) {
+    recipeSignatures ??= new Map(WEAVE_FORMS.map(candidate => [weaveGraphSignature(weaveRecipeGraph(candidate)), candidate]));
+    form = graph.incomplete ? null : recipeSignatures.get(weaveGraphSignature(graph)) ?? null;
+    recipeFormByGraph.set(graph, form);
+  }
+  return form ?? undefined;
+}
+
+let recipeBindings: ReadonlySet<string> | undefined;
+const editedBindings = new WeakMap<EffectOperatorGraph, ReadonlySet<string>>();
+const boundKeys = (graph: EffectOperatorGraph) => graph.nodes.flatMap(node => Object.values(node.bindings)
+  .filter((binding): binding is string => typeof binding === 'string'));
+/**
+ * Effect parameters a Weave acts on. Without an edited graph that is Form and every parameter its
+ * recipes bind (the card dims the rows of the other Form); an edited graph decides alone, so Form
+ * and the controls it no longer binds leave the card.
+ */
+export function weaveBoundParameters(params: OperatorParameters, edited: EffectOperatorGraph | undefined): ReadonlySet<string> {
+  if (edited && !weaveRecipeForm(edited)) {
+    let keys = editedBindings.get(edited);
+    if (!keys) editedBindings.set(edited, keys = new Set(boundKeys(edited)));
+    return keys;
+  }
+  if (!edited && params[EFFECT_GRAPH_PARAM] !== undefined) return new Set(boundKeys(weaveOperatorGraph(params)));
+  return recipeBindings ??= new Set(['form', ...WEAVE_FORMS.flatMap(form => boundKeys(weaveRecipeGraph(form)))]);
+}
+
+const storedRecipeForms = new Map<string, WeaveForm | null>();
 export function weaveOperatorGraph(params: OperatorParameters): EffectOperatorGraph {
-  const graph = readEffectGraph(params[EFFECT_GRAPH_PARAM], createDefaultWeaveGraph);
+  const stored = params[EFFECT_GRAPH_PARAM];
+  const graph = readEffectGraph(stored, () => weaveRecipeGraph(params.form));
   const errors = validateWeaveGraph(graph, typeof graph.incomplete === 'string');
   if (errors.length) throw new Error(errors[0]);
-  return graph;
+  if (typeof stored !== 'string' || stored === '') return graph;
+  // A saved recipe follows Form (weaveRecipeForm); the last few stored graphs are remembered by their text.
+  let form = storedRecipeForms.get(stored);
+  if (form === undefined) {
+    form = weaveRecipeForm(graph) ?? null;
+    if (storedRecipeForms.size >= 8) storedRecipeForms.delete(storedRecipeForms.keys().next().value!);
+    storedRecipeForms.set(stored, form);
+  }
+  return form ? weaveRecipeGraph(params.form) : graph;
 }
 
 /** Owner validation: structure first, then a full lowering with the effect's current values. */

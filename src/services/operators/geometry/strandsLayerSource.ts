@@ -17,7 +17,8 @@ import type { ParameterSourceClip } from '../../parameterSources/parameterSource
 export interface StrandsLayerSourceData { clipId: string; effectId: string; program: GeometryProgram }
 
 /** Resolving a stored graph validates and re-parses it; keep one result per stored revision. */
-const resolvedGraphs = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
+// A saved recipe follows Form (weaveRecipeForm), so the result also depends on the instance's Form.
+const resolvedGraphs = new WeakMap<EffectOperatorGraph, { form: unknown; graph: EffectOperatorGraph }>();
 const resolvedLegacyGraphs = new WeakMap<Effect, { value: unknown; graph: EffectOperatorGraph }>();
 function weaveGraphOf(effect: Effect): EffectOperatorGraph {
   const stored = effect.operatorGraph;
@@ -29,8 +30,10 @@ function weaveGraphOf(effect: Effect): EffectOperatorGraph {
     resolvedLegacyGraphs.set(effect, { value, graph });
     return graph;
   }
-  let graph = resolvedGraphs.get(stored);
-  if (!graph) { graph = effectOperatorGraph(effect); resolvedGraphs.set(stored, graph); }
+  const cached = resolvedGraphs.get(stored);
+  if (cached && cached.form === effect.params.form) return cached.graph;
+  const graph = effectOperatorGraph(effect);
+  resolvedGraphs.set(stored, { form: effect.params.form, graph });
   return graph;
 }
 

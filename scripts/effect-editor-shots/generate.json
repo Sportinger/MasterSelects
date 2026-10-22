@@ -64,15 +64,6 @@
         1
       ],
       "file": "docs/Features/assets/effects/flocking.webp"
-    },
-    {
-      "name": "weave",
-      "view": "preview",
-      "effect": "weave",
-      "image": "dancer_stage.jpg",
-      "duration": 8,
-      "time": 6,
-      "file": "docs/Features/assets/effects/weave.webp"
     }
   ]
 }

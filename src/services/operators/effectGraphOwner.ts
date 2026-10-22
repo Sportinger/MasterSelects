@@ -420,7 +420,8 @@ export function addableEffectOperators(type: string) {
 
 export function effectOperatorParams(effect: EffectGraphOwner): Record<string, unknown> {
   if (effect.type === 'splat-exploration') return { ...defaultSplatGraph(true).params, ...effect.params };
-  if (isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' || isComputeImageEffectType(effect.type)) {
+  // Weave's card controls are definition parameters its recipe graphs bind, read the same way.
+  if (isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' || isComputeImageEffectType(effect.type) || effect.type === WEAVE_EFFECT_TYPE) {
     const definition = getEffect(effect.type);
     // A parameter missing from stored params predates it: render with its legacy value where it has one.
     const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.legacyDefault ?? spec.default]));

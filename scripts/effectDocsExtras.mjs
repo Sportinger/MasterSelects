@@ -33,6 +33,8 @@ export const EFFECT_DOC_EXTRAS = {
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
   'stick-figure': { thumb: { region: [0, 0, 1, 1] } },
+  // Weave: the still is the net alone on black; Form and Color sit above the card's sections.
+  weave: { thumb: { region: [0, 0, 1, 1] }, sectionLabels: { '': 'Form and color' } },
   'ai-edge-fill': {
     rows: [
       'resolution',

@@ -199,19 +199,52 @@ last curves rather than inventing a remaining parent.
 
 ## Default graph
 
-A new Weave effect starts with a plain weave of fuzzy three-ply yarns (16 warps and
-10 wefts over 1.6 × 0.96 scene units, about two thirds of the frame wide, in a muted
-grey custom wool) on a sail held at its corners, simulated as 40 × 24 square cloth
-cells. Weaves saved before 2026-10-21 keep the graph stored with them (the 2.4 × 1.6
-sheet with 24 × 16 threads in white wool and a 40 × 27 cloth):
+The card's **Form** picks a recipe graph, **Woven Cloth** (the default, below) or
+**Qualle** (see [Qualle form](#qualle-form)), and the card controls are effect parameters
+those recipes bind (`WEAVE_PARAMS` in `src/effects/generate/weave/index.ts`, recipes in
+`weaveRecipeGraph`). A new Weave has no graph of its own; saving, undo and loading pin it
+to the graph it renders, like every graph effect. A stored graph that is the current
+recipe of a form (`weaveRecipeForm`: same nodes, values, bindings, cables and switched-off
+folders, compositions expanded) still follows Form. A graph edited in the Nodes tab, or
+with a folder switched off with **Byp**, is the Weave's own: it decides alone, Form
+leaves the card and only the controls it binds stay; so does a recipe saved by an earlier
+version, which keeps that look. The card's presets (Red Thread, Linen Grid, Nest, Qualle)
+set Form and the values. The rows of the other form stay visible but dimmed
+(`activeWhen`), so a preset that switches Form can always set them.
 
-| Group | What it does | Exposed values |
+The Woven Cloth is a plain weave of fuzzy three-ply yarns (16 warps and 10 wefts over
+1.6 × 0.96 scene units, about two thirds of the frame wide, in a muted grey custom wool)
+on a sail held at its corners, simulated as 40 × 24 square cloth cells. Weaves saved
+before 2026-10-21 keep the graph stored with them (the 2.4 × 1.6 sheet with 24 × 16
+threads in white wool and a 40 × 27 cloth):
+
+| Group | What it does | Card controls |
 |---|---|---|
 | **Weave In** | *Thread Along* pulls every thread in along its path behind a tip that arcs up off the sheet and settles with a damped swing. Warps come first, then the wefts row by row, over the first four seconds of the clip. | **Weave Speed** (1 = four seconds) |
 | **Handmade** | Each thread meanders along its length (uneven spacing), each thread gets its own tension (crimp varies), and slubs thicken the yarn in places. | **Irregularity** (1 = default look, 0 = machine-perfect, up to 3) |
-| **Reveal by Shape** | A growing sphere with a noisy front scales the yarn radius. | **Reveal** (0–1) |
-| **Yarn** | Yarn Profile (plies and fibers twisted along curve length) and Flyaways (stray loops and free ends). | — |
-| **Wind Cloth** | A simulated cloth sheet in gusty, swirling wind; Surface Bind places the woven curves on it. | — |
+| **Reveal by Shape** | A growing sphere with a noisy front scales the yarn radius. Its reach (1.15) is the sphere radius at Reveal 1, just past the sheet's corners, so the whole range grows the net. | **Reveal** (0–1) |
+| **Yarn** | Yarn Profile (plies and fibers twisted along curve length) and Flyaways (stray loops and free ends). Fiber Material's colour is bound to the card. | **Color** |
+| **Wind Cloth** | A simulated cloth sheet in gusty, swirling wind; Surface Bind places the woven curves on it. The wind node's strength is bound to the card (a simulation reads its force values from the node, so Wind has no Value node and is not node-drivable). | **Wind** (0–2, 0.35) |
+
+Reveal, Weave Speed and Irregularity keep their Value nodes, exposed under the same
+parameter keys (`reveal_value`, …), so saved graphs, keyframes and node drivers keep
+working; the card shows each key once. A bound value missing from saved params renders
+the node's own value (`geometryParameterReader`), so a Weave saved before Wind and Color
+were bound keeps its 0.35 wind and grey wool.
+
+### Qualle form
+
+**Qualle** is the ribbon motion of the jellyfish animation *Qualle — Beidseitige Curls*
+(2026-10-08): its Weave graph is the Jellyfish reference structure below, with that
+piece's values (`createQualleGraph` in `qualleGraph.ts`). The piece's story layers
+(metamorphosis, scan overlay, violet marker, particle wake and its 59-second speed
+envelope) are left out, the circulation runs at a constant 0.05 turns per second, and an
+**Upright Pose** group stands the body up (the piece did that with the clip transform):
+(x, y, z) → (x, z, −y) × 0.42, lifted by 0.22, with yarn radius and flyaway length scaled
+alike. Only **Pulse Rate**, **Pulse Size** and **Curl Strength** are card controls; Body
+Length, Tail Inset, Irregularity, Return Flow, Curl Detail and Evolution, Head Wobble,
+Tail Soft Noise, Soft Motion and Return Length are fixed at the piece's values. The
+fibre colour is the card's **Color** (the Qualle preset sets cream `#eee2cf`).
 
 Each group can be bypassed from its **Byp** button or its Effects tab section:
 bypassing *Weave In* shows the finished weave from the first frame, *Handmade* a

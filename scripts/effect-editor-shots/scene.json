@@ -1,0 +1,9 @@
+{
+  "shots": [
+    { "name": "weave-inspector", "effect": "weave", "params": { "color": "#7d5b3a", "weave_value": 2, "reveal_value": 0.32, "irregularity_value": 2.5, "wind": 0.2 },
+      "image": "dancer_stage.jpg", "preview": 0, "top": "card", "gutter": 70, "layout": "float", "viewport": { "width": 1600, "height": 1500 }, "hide": ["Particle Out"],
+      "marks": [{ "target": "Preset", "label": "Preset" }, { "target": "Form", "label": "Form" }, { "target": "Reveal", "label": "Reveal" },
+        { "target": "Wind", "label": "Wind" }, { "target": "Pulse Rate", "label": "Pulse Rate" }],
+      "alt": "TODO", "caption": "TODO" }
+  ]
+}

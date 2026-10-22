@@ -3,6 +3,7 @@ import type { EffectParam } from '../../effects/types';
 import { FEEDBACK_HISTORY_LOOP_KEY } from '../../effects/_shared/feedbackParameters';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { effectOperatorGraph, isImageGraphEffectType } from './effectGraphOwner';
+import { WEAVE_EFFECT_TYPE, weaveBoundParameters } from './geometry/weaveGraph';
 import { isCurrentStylizeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_EFFECT_TYPES } from './stylizeRecipes';
 import { Logger } from '../logger';
 
@@ -17,6 +18,9 @@ const FEEDBACK_CONTROLS = [FEEDBACK_HISTORY_LOOP_KEY, 'reset'];
 
 /** Parameters the instance's effective image graph reads; undefined when no graph decides it. */
 export function graphBoundParameters(effect: EffectParamOwner): ReadonlySet<string> | undefined {
+  if (effect.type === WEAVE_EFFECT_TYPE) {
+    try { return weaveBoundParameters(effect.params, effect.operatorGraph); } catch { return undefined; }
+  }
   if (!isImageGraphEffectType(effect.type)) return undefined;
   let graph: EffectOperatorGraph;
   try { graph = effectOperatorGraph(effect, { inspectionOnly: true }); } catch { return undefined; }
