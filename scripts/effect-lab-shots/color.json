@@ -4,9 +4,14 @@
     { "name": "brightness", "out": "docs/Features/assets/effects/brightness.webp", "image": "dancer_stage", "width": 1920, "layout": "compare", "outWidth": 1600, "maxBytes": 190000,
       "left": { "effect": "original" }, "right": { "effect": "brightness", "params": { "amount": 0.7 } },
       "alt": "The dancer on a dark stage, original left and with Brightness at Amount 0.7 right: the haze, the curtains and her skin turn clearly lighter and the dress glows, while the deepest shadows on the floor stay dark and the white of the dress does not burn out",
-      "caption": "Left: original. Right: Amount 0.7 (the Full Light preset)." }
+      "caption": "Left: original. Right: Amount 0.7 (the Full Light preset)." },
+    { "name": "contrast", "out": "docs/Features/assets/effects/contrast.webp", "image": "dancer_stage", "width": 1920, "layout": "compare", "outWidth": 1600, "maxBytes": 190000,
+      "left": { "effect": "original" }, "right": { "effect": "contrast", "params": { "amount": 1.5 } },
+      "alt": "The dancer on a dark stage, original left and with Contrast at Amount 1.5 right: the haze and the back wall sink into deep black, the dress and her skin stand out brighter and a little warmer, and the white of the dress keeps its folds",
+      "caption": "Left: original. Right: Amount 1.5 (the Bold preset)." }
   ],
   "strips": [
-    { "effect": "brightness", "image": "dancer_stage", "width": 1920, "cellWidth": 400, "columns": 2, "maxBytes": 120000 }
+    { "effect": "brightness", "image": "dancer_stage", "width": 1920, "cellWidth": 400, "columns": 2, "maxBytes": 120000 },
+    { "effect": "contrast", "image": "dancer_stage", "width": 1920, "cellWidth": 400, "columns": 2, "maxBytes": 120000 }
   ]
 }

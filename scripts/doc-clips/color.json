@@ -5,6 +5,10 @@
     { "name": "brightness-amount", "effect": "brightness", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
       "sweep": { "param": "amount", "label": "Amount", "from": -0.8, "to": 0.8, "decimals": 2 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
       "alt": "The dancer on a dark stage with Brightness while Amount runs from −0.8 to 0.8 and back: the stage sinks into night until only her dress and the spotlights remain, then lifts until the haze and curtains show, while the deepest shadows stay dark and the brightest light never burns out; the current value is shown at the bottom left",
-      "caption": "Amount from −0.8 to 0.8 and back." }
+      "caption": "Amount from −0.8 to 0.8 and back." },
+    { "name": "contrast-amount", "effect": "contrast", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
+      "sweep": { "param": "amount", "label": "Amount", "from": 0.4, "to": 1.8, "decimals": 2 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
+      "alt": "The dancer turning on a dark stage with Contrast while Amount runs from 0.4 to 1.8 and back: at first the whole stage is a pale, misty grey, then the haze sinks into black while the dress and skin glow brighter and warmer, and back to the grey veil; the current value is shown at the bottom left",
+      "caption": "Amount from 0.4 to 1.8 and back." }
   ]
 }

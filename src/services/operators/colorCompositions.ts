@@ -1,6 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorDefinition, OperatorEndpoint, OperatorPort } from '../../types/operatorGraph';
 import { extractImageComposition } from './extractImageComposition';
-import { createDefaultBrightnessGraph, createDefaultContrastGraph, createDefaultExposureGraph, createDefaultHueShiftGraph,
+import { createDefaultBrightnessGraph, createFormerContrastGraph, createDefaultExposureGraph, createDefaultHueShiftGraph,
   createDefaultSaturationGraph, createDefaultTemperatureGraph } from './colorEffectGraphs';
 
 const node = (id: string, operator: string): BoundOperatorNode => ({ id, operator, operatorVersion: 1, bindings: {} });
@@ -45,7 +45,9 @@ const consumers = (...effects: string[]) => ['Image graphs', ...effects];
  * each effect graph is its bound parameters plus one of these, and every block is insertable
  * from Reusable Nodes and expandable into its primitives.
  */
-const brightness = createDefaultBrightnessGraph(), contrast = createDefaultContrastGraph(), exposure = createDefaultExposureGraph();
+// Contrast's block is the S-curve alone (its recipe flattens below 1 outside it); the former recipe
+// wires it straight from Amount, so the block keeps its input port and saved instances stay valid.
+const brightness = createDefaultBrightnessGraph(), contrast = createFormerContrastGraph(), exposure = createDefaultExposureGraph();
 const temperature = createDefaultTemperatureGraph(), saturation = createDefaultSaturationGraph(), hue = createDefaultHueShiftGraph();
 const RECIPE_COMPOSITIONS: readonly OperatorDefinition[] = [
   extractImageComposition(brightness, {

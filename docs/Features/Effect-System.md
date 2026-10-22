@@ -509,9 +509,14 @@ bypasses the RGB math. New instances (since the 2026-10 rebuild,
 
 - **Brightness**: per channel `y = x·m / (x·m + 1 − x)` with `m = 2^(2.5 · Amount)`;
   black and white stay fixed, so there is no grey veil.
-- **Contrast**: S-curve `y = x^c / (x^c + (1 − x)^c)`, slope `c` = Amount at
-  mid-grey 0.5; highlights and shadows roll off instead of clipping. Per channel,
-  so strong values also raise saturation.
+- **Contrast**: slope `c` = Amount at mid-grey 0.5. From 1 up an S-curve
+  `y = x^c / (x^c + (1 − x)^c)`: highlights and shadows roll off instead of clipping;
+  per channel, so strong values also raise saturation. Below 1 a straight line toward
+  mid-grey, `y = 0.5 + (x − 0.5) · c` (the Flatten folder; the curve then gets slope 1).
+  Until 2026-10-22 the S-curve ran below 1 too, an inverse S with an infinite slope at
+  black and white that turned one 8-bit shadow step into about 40 at Amount 0.3; saved
+  graphs of that recipe are upgraded on load (`contrastFlattenUpgrade.ts`), identical
+  from Amount 1 up.
 - **Saturation**: mix of Rec.709 luma and RGB by Amount, stopped where the first
   channel reaches 0 or 1, so hue and luma stay (gamut-safe).
 - **Vibrance**: the same gamut-safe mix, with Amount weighted by `1 − S` (HSV
@@ -2525,7 +2530,9 @@ blocks: [Node Catalog](./Node-Catalog.md); graph contract:
   reported (`unsupported-effects`).
 - **Saved projects.** Brightness, Contrast, Exposure, Levels, Saturation, Vibrance, Temperature and
   Hue Shift keep the graph they were saved with, so projects from before the 2026-10 rebuild look as
-  before (`legacyColorEffectGraphs.ts`); add the effect again for the current look. A colour effect
+  before (`legacyColorEffectGraphs.ts`); add the effect again for the current look. One bug fix
+  changes saved looks: a Contrast saved with the 2026-10 recipe flattens below Amount 1 instead of
+  blowing up shadow noise (2026-10-22); from 1 up it is unchanged. A colour effect
   saved before effect graphs existed loads with the original graph; new effects get the recipe graph
   when they are added, also on adjustment layers, where an agent's `configure` keeps the graph of
   every effect it keeps.

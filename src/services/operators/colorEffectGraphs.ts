@@ -103,17 +103,42 @@ export function createDefaultBrightnessGraph(): EffectOperatorGraph {
   return finish(g, curve);
 }
 
-/** S-curve around mid-grey with slope `amount` there; 0 and 1 stay put: y = x^a / (x^a + (1 − x)^a). */
-export function createDefaultContrastGraph(): EffectOperatorGraph {
-  const g = begin();
-  const amount = boundParameter(g, 'amount', CONTRAST_AMOUNT_PARAM);
-  const slope = rgbOf(g, g.binary('curve-slope', 'math.max.scalar', amount, g.number('curve-minimum-slope', COLOR_RECIPE.contrastMinimumSlope)));
-  const input = clampRgb(g, 'input', ['split', 'rgb'], COLOR_RECIPE.contrastEdge, 1 - COLOR_RECIPE.contrastEdge);
+/** The steepening S-curve of Contrast (node ids `curve…`, the shared Contrast Curve block); 0 and 1 stay put. */
+function contrastCurve(g: GraphBuilder, slopeSource: string, rgb: GraphPort): string {
+  const slope = rgbOf(g, g.binary('curve-slope', 'math.max.scalar', slopeSource, g.number('curve-minimum-slope', COLOR_RECIPE.contrastMinimumSlope)));
+  const input = clampRgb(g, 'input', rgb, COLOR_RECIPE.contrastEdge, 1 - COLOR_RECIPE.contrastEdge);
   const shadows = g.binary('curve-shadows', 'math.power.rgb', input, slope);
   const highlights = g.binary('curve-highlights', 'math.power.rgb',
     g.binary('curve-inverse', 'math.subtract.rgb', rgbOf(g, g.number('curve-one', 1)), input), slope);
-  const curve = g.binary('curve', 'math.divide-ieee.rgb', shadows, g.binary('curve-total', 'math.add.rgb', shadows, highlights));
-  return finish(g, curve);
+  return g.binary('curve', 'math.divide-ieee.rgb', shadows, g.binary('curve-total', 'math.add.rgb', shadows, highlights));
+}
+
+/**
+ * Contrast with slope `amount` at mid-grey. Above 1 an S-curve that keeps 0 and 1 and rolls the
+ * highlights off: y = x^a / (x^a + (1 − x)^a). Below 1 the curve stays straight and the picture
+ * flattens toward mid-grey: y = 0.5 + (x − 0.5) · a, a faded print with lifted blacks (2026-10-22).
+ * The inverse S used there before had an infinite slope at black and white and blew 8-bit shadow
+ * noise up into colour blotches; saved graphs of that recipe are upgraded (contrastFlattenUpgrade.ts).
+ */
+export function createDefaultContrastGraph(): EffectOperatorGraph {
+  const g = begin();
+  const amount = boundParameter(g, 'amount', CONTRAST_AMOUNT_PARAM);
+  const one = g.number('flatten-one', 1);
+  const steepness = g.binary('amount-steepness', 'math.max.scalar', amount, one);
+  const factor = g.binary('amount-flatten', 'math.min.scalar', amount, one);
+  // At most one of the two stages acts: Flatten up to Amount 1, the curve from 1 on.
+  const flat = g.add('flatten', 'math.mix.rgb', { a: rgbOf(g, g.number('flatten-grey', 0.5)), b: ['split', 'rgb'], t: factor });
+  return finish(g, contrastCurve(g, steepness, flat));
+}
+
+/**
+ * The Contrast recipe of 2026-10 before the flat branch: the S-curve family at every amount, so
+ * below 1 an inverse S with an infinite slope at black and white. Kept to recognise and upgrade
+ * saved graphs, and as the source of the shared Contrast Curve block, whose ports must not change.
+ */
+export function createFormerContrastGraph(): EffectOperatorGraph {
+  const g = begin();
+  return finish(g, contrastCurve(g, boundParameter(g, 'amount', CONTRAST_AMOUNT_PARAM), ['split', 'rgb']));
 }
 
 export function createDefaultSaturationGraph(): EffectOperatorGraph {

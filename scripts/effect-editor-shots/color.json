@@ -26,6 +26,31 @@
       ]
     },
     {
+      "name": "contrast-inspector",
+      "effect": "contrast",
+      "params": {
+        "amount": 1.5
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Contrast card: the Preset menu showing Bold and the Amount row at 1.50, beside a strip of the preview with the deep black stage",
+      "caption": "Contrast with the Bold preset. 1 — Preset: pick a starting point. 2 — Amount: flatter or punchier.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
       "name": "exposure-inspector",
       "effect": "exposure",
       "params": {

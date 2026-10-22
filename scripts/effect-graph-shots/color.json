@@ -1,9 +1,12 @@
 {
   "shots": [
     "brightness?plumbing=hide&marks=organized-brightness-controls:above,compound-shared-curve-stops-per-amount:above@brightness",
-    "contrast?focus=contrast-curve&only=input,curve-shadows,curve-one,curve-one-rgb,curve-inverse,curve-highlights,curve-total,curve&rows=1&name.curve-slope-rgb=Slope@contrast-curve",
     "brightness?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@brightness-parameters",
     "brightness?focus=brightness-curve&only=curve-stops-per-amount,curve-stops,curve-gain,input,curve-lifted,curve-one,curve-one-rgb,curve-rest,curve-total,curve&cables=avoid&marks=curve-stops-per-amount:below,curve-gain:above,curve-lifted:above,curve:above@brightness-curve",
+    "contrast?plumbing=hide&marks=organized-contrast-controls:below,organized-contrast-flatten:above,compound-shared-curve-minimum-slope:above@contrast",
+    "contrast?focus=parameters&only=amount,amount-clamped,amount-flatten,amount-steepness&cables=avoid&marks=amount-clamped:above,amount-flatten:above,amount-steepness:below@contrast-parameters",
+    "contrast?focus=flatten&only=flatten-grey-rgb,flatten&cables=avoid&layout=float&marks=flatten:below@contrast-flatten",
+    "contrast?focus=contrast-curve&only=input,curve-shadows,curve-one,curve-one-rgb,curve-inverse,curve-highlights,curve-total,curve&rows=1&name.curve-slope-rgb=Slope&cables=avoid&marks=curve-shadows:below,curve-highlights:above,curve:above@contrast-curve",
     "exposure?focus=exposure-stops&marks=light-gain:above@exposure-stops",
     "hue-shift?focus=hue-rotate-oklch&marks=hue-lch-split:above,hue-lch-combine:above@hue-shift-rotate",
     "vibrance?focus=muted-colour-weight&only=weight-muted,weight,weight-boost,weight-amount,weight-saturation&rows=1&layout=full&marks=weight:below@vibrance"

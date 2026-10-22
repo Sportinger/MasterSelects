@@ -29,6 +29,7 @@ import type { ImageOperatorCompileContext } from './imageOperatorChoice';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from './analogSignalGraph';
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { migrateAnalogSignalGraph } from './analogSignalMigration';
+import { flattenContrastGraph } from './contrastFlattenUpgrade';
 import { COLOR_RECIPE_EFFECT_TYPES, createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
 import { createLegacyColorEffectGraph } from './legacyColorEffectGraphs';
 import { ORIGINAL_COLOR_PRESENTATION } from './effectPresentationPlans';
@@ -258,7 +259,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
         : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved)
           : effectType === 'rom1' ? kneeRom1GainGraph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved)
-            : upgradePointwiseStylizeGraph(effectType, saved);
+            : effectType === 'contrast' ? flattenContrastGraph(saved) : upgradePointwiseStylizeGraph(effectType, saved);
     // Stylize effects saved with their earlier recipe (before 2026-10-21) keep it and its folder plan
     // (its own presentation type, e.g. 'glow-earlier').
     const stylizeEarlier = stylizePresentation(effectType, presented);
