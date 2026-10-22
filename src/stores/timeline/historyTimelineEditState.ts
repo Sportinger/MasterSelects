@@ -257,6 +257,9 @@ function isDurableIdMapPath(path: string): boolean {
     || (path.includes('.nodeGraph.groups.') && path.endsWith('.nodeLayouts'));
 }
 
+/** A parameter source binding names its driving node as `source: { nodeId, portId }`: durable data, still traversed. */
+const isParameterSourceEndpoint = (path: string, key: string) => key === 'source' && path.includes('.nodeGraph.parameterSources.targets.');
+
 export function findHistoryStateBoundaryViolations(value: unknown): string[] {
   const violations: string[] = [];
   const stack = new WeakSet<object>();
@@ -319,7 +322,8 @@ export function findHistoryStateBoundaryViolations(value: unknown): string[] {
       // Composition rules (including unknown operators) may use arbitrary durable JSON keys.
       const compositionGraphData = path === '$.timeline.compositionGraph' || path.startsWith('$.timeline.compositionGraph.');
       if (compositionGraphData && child === undefined) continue; // Optional fields stay verbatim in snapshots.
-      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object' && !isDurableIdMapPath(path) && !compositionGraphData) {
+      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object' && !isDurableIdMapPath(path) && !compositionGraphData
+        && !isParameterSourceEndpoint(path, key)) {
         violations.push(`${childPath}: runtime payload key`);
         continue;
       }
