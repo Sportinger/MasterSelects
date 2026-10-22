@@ -26,9 +26,9 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The whole dancer four times in a grid, once per preset: Photogravure as a fine cream grain out of an even dark brown, Mezzotint as a coarser cream grain out of black with a few light specks on the stage, Blueprint as white grain on deep blue, and Red Poster as a cream figure in a medium grain on signal red](../assets/effects/presets/paper-print.webp)
+![The dancer's upper body four times, once per preset: Photogravure as a fine cream grain out of an even dark brown, Mezzotint as a coarser cream grain out of black with light specks on the stage, Blueprint as a coarse white grain on deep blue, and Red Poster as a cream figure in a medium grain on signal red](../assets/effects/presets/paper-print.webp)
 
-<figcaption>The four presets on the whole figure.</figcaption>
+<figcaption>The four presets on the upper body. Click for full size: one pixel of a 1080p frame per screen pixel.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -341,7 +341,7 @@ Paper Print works in seven stages, one folder each in the Nodes tab: **Grain** l
 
 ## Technical details
 
-- **Size.** Grain Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same grain. A grain is never smaller than one pixel of the frame; below 1 px Grain Size renders as 1. The card says when either happens. The paper's bumps are 3 pixels of a 1080p frame.
+- **Size.** Grain Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same grain. A grain is never smaller than one pixel of the frame being drawn, so a fine grain can come out coarser in a preview at 1/4 quality than in the export (Grain Size 2 at 1/4 quality is half a preview pixel and draws a whole one, twice as coarse as the export); below 1 px Grain Size renders as 1. The card says when either happens, for the preview as well as the export. The paper's bumps are 3 pixels of a 1080p frame.
 - **Tone.** The share of ink is worked out in linear light. Over an area the print keeps the picture's brightness within 2 % at Texture 0; Texture lifts the mid tones a little (the most at 1), and the lift fades out towards full ink. Pure white prints clean paper and pure black solid ink at every Texture.
 - **Time.** Paper Print does not move: the grain stays in place on the frame, so moving footage slides under it like a picture under a screen. A paused picture needs no extra rendering.
 - **Transparency.** Every pixel is printed by itself and keeps its own alpha, so cut-out edges get no dark rim.

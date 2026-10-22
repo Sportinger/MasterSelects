@@ -1,10 +1,11 @@
-import { getEffect } from '../../effects';
+import { getDefaultParams, getEffect } from '../../effects';
 import type { EffectParam } from '../../effects/types';
 import { FEEDBACK_HISTORY_LOOP_KEY } from '../../effects/_shared/feedbackParameters';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { effectOperatorGraph, isImageGraphEffectType } from './effectGraphOwner';
 import { isCurrentStylizeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_EFFECT_TYPES } from './stylizeRecipes';
 import { Logger } from '../logger';
+import { PATTERN_REFERENCE_HEIGHT } from './patternReferenceFrame';
 
 const log = Logger.create('EffectParamVisibility');
 
@@ -66,11 +67,34 @@ export function unusedParamWarnings(effect: EffectParamOwner, names: readonly st
  * hedged note, because its own nodes decide what happens to those values. A note function that
  * throws is logged and reported, never dropped silently.
  */
+const measuredTypes = new Map<string, boolean>();
+const measures = (graph: EffectOperatorGraph | undefined) => graph?.nodes.some(node => node.id === 'frame-scale') ?? false;
+function graphOf(effect: EffectParamOwner): EffectOperatorGraph | undefined {
+  try { return effectOperatorGraph(effect, { inspectionOnly: true }); } catch { return undefined; }
+}
+
+/**
+ * True when the effect's current recipe measures its pattern sizes in 1080p pixels
+ * (`measureInReferenceFrame`) but this instance's graph does not: an earlier saved graph (Halftone,
+ * Riso, Dithering, Paper Print from 3.2.7 ...) draws them in output pixels, so its size notes must be
+ * judged on a 1080-pixel frame, where a 1080p pixel is one output pixel.
+ */
+function runsUnmeasuredGraph(effect: EffectParamOwner): boolean {
+  if (!isImageGraphEffectType(effect.type)) return false;
+  let current = measuredTypes.get(effect.type);
+  if (current === undefined) {
+    current = measures(graphOf({ type: effect.type, params: getDefaultParams(effect.type) }));
+    measuredTypes.set(effect.type, current);
+  }
+  return current && !measures(graphOf(effect));
+}
+
 export function effectDefinitionNotes(effect: EffectParamOwner, width: number, height: number): string[] {
   const definition = getEffect(effect.type);
   if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
   const recipe = STYLIZE_RECIPE_EFFECT_TYPES.has(effect.type);
   if (recipe && isEarlierStylizeGraph(effect.type, effect.operatorGraph)) return [];
+  if (runsUnmeasuredGraph(effect)) width = height = PATTERN_REFERENCE_HEIGHT;
   let notes: string[];
   try { notes = definition.paramWarnings(effect.params as Record<string, number | boolean | string>, width, height); } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);

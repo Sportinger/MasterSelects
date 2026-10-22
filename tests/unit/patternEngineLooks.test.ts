@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { effectEngineMembers } from '../../src/effects/effectCatalogGroups';
 import { CATALOG_SPEED_TRAVEL } from '../../src/effects/_shared/catalogEffect';
+import { previewSizeNotes } from '../../src/components/panels/properties/effectCardNotes';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { bindImageOperatorValues } from '../../src/services/operators/imageOperatorValueBindings';
@@ -157,6 +158,20 @@ describe('two-tone-pattern engine', () => {
     expect(notes('dither', { scale: 3 }, 1280, 720)).toEqual([]);
     const cells = (resolution: [number, number]) => render(compile('dither', { scale: 3, amount: 1 }).plan, resolution, 0);
     expect(agreement(cells([960, 540]), render(compile('dither', { scale: 4, amount: 1 }).plan, [960, 540], 0), 0)).toBe(1); // 1.5 → 2, like 4 px
+  });
+
+  it('says when a lower Preview Quality draws a pattern size differently from the export', () => {
+    const preview = (type: string, params: Params, quality: number) => {
+      const values = { ...getDefaultParams(type), ...params };
+      return previewSizeNotes(type, values, undefined, 1920, 1080, quality, getEffect(type)!.paramWarnings?.(values, 1920, 1080) ?? []);
+    };
+    // Dithering 3 px is 1.5 pixels at half quality and renders 2-pixel cells.
+    expect(preview('dither', { scale: 3 }, .5)).toEqual(['At this Preview Quality the preview draws 960×540, the export 1920×1080. In the preview: Pixel Size 3 px is 1.5 pixels on this 960×540 frame; dither cells are whole pixels, so it renders 2.']);
+    // Paper Print Grain 2 px and Halftone Dot Size 2 reach the one-pixel floor at quarter quality.
+    expect(preview('paper-print', { scale: 2 }, .25).join(' ')).toMatch(/preview draws 480×270.*thinner than one pixel/u);
+    expect(preview('halftone', { scale: 2 }, .25).join(' ')).toMatch(/Dot Size 2 px is thinner than one pixel on this 480×270 frame/u);
+    expect(preview('halftone', { scale: 12 }, .25)).toEqual([]);
+    expect(preview('dither', { scale: 3 }, 1)).toEqual([]);
   });
 
   it('moves a keyframed Speed by the distance travelled, so a ramp does not jump', () => {

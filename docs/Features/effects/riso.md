@@ -25,7 +25,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 ![The dancer's upper body five times, once per preset: Zine in blue and pink dots with pink fringes on a violet stage, Postcard in teal and red on a dark teal stage, Art Print in fine green and pink dots on a dark aubergine stage, Gig Poster in bold black and red dots, and Off Register in large burgundy dots with aqua fringes beside every edge on navy](../assets/effects/presets/riso.webp)
 
-<figcaption>The five presets on the upper body, at full size: one pixel of a 1080p frame per screen pixel.</figcaption>
+<figcaption>The five presets on the upper body. Click for full size: one pixel of a 1080p frame per screen pixel.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -348,7 +348,7 @@ From these numbers the folder solves for the two shares: first the dark ink's sh
 
 ## Technical details
 
-- **Size.** Dot Size and Registration count pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same dots and the same slip. A cell is never smaller than one pixel of the frame, and the card says so on a frame that small; Registration may stay below a pixel.
+- **Size.** Dot Size and Registration count pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same dots and the same slip. A cell is never smaller than one pixel of the frame being drawn, so small dots can come out coarser in a preview at 1/4 quality than in the export; the card says so, for the preview as well as the export. Registration may stay below a pixel.
 - **Colour.** Each cell's colour is the average of all its pixels in linear light (four reads of the Cell Filter) and split between the two inks by a least-squares fit of the light it takes from the paper. The inks multiply where they overlap, and over an area the dots keep the colour's brightness within a few percent. A colour the two inks cannot make (green with blue and pink ink) keeps its brightness and takes the nearest mix; black prints both inks in full, white stays paper.
 - **Screens.** The dark ink's dots lie on a grid turned 15°, the warm ink's on one turned 75°; dot edges are one output pixel soft, so a 4K export is sharper than the preview, not different.
 - **Transparency.** Transparent reading points do not count towards a cell's colour, and a cell whose points are all transparent prints no ink. Each pixel keeps its own alpha, so the inks slip inside a cut-out figure's outline.

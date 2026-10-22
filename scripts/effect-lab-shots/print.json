@@ -24,7 +24,7 @@
  "strips": [
   {"effect": "halftone", "image": "dancer_stage", "width": 1920, "crop": [440, 30, 1040, 1040], "cellWidth": 520, "columns": 3},
   {"effect": "dither", "image": "dancer_stage", "width": 1920, "crop": [720, 110, 460, 460], "cellWidth": 460, "columns": 2},
-  {"effect": "riso", "image": "dancer_stage", "width": 1920, "crop": [760, 120, 340, 340], "cellWidth": 340, "columns": 3, "maxBytes": 150000},
-  {"effect": "paper-print", "image": "dancer_stage", "width": 1920, "crop": [440, 30, 1040, 1040], "cellWidth": 520, "columns": 2}
+  {"effect": "riso", "image": "dancer_stage", "width": 1920, "crop": [740, 110, 420, 420], "cellWidth": 420, "columns": 2, "maxBytes": 195000},
+  {"effect": "paper-print", "image": "dancer_stage", "width": 1920, "crop": [720, 110, 460, 460], "cellWidth": 460, "columns": 2}
  ]
 }

@@ -25,7 +25,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 ![The dancer's upper body four times, once per preset: Eight Colours as a light figure in fine dots of pure red, yellow and white on black, Poster in a coarse checker of few colours over the stage and the figure, Game Screen in chunky pixels of a few colours, and Big Pixels as a coarse mosaic in which face and arms still read](../assets/effects/presets/dither.webp)
 
-<figcaption>The four presets on the upper body, at full size: one pixel of a 1080p frame per screen pixel.</figcaption>
+<figcaption>The four presets on the upper body. Click for full size: one pixel of a 1080p frame per screen pixel.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
@@ -307,7 +307,7 @@ The picture averaged over boxes of half a cell, in linear light and weighted by 
 
 ## Technical details
 
-- **Size.** Pixel Size counts pixels of a frame whose shorter side is 1080, rounded to whole pixels of the frame being drawn: a 4K export shows the same pattern twice as large in pixels, a portrait 1080 × 1920 frame the same as a landscape one. On a frame where the size is not whole (3 px at half Preview Quality are 1.5 pixels), it renders the nearest whole size and the card says so.
+- **Size.** Pixel Size counts pixels of a frame whose shorter side is 1080, rounded to whole pixels of the frame being drawn: a 4K export shows the same pattern twice as large in pixels, a portrait 1080 × 1920 frame the same as a landscape one. On a frame where the size is not whole it renders the nearest whole size, and the card says so: 3 px at half Preview Quality are 1.5 pixels, so the preview draws 2-pixel cells while the 1080p export draws 3, and the card names both.
 - **Tone.** Each cell's colour is the average of all its pixels in linear light (four reads of the Cell Filter), and the share of the upper step is measured in light: over one 4 × 4 tile of cells, the dithered light matches the cell's light to a 32nd of a step. Black stays black and white stays white at every Levels.
 - **Colour reads.** Every cell is averaged over all its pixels: four reads of the Cell Filter, each the average of a box half a cell wide (up to 32 reads per row and column, spread evenly in wider boxes). On moving footage a cell's colour changes smoothly as an edge crosses it.
 - **Transparency.** Transparent reads do not count towards a cell's colour, so a cut-out figure gets no dark rim; every pixel keeps its own alpha.

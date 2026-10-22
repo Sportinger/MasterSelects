@@ -1946,11 +1946,16 @@ Riso, Riso Glow, Dithering and Paper Print without their new parameter (Dot Size
 every persisted entry (`pinEarlierPrintGraph`, as the analog looks do), and a graph-less Halftone or
 Pattern Halftone from a project file (`migrateLoadedEffectOperatorGraph`) gets the frozen 3.2.7 graph
 `createLegacyHalftoneGraph` (`legacyHalftoneGraph.ts`). These earlier recipes keep sizes in output pixels
-(no 1080p measure). A custom Look stores the graph of these looks with its entry when the effect has one
-(`stackFromClipEffects`); a freshly added look has none yet, and its entry is marked `recipe: 'current'`
-instead, so the Look's thumbnail and every apply render the current recipe the clip showed. An unmarked
-entry without a graph is from before 2026-10-22 and gets the 3.2.7 graph (`lookEntryOriginalGraph`), with
-the new recipe's own parameters left out, in its thumbnail and on the clip. A graph-less look in the running editor is new and renders the current recipe, also for
+(no 1080p measure). A custom Look entry of these looks names the recipe instead of storing it
+(`stackFromClipEffects`): a graph-less effect or one whose graph is the current recipe
+(`matchesEffectRecipe`) is marked `recipe: 'current'`, one on its 3.2.7 graph is left unmarked, and only an
+edited graph is stored (the stock graphs are 30–180 KB, and every Look shares one localStorage key), so the
+Look's thumbnail and every apply render what the clip showed. An unmarked entry without a graph (saved
+before 2026-10-22, or on the 3.2.7 graph) gets the 3.2.7 graph (`lookEntryOriginalGraph`), with
+the new recipe's own parameters left out, in its thumbnail and on the clip. The card's size notes judge an
+instance without the `frame-scale` node (an earlier graph, sizes in output pixels) on a 1080-pixel frame, so it
+gets no 1080p rounding or floor notes (`effectDefinitionNotes`), and at a Preview Quality below Full the card
+also names the notes that hold only for the preview frame (`previewSizeNotes`). A graph-less look in the running editor is new and renders the current recipe, also for
 `effectOperatorGraph({ type, params: {} })`. Other pattern looks without a stored graph (projects from
 before 2026-09-21) get their current recipe, whose sizes match the old ones at 1080p. The shared base controls (Scale, Amount, Angle, Ink, Paper,
 Speed) are read by every look that shows them or retired with a reason; Film Prism's Prism Angle

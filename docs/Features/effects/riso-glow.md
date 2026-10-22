@@ -77,7 +77,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Registration from 0 to 16 px and back.</figcaption>
 </figure>
 
-**Registration** – how far the two inks slip apart, like two drums of the press that did not line up. At 0 they print exactly on top of each other; 2 to 4 px gives the slight misprint of a real risograph; 10 and more lets the glow ink stand beside every edge of the figure as a glowing fringe. The shadow ink moves up and to the left, the glow ink down and to the right, half the distance each; far above 30 px the two prints come apart, a range kept for projects saved with the earlier Riso Glow. 0 to 80 px, default 3 px.
+**Registration** – how far the two inks slip apart, like two drums of the press that did not line up. At 0 they print exactly on top of each other; 2 to 4 px gives the slight misprint of a real risograph; 10 and more lets the glow ink stand beside every edge of the figure as a glowing fringe. The shadow ink moves up and to the left, the glow ink down and to the right, half the distance each. Above about 30 px the two inks separate into two pictures; the slider reaches 80 so older projects keep their setting. 0 to 80 px, default 3 px.
 
 ### Glow & Pulse
 
@@ -314,7 +314,7 @@ The round dot that covers exactly that share of each cell, one pixel soft at the
 
 ## Technical details
 
-- **Size.** Dot Size and Registration count pixels of a frame whose shorter side is 1080, and the glow reaches a fixed number of dots: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same dots and the same glow. A cell is never smaller than one pixel of the frame, and the card says so on a frame that small.
+- **Size.** Dot Size and Registration count pixels of a frame whose shorter side is 1080, and the glow reaches a fixed number of dots: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same dots and the same glow. A cell is never smaller than one pixel of the frame being drawn, so small dots can come out coarser in a preview at 1/4 quality than in the export; the card says so, for the preview as well as the export.
 - **Glow.** The print and the glow share (mix(0.6, 1, the glow ink's coverage) × the part the shadow ink leaves open × the pixel's alpha) are cached in one pass; the second pass gathers the share over 9 × 9 taps 0.75 dots apart with Gaussian weights and screens the glow ink's light onto the print in linear light: 1 − (1 − print) × e^(−strength × light). Black keeps the print's darkest colour (both inks in full) and gives no glow; light parts glow with the glow ink and spill into the dark around them.
 - **Time.** The pulse is 0.55 + 0.45 × cos(2 × seconds × Speed) of the timeline: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. A keyframed Speed breathes faster or slower smoothly, without a jump.
 - **Transparency.** Transparent parts of the picture take no ink and give no glow, and each pixel keeps its own alpha: on a cut-out figure the glow stays inside its outline and does not spill onto what lies behind it.

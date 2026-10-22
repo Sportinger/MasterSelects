@@ -1,27 +1,12 @@
 import { useMediaStore } from '../../../stores/mediaStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { getEffect } from '../../../effects';
 import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
-import { effectDefinitionNotes } from '../../../services/operators/effectParamVisibility';
 import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 import { effectExperimentalNote } from '../../../effects/types';
+import { definitionNotes, previewSizeNotes } from './effectCardNotes';
 
 const size = (value: unknown, fallback: number) => typeof value === 'number' && value > 0 ? value : fallback;
-
-/**
- * The effect's own notes on values it clamps, ignores or cannot show (`paramWarnings`, judged on
- * the instance's recipe: an earlier saved stylize recipe gets none). Tool results name parameters
- * by id ("levels: 1 is …"); the inspector names them by their label.
- */
-function definitionNotes(effectType: string, params: Record<string, unknown>, operatorGraph: EffectOperatorGraph | undefined,
-  width: number, height: number): string[] {
-  const definition = getEffect(effectType);
-  if (!definition) return [];
-  const labelled = (note: string) => note.replace(/^([A-Za-z][\w-]*): /, (prefix, id: string) => {
-    const label = Object.hasOwn(definition.params, id) ? definition.params[id].label : undefined;
-    return label ? `${label}: ` : prefix;
-  });
-  return effectDefinitionNotes({ type: effectType, params, operatorGraph }, width, height).map(labelled);
-}
 
 /**
  * Says where a blur stops being exact at the size of the composition being edited, which owns the
@@ -34,9 +19,11 @@ function definitionNotes(effectType: string, params: Record<string, unknown>, op
 export function EffectBudgetNotice({ effectType, params, operatorGraph }: { effectType: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }) {
   const width = size(useMediaStore(state => state.getActiveComposition?.()?.width), 1920);
   const height = size(useMediaStore(state => state.getActiveComposition?.()?.height), 1080);
+  const previewQuality = useSettingsStore(state => state.previewQuality);
   const experimental = effectExperimentalNote(getEffect(effectType));
+  const exported = definitionNotes(effectType, params, operatorGraph, width, height);
   const notes = [...(experimental ? [`Experimental: ${experimental}`] : []), ...blurBudgetNotes(effectType, params, width, height),
-    ...definitionNotes(effectType, params, operatorGraph, width, height)];
+    ...exported, ...previewSizeNotes(effectType, params, operatorGraph, width, height, previewQuality, exported)];
   if (!notes.length) return null;
   return <div className="effect-quality-warning" role="status">{notes.join(' ')}</div>;
 }

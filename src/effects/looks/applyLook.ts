@@ -1,9 +1,11 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { COLOR_RECIPE_EFFECT_TYPES } from '../../services/operators/colorEffectGraphs';
-import { isReviewedPrintLook } from '../../services/operators/patternLegacyGraphs';
+import { earlierPrintGraph, isReviewedPrintLook } from '../../services/operators/patternLegacyGraphs';
+import { effectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { matchesEffectRecipe } from '../../services/operators/effectFamilyPresentation';
 import { hasEarlierStylizeRecipe, isEarlierStylizeGraph, stylizeNewInstanceParams } from '../../services/operators/stylizeRecipes';
-import { getEffect, withLegacyDefaultParams, withoutRuntimeTravelParams } from '..';
+import { getDefaultParams, getEffect, withLegacyDefaultParams, withoutRuntimeTravelParams } from '..';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { checkedLookEntryOperatorGraph, lookEntryOmittedParams, lookEntryParams } from './lookEntryGraph';
 import type { LookDefinition, LookStackEntry } from './types';
@@ -40,6 +42,20 @@ export function applyLookToClip(look: LookDefinition, clipId: string): string[] 
   return problems;
 }
 /**
+ * Which recipe a print look's graph is: `current` (the recipe a new instance renders), `earlier` (its
+ * 3.2.7 graph) or `edited`. A project load gives every print look its graph, and those graphs are
+ * large (Riso Glow about 170 KB), so a Look entry stores only an edited one.
+ */
+function printGraphRecipe(effect: { type: string; params?: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }): 'current' | 'earlier' | 'edited' {
+  const graph = effect.operatorGraph;
+  if (!graph) return 'current';
+  const current = effectOperatorGraph({ id: 'look-entry', type: effect.type, params: { ...getDefaultParams(effect.type), ...effect.params } } as never);
+  if (matchesEffectRecipe(graph, current)) return 'current';
+  const earlier = earlierPrintGraph(effect.type);
+  return earlier && matchesEffectRecipe(graph, earlier) ? 'earlier' : 'edited';
+}
+
+/**
  * A Look stack from clip effects. A parameter an instance does not store renders at its
  * `legacyDefault` (saved before the parameter existed); the entry stores that value explicitly, so the
  * Look applies and previews as the clip looked rather than with the new default.
@@ -47,21 +63,24 @@ export function applyLookToClip(look: LookDefinition, clipId: string): string[] 
 export function stackFromClipEffects(
   effects: Array<{ type: string; enabled?: boolean; params?: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }>,
 ): LookStackEntry[] {
-  return effects.map((effect) => ({
-    effectId: effect.type,
-    enabled: effect.enabled !== false,
-    ...(hasEarlierStylizeRecipe(effect.type) && isEarlierStylizeGraph(effect.type, effect.operatorGraph) ? { recipe: 'earlier' as const } : {}),
-    // A fresh print look has no graph and renders its current recipe; the marker keeps the entry from
-    // being taken for one saved before the 2026-10-22 print review (lookEntryOriginalGraph).
-    ...(!effect.operatorGraph && isReviewedPrintLook(effect.type) ? { recipe: 'current' as const } : {}),
-    params: withoutRuntimeTravelParams(effect.type, withLegacyDefaultParams(effect.type, Object.fromEntries(
-      Object.entries(effect.params ?? {}).filter(([, value]) => (
-        typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
-      ))) as Record<string, number | boolean | string>)),
-    // Color and print-look graphs are small and self-contained; other graphs may reference clip resources. A print
-    // look keeps its graph so the entry stays the look it was saved with (a graph-less unmarked one is from
-    // before the 2026-10-22 print review, lookEntryOriginalGraph).
-    ...(effect.operatorGraph && (COLOR_RECIPE_EFFECT_TYPES.has(effect.type) || isReviewedPrintLook(effect.type))
-      ? { operatorGraph: structuredClone(effect.operatorGraph) } : {}),
-  }));
+  return effects.map((effect) => {
+    const print = isReviewedPrintLook(effect.type) ? printGraphRecipe(effect) : undefined;
+    return {
+      effectId: effect.type,
+      enabled: effect.enabled !== false,
+      ...(hasEarlierStylizeRecipe(effect.type) && isEarlierStylizeGraph(effect.type, effect.operatorGraph) ? { recipe: 'earlier' as const } : {}),
+      // A print look on its current recipe is marked so the entry is not taken for one saved before the
+      // 2026-10-22 print review; an unmarked graph-less entry gets the 3.2.7 graph (lookEntryOriginalGraph),
+      // which is exactly what a print look on its earlier graph needs.
+      ...(print === 'current' ? { recipe: 'current' as const } : {}),
+      params: withoutRuntimeTravelParams(effect.type, withLegacyDefaultParams(effect.type, Object.fromEntries(
+        Object.entries(effect.params ?? {}).filter(([, value]) => (
+          typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
+        ))) as Record<string, number | boolean | string>)),
+      // Color graphs are small and self-contained; other graphs may reference clip resources. A print look
+      // stores its graph only when it was edited: its known recipes are rebuilt from the marker above.
+      ...(effect.operatorGraph && (COLOR_RECIPE_EFFECT_TYPES.has(effect.type) || print === 'edited')
+        ? { operatorGraph: structuredClone(effect.operatorGraph) } : {}),
+    };
+  });
 }

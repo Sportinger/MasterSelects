@@ -24,10 +24,11 @@ function ditherWholePixelNotes(params: Record<string, number | boolean | string>
 
 /** A graph-less Dithering saved before Levels (no `levels` value, hasEarlierDitheringParams) renders its earlier recipe: say so in the card. */
 function ditherNotes(params: Record<string, number | boolean | string>, width?: number, height?: number): string[] {
-  const earlier = params.levels === undefined
-    ? ['This Dithering was saved before Levels and keeps its earlier look (each pixel stepped to four levels); add Dithering again to use Levels and the presets as designed.']
-    : [];
-  return [...earlier, ...ditherWholePixelNotes(params, width, height)];
+  // The earlier recipe draws Pixel Size in output pixels and never rounds it, so no size note applies to it.
+  if (params.levels === undefined) {
+    return ['This Dithering was saved before Levels and keeps its earlier look (each pixel stepped to four levels); add Dithering again to use Levels and the presets as designed.'];
+  }
+  return ditherWholePixelNotes(params, width, height);
 }
 
 /** A graph-less Riso or Riso Glow saved before Dot Size (no `dotSize`, hasEarlierRisoParams) renders its earlier recipe;

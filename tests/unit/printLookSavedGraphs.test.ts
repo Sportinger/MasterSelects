@@ -5,6 +5,7 @@ import { lookPreviewEffects } from '../../src/effects/looks/lookEntryGraph';
 import type { LookDefinition } from '../../src/effects/looks/types';
 import { effectOperatorGraph, migrateLoadedEffectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
+import { effectDefinitionNotes } from '../../src/services/operators/effectParamVisibility';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { evaluateImagePasses } from '../helpers/imageGraphPasses';
 import { createLegacyHalftoneGraph } from '../../src/services/operators/legacyHalftoneGraph';
@@ -101,12 +102,43 @@ describe('print looks saved before the 2026-10-22 print review', () => {
     expect(lookPreviewEffects({ ...look, builtIn: true })[0].operatorGraph).toBeUndefined();
   });
 
-  it('a Look saved now stores the print look graph, so it keeps the look it was saved with', () => {
+  it('an earlier graph draws in output pixels, so it gets no 1080p size notes', () => {
+    // A 3.2.7 Dithering without Levels at 1280x720, Pixel Size 4: it renders 4 output pixels.
+    const oldDither = { type: 'dither', params: { scale: 4, angle: 0, amount: .75 }, operatorGraph: createDefaultDitherGraph('dither') };
+    expect(effectDefinitionNotes(oldDither, 1280, 720).join(' ')).toMatch(/saved before Levels/);
+    expect(effectDefinitionNotes(oldDither, 1280, 720).join(' ')).not.toMatch(/renders 3|pixels on this/);
+    // A stored 3.2.7 Halftone at 640x360 with Dot Size 2 renders 2 output pixels, not "thinner than one pixel".
+    const oldHalftone = { type: 'halftone', params: { ...getDefaultParams('halftone'), scale: 2 }, operatorGraph: createLegacyHalftoneGraph('halftone') };
+    expect(effectDefinitionNotes(oldHalftone, 640, 360).join(' ')).not.toMatch(/thinner than one pixel/);
+    // The current recipe measures in 1080p pixels and still says so.
+    expect(effectDefinitionNotes({ type: 'halftone', params: { ...getDefaultParams('halftone'), scale: 2 } }, 640, 360).join(' ')).toMatch(/thinner than one pixel/);
+    expect(effectDefinitionNotes({ type: 'dither', params: { ...getDefaultParams('dither'), scale: 4 } }, 1280, 720).join(' ')).toMatch(/renders 3/);
+  });
+
+  it('a Look saved from a reopened project stores no known print recipe, only edited graphs, and stays a few KB', () => {
+    const types = ['halftone', 'riso', 'dither', 'paper-print', 'riso-glow'];
+    // A project save stores every print look's graph and a load keeps it (migratePersisted/migrateLoadedEffectOperatorGraph).
+    const loaded = types.map(type => migrateLoadedEffectOperatorGraph(migratePersistedEffectOperatorGraph({ ...graphless(type, getDefaultParams(type)), id: type })));
+    loaded.forEach(effect => expect(effect.operatorGraph).toBeDefined());
+    const stack = stackFromClipEffects(loaded as never);
+    stack.forEach((entry) => {
+      expect(entry.operatorGraph).toBeUndefined();
+      expect(entry.recipe).toBe('current');
+      expect(JSON.stringify(entry).length).toBeLessThan(4096);
+    });
+    lookPreviewEffects(custom(stack)).forEach((effect, index) => {
+      expect(matchesEffectRecipe(effectOperatorGraph(effect), effectOperatorGraph(loaded[index]))).toBe(true);
+    });
+    // The 3.2.7 graph is rebuilt from an unmarked graph-less entry.
+    const [earlier] = stackFromClipEffects([{ type: 'riso', params: getDefaultParams('riso'), operatorGraph: createEarlierRisoGraph('riso') }]);
+    expect(earlier.operatorGraph).toBeUndefined();
+    expect(earlier.recipe).toBeUndefined();
+    expect(matchesEffectRecipe(lookPreviewEffects(custom([earlier]))[0].operatorGraph!, createEarlierRisoGraph('riso'))).toBe(true);
+    // An edited graph is stored, so the entry keeps the look it was saved with.
     const current = createDefaultHalftoneGraph('halftone');
-    const [entry] = stackFromClipEffects([{ type: 'halftone', params: getDefaultParams('halftone') as never, operatorGraph: current }]);
-    expect(entry.operatorGraph && matchesEffectRecipe(entry.operatorGraph, current)).toBe(true);
-    const [preview] = lookPreviewEffects(custom([entry]));
-    expect(matchesEffectRecipe(preview.operatorGraph!, current)).toBe(true);
+    const edited = { ...current, nodes: current.nodes.map(node => node.id === 'own-weight' ? { ...node, constants: { value: 0.123 } } : node) };
+    const [kept] = stackFromClipEffects([{ type: 'halftone', params: getDefaultParams('halftone'), operatorGraph: edited }]);
+    expect(kept.operatorGraph && matchesEffectRecipe(kept.operatorGraph, edited)).toBe(true);
   });
 
   it('a Look saved from freshly added print looks (no graph yet) previews and applies their current recipe', () => {
