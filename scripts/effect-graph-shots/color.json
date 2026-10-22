@@ -7,7 +7,11 @@
     "contrast?focus=parameters&only=amount,amount-clamped,amount-flatten,amount-steepness&cables=avoid&marks=amount-clamped:above,amount-flatten:above,amount-steepness:below@contrast-parameters",
     "contrast?focus=flatten&only=flatten-grey-rgb,flatten&cables=avoid&layout=float&marks=flatten:below@contrast-flatten",
     "contrast?focus=contrast-curve&only=input,curve-shadows,curve-one,curve-one-rgb,curve-inverse,curve-highlights,curve-total,curve&rows=1&name.curve-slope-rgb=Slope&cables=avoid&marks=curve-shadows:below,curve-highlights:above,curve:above@contrast-curve",
-    "exposure?focus=exposure-stops&marks=light-gain:above@exposure-stops",
+    "exposure?plumbing=hide&marks=organized-exposure-controls:below,compound-shared-light-gain:above,organized-exposure-tone:below,organized-exposure-finish:above@exposure",
+    "exposure?focus=parameters&only=exposure,exposure-clamped,gamma,gamma-clamped,offset&constants=hide&cables=avoid&layout=float&marks=exposure-clamped:above,gamma-clamped:below@exposure-parameters",
+    "exposure?focus=exposure-stops&marks=light-linear:below,light-gain:above,light-exposed:above,light-encoded:above@exposure-stops",
+    "exposure?focus=offset-and-gamma&only=offset-rgb,tone-offset,tone-zero-rgb,tone-positive,tone-inverse-gamma,tone-inverse-gamma-rgb,tone-gamma&cables=avoid&marks=tone-offset:above,tone-positive:above,tone-inverse-gamma:below,tone-gamma:above@exposure-tone",
+    "exposure?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@exposure-finish",
     "hue-shift?focus=hue-rotate-oklch&marks=hue-lch-split:above,hue-lch-combine:above@hue-shift-rotate",
     "vibrance?focus=muted-colour-weight&only=weight-muted,weight,weight-boost,weight-amount,weight-saturation&rows=1&layout=full&marks=weight:below@vibrance"
   ]

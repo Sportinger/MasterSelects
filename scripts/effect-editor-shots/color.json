@@ -54,33 +54,32 @@
       "name": "exposure-inspector",
       "effect": "exposure",
       "params": {
-        "exposure": 1
+        "offset": 0.06,
+        "gamma": 1.25
       },
       "image": "dancer_stage.jpg",
-      "preview": 0,
-      "alt": "Properties, Effects with the Exposure card: Exposure at 1.0 EV, Offset 0 and Gamma 1, with keyframe and reset buttons beside each row",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with an Exposure card: the Preset menu showing Milky Haze, Exposure at 0.0 EV, Offset at 0.06 and Gamma at 1.25, beside a strip of the preview with the hazy, lifted stage",
+      "caption": "Exposure with the Milky Haze preset. 1 — Preset: pick a starting point. 2 — Exposure: the light, in camera stops. 3 — Offset: lifts or lowers everything. 4 — Gamma: the mid-tones.",
       "marks": [
         {
-          "target": "tab:Effects",
-          "from": "below",
-          "label": "Properties → Effects lists the selected clip's effects"
+          "target": "Preset",
+          "label": "Preset"
         },
         {
           "target": "Exposure",
-          "label": "Exposure in camera stops; the unit EV is shown in the field"
+          "label": "Exposure"
+        },
+        {
+          "target": "Offset",
+          "label": "Offset"
         },
         {
           "target": "Gamma",
-          "label": "Gamma, for the mid-tones"
-        },
-        {
-          "target": "bypass",
-          "from": "above",
-          "label": "Bypass, to compare with the original"
+          "label": "Gamma"
         }
       ],
-      "top": "tabs",
-      "layout": "float",
       "hide": [
         "Particle Out"
       ]

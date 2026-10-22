@@ -9,6 +9,10 @@
     { "name": "contrast-amount", "effect": "contrast", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
       "sweep": { "param": "amount", "label": "Amount", "from": 0.4, "to": 1.8, "decimals": 2 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
       "alt": "The dancer turning on a dark stage with Contrast while Amount runs from 0.4 to 1.8 and back: at first the whole stage is a pale, misty grey, then the haze sinks into black while the dress and skin glow brighter and warmer, and back to the grey veil; the current value is shown at the bottom left",
-      "caption": "Amount from 0.4 to 1.8 and back." }
+      "caption": "Amount from 0.4 to 1.8 and back." },
+    { "name": "exposure-exposure", "effect": "exposure", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
+      "sweep": { "param": "exposure", "label": "Exposure", "from": -2, "to": 2, "unit": " EV", "decimals": 0 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
+      "alt": "The dancer turning on a dark stage with Exposure while it runs from −2 to +2 EV and back: first she is a dim figure in the dark, then the light comes up evenly over the whole stage until the haze glows and the brightest folds of her dress burn out to white; the current value is shown at the bottom left",
+      "caption": "Exposure from −2 to +2 EV and back." }
   ]
 }

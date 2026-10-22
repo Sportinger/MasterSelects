@@ -3,6 +3,7 @@ import { getDefaultParams, getEffect } from '../../src/effects';
 import { COLOR_RECIPE, createDefaultColorEffectGraph, createFormerContrastGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
 import { flattenContrastGraph } from '../../src/services/operators/contrastFlattenUpgrade';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
+import { effectPresentationPlan } from '../../src/services/operators/effectPresentationPlans';
 import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { colorEffectGraphState } from '../../src/services/operators/colorEffectGraphState';
 import { createLegacyColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
@@ -254,6 +255,16 @@ describe('rebuilt color effect recipes', () => {
     applyWorkerSoftwareImageGraphs(data, 1, 1, plan!.pixelEffects.imageOperatorPlans!, 0);
     const gain = 2 ** (COLOR_RECIPE.brightnessStops * 0.4), curve = (x: number) => x * gain / (x * gain + 1 - x);
     expect([...data]).toEqual([Math.round(curve(0.2) * 255), Math.round(curve(128 / 255) * 255), 0, 255]);
+  });
+
+  it('folds every working node of the Exposure recipe into a stage folder, the Offset splat into Offset & Gamma', () => {
+    const graph = createDefaultColorEffectGraph('exposure'), plan = effectPresentationPlan('exposure')!;
+    const plumbing = /^(frame|split|output)$|-render-(min|max)$|^tone-zero$|^clamp-(low|high)$/;
+    const bound = new Set(['exposure', 'offset', 'gamma']);
+    const loose = graph.nodes.filter(node => !plumbing.test(node.id) && !bound.has(node.id) && plan.stage(node as never) === 'processing');
+    expect(loose.map(node => node.id)).toEqual([]);
+    expect(plan.stage({ id: 'offset-rgb' } as never)).toBe('tone');
+    expect(plan.labels.tone).toBe('Offset & Gamma');
   });
 
   it('keeps the original formulas in the legacy graphs that saved projects still carry', () => {

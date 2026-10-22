@@ -33,7 +33,7 @@ export const ORIGINAL_COLOR_PRESENTATION: EffectPresentationPlan = {
 const COLOR_STAGES: readonly [RegExp, string, string][] = [
   [/-clamped$|^amount-(steepness|flatten)$/, 'controls', 'Parameters'], [/^(clamp|combine|image)(-|$)/, 'finish', 'Clamp & Alpha'],
   [/^input(-|$)/, 'input', 'Input 0–1'], [/^curve(-|$)/, 'curve', 'Tone Curve'], [/^flatten(-|$)/, 'flatten', 'Flatten'], [/^light-/, 'light', 'Linear Light'],
-  [/^gain-/, 'gain', 'White Balance Gains'], [/^tone-/, 'tone', 'Offset & Gamma'], [/^weight(-|$)/, 'weight', 'Muted-Colour Weight'],
+  [/^gain-/, 'gain', 'White Balance Gains'], [/^tone-|^offset-rgb$/, 'tone', 'Offset & Gamma'], [/^weight(-|$)/, 'weight', 'Muted-Colour Weight'],
   [/^measure-/, 'measure', 'Hue & Saturation'], [/^skin-/, 'skin', 'Skin Protection'], [/^gamut-/, 'gamut', 'Gamut-Safe Saturation'], [/^(range|remap)(-|$)/, 'remap', 'Input Black & White'],
   [/^gamma-/, 'gamma', 'Gamma'], [/^output-range$/, 'output', 'Output Range'], [/^hue-/, 'hue', 'Hue Rotation'],
 ];
