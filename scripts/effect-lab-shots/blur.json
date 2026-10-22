@@ -105,6 +105,24 @@
       },
       "alt": "The dancer on the dark stage, original left and with Radial Blur in Spin mode at Amount 0.5 right: her arms, dress and the stage floor smear in arcs around her middle, as if she spun in a pirouette while the shutter was open",
       "caption": "Left: original. Right: Type Spin, Amount 0.5."
+    },
+    {
+      "name": "zoom-blur",
+      "out": "docs/Features/assets/effects/zoom-blur.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "compare",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "zoom-blur",
+        "params": {
+          "amount": 0.3
+        }
+      },
+      "alt": "The rainy night street, original left and with Zoom Blur at Amount 0.3 right: the neon signs, shop fronts and wet reflections streak outward from the walker in the middle, as if the camera rushed down the street while the shutter was open",
+      "caption": "Left: original. Right: Amount 0.3."
     }
   ]
 }

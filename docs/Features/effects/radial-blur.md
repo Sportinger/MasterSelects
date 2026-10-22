@@ -304,7 +304,7 @@ Radial Blur works in the six stages of [Motion Blur](./motion-blur.md#node-setup
 
 ## Technical details
 
-- **Units.** Center X and Y are shares of the frame (0 to 1, from the top left). Spin turns by 20° per unit of Amount in total, half each way, so its streak at a pixel is Amount × 0.349 × the distance from the centre. Zoom reads from the pixel towards the centre down to a scale of 1 − 0.2 × Amount × the distance from the centre in shares of the frame, never below 0.05, and weights its reads 1 − t/2. At Amount 0.3, [Zoom Blur](./zoom-blur.md)'s streak is about five times as long.
+- **Units.** Center X and Y are shares of the frame (0 to 1, from the top left). Spin turns by 20° per unit of Amount in total, half each way, so its streak at a pixel is Amount × 0.349 × the distance from the centre. Zoom reads from the pixel towards the centre down to a scale of 1 − 0.2 × Amount × the distance from the centre in shares of the frame, never below 0.05, and weights its reads 1 − t/2. At the same Amount, [Zoom Blur](./zoom-blur.md)'s streak is about 3.5 times as long in the corners and more near the centre.
 - **Two stages.** About 2 × √(2 × longest streak in pixels) reads per pixel: Stage B reads up to 64 pieces, Stage A up to 256 pixels per piece. A streak beyond that (only on very large frames) reads its pieces further apart, and the card and the tool result say so.
 - **Edges.** At the frame edge the picture is clamped, not mirrored. Transparent edges smear without a dark rim, and the preview and the export match.
 - **Below 0 and zero.** A negative Amount leaves the picture unchanged, as in earlier versions, and the card and the tool result say so. An unedited Radial Blur at Amount 0 is skipped, so the picture passes through exactly.

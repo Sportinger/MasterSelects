@@ -145,6 +145,39 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "zoom-blur-inspector",
+      "effect": "zoom-blur",
+      "params": {
+        "amount": 0.45
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Zoom Blur card: the Preset menu showing Rush, Amount at 0.45 and Center X and Center Y at 0.5, beside a strip of the preview where the dancer's arm and dress and a beam of stage light streak outward from the middle of the frame",
+      "caption": "Zoom Blur with the Rush preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how long the streaks are. 3 \u2014 Center X: where the burst starts across. 4 \u2014 Center Y: and up or down.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Center X",
+          "label": "Center X"
+        },
+        {
+          "target": "Center Y",
+          "label": "Center Y"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

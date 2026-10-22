@@ -43,6 +43,17 @@
         1920,
         1080
       ]
+    },
+    {
+      "effect": "zoom-blur",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ]
     }
   ]
 }

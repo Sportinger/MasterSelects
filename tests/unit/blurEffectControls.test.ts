@@ -15,6 +15,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import { executeAITool } from '../../src/services/aiTools';
 import { motionBlur } from '../../src/effects/blur/motion';
 import { radialBlur } from '../../src/effects/blur/radial';
+import { zoomBlur } from '../../src/effects/blur/zoom';
 import { resolveEffectPreset } from '../../src/services/effects/effectPresets';
 import { effectParamDisplay } from '../../src/effects/paramDisplay';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
@@ -131,6 +132,21 @@ describe('Radial Blur presets', () => {
       expect(amount).toBeGreaterThan(0);
       expect(amount).toBeLessThanOrEqual(2);
       expect(resolveEffectPreset({ type: 'radial-blur', params: {} }, preset)).toMatchObject({ mode, amount, centerX: 0.5, centerY: 0.5 });
+    }
+  });
+});
+
+describe('Zoom Blur presets', () => {
+  it('grow in Amount within the card range and keep the centre in the middle', () => {
+    expect(zoomBlur.presets?.map(preset => preset.name)).toEqual(['Push In', 'Impact', 'Rush', 'Light Speed']);
+    const amounts = (zoomBlur.presets ?? []).map(preset => (preset.params as { amount: number }).amount);
+    expect(amounts).toEqual(amounts.toSorted((a, b) => a - b));
+    for (const preset of zoomBlur.presets ?? []) {
+      const { amount } = preset.params as { amount: number };
+      expect(amount).toBeGreaterThan(0);
+      expect(amount).toBeLessThanOrEqual(zoomBlur.params.amount.max ?? 1);
+      expect(blurBudgetNotes('zoom-blur', { amount }, 1920, 1080)).toEqual([]);
+      expect(resolveEffectPreset({ type: 'zoom-blur', params: { centerX: 0.2 } }, preset)).toMatchObject({ amount, centerX: 0.5, centerY: 0.5 });
     }
   });
 });
