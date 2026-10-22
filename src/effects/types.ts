@@ -60,6 +60,12 @@ export interface EffectParam {
   // named here, and packers use that travel instead of value × time, so a ramp moves smoothly. Never
   // stored: loading strips it (withoutRuntimeTravelParams).
   integratedAs?: string;
+  // Looks of one style engine (the card's Style menu) share parameter keys. A key whose control does
+  // something else in this look than in the engine's other looks (Crystal Glass's Facets count the
+  // facets across the frame where Scale is a cell size in pixels) names that here: a Style switch
+  // carries a value and its keyframes only between looks whose control has the same role (none = the
+  // engine's shared meaning), and starts any other at the new look's default.
+  styleRole?: string;
 }
 
 /**

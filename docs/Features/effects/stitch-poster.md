@@ -1,6 +1,6 @@
 # Stitch Poster
 
-<!-- effect-docs: basic page sha=522d24231016, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=26e847e50de6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Combines character art with cross-stitch X marks that get denser in dark areas over a paper-tinted background; Cell Size sets stitch size.
 
@@ -36,7 +36,7 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 | Light | a colour | `#e8fff5` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks under [Text & Glyph](../Effects-Glyph.md) (17).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults. Looks under [Text & Glyph](../Effects-Glyph.md) (17).
 
 ## Technical details
 

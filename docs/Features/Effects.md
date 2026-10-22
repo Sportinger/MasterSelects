@@ -123,10 +123,13 @@ opens that node in the Nodes tab. More: [Parameter sources](./Node-Workspace.md#
 **Styles.** Many effects are looks of one shared engine: the print, line, textile, pixel, lens and
 glitch patterns share one, the text and glyph looks another, the tracking overlays a third. Their card
 has a **Style** menu at the top, with the looks of the effect's own group first and the other groups
-under their names. A switch keeps the values and keyframes of controls with the same name, brought
-into the new look's range. A control with another name (Halftone's **Scale** is CRT Screen's **Mask
-Density**) or one only the new look has starts at its default. A control only the old look has keeps
-its value and keyframes for a switch back. The row under the menu names each of these changes.
+under their names. A control you changed keeps its value and keyframes when the new look has the
+same control, also under another name (Halftone's **Ink** is Riso's **Dark Ink**), brought into the
+new look's range. A control you left alone opens at the new look's default. A control that does
+something else in the new look (Halftone's **Scale** is a cell size, CRT Screen's **Mask Density** a
+stripe width) starts at its default; **Undo** brings back the old value and keyframes. A control only
+the old look has keeps its value and keyframes for a switch back. A control a node drives stays
+driven. The row under the menu names each of these changes.
 
 **Presets.** Effects that come with presets have a **Preset** row under **Style**. A preset is a
 named starting point: it sets all controls of the card at once, and one undo takes it back. A control

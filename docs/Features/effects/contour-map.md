@@ -1,6 +1,6 @@
 # Contour Map
 
-<!-- effect-docs: basic page sha=41920041d562, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=1f0dd1d9022d, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Turns brightness into banded elevation zones between Ink and Paper with lines at each band, like a topographic map; Scale sets band count.
 
@@ -29,7 +29,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Lines & Engraving: [Crosshatch](./crosshatch.md), [Drift Lines](./drift-lines.md), [Outline](./outline.md), [Vector Engraving](./vector-tiling.md), [Wave Lines](./wave-lines.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Textile & Craft](../Effects-Textile.md) (3), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults. Looks of Lines & Engraving: [Crosshatch](./crosshatch.md), [Drift Lines](./drift-lines.md), [Outline](./outline.md), [Vector Engraving](./vector-tiling.md), [Wave Lines](./wave-lines.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Textile & Craft](../Effects-Textile.md) (3), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 

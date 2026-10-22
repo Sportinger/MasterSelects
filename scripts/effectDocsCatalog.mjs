@@ -557,7 +557,7 @@ export function basicPage(effect, ctx) {
     const rest = !groups.length ? ''
       : others.length <= 3 ? ` ${near.length ? 'Also' : 'Looks'}: ${groups.map(([id, ids]) => `${ids.toSorted(byName).map(look).join(', ')} (${group(id)})`).join('; ')}.`
         : ` ${near.length ? 'Further looks' : 'Looks'} under ${groups.map(([id, ids]) => `${group(id)} (${ids.length})`).join(', ')}.`;
-    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults.${own}${rest}`);
+    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults.${own}${rest}`);
   }
   const details = [];
   if (effect.engine) details.push(`${effect.name} is one look of ${ENGINE_LABELS[effect.engine] ?? `the ${effect.engine} engine`}; its looks share one node setup.`);

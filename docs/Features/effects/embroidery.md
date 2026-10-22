@@ -1,6 +1,6 @@
 # Embroidery
 
-<!-- effect-docs: basic page sha=c7a0bb5b2607, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=ed217bdc26dc, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Covers the image in wavy animated thread rows tinted with the Ink color for a knitted fabric look; Scale sets the stitch size.
 
@@ -30,7 +30,7 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Textile & Craft: [Cross Stitch](./cross-stitch.md), [Kilim Carpet](./kilim.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Lines & Engraving](../Effects-Lines.md) (6), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults. Looks of Textile & Craft: [Cross Stitch](./cross-stitch.md), [Kilim Carpet](./kilim.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Lines & Engraving](../Effects-Lines.md) (6), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 

@@ -8,6 +8,7 @@ import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/ex
 import { EFFECT_GRAPH_PARAM } from '../operators/effectGraph';
 import { createEffectProperty } from '../../types/animationProperties';
 import { startBatch, endBatch } from '../../stores/historyStore';
+import { isParameterNodeDriven } from '../parameterSources/parameterSourceTargets';
 
 const paramsOf = (type: string): Record<string, EffectParam> => getEffect(type)?.params ?? {};
 const nameOf = (type: string) => getEffect(type)?.name ?? type;
@@ -65,15 +66,30 @@ export function hideOtherStyleLanes(properties: Set<string>, effects: ReadonlyAr
 const formatValue = (value: unknown) => typeof value === 'number' ? String(Math.round(value * 1000) / 1000) : String(value);
 const clampTo = (param: EffectParam, value: number) => Math.min(param.max ?? Infinity, Math.max(param.min ?? -Infinity, value));
 const listText = (items: string[]) => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+const sameValue = (a: unknown, b: unknown) => typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) <= 1e-9 : a === b;
 
 /**
- * Replaces the look in place: same effect ID, stack position and one undo step. A control both
- * looks have under the same name keeps its value and keyframes, brought into the new look's range.
- * A control with another name in the new look (Halftone's Scale is CRT Screen's Mask Density) is
- * another control: it starts at the new look's default and the old keyframes on it are removed.
- * Controls only the new look has start at their defaults, a choice the new look does not offer
- * falls back to its default, and controls only the old look has keep their value and keyframes for
- * a switch back. Returns one short sentence per change the user cannot see in the card.
+ * Whether a stored value of `key` means the same in the new look (EffectParam.styleRole). A value the
+ * old look does not have was kept from an earlier look, which the effect does not record: it carries
+ * only when every look of the engine that has the key gives it the new look's role.
+ */
+function carriesStyleValue(engineType: string, key: string, old: EffectParam | undefined, param: EffectParam): boolean {
+  if (old) return old.styleRole === param.styleRole;
+  const engine = effectEngine(engineType);
+  return !!engine && effectEngineMembers(engine).every(member => !paramsOf(member)[key] || paramsOf(member)[key].styleRole === param.styleRole);
+}
+
+/**
+ * Replaces the look in place: same effect ID, stack position and one undo step. A control both looks
+ * have in the same role (EffectParam.styleRole; Halftone's Ink is Riso's Dark Ink) keeps a value the
+ * user set and its keyframes, brought into the new look's range; one still at the old look's default,
+ * without keyframes or a node driving it, takes the new look's default, so an untouched control opens
+ * like the new look. A control in another role (Halftone's Scale is a cell size, CRT Screen's Mask
+ * Density a stripe width) starts at the new look's default, and its old keyframes are removed (Undo
+ * brings both back). Controls only the new look has start at their defaults, a choice the new look
+ * does not offer falls back to its default, and controls only the old look has keep their value and
+ * keyframes for a switch back. A node source on a control stays and keeps driving it; the row says
+ * so. Returns one short sentence per change the user cannot see in the card.
  */
 export function changeEffectStyle(clipId: string, effectId: string, type: string): string[] {
   assertExclusiveTimelineMutationAllowed();
@@ -85,20 +101,24 @@ export function changeEffectStyle(clipId: string, effectId: string, type: string
   const oldParams = paramsOf(effect.type), newParams = paramsOf(type), newName = nameOf(type);
   const keyframes = state.clipKeyframes.get(clipId) ?? [];
   const keyed = (key: string) => keyframes.filter(keyframe => keyframe.property === createEffectProperty(effectId, key));
-  const notes: string[] = [], renamed: Array<{ from: string; to: string }> = [];
+  const driven = (key: string) => isParameterNodeDriven(clip, createEffectProperty(effectId, key));
+  const notes: string[] = [], renamed: Array<{ from: string; to: string }> = [], drivenLabels: string[] = [];
   const clampKeys: Array<{ id: string; value: number }> = [], removeKeys: string[] = [];
   // A customized node graph belongs to the previous look; the new style starts from its own default graph.
   const params = Object.fromEntries(Object.entries(effect.params).filter(([key]) => key !== EFFECT_GRAPH_PARAM));
   for (const [key, param] of Object.entries(newParams)) {
     const stored = params[key], old = oldParams[key];
-    if (old && old.label !== param.label) {
+    if (driven(key)) drivenLabels.push(param.label);
+    if (stored !== undefined && !carriesStyleValue(effect.type, key, old, param)) {
       params[key] = param.default;
-      renamed.push({ from: old.label, to: param.label });
+      if (old) renamed.push({ from: old.label, to: param.label });
       removeKeys.push(...keyed(key).map(keyframe => keyframe.id));
       continue;
     }
     const offered = param.type !== 'select' || param.options?.some(option => option.value === stored);
     if (stored === undefined || !offered) { params[key] = param.default; continue; }
+    // Untouched: the old look's default, not keyed and not driven, opens at the new look's default.
+    if (old && sameValue(stored, old.default) && !keyed(key).length && !driven(key)) { params[key] = param.default; continue; }
     if (param.type !== 'number') continue;
     if (typeof stored === 'number' && clampTo(param, stored) !== stored) {
       params[key] = clampTo(param, stored);
@@ -111,10 +131,11 @@ export function changeEffectStyle(clipId: string, effectId: string, type: string
     }
   }
   if (renamed.length) {
-    const removed = removeKeys.length ? ' Their keyframes were removed (Undo brings them back).' : '';
-    const one = renamed.length === 1;
-    notes.unshift(`${listText(renamed.map(entry => entry.to))} ${one ? 'starts' : 'start'} at ${newName}'s ${one ? 'default' : 'defaults'} (${one ? 'another control' : 'other controls'} than ${listText(renamed.map(entry => entry.from))}).${removed}`);
+    const one = renamed.length === 1, from = listText(renamed.map(entry => entry.from));
+    const removed = removeKeys.length ? ` and ${one ? 'its' : 'their'} keyframes` : '';
+    notes.unshift(`${newName} has no ${from}: ${listText(renamed.map(entry => entry.to))} ${one ? 'starts at its default' : 'start at their defaults'} (Undo brings back ${from}${removed}).`);
   }
+  if (drivenLabels.length) notes.push(`${listText(drivenLabels)} ${drivenLabels.length === 1 ? 'stays driven by its node' : 'stay driven by their nodes'}.`);
   const kept = Object.entries(oldParams).filter(([key]) => !newParams[key] && keyed(key).length > 0).map(([, param]) => param.label);
   if (kept.length) notes.push(`${listText(kept)} ${kept.length === 1 ? 'keeps its' : 'keep their'} keyframes for a switch back; ${newName} has no ${listText(kept)}.`);
   const next: Effect = { ...effect, type: type as Effect['type'], params, operatorGraph: undefined,

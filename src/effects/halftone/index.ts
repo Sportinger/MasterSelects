@@ -30,7 +30,7 @@ export const patternHalftone = createCatalogEffect({
 });
 export const riso = createCatalogEffect({
   id: 'riso', name: 'Riso', category: 'halftone', shader, entryPoint: 'risoFragment',
-  params: { scale: { type: 'number', label: 'Registration', default: 8, min: 1, max: 32, step: 1, group: 'Pattern' }, colorA: { type: 'color', label: 'Dark Ink', default: '#2046b3', group: 'Color' }, colorB: { type: 'color', label: 'Warm Ink', default: '#ef476f', group: 'Color' } },
+  params: { scale: { type: 'number', label: 'Registration', default: 8, min: 1, max: 32, step: 1, group: 'Pattern', styleRole: 'registration' }, colorA: { type: 'color', label: 'Dark Ink', default: '#2046b3', group: 'Color' }, colorB: { type: 'color', label: 'Warm Ink', default: '#ef476f', group: 'Color' } },
   retired: ignoredBaseParams('Riso', ['angle']),
 });
 export const risoGlow = createCatalogEffect({

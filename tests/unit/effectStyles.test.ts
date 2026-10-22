@@ -22,13 +22,15 @@ function setup(locked = false) {
 }
 
 describe('effect styles', () => {
-  it('switches the look in place and keeps the ID, the values of controls with the same name and the position', () => {
+  it('switches the look in place and keeps the ID, the values of controls in the same role and the position', () => {
     setup();
     changeEffectStyle('style-clip', 'fx', 'riso');
     const [effect] = useTimelineStore.getState().clips[0].effects;
-    // Amount and Angle are the same controls; Riso's Registration, Dark Ink and Warm Ink are not Scale, Ink and Paper.
+    // Amount, Angle and the inks (Riso's Dark Ink and Warm Ink are Ink and Paper) carry; Registration is not a cell size.
     expect(effect).toMatchObject({ id: 'fx', type: 'riso', name: 'riso', enabled: true,
-      params: { amount: 0.7, angle: 30, scale: 8, colorA: '#2046b3', colorB: '#ef476f' } });
+      params: { amount: 0.7, angle: 30, scale: 8, colorA: '#101010', colorB: '#f0f0f0' } });
+    changeEffectStyle('style-clip', 'fx', 'halftone');
+    expect(fx().params).toMatchObject({ colorA: '#101010', colorB: '#f0f0f0', scale: 14 });
     // A saved node graph belongs to the previous look.
     expect(effect.params.operatorGraph).toBeUndefined();
     expect(effect.operatorGraph).toBeUndefined();
@@ -61,8 +63,8 @@ describe('effect styles', () => {
     changeEffectStyle('style-clip', 'fx', 'drift-lines');
     [effect] = useTimelineStore.getState().clips[0].effects;
     // Drift Lines has no Shape: the stored choice stays for a switch back; its Speed starts at the default,
-    // and its Band Size is another control than Scale, so it starts at its default too.
-    expect(effect.params).toMatchObject({ shape: 'diamond', speed: 1, scale: 14, angle: 30 });
+    // and its Band Size is Scale under another name, so it keeps 12.
+    expect(effect.params).toMatchObject({ shape: 'diamond', speed: 1, scale: 12, angle: 30 });
     changeEffectStyle('style-clip', 'fx', 'pattern-halftone');
     expect(useTimelineStore.getState().clips[0].effects[0].params.shape).toBe('diamond');
     // Tone Geometry's Shape list has no diamond: it starts at its own default shape.
@@ -79,19 +81,68 @@ describe('effect styles', () => {
     expect(effectStyleOptions('halftone').map(option => option.value)).toEqual(groups.flatMap(group => group.options.map(option => option.value)));
   });
 
-  it('starts a control with another name at the new default, removes its keyframes and says so (Halftone Scale 60 -> CRT Screen)', () => {
+  it('starts a control in another role at the new default, removes its keyframes and says so (Halftone Scale 60 -> CRT Screen)', () => {
     setupLook('halftone', { scale: 60, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc' }, [key('k1', 'scale', 0, 20), key('k2', 'scale', 1, 70)]);
     const notes = changeEffectStyle('style-clip', 'fx', 'crt-screen');
-    // Mask Density (1-12) is not Scale (2-80), and CRT's Mix is not Halftone's Amount: both start at CRT Screen's defaults.
+    // Mask Density (a stripe width) is not Scale (a cell size); the untouched Amount opens at CRT Screen's Mix default.
     expect(fx().params).toMatchObject({ scale: 3, amount: 1, angle: 0, colorA: '#111827' });
     expect(keysOf()).toEqual([]);
-    expect(notes.join(' ')).toMatch(/Mask Density and Mix start at CRT Screen's defaults \(other controls than Scale and Amount\)\. Their keyframes were removed/);
+    expect(notes[0]).toBe('CRT Screen has no Scale: Mask Density starts at its default (Undo brings back Scale and its keyframes).');
   });
 
-  it('starts Drift Lines Band Size 60 as Dithering Pixel Size at its default', () => {
-    setupLook('drift-lines', { scale: 60, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc', speed: 1 });
-    changeEffectStyle('style-clip', 'fx', 'dither');
-    expect(fx().params.scale).toBe(3);
+  it('opens an untouched control at the new look default and carries a changed one', () => {
+    // ASCII at its defaults -> Matrix Rain: its own glyph set; the Cell Size of both is 14.
+    setupLook('ascii', { cellSize: 14, rampPreset: 'standard' });
+    changeEffectStyle('style-clip', 'fx', 'matrix');
+    expect(fx().params).toMatchObject({ cellSize: 14, rampPreset: 'symbols' });
+    setupLook('ascii', { cellSize: 14, rampPreset: 'standard' });
+    changeEffectStyle('style-clip', 'fx', 'word-mosaic');
+    expect(fx().params.cellSize).toBe(22);
+    // Halftone at its defaults -> Wave Lines opens at Amount 0.3; a changed Amount (0.5) carries.
+    setupLook('halftone', { scale: 14, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc' });
+    changeEffectStyle('style-clip', 'fx', 'wave-lines');
+    expect(fx().params.amount).toBe(0.3);
+    setupLook('halftone', { scale: 14, amount: 0.5, angle: 0, colorA: '#111827', colorB: '#f8fafc' });
+    changeEffectStyle('style-clip', 'fx', 'wave-lines');
+    expect(fx().params.amount).toBe(0.5);
+    // A keyed control at the old default keeps its value and keyframes.
+    setupLook('halftone', { scale: 14, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc' }, [key('k1', 'amount', 0, 0.2)]);
+    changeEffectStyle('style-clip', 'fx', 'wave-lines');
+    expect(fx().params.amount).toBe(0.75);
+    expect(keysOf()).toHaveLength(1);
+  });
+
+  it('carries Drift Lines Band Size and Drift with their keyframes into another look', () => {
+    setupLook('drift-lines', { scale: 30, amount: 0.4, angle: 0, colorA: '#111827', colorB: '#f8fafc', speed: 1 },
+      [key('k1', 'scale', 0, 20), key('k2', 'amount', 1, 0.6)]);
+    const notes = changeEffectStyle('style-clip', 'fx', 'glitch-grid');
+    expect(fx().params).toMatchObject({ scale: 30, amount: 0.4 });
+    expect(keysOf().map(keyframe => keyframe.id)).toEqual(['k1', 'k2']);
+    expect(notes).toEqual([]);
+  });
+
+  it('judges a value kept from an earlier look by its role: Drift Lines -> Halftone -> Crystal is Drift Lines -> Crystal', () => {
+    const run = (path: string[]) => {
+      setupLook('drift-lines', { scale: 30, amount: 0.4, angle: 0, colorA: '#111827', colorB: '#f8fafc', speed: 2 },
+        [key('k1', 'speed', 0, 1), key('k2', 'speed', 1, 3)]);
+      for (const type of path) changeEffectStyle('style-clip', 'fx', type);
+      return { params: fx().params, keys: keysOf().map(keyframe => keyframe.id) };
+    };
+    const direct = run(['crystal']);
+    expect(run(['halftone', 'crystal'])).toEqual(direct);
+    // Shimmer Speed is Speed; Facets count the facets and Refraction is not Amount.
+    expect(direct.params).toMatchObject({ speed: 2, scale: 14, amount: 0.3 });
+    expect(direct.keys).toEqual(['k1', 'k2']);
+  });
+
+  it('names a control a node drives and leaves its value to the node', () => {
+    setupLook('halftone', { scale: 14, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc' });
+    const clip = useTimelineStore.getState().clips[0];
+    useTimelineStore.setState({ clips: [{ ...clip, nodeGraph: { version: 1, nodes: [], parameterSources: { version: 1, clipTimeOffset: 0,
+      graph: { version: 1, nodes: [], edges: [], layout: {} }, targets: { 'effect.fx.amount': { source: { nodeId: 'lfo', portId: 'value' } } } } } } as never] });
+    const notes = changeEffectStyle('style-clip', 'fx', 'wave-lines');
+    expect(fx().params.amount).toBe(0.75);
+    expect(notes).toContain('Amount stays driven by its node.');
   });
 
   it('brings a carried value and its keyframes into the new range and names them', () => {
