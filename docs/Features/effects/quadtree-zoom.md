@@ -23,19 +23,19 @@ Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effect
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/quadtree-zoom-presets.mp4" poster="../assets/effects/clips/quadtree-zoom-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Fine Print top left with small tiles that trace her outline, Big Tiles top right with her figure in chunky blocks and large squares on the dark stage, Tile Veil bottom left with soft tiles laid over the clear picture, Breathing Grid bottom right with tiles that keep splitting and merging"></video>
+<video src="../assets/effects/clips/quadtree-zoom-presets.mp4" poster="../assets/effects/clips/quadtree-zoom-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Fine Print top left with small tiles that trace her outline, Big Tiles top right with her figure, arms and legs in chunky blocks and large squares on the dark stage, Tile Veil bottom left with soft tiles laid over the clear picture, Breathing Grid bottom right with coarser tiles that keep splitting and merging quickly"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Fine Print** – small tiles that follow every edge: faces and hands stay readable, and only flat stage, sky and haze turn into calm squares. The quietest look, good for a whole scene.
+**Fine Print** – the finest tiles, split wherever the picture has texture: faces and hands stay readable, and only an even dark stage or sky turns into calm squares. The quietest look, good for a whole scene.
 
-**Big Tiles** – chunky blocks on the figure and large squares on the stage, with no original showing through: the picture reads like a coarse mosaic, and the figure stays recognisable only by its outline. Strong for a title, a memory or a face that should stay hidden.
+**Big Tiles** – chunky blocks on the figure and large squares on the stage, with no original showing through: the picture reads like a coarse mosaic, while arms and legs still keep their own blocks. Strong for a title, a memory or a face that should stay hidden.
 
 **Tile Veil** – tiles laid at 60 % over the picture, so it stays clear under a soft grid of colour. For a scene that starts to fall apart, or behind text.
 
-**Breathing Grid** – the split pulses quickly, so the tiles keep splitting and merging even where nothing moves. A restless, digital pulse for a cue or a breakdown.
+**Breathing Grid** – coarser tiles whose split pulses quickly, about twice a second, so they keep splitting and merging even where nothing moves. A restless, digital pulse for a cue or a breakdown.
 
 ## Controls
 
@@ -43,7 +43,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Quadtree Zoom card: Preset menu showing Fine Print, then Minimum Cell 4 px, Detail Threshold 0.012, Amount 1 and Speed 0, beside a strip of the preview with the harbour split into tiles, large over the sky and small over the houses](../assets/effects/editor/quadtree-zoom-inspector.webp)
+![Properties, Effects with a Quadtree Zoom card: Preset menu showing Big Tiles, then Minimum Cell 16 px, Detail Threshold 0.015, Amount 1 and Speed 0, beside a strip of the preview with the harbour rebuilt from chunky tiles, large over the sky and smaller over the houses](assets/effects/editor/quadtree-zoom-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 715" aria-hidden="true" focusable="false">
 <defs><marker id="quadtree-zoom-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -60,7 +60,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 </svg>
 </div>
 
-<figcaption>Quadtree Zoom with the Fine Print preset. 1 — Preset: pick a starting point. 2 — Minimum Cell. 3 — Detail Threshold. 4 — Amount. 5 — Speed.</figcaption>
+<figcaption>Quadtree Zoom with the Big Tiles preset. 1 — Preset: pick a starting point. 2 — Minimum Cell. 3 — Detail Threshold. 4 — Amount. 5 — Speed.</figcaption>
 </figure>
 
 Every tile takes the colour of the pixel at its centre, a little darker than the picture, with a thin light line along its top and left edge, so the tiles read as tiles.

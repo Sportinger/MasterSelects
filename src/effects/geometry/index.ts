@@ -64,13 +64,13 @@ export const pixelSort: ComputeEffectDefinition = {
 /** Quadtree Zoom's named starting points (the Preset row of its card; docs/Features/effects/quadtree-zoom.md). */
 export const QUADTREE_ZOOM_PRESETS: readonly EffectPreset[] = [
   // Small cells that follow every edge: the picture stays readable, flat areas turn into calm tiles.
-  { id: 'fine-print', name: 'Fine Print', params: { scale: 4, threshold: 0.012, amount: 1, speed: 0 } },
+  { id: 'fine-print', name: 'Fine Print', params: { scale: 4, threshold: 0.005, amount: 1, speed: 0 } },
   // Chunky tiles on the figure and large squares on the stage (the 4 x 4 grid test keeps the figure in large blocks).
-  { id: 'big-tiles', name: 'Big Tiles', params: { scale: 16, threshold: 0.04, amount: 1, speed: 0 } },
+  { id: 'big-tiles', name: 'Big Tiles', params: { scale: 16, threshold: 0.015, amount: 1, speed: 0 } },
   // Tiles laid half over the original: a soft mosaic veil that keeps faces and lines.
   { id: 'tile-veil', name: 'Tile Veil', params: { scale: 8, threshold: 0.02, amount: 0.6, speed: 0.5 } },
   // The split threshold pulses quickly, so cells keep splitting and merging.
-  { id: 'breathing-grid', name: 'Breathing Grid', params: { scale: 6, threshold: 0.03, amount: 0.9, speed: 2 } },
+  { id: 'breathing-grid', name: 'Breathing Grid', params: { scale: 12, threshold: 0.025, amount: 0.9, speed: 3 } },
 ];
 
 export const quadtreeZoom: ComputeEffectDefinition = {
