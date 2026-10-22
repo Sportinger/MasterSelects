@@ -1,6 +1,6 @@
 # Riso Glow
 
-<!-- effect-docs: basic page sha=d3153d7ef2e8, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=e01d23c0e032, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Two-ink risograph print look with a pulsing glow added to the inks; Shadow and Glow Ink set the colors, Speed the pulse rate.
 
@@ -22,7 +22,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 |---|---|---|
 | **Pattern** | | |
 | Scale | 2 to 80 | 14 |
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |
 | Shadow Ink | a colour | `#4f46e5` |
@@ -31,7 +31,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Riso](./riso.md), [Dither Studio](./dither-studio.md), [Pattern Halftone](./pattern-halftone.md), [Tone Geometry](./tone-geometry.md), and 20 more looks from other groups.
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Print & Halftone: [Dither Studio](./dither-studio.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pattern Halftone](./pattern-halftone.md), [Riso](./riso.md), [Tone Geometry](./tone-geometry.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Lines & Engraving](../Effects-Lines.md) (6), [Textile & Craft](../Effects-Textile.md) (3), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 

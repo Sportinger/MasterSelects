@@ -1,6 +1,6 @@
 # Dither Studio
 
-<!-- effect-docs: basic page sha=42c72ede92a1, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=61c1109ad93d, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Reduces the image to two ink colors using a selectable dither pattern (Bayer 2, Bayer 4 or Checker); Kernel picks the pattern, Scale its size.
 
@@ -23,14 +23,14 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 | **Pattern** | | |
 | Scale | 2 to 80 | 14 |
 | Kernel | bayer 2, bayer 4, checker | bayer 4 |
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |
 | Ink | a colour | `#111827` |
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [Riso Glow](./riso-glow.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Riso](./riso.md), [Pattern Halftone](./pattern-halftone.md), [Tone Geometry](./tone-geometry.md), and 20 more looks from other groups.
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Print & Halftone: [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pattern Halftone](./pattern-halftone.md), [Riso](./riso.md), [Riso Glow](./riso-glow.md), [Tone Geometry](./tone-geometry.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Lines & Engraving](../Effects-Lines.md) (6), [Textile & Craft](../Effects-Textile.md) (3), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 

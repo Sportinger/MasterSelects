@@ -524,7 +524,8 @@ const ENGINE_LABELS = {
 /**
  * A basic page for an effect without a hand-written page. ctx: { groupLabel (the sidebar label, joined
  * groups as "Keying & Time"), overview (file relative to docs/Features or undefined), still (its Effect Lab
- * still, asset path, or undefined), stillSize (its pixel size: a compare pair gets a compare slider), names (id → name), groupOf(id) (its picker group), hasPage(id) (whether effects/<id>.md exists, for
+ * still, asset path, or undefined), stillSize (its pixel size: a compare pair gets a compare slider), names (id → name), groupOf(id) (its picker group), groupOrder (picker group ids in order), groupName(id) and
+ * groupHref(id) (a picker group's label and overview link), hasPage(id) (whether effects/<id>.md exists, for
  * links to the other styles) }. The marker under the title carries the hash of the rest of the page.
  */
 export function basicPage(effect, ctx) {
@@ -545,12 +546,18 @@ export function basicPage(effect, ctx) {
   }
   parts.push(`## Controls\n\n${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`);
   if (effect.styles.length) {
-    // The looks of the effect's own picker group by name, the rest of the engine as a count.
-    const near = effect.styles.filter((id) => ctx.groupOf?.(id) === effect.group);
-    const shown = near.length ? near : effect.styles, more = effect.styles.length - shown.length;
-    const names = shown.map((id) => (ctx.hasPage?.(id) ? `[${ctx.names.get(id) ?? id}](./${id}.md)` : ctx.names.get(id) ?? id));
-    const rest = more ? `, and ${more} more ${more === 1 ? 'look' : 'looks'} from other groups` : '';
-    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: ${names.join(', ')}${rest}.`);
+    // As the Style menu: the looks of the effect's own picker group by name, the other groups by name and count.
+    const byName = (a, b) => (ctx.names.get(a) ?? a).localeCompare(ctx.names.get(b) ?? b);
+    const look = (id) => (ctx.hasPage?.(id) ? `[${ctx.names.get(id) ?? id}](./${id}.md)` : ctx.names.get(id) ?? id);
+    const near = effect.styles.filter((id) => ctx.groupOf?.(id) === effect.group).toSorted(byName);
+    const others = effect.styles.filter((id) => ctx.groupOf?.(id) !== effect.group);
+    const groups = (ctx.groupOrder ?? []).map((group) => [group, others.filter((id) => ctx.groupOf?.(id) === group)]).filter(([, ids]) => ids.length);
+    const group = (id) => `[${ctx.groupName?.(id) ?? id}](${ctx.groupHref?.(id) ?? './index.md'})`;
+    const own = near.length ? ` Looks of ${ctx.groupLabel}: ${near.map(look).join(', ')}.` : '';
+    const rest = !groups.length ? ''
+      : others.length <= 3 ? ` ${near.length ? 'Also' : 'Looks'}: ${groups.map(([id, ids]) => `${ids.toSorted(byName).map(look).join(', ')} (${group(id)})`).join('; ')}.`
+        : ` ${near.length ? 'Further looks' : 'Looks'} under ${groups.map(([id, ids]) => `${group(id)} (${ids.length})`).join(', ')}.`;
+    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults.${own}${rest}`);
   }
   const details = [];
   if (effect.engine) details.push(`${effect.name} is one look of ${ENGINE_LABELS[effect.engine] ?? `the ${effect.engine} engine`}; its looks share one node setup.`);
@@ -594,6 +601,12 @@ export function planEffectDocs(snapshot, files, { basic = [] } = {}) {
     stillSize: files.exists(effectAssets(effect.id).still) ? files.size(effectAssets(effect.id).still) : undefined,
     names,
     groupOf: (id) => byId.get(id)?.group,
+    groupOrder: snapshot.groups.map((group) => group.id),
+    groupName: (id) => labels.get(id) ?? id,
+    groupHref: (id) => {
+      const overview = overviews.get(id)?.overview;
+      return overview ? `../${overview}` : `./index.md#${slug((overviews.get(id)?.joined ?? [id]).map((group) => labels.get(group) ?? group).join(' & '))}`;
+    },
     hasPage: (id) => pageIds.has(id),
   });
   for (const id of files.pages) {

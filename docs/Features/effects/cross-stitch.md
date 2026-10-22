@@ -1,6 +1,6 @@
 # Cross Stitch
 
-<!-- effect-docs: basic page sha=314a75230fc6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=9572e50cae51, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Renders the image as X-shaped cross stitches on Paper-colored fabric; Stitch Size sets the stitch grid, Ink tints the thread.
 
@@ -22,14 +22,14 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 |---|---|---|
 | **Pattern** | | |
 | Stitch Size | 4 to 40 | 12 |
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |
 | Ink | a colour | `#111827` |
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [Embroidery](./embroidery.md), [Kilim Carpet](./kilim.md), and 25 more looks from other groups.
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Textile & Craft: [Embroidery](./embroidery.md), [Kilim Carpet](./kilim.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Lines & Engraving](../Effects-Lines.md) (6), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 

@@ -1,6 +1,6 @@
 # Rain Reveal
 
-<!-- effect-docs: basic page sha=9493c835adf8, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=96fb7c24af94, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Pours falling streaks of the Overlay color over the scene, with less rain over the tracked subject and a slightly dimmed background.
 
@@ -27,7 +27,7 @@ Group: [Tracking & Overlays](../Effects-Tracking.md) · [How to add an effect](.
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [CCTV](./cctv.md), [HUD Tracker](./hud-tracker.md), [Stardust](./stardust.md), [Tracked Scene](./tracked-scene.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Tracking & Overlays: [CCTV](./cctv.md), [HUD Tracker](./hud-tracker.md), [Stardust](./stardust.md), [Tracked Scene](./tracked-scene.md).
 
 ## Technical details
 

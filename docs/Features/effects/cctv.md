@@ -1,6 +1,6 @@
 # CCTV
 
-<!-- effect-docs: basic page sha=257075303c42, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=6f302995eedd, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Turns footage into greenish monochrome security-camera video with scanlines, noise and a target box around the tracked subject.
 
@@ -27,7 +27,7 @@ Group: [Tracking & Overlays](../Effects-Tracking.md) · [How to add an effect](.
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [HUD Tracker](./hud-tracker.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md), [Tracked Scene](./tracked-scene.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Tracking & Overlays: [HUD Tracker](./hud-tracker.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md), [Tracked Scene](./tracked-scene.md).
 
 ## Technical details
 

@@ -1,6 +1,6 @@
 # Glitch Grid
 
-<!-- effect-docs: basic page sha=e7a2014f26a0, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=bc9c3d1f531b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Randomly jumps grid cells sideways in flickering bursts for a blocky digital glitch; Scale sets cell size, Amount the displacement.
 
@@ -22,13 +22,13 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 |---|---|---|
 | **Pattern** | | |
 | Scale | 2 to 80 | 14 |
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [CRT Screen](./crt-screen.md), [Glitch](./glitch.md), [Ribbon Scan](./ribbon-scan.md), and 24 more looks from other groups.
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Analog & Glitch: [CRT Screen](./crt-screen.md), [Glitch](./glitch.md), [Ribbon Scan](./ribbon-scan.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Lines & Engraving](../Effects-Lines.md) (6), [Textile & Craft](../Effects-Textile.md) (3), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 

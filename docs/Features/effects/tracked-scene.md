@@ -1,6 +1,6 @@
 # Tracked Scene
 
-<!-- effect-docs: basic page sha=7525fe7b23fc, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=5e68afe80b1e, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Draws tracked face landmarks as dots connected by lines in the Overlay color, like a motion-capture mesh.
 
@@ -18,7 +18,7 @@ Group: [Tracking & Overlays](../Effects-Tracking.md) · [How to add an effect](.
 | Overlay | a colour | `#36f59a` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [CCTV](./cctv.md), [HUD Tracker](./hud-tracker.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Tracking & Overlays: [CCTV](./cctv.md), [HUD Tracker](./hud-tracker.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md).
 
 ## Technical details
 

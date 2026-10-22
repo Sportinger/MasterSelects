@@ -1,6 +1,6 @@
 # Outline
 
-<!-- effect-docs: basic page sha=9924b3f13fd6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=c91a69aed358, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Turns the image into an edge drawing: brightness edges in Ink on Paper with a subtle pulse; Amount blends with the original.
 
@@ -20,7 +20,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 <!-- generated:controls start -->
 | Control | Range | Default |
 |---|---|---|
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |
 | Ink | a colour | `#111827` |
@@ -29,7 +29,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [Drift Lines](./drift-lines.md), [Wave Lines](./wave-lines.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Vector Engraving](./vector-tiling.md), and 22 more looks from other groups.
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls with the same name keep their values and keyframes; the others start at their defaults. Looks of Lines & Engraving: [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Drift Lines](./drift-lines.md), [Vector Engraving](./vector-tiling.md), [Wave Lines](./wave-lines.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Textile & Craft](../Effects-Textile.md) (3), [Analog & Glitch](../Effects-Analog.md) (4), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 
