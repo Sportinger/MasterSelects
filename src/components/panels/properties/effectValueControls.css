@@ -3,6 +3,34 @@
     min-width: 0;
   }
 
+  /* Effect control labels can be long ('Line Brightness', 'Shadow Pigment', 'Vignette Correction'):
+     they wrap to a second line inside the label column instead of being cut, so the columns stay
+     aligned at every docked width; only a label longer than two lines still ends in an ellipsis. */
+  .effects-tab .resolve-inspector-row-label {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: break-word;
+    line-height: 13px;
+  }
+
+  /* In the stacked layout (ResolveInspectorNarrow.css) the label line grows with a second line
+     instead of running into the row above. */
+  @container (max-width: 280px) {
+    .effects-tab .resolve-inspector-row {
+      grid-template-rows: minmax(18px, auto) auto;
+    }
+
+    /* The 22 px action buttons keep overhanging their 18 px line as before, so one-line rows keep
+       their height; only a second label line makes the row taller. */
+    .effects-tab .resolve-inspector-row > .resolve-inspector-row-actions {
+      height: 18px;
+      align-content: center;
+    }
+  }
+
   .effects-tab .effect-param-value {
     flex: 1;
     width: 100%;
