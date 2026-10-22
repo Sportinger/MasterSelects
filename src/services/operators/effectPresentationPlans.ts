@@ -293,6 +293,27 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^(threshold|threshold-rgb|share-raised|step-up|level-index|dithered-raw|dithered)$/.test(id) ? 'dither'
           : /^(mixed-color|combine)$/.test(id) ? 'finish' : 'grid',
   };
+  // Paper Print (createDefaultPaperPrintGraph): the turned grain, evened out to a threshold, each pixel's share of ink,
+  // the paper's surface, the width of the ink's soft edge, ink over paper where the share beats the threshold, the mix.
+  if (type === 'paper-print') return {
+    labels: { grain: 'Grain (Grain Size)', even: 'Even Out', share: 'Ink Share', surface: 'Paper Surface (Texture)', edge: 'Ink Edge', print: 'Print',
+      finish: 'Mix (Amount)' },
+    portLabels: { pixel: 'Pixel (px)', 'frame-scale': 'Frame Scale', 'scale-clamped-pixels': 'Grain Size (px)', 'grain-turned': 'Turned Pixel (px)', 'grain-position': 'Position in Grains',
+      'grain-noise': 'Grain Noise', 'grain-centred': 'Noise − 0.5', threshold: 'Threshold', 'sample-split:rgb': 'Pixel RGB', 'sample-split:alpha': 'Pixel Alpha',
+      'min-uv': 'Lowest UV', 'max-uv': 'Highest UV', 'ink-rgb': 'Ink RGB', 'paper-rgb': 'Paper RGB', 'ink-linear': 'Ink Light', 'paper-linear': 'Paper Light',
+      'picture-light': 'Picture Brightness', 'ink-light': 'Ink Brightness', 'paper-light': 'Paper Brightness', 'light-span': 'Paper − Ink',
+      'safe-span': 'Safe Span', 'ink-share': 'Ink Share', 'texture-size-frame-pixels': 'Bump Size (px)', 'surface-noise': 'Paper Height',
+      'surface-centred': 'Height − 0.5', 'valley-depth': 'Valley Depth', 'valley-lift': 'Valley Lift', 'surface-shade': 'Paper Shade',
+      'threshold-lifted': 'Lifted Threshold', 'edge-width': 'One Pixel (threshold)', 'edge-fitted': 'Edge Width', 'ink-coverage': 'Ink Coverage',
+      'printed-linear': 'Print Light', printed: 'Print', ...clampLabels({ texture: 'Texture' }) },
+    portLabelsApply: graph => graph.nodes.some(node => node.id === 'ink-coverage'),
+    stage: ({ id }) => /^(grain-centred|grain-square|grain-cube|threshold)$|^even-/.test(id) ? 'even'
+      : /^(sample|sample-split|clamped-uv|min-uv|max-uv|ink-rgb|paper-rgb|ink-linear|paper-linear|picture-linear|picture-light|ink-light|paper-light|safe-span|paper-brighter|light-missing)$|^(light-span|span-|ink-share)/.test(id) ? 'share'
+        : /^(texture-|surface-|valley-)/.test(id) ? 'surface'
+          : /^(share-rest|share-nearest-end)$|^edge-/.test(id) ? 'edge'
+            : /^(threshold-lifted|share-over-threshold|share-above|ink-centred|ink-coverage)$|^printed/.test(id) ? 'print'
+            : /^(mixed|combine)$/.test(id) ? 'finish' : 'grain',
+  };
   if (type === 'vignette') return {
     labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
     portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither' },

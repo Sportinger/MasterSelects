@@ -1,10 +1,16 @@
-import shader from './shader.wgsl?raw';
+import lookShaders from './shader.wgsl?raw';
+import coordinateRotation from '../_shared/coordinateRotation.wgsl?raw';
+import { IMAGE_FRACTAL_NOISE_WGSL } from '../../services/operators/imageNoiseSemantics';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { DRIFT_LINES_PRESETS, driftLinesWarnings } from './driftLines';
 import { HALFTONE_PRESETS } from './halftonePresets';
 import { DITHER_PRESETS } from './ditherPresets';
 import { RISO_PRESETS } from './risoPresets';
 import { RISO_GLOW_PRESETS } from './risoGlowPresets';
+import { PAPER_PRINT_INK, PAPER_PRINT_PAPER, PAPER_PRINT_PRESETS, paperPrintNotes } from './paperPrint';
+
+// The looks' shader twins; Paper Print's reads the graph's own Rotate UV and Fractal Noise (imageNoiseSemantics.ts), so both draw the same grain.
+const shader = `${lookShaders}\n${coordinateRotation}\n${IMAGE_FRACTAL_NOISE_WGSL}`;
 
 /** Dither cells are whole output pixels (patternReferenceFrame.ts wholePixels): say when Pixel Size rounds on this frame. */
 function ditherWholePixelNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080): string[] {
@@ -127,8 +133,25 @@ export const risoGlow = createCatalogEffect({
 });
 export const paperPrint = createCatalogEffect({
   id: 'paper-print', name: 'Paper Print', category: 'halftone', shader, entryPoint: 'paperPrintFragment', scaleFloor: 1,
-  params: { scale: { type: 'number', label: 'Press Grain', default: 18, min: 4, max: 80, step: 1, group: 'Pattern' } },
+  // Same parameter ids as the other looks of the engine; Texture is its own, so the Style menu of the other looks
+  // (styles share every parameter, effectStyles.ts) does not offer Paper Print. Card: Grain Size and Texture under
+  // Pattern, then Ink, Paper and Amount under Color.
+  params: {
+    // The size of one grain, in 1080p pixels. Effects saved without a value had 18. Below 1 renders 1 (renderMin).
+    scale: { type: 'number', label: 'Grain Size', default: 2, min: 1, max: 80, step: 0.5, unit: ' px', renderMin: 1, group: 'Pattern', legacyDefault: 18 },
+    // How much the paper's surface shows: uneven paper and ink that did not take everywhere. A graph saved before
+    // Texture does not read it (graphOnly); below 0 renders 0 and the card says so (renderMin).
+    texture: { type: 'number', label: 'Texture', default: 0.5, min: 0, max: 1, step: 0.01, renderMin: 0, graphOnly: true, group: 'Pattern' },
+    colorA: catalogBaseParam('colorA', { default: PAPER_PRINT_INK, legacyDefault: '#111827' }),
+    colorB: catalogBaseParam('colorB', { default: PAPER_PRINT_PAPER, legacyDefault: '#f8fafc' }),
+    // The print alone by default; effects saved without an Amount keep the earlier 0.75.
+    amount: catalogBaseParam('amount', { group: 'Color', default: 1, legacyDefault: 0.75 }),
+  },
+  cardEnd: ['colorA', 'colorB', 'amount'],
+  variantParam: 'texture',
   retired: ignoredBaseParams('Paper Print', ['angle']),
+  paramWarnings: paperPrintNotes,
+  presets: PAPER_PRINT_PRESETS,
 });
 export const pixelPoster = createCatalogEffect({
   id: 'pixel-poster', name: 'Pixel Poster', category: 'halftone', shader, entryPoint: 'pixelPosterFragment', scaleFloor: 2,

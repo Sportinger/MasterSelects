@@ -1877,8 +1877,8 @@ recipe: [Dithering](#dithering)). Dither Studio's Bayer 2, Bayer 4 and Checker
 choices remain bound to the catalog-owned Kernel schema rather than copied into
 saved graph data.
 
-Pixel Press (`paper-print`) and Pixel Poster expose their source sampling,
-noise/posterization arithmetic and final amount blend as editable graph
+Paper Print (its grain print: [Paper Print](#paper-print)) and Pixel Poster expose their source
+sampling, grain/posterization arithmetic and final amount blend as editable graph
 operations with catalog-owned controls and preserved source alpha. Pixel
 Poster's pixelated source remains part of its result even when Amount is zero.
 
@@ -2063,6 +2063,52 @@ Dot Size and Glow (`graphOnly`) and says so; Registration keeps 14 when it was s
 unchanged, the glow on the ink and its spill into the dark, the pulse and Speed 0, transparency, the
 earlier recipe and the card notes, the node budget), `tests/unit/patternEngineLooks.test.ts`, GPU parity
 `tests/browser/image-graph-probe.html?suite=riso-graphs`.
+
+### Paper Print
+
+`createDefaultPaperPrintGraph` (`src/services/operators/paperPrintGrainGraph.ts`, WGSL twin
+`paperPrintFragment`) prints the picture in one ink on paper by a stochastic grain, like a mezzotint:
+
+- **Grain:** the pixel position turned by `PAPER_PRINT_GRAIN.turn` (0.5 rad, `coordinates.rotate.vec2`) and
+  divided by **Grain Size** (`scale`, 1080p pixels, at least one output pixel; below 1 renders 1:
+  `scale-clamped`, `renderMin`) feeds a two-octave Fractal Noise (roughness 0.5). The turn makes every pixel
+  read a different spot of its grain cell; an upright grain of whole pixels reads the same few spots and
+  missed the tone by 2–4 %.
+- **Even Out:** 1 / (1 + e^−(13.46 x + 67.7 x³)), x = noise − 0.5 (`PAPER_PRINT_EVEN`), is the measured
+  distribution of that noise (within 0.2 %), so the threshold is uniform over 0..1.
+- **Ink Share:** the share of ink c = (paper light − picture light) / (paper light − ink light), luminance in
+  linear light, clamped to 0..1. A gap below `PAPER_PRINT_SPAN_FLOOR` (1e−4) keeps its sign (Switch), so equal
+  Ink and Paper stay finite; the card says when they are (almost) equally bright. Light ink on dark paper
+  works the other way round.
+- **Paper Surface:** **Texture** (`texture`, `graphOnly`, below 0 renders 0: `texture-clamped`) scales a
+  three-octave Fractal Noise with bumps of `PAPER_PRINT_TEXTURE.size` (3) 1080p pixels, moved by an offset
+  so it never repeats the grain. Its valleys lift the threshold by up to 2 × their depth × Texture (white
+  specks in solid ink, about 4 % of it at the default 0.5; mid-tones print that much lighter), and its height
+  shades the print by ±0.2 × Texture in linear light. White never gets ink.
+- **Ink Edge:** one output pixel in threshold units is `PAPER_PRINT_EDGE` (1.8, the measured slope of the
+  evened threshold per grain) / grain pixels; the width used is min(that, 2 × min(c, 1 − c)), at least 1e−6,
+  so the edge is hard at shares of 0 and 1 and the average coverage over an area is exactly c.
+- **Print:** coverage = clamp((c − lifted threshold) / width + 0.5); Ink over Paper by coverage in linear
+  light, times the paper shade, clamped, back to sRGB; mixed over the pixel by **Amount** (default 1; saves
+  without one keep 0.75) with the pixel's own alpha.
+
+At Texture 0 an area keeps the picture's brightness within 2 % at every Grain Size, pure white prints clean
+paper and pure black solid ink. Defaults: Grain Size 2 px, Texture 0.5, Ink `#1c1a18` on Paper `#f3ecdc`
+(saves without them keep 18, `#111827` and `#f8fafc`: `legacyDefault`). The twin reads Texture from the
+variant slot (`createCatalogEffect({ variantParam })`) and shares the graph's own Rotate UV and Fractal
+Noise WGSL (appended to the looks' shader in `src/effects/halftone/index.ts`), so the two match byte for
+byte. Card: Pattern (Grain Size, Texture), Color (Ink, Paper, Amount). Stage folders: Grain (Grain Size),
+Even Out, Ink Share, Paper Surface (Texture), Ink Edge, Print, Mix (Amount). Texture takes Paper Print out
+of the Style menu of the other looks. Presets in `src/effects/halftone/paperPrint.ts`.
+
+A graph-less Paper Print saved before Texture (`hasEarlierPaperPrintParams`: its params lack `texture`)
+keeps the earlier recipe, `createEarlierPaperPrintGraph` in `paperPrintEffectGraph.ts` (WGSL
+`paperPrintEarlierFragment`): luminance plus a sine-hash value noise on Press Grain cells, pressed through
+smoothstep(0.15, 0.85) between Ink and Paper and darkened by the same grain; its card hides Texture and says
+so. Tests: `tests/unit/imagePaperPrintGraph.test.ts` (even threshold, tone at whole-pixel grains, clean
+white and solid black, Texture specks, the one-pixel edge, 4K against 1080p, light ink on dark paper and
+equal colours, alpha, range notes, presets, the earlier recipe), GPU parity
+`tests/browser/image-graph-probe.html?suite=print-graphs`.
 
 ### CCTV noise speed
 

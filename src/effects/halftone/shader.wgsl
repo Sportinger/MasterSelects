@@ -307,14 +307,42 @@ fn risoGlowFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(mix(own.rgb, linearToSrgb(glowing), params.amount), own.a);
 }
 
+// The earlier Paper Print (createEarlierPaperPrintGraph in paperPrintEffectGraph.ts), kept for graph-less saves from
+// before Texture: brightness plus a value-noise grain pressed between Ink and Paper.
 @fragment
-fn paperPrintFragment(input: VertexOutput) -> @location(0) vec4f {
+fn paperPrintEarlierFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
   let pixel = floor(input.uv * params.resolution);
   let grain = noise2d(pixel / referencePixels(max(params.scale, 1.0))) - 0.5;
   let pressed = smoothstep(0.15, 0.85, luminance(color.rgb) + grain * 0.3);
   let printColor = mix(params.colorA.rgb, params.colorB.rgb, pressed) * (0.92 + grain * 0.08);
   return vec4f(mix(color.rgb, printColor, params.amount), color.a);
+}
+
+// Paper Print (createDefaultPaperPrintGraph in paperPrintGrainGraph.ts): one ink on paper by a stochastic grain. The
+// grain is two-octave Fractal Noise on cells of Grain Size, evened out to a uniform threshold (PAPER_PRINT_EVEN); each
+// pixel's share of ink comes from its brightness between Paper and Ink in linear light; the paper's surface (Texture,
+// read from the variant slot) lifts the threshold in its valleys and shades the print.
+@fragment
+fn paperPrintFragment(input: VertexOutput) -> @location(0) vec4f {
+  let color = source(input.uv);
+  let pixel = input.uv * params.resolution;
+  let grain = referencePixels(max(params.scale, 1.0));
+  let centred = imageGraphFractalNoise(imageRotate2d(pixel, 0.5) / grain, 2.0, 0.5) - 0.5;
+  let spread = centred * 13.46 + centred * centred * centred * 67.7;
+  let threshold = 1.0 / (1.0 + exp(0.0 - spread));
+  let inkLinear = srgbToLinear(params.colorA.rgb);
+  let paperLinear = srgbToLinear(params.colorB.rgb);
+  let span = luminance(paperLinear) - luminance(inkLinear);
+  let safeSpan = select(min(span, 0.0 - 1e-4), max(span, 1e-4), span > 0.0);
+  let share = clamp((luminance(paperLinear) - luminance(srgbToLinear(color.rgb))) / safeSpan, 0.0, 1.0);
+  let texture = max(params.variant, 0.0);
+  let surface = imageGraphFractalNoise(pixel / (3.0 * frameScale()) + vec2f(37.17, 11.83), 3.0, 0.5) - 0.5;
+  let lifted = threshold + max(0.0 - surface, 0.0) * 2.0 * texture;
+  let width = max(min(1.8 / grain, min(share, 1.0 - share) * 2.0), 1e-6);
+  let coverage = clamp((share - lifted) / width + 0.5, 0.0, 1.0);
+  let printed = mix(paperLinear, inkLinear, coverage) * (1.0 + surface * 0.4 * texture);
+  return vec4f(mix(color.rgb, linearToSrgb(clamp(printed, vec3f(0.0), vec3f(1.0))), params.amount), color.a);
 }
 
 @fragment

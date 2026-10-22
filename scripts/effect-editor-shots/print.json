@@ -20,6 +20,10 @@
    "alt": "Properties, Effects with a Riso Glow card: Preset menu showing Neon Sign, Dot Size and Registration under Pattern, Glow and Speed under Glow & Pulse, Shadow Ink, Glow Ink and Amount under Color, beside a strip of the preview printed in teal and coral dots with a warm glow",
    "caption": "Riso Glow with the Neon Sign preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Glow: how brightly the glow ink shines. 4 — Speed: how fast the glow breathes. 5 — Glow Ink: the colour that glows.",
    "marks": [{"target": "Preset", "label": "Preset"}, {"target": "Dot Size", "label": "Dot Size"}, {"target": "Glow", "label": "Glow"}, {"target": "Speed", "label": "Speed"}, {"target": "Glow Ink", "label": "Glow Ink"}],
-   "hide": ["Particle Out"]}
+   "hide": ["Particle Out"]},
+  {"name": "paper-print-inspector", "effect": "paper-print", "params": {"scale": 2.5, "texture": 0.5, "amount": 1, "colorA": "#3a2416", "colorB": "#eee0c4"}, "image": "dancer_stage.jpg", "preview": 380, "top": "tabs",
+   "alt": "Properties, Effects with a Paper Print card: Preset menu showing Photogravure, Grain Size and Texture under Pattern, Ink, Paper and Amount under Color, beside a strip of the preview printed in a fine brown grain on warm paper",
+   "caption": "Paper Print with the Photogravure preset. 1 — Preset: pick a starting point. 2 — Grain Size. 3 — Texture: the paper's bumps. 4 — Ink. 5 — Paper.",
+   "marks": [{"target": "Preset", "label": "Preset"}, {"target": "Grain Size", "label": "Grain Size"}, {"target": "Texture", "label": "Texture"}, {"target": "Ink", "label": "Ink"}, {"target": "Paper", "label": "Paper"}], "hide": ["Particle Out"]}
  ]
 }

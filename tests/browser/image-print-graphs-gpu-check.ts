@@ -2,26 +2,38 @@ import common from '../../src/effects/_shared/commonShader';
 import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDefinition';
 import { paperPrint, pixelPoster } from '../../src/effects/halftone';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
-import { createDefaultPaperPrintGraph } from '../../src/services/operators/paperPrintEffectGraph';
+import { createEarlierPaperPrintGraph } from '../../src/services/operators/paperPrintEffectGraph';
+import { createDefaultPaperPrintGraph } from '../../src/services/operators/paperPrintGrainGraph';
 import { createDefaultPixelPosterGraph } from '../../src/services/operators/pixelPosterEffectGraph';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const width = 47, height = 29, bytesPerRow = 256;
-type PrintType = 'paper-print' | 'pixel-poster';
+type PrintType = 'paper-print' | 'paper-print-earlier' | 'pixel-poster';
 type Primitive = number | boolean | string;
 type Case = { name: string; params: Record<string, Primitive> };
-type Fixture = { type: PrintType; definition: FullscreenEffectDefinition; factory: () => EffectOperatorGraph; cases: readonly Case[] };
+type Fixture = { type: PrintType; definition: FullscreenEffectDefinition; factory: () => EffectOperatorGraph; cases: readonly Case[]; entryPoint?: string };
 const amountCases: Case[] = [{ name: 'defaults', params: {} }, { name: 'amount-minimum', params: { amount: 0 } },
   { name: 'amount-maximum', params: { amount: 1 } }];
 const fixtures: Fixture[] = [
+  // Paper Print's grain print (paperPrintGrainGraph.ts) against its twin paperPrintFragment; 47 × 29 px measures sizes small.
   { type: 'paper-print', definition: paperPrint as FullscreenEffectDefinition, factory: createDefaultPaperPrintGraph, cases: [
+    ...amountCases, { name: 'scale-minimum', params: { scale: 1, amount: 1 } }, { name: 'scale-large', params: { scale: 80, amount: 1 } },
+    { name: 'scale-below-range', params: { scale: .25, amount: 1 } }, { name: 'texture-none', params: { texture: 0, scale: 30 } },
+    { name: 'texture-full', params: { texture: 1, scale: 40 } }, { name: 'texture-below-range', params: { texture: -1, scale: 40 } },
+    { name: 'custom-colors', params: { scale: 33, amount: .78, colorA: '#263851', colorB: '#c1aa91' } },
+    { name: 'light-ink-dark-paper', params: { scale: 50, colorA: '#eef2f6', colorB: '#1d4c8c' } },
+    { name: 'equal-brightness', params: { scale: 50, colorA: '#808080', colorB: '#808080' } },
+  ] },
+  // The earlier recipe, kept for graph-less saves from before Texture, against paperPrintEarlierFragment.
+  { type: 'paper-print-earlier', definition: paperPrint as FullscreenEffectDefinition, factory: createEarlierPaperPrintGraph, entryPoint: 'paperPrintEarlierFragment', cases: [
     ...amountCases, { name: 'scale-minimum', params: { scale: 4, amount: 1 } }, { name: 'scale-maximum', params: { scale: 80, amount: 1 } },
     { name: 'custom-colors', params: { scale: 13, amount: .78, colorA: '#263851', colorB: '#c1aa91' } },
   ] },
+  // Block Size counts 1080p pixels, so on 47 × 29 px the default is one pixel: Amount 0 is checked on blocks of 64 (1.7 px).
   { type: 'pixel-poster', definition: pixelPoster as FullscreenEffectDefinition, factory: createDefaultPixelPosterGraph, cases: [
-    ...amountCases, { name: 'scale-minimum', params: { scale: 2, amount: 1 } }, { name: 'scale-maximum', params: { scale: 64, amount: 1 } },
+    amountCases[0], { name: 'amount-minimum', params: { amount: 0, scale: 64 } }, amountCases[2], { name: 'scale-minimum', params: { scale: 2, amount: 1 } }, { name: 'scale-maximum', params: { scale: 64, amount: 1 } },
   ] },
 ];
 
@@ -95,8 +107,8 @@ export async function checkPrintGraphsGpu(device: GPUDevice): Promise<number> {
       for (const item of fixture.cases) {
         const values = resolved(fixture.definition, item.params), plan = compileImageOperatorGraph(fixture.factory(), values, { parameterSchema: fixture.definition.params });
         const packed = fixture.definition.packUniforms(values, width, height, 0); if (!packed) throw new Error(`${fixture.type} legacy uniforms unavailable`);
-        const expected = await render(device, sampler, source.createView(), target, readback, fixture.definition.shader, fixture.definition.entryPoint, new Float32Array(packed));
-        const entryPoint = `${fixture.type.replace('-', '')}GraphFragment`, actual = await render(device, sampler, source.createView(), target, readback,
+        const expected = await render(device, sampler, source.createView(), target, readback, fixture.definition.shader, fixture.entryPoint ?? fixture.definition.entryPoint, new Float32Array(packed));
+        const entryPoint = `${fixture.type.replaceAll('-', '')}GraphFragment`, actual = await render(device, sampler, source.createView(), target, readback,
           imageGraphProgramShader(plan, entryPoint), entryPoint, packImageOperatorRuntimeUniforms(plan, 0, width, height));
         if (expected.some((value, index) => value !== actual[index])) throw new Error(`${fixture.type}/${item.name}: ${mismatch(expected, actual)}`);
         if (item.name === 'amount-maximum') processed = actual; if (item.name === 'amount-minimum') amountZero = actual; comparisons++;
@@ -106,7 +118,7 @@ export async function checkPrintGraphsGpu(device: GPUDevice): Promise<number> {
       }
       const values = resolved(fixture.definition, { amount: 1 });
       for (const [name, graph] of [['bypass', bypassGraph(fixture)], ['direct', directGraph(fixture)]] as const) {
-        const plan = compileImageOperatorGraph(graph, values, { parameterSchema: fixture.definition.params }), entryPoint = `${fixture.type.replace('-', '')}${name}Fragment`;
+        const plan = compileImageOperatorGraph(graph, values, { parameterSchema: fixture.definition.params }), entryPoint = `${fixture.type.replaceAll('-', '')}${name}Fragment`;
         const actual = await render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, entryPoint), entryPoint,
           packImageOperatorRuntimeUniforms(plan, 0, width, height));
         const expected = name === 'bypass' ? processed : compactInput; if (!expected) throw new Error(`${fixture.type}/${name}: processed reference unavailable`);

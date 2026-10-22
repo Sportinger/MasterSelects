@@ -74,7 +74,8 @@ import { createDefaultRisoGraph, createEarlierRisoGraph, type EditableRisoEffect
 import { hasEarlierRisoParams } from './risoPrintEffectGraph';
 import { createDefaultDitherGraph, type EditableDitherEffectType } from './ditherEffectGraphs';
 import { createDefaultDitheringGraph, hasEarlierDitheringParams } from './ditheringEffectGraph';
-import { createDefaultPaperPrintGraph } from './paperPrintEffectGraph';
+import { createEarlierPaperPrintGraph, hasEarlierPaperPrintParams } from './paperPrintEffectGraph';
+import { createDefaultPaperPrintGraph } from './paperPrintGrainGraph';
 import { createDefaultPixelPosterGraph } from './pixelPosterEffectGraph';
 import { createDefaultToneGeometryGraph } from './toneGeometryEffectGraph';
 import { createDefaultCrossStitchGraph } from './crossStitchEffectGraph';
@@ -232,7 +233,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         // A graph-less Dithering saved before Levels keeps the look it was saved with (the earlier recipe).
         : effectType === 'dither' ? (hasEarlierDitheringParams(effect.params) ? () => createDefaultDitherGraph('dither') : createDefaultDitheringGraph)
         : effectType === 'dither-studio' ? () => createDefaultDitherGraph(effectType)
-        : effectType === 'paper-print' ? createDefaultPaperPrintGraph
+        // A graph-less Paper Print saved before Texture keeps the look it was saved with (the earlier recipe).
+        : effectType === 'paper-print' ? (hasEarlierPaperPrintParams(effect.params) ? createEarlierPaperPrintGraph : createDefaultPaperPrintGraph)
         : effectType === 'pixel-poster' ? createDefaultPixelPosterGraph
         : effectType === 'tone-geometry' ? createDefaultToneGeometryGraph
         : effectType === 'cross-stitch' ? createDefaultCrossStitchGraph

@@ -15,11 +15,16 @@
   {"name": "riso-glow", "out": "docs/Features/assets/effects/riso-glow.webp", "image": "dancer_stage", "width": 1920, "crop": [0, 40, 1240, 1000],
    "layout": "compare", "outWidth": 1600, "left": {"effect": "original"}, "right": {"effect": "riso-glow", "params": {}, "times": [0]},
    "alt": "The dancer and the lamp on a dark stage, original left and with Riso Glow right: a print of pink and indigo dots on a deep plum ground, where her skin, dress and the lamp give off a soft pink glow",
-   "caption": "Left: original. Right: Riso Glow at its default settings, at the top of its pulse."}
+   "caption": "Left: original. Right: Riso Glow at its default settings, at the top of its pulse."},
+  {"name": "paper-print", "out": "docs/Features/assets/effects/paper-print.webp", "image": "dancer_stage", "width": 1920, "crop": [600, 120, 640, 760],
+   "layout": "compare", "outWidth": 1280, "left": {"effect": "original"}, "right": {"effect": "paper-print", "params": {}},
+   "alt": "The dancer on a dark stage, original left and with Paper Print right: the picture becomes a print in warm black ink on cream paper, made of a fine grain that gathers densely in the shadows and thins out in her lit dress, with tiny specks of paper in the solid black stage",
+   "caption": "Left: original. Right: Paper Print at its default settings, at full size."}
  ],
  "strips": [
   {"effect": "halftone", "image": "dancer_stage", "width": 1920, "crop": [660, 120, 560, 560], "cellWidth": 400, "columns": 3},
   {"effect": "dither", "image": "dancer_stage", "width": 1920, "crop": [700, 110, 400, 400], "cellWidth": 400, "columns": 3},
-  {"effect": "riso", "image": "dancer_stage", "width": 1920, "crop": [740, 100, 400, 400], "cellWidth": 400, "columns": 3}
+  {"effect": "riso", "image": "dancer_stage", "width": 1920, "crop": [740, 100, 400, 400], "cellWidth": 400, "columns": 3},
+  {"effect": "paper-print", "image": "dancer_stage", "width": 1920, "crop": [720, 110, 400, 400], "cellWidth": 400, "columns": 2}
  ]
 }

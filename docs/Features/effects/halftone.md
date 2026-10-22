@@ -67,7 +67,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Halftone with the Newsprint preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Angle: 45° turns the screen like a newspaper's. 4 — Ink. 5 — Amount.</figcaption>
 </figure>
 
-**Style** – switches to another look of the same engine and keeps your values and keyframes, for example [Riso](./riso.md), [Paper Print](./paper-print.md) or [Crosshatch](./crosshatch.md).
+**Style** – switches to another look of the same engine and keeps your values and keyframes, for example [Pixel Poster](./pixel-poster.md), [Cross Stitch](./cross-stitch.md) or [Crosshatch](./crosshatch.md).
 
 ### Pattern
 

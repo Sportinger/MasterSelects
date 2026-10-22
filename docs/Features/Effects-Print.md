@@ -16,7 +16,7 @@ Add one in **Properties → Effects → + Add Effect → Print & Halftone**
 | a 1-bit picture in two inks | [Dither Studio](./effects/dither-studio.md) |
 | a two-ink risograph print, slightly out of register | [Riso](./effects/riso.md) |
 | the same print with a slow pulsing glow | [Riso Glow](./effects/riso-glow.md) |
-| a grainy two-colour press print | [Paper Print](./effects/paper-print.md) |
+| a grain print in one ink, like a mezzotint | [Paper Print](./effects/paper-print.md) |
 | squares, circles or triangles sized by tone | [Tone Geometry](./effects/tone-geometry.md) |
 
 ## The shared idea
@@ -26,13 +26,14 @@ grow where it is dark, dither patterns decide pixel by pixel between a few tones
 
 - **Ink** and **Paper** are the two colours most of them print with. Riso uses two inks on cream
   paper; Dithering keeps the picture's own colours.
-- **Scale** (or Dot Size, Pixel Size, Press Grain) sets the size of the marks; Riso's and Riso Glow's
+- **Scale** (or Dot Size, Pixel Size, Grain Size) sets the size of the marks; Riso's and Riso Glow's
   **Registration** sets how far their two inks slip apart.
 - **Amount** mixes back towards the original: 1 is the full print.
 
 Halftone, Dithering, Riso and Paper Print share one pattern engine with most
-[Lines](./Effects-Lines.md) and [Textile](./Effects-Textile.md) looks: the **Style** menu in their card
-switches between these looks and keeps the values and keyframes.
+[Lines](./Effects-Lines.md) and [Textile](./Effects-Textile.md) looks. The **Style** menu in a card
+switches between the looks that have the same controls (Halftone, Pixel Poster and most Lines and
+Textile looks) and keeps the values and keyframes.
 
 ## Technical details
 

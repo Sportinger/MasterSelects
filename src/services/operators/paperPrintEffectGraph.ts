@@ -29,7 +29,21 @@ function noise2d(g: Builder, p: Ref, zero: Ref, one: Ref, two: Ref, three: Ref):
   return mix('noise-result', mix('noise-row-zero', h00, h10, ux), mix('noise-row-one', h01, h11, ux), uy);
 }
 
-export function createDefaultPaperPrintGraph(): EffectOperatorGraph {
+/**
+ * A Paper Print saved without a node graph before Texture existed (its params lack `texture`; new effects store every
+ * default): it keeps the earlier recipe it was saved with (createEarlierPaperPrintGraph), a soft duotone under a
+ * blocky value-noise grain.
+ */
+export function hasEarlierPaperPrintParams(params: Record<string, unknown>): boolean {
+  return params.texture === undefined;
+}
+
+/**
+ * The earlier Paper Print: brightness plus a value-noise grain (sine hash on Press Grain cells), pressed through a
+ * smoothstep between Ink and Paper and darkened by the same grain. Kept for graph-less saves from before Texture
+ * (hasEarlierPaperPrintParams); its WGSL reference is paperPrintEarlier in src/effects/halftone/shader.wgsl.
+ */
+export function createEarlierPaperPrintGraph(): EffectOperatorGraph {
   const g = new Builder(), frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const clampMin = g.number('clamp-min', .001), clampMax = g.number('clamp-max', .999);
   const clampMin2 = g.unary('clamp-min-vec2', 'convert.scalar-to-vec2', clampMin), clampMax2 = g.unary('clamp-max-vec2', 'convert.scalar-to-vec2', clampMax);

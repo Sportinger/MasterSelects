@@ -35,7 +35,7 @@ export const STARTER_LOOKS: LookDefinition[] = [
     fx('rgb-split', { amount: 0.012 }),
   ]),
   look('paper-press', 'Paper Press', 'print', ['paper', 'press', 'soft'], [
-    fx('paper-print', { amount: 0.78, scale: 24, colorA: '#1a202c', colorB: '#efe8d5' }),
+    fx('paper-print', { amount: 0.78, scale: 3, colorA: '#1a202c', colorB: '#efe8d5' }),
     fx('grain', { amount: 0.08 }),
   ]),
   look('holo-drift', 'Holo Drift', 'digital', ['hologram', 'spectrum', 'animated'], [
