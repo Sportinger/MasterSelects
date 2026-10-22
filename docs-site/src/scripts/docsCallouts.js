@@ -94,9 +94,13 @@ function sectionOf(figure, content) {
   return section;
 }
 
+// Whole names win: "Gamma" links **Gamma**, not **Gamma Render Min**. A longer bold name only counts
+// when the scope has no exact one (**Line Shading & Alpha** for the callout "Line Shading").
 function boldWords(scope, label) {
-  return scope.flatMap((el) => [...el.querySelectorAll('strong, b')])
+  const candidates = scope.flatMap((el) => [...el.querySelectorAll('strong, b')])
     .filter((word) => !word.closest('figure, h1, h2, h3, h4, a') && sameName(normal(word.textContent), label));
+  const exact = candidates.filter((word) => normal(word.textContent) === label);
+  return exact.length ? exact : candidates;
 }
 
 // One connector for the whole page, drawn in viewport coordinates.
