@@ -753,6 +753,16 @@ T(a)·T(b) = T(a + b), the boxes tile the range exactly, so streaks stay continu
 at any length with about `2 × sqrt(2 × streak length in px)` taps per pixel; the old
 fixed sample counts showed ghost copies and stair steps on long streaks. A partial
 last box (Radial Zoom ranges differ per pixel) is weighted by its covered share.
+Since 2026-10-22 the counts never step: the coarse count `sqrt(2 × longest px)` is not
+rounded (h follows the amount, the partial last box grows in), and stage A works in
+one-pixel cells from the centre out whose outermost pair counts with the share of its
+cell the box covers. Every tap position and weight is a continuous function of the
+amount, so an animated amount ramps smoothly from 0 (the 3.2.7 recipe rounded both
+counts up: a streak under about a pixel rendered the source unchanged, Motion jumped by
+up to 35 levels at count steps, Radial Zoom near Amount 1 drew a faint ring near the
+centre). Untouched 3.2.7 graphs load with the new recipe as a bug fix; still pictures
+differ by under 0.4 levels on average (up to about 30 on a few thin high-contrast lines,
+measured on the Effect Lab images at the presets).
 Motion Blur's direction is now an exact on-screen angle (diagonal angles were
 skewed on non-square frames); its reach to each side keeps the legacy length,
 Length × |(cos × width, sin × height)|: a share of the width for horizontal and of
@@ -860,10 +870,11 @@ halo stays at about 18 % of the step at Amount 1 and about 26 % at Amount 5 (a
 plain unsharp mask overshoots by 40 % or more). At Amount 3–5 on strong texture the
 peaks are compressed, and two neighbours at a peak can round to the same level.
 Nothing depends on the timeline time. Negative Amount softens; alpha is kept. Three
-passes. An untouched Sharpen saved with the 3.2.7 recipe (taps spread evenly over a
-fractional window, which jumped when an animated Radius added a tap) loads with the
-current one; both render the same wherever 2σ is a whole number of pixels (Radius 0.5,
-1, 1.5 … at 1080p). Sharpens saved
+passes. A Sharpen saved with the 3.2.7 recipe (taps spread evenly over a fractional
+window, which jumped when an animated Radius added a tap) keeps it; the inspector names
+it and offers the current recipe (`isPreviousStylizeGraph`). Both render the same
+wherever 2σ is a whole number of pixels (Radius 0.5, 1, 1.5 … at 1080p); in between, a
+strong Sharpen differs by up to about 60 levels on fine detail. Sharpens saved
 earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
 **Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,

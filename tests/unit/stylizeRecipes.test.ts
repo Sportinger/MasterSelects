@@ -6,7 +6,7 @@ import { validateEffectGraph } from '../../src/services/operators/effectGraph';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
-import { createStylizeRecipeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_EFFECT_TYPES } from '../../src/services/operators/stylizeRecipes';
+import { createStylizeRecipeGraph, earlierStylizeRecipeNote, isEarlierStylizeGraph, isPreviousStylizeGraph, previousStylizeRecipeNote, STYLIZE_RECIPE_EFFECT_TYPES, stylizeRecipeUpdate } from '../../src/services/operators/stylizeRecipes';
 import { unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
 import { createSpreadWindowSharpenGraph } from '../../src/services/operators/sharpenEffectGraph';
 import { applyWorkerSoftwareImageGraphs, canApplyWorkerSoftwareImageGraphPlan } from '../../src/services/render/workerSoftwareImageGraphs';
@@ -53,15 +53,22 @@ describe('stylize recipes: ownership and saved projects', () => {
     expect(isEarlierStylizeGraph(type, graph)).toBe(false);
   });
 
-  it('moves an untouched Sharpen of 3.2.7 (spread halo window) to the current recipe and keeps an edited one', () => {
+  it('keeps an untouched Sharpen of 3.2.7 (spread halo window) as saved, offers the current recipe and still reports its value notes', () => {
     const released = createSpreadWindowSharpenGraph(), current = createStylizeRecipeGraph('sharpen')!;
     expect(matchesEffectRecipe(released, current)).toBe(false);
     const resolve = (operatorGraph: ReturnType<typeof createSpreadWindowSharpenGraph>) =>
       effectOperatorGraph({ type: 'sharpen', params: getDefaultParams('sharpen') as Effect['params'], operatorGraph }, { inspectionOnly: true });
-    expect(matchesEffectRecipe(resolve(released), current)).toBe(true);
+    expect(matchesEffectRecipe(resolve(released), released)).toBe(true);
+    expect(isPreviousStylizeGraph('sharpen', released)).toBe(true);
+    expect(isEarlierStylizeGraph('sharpen', released)).toBe(false);
+    expect(stylizeRecipeUpdate('sharpen', released)).toMatchObject({ label: 'Use the new Sharpen', message: expect.stringContaining('3.2.7') });
+    expect(stylizeRecipeUpdate('sharpen', current)).toBeUndefined();
+    expect(previousStylizeRecipeNote('sharpen', released)).toContain('3.2.7');
+    expect(earlierStylizeRecipeNote('sharpen', released)).toBeUndefined();
     const edited = createSpreadWindowSharpenGraph();
     edited.nodes = edited.nodes.map(node => (node.id === 'overshoot' ? { ...node, constants: { value: 0.5 } } : node));
-    expect(matchesEffectRecipe(resolve(edited), current)).toBe(false);
+    expect(isPreviousStylizeGraph('sharpen', edited)).toBe(false);
+    expect(stylizeRecipeUpdate('sharpen', edited)).toBeUndefined();
   });
 
   it('gives new stylize effects their current recipe graph', () => {

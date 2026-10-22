@@ -11,7 +11,7 @@ import type { JsonObject } from '../../motionDesign/adjustment/contracts';
 import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../../motionDesign/adjustment/supportedEffectContractAdapter';
 import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/supportedEffects';
 import { effectDefinitionNotes, effectParamDefinitions, graphBoundParameters, unusedParamWarnings } from '../../operators/effectParamVisibility';
-import { earlierStylizeRecipeNote } from '../../operators/stylizeRecipes';
+import { earlierStylizeRecipeNote, previousStylizeRecipeNote } from '../../operators/stylizeRecipes';
 import { chromaKeyScreen } from '../../../effects/keying/chroma-key/keyerContract';
 import { chromaKeyScreenProbeMessage, probeChromaKeyScreen } from '../../../effects/keying/chroma-key/screenProbe';
 import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
@@ -41,7 +41,8 @@ export function effectParamWarnings(effect: Effect | undefined, names: readonly 
   const width = composition?.width ?? 1920, height = composition?.height ?? 1080;
   // The effect's own notes are judged on the recipe this instance runs (effectDefinitionNotes).
   const earlier = names.length ? earlierStylizeRecipeNote(effect.type, effect.operatorGraph) : undefined;
-  return [...unusable, ...unusedParamWarnings(effect, names),
+  const previous = names.length ? previousStylizeRecipeNote(effect.type, effect.operatorGraph) : undefined;
+  return [...unusable, ...unusedParamWarnings(effect, names), ...(previous ? [previous] : []),
     ...paramRangeNotes(definitions, set, effect.operatorGraph).map(note => `${note.param}: ${note.message}`),
     ...blurBudgetNotes(effect.type, effect.params, width, height),
     ...(earlier ? [earlier] : names.length ? effectDefinitionNotes(effect, width, height) : [])];
