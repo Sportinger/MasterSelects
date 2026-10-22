@@ -120,6 +120,18 @@
         1080
       ],
       "cellWidth": 480
+    },
+    {
+      "effect": "rgb-split",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "cellWidth": 640
     }
   ]
 }

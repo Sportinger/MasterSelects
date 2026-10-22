@@ -14,12 +14,13 @@
     {
       "name": "rgb-split",
       "out": "docs/Features/assets/effects/rgb-split.webp",
-      "image": "neon_rain_street",
+      "image": "dancer_stage",
       "width": 1920,
-      "layout": "split",
-      "outWidth": 1600,
+      "layout": "compare",
       "left": { "effect": "original" },
-      "right": { "effect": "rgb-split", "params": { "amount": 0.01 } }
+      "right": { "effect": "rgb-split", "params": { "amount": 0.012 } },
+      "alt": "The dancer on a dark stage, original left and with RGB Split right: a red copy of her sits to the left and a blue copy to the right, so her white dress and raised arm carry red and blue fringes on either side, while the stage lights stay soft",
+      "caption": "Left: original. Right: RGB Split with Amount 0.012."
     },
     {
       "name": "pixelate",

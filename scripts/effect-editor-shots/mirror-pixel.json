@@ -63,6 +63,26 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "rgb-split-inspector",
+      "effect": "rgb-split",
+      "params": { "amount": 0.02, "angle": 0, "mode": "offset" },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with an RGB Split card: the Preset menu showing Glitch, Amount 0.020, Angle 0°, Mode Offset and Frame Edges Mirror, beside a strip of the preview where the dancer's arm and dress repeat in red, green and blue copies side by side",
+      "caption": "RGB Split with the Glitch preset. 1 — Preset: pick a starting point. 2 — Amount: how far the colours move. 3 — Angle: which way. 4 — Mode: a straight shift or a lens. 5 — Frame Edges: what fills in at the edge.",
+      "marks": [
+        { "target": "Preset", "label": "Preset" },
+        { "target": "Amount", "label": "Amount" },
+        { "target": "Angle", "label": "Angle" },
+        { "target": "Mode", "label": "Mode" },
+        { "target": "Frame Edges", "label": "Frame Edges" }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

@@ -3,7 +3,7 @@
 // (services/operators/mirrorRecipes.ts); shader.wgsl is its WGSL reference.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { EDGES_PARAM, UV_DISTORT_COMMON_WGSL, choiceWarnings, distortNumber, edgeIndex } from '../uvDistortParams';
 import { RGB_SPLIT_LENS_SCALE, RGB_SPLIT_MODE_OPTIONS } from '../../../services/operators/mirrorRecipes';
 
@@ -16,6 +16,21 @@ export function rgbSplitWarnings(params: Params): string[] {
     ...choiceWarnings(params, ['edges']),
   ];
 }
+
+/**
+ * Presets name the look-defining controls: Amount, Angle and Mode. Frame Edges stays with the shot.
+ * Angle is stored in radians, like the parameter.
+ */
+export const RGB_SPLIT_PRESETS: readonly EffectPreset[] = [
+  // A slight diagonal misregistration, like a poster printed with shifted plates.
+  { id: 'misprint', name: 'Misprint', params: { amount: 0.004, angle: Math.PI / 6, mode: 'offset' } },
+  // A clear sideways split for a glitch hit.
+  { id: 'glitch', name: 'Glitch', params: { amount: 0.02, angle: 0, mode: 'offset' } },
+  // Clean in the middle, colour fringes towards the edges, like a cheap lens.
+  { id: 'cheap-lens', name: 'Cheap Lens', params: { amount: 0.012, angle: 0, mode: 'lens' } },
+  // Red and blue far apart: three ghosts of the picture, as in a dizzy spell.
+  { id: 'double-vision', name: 'Double Vision', params: { amount: 0.05, angle: 0, mode: 'offset' } },
+];
 
 export const rgbSplit: EffectDefinition = {
   id: 'rgb-split',
@@ -53,6 +68,8 @@ export const rgbSplit: EffectDefinition = {
     mode: { type: 'select', label: 'Mode', default: 'offset', options: RGB_SPLIT_MODE_OPTIONS, graphOnly: true },
     edges: EDGES_PARAM,
   },
+
+  presets: RGB_SPLIT_PRESETS,
 
   paramWarnings: rgbSplitWarnings,
   packUniforms: (params, width, height) => new Float32Array([

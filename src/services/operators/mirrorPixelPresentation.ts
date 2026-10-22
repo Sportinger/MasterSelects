@@ -42,11 +42,12 @@ export function mirrorPixelPresentationPlan(type: string): EffectPresentationPla
     stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : finish(id) ? 'finish'
       : /^edge-/.test(id) || /^mirror-/.test(id) && READ.test(id) ? 'reads' : /^space-/.test(id) || id === 'one-vec2' ? 'space' : 'reflect',
   };
+  // RGB Split's folder ports read 'One' instead of '(1, 1)', as on Mirror and Kaleidoscope.
   if (type === 'rgb-split') return {
     labels: { premultiply: 'Premultiplied Source (cached)', offset: 'Split Offset', reads: 'Channel Reads & Frame Edges', finish: 'Channel Merge & Straight Alpha' },
     portLabels: { ...COMMON_PORTS, direction: 'Direction', 'length-px': 'Length (px)', 'linear-offset': 'Offset', 'lens-offset': 'Lens Offset', offset: 'Split Offset',
       'red-uv': 'Red Read', 'blue-uv': 'Blue Read', 'red-vec4': 'Red Plate', 'green-vec4': 'Green Plate', 'blue-vec4': 'Blue Plate',
-      alpha: 'Union Alpha', combined: 'Merged Channels' },
+      alpha: 'Union Alpha', combined: 'Merged Channels', 'one-vec2': 'One' },
     stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : finish(id) || /^(red|green|blue)-(vec4|split)$|^alpha|^combined/.test(id) ? 'finish'
       : /^edge-|^green-read$/.test(id) || /^(red|blue)-/.test(id) && READ.test(id) ? 'reads' : 'offset',
   };
