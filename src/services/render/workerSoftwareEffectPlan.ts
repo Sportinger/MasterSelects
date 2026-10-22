@@ -100,6 +100,8 @@ interface MutableWorkerSoftwarePixelEffects {
     density: number;
     gainX: number;
     gainY: number;
+    /** Share of the trail kept per frame (missing in hosts built before 2026-10-22: 0.98). */
+    trail?: number;
     reset: boolean;
     historyLoop?: 'reset' | 'continuous';
   }[];
@@ -259,6 +261,7 @@ function effectFilterPart(
         density: finiteEffectNumber(effect.params.density, 4),
         gainX: finiteEffectNumber(effect.params.gainX, 0.3),
         gainY: finiteEffectNumber(effect.params.gainY, 0.3),
+        trail: finiteEffectNumber(effect.params.trail, 0.98),
         reset: effect.params.reset === true,
         historyLoop: resolveFeedbackHistoryLoop(effect.params),
       });

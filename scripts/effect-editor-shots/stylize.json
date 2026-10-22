@@ -4,31 +4,263 @@
       "name": "glow-inspector",
       "effect": "glow",
       "params": {
-        "amount": 2.5,
-        "threshold": 0.95,
-        "radius": 80
+        "amount": 4,
+        "threshold": 0.85,
+        "softness": 0.6,
+        "radius": 70
       },
       "image": "neon_rain_street.jpg",
       "preview": 380,
-      "alt": "Properties, Effects with a Glow card at its default values (Amount 2.5, Threshold 0.95, Softness 0.5, Radius 80, Color white) beside the glowing night street in the preview",
+      "alt": "Properties, Effects with a Glow card: the Preset menu showing Neon Bloom, Amount 4, Threshold 0.85, Softness 0.6, Radius 70 px and a white Color swatch, beside a strip of the preview where the neon signs bloom",
       "marks": [
         {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
           "target": "Amount",
-          "label": "Amount: how bright"
+          "label": "Amount"
         },
         {
           "target": "Threshold",
-          "label": "Threshold: what glows"
+          "label": "Threshold"
+        },
+        {
+          "target": "Softness",
+          "label": "Softness"
         },
         {
           "target": "Radius",
-          "label": "Radius: how far it spreads"
+          "label": "Radius"
+        },
+        {
+          "target": "Color",
+          "label": "Color"
         }
       ],
       "top": "tabs",
       "hide": [
         "Particle Out"
-      ]
+      ],
+      "caption": "Glow with the Neon Bloom preset. 1 — Preset: pick a starting point. 2 — Amount: how bright. 3 — Threshold: what glows. 4 — Softness: how gently light joins in. 5 — Radius: how far it spreads. 6 — Color: the tint of the halo."
+    },
+    {
+      "name": "sheen-inspector",
+      "effect": "sheen",
+      "params": {
+        "color": "#ffcc66",
+        "angle": -60,
+        "width": 0.16,
+        "intensity": 1.2
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 800,
+      "alt": "Properties, Effects with a Sheen card: the Preset menu showing Golden Beam, Position 0.5, Angle -60 degrees, Width 0.16, Softness 0.7, Intensity 1.2, Highlights 0.6 and a golden Color swatch, beside the preview where a warm golden beam crosses the dancer's dress and arm",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Position",
+          "label": "Position"
+        },
+        {
+          "target": "Width",
+          "label": "Width"
+        },
+        {
+          "target": "Intensity",
+          "label": "Intensity"
+        },
+        {
+          "target": "Color",
+          "label": "Color"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "caption": "Sheen with the Golden Beam preset. 1 — Preset: pick a starting point. 2 — Position: where the band is. 3 — Width: how far the light reaches. 4 — Intensity: how bright. 5 — Color: the tint of the light."
+    },
+    {
+      "name": "vignette-inspector",
+      "effect": "vignette",
+      "params": {
+        "amount": 0.95,
+        "size": 0.12,
+        "softness": 0.5,
+        "roundness": 1
+      },
+      "image": "harbor_town.jpg",
+      "preview": 800,
+      "alt": "Properties, Effects with a Vignette card: the Preset menu showing Spotlight, Amount 0.95, Size 0.12, Softness 0.5 and Roundness 1, beside the preview where the harbour town stays lit in a round pool in the middle of the frame and fades to black towards the left and right edges and the sky",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount",
+          "reach": 36
+        },
+        {
+          "target": "Size",
+          "label": "Size",
+          "reach": 120
+        },
+        {
+          "target": "Softness",
+          "label": "Softness",
+          "reach": 36
+        },
+        {
+          "target": "Roundness",
+          "label": "Roundness",
+          "reach": 120
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "caption": "Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Size: where the darkening begins. 4 — Softness: how gradually it fades in. 5 — Roundness: a circle or the frame's shape."
+    },
+    {
+      "name": "edge-detect-inspector",
+      "effect": "edge-detect",
+      "params": {
+        "strength": 2,
+        "width": 1.5,
+        "colorize": 1,
+        "invert": false
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 560,
+      "alt": "Properties, Effects with an Edge Detect card: the Preset menu showing Neon Outline, Strength 2, Width 1.5 px, Color 1 and Invert off, beside a strip of the preview where the dancer's arm, hair and dress are drawn as glowing warm lines on black",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Strength",
+          "label": "Strength"
+        },
+        {
+          "target": "Width",
+          "label": "Width"
+        },
+        {
+          "target": "Color",
+          "label": "Color"
+        },
+        {
+          "target": "Invert",
+          "label": "Invert"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "caption": "Edge Detect with the Neon Outline preset. 1 — Preset: pick a starting point. 2 — Strength: how bright and how many lines. 3 — Width: how thick. 4 — Color: white or the picture's colours. 5 — Invert: dark lines on white."
+    },
+    {
+      "name": "acuarela-inspector",
+      "effect": "acuarela",
+      "params": {
+        "wash": 12,
+        "bleed": 8,
+        "edges": 2,
+        "simplify": 1,
+        "blooms": 0.4,
+        "granulation": 0.8,
+        "paper": 0.8
+      },
+      "image": "harbor_town.jpg",
+      "preview": 0,
+      "alt": "Properties, Effects with an Acuarela card: the Preset menu showing Loose Wash, then Mix, the Paint section with Wash, Bleed, Edges, Simplify, Blooms and Shadow Pigment, the Paper section with Granulation, Paper, Grain Size and Lift, and the Motion section with Flow",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Wash",
+          "label": "Wash"
+        },
+        {
+          "target": "Edges",
+          "label": "Edges"
+        },
+        {
+          "target": "Granulation",
+          "label": "Granulation"
+        },
+        {
+          "target": "Flow",
+          "label": "Flow"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "viewport": {
+        "width": 1600,
+        "height": 1200
+      },
+      "caption": "Acuarela with the Loose Wash preset. 1 — Preset: pick a starting point. 2 — Wash: how flat the colour gets. 3 — Edges: the darker paint along every border. 4 — Granulation: pigment in the paper grain. 5 — Flow: lets the wet paint drift.",
+      "layout": "float"
+    },
+    {
+      "name": "rom1-inspector",
+      "effect": "rom1",
+      "params": {
+        "trail": 0.95,
+        "strength": 0.35,
+        "gainX": 0.9,
+        "gainY": 0,
+        "density": 1
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 0,
+      "alt": "Properties, Effects with a Rom1 card: the Preset menu showing Light Trails, then History Loop, Opacity, Trail, Gain, Speed, Detail, Strength, Density, Gain X, Gain Y and the Reset box",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Trail",
+          "label": "Trail"
+        },
+        {
+          "target": "Strength",
+          "label": "Strength"
+        },
+        {
+          "target": "Density",
+          "label": "Density"
+        },
+        {
+          "target": "Gain X",
+          "label": "Gain X"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "viewport": {
+        "width": 1600,
+        "height": 1200
+      },
+      "caption": "Rom1 with the Light Trails preset. 1 — Preset: pick a starting point. 2 — Trail: how long the smoke stays. 3 — Strength: how far it flows each frame. 4 — Density: how large the currents are. 5 — Gain X: the sideways share of the flow.",
+      "layout": "float"
     }
   ]
 }

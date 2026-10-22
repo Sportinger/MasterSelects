@@ -24,7 +24,7 @@ describe('contextual image effect graph ownership', () => {
   it('shares the exact legacy vignette schema while remaining outside the pixel-only inline set', () => {
     expect(getEffect('vignette')?.params).toBe(VIGNETTE_PARAMS);
     expect(VIGNETTE_PARAMS).toMatchObject({
-      amount: { default: 0.5, min: 0, max: 1 }, size: { default: 0.5, min: 0, max: 1.5 },
+      amount: { default: 0.5, min: 0, max: 1 }, size: { default: 0.5, min: 0, max: 1, renderMax: 1.5 },
       softness: { default: 0.5, min: 0, max: 1 }, roundness: { default: 1, min: 0, max: 1 },
     });
     expect(isImageGraphEffectType('vignette')).toBe(true);

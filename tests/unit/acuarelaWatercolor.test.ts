@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams } from '../../src/effects';
 import { acuarelaParamWarnings } from '../../src/effects/stylize/acuarela/warnings';
-import { createDefaultAcuarelaGraph } from '../../src/services/operators/acuarelaWatercolorGraph';
+import { createAcuarelaGraphBefore20261022, createDefaultAcuarelaGraph } from '../../src/services/operators/acuarelaWatercolorGraph';
 import { createLegacyAcuarelaGraph, hasLegacyAcuarelaParams } from '../../src/services/operators/acuarelaEffectGraph';
 import { withLegacyAcuarelaGraph } from '../../src/services/operators/acuarelaIdentity';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
@@ -216,7 +216,7 @@ describe('Acuarela saved with the watery-smoke recipe', () => {
   it('names the watercolour ports only on the watercolour recipe, not on saved smoke graphs', () => {
     const clip = createMockClip({ id: 'labels-clip' });
     const label = (owner: Effect, id: string) => buildEffectOperatorGraph(clip, owner).nodes.find(node => node.id === id)?.outputs[0]?.label;
-    expect(label(effect(watercolour()), 'density')).toBe('Pigment Density');
+    expect(label(effect(watercolour()), 'density-painted')).toBe('Painted Colour');
     const smoke = migratePersistedEffectOperatorGraph(effect(SMOKE));
     expect(smoke.operatorGraph!.nodes.some(node => node.id === 'density')).toBe(true);
     expect(label(smoke, 'density')).not.toBe('Pigment Density');
@@ -230,6 +230,46 @@ describe('Acuarela saved with the watery-smoke recipe', () => {
     // The watercolour is unsupported in software (minutes per frame), fresh or stored: the frame falls back to the GPU renderer.
     expect(workerSoftwareEffectPlanForLayer(layer(effect(watercolour())))).toBeNull();
     expect(workerSoftwareEffectPlanForLayer(layer(migratePersistedEffectOperatorGraph(effect(watercolour()))))).toBeNull();
+  });
+
+  it('has no dead nodes: every card of the recipe feeds the output (no dangling folder ports)', () => {
+    const graph = createDefaultAcuarelaGraph();
+    const reached = new Set(['output']), queue = ['output'];
+    while (queue.length) {
+      const id = queue.pop()!;
+      for (const edge of graph.edges) if (edge.to === id && !reached.has(edge.from)) { reached.add(edge.from); queue.push(edge.from); }
+    }
+    const bound = new Set(graph.nodes.filter(node => Object.keys(node.bindings ?? {}).length).map(node => node.id));
+    expect(graph.nodes.map(node => node.id).filter(id => !reached.has(id) && !bound.has(id))).toEqual([]);
+  });
+
+  it('still counts untouched copies saved before 2026-10-22 (with the unused density card) as the built-in recipe', () => {
+    const before = createAcuarelaGraphBefore20261022();
+    expect(before.nodes.some(node => node.id === 'density')).toBe(true);
+    const saved = (graph: typeof before): Effect => ({ ...effect(watercolour({ opacity: 0 })), operatorGraph: graph });
+    expect(isNeutralEffect(saved(before), 1920, 1080)).toBe(true);
+    expect(isNeutralEffect(saved(createDefaultAcuarelaGraph()), 1920, 1080)).toBe(true);
+    const edited = { ...before, nodes: before.nodes.filter(node => node.id !== 'bloom-density') };
+    expect(isNeutralEffect(saved(edited), 1920, 1080)).toBe(false);
+    // Same pixels: the dropped card fed nothing.
+    const paint = (graph: typeof before) => {
+      const data = new Uint8ClampedArray(12 * 8 * 4);
+      for (let index = 0; index < data.length; index += 4) data.set([index % 251, 90, 200 - (index % 97), 255], index);
+      applyWorkerSoftwareImageGraphs(data, 12, 8, [compileImageOperatorGraph(graph, watercolour(), {})], 1.5);
+      return [...data];
+    };
+    expect(paint(createDefaultAcuarelaGraph())).toEqual(paint(before));
+  });
+
+  it('loads an untouched copy saved before 2026-10-22 as the current recipe, so it keeps its stage folders', () => {
+    const before = createAcuarelaGraphBefore20261022();
+    const folders = (graph: typeof before) => (effectOperatorGraph({ ...effect(watercolour()), operatorGraph: graph }, { inspectionOnly: true }).groups ?? []).length;
+    const current = folders(createDefaultAcuarelaGraph());
+    expect(current).toBeGreaterThan(10);
+    expect(folders(before)).toBe(current);
+    const constant = before.nodes.find(node => node.operator === 'values.number' && typeof node.constants?.value === 'number')!;
+    const edited = { ...before, nodes: before.nodes.map(node => node === constant ? { ...node, constants: { ...node.constants, value: Number(node.constants!.value) + 0.5 } } : node) };
+    expect(effectOperatorGraph({ ...effect(watercolour()), operatorGraph: edited }, { inspectionOnly: true }).nodes.some(node => node.id === 'density')).toBe(true);
   });
 
   it('skips the watercolour at Mix 0 but never the smoke recipe, whose history keeps running', () => {

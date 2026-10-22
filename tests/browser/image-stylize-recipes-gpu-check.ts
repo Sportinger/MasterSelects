@@ -21,6 +21,8 @@ const cases: { name: string; type: string; params: Record<string, unknown>; tole
   { name: 'edge-default', type: 'edge-detect', params: {}, tolerance: 2 },
   { name: 'edge-width-colour', type: 'edge-detect', params: { width: 3, strength: 1.5, colorize: 1 }, tolerance: 2 },
   { name: 'edge-inverted', type: 'edge-detect', params: { invert: true }, tolerance: 2 },
+  // 2 sigma = 12 px: the window keeps 8 taps per side and spreads them 1.5 px apart (bilinear reads).
+  { name: 'edge-spread-taps', type: 'edge-detect', params: { width: 120, strength: 1.5 }, tolerance: 2 },
   { name: 'sharpen-strong', type: 'sharpen', params: { amount: 5, radius: 5 }, tolerance: 2 },
   { name: 'grain-colour', type: 'grain', params: { amount: 0.4, size: 3, chroma: 1, seed: 9 }, tolerance: 2 },
   { name: 'vignette-frame-shape', type: 'vignette', params: { amount: 0.8, roundness: 0, softness: 0 }, tolerance: 2 },

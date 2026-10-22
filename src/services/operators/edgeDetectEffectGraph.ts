@@ -1,5 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
-import { EDGE_GAIN, EDGE_MAX_REACH_PX, EDGE_MIN_SIGMA_PX, EDGE_MIN_WIDTH, EDGE_REFERENCE_HEIGHT, EDGE_VIVID_FLOOR } from '../../effects/stylize/edge-detect/edgeDetectModel';
+import { EDGE_GAIN, EDGE_PASS_TAPS, EDGE_WINDOW_TAPS, EDGE_MIN_SIGMA_PX, EDGE_MIN_WIDTH, EDGE_REFERENCE_HEIGHT, EDGE_VIVID_FLOOR } from '../../effects/stylize/edge-detect/edgeDetectModel';
 import { BlurGraphBuilder } from './blurGraphBuilder';
 
 const node = (id: string, operator: string, bindings: BoundOperatorNode['bindings'] = {}, constants?: BoundOperatorNode['constants']): BoundOperatorNode =>
@@ -59,27 +59,36 @@ export function createEarlierEdgeDetectGraph(): EffectOperatorGraph {
 }
 
 /**
- * Edge Detect v2 (contract in `effects/stylize/edge-detect/edgeDetectModel.ts`): a
- * derivative-of-Gaussian gradient of premultiplied brightness from one window reduction,
- * normalized by the window's own second moment (exact for ramps at every Width and resolution),
- * a soft roll-off, and line/background colours composited premultiplied. One fullscreen pass.
+ * Edge Detect (contract in `effects/stylize/edge-detect/edgeDetectModel.ts`): a
+ * derivative-of-Gaussian gradient of premultiplied brightness, normalized by the window's own
+ * second moment (exact for ramps at every Width and resolution), a soft roll-off, and
+ * line/background colours composited premultiplied. The Gaussian window is separable, so it runs
+ * as two passes: a horizontal pass caches the brightness and its x moment per pixel
+ * (`horizontal-cache`), a vertical pass sums those into the window. Every tap reads a whole pixel
+ * out to two sigma (up to EDGE_PASS_TAPS per side), so the window averages all the texture it
+ * covers and a Width draws the same line, with the same amount of fine speckle, in a preview, at
+ * 1080p and at 4K. The outermost taps count with the share of them two sigma covers, so the
+ * window grows continuously while Width is animated.
  */
 export function createDefaultEdgeDetectGraph(): EffectOperatorGraph {
+  return createSeparableEdgeDetectGraph();
+}
+
+/**
+ * The Edge Detect recipe released with 3.2.7: whole taps out to ceil(2 sigma), so the lines jumped
+ * whenever an animated Width made the window one tap wider. Kept to recognize untouched saved 3.2.7
+ * graphs, which keep their look (isPreviousStylizeGraph; the inspector offers Use the new Edge Detect).
+ */
+export function createWholeTapEdgeDetectGraph(): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
   g.number('zero', 0); g.number('one', 1); g.number('two', 2);
   const strength = g.bound('strength', 'strength'), width = g.bound('width', 'width');
   const invert = g.bound('invert', 'invert', 'values.boolean'), colorize = g.bound('colorize', 'colorize');
-
-  // Scale: sigma = Width pixels of a 1080p frame (at least EDGE_MIN_SIGMA_PX); the window reaches two sigma (capped).
-  g.number('reference-height', EDGE_REFERENCE_HEIGHT); g.number('width-minimum', EDGE_MIN_WIDTH);
-  g.number('sigma-minimum', EDGE_MIN_SIGMA_PX); g.number('reach-limit', EDGE_MAX_REACH_PX);
-  const pixelScale = g.binary('pixel-scale', 'math.divide-ieee.scalar', g.unary('short-side', 'vector.reduce-min.vec2', 'resolution'), 'reference-height');
-  const sigmaRaw = g.binary('sigma-raw', 'math.multiply.scalar', g.binary('width-safe', 'math.max.scalar', width, 'width-minimum'), pixelScale);
-  const sigma = g.binary('sigma', 'math.max.scalar', sigmaRaw, 'sigma-minimum');
-  const reach = g.binary('reach', 'math.min.scalar', g.unary('reach-needed', 'math.ceil.scalar', g.binary('two-sigma', 'math.multiply.scalar', sigma, 'two')), 'reach-limit');
+  const { sigma, twoSigma } = lineSigma(g, width, EDGE_WINDOW_TAPS);
+  // Taps per side: ceil(2 sigma), at most EDGE_WINDOW_TAPS (8 px: thinner lines in large frames).
+  const reach = g.binary('reach', 'math.min.scalar', g.unary('reach-needed', 'math.ceil.scalar', twoSigma), 'reach-limit');
   const span = g.binary('window-size', 'math.add.scalar', g.binary('reach-double', 'math.multiply.scalar', reach, 'two'), 'one');
-
   // Window taps at whole-pixel offsets (texel centres, so premultiplying each tap is exact), Gaussian weights.
   const index = g.add('window-index', 'vector.split.vec2', { value: g.add('window-kernel', 'image.kernel-index') });
   const dx = g.binary('tap-x', 'math.subtract.scalar', [index, 'x'], reach), dy = g.binary('tap-y', 'math.subtract.scalar', [index, 'y'], reach);
@@ -94,9 +103,79 @@ export function createDefaultEdgeDetectGraph(): EffectOperatorGraph {
     x: g.binary('tap-moment-x', 'math.multiply.scalar', tapLuma, dx), y: g.binary('tap-moment-y', 'math.multiply.scalar', tapLuma, dy),
     z: g.binary('tap-x-squared', 'math.multiply.scalar', dx, dx), w: 'one' }) });
   const reduce = g.add('window-reduce', 'image.kernel-rect-reduce', { sample: [moment, 'image'], weight, width: span, height: span });
+  edgeFinish(g, g.add('window-sums', 'vector.split.vec4', { value: [reduce, 'sum'] }), sigma, strength, invert, colorize);
+  return g.graph();
+}
 
+/** Line sigma in pixels: Width pixels of a 1080p frame, at least EDGE_MIN_SIGMA_PX; the window reaches two sigma. */
+function lineSigma(g: BlurGraphBuilder, width: string, reachLimit: number) {
+  g.number('reference-height', EDGE_REFERENCE_HEIGHT); g.number('width-minimum', EDGE_MIN_WIDTH);
+  g.number('sigma-minimum', EDGE_MIN_SIGMA_PX); g.number('reach-limit', reachLimit);
+  const pixelScale = g.binary('pixel-scale', 'math.divide-ieee.scalar', g.unary('short-side', 'vector.reduce-min.vec2', 'resolution'), 'reference-height');
+  const sigmaRaw = g.binary('sigma-raw', 'math.multiply.scalar', g.binary('width-safe', 'math.max.scalar', width, 'width-minimum'), pixelScale);
+  const sigma = g.binary('sigma', 'math.max.scalar', sigmaRaw, 'sigma-minimum');
+  return { sigma, twoSigma: g.binary('two-sigma', 'math.multiply.scalar', sigma, 'two') };
+}
+
+function createSeparableEdgeDetectGraph(): EffectOperatorGraph {
+  const g = new BlurGraphBuilder();
+  g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
+  g.number('zero', 0); g.number('one', 1); g.number('two', 2);
+  const strength = g.bound('strength', 'strength'), width = g.bound('width', 'width');
+  const invert = g.bound('invert', 'invert', 'values.boolean'), colorize = g.bound('colorize', 'colorize');
+  // Taps per side: ceil(2 sigma), one pixel apart. Past EDGE_PASS_TAPS (2 sigma above 64 px, a
+  // Width above 8 at 4K) the taps spread 2 sigma / EDGE_PASS_TAPS apart; the parameter notes say so.
+  const { sigma, twoSigma } = lineSigma(g, width, EDGE_PASS_TAPS);
+  const reach = g.binary('reach', 'math.min.scalar', g.unary('reach-needed', 'math.ceil.scalar', twoSigma), 'reach-limit');
+  const count = g.binary('window-size', 'math.add.scalar', g.binary('reach-double', 'math.multiply.scalar', reach, 'two'), 'one');
+  const spacing = g.binary('tap-spacing', 'math.divide-ieee.scalar', g.binary('tap-spacing-wide', 'math.max.scalar', twoSigma, 'reach-limit'), 'reach-limit');
+  // A tap counts with the share of it two sigma covers (in taps): 1 inside, the covered part for
+  // the outermost tap, so no tap pops in at once while Width is animated.
+  const reachCovered = g.binary('reach-covered', 'math.min.scalar', twoSigma, 'reach-limit');
+
+  /** One tap of a pass: its offset in pixels and its weight, Gaussian times covered share. */
+  const passTap = (axis: 'horizontal' | 'vertical') => {
+    const id = (name: string) => `${axis}-${name}`;
+    const tap = g.binary(id('tap'), 'math.subtract.scalar', [g.add(id('index'), 'image.sequence-index'), 'index'], reach);
+    const offsetPx = g.binary(id('offset-px'), 'math.multiply.scalar', tap, spacing);
+    const covered = g.add(id('coverage'), 'math.clamp.scalar', { value: g.binary(id('coverage-raw'), 'math.add.scalar',
+      g.binary(id('inside'), 'math.subtract.scalar', reachCovered, g.unary(id('distance'), 'math.abs.scalar', tap)), 'one'), min: 'zero', max: 'one' });
+    const weight = g.binary(id('weight'), 'math.multiply.scalar', g.add(id('gaussian'), 'math.gaussian.scalar', { value: offsetPx, sigma }), covered);
+    const offset = g.add(id('offset'), 'vector.combine.vec2', axis === 'horizontal' ? { x: offsetPx, y: 'zero' } : { x: 'zero', y: offsetPx });
+    const uv = g.binary(id('uv'), 'math.add.vec2', ['uv', 'uv'], g.binary(id('offset-uv'), 'math.divide-ieee.vec2', offset, 'resolution'));
+    return { offsetPx, weight, uv };
+  };
+  const normalized = (axis: 'horizontal' | 'vertical', reduce: string) => g.add(`${axis}-average`, 'math.divide-ieee.vec4',
+    { a: [reduce, 'sum'], b: g.add(`${axis}-weight-vec4`, 'convert.scalar-to-vec4', { value: [reduce, 'weightSum'] }) });
+
+  // Horizontal pass: premultiplied brightness L of each tap (whole pixels: texel centres, so
+  // premultiplying a tap is exact). Cached per pixel, normalized by the weight sum:
+  // (sum w L, sum w L x, sum w x^2, 1) / sum w.
+  const h = passTap('horizontal');
+  const sample = g.add('horizontal-split', 'vector.split.rgba', { image: [g.add('horizontal-sample', 'image.sample', { image: ['frame', 'image'], uv: h.uv }), 'image'] });
+  const luma = g.binary('horizontal-luma', 'math.multiply.scalar', g.add('horizontal-luma-straight', 'color.luminance-rec709.rgb', { rgb: [sample, 'rgb'] }),
+    g.add('horizontal-alpha', 'convert.alpha-to-scalar', { alpha: [sample, 'alpha'] }));
+  const hMoment = g.add('horizontal-moment', 'convert.vec4-to-image', { value: g.add('horizontal-moment-vec4', 'vector.combine.vec4', {
+    x: luma, y: g.binary('horizontal-moment-x', 'math.multiply.scalar', luma, h.offsetPx),
+    z: g.binary('horizontal-x-squared', 'math.multiply.scalar', h.offsetPx, h.offsetPx), w: 'one' }) });
+  const hReduce = g.add('horizontal-reduce', 'image.sequence-reduce', { sample: [hMoment, 'image'], weight: h.weight, count });
+  const cache = g.add('horizontal-cache', 'image.materialize', { image: [g.add('horizontal-image', 'convert.vec4-to-image', { value: normalized('horizontal', hReduce) }), 'image'] });
+
+  // Vertical pass over the cached rows: x slope (sum w B), y slope (sum w y A), x spread (sum w z), sum w.
+  // These are the window sums of the full 2D window divided by the horizontal weight sum, which cancels.
+  const v = passTap('vertical');
+  const row = g.add('vertical-row', 'vector.split.vec4', { value: g.add('vertical-row-vec4', 'convert.image-to-vec4',
+    { image: [g.add('vertical-sample', 'image.sample', { image: [cache, 'image'], uv: v.uv }), 'image'] }) });
+  const vMoment = g.add('vertical-moment', 'convert.vec4-to-image', { value: g.add('vertical-moment-vec4', 'vector.combine.vec4', {
+    x: [row, 'y'], y: g.binary('vertical-moment-y', 'math.multiply.scalar', [row, 'x'], v.offsetPx), z: [row, 'z'], w: 'one' }) });
+  const vReduce = g.add('vertical-reduce', 'image.sequence-reduce', { sample: [vMoment, 'image'], weight: v.weight, count });
+  edgeFinish(g, g.add('window-sums', 'vector.split.vec4', { value: [vReduce, 'sum'] }), sigma, strength, invert, colorize);
+  return g.graph();
+}
+
+/** Gradient from the window sums (x, y slope; z = sum w dx^2; w = sum w), roll-off, colours and alpha. */
+function edgeFinish(g: BlurGraphBuilder, sums: string, sigma: string, strength: string, invert: string, colorize: string): void {
   // Edge contrast: |sum w L d| / sqrt(sum w dx^2 * sum w) * sqrt(2 pi): a step of contrast c reads about c.
-  const sums = g.add('window-sums', 'vector.split.vec4', { value: [reduce, 'sum'] });
   const gradientSums = g.add('gradient-sums', 'vector.combine.vec2', { x: [sums, 'x'], y: [sums, 'y'] });
   const gradient = g.unary('gradient-length', 'vector.length.vec2', gradientSums);
   const spread = g.unary('window-spread', 'math.sqrt.scalar', g.binary('window-moments', 'math.max.scalar',
@@ -138,5 +217,4 @@ export function createDefaultEdgeDetectGraph(): EffectOperatorGraph {
     b: g.binary('edge-alpha-safe', 'math.max.scalar', alpha, 'alpha-floor') }), min: 'zero', max: 'one' });
   const output = g.add('combine', 'vector.combine.rgba', { rgb, alpha: [g.add('edge-alpha-port', 'convert.scalar-to-alpha', { value: alpha }), 'alpha'] });
   g.add('output', 'image.output', { image: [output, 'image'] });
-  return g.graph();
 }

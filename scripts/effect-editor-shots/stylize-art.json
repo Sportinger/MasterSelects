@@ -1,35 +1,3 @@
 {
-  "shots": [
-    {
-      "name": "acuarela-inspector",
-      "effect": "acuarela",
-      "params": {},
-      "image": "harbor_town.jpg",
-      "preview": 200,
-      "alt": "The Acuarela effect card in Properties → Effects beside the preview of the harbour painted as a watercolour",
-      "marks": [
-        {
-          "target": "Wash",
-          "label": "Wash, how flat the colour washes are"
-        },
-        {
-          "target": "Bleed",
-          "label": "Bleed, how far wet paint runs",
-          "reach": 160
-        },
-        {
-          "target": "Edges",
-          "label": "Edges, the darker paint along every edge"
-        }
-      ],
-      "top": "card",
-      "hide": [
-        "Particle Out"
-      ],
-      "viewport": {
-        "width": 2000,
-        "height": 1300
-      }
-    }
-  ]
+  "shots": []
 }

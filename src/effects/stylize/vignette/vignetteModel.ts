@@ -29,6 +29,11 @@ export function vignetteParamNotes(params: Record<string, unknown>): string[] {
   const softness = finite(params.softness, 0.5), roundness = finite(params.roundness, 1);
   if (softness < 0) notes.push(`Softness ${softness} is below 0; it is used as 0 (the sharpest edge).`);
   if (roundness < 0 || roundness > 1) notes.push(`Roundness ${roundness} is outside 0–1; it is used as ${roundness < 0 ? 0 : 1}.`);
+  // Every corner is at distance 1, so a falloff that starts there darkens nothing. The slider ends
+  // at 1; a larger Size still arrives from keyframes, tools and Vignettes saved before 2026-10-21
+  // (their corners sit at about 1.41, which is why the number field takes up to 1.5).
+  const size = finite(params.size, 0.5);
+  if (size >= 1) notes.push(`Size ${size} starts the darkening at or past the corners (1), so nothing darkens; use a Size below 1.`);
   const amount = finite(params.amount, 0.5);
   if (amount > 1) notes.push(`Amount ${amount} is above 1: the edges reach black before Size + Softness.`);
   return notes;

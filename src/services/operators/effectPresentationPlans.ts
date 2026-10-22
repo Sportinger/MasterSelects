@@ -3,6 +3,7 @@ import { mirrorPixelPresentationPlan } from './mirrorPixelPresentation';
 import { FILM_PRISM_SPECTRUM } from '../../effects/analog/filmPrismLimits';
 import { createLegacyCrtScreenGraph } from './legacyCrtScreenGraph';
 import { acuarelaPresentationPlan } from './acuarelaPresentation';
+import { rom1PresentationPlan } from './rom1Presentation';
 
 export interface EffectPresentationPlan {
   labels: Record<string, string>;
@@ -135,11 +136,15 @@ export function effectPortLabels(type: string): Record<string, string> | undefin
 
 const GLOW_PORTS: Record<string, string> = { 'source-split:rgb': 'Source Color', 'source-alpha': 'Source Alpha', 'bright-cache': 'Bright Light',
   'tap-weight': 'Tap Weight', 'up-uv': 'Up Read Position', 'down-uv': 'Down Read Position', 'level-weight': 'Level Weight',
-  'top-level-weight': 'Top Level Weight', 'glow-core-weight': 'Level 0 Weight', 'glow-light': 'Glow Light', 'glow-amount': 'Glow Amount', 'glow-tinted': 'Tinted Glow', 'color-rgb': 'Glow Color', 'glow-scaled': 'Glow',
+  'top-level-weight': 'Top Level Weight', 'level-short-side': 'Short Side', 'level-radius': 'Radius (> 0)', 'glow-core-weight': 'Level 0 Weight', 'glow-light': 'Glow Light', 'glow-amount': 'Glow Amount', 'glow-tinted': 'Tinted Glow', 'color-rgb': 'Glow Color', 'glow-scaled': 'Glow',
   'resolve-premultiplied': 'Premultiplied Source', 'glow-negative': '−Glow', 'euler-rgb': 'e', 'one-rgb': 'One', 'resolve-falloff': 'exp(−Glow)',
   'resolve-room': 'Room (1 − Picture)', 'resolve-remaining': 'Room × exp(−Glow)', 'resolve-result': 'Picture screened with Glow',
+  'bright-peak': 'Brightest Channel', 'bright-threshold': 'Threshold (≥ 0)', 'bright-knee': 'Softness × Headroom', 'bright-ramp-start': 'Ramp Start',
+  'bright-ramp-end': 'Ramp End', 'bright-contribution': 'Glow Share', 'level-reach-px': 'Radius × Short Side', 'level-fineness': 'Fineness',
+  'level-fine-fade': 'Fine Fade', 'level-position-shifted': 'Octaves + 1', 'glow-light-sum': 'Light Sum', 'glow-weight-safe': 'Weight Sum (≥ 1)', 'zero-rgb': 'Zero',
   ...Object.fromEntries(Array.from({ length: 10 }, (_, index) => [[`down-${index + 1}-cache`, `Level ${index + 1} (1/${2 ** (index + 1)} size)`],
-    [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`]]).flat()) };
+    [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`], [`up-${index + 1}-level-split:rgb`, `Level ${index + 1} Light`],
+    [`up-${index + 1}-weights`, 'Weight Sum'], [`up-${index + 1}-alpha`, 'Weight Sum'], [`up-${index + 1}-weight-sum`, 'Smaller Levels Weight']]).flat()) };
 // Threshold and Posterize: the hard step and the soft ramp that Softness blends in.
 const POINTWISE_PORTS = { compare: 'Above Level', hard: 'Hard Step', ramp: 'Soft Ramp', soft: 'Softness On', smooth: 'Soft Steps', steps: 'Steps' };
 /** Invert has no clamp (1 − x stays within 0 to 1), so its folders name what they do, and its three
@@ -432,7 +437,10 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   };
   if (type === 'vignette') return {
     labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
-    portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither' },
+    portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither',
+      'half-diagonal': 'Half Diagonal (px)', 'gain-change': 'Darkening Depth', shaded: 'Darkened Color',
+      'circle-scale': 'Circle Scale', 'frame-scale': 'Frame Scale (√2)', center: 'Centre (0.5, 0.5)', 'corner-distance': 'Corner Distance',
+      'minimum-feather': 'Minimum Feather', pixel: 'Pixel Position', 'dither-b-pixel': 'Shifted Pixel' },
     stage: ({ id }) => /^(minimum-feather|feather|falloff|outer-edge|gain|darkening)/.test(id) ? 'falloff' : /^(pixel$|dither)/.test(id) ? 'dither'
       : /^(source-split|shaded|dithered|clamped|combine)$/.test(id) ? 'finish' : 'shape',
   };
@@ -451,8 +459,8 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : /^(opacity-limited|gain|darkening|gap|source-split|shaded|combine)$/.test(id) ? 'finish' : 'lines',
   };
   if (type === 'glow') return {
-    labels: { bright: 'Bright Pass (ramp to white)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid: Halve the Light',
-      up: 'Pyramid: Add Levels Back Up', finish: 'Glow Resolve & Alpha' },
+    labels: { bright: 'Bright Pass (ramp to white)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid Down (halve the light)',
+      up: 'Pyramid Up (add levels back)', finish: 'Glow Resolve & Alpha' },
     portLabels: GLOW_PORTS,
     stage: ({ id }) => /^(bright-|source-)/.test(id) ? 'bright'
       : /^(tap-|texel$|one-vec2$|up-offset$|up-uv$|down-offset$|down-uv$|level-|top-level-|finest-)/.test(id) ? 'kernel'
@@ -477,11 +485,21 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : includes('strength scaled clamped inverse invert selected rgba image', id) ? 'finish' : 'sampling',
   };
   if (type === 'edge-detect') return {
-    labels: { scale: 'Line Width (sigma & window)', window: 'Window Taps (premultiplied brightness)', gradient: 'Gradient & Edge Strength', finish: 'Line Color & Alpha' },
-    portLabels: { sigma: 'Sigma (px)', reach: 'Reach (px)', 'window-size': 'Window Size', 'tap-moment': 'Moments', edge: 'Edge', 'line-color': 'Line Color' },
-    stage: ({ id }) => /^(pixel-scale|short-side|width-safe|sigma|two-sigma|reach|window-size)/.test(id) ? 'scale'
-      : /^(tap-|window-reduce|window-index)/.test(id) ? 'window'
-        : /^(window-|gradient-(sums|length|normalized)|edge-contrast|edge-raw|edge-falloff|edge-negative|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',
+    // The 3.2.7 recipe (one 2D window, `tap-*`) shares this plan: its taps sit in Window Taps.
+    labels: { scale: 'Line Width (sigma & window)', horizontal: 'Horizontal Pass (row brightness & x slope)', vertical: 'Vertical Pass (window sums)',
+      window: 'Window Taps (premultiplied brightness)', gradient: 'Gradient & Edge Strength', finish: 'Line Color & Alpha' },
+    portLabels: { sigma: 'Sigma (px)', reach: 'Reach (taps)', 'window-size': 'Window Size', 'tap-moment': 'Moments', edge: 'Edge', 'line-color': 'Line Color',
+      'two-sigma': '2 Sigma (px)', 'reach-needed': 'Whole Taps', 'reach-covered': 'Covered Reach (taps)', 'tap-spacing': 'Tap Spacing (px)', 'tap-spacing-wide': '2 Sigma, at least 64 (px)',
+      'tap-weight': 'Gaussian Weight', 'window-reduce:sum': 'Window Sums', 'vertical-reduce:sum': 'Window Sums',
+      'horizontal-offset-px': 'Tap X (px)', 'vertical-offset-px': 'Tap Y (px)', 'horizontal-weight': 'Tap Weight', 'vertical-weight': 'Tap Weight',
+      'horizontal-coverage': 'Tap Share', 'vertical-coverage': 'Tap Share', 'horizontal-luma': 'Premultiplied Brightness',
+      'horizontal-moment': 'Row Moments', 'horizontal-average': 'Row Moments / Weight', 'horizontal-cache': 'Row Moments (cached)',
+      'vertical-row': 'Cached Row', 'vertical-moment': 'Window Moments',
+      'gradient-sums': 'Gradient (x, y)', vivid: 'Picture Colour (full brightness)', 'edge-premultiplied': 'Premultiplied Line + Background' },
+    stage: ({ id }) => /^(pixel-scale|short-side|width-safe|sigma|two-sigma|reach|window-size|tap-spacing)/.test(id) ? 'scale'
+      : /^horizontal-/.test(id) ? 'horizontal' : /^vertical-/.test(id) ? 'vertical'
+        : /^(tap-|window-reduce|window-index)/.test(id) ? 'window'
+          : /^(window-|gradient-(sums|length|normalized)|edge-contrast|edge-raw|edge-falloff|edge-negative|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',
   };
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
     labels: { premultiply: 'Premultiplied Source (cached)', space: 'Centre, Shape & Radius', phase: 'Phase & Speed', edges: 'Frame Edges & Sampling',
@@ -493,7 +511,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^space-(moved-delta|sample-uv)$/.test(id) ? 'coordinates' : /^space-/.test(id) ? 'space'
           : /^phase(-|$)/.test(id) ? 'phase' : 'coordinates',
   };
-  const mirrorPixel = mirrorPixelPresentationPlan(type) ?? acuarelaPresentationPlan(type);
+  const mirrorPixel = mirrorPixelPresentationPlan(type) ?? acuarelaPresentationPlan(type) ?? rom1PresentationPlan(type);
   if (mirrorPixel) return mirrorPixel;
   if (COLOR_RECIPES.has(type)) return {
     labels: { processing: 'Color Processing', ...Object.fromEntries(COLOR_STAGES.map(([, stage, label]) => [stage, label])) },

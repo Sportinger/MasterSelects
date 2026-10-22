@@ -12,7 +12,7 @@ struct Rom1Params {
   width: f32,
   height: f32,
   time: f32,
-  pad0: f32,
+  trail: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -69,22 +69,37 @@ fn rom1Fragment(input: VertexOutput) -> @location(0) vec4f {
 
   let warpedUv = input.uv + offset;
   let feedbackSampleUv = clamp(warpedUv, vec2f(0.0), vec2f(1.0));
-  let feedback = textureSample(feedbackTex, texSampler, feedbackSampleUv) * rom1EdgeMask(warpedUv);
+  let feedback = textureSample(feedbackTex, texSampler, feedbackSampleUv);
   let wetSource = textureSample(inputTex, texSampler, feedbackSampleUv);
 
   // Gain knee (smokeGainUpgrade.ts): unchanged up to 0.25, then eases toward 0.5 instead of lifting to white.
   let gainInput = max(params.gain, 0.0);
   let gain = min(gainInput, 0.25) + 0.25 * (1.0 - exp(0.0 - max(gainInput - 0.25, 0.0) / 0.25));
-  let liftedSource = vec4f(
-    clamp(mix(source.rgb, wetSource.rgb, 0.18) + vec3f(gain) * source.a, vec3f(0.0), vec3f(1.0)),
-    source.a
+
+  // Premultiplied trail (2026-10-22): colour x alpha decays and keeps the brighter value, so smoke outside a
+  // cut-out fades in alpha instead of turning dark. With alpha 1 everywhere this equals the straight recipe.
+  let feedbackAlpha = feedback.a * rom1EdgeMask(warpedUv);
+  let sourcePremultiplied = source.rgb * source.a;
+  let liftedPremultiplied = clamp(
+    mix(sourcePremultiplied, wetSource.rgb * wetSource.a, 0.18) + vec3f(gain) * source.a,
+    vec3f(0.0),
+    vec3f(source.a)
   );
 
-  let feedbackDecay = 0.98;
-  let advectedRgb = feedback.rgb * feedbackDecay;
-  let waterRgb = max(liftedSource.rgb, advectedRgb);
-  let waterAlpha = clamp(max(liftedSource.a, feedback.a * feedbackDecay), 0.0, 1.0);
-  let water = vec4f(waterRgb, waterAlpha);
+  // The history is 8-bit: each frame fades by at least three quarters of a step, so every trail reaches
+  // zero (a smaller fade rounded back to the same value and left a grey ghost).
+  let feedbackDecay = clamp(params.trail, 0.0, 0.995);
+  let fadeFloor = 0.75 / 255.0;
+  let feedbackPremultiplied = feedback.rgb * feedbackAlpha;
+  let decayedPremultiplied = feedbackPremultiplied * feedbackDecay;
+  let fadedPremultiplied = decayedPremultiplied - max(vec3f(fadeFloor) - (feedbackPremultiplied - decayedPremultiplied), vec3f(0.0));
+  let decayedAlpha = feedbackAlpha * feedbackDecay;
+  let fadedAlpha = decayedAlpha - max(fadeFloor - (feedbackAlpha - decayedAlpha), 0.0);
+  let waterPremultiplied = max(liftedPremultiplied, fadedPremultiplied);
+  let waterAlpha = clamp(max(source.a, fadedAlpha), 0.0, 1.0);
 
-  return mix(source, water, clamp(params.opacity, 0.0, 1.0));
+  let opacity = clamp(params.opacity, 0.0, 1.0);
+  let mixedPremultiplied = mix(sourcePremultiplied, waterPremultiplied, opacity);
+  let mixedAlpha = mix(source.a, waterAlpha, opacity);
+  return vec4f(clamp(mixedPremultiplied / max(mixedAlpha, 0.001), vec3f(0.0), vec3f(1.0)), mixedAlpha);
 }

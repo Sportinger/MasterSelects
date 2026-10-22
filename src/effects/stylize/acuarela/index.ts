@@ -4,7 +4,7 @@
 // shader and packUniforms are that legacy recipe's reference and read only its parameters.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition, EffectParam } from '../../types';
+import type { EffectDefinition, EffectParam, EffectPreset } from '../../types';
 import { FEEDBACK_PARAMETERS } from '../../_shared/feedbackParameters';
 import { acuarelaParamWarnings } from './warnings';
 
@@ -12,6 +12,17 @@ const LEGACY = 'Only Acuarela effects saved with the original watery-smoke recip
 const legacy = (param: EffectParam): EffectParam => ({ ...param, deprecated: LEGACY });
 const paint = (label: string, defaultValue: number, min: number, max: number, group: string, step = 0.01): EffectParam =>
   ({ type: 'number', label, default: defaultValue, min, max, step, animatable: true, group, graphOnly: true });
+
+export const ACUARELA_PRESETS: readonly EffectPreset[] = [
+  // A careful study: small washes, crisp pooled edges and little paper, so faces and hands stay readable.
+  { id: 'fine-study', name: 'Fine Study', params: { wash: 2, bleed: 3, edges: 1.8, simplify: 0.25, blooms: 0.2, granulation: 0.4, paper: 0.5, lift: 0.05 } },
+  // Big, flat washes in a few tones with hard pooled edges and few stains: a quick, loose sketch.
+  { id: 'loose-wash', name: 'Loose Wash', params: { wash: 12, bleed: 8, edges: 2, simplify: 1, blooms: 0.4, granulation: 0.8, paper: 0.8 } },
+  // Colour runs far across the borders with soft edges, many blooms, and the wet patches drift with the playhead.
+  { id: 'wet-in-wet', name: 'Wet in Wet', params: { wash: 5, bleed: 30, edges: 0.4, simplify: 0.3, blooms: 2, flow: 0.8, lift: 0.15 } },
+  // A thin wash on coarse, strongly grained paper that shows through: a faded page from a sketchbook.
+  { id: 'pale-paper', name: 'Pale Paper', params: { wash: 4, edges: 1.4, shadows: 1, granulation: 1.3, paper: 1.4, grainSize: 1.8, lift: 0.4 } },
+];
 
 export const acuarela: EffectDefinition = {
   id: 'acuarela',
@@ -58,6 +69,7 @@ export const acuarela: EffectDefinition = {
     reset: legacy({ type: 'boolean', label: 'Reset', default: false, animatable: false }),
   },
 
+  presets: ACUARELA_PRESETS,
   paramWarnings: acuarelaParamWarnings,
 
   packUniforms: (params, width, height, timelineTimeSeconds = 0) => {

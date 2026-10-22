@@ -45,7 +45,7 @@ export const ACUARELA_LIFT_REACH = 0.8;
 
 function sources(g: BlurGraphBuilder) {
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution'); g.add('time', 'image.timeline-time');
-  for (const [id, value] of [['zero', 0], ['one', 1], ['half', .5], ['two', 2], ['three', 3]] as const) g.number(id, value);
+  for (const [id, value] of [['zero', 0], ['one', 1], ['half', .5], ['two', 2]] as const) g.number(id, value);
   g.number('reference-height', ACUARELA_REFERENCE_HEIGHT);
   // s: pixels per 1080p pixel; q: aspect-correct position (1 = frame height); px: position in 1080p pixels.
   g.add('space-resolution-split', 'vector.split.vec2', { value: 'resolution' });
@@ -377,7 +377,7 @@ function simplify(g: BlurGraphBuilder): void {
  * 0..2 for any Edges, Granulation and Blooms, the darkest pooling is C^2 (a deeper tint of the same
  * pigment), and white paper (C = 1) and black stay put.
  */
-function pigment(g: BlurGraphBuilder): void {
+function pigment(g: BlurGraphBuilder, unusedDensityCard = false): void {
   g.binary('density-pool-granulation', 'math.add.scalar', 'pool-density', 'paper-granulation');
   g.binary('density-terms', 'math.add.scalar', 'density-pool-granulation', 'bloom-density');
   g.binary('density-more', 'math.max.scalar', 'density-terms', 'zero');
@@ -388,7 +388,10 @@ function pigment(g: BlurGraphBuilder): void {
   g.unary('density-less-decay', 'math.exp.scalar', 'density-less');
   g.binary('density-less-eased', 'math.subtract.scalar', 'density-less-decay', 'one');
   g.binary('density-excess', 'math.add.scalar', 'density-more-eased', 'density-less-eased');
-  g.binary('density', 'math.add.scalar', 'one', 'density-excess');
+  // Recipes before 2026-10-22 also built d = 1 + excess as a card that nothing read (a loose
+  // "Pigment Density" port on the folder) and an unused constant 3; only
+  // createAcuarelaGraphBefore20261022 still adds them.
+  if (unusedDensityCard) { g.binary('density', 'math.add.scalar', 'one', 'density-excess'); g.number('three', 3); }
   g.add('density-colour', 'math.clamp.rgb-scalar', { value: 'tone-rgb', min: 'zero', max: 'one' });
   g.binary('density-colour-squared', 'math.multiply.rgb', 'density-colour', 'density-colour');
   g.binary('density-transmission', 'math.subtract.rgb', 'density-colour', 'density-colour-squared');
@@ -456,6 +459,18 @@ function finish(g: BlurGraphBuilder): void {
 }
 
 export function createDefaultAcuarelaGraph(): EffectOperatorGraph {
+  return buildAcuarelaGraph(false);
+}
+
+/**
+ * The recipe as saved before 2026-10-22: the same pixels, plus the unused `density` card and `three`. Saved
+ * untouched copies of it still count as the built-in recipe (acuarelaIdentity.ts).
+ */
+export function createAcuarelaGraphBefore20261022(): EffectOperatorGraph {
+  return buildAcuarelaGraph(true);
+}
+
+function buildAcuarelaGraph(unusedDensityCard: boolean): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
   sources(g);
   g.number('coverage-floor', 1e-5);
@@ -466,7 +481,7 @@ export function createDefaultAcuarelaGraph(): EffectOperatorGraph {
   paper(g);
   blooms(g);
   simplify(g);
-  pigment(g);
+  pigment(g, unusedDensityCard);
   shadowPigment(g);
   finish(g);
   return g.graph(10);

@@ -69,7 +69,6 @@ export const RECIPE_PENDING = {
   ...Object.fromEntries([
     'box-blur.webp',
     'contrast.webp',
-    'edge-detect.webp',
     'exposure.webp',
     'grain.webp',
     'levels.webp',
@@ -79,7 +78,6 @@ export const RECIPE_PENDING = {
     'scanlines.webp',
     'twirl.webp',
     'vibrance.webp',
-    'vignette.webp',
     'wave.webp',
     'zoom-blur.webp',
   ].map((asset) => [`${ASSET_DIR}/effects/${asset}`, BEFORE_RECIPES])),

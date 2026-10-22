@@ -605,7 +605,10 @@ also on pooled edges, and Mix blends
 premultiplied. Its noise fields use the shared
 **Fractal Noise** node (`noise.fractal2d.vec2`, PCG-hashed gradient noise, 1-8 octaves),
 which stays free of the streaks Random (Hash) shows at large positions. Sizes are pixels
-of a 1080p frame; the recipe has no frame history and Mix 0 is skipped. Acuarela effects
+of a 1080p frame; the recipe has no frame history and Mix 0 is skipped. Untouched saved
+copies of the recipe before 2026-10-22, which also built an unused `density` card and
+constant `three`, still count as the built-in recipe (`createAcuarelaGraphBefore20261022()`
+in `acuarelaIdentity.ts`). Acuarela effects
 saved with the original watery-smoke recipe keep it: a stored graph renders as saved,
 and a graph-less effect with only the smoke parameters resolves to
 `createLegacyAcuarelaGraph()` (generic noise, vector math and blend operators with an
@@ -699,7 +702,12 @@ An automatic key on a clip without that screen colour keys nothing; the inspecto
 `addEffect`/`updateEffect` say so, checked on the clip's thumbnails.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
-feedback decay, and final RGBA mixing as shared nodes. Its source lift passes Gain through a
+feedback decay (the Trail control, 0 to 0.995, default 0.98: the fixed value before
+2026-10-22), and final RGBA mixing as shared nodes. Since 2026-10-22 it keeps the trail
+premultiplied (colour × alpha decays and keeps the brighter value, divided back to
+straight colour at the end), so smoke beside a cut-out layer fades in alpha instead of
+turning dark; untouched saved graphs upgrade on load (`upgradeRom1Graph`), opaque layers
+render the same pixels. Its source lift passes Gain through a
 knee: the lift equals Gain up to 0.25, then eases as `0.25 + 0.25 (1 - exp(-(Gain - 0.25) / 0.25))`
 toward 0.5 (`rom1GainLift`), so saved looks with typical Gain stay the same and large values
 wash the frame out instead of turning it white; saved graphs get the knee nodes on load. Detail changes frequency,
@@ -860,7 +868,10 @@ touching all four edges at the same distance) to a true circle (1, the default).
 The darkening starts at Size and is complete at Size + Softness (smoothstep, never
 narrower than 1.5 px), `gain = 1 − Amount × falloff`; a dither of at most half an
 8-bit step, only where the gain changes the picture, keeps dark gradients free of
-banding. One fullscreen pass; alpha is kept. Vignettes saved before 2026-10-21 keep
+banding. One fullscreen pass; alpha is kept. A Size at or above 1 starts past the
+corners and darkens nothing, which `vignetteParamNotes` reports in the card and the
+tool result (the slider keeps 0–1.5 for the earlier recipe). Presets: Soft Frame, Old
+Lens, Spotlight, Iris. Vignettes saved before 2026-10-21 keep
 their earlier graph, where Roundness (0.5–2) stretched a UV ellipse vertically. UV-dependent node previews show
 the spatial field instead of inventing a single numeric value. Adding a UV
 dependency to another image graph also routes it through the contextual
@@ -1113,9 +1124,14 @@ strong Sharpen differs by up to about 60 levels on fine detail. Sharpens saved
 earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
 **Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,
-since 2026-10-21) is a derivative-of-Gaussian gradient of premultiplied brightness
-in one window reduction: σ = **Width** pixels of a 1080p frame (at least 0.7 px),
-window ±2σ up to ±8 px. Dividing by the window's own second moment makes it exact for
+since 2026-10-21) is a derivative-of-Gaussian gradient of premultiplied brightness:
+σ = **Width** pixels of a 1080p frame (at least 0.7 px), window ±2σ. The Gaussian is
+separable, so the window runs as a horizontal pass (Sequence Reduce of brightness, its
+x moment and spread, cached in an rgba16float Cache Image) and a vertical pass over the
+cached rows; every tap reads one whole pixel (texel centre), up to 64 per side, so the
+window averages all the texture it covers and a Width draws the same line, with the same
+fine-texture speckle, at any resolution (past 64 taps the taps spread apart and the
+parameter notes say so). Dividing by the window's own second moment makes it exact for
 brightness ramps at any Width and resolution, so a step of contrast c gives a
 response of about `x = c × 4 × Strength` (the brightness of the earlier Sobel); the
 line strength is `1 − exp(−x)`, linear for faint edges and rolling off softly instead
@@ -1126,7 +1142,12 @@ the brighter side. Lines are composited over the background premultiplied: alpha
 `edge + source alpha × (1 − edge)`, colour = `(line × edge + background × source
 alpha × (1 − edge)) / alpha`, so transparent surroundings stay transparent and a
 layer's outline shows outside it in its full line colour. Cost grows with Width:
-(2⌈2σ⌉ + 1)² taps, 25 at the default on 1080p, at most 289, plus two colour taps. Edge Detects saved earlier
+2 × (2⌈2σ⌉ + 1) taps, 10 at the default on 1080p, 98 at Width 6 on 4K, plus two colour
+taps. The outermost tap counts with the share of it 2σ covers (`clamp(min(2σ, 64) − |offset| + 1, 0, 1)`
+per pass, in taps), so an animated Width changes smoothly; Edge Detects saved with 3.2.7 keep whole taps
+out to ⌈2σ⌉, at most ±8 px (their lines jump a step whenever 2σ passes a whole pixel, and wide
+lines come out thinner in large frames), open with the current folders, and their card offers
+the current recipe. Edge Detects saved earlier
 keep the eight-tap Sobel at render resolution (alpha always one); its Sobel Magnitude
 stays available as a reusable block.
 

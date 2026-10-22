@@ -9,6 +9,9 @@ import { createEarlierPointwiseEffectGraph } from '../../src/services/operators/
 import { createStylizeRecipeGraph, earlierStylizeRecipeNote, isEarlierStylizeGraph, isPreviousStylizeGraph, previousStylizeRecipeNote, STYLIZE_RECIPE_EFFECT_TYPES, stylizeRecipeUpdate } from '../../src/services/operators/stylizeRecipes';
 import { unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
 import { createSpreadWindowSharpenGraph } from '../../src/services/operators/sharpenEffectGraph';
+import { createWholeTapEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
+import { createDefaultGlowGraph, createGlowGraphBefore20261022 } from '../../src/services/operators/glowBloomEffectGraph';
+import { effectDefinitionNotes } from '../../src/services/operators/effectParamVisibility';
 import { applyWorkerSoftwareImageGraphs, canApplyWorkerSoftwareImageGraphPlan } from '../../src/services/render/workerSoftwareImageGraphs';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
@@ -30,6 +33,24 @@ afterEach(() => useTimelineStore.setState(initial));
 function plan(type: string, params: Record<string, unknown> = {}, operatorGraph = createStylizeRecipeGraph(type)) {
   const effect = { type, params: { ...getRenderedDefaultParams(type), ...params } as Effect['params'], operatorGraph };
   return compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
+}
+
+/**
+ * One pixel of a plan with cached passes: each cache texel is the pass program evaluated at that
+ * uv (the reads of these recipes land on texel centres). Memoized per uv, so wide windows stay quick.
+ */
+function evaluatePixel(compiled: ReturnType<typeof plan>, source: (uv: [number, number]) => Pixel, uv: [number, number],
+  resolution: [number, number], memo = new Map<string, Pixel>()): Pixel {
+  const passes = compiled.passes ?? [];
+  const sampleResource = (id: string, at: [number, number]): Pixel => {
+    const key = `${id}:${at[0]}:${at[1]}`, known = memo.get(key);
+    if (known) return known;
+    const pass = passes.find(item => item.outputResource === id)!;
+    const texel = evaluateImageOperatorPlan(pass.program, source(at), { uv: at, resolution, sampleImage: source, sampleResource }) as Pixel;
+    memo.set(key, texel);
+    return texel;
+  };
+  return evaluateImageOperatorPlan(compiled, source(uv), { uv, resolution, sampleImage: source, sampleResource }) as Pixel;
 }
 
 /** Straight-alpha RGBA8 raster through the software pass runtime (real resource sizes, linear filtering). */
@@ -70,6 +91,49 @@ describe('stylize recipes: ownership and saved projects', () => {
     edited.nodes = edited.nodes.map(node => (node.id === 'overshoot' ? { ...node, constants: { value: 0.5 } } : node));
     expect(isPreviousStylizeGraph('sharpen', edited)).toBe(false);
     expect(stylizeRecipeUpdate('sharpen', edited)).toBeUndefined();
+  });
+
+  it('keeps an untouched Edge Detect of 3.2.7 (whole-tap window) as saved and offers the current recipe', () => {
+    const released = createWholeTapEdgeDetectGraph(), current = createStylizeRecipeGraph('edge-detect')!;
+    expect(matchesEffectRecipe(released, current)).toBe(false);
+    const resolved = effectOperatorGraph({ type: 'edge-detect', params: getDefaultParams('edge-detect') as Effect['params'], operatorGraph: released }, { inspectionOnly: true });
+    expect(matchesEffectRecipe(resolved, released)).toBe(true);
+    expect(isPreviousStylizeGraph('edge-detect', released)).toBe(true);
+    expect(isEarlierStylizeGraph('edge-detect', released)).toBe(false);
+    expect(stylizeRecipeUpdate('edge-detect', released)).toMatchObject({ label: 'Use the new Edge Detect', message: expect.stringContaining('3.2.7') });
+    expect(stylizeRecipeUpdate('edge-detect', current)).toBeUndefined();
+    expect(previousStylizeRecipeNote('edge-detect', released)).toContain('Width is animated');
+  });
+
+  it.each([['edge-detect', createWholeTapEdgeDetectGraph], ['sharpen', createSpreadWindowSharpenGraph]] as const)(
+    '%s of 3.2.7 opens with the same stage folders as the current recipe', (type, released) => {
+      const folders = (operatorGraph: ReturnType<typeof released>) => (effectOperatorGraph({ type, params: getDefaultParams(type) as Effect['params'], operatorGraph },
+        { inspectionOnly: true }).groups ?? []).map(group => group.label).filter(label => !/^(Pair Tap Offsets|Merge Pair Weights|Normalize by Weight)$/.test(label));
+      const current = folders(createStylizeRecipeGraph(type)!);
+      if (type === 'edge-detect') {
+        // The current window runs as two passes; the 3.2.7 window (one 2D reduction) keeps its Window Taps folder.
+        expect(current.slice(3)).toEqual(['Line Width (sigma & window)', 'Horizontal Pass (row brightness & x slope)', 'Vertical Pass (window sums)',
+          'Gradient & Edge Strength', 'Line Color & Alpha']);
+        expect(folders(released()).slice(3)).toEqual(['Line Width (sigma & window)', 'Window Taps (premultiplied brightness)', 'Gradient & Edge Strength', 'Line Color & Alpha']);
+        return;
+      }
+      expect(current.length).toBeGreaterThan(5);
+      expect(folders(released())).toEqual(current);
+    });
+
+  it('loads an untouched Glow of 3.2.7 (one unused weight card more, same pixels) as the current recipe: folders and plain notes', () => {
+    const released = createGlowGraphBefore20261022(), current = createDefaultGlowGraph();
+    expect(released.nodes.length).toBe(current.nodes.length + 1);
+    const effect = (operatorGraph: typeof released) => ({ type: 'glow', params: { ...getDefaultParams('glow'), threshold: 1.2 } as Effect['params'], operatorGraph });
+    const resolved = effectOperatorGraph(effect(released), { inspectionOnly: true });
+    expect(matchesEffectRecipe(resolved, current)).toBe(true);
+    expect((resolved.groups ?? []).map(group => group.label)).toEqual((effectOperatorGraph(effect(current), { inspectionOnly: true }).groups ?? []).map(group => group.label));
+    expect(effectDefinitionNotes(effect(released), 640, 360)).toEqual(effectDefinitionNotes(effect(current), 640, 360));
+    expect(effectDefinitionNotes(effect(released), 640, 360).join(' ')).not.toMatch(/edited graph/);
+    expect(stylizeRecipeUpdate('glow', released)).toBeUndefined();
+    // An edited 3.2.7 graph is user work and stays as saved.
+    const edited = { ...released, nodes: released.nodes.map(node => node.id === 'ramp-floor' ? { ...node, constants: { ...node.constants, value: 0.2 } } : node) } as typeof released;
+    expect(matchesEffectRecipe(effectOperatorGraph(effect(edited), { inspectionOnly: true }), current)).toBe(false);
   });
 
   it('gives new stylize effects their current recipe graph', () => {
@@ -195,6 +259,22 @@ describe('Vignette', () => {
     }
   });
 
+  it('says when Size starts the darkening at or past the corners, where it changes nothing', () => {
+    const notes = (getEffect('vignette') as FullscreenEffectDefinition).paramWarnings!;
+    expect(notes({ ...getDefaultParams('vignette'), size: 1.2 } as Record<string, number>, 1920, 1080).join(' ')).toMatch(/nothing darkens/);
+    expect(notes({ ...getDefaultParams('vignette'), size: 0.95 } as Record<string, number>, 1920, 1080)).toEqual([]);
+    for (const size of [1, 1.2, 1.5]) for (const uv of [[0.5 / 1920, 0.5 / 1080], [0.999, 0.5]] as [number, number][]) {
+      expect(gain({ amount: 1, size, softness: 1, roundness: 0 }, uv, [1920, 1080])).toBeCloseTo(1, 3);
+    }
+    expect(gain({ amount: 1, size: 0.95, softness: 0.1 }, [0.5 / 1920, 0.5 / 1080], [1920, 1080])).toBeLessThan(0.9);
+  });
+
+  it('ends the Size slider at the corners (1) and keeps up to 1.5 in the number field for saved Vignettes', () => {
+    const size = getEffect('vignette')!.params.size as { max?: number; renderMax?: number };
+    expect(size.max).toBe(1);
+    expect(size.renderMax).toBe(1.5);
+  });
+
   it('looks the same at every resolution', () => {
     for (const uv of [[0.1, 0.2], [0.8, 0.9], [0.3, 0.5]] as [number, number][]) {
       expect(Math.abs(gain({ amount: 0.7 }, uv, [960, 540]) - gain({ amount: 0.7 }, uv, [3840, 2160]))).toBeLessThan(0.006);
@@ -289,10 +369,10 @@ describe('Edge Detect', () => {
     const resolution: [number, number] = [height * 16 / 9, height];
     const source = ([u]: [number, number]): Pixel => (u < 0.5 ? [0.2, 0.2, 0.2, 1] : [0.2 + contrast, 0.2 + contrast, 0.2 + contrast, 1]);
     const compiled = plan('edge-detect', { width, strength: 0.25 });
-    let best = 0;
+    let best = 0; const memo = new Map<string, Pixel>();
     for (let x = resolution[0] / 2 - 3; x <= resolution[0] / 2 + 2; x++) {
       const uv: [number, number] = [(x + 0.5) / resolution[0], 0.5];
-      best = Math.max(best, evaluateImageOperatorPlan(compiled, source(uv), { uv, resolution, sampleImage: source })[0]);
+      best = Math.max(best, evaluatePixel(compiled, source, uv, resolution, memo)[0]);
     }
     return best;
   };
@@ -310,11 +390,114 @@ describe('Edge Detect', () => {
     expect(peak(1, 1080, 0.75)).toBeGreaterThan(peak(1, 1080, 0.5) + 0.05);
   });
 
+  it('changes smoothly when Width is animated across a step of the window (no jump)', () => {
+    // The window grows by one tap per side whenever 2 sigma passes a whole pixel. The new outer taps
+    // enter with their covered share, so a 0.02 px sigma step there changes the lines no more than
+    // the same step between two window sizes (before, the Gaussian's outer ring popped in at once).
+    const size = 40, pixel = (x: number, y: number): Pixel => {
+      const v = (x > 19 ? 0.65 : 0.3) + 0.15 * Math.sin(1.3 * x + 0.4 * y) * Math.cos(1.1 * y); return [v, v, v, 1];
+    };
+    const frame = (sigma: number) => render('edge-detect', { strength: 1, width: sigma * 1080 / size }, size, size, pixel);
+    const change = (sigma: number) => {
+      const [before, after] = [frame(sigma - 0.01), frame(sigma + 0.01)];
+      let largest = 0;
+      for (let index = 0; index < before.length; index++) largest = Math.max(largest, Math.abs(after[index] - before[index]));
+      return largest;
+    };
+    // Compared with the same step just before and after (the lines change faster at small Widths).
+    for (const edge of [1, 1.5, 2, 2.5]) {
+      const steady = Math.max(change(edge - 0.06), change(edge + 0.06));
+      expect(change(edge)).toBeLessThanOrEqual(steady + 1 / 255);
+    }
+  });
+
+  it('draws the same line at 1080p and at 4K: the window reaches two sigma at every frame size instead of ending at 8 px', () => {
+    // Line brightness across a vertical step, at positions measured in 1080p pixels from the step.
+    const profile = (graph: ReturnType<typeof createStylizeRecipeGraph>, width: number, height: number) => {
+      const resolution: [number, number] = [height * 16 / 9, height], scale = height / 1080;
+      // A soft step over 3 px of a 1080p frame (as in real footage), the same share of every frame.
+      const source = ([u]: [number, number]): Pixel => {
+        const t = Math.min(1, Math.max(0, ((u - 0.5) * resolution[0] / scale + 1.5) / 3)), v = 0.2 + 0.5 * t * t * (3 - 2 * t);
+        return [v, v, v, 1];
+      };
+      const compiled = plan('edge-detect', { width, strength: 0.5 }, graph), memo = new Map<string, Pixel>();
+      return Array.from({ length: 31 }, (_, index) => {
+        const uv: [number, number] = [0.5 + (index - 15 + 0.5) * scale / resolution[0], 0.5];
+        return evaluatePixel(compiled, source, uv, resolution, memo)[0];
+      });
+    };
+    const largest = (a: number[], b: number[]) => Math.max(...a.map((value, index) => Math.abs(value - b[index])));
+    for (const width of [3, 5]) {
+      const current = createStylizeRecipeGraph('edge-detect');
+      expect(largest(profile(current, width, 1080), profile(current, width, 2160))).toBeLessThan(0.02);
+      // At 540p the 3 px soft step itself is only 1.5 pixels wide, so the pixel grid shifts the tail a little.
+      expect(largest(profile(current, width, 540), profile(current, width, 2160))).toBeLessThan(0.045);
+    }
+    // The 3.2.7 window ended at 8 px: at 4K, Width 3 drew a clearly thinner line than at 1080p.
+    const released = createWholeTapEdgeDetectGraph();
+    expect(largest(profile(released, 3, 1080), profile(released, 3, 2160))).toBeGreaterThan(0.08);
+    // No note claims a cut window any more.
+    expect((getEffect('edge-detect') as FullscreenEffectDefinition).paramWarnings!({ ...getDefaultParams('edge-detect'), width: 6 } as Record<string, number>, 3840, 2160)).toEqual([]);
+  });
+
+  it('lets the same fine texture through at 4K as in the 1080p and 540p previews: every tap reads a whole pixel (no point-sampled spread taps)', () => {
+    // Fine noise at 4K; the smaller frames are its box-downsampled copies (what a preview renders).
+    const hash = (x: number, y: number) => { let h = (x * 374761393 + y * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    const texel = (scale: number, x: number, y: number) => {
+      let sum = 0;
+      for (let j = 0; j < scale; j++) for (let i = 0; i < scale; i++) sum += 0.5 + 0.25 * (hash(x * scale + i, y * scale + j) - 0.5);
+      return sum / (scale * scale);
+    };
+    const meanLine = (width: number, scale: number) => {
+      const resolution: [number, number] = [3840 / scale, 2160 / scale], compiled = plan('edge-detect', { width, strength: 1 });
+      const source = ([u, v]: [number, number]): Pixel => {
+        const x = Math.min(resolution[0] - 1, Math.max(0, u * resolution[0] - 0.5)), y = Math.min(resolution[1] - 1, Math.max(0, v * resolution[1] - 0.5));
+        const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+        const value = (texel(scale, x0, y0) * (1 - fx) + texel(scale, x0 + 1, y0) * fx) * (1 - fy) + (texel(scale, x0, y0 + 1) * (1 - fx) + texel(scale, x0 + 1, y0 + 1) * fx) * fy;
+        return [value, value, value, 1];
+      };
+      let total = 0;
+      for (let k = 0; k < 24; k++) {
+        const px = Math.floor((400 + (k * 37) % 800) / scale), py = Math.floor((300 + (k * 53) % 600) / scale);
+        total += evaluatePixel(compiled, source, [(px + 0.5) / resolution[0], (py + 0.5) / resolution[1]], resolution)[0];
+      }
+      return total / 24;
+    };
+    // Before (one 2D window of 8 spread taps per side) Width 6 read 0.050 at 4K against 0.018 at 1080p.
+    for (const width of [4, 6]) {
+      const uhd = meanLine(width, 1), hd = meanLine(width, 2), preview = meanLine(width, 4);
+      expect(Math.abs(uhd / hd - 1)).toBeLessThan(0.2);
+      expect(Math.abs(preview / hd - 1)).toBeLessThan(0.2);
+    }
+    // Wider lines let less fine texture through, at 4K as everywhere.
+    expect(meanLine(6, 1)).toBeLessThan(meanLine(3, 1));
+  }, 120_000);
+
+  it('says when a Width needs more than 64 taps per side and starts spreading them', () => {
+    const notes = (width: number, w: number, h: number) => (getEffect('edge-detect') as FullscreenEffectDefinition).paramWarnings!({ ...getDefaultParams('edge-detect'), width } as Record<string, number>, w, h);
+    expect(notes(6, 7680, 4320)).toEqual([]);
+    expect(notes(24, 3840, 2160).join(' ')).toContain('1.5 px apart');
+  });
+
+  it('changes smoothly when an animated Width starts spreading the taps (2 sigma = 8 px)', () => {
+    const size = 32, pixel = (x: number, y: number): Pixel => {
+      const v = (x > 15 ? 0.65 : 0.3) + 0.15 * Math.sin(1.3 * x + 0.4 * y) * Math.cos(1.1 * y); return [v, v, v, 1];
+    };
+    const frame = (sigma: number) => render('edge-detect', { strength: 1, width: sigma * 1080 / size }, size, size, pixel);
+    const change = (sigma: number) => {
+      const [before, after] = [frame(sigma - 0.01), frame(sigma + 0.01)];
+      let largestChange = 0;
+      for (let index = 0; index < before.length; index++) largestChange = Math.max(largestChange, Math.abs(after[index] - before[index]));
+      return largestChange;
+    };
+    expect(change(4)).toBeLessThanOrEqual(Math.max(change(3.94), change(4.06)) + 1 / 255);
+  }, 60_000);
+
   it('finds no edges in a flat picture and keeps transparent surroundings transparent', () => {
     const flat = (): Pixel => [0.4, 0.4, 0.4, 1];
-    expect(evaluateImageOperatorPlan(plan('edge-detect'), flat(), { uv: [0.5, 0.5], resolution: [320, 180], sampleImage: flat })[0]).toBeLessThan(1e-4);
+    expect(evaluatePixel(plan('edge-detect'), flat, [0.5, 0.5], [320, 180])[0]).toBeLessThan(1e-4);
     const empty = (): Pixel => [0, 0, 0, 0];
-    expect(evaluateImageOperatorPlan(plan('edge-detect'), empty(), { uv: [0.5, 0.5], resolution: [320, 180], sampleImage: empty })[3]).toBe(0);
+    expect(evaluatePixel(plan('edge-detect'), empty, [0.5, 0.5], [320, 180])[3]).toBe(0);
   });
 });
 
@@ -504,6 +687,17 @@ describe('Glow', () => {
     expect(glowLevelWeights(40, 540)[0]).toBeCloseTo(1, 6);
     expect(glowLevelWeights(40, 1080)[0]).toBe(0);
     expect(glowLevelWeights(40, 2160).slice(0, 2)).toEqual([0, 0]);
+  });
+
+  it('has no dead nodes: every card of the recipe feeds the output (no dangling folder ports)', () => {
+    const graph = createStylizeRecipeGraph('glow');
+    const reached = new Set(['output']), queue = ['output'];
+    while (queue.length) {
+      const id = queue.pop()!;
+      for (const edge of graph.edges) if (edge.to === id && !reached.has(edge.from)) { reached.add(edge.from); queue.push(edge.from); }
+    }
+    const bound = new Set(graph.nodes.filter(node => Object.keys(node.bindings ?? {}).length).map(node => node.id));
+    expect(graph.nodes.map(node => node.id).filter(id => !reached.has(id) && !bound.has(id))).toEqual([]);
   });
 
   it('tints the halo with Color and carries it onto transparent surroundings', () => {

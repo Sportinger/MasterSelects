@@ -96,7 +96,7 @@ export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed:
         'color.soft-bright-pass': 'bright', 'color.sobel-magnitude': 'gradient', 'sampling.bounded-count': 'count',
         // Glow normalizes inside each prefilter pass; its stage follows the owning pass, not the final resolve.
         // Glow and the multi-pass blurs normalize inside each pass; the stage follows the owning pass.
-        'sampling.normalize-rgba': type === 'sharpen-earlier' ? 'average' : ['glow', 'glow-earlier', 'sharpen', 'box-blur', 'gaussian-blur', 'motion-blur', 'radial-blur', 'zoom-blur', 'pixelate', 'blockify', 'block-mosaic', 'acuarela'].includes(type) ? '' : 'finish',
+        'sampling.normalize-rgba': type === 'sharpen-earlier' ? 'average' : ['glow', 'glow-earlier', 'sharpen', 'box-blur', 'gaussian-blur', 'motion-blur', 'radial-blur', 'zoom-blur', 'pixelate', 'blockify', 'block-mosaic', 'acuarela', 'edge-detect'].includes(type) ? '' : 'finish',
         // Contrast's block starts with its Steepness/Flatten split, which alone would file it under Parameters.
         'color.contrast-curve.rgb': 'curve',
         'sampling.texel-offset.vec2': 'sampling', 'sampling.gaussian-weight.vec2': 'weight', 'coordinates.centered-scale.vec2': 'sampling',

@@ -779,7 +779,29 @@ describe('worker software painter', () => {
     );
 
     expect(first ? Array.from(first) : null).toEqual([100, 50, 0, 255]);
-    expect(second ? Array.from(second) : null).toEqual([98, 49, 0, 250]);
+    // The trail outside the (now transparent) layer fades in alpha and keeps its colour (premultiplied since 2026-10-22).
+    expect(second ? Array.from(second) : null).toEqual([100, 50, 0, 250]);
+  });
+
+  // The software history is 8-bit like the GPU's: without the fade floor (ROM1_TRAIL_FADE_FLOOR) a white
+  // frame left 24 of 255 at Trail 0.98 and 100 at 0.995 forever, while the GPU preview and export faded out.
+  it.each([
+    [0.98, 255], [0.995, 255], [0.98, 0], [0.995, 0],
+  ])('fades a rom1 trail at Trail %s to zero on the 8-bit software history (source alpha %s)', (trail, sourceAlpha) => {
+    const feedbackStore = createWorkerSoftwareFeedbackStore();
+    const pixelEffects: WorkerRenderSoftwareFrame['layers'][number]['pixelEffects'] = {
+      brightness: 0,
+      rom1Adjustments: [{
+        feedbackKey: 'solid-a:rom1-a', opacity: 1, gain: 0, speed: 0, detail: 1, strength: 0, density: 1,
+        gainX: 0, gainY: 0, trail, reset: false,
+      }],
+    };
+    drawLayerWithPixels(new Uint8ClampedArray([255, 255, 255, 255]), 1, 1, pixelEffects, 0, feedbackStore);
+    let last: Uint8ClampedArray | null = null;
+    for (let frame = 1; frame <= 1500; frame += 1) {
+      last = drawLayerWithPixels(new Uint8ClampedArray([0, 0, 0, sourceAlpha]), 1, 1, pixelEffects, frame / 30, feedbackStore);
+    }
+    expect(last ? Array.from(last) : null).toEqual(sourceAlpha === 255 ? [0, 0, 0, 255] : [0, 0, 0, 0]);
   });
 
   // Directional blurs follow the shared contract (effects/blur/blurSampling.ts) in one stage of

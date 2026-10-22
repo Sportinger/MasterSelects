@@ -2,22 +2,43 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { EFFECT_GRAPH_PARAM, readEffectGraph } from './effectGraph';
 import { matchesEffectRecipe } from './effectFamilyPresentation';
 import { createLegacyAcuarelaGraph, hasLegacyAcuarelaParams } from './acuarelaEffectGraph';
-import { createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
+import { createAcuarelaGraphBefore20261022, createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
 
-let recipe: EffectOperatorGraph | undefined;
+let recipes: EffectOperatorGraph[] | undefined;
 const recipeCopies = new WeakMap<EffectOperatorGraph, boolean>();
 
-/** True when the instance renders the built-in watercolour recipe (no saved graph, or an untouched saved copy). */
+/**
+ * True when the instance renders the built-in watercolour recipe (no saved graph, or an untouched
+ * saved copy of the current recipe or of the one before 2026-10-22, which drew the same pixels).
+ */
 export function rendersBuiltInAcuarelaRecipe(effect: { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }): boolean {
   if (effect.type !== 'acuarela') return false;
   if (!effect.operatorGraph) return effect.params[EFFECT_GRAPH_PARAM] === undefined && !hasLegacyAcuarelaParams(effect.params);
   let known = recipeCopies.get(effect.operatorGraph);
   if (known === undefined) {
-    recipe ??= createDefaultAcuarelaGraph();
-    known = matchesEffectRecipe(effect.operatorGraph, recipe);
+    recipes ??= [createDefaultAcuarelaGraph(), createAcuarelaGraphBefore20261022()];
+    const graph = effect.operatorGraph;
+    known = recipes.some(recipe => matchesEffectRecipe(graph, recipe));
     recipeCopies.set(effect.operatorGraph, known);
   }
   return known;
+}
+
+let before20261022: EffectOperatorGraph | undefined;
+const upgradedCopies = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
+
+/**
+ * An untouched saved copy of the watercolour recipe before 2026-10-22 (3.2.7: one unused density
+ * card and constant more, the same pixels) loads as the current recipe, so the Nodes tab shows its
+ * stage folders. Edited graphs and bypassed folders are user work and stay as saved.
+ */
+export function upgradeAcuarelaGraph(source: EffectOperatorGraph): EffectOperatorGraph {
+  if (source.incomplete || source.groups?.some(group => group.bypassed)) return source;
+  const known = upgradedCopies.get(source); if (known) return known;
+  before20261022 ??= createAcuarelaGraphBefore20261022();
+  const result = matchesEffectRecipe(source, before20261022) ? createDefaultAcuarelaGraph() : source;
+  upgradedCopies.set(source, result); upgradedCopies.set(result, result);
+  return result;
 }
 
 /** Mix 0 returns the original picture: the pipeline skips the three passes. */

@@ -32,7 +32,7 @@ import { migrateAnalogSignalGraph } from './analogSignalMigration';
 import { flattenContrastGraph } from './contrastFlattenUpgrade';
 import { COLOR_RECIPE_EFFECT_TYPES, createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
 import { createLegacyColorEffectGraph } from './legacyColorEffectGraphs';
-import { ORIGINAL_COLOR_PRESENTATION } from './effectPresentationPlans';
+import { effectPresentationPlan, ORIGINAL_COLOR_PRESENTATION } from './effectPresentationPlans';
 import { getEffect, withoutRuntimeTravelParams } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
 import type { EditableContextualEffectType } from './contextualEffectGraphs';
@@ -49,8 +49,9 @@ import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectTy
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultGlowGraph } from './glowBloomEffectGraph';
 import { upgradeGlowGraph } from './glowGraphUpgrade';
-import { createEarlierStylizeGraph, stylizePresentation, upgradePointwiseStylizeGraph } from './stylizeRecipes';
-import { clampSmokeGainGraph, kneeRom1GainGraph } from './smokeGainUpgrade';
+import { createEarlierStylizeGraph, previousStylizeRecipe, stylizePresentation, upgradePointwiseStylizeGraph } from './stylizeRecipes';
+import { clampSmokeGainGraph } from './smokeGainUpgrade';
+import { upgradeRom1Graph } from './rom1GraphUpgrade';
 import { withLegacySheenParams } from '../../effects/stylize/sheen/legacy';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
@@ -83,6 +84,7 @@ import { createDefaultMotionHalftoneGraph, type EditableMotionHalftoneEffectType
 import { createDefaultAsciiGhostGraph, createDefaultAsciiGraph, createDefaultBrandGeneratorGraph, createDefaultCapsuleCloudGraph, createDefaultDataHatchGraph, createDefaultDitherTextGraph, createDefaultGlyphMatrixGraph, createDefaultGridGlyphGraph, createDefaultInscribeGraph, createDefaultMatrixGraph, createDefaultNumberFieldGraph, createDefaultPixelCodeGraph, createDefaultPixelDitherGraph, createDefaultRetroMatrixGraph, createDefaultStitchPosterGraph, createDefaultSymbolMatrixGraph, createDefaultUiCollageGraph, createDefaultWordMosaicGraph } from './asciiEffectGraph';
 import { createLegacyAcuarelaGraph, hasLegacyAcuarelaParams } from './acuarelaEffectGraph';
 import { createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
+import { upgradeAcuarelaGraph } from './acuarelaIdentity';
 import { createDefaultVoronoiGraph } from './voronoiEffectGraph';
 import { createDefaultPixelSortGraph } from './pixelSortEffectGraph';
 import { createDefaultQuadtreeGraph } from './quadtreeEffectGraph';
@@ -263,7 +265,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
         : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved)
-          : effectType === 'rom1' ? kneeRom1GainGraph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved)
+          : effectType === 'rom1' ? upgradeRom1Graph(saved) : effectType === 'acuarela' ? upgradeAcuarelaGraph(clampSmokeGainGraph(saved))
             : effectType === 'contrast' ? flattenContrastGraph(saved) : upgradePointwiseStylizeGraph(effectType, saved);
     // Stylize effects saved with their earlier recipe (before 2026-10-21) keep it and its folder plan
     // (its own presentation type, e.g. 'glow-earlier').
@@ -271,8 +273,10 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     // A saved original color graph (before 2026-10) keeps its original folders; the recipe stages fit only the recipe.
     const colorEarlier = COLOR_RECIPE_EFFECT_TYPES.has(effectType) && effectType !== 'hue-shift' ? { key: 'original-color', plan: ORIGINAL_COLOR_PRESENTATION,
       createDefault: () => createLegacyColorEffectGraph(effectType as EditableColorEffectType) } : undefined;
+    // A previous release (Sharpen and Edge Detect of 3.2.7) shares the current recipe's folders.
+    const previous = stylizeEarlier ? undefined : previousStylizeRecipe(effectType), previousPlan = previous && effectPresentationPlan(effectType);
     const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), stylizeEarlier?.key ?? effectType,
-      stylizeEarlier?.createDefault ?? fallback, colorEarlier);
+      stylizeEarlier?.createDefault ?? fallback, colorEarlier ?? (previous && previousPlan ? { ...previous, plan: previousPlan } : undefined));
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);

@@ -1,4 +1,5 @@
 import { rom1GainLift } from '../operators/smokeGainUpgrade';
+import { ROM1_TRAIL_DEFAULT, ROM1_TRAIL_FADE_FLOOR, ROM1_TRAIL_MAX } from '../../effects/stylize/rom1/warnings';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import { transitionFrameHistory, type FrameHistoryDiscontinuity, type FrameHistoryLoopPolicy, type FrameHistoryState } from '../../effects/frameHistoryTransition';
 
@@ -354,24 +355,26 @@ function applyRom1Effect(input: {
   const wetSource = sampleRgba(input.sourceData, input.width, input.height, warpedUvX, warpedUvY);
   // Rom1's Gain knee (smokeGainUpgrade.ts): unchanged up to 0.25, then eases toward 0.5 instead of lifting to white.
   const gain = rom1GainLift(params.gain);
-  const lifted = [
-    clamp01(mix(input.current[0], wetSource[0], 0.18) + gain * input.current[3]),
-    clamp01(mix(input.current[1], wetSource[1], 0.18) + gain * input.current[3]),
-    clamp01(mix(input.current[2], wetSource[2], 0.18) + gain * input.current[3]),
-  ];
-  const water = [
-    Math.max(lifted[0], feedback[0] * edgeMask * 0.98),
-    Math.max(lifted[1], feedback[1] * edgeMask * 0.98),
-    Math.max(lifted[2], feedback[2] * edgeMask * 0.98),
-    clamp01(Math.max(input.current[3], feedback[3] * edgeMask * 0.98)),
-  ];
+  // Premultiplied trail (rom1EffectGraph.ts): smoke outside a cut-out fades in alpha instead of turning dark.
+  const sourceAlpha = input.current[3], wetAlpha = wetSource[3], feedbackAlpha = feedback[3] * edgeMask;
   const opacity = clamp01(params.opacity);
-  return [
-    mix(input.current[0], water[0], opacity),
-    mix(input.current[1], water[1], opacity),
-    mix(input.current[2], water[2], opacity),
-    mix(input.current[3], water[3], opacity),
-  ];
+  const decay = Math.min(Math.max(params.trail ?? ROM1_TRAIL_DEFAULT, 0), ROM1_TRAIL_MAX);
+  // The history is 8-bit (rounded on write), as on the GPU: each frame fades by at least
+  // ROM1_TRAIL_FADE_FLOOR, or a high Trail rounds back to the same value and leaves a grey ghost.
+  const fade = (premultiplied: number) => {
+    const decayed = premultiplied * decay;
+    return decayed - Math.max(ROM1_TRAIL_FADE_FLOOR - (premultiplied - decayed), 0);
+  };
+  const waterAlpha = clamp01(Math.max(sourceAlpha, fade(feedbackAlpha)));
+  const mixedAlpha = mix(sourceAlpha, waterAlpha, opacity);
+  const coverage = Math.max(mixedAlpha, 0.001);
+  const channel = (index: number) => {
+    const source = input.current[index] * sourceAlpha;
+    const lifted = Math.min(Math.max(mix(source, wetSource[index] * wetAlpha, 0.18) + gain * sourceAlpha, 0), sourceAlpha);
+    const water = Math.max(lifted, fade(feedback[index] * feedbackAlpha));
+    return clamp01(mix(source, water, opacity) / coverage);
+  };
+  return [channel(0), channel(1), channel(2), mixedAlpha];
 }
 
 export function applyWorkerSoftwareFeedbackEffects(input: {

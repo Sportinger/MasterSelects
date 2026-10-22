@@ -44,11 +44,15 @@ fn sheenFragment(input: VertexOutput) -> @location(0) vec4f {
   } else {
     // Falloff from the centre: exp(-4.5 t^p) with p = 2 / Softness, so Softness 1 is a Gaussian
     // (Width is where the light has faded out) and lower Softness flattens the top toward a hard
-    // band; the band edge itself gets one pixel of anti-aliasing.
+    // band. The curve is lowered by its value at Width (exp(-4.5), 1.1 % of the peak) and scaled
+    // back to 1 in the middle, so a soft band fades to nothing instead of ending in a faint step
+    // (a visible seam on skies at high Intensity); the band edge gets one pixel of anti-aliasing.
     let t = min(distanceToCenter / halfWidth, 2.0);
     let shape = 2.0 / max(softness, 0.02);
     let edge = min(pixel / halfWidth, 1.0);
-    band = exp(-4.5 * pow(t, shape)) * (1.0 - smoothstep(1.0 - edge, 1.0, t));
+    let rim = 0.011108997; // exp(-4.5)
+    let falloff = max(exp(-4.5 * pow(t, shape)) - rim, 0.0) / (1.0 - rim);
+    band = falloff * (1.0 - smoothstep(1.0 - edge, 1.0, t));
   }
   // Highlights: the light catches bright surfaces more than dark voids (luma weight).
   let luma = dot(clamp(color.rgb, vec3f(0.0), vec3f(1.0)), vec3f(0.2126, 0.7152, 0.0722));
