@@ -87,7 +87,17 @@ Pick one in the **Preset** row of the effect card. It sets Framing, Strength and
 <figcaption>The tilted photo with the two vertical guides of all pictures on this page, drawn along the left and the right house edge as the guide editor shows them.</figcaption>
 </figure>
 
-**Guides** – the lines that tell the effect what should be straight. Choose **Edit guides**: the Preview shows the photo (after Lens Correction, before this effect) and the playback bar gets **Vertical**, **Horizontal**, **Apply**, **Cancel** and **Clear guides**. Pick a direction and drag along an edge in the photo that should stand upright (a house corner, a door frame, the side of a portal), then along a second one far away from it. Two lines per direction are enough; more lines along other edges of the same wall even out small drawing errors. Drag a line or its end points to refine it, right-click to remove it; the wheel or a pinch zooms. **Apply** keeps the guides as one undo step, **Cancel** or Esc leaves everything as it was. Use edges of one wall or one direction only: lines from walls that face different ways cannot all become straight. The reset arrow of the row removes the guides and their correction, also a correction that a tool set without guides. Until guides are drawn, the card reminds you to put Lens Correction first when none comes before this effect. Guides can be drawn on still photos only; the card says so on a video clip. 2 to 8 lines per direction (Edit guides, Reset), default none.
+**Guides** – the lines that tell the effect what should be straight: edges in the photo that should stand upright or lie level. You draw them in the Preview with **Edit guides**; the reset arrow of the row removes them. 2 to 8 lines per direction (Edit guides, Reset), default none.
+
+Drawing guides:
+
+1. Choose **Edit guides**. The Preview shows the photo after Lens Correction, and the playback bar gets **Vertical**, **Horizontal**, **Apply**, **Cancel** and **Clear guides**.
+2. Pick a direction and drag along an edge that should be straight: a house corner, a door frame, the side of a portal.
+3. Drag a second line along another edge of the same direction, far away from the first. More lines even out small drawing errors.
+4. Refine a line by dragging it or its end points; right-click removes it, the wheel or a pinch zooms.
+5. **Apply** keeps the guides as one undo step. **Cancel** or Esc leaves everything as it was.
+
+Use edges of one wall or one direction only: lines from walls that face different ways cannot all become straight.
 
 **Framing** – what happens to the edges the correction moves. **Whole photo** shrinks the corrected photo until all of it fits in the frame, so nothing is cropped and the corners stay transparent. **Fill frame** enlarges it just enough that it covers the whole frame: the photo loses a little at its edges and leaves no empty corners. Fill frame follows Strength, so a weaker correction is enlarged less, also while Strength is keyframed. A correction so strong that it would have to be enlarged more than 20× keeps Whole photo framing, and the card says so. Whole photo or Fill frame, default Whole photo.
 
@@ -104,6 +114,7 @@ Guided Perspective is one fixed shader with its own card: it has no node graph t
 - **Guides.** Positions are stored as fractions of the photo with the effect; all lines of one direction are combined into one vanishing point by a least-squares fit. Short, duplicate or unstable guides are rejected in the guide editor with an explanation.
 - **Correction.** One perspective transform (homography) per effect, stored with the guides. Strength blends that transform towards no change, so lines stay straight at every value. Fill frame finds the smallest enlargement at which all four frame corners lie inside the corrected photo.
 - **Edges.** Areas the photo does not cover are transparent, with a one-pixel soft edge along the slanted borders. Cut-outs in the photo keep their transparency.
+- **Reset and video.** The reset arrow of the Guides row also removes a correction that a tool set without guides. Until guides are drawn, the card reminds you to put Lens Correction first when none comes before this effect. Guides can be drawn on still photos only; the card says so on a video clip.
 - **Order.** The guide editor shows earlier Lens Correction effects, but no other effects; put Guided Perspective directly after Lens Correction and before every look. It cannot remove curved lens distortion: that is Lens Correction's work.
 - **Saved projects.** Projects keep their look: Framing starts on Whole photo, the behaviour before Fill frame existed. Guides and the correction are saved with the effect and applied in the export.
 - **More:** [Effect system: Guided Perspective](../Effect-System.md#guided-perspective) · [Lens Correction](./lens-correction.md) · [AI Edge Fill](./ai-edge-fill.md).

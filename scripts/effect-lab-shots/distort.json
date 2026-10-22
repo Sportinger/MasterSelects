@@ -72,7 +72,7 @@
     {
       "name": "fisheye",
       "out": "docs/Features/assets/effects/fisheye.webp",
-      "image": "harbor_town",
+      "image": "neon_rain_street",
       "width": 1920,
       "layout": "compare",
       "outWidth": 1600,
@@ -81,10 +81,16 @@
         "effect": "original"
       },
       "right": {
-        "effect": "fisheye"
+        "effect": "fisheye",
+        "params": {
+          "fieldOfView": 165,
+          "curveBias": -1,
+          "vignette": 0.4,
+          "vignetteSoftness": 0.5
+        }
       },
-      "alt": "The harbour town, original left and with Fisheye Lens at its default settings right: the horizon and the quay bow into one curve across the whole frame, the town in the middle comes closer and the corners stay filled",
-      "caption": "Left: original. Right: the default settings."
+      "alt": "The rainy night street with neon signs, original left and with Fisheye Lens right: on the right the walker with the umbrella comes close and large, and the shop front at the left bows outward in one strong curve from top to bottom",
+      "caption": "Left: original. Right: the Skate Fisheye preset."
     },
     {
       "name": "bulge",
@@ -102,12 +108,44 @@
       },
       "alt": "The rainy night street with neon signs, original left and with Bulge & Pinch right: on the right the walker with the umbrella in the middle of the street is twice as large, as under a round glass, and the shop fronts around him bow outward, while the edges of the picture stay where they were",
       "caption": "Left: original. Right: the default settings."
+    },
+    {
+      "name": "ai-edge-fill-input",
+      "out": "docs/Features/assets/effects/ai-edge-fill-input.webp",
+      "image": "neon_rain_street_tilted",
+      "width": 1920,
+      "layout": "single",
+      "outWidth": 1200,
+      "maxBytes": 150000,
+      "backdrop": "#3c6ec8",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "guided-perspective",
+        "params": {
+          "guides": "[{\"axis\":\"vertical\",\"x1\":0.217,\"y1\":0.12,\"x2\":0.1447,\"y2\":0.86},{\"axis\":\"vertical\",\"x1\":0.7885,\"y1\":0.12,\"x2\":0.8622,\"y2\":0.86}]",
+          "matrix0": 1.180074,
+          "matrix1": -0.1800771,
+          "matrix2": 0.01192044,
+          "matrix3": 0,
+          "matrix4": 1,
+          "matrix5": -0.06619634,
+          "matrix6": 0,
+          "matrix7": -0.360147,
+          "matrix8": 1.203914,
+          "fillFrame": false,
+          "strength": 100
+        }
+      },
+      "alt": "The tilted night street after Guided Perspective on Whole photo: the shop fronts stand upright, and the photo has become a wedge, narrower at the bottom, with empty triangles at both sides and empty bands along the top and bottom, shown in blue",
+      "caption": "What AI Edge Fill fills: a street photo straightened with Guided Perspective on Whole photo. Blue: the empty, transparent edges."
     }
   ],
   "strips": [
     {
       "effect": "lens-correction",
-      "image": "neon_rain_street_lens",
+      "image": "harbor_town_lens",
       "width": 1920,
       "crop": [
         0,

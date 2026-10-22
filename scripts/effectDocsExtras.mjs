@@ -35,6 +35,9 @@ export const EFFECT_DOC_EXTRAS = {
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
   'stick-figure': { thumb: { region: [0, 0, 1, 1] } },
+  // Lens shapes that read at card size: the round Crystal Ball and the Magnifying Glass, not the page's whole-frame still.
+  fisheye: { thumb: { shot: 'scripts/effect-lab-shots/distort-thumbs.json' } },
+  bulge: { thumb: { shot: 'scripts/effect-lab-shots/distort-thumbs.json' } },
   // A current Sharpen's card has only these rows: its own control (a note with Use the new Sharpen)
   // shows on Sharpens saved with 3.2.7 alone, and the page's Saved projects note describes it.
   sharpen: { rows: ['amount', 'radius'] },

@@ -185,7 +185,7 @@
         "chromaticAberration": 0.012
       },
       "image": "neon_rain_street.jpg",
-      "preview": 560,
+      "preview": 380,
       "top": "tabs",
       "viewport": {
         "width": 1600,
@@ -238,7 +238,7 @@
         "width": 1600,
         "height": 900
       },
-      "alt": "Properties, Effects with a Bulge & Pinch card on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the walker enlarged under a small round glass",
+      "alt": "Properties, Effects with a Bulge & Pinch card on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the right side of the night street and, at its left edge, the enlarged umbrella of the walker under the glass",
       "caption": "Bulge & Pinch with the Magnifying Glass preset. 1 — Preset: pick a starting point. 2 — Amount: bulge above 1, pinch below. 3 — Radius: the size of the area. 4 — Shape: round or stretched with the frame. 5 — Frame Edges: what shows beyond the picture.",
       "marks": [
         {
@@ -264,7 +264,7 @@
         {
           "target": "Frame Edges",
           "label": "Frame Edges",
-          "reach": 28
+          "reach": 45
         }
       ],
       "hide": [

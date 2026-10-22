@@ -4,13 +4,20 @@ Fills the empty edges a lens or perspective correction leaves on a still photo w
 
 Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effects.md#add-an-effect)
 
+<figure class="docs-shot">
+
+![The tilted night street after Guided Perspective on Whole photo: the shop fronts stand upright, and the photo has become a wedge, narrower at the bottom, with empty triangles at both sides and empty bands along the top and bottom, shown in blue](../assets/effects/ai-edge-fill-input.webp)
+
+<figcaption>What AI Edge Fill fills: a street photo straightened with Guided Perspective on Whole photo. Blue: the empty, transparent edges. A picture of a generated fill follows once fills have been made for these pages (each costs cloud credits).</figcaption>
+</figure>
+
 **Use it for:** a straightened photo of the set or the house that has to fill the whole projection · keeping every pixel of a photo after a strong correction · a background plate wider than the photo you have.
 
 - **Scene** – what the empty edges should continue: a room, a stage, a street or your own words.
 - **Fill** – sends the photo to the AI service once; the result is saved with the project.
 - **Seam Blend** – matches the colour of the added edges to the photo beside them.
 
-It works on stills, including Canon raw photos (CR2): put it after [Lens Correction](./lens-correction.md) and [Guided Perspective](./guided-perspective.md) and before every other effect. The empty edges are the transparent areas a correction leaves, like the blue ones in the Whole Photo picture of [Guided Perspective's presets](./guided-perspective.md#presets); the effect also fills a photo that is smaller than the frame. Generating uses the cloud AI service and its credits. Playback and the export use the saved fill and send nothing again.
+It works on stills, including Canon raw photos (CR2): put it after [Lens Correction](./lens-correction.md) and [Guided Perspective](./guided-perspective.md) and before every other effect. The empty edges are the transparent areas a correction leaves, like the blue ones in the picture above; the effect also fills a photo that is smaller than the frame. Generating uses the cloud AI service and its credits. Playback and the export use the saved fill and send nothing again.
 
 **Tip:** finish the corrections and the photo's position first, then generate. When you change one of them later, the card says the fill no longer matches and asks you to generate again.
 

@@ -1,0 +1,58 @@
+{
+  "about": "The gallery thumbnails of Fisheye Lens and Bulge & Pinch: a preset whose lens shape reads at 130 px, cut around it. node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/distort-thumbs.json",
+  "pairs": [
+    {
+      "name": "fisheye-thumb",
+      "out": "docs/Features/assets/effects/thumbs/fisheye.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        700
+      ],
+      "outWidth": 400,
+      "maxBytes": 24000,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "fisheye",
+        "params": {
+          "projection": "stereographic",
+          "fieldOfView": 160,
+          "radius": 0.9,
+          "feather": 0.04,
+          "chromaticAberration": 0.012
+        }
+      }
+    },
+    {
+      "name": "bulge-thumb",
+      "out": "docs/Features/assets/effects/thumbs/bulge.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "single",
+      "crop": [
+        560,
+        180,
+        800,
+        500
+      ],
+      "outWidth": 400,
+      "maxBytes": 24000,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "bulge",
+        "params": {
+          "amount": 3,
+          "radius": 0.3
+        }
+      }
+    }
+  ]
+}

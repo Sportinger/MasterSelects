@@ -6,9 +6,9 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-compare docs-shot--float-left">
 
-![The harbour town, original left and with Fisheye Lens at its default settings right: the horizon and the quay bow into one curve across the whole frame, the town in the middle comes closer and the corners stay filled](../assets/effects/fisheye.webp)
+![The rainy night street with neon signs, original left and with Fisheye Lens right: on the right the walker with the umbrella comes close and large, and the shop front at the left bows outward in one strong curve from top to bottom](../assets/effects/fisheye.webp)
 
-<figcaption>Left: original. Right: the default settings. The horizon and the quay bend into one curve.</figcaption>
+<figcaption>Left: original. Right: the Skate Fisheye preset.</figcaption>
 </figure>
 
 **Use it for:** a skate-video or peephole look · a porthole, crystal ball or spy-hole frame · flattening footage from a real fisheye lens.
@@ -49,20 +49,20 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Fisheye Lens card on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, and the Edges section with Lens Feather 0.04, and the Optics and Quality sections below, beside the preview with the walker inside a round glass ball](../assets/effects/editor/fisheye-inspector.webp)
+![Properties, Effects with a Fisheye Lens card on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, the Edges section with Lens Feather 0.04, and the Optics and Quality sections below, beside a strip of the preview with the walker inside a round glass ball](../assets/effects/editor/fisheye-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1098" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1379" aria-hidden="true" focusable="false">
 <defs><marker id="fisheye-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M661 224 L723 224" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="661" cy="224" r="18" /><text x="661" y="224" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M661 308 L730 308" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="661" cy="308" r="18" /><text x="661" y="308" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M661 368 L713 368" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="661" cy="368" r="18" /><text x="661" y="368" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M662 490 L715 490" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="662" cy="490" r="18" /><text x="662" y="490" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M661 792 L710 792" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="661" cy="792" r="18" /><text x="661" y="792" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M587 282 L649 282" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="587" cy="282" r="18" /><text x="587" y="282" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M589 387 L658 387" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="387" r="18" /><text x="589" y="387" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M584 462 L636 462" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="584" cy="462" r="18" /><text x="584" y="462" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M586 616 L639 616" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="586" cy="616" r="18" /><text x="586" y="616" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M584 994 L633 994" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="584" cy="994" r="18" /><text x="584" y="994" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -117,7 +117,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Quality
 
-**Edge Sampling** – how many reads each pixel averages, a little apart, so the lens rim and fine bent lines stay smooth. 1 is the fastest and shows stair-steps at the rim, 4 is smooth, 8 helps on fine detail at strong settings. Every step from 1 to 8 counts. A preset puts it back to 4. 1 to 8, default 4.
+**Edge Sampling** – in the **Quality** section, which starts closed. How many reads each pixel averages, a little apart, so the lens rim and fine bent lines stay smooth. 1 is the fastest and shows stair-steps at the rim, 4 is smooth, 8 helps on fine detail at strong settings. Every step from 1 to 8 counts. A preset puts it back to 4. 1 to 8, default 4.
 
 ## Node setup
 
@@ -263,8 +263,8 @@ Sequence Index counts the reads of one pixel, 0 to Edge Sampling − 1.
 <circle class="docs-shot-number" cx="369" cy="83" r="18" /><text x="369" y="83" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M508 83 L508 167" marker-end="url(#fisheye-chromatic-aberration-arrow)" />
 <circle class="docs-shot-number" cx="508" cy="83" r="18" /><text x="508" y="83" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M787 83 L787 167" marker-end="url(#fisheye-chromatic-aberration-arrow)" />
-<circle class="docs-shot-number" cx="787" cy="83" r="18" /><text x="787" y="83" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M787 479 L787 395" marker-end="url(#fisheye-chromatic-aberration-arrow)" />
+<circle class="docs-shot-number" cx="787" cy="479" r="18" /><text x="787" y="479" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M926 83 L926 167" marker-end="url(#fisheye-chromatic-aberration-arrow)" />
 <circle class="docs-shot-number" cx="926" cy="83" r="18" /><text x="926" y="83" class="docs-shot-number-text">4</text>
 </svg>

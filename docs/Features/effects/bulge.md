@@ -46,7 +46,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Bulge & Pinch card on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the walker enlarged under a small round glass](../assets/effects/editor/bulge-inspector.webp)
+![Properties, Effects with a Bulge & Pinch card on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the right side of the night street and, at its left edge, the enlarged umbrella of the walker under the glass](../assets/effects/editor/bulge-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 581" aria-hidden="true" focusable="false">
 <defs><marker id="bulge-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -58,8 +58,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <circle class="docs-shot-number" cx="602" cy="382" r="18" /><text x="602" y="382" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M601 494 L649 494" marker-end="url(#bulge-inspector-arrow)" />
 <circle class="docs-shot-number" cx="601" cy="494" r="18" /><text x="601" y="494" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M567 532 L595 532" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="567" cy="532" r="18" /><text x="567" y="532" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M550 532 L595 532" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="550" cy="532" r="18" /><text x="550" y="532" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -186,12 +186,12 @@ Bulge & Pinch does not paint anything: it moves where each pixel reads from, lik
 
 ![Inside the Premultiplied Source (cached) folder: Frame goes into Split RGB + Alpha; Alpha to Scalar and Multiply multiply the colour by the alpha, Combine RGB + Alpha joins them again and Cache Image keeps the result](../assets/effects/graphs/bulge-premultiply.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 420" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 454" aria-hidden="true" focusable="false">
 <defs><marker id="bulge-premultiply-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M118 145 L118 229" marker-end="url(#bulge-premultiply-arrow)" />
-<circle class="docs-shot-number" cx="118" cy="145" r="18" /><text x="118" y="145" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M491 162 L491 246" marker-end="url(#bulge-premultiply-arrow)" />
-<circle class="docs-shot-number" cx="491" cy="162" r="18" /><text x="491" y="162" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M22 300 L64 300" marker-end="url(#bulge-premultiply-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="300" r="18" /><text x="22" y="300" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M493 431 L493 347" marker-end="url(#bulge-premultiply-arrow)" />
+<circle class="docs-shot-number" cx="493" cy="431" r="18" /><text x="493" y="431" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -244,12 +244,12 @@ Bulge & Pinch does not paint anything: it moves where each pixel reads from, lik
 
 ![Inside the Straight Alpha Output folder: Image goes into Split RGB + Alpha; Alpha to Scalar and Maximum give the alpha, Divide divides the colour by it, and Combine RGB + Alpha joins them into the Distorted Image](../assets/effects/graphs/bulge-output.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 421" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 483" aria-hidden="true" focusable="false">
 <defs><marker id="bulge-output-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M116 146 L116 230" marker-end="url(#bulge-output-arrow)" />
-<circle class="docs-shot-number" cx="116" cy="146" r="18" /><text x="116" y="146" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M303 146 L303 230" marker-end="url(#bulge-output-arrow)" />
-<circle class="docs-shot-number" cx="303" cy="146" r="18" /><text x="303" y="146" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M22 300 L64 300" marker-end="url(#bulge-output-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="300" r="18" /><text x="22" y="300" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M311 461 L311 377" marker-end="url(#bulge-output-arrow)" />
+<circle class="docs-shot-number" cx="311" cy="461" r="18" /><text x="311" y="461" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
