@@ -15,8 +15,9 @@ export const TWIRL_PRESETS: readonly EffectPreset[] = [
   { id: 'knot', name: 'Knot', params: { amount: degrees(540), radius: 0.25 } },
   // One full turn: the middle spirals in, the edge of the area still shows the picture.
   { id: 'whirlpool', name: 'Whirlpool', params: { amount: degrees(360), radius: 0.6 } },
-  // Two full turns across the whole frame: nothing but spiral bands of colour.
-  { id: 'vortex', name: 'Vortex', params: { amount: degrees(720), radius: 1 } },
+  // One and a half turns across the whole frame: spiral bands of colour. 540°, under the ~570° where
+  // single-read sampling starts to shimmer on fine moving detail.
+  { id: 'vortex', name: 'Vortex', params: { amount: degrees(540), radius: 1 } },
 ];
 
 export const twirl: EffectDefinition = {

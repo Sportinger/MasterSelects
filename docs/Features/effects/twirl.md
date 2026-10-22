@@ -36,7 +36,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Whirlpool** – Twist 360°, Radius 0.6: one full turn that draws the middle of the picture into a clear spiral, while the edges still show the scene.
 
-**Vortex** – Twist 720°, Radius 1: two full turns across the whole frame. Nothing is left but rings of colour; strong at the peak of a swirl transition.
+**Vortex** – Twist 540°, Radius 1: one and a half turns across the whole frame, still below the strength where fine detail shimmers. Nothing is left but rings of colour; strong at the peak of a swirl transition.
 
 ## Controls
 
