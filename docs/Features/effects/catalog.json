@@ -18,7 +18,7 @@
     {"id":"scene","label":"3D & Particles","effects":["voxel-relief","splat-exploration","bricks","pixel-particle-disintegrate","flocking","weave"]}
   ],
   "effects": [
-    {"id":"brightness","name":"Brightness","group":"color","description":"Lightens or darkens the mid-tones while black and white stay where they are.","anchor":"brightness","page":"effects/brightness.md","still":"assets/effects/brightness.webp","thumb":"assets/effects/thumbs/brightness.webp"},
+    {"id":"brightness","name":"Brightness","group":"color","description":"Lightens or darkens the mid-tones while black and white stay where they are.","anchor":"brightness","page":"effects/brightness.md","still":"assets/effects/brightness.webp","thumb":"assets/effects/thumbs/brightness.webp","presets":["Soft Lift","Full Light","Dusk","Nightfall"],"presetStrip":"assets/effects/presets/brightness.webp"},
     {"id":"contrast","name":"Contrast","group":"color","description":"Adds punch: deeper shadows and brighter highlights on a soft S-shaped curve.","anchor":"contrast","page":"effects/contrast.md","still":"assets/effects/contrast.webp","thumb":"assets/effects/thumbs/contrast.webp"},
     {"id":"exposure","name":"Exposure","group":"color","description":"Changes the amount of light like a camera's exposure: +1 doubles it, −1 halves it.","anchor":"exposure","page":"effects/exposure.md","still":"assets/effects/exposure.webp","thumb":"assets/effects/thumbs/exposure.webp"},
     {"id":"levels","name":"Levels","group":"color","description":"Chooses which tone becomes black, which becomes white and how bright the middle is.","anchor":"levels","page":"effects/levels.md","still":"assets/effects/levels.webp","thumb":"assets/effects/thumbs/levels.webp"},

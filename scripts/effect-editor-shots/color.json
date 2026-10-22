@@ -1,6 +1,31 @@
 {
   "shots": [
     {
+      "name": "brightness-inspector",
+      "effect": "brightness",
+      "params": {
+        "amount": 0.7
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Brightness card: the Preset menu showing Full Light and the Amount row at 0.70, beside a strip of the preview with the lifted stage",
+      "caption": "Brightness with the Full Light preset. 1 — Preset: pick a starting point. 2 — Amount: lighter or darker.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
       "name": "exposure-inspector",
       "effect": "exposure",
       "params": {
