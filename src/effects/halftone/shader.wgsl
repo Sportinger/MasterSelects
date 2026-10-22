@@ -21,23 +21,51 @@ fn source(uv: vec2f) -> vec4f {
 // Cell Filter (prefilterCellTaps in patternCellFilter.ts): the picture averaged over a box of half a cell (whole
 // pixels, at most 32 evenly spread reads per axis) in linear light weighted by alpha, back in straight sRGB with the
 // average alpha. The cell reads of Halftone, Riso and Dithering take it, so a cell shows its whole light.
-fn cellFiltered(uv: vec2f, cells: f32) -> vec4f {
+// cellBox is the box centred on one point; the graph caches it at every pixel centre and reads that cache
+// bilinearly at the tap, so cellFiltered does the same with the four pixel centres around the tap.
+// One row of the box (the graph's first pass, cached at every pixel centre): `count` reads across `width` pixels,
+// in linear light weighted by alpha.
+fn cellRow(uv: vec2f, width: f32, count: f32, spacing: f32) -> vec4f {
+  var row = vec4f(0.0);
+  for (var i = 0; i < i32(count); i++) {
+    let dx = ((f32(i) + 0.5) * spacing - width * 0.5) / params.resolution.x;
+    let p = source(uv + vec2f(dx, 0.0));
+    row += vec4f(srgbToLinear(p.rgb) * p.a, p.a);
+  }
+  return row / count;
+}
+
+// The box centred on a pixel centre `uv` (the graph's second pass): its column reads take the row cache bilinearly,
+// so a read between two pixel rows mixes their rows in linear light.
+fn cellBox(uv: vec2f, cells: f32) -> vec4f {
   let width = max(floor(cells * 0.5 + 0.5), 1.0);
   let count = min(width, 32.0);
   let spacing = width / count;
+  let lastRow = params.resolution.y - 1.0;
   var sum = vec4f(0.0);
   for (var j = 0; j < i32(count); j++) {
     let dy = ((f32(j) + 0.5) * spacing - width * 0.5) / params.resolution.y;
-    var row = vec4f(0.0);
-    for (var i = 0; i < i32(count); i++) {
-      let dx = ((f32(i) + 0.5) * spacing - width * 0.5) / params.resolution.x;
-      let p = source(uv + vec2f(dx, dy));
-      row += vec4f(srgbToLinear(p.rgb) * p.a, p.a);
-    }
-    sum += row / count;
+    let y = clamp(uv.y + dy, 0.001, 0.999) * params.resolution.y - 0.5;
+    let base = floor(y);
+    let upper = (clamp(base, 0.0, lastRow) + 0.5) / params.resolution.y;
+    let lower = (clamp(base + 1.0, 0.0, lastRow) + 0.5) / params.resolution.y;
+    sum += mix(cellRow(vec2f(uv.x, upper), width, count, spacing), cellRow(vec2f(uv.x, lower), width, count, spacing), y - base);
   }
   let average = sum / count;
   return vec4f(linearToSrgb(average.rgb / max(average.a, 1e-6)), average.a);
+}
+
+fn cellFiltered(uv: vec2f, cells: f32) -> vec4f {
+  // The cache read: clamp to the frame as the sampler does, then mix the four pixel centres around the point.
+  let point = clamp(uv, vec2f(0.0), vec2f(1.0)) * params.resolution - 0.5;
+  let base = floor(point);
+  let f = point - base;
+  let last = params.resolution - 1.0;
+  let p00 = (clamp(base, vec2f(0.0), last) + 0.5) / params.resolution;
+  let p11 = (clamp(base + 1.0, vec2f(0.0), last) + 0.5) / params.resolution;
+  let top = mix(cellBox(p00, cells), cellBox(vec2f(p11.x, p00.y), cells), f.x);
+  let bottom = mix(cellBox(vec2f(p00.x, p11.y), cells), cellBox(p11, cells), f.x);
+  return mix(top, bottom, f.y);
 }
 
 // Pattern sizes count pixels of a 1080p frame (shorter side), as the graphs do (patternReferenceFrame.ts).

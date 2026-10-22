@@ -1,14 +1,19 @@
 import common from '../../src/effects/_shared/commonShader';
+import { parityProblem } from './patternParityTolerance';
 import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDefinition';
+import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
 import { dither, ditherStudio } from '../../src/effects/halftone';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { createDefaultDitherGraph, type EditableDitherEffectType } from '../../src/services/operators/ditherEffectGraphs';
 import { createDefaultDitheringGraph } from '../../src/services/operators/ditheringEffectGraph';
-import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
+import { compileImageOperatorGraph, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const width = 47, height = 29, bytesPerRow = 256;
+/** The graph against its twin (patternParityTolerance.ts): measured no byte one step apart and at most 0.9 % of pixels on
+ * the other side of a Levels step (16 Levels, a cell average on its threshold). */
+const CELL_FILTER_PARITY = { oneStep: .005, flipped: .01 };
 type Primitive = number | boolean | string;
 type Case = { name: string; params: Record<string, Primitive> };
 type Fixture = { type: EditableDitherEffectType; definition: FullscreenEffectDefinition; cases: readonly Case[] };
@@ -82,6 +87,19 @@ async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTexture
 }
 /** The current recipe of each effect (Dithering's own; Dither Studio's in ditherEffectGraphs.ts). */
 const graphOf = (type: EditableDitherEffectType) => type === 'dither' ? createDefaultDitheringGraph() : createDefaultDitherGraph(type);
+/** A graph plan on the GPU: one generated shader, or the pass runtime for a multi-pass plan (the Cell Filter's two cached passes). */
+async function renderPlan(device: GPUDevice, runtime: ImageGraphPassRuntime, sampler: GPUSampler, source: GPUTexture, target: GPUTexture,
+  readback: GPUBuffer, plan: ImageOperatorPlan, entryPoint: string, time = 0) {
+  if (!plan.passes?.length) return render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, entryPoint), entryPoint,
+    packImageOperatorRuntimeUniforms(plan, time, width, height));
+  device.pushErrorScope('validation');
+  const encoder = device.createCommandEncoder();
+  runtime.encode({ encoder, sampler, source: { kind: 'texture', view: source.createView() }, width, height,
+    timelineTimeSeconds: time, plan, outputView: target.createView(), instanceId: `check-${entryPoint}` });
+  encoder.copyTextureToBuffer({ texture: target }, { buffer: readback, bytesPerRow }, [width, height]); device.queue.submit([encoder.finish()]);
+  await readback.mapAsync(GPUMapMode.READ); const result = compact(new Uint8Array(readback.getMappedRange())); readback.unmap();
+  const validation = await device.popErrorScope(); if (validation) throw new Error(validation.message); return result;
+}
 function directGraph(type: EditableDitherEffectType): EffectOperatorGraph {
   const graph = structuredClone(graphOf(type));
   const frame = graph.nodes.find(node => node.operator === 'image.frame'), output = graph.nodes.find(node => node.operator === 'image.output');
@@ -104,6 +122,7 @@ export async function checkDitherGraphsGpu(device: GPUDevice): Promise<number> {
   const source = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const target = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
   const readback = device.createBuffer({ size: bytesPerRow * height, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  const runtime = new ImageGraphPassRuntime(device);
   device.queue.writeTexture({ texture: source }, input, { bytesPerRow }, [width, height]); let comparisons = 0;
   try {
     for (const fixture of fixtures) {
@@ -116,16 +135,14 @@ export async function checkDitherGraphsGpu(device: GPUDevice): Promise<number> {
         const expected = await render(device, sampler, source.createView(), target, readback, fixture.definition.shader, fixture.definition.entryPoint,
           new Float32Array(packed));
         const entryPoint = `${fixture.type.replace('-', '')}GraphFragment`;
-        const actual = await render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, entryPoint), entryPoint,
-          packImageOperatorRuntimeUniforms(plan, 0, width, height));
-        if (expected.some((value, index) => value !== actual[index])) throw new Error(`${fixture.type}/${item.name}: ${mismatch(expected, actual)}`);
+        const actual = await renderPlan(device, runtime, sampler, source, target, readback, plan, entryPoint);
+        const problem = parityProblem(`${fixture.type}/${item.name}`, expected, actual, CELL_FILTER_PARITY); if (problem) throw new Error(problem);
         if (item.name === 'amount-maximum') processed = actual; comparisons++;
       }
       const values = resolved(fixture.definition, { amount: 1 });
       for (const [name, graph] of [['bypass', bypassGraph(fixture.type)], ['direct', directGraph(fixture.type)]] as const) {
         const plan = compileImageOperatorGraph(graph, values, { parameterSchema: fixture.definition.params }), entryPoint = `${fixture.type.replace('-', '')}${name}Fragment`;
-        const actual = await render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, entryPoint), entryPoint,
-          packImageOperatorRuntimeUniforms(plan, 0, width, height));
+        const actual = await renderPlan(device, runtime, sampler, source, target, readback, plan, entryPoint);
         const expected = name === 'bypass' ? processed : compactInput;
         if (!expected) throw new Error(`${fixture.type}/${name}: processed reference unavailable`);
         if (expected.some((value, index) => value !== actual[index])) throw new Error(`${fixture.type}/${name}: ${mismatch(expected, actual)}`); comparisons++;
@@ -133,5 +150,5 @@ export async function checkDitherGraphsGpu(device: GPUDevice): Promise<number> {
       if (!processed || processed.every((value, index) => value === compactInput[index])) throw new Error(`${fixture.type} processed output did not change`);
     }
     return comparisons;
-  } finally { source.destroy(); target.destroy(); readback.destroy(); }
+  } finally { runtime.dispose(); source.destroy(); target.destroy(); readback.destroy(); }
 }

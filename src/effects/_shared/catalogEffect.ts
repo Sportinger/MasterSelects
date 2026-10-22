@@ -77,11 +77,16 @@ export function ignoredBaseParams(name: string, keys: readonly BaseParam[]): Rec
 }
 
 /** The note for a Scale (in 1080p pixels) that is thinner than one pixel of a small frame: it renders one pixel. */
-export function thinScaleNotes(label: string, floor: number, params: Record<string, Primitive>, width = 1920, height = 1080): string[] {
-  const scale = Math.max(typeof params.scale === 'number' && Number.isFinite(params.scale) ? params.scale : floor, floor);
+export function thinScaleNotes(label: string, floor: number, params: Record<string, Primitive>, width = 1920, height = 1080,
+  options: { belowFloor?: boolean } = {}): string[] {
+  const raw = typeof params.scale === 'number' && Number.isFinite(params.scale) ? params.scale : floor;
+  const scale = Math.max(raw, floor), format = (value: number) => Number(value.toPrecision(4));
+  // The graph's clamp (`safe-scale`) lifts a smaller value (keyframe overshoot, tool calls, node drivers) to the floor:
+  // say so, unless the parameter's renderMin already reports it (paramRangeNotes).
+  const below = options.belowFloor !== false && raw < floor ? [`${label} ${format(raw)} px is below the rendered minimum (${format(floor)} px) and renders as ${format(floor)} px.`] : [];
   const shortSide = Math.min(width, height);
-  if (!(shortSide > 0) || scale * shortSide / 1080 >= 1) return [];
-  return [`${label} ${Number(scale.toPrecision(4))} px is thinner than one pixel on this ${width}×${height} frame; it renders 1 pixel.`];
+  if (!(shortSide > 0) || scale * shortSide / 1080 >= 1) return below;
+  return [...below, `${label} ${format(scale)} px is thinner than one pixel on this ${width}×${height} frame; it renders 1 pixel.`];
 }
 
 function numberParam(params: Record<string, Primitive>, key: string, fallback: number): number {
@@ -123,7 +128,8 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
     ...(options.presets ? { presets: options.presets } : {}),
     ...(options.paramWarnings || options.scaleFloor !== undefined ? { paramWarnings: (values: Record<string, Primitive>, width?: number, height?: number) => [
       ...(options.paramWarnings?.(values, width, height) ?? []),
-      ...(options.scaleFloor !== undefined && !params.scale?.deprecated ? thinScaleNotes(params.scale?.label ?? 'Scale', options.scaleFloor, values, width, height) : []),
+      ...(options.scaleFloor !== undefined && !params.scale?.deprecated ? thinScaleNotes(params.scale?.label ?? 'Scale', options.scaleFloor, values, width, height,
+        { belowFloor: !(params.scale?.type === 'number' && params.scale.renderMin !== undefined) }) : []),
     ] } : {}),
     ...(options.experimental ? { experimental: options.experimental } : {}),
     packUniforms: (values, width, height, timelineTimeSeconds = 0) => {

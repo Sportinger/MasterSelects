@@ -1907,7 +1907,10 @@ The 25 looks of the `two-tone-pattern` engine (`effectEngineMembers('two-tone-pa
   Dispersion, Crosshatch, Kilim, Vector Engraving, Embroidery, Toy Bricks and the Outline edge step.
   Dithering rounds to whole pixels (`wholePixels`; a 1.5-pixel Bayer cell beats into a plaid) and its
   card says so for frames where Pixel Size is not whole. A size thinner than one pixel of a small frame
-  gets a card note (`scaleFloor` → `thinScaleNotes`). Drift Lines measures its bands the same way; the
+  gets a card note (`scaleFloor` → `thinScaleNotes`), and so does a size below the look's floor (keyframe
+  overshoot, tool calls, node drivers), which renders as the floor: "Dot Size 1 px is below the rendered minimum
+  (2 px) and renders as 2 px." (a parameter with its own `renderMin` says it through `paramRangeNotes` instead).
+  `tests/unit/patternEngineLooks.test.ts` checks that every such look draws exactly its floor. Drift Lines measures its bands the same way; the
   rebuilt analog looks (CRT Screen, Film Prism, Glitch, Holo, Ribbon Scan) and Crystal Glass, Wave Lines
   and Contour Map were already frame-relative. Dither Studio still draws in output pixels.
 - **Keyframed Speed travels.** The Speed of every animated look declares
@@ -1927,7 +1930,14 @@ The 25 looks of the `two-tone-pattern` engine (`effectEngineMembers('two-tone-pa
   `tap-<n>-sample` that reads `frame`, so the four reads together give the whole cell's alpha-weighted
   average and a dot changes smoothly as an edge crosses its cell (four point reads made it jump by a
   quarter of its coverage on moving footage). The nodes sit in their own **Cell Filter** folder;
-  `tests/unit/patternCellFilter.test.ts` moves an edge across a cell in one-pixel steps.
+  `tests/unit/patternCellFilter.test.ts` moves an edge across a cell in one-pixel steps. The WGSL twins
+  (`cellFiltered` in `src/effects/halftone/shader.wgsl`) do what the caches do: the box at the four pixel centres
+  around a tap, mixed bilinearly, with each column read mixing two cached rows in linear light. The GPU parity
+  checks render the graph's passes (`ImageGraphPassRuntime`) and allow what the rgba16float caches leave
+  (`tests/browser/patternParityTolerance.ts`, limits measured and named in each check). Cost: two full-size
+  rgba16float caches per Halftone, Riso and Dithering, three with Riso Glow's glow cache (about 133 MB of
+  video memory per instance at 4K, 200 MB for Riso Glow), and about 55 to 175 KB of graph JSON per saved
+  instance.
 
 Saved effects keep their look. A project stores every effect's graph (the project save runs
 `migratePersistedEffectOperatorGraph`), and a stored graph renders as saved. Old data that carries only
@@ -1936,10 +1946,11 @@ Riso, Riso Glow, Dithering and Paper Print without their new parameter (Dot Size
 every persisted entry (`pinEarlierPrintGraph`, as the analog looks do), and a graph-less Halftone or
 Pattern Halftone from a project file (`migrateLoadedEffectOperatorGraph`) gets the frozen 3.2.7 graph
 `createLegacyHalftoneGraph` (`legacyHalftoneGraph.ts`). These earlier recipes keep sizes in output pixels
-(no 1080p measure). A custom Look stores the graph of these looks with its entry
-(`stackFromClipEffects`); an entry saved without one is from before 2026-10-22 and gets the 3.2.7 graph
-(`lookEntryOriginalGraph`), with the new recipe's own parameters left out, in its thumbnail and on the
-clip. A graph-less look in the running editor is new and renders the current recipe, also for
+(no 1080p measure). A custom Look stores the graph of these looks with its entry when the effect has one
+(`stackFromClipEffects`); a freshly added look has none yet, and its entry is marked `recipe: 'current'`
+instead, so the Look's thumbnail and every apply render the current recipe the clip showed. An unmarked
+entry without a graph is from before 2026-10-22 and gets the 3.2.7 graph (`lookEntryOriginalGraph`), with
+the new recipe's own parameters left out, in its thumbnail and on the clip. A graph-less look in the running editor is new and renders the current recipe, also for
 `effectOperatorGraph({ type, params: {} })`. Other pattern looks without a stored graph (projects from
 before 2026-09-21) get their current recipe, whose sizes match the old ones at 1080p. The shared base controls (Scale, Amount, Angle, Ink, Paper,
 Speed) are read by every look that shows them or retired with a reason; Film Prism's Prism Angle
@@ -1979,7 +1990,8 @@ params lack `levels`) is given the earlier recipe, `createDefaultDitherGraph('di
 / 3, which lifts black and clips white; its card hides Levels and says so (`paramWarnings`). Four presets live in `src/effects/halftone/ditherPresets.ts`. The card note on a non-whole Pixel Size rounds half to even, as the graph does.
 Tests: `tests/unit/imageDitheringGraph.test.ts` (reference, pure black and white, tone, one colour per
 cell, cut-out edges, Levels limits, the earlier recipe), the GPU parity suite
-`tests/browser/image-graph-probe.html?suite=dither-graphs`.
+`tests/browser/image-graph-probe.html?suite=dither-graphs` (the graph's passes against the twin: no byte one
+step apart, at most 1 % of pixels on the other side of a Levels step).
 
 ### Drift Lines
 
@@ -1996,7 +2008,10 @@ reported by `driftLinesWarnings`. The parameter ids stay the engine's (`scale`, 
 `speed`), so the Style menu keeps values; only the labels differ. Angle is `graphOnly`: a node setup
 edited before it acted does not read it and the card hides it. The stage folders come from its
 presentation plan (Bands, Drift Wave, Shifted Sample, Line Shading & Alpha). Its four presets live in
-`src/effects/halftone/driftLines.ts`. Tests: `tests/unit/imageMotionHalftoneGraphs.test.ts`, `tests/unit/effectPresets.test.ts`.
+`src/effects/halftone/driftLines.ts`. Tests: `tests/unit/imageMotionHalftoneGraphs.test.ts`, `tests/unit/effectPresets.test.ts`,
+GPU parity `tests/browser/image-graph-probe.html?suite=halftone-patterns` (exact, except that the graph's Rotate UV and
+the twin's `driftRotate` round a float step apart, so a pixel on a band edge may land in the next band: at most 0.2 %
+of pixels, measured 0.07 % at Angle −30°).
 
 ### Riso
 
@@ -2040,8 +2055,9 @@ earlier recipe, `createEarlierRisoGraph('riso')` in `risoEffectGraphs.ts`, exact
 (`graphOnly`) and says so, and Registration keeps 8 when it was saved without one (`legacyDefault`).
 Tests: `tests/unit/imageRisoGraphs.test.ts` (white, black and single-ink colours, area tone, the
 registration fringe, transparency, any ink pair, Amount, the earlier recipe), GPU parity
-`tests/browser/image-graph-probe.html?suite=riso-graphs` (Riso within one 8-bit step on at most 0.5 % of
-bytes: the graph sums channels node by node, the twin with `dot()`).
+`tests/browser/image-graph-probe.html?suite=riso-graphs` (the graph's passes against the twin: at most 10 % of
+bytes one 8-bit step apart and 1 % of pixels further, measured 9 % and 0.6 % with Riso Glow's cache; the graph
+sums channels node by node, the twin with `dot()`).
 
 ### Riso Glow
 
@@ -2070,8 +2086,8 @@ Riso's print ([Riso](#riso): same builder, same node ids, same parameters `scale
 At Glow 0 it renders exactly Riso's print with the same inks. The graph stays under 495 nodes (with the
 Cell Filter), leaving room under the 512-node budget for a remix. Default Shadow Ink `#1b1f4a` (deep
 indigo, so the stage stays near black; saves without one keep `#4f46e5`: `legacyDefault`). The twin computes the cached share at the four pixel centres
-around each tap (as the hardware's bilinear read of the cache does) and matches the graph within one 8-bit
-step on at most 3 % of bytes (the cache is rgba16float). Registration and Glow below 0 render 0 and the
+around each tap (as the hardware's bilinear read of the cache does) and matches the graph within the Riso
+limits above (the caches are rgba16float). Registration and Glow below 0 render 0 and the
 card says so (`renderMin`). Glow reaches the twin through the Angle slot, which Riso Glow does not use
 (`createCatalogEffect({ angleSlotParam })`). Card: Pattern (Dot Size, Registration), Glow & Pulse (Glow,
 Speed), Color (Shadow Ink, Glow Ink, Amount). Stage folders: Riso's seven print folders, then Print & Glow

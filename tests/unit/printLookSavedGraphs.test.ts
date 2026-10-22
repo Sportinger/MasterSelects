@@ -108,4 +108,32 @@ describe('print looks saved before the 2026-10-22 print review', () => {
     const [preview] = lookPreviewEffects(custom([entry]));
     expect(matchesEffectRecipe(preview.operatorGraph!, current)).toBe(true);
   });
+
+  it('a Look saved from freshly added print looks (no graph yet) previews and applies their current recipe', () => {
+    const types = ['halftone', 'riso', 'dither', 'paper-print', 'riso-glow'];
+    const clip = createMockClip({ id: 'fresh', effects: [] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] } as never);
+    for (const type of types) useTimelineStore.getState().addClipEffect('fresh', type);
+    const fresh = useTimelineStore.getState().clips[0].effects;
+    const stack = stackFromClipEffects(fresh as never);
+    expect(stack.map(entry => entry.recipe)).toEqual(types.map(() => 'current'));
+    const look = custom(stack);
+    // The preview renders what the clip showed: no 3.2.7 graph, the current recipe with its 1080p measure.
+    lookPreviewEffects(look).forEach((effect, index) => {
+      expect(effect.operatorGraph).toBeUndefined();
+      const shown = effectOperatorGraph(fresh[index] as Effect), previewed = effectOperatorGraph(effect);
+      expect(matchesEffectRecipe(previewed, shown)).toBe(true);
+      expect(hasNode(previewed, 'frame-scale')).toBe(true);
+    });
+    // Applying it gives effects that render like the originals and carry every current control.
+    const target = createMockClip({ id: 'target', effects: [] });
+    useTimelineStore.setState({ clips: [target], tracks: [createMockTrack({ id: target.trackId })] } as never);
+    applyLookToClip(look, 'target');
+    const applied = useTimelineStore.getState().clips[0].effects;
+    applied.forEach((effect, index) => {
+      expect(matchesEffectRecipe(effectOperatorGraph(effect), effectOperatorGraph(fresh[index] as Effect))).toBe(true);
+      expect(getEffect(effect.type)!.paramWarnings?.(effect.params as never).join(' ') ?? '').not.toMatch(/saved before/);
+    });
+    expect(applied[1].params).toHaveProperty('dotSize');
+  });
 });

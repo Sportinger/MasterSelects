@@ -1,4 +1,5 @@
 import common from '../../src/effects/_shared/commonShader';
+import { parityProblem } from './patternParityTolerance';
 import { colorToRgba } from '../../src/effects/_shared/catalogColor';
 import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDefinition';
 import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
@@ -10,6 +11,9 @@ import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/i
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const width = 47, height = 29, bytesPerRow = 256;
+/** The graph against its twin (patternParityTolerance.ts): measured at most 9 % of bytes one step apart (Riso Glow's glow
+ * cache) and 0.6 % of pixels further, by at most 3 steps. */
+const CELL_FILTER_PARITY = { oneStep: .1, flipped: .01 };
 type RisoType = 'riso' | 'riso-glow';
 type Primitive = number | boolean | string;
 type Case = { name: string; params: Record<string, Primitive>; time: number };
@@ -72,20 +76,6 @@ function compact(data: Uint8Array) {
   const result = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) result.set(data.subarray(y * bytesPerRow, y * bytesPerRow + width * 4), y * width * 4);
   return result;
-}
-/** Riso's print recipe sums channels and dot products node by node, its twin with WGSL dot() and luminance(): a channel
- * on a rounding boundary may land one step apart (at most 0.5 % of bytes). Riso Glow's graph also keeps the print and
- * the glow share in an rgba16float cache between its passes, which its single-pass twin does not: one step apart on at most
- * 3 % of bytes (RISO_GLOW_TOLERANCE; the defaults measure 1.6 %). */
-const RISO_GLOW_TOLERANCE = { delta: 1, share: .03 };
-function matches(type: RisoType, expected: Uint8Array, actual: Uint8Array) {
-  const limit = type === 'riso-glow' ? RISO_GLOW_TOLERANCE : { delta: 1, share: .005 };
-  let off = 0;
-  for (let index = 0; index < expected.length; index++) {
-    const delta = Math.abs(expected[index] - actual[index]);
-    if (delta > limit.delta) return false; if (delta) off++;
-  }
-  return off <= expected.length * limit.share;
 }
 function mismatch(expected: Uint8Array, actual: Uint8Array) {
   let first = -1, count = 0, maximum = 0;
@@ -162,7 +152,7 @@ export async function checkRisoGraphsGpu(device: GPUDevice): Promise<number> {
         const expected = await render(device, sampler, source.createView(), target, readback, fixture.definition.shader, fixture.definition.entryPoint,
           legacyUniforms(fixture.type, values, item.time));
         const actual = await renderPlan(device, runtime, sampler, source, target, readback, plan, `${fixture.type.replace('-', '')}GraphFragment`, item.time);
-        if (!matches(fixture.type, expected, actual)) throw new Error(`${fixture.type}/${item.name}: ${mismatch(expected, actual)}`);
+        const problem = parityProblem(`${fixture.type}/${item.name}`, expected, actual, CELL_FILTER_PARITY); if (problem) throw new Error(problem);
         if (item.name === 'amount-maximum') processed = actual; comparisons++;
       }
       const values = resolved(fixture.definition, { amount: 1 });

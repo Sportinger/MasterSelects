@@ -1,4 +1,5 @@
 import common from '../../src/effects/_shared/commonShader';
+import { parityProblem } from './patternParityTolerance';
 import { colorToRgba } from '../../src/effects/_shared/catalogColor';
 import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDefinition';
 import { crossStitch, driftLines, glitchGrid, scatterMosaic, toneGeometry } from '../../src/effects/halftone';
@@ -11,6 +12,9 @@ import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/i
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const width = 47, height = 29, bytesPerRow = 256;
+/** Exact, except Drift Lines: its graph turns the pixel with Rotate UV, its twin with driftRotate, which round apart by a
+ * float step; a pixel on a band edge may land in the next band (measured 0.07 % of pixels, patternParityTolerance.ts). */
+const EXACT = { oneStep: 0, flipped: 0 }, DRIFT_LINES_PARITY = { oneStep: 0, flipped: .002 };
 type PatternType = 'tone-geometry' | 'cross-stitch' | EditableMotionHalftoneEffectType;
 type Primitive = number | boolean | string;
 type Case = { name: string; params: Record<string, Primitive>; time: number };
@@ -90,7 +94,7 @@ export async function checkHalftonePatternsGpu(device: GPUDevice): Promise<numbe
         const expected = await render(device, sampler, source.createView(), target, readback, fixture.definition.shader, fixture.definition.entryPoint, legacyUniforms(values, item.time));
         const entryPoint = `${fixture.type.replace('-', '')}GraphFragment`, actual = await render(device, sampler, source.createView(), target, readback,
           imageGraphProgramShader(plan, entryPoint), entryPoint, packImageOperatorRuntimeUniforms(plan, item.time, width, height));
-        if (expected.some((value, index) => value !== actual[index])) throw new Error(`${fixture.type}/${item.name}: ${mismatch(expected, actual)}`);
+        const problem = parityProblem(`${fixture.type}/${item.name}`, expected, actual, fixture.type === 'drift-lines' ? DRIFT_LINES_PARITY : EXACT); if (problem) throw new Error(problem);
         sampledAlphaObserved ||= actual.some((value, index) => index % 4 === 3 && value !== compactInput[index]); comparisons++;
       }
       if (fixture.type === 'glitch-grid' || fixture.type === 'scatter-mosaic' || fixture.type === 'drift-lines') {

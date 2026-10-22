@@ -20,7 +20,7 @@ function cleanStack(stack: LookStackEntry[]): LookStackEntry[] {
     .map((entry) => ({
       effectId: entry.effectId,
       enabled: entry.enabled !== false,
-      ...(entry.recipe === 'earlier' ? { recipe: 'earlier' as const } : {}),
+      ...(entry.recipe === 'earlier' || entry.recipe === 'current' ? { recipe: entry.recipe } : {}),
       params: Object.fromEntries(Object.entries(entry.params).filter(([, value]) => (
         typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
       ))),

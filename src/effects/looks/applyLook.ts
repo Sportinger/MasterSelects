@@ -51,13 +51,16 @@ export function stackFromClipEffects(
     effectId: effect.type,
     enabled: effect.enabled !== false,
     ...(hasEarlierStylizeRecipe(effect.type) && isEarlierStylizeGraph(effect.type, effect.operatorGraph) ? { recipe: 'earlier' as const } : {}),
+    // A fresh print look has no graph and renders its current recipe; the marker keeps the entry from
+    // being taken for one saved before the 2026-10-22 print review (lookEntryOriginalGraph).
+    ...(!effect.operatorGraph && isReviewedPrintLook(effect.type) ? { recipe: 'current' as const } : {}),
     params: withoutRuntimeTravelParams(effect.type, withLegacyDefaultParams(effect.type, Object.fromEntries(
       Object.entries(effect.params ?? {}).filter(([, value]) => (
         typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
       ))) as Record<string, number | boolean | string>)),
     // Color and print-look graphs are small and self-contained; other graphs may reference clip resources. A print
-    // look keeps its graph so the entry stays the look it was saved with (a graph-less one is from before the
-    // 2026-10-22 print review, lookEntryOriginalGraph).
+    // look keeps its graph so the entry stays the look it was saved with (a graph-less unmarked one is from
+    // before the 2026-10-22 print review, lookEntryOriginalGraph).
     ...(effect.operatorGraph && (COLOR_RECIPE_EFFECT_TYPES.has(effect.type) || isReviewedPrintLook(effect.type))
       ? { operatorGraph: structuredClone(effect.operatorGraph) } : {}),
   }));

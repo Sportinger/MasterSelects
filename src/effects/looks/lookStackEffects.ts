@@ -7,14 +7,15 @@ import type { LookDefinition, LookStackEntry } from './types';
 /**
  * A custom Look entry saved before its analog effect's 2026-10 rebuild keeps that effect's
  * original graph, and one of a print look (Halftone, Riso, Dithering, Paper Print ...) saved
- * without a graph, before the 2026-10-22 print review, keeps its 3.2.7 graph (patternLegacyGraphs.ts;
- * newer entries store their graph, stackFromClipEffects). Built-in Looks and newer entries follow the
- * current recipe or their stored graph (undefined).
+ * without a graph before the 2026-10-22 print review keeps its 3.2.7 graph (patternLegacyGraphs.ts).
+ * Newer print entries store their graph or, saved from a fresh effect without one, carry
+ * `recipe: 'current'` (stackFromClipEffects). Built-in Looks and newer entries follow the current
+ * recipe or their stored graph (undefined).
  */
 export function lookEntryOriginalGraph(look: Pick<LookDefinition, 'builtIn'>,
-  entry: Pick<LookStackEntry, 'effectId' | 'params'> & { operatorGraph?: EffectOperatorGraph }): EffectOperatorGraph | undefined {
+  entry: Pick<LookStackEntry, 'effectId' | 'params' | 'recipe'> & { operatorGraph?: EffectOperatorGraph }): EffectOperatorGraph | undefined {
   if (look.builtIn || entry.operatorGraph) return undefined;
-  if (isReviewedPrintLook(entry.effectId)) return earlierPrintGraph(entry.effectId);
+  if (isReviewedPrintLook(entry.effectId)) return entry.recipe === 'current' ? undefined : earlierPrintGraph(entry.effectId);
   if (!predatesAnalogRecipe(entry.effectId, entry.params)) return undefined;
   return originalAnalogGraph(entry.effectId);
 }
@@ -25,7 +26,7 @@ export function lookEntryOriginalGraph(look: Pick<LookDefinition, 'builtIn'>,
  * effect matches a pinned saved effect, so no note talks about controls its graph does not have.
  */
 export function lookEntryRecipeOnlyParams(look: Pick<LookDefinition, 'builtIn'>,
-  entry: Pick<LookStackEntry, 'effectId' | 'params'> & { operatorGraph?: EffectOperatorGraph }): ReadonlySet<string> {
+  entry: Pick<LookStackEntry, 'effectId' | 'params' | 'recipe'> & { operatorGraph?: EffectOperatorGraph }): ReadonlySet<string> {
   const graph = lookEntryOriginalGraph(look, entry);
   if (!graph) return new Set();
   const bound = new Set(graph.nodes.flatMap(node => Object.values(node.bindings).filter((binding): binding is string => typeof binding === 'string')));

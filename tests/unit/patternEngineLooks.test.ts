@@ -124,12 +124,31 @@ describe('two-tone-pattern engine', () => {
     expect(() => measureInReferenceFrame(measured, 'size')).toThrow(/twice/u);
   });
 
+  it('says when a pattern size below the look\'s floor renders as the floor (no silent clamp)', () => {
+    const notes = (type: string, params: Params) => getEffect(type)!.paramWarnings?.({ ...getDefaultParams(type), ...params }, 1920, 1080) ?? [];
+    expect(notes('halftone', { scale: 1 })).toEqual(['Dot Size 1 px is below the rendered minimum (2 px) and renders as 2 px.']);
+    expect(notes('dither', { scale: .4 })).toEqual(['Pixel Size 0.4 px is below the rendered minimum (1 px) and renders as 1 px.']);
+    expect(notes('halftone', { scale: 2 })).toEqual([]);
+    const reported: string[] = [];
+    for (const type of LOOKS) {
+      const scale = getEffect(type)!.params.scale;
+      if (scale?.type !== 'number' || scale.renderMin !== undefined) continue; // renderMin: paramRangeNotes says it
+      const floor = /below the rendered minimum \((\d+(?:\.\d+)?) px\)/u.exec(notes(type, { scale: .25 }).join(' '))?.[1];
+      if (!floor) continue;
+      reported.push(type);
+      // What the note says is what renders: a size under the floor draws exactly the floor.
+      expect(agreement(render(compile(type, { scale: .25 }).plan, [480, 270], .5), render(compile(type, { scale: Number(floor) }).plan, [480, 270], .5), 0), type).toBe(1);
+    }
+    expect(reported).toEqual(expect.arrayContaining(['halftone', 'dither', 'pixel-poster', 'cross-stitch', 'glitch-grid', 'scatter-mosaic', 'bricks']));
+  });
+
   it('says when a pattern size is thinner than one pixel of a small frame', () => {
     const notes = (type: string, params: Params, width: number, height: number) => getEffect(type)!.paramWarnings?.({ ...getDefaultParams(type), ...params }, width, height) ?? [];
     expect(notes('halftone', { scale: 2 }, 1920, 1080)).toEqual([]);
     expect(notes('halftone', { scale: 2 }, 640, 360)).toEqual(['Dot Size 2 px is thinner than one pixel on this 640×360 frame; it renders 1 pixel.']);
     expect(notes('dither', { scale: 1 }, 1280, 720).join(' ')).toMatch(/^Pixel Size 1 px is thinner than one pixel on this 1280×720 frame/u);
-    expect(notes('bricks', { scale: 1 }, 640, 360)).toEqual([]); // the floor of 5 px is 1.7 px there
+    // Below the floor of 5 px it renders 5 px (said), which is 1.7 px there (not thinner than a pixel).
+    expect(notes('bricks', { scale: 1 }, 640, 360)).toEqual(['Scale 1 px is below the rendered minimum (5 px) and renders as 5 px.']);
     // Dither cells are whole pixels: 3 px of a 1080p frame are 1.5 pixels at 540p and render as 2.
     expect(notes('dither', { scale: 3 }, 960, 540)).toEqual(['Pixel Size 3 px is 1.5 pixels on this 960×540 frame; dither cells are whole pixels, so it renders 2.']);
     // Half to even, as the render: 2.5 pixels render 2, 4.5 render 4.

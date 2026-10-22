@@ -17,9 +17,12 @@ export interface LookStackEntry {
   /**
    * 'earlier': a stylize effect saved with its earlier recipe (before 2026-10-21, see
    * services/operators/stylizeRecipes.ts); applying the Look recreates that recipe so its saved
-   * values keep their look. Absent: the effect's current recipe.
+   * values keep their look. 'current': a print look (Halftone, Riso, Dithering, Paper Print ...)
+   * saved without a graph after the 2026-10-22 print review, which renders its current recipe; a
+   * graph-less print entry without it was saved earlier and keeps its 3.2.7 graph
+   * (lookEntryOriginalGraph). Absent otherwise: the effect's current recipe.
    */
-  recipe?: 'earlier';
+  recipe?: 'earlier' | 'current';
 }
 /** Current schema of saved Looks (LookDefinition.schemaVersion). */
 export const LOOK_SCHEMA_VERSION = 2 as const;
