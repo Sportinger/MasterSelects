@@ -44,12 +44,12 @@ Pick one in the **Preset** row of the effect card. It sets Shift in one undo ste
 
 ![Properties, Effects with a Hue Shift card: the Preset menu showing Third Turn and Shift at 120°, beside a strip of the preview with the night street, its pink sign turned yellow and its orange sign green](../assets/effects/editor/hue-shift-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 421" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 393" aria-hidden="true" focusable="false">
 <defs><marker id="hue-shift-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#hue-shift-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M581 344 L665 344" marker-end="url(#hue-shift-inspector-arrow)" />
-<circle class="docs-shot-number" cx="581" cy="344" r="18" /><text x="581" y="344" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M565 281 L649 281" marker-end="url(#hue-shift-inspector-arrow)" />
+<circle class="docs-shot-number" cx="565" cy="281" r="18" /><text x="565" y="281" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M581 343 L665 343" marker-end="url(#hue-shift-inspector-arrow)" />
+<circle class="docs-shot-number" cx="581" cy="343" r="18" /><text x="581" y="343" class="docs-shot-number-text">2</text>
 </svg>
 
 </div>
