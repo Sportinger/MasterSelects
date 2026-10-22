@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-10-22",
+    "type": "improve",
+    "title": "MasterSelects 3.2.7",
+    "description": "Most effect groups were reviewed and improved: blur, colour, distortion, mirror and pixel, stylize, keying and time, analog, art styles and generators look better, handle transparency cleanly and tell you in the card when a value is limited. Effects can now carry presets in a Preset row of their card, starting with four for Drift Lines. Crossfades were rebuilt, including their preview audio. The documentation now has a page for every effect, with before/after sliders, short video loops, interactive callouts and a zoomable picture view.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-22",
     "type": "fix",
     "title": "MasterSelects 3.2.6",
     "description": "Projects keep opening after an update: one click on Resume restores folder and media access instead of relinking, and MasterSelects can be installed as an app so Chrome keeps folder access. On iPad and iPhone, projects no longer fail when Safari refuses storage, and a clear Keep safe button shows how to keep them. Imported .msproj archives open reliably, FFmpeg exports no longer run out of memory on long 1080p videos, more audio formats play and show waveforms, a second tab can take over editing, and many GPU, preview and error-report problems are fixed.",
