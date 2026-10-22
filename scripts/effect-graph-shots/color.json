@@ -12,6 +12,12 @@
     "exposure?focus=exposure-stops&marks=light-linear:below,light-gain:above,light-exposed:above,light-encoded:above@exposure-stops",
     "exposure?focus=offset-and-gamma&only=offset-rgb,tone-offset,tone-zero-rgb,tone-positive,tone-inverse-gamma,tone-inverse-gamma-rgb,tone-gamma&cables=avoid&marks=tone-offset:above,tone-positive:above,tone-inverse-gamma:below,tone-gamma:above@exposure-tone",
     "exposure?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@exposure-finish",
+    "levels?plumbing=hide&marks=organized-levels-controls:below,organized-levels-remap:above,organized-levels-gamma:below,organized-levels-output:above,organized-levels-finish:below@levels",
+    "levels?focus=parameters&only=gamma,gamma-clamped&cables=avoid&layout=float&marks=gamma-clamped:below@levels-parameters",
+    "levels?focus=input-black-and-white&only=inputBlack-rgb,remap-black,range-safe-rgb,remap,remap-clamp&cables=avoid&marks=remap-black:above,remap:above,remap-clamp:above@levels-remap",
+    "levels?focus=gamma&only=gamma-inverse,gamma-inverse-rgb,gamma-curve&cables=avoid&layout=float&marks=gamma-inverse:below,gamma-curve:above@levels-gamma",
+    "levels?focus=output-range&cables=avoid&layout=float&marks=output-range:above@levels-output",
+    "levels?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@levels-finish",
     "hue-shift?focus=hue-rotate-oklch&marks=hue-lch-split:above,hue-lch-combine:above@hue-shift-rotate",
     "vibrance?focus=muted-colour-weight&only=weight-muted,weight,weight-boost,weight-amount,weight-saturation&rows=1&layout=full&marks=weight:below@vibrance"
   ]

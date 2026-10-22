@@ -267,6 +267,17 @@ describe('rebuilt color effect recipes', () => {
     expect(plan.labels.tone).toBe('Offset & Gamma');
   });
 
+  it('folds every working node of the Levels recipe into a stage folder, the colour splats into Input Black & White and Output Range', () => {
+    const graph = createDefaultColorEffectGraph('levels'), plan = effectPresentationPlan('levels')!;
+    const plumbing = /^(frame|split|output)$|-render-(min|max)$|^range-(zero|minimum)$|^(remap-)?clamp-(low|high)$/;
+    const bound = new Set(['inputBlack', 'inputWhite', 'gamma', 'outputBlack', 'outputWhite']);
+    const loose = graph.nodes.filter(node => !plumbing.test(node.id) && !bound.has(node.id) && plan.stage(node as never) === 'processing');
+    expect(loose.map(node => node.id)).toEqual([]);
+    expect(plan.stage({ id: 'inputBlack-rgb' } as never)).toBe('remap');
+    expect(['output-range', 'outputBlack-rgb', 'outputWhite-rgb'].map(id => plan.stage({ id } as never))).toEqual(['output', 'output', 'output']);
+    expect(plan.labels.output).toBe('Output Range');
+  });
+
   it('keeps the original formulas in the legacy graphs that saved projects still carry', () => {
     const pixel: Pixel = [0.2, 0.4, 0.8, 0.35];
     expectPixel(render('brightness', { amount: 0.15 }, pixel, createLegacyColorEffectGraph('brightness')), [0.35, 0.55, 0.95, 0.35]);

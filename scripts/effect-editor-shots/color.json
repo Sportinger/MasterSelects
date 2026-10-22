@@ -83,6 +83,48 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "levels-inspector",
+      "effect": "levels",
+      "params": {
+        "outputBlack": 0.12,
+        "outputWhite": 0.9
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Levels card: the Preset menu showing Matte Film, Input Black at 0, Input White at 1, Gamma at 1, Output Black at 0.12 and Output White at 0.90, beside a strip of the preview with the grey, matte stage",
+      "caption": "Levels with the Matte Film preset. 1 — Preset: pick a starting point. 2 — Input Black: what becomes black. 3 — Input White: what becomes white. 4 — Gamma: the mid-tones. 5 — Output Black: how dark black is. 6 — Output White: how bright white is.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Input Black",
+          "label": "Input Black"
+        },
+        {
+          "target": "Input White",
+          "label": "Input White"
+        },
+        {
+          "target": "Gamma",
+          "label": "Gamma"
+        },
+        {
+          "target": "Output Black",
+          "label": "Output Black"
+        },
+        {
+          "target": "Output White",
+          "label": "Output White"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }
