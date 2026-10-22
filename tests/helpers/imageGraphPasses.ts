@@ -1,4 +1,5 @@
-import { evaluateImageOperatorPlan, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { createImageOperatorEvaluator } from '../../src/services/operators/imageOperatorEvaluation';
 
 export type Pixel = [number, number, number, number];
 type Sampler = (uv: [number, number]) => Pixel;
@@ -58,8 +59,13 @@ export function createImagePassEvaluator(plan: ImageOperatorPlan, resolution: [n
   const sampleResource = (id: string, sampled: [number, number]): Pixel => options.filterResources
     ? bilinear(resolution[0], resolution[1], (x, y) => texel(id, x, y), sampled)
     : evaluate(producer(id), sampled);
+  // One prepared evaluator per program: preparing it (scope tables, dependency sets) per pixel cost more
+  // than evaluating the pixel and made multi-frame recipe tests slow enough to time out on CI.
+  const evaluators = new Map<ImageOperatorPlan, ReturnType<typeof createImageOperatorEvaluator>>();
   function evaluate(program: ImageOperatorPlan, at: [number, number]): Pixel {
-    return evaluateImageOperatorPlan(program, sampleImage(at), { uv: at, resolution, sampleImage, sampleResource,
+    let evaluator = evaluators.get(program);
+    if (!evaluator) { evaluator = createImageOperatorEvaluator(program); evaluators.set(program, evaluator); }
+    return evaluator(sampleImage(at), { uv: at, resolution, sampleImage, sampleResource,
       timelineTimeSeconds: options.timelineTimeSeconds ?? 0 });
   }
   return uv => evaluate(plan, uv);

@@ -189,9 +189,12 @@ describe('Glitch recipe', () => {
   });
 
   it('moves almost nothing at a faint Intensity (block offsets round to the nearest block)', () => {
-    const changedShare = (amount: number) => {
+    // Every frame here costs about 0.25 s on the CPU pass evaluator (several times that on CI runners), so the
+    // test samples few frames: bursts glitch at each of these times (Intensity 1 changes most of the frame at
+    // every one), and Intensity 0 is covered by "analog recipes are neutral at zero strength".
+    const changedShare = (amount: number, times: readonly number[]) => {
       let changed = 0, total = 0;
-      for (const time of [.1, .35, .6, .85, 1.1, 1.35, 1.6, 1.85]) {
+      for (const time of times) {
         const output = render('glitch', { amount, density: 1, split: 0 }, opaque, [96, 54], time);
         for (let y = 0; y < 54; y++) for (let x = 0; x < 96; x++, total++) {
           if (output(x, y).some((value, channel) => Math.abs(value - opaque(x, y)[channel]) > 2 / 255)) changed++;
@@ -199,10 +202,12 @@ describe('Glitch recipe', () => {
       }
       return changed / total;
     };
-    expect(changedShare(0)).toBe(0);
-    expect(changedShare(.002)).toBeLessThan(.005);
-    expect(changedShare(.01)).toBeLessThan(.005);
-    expect(changedShare(1)).toBeGreaterThan(.1);
+    // The limits separate rounded from unrounded block offsets: rounded, Intensity 0.01 changes no pixel and
+    // 0.03 about 0.03 % (stray torn rows); unrounded, the same frames change about 0.09 % and 1 %.
+    const faintTimes = [.1, .6, 1.1, 1.6];
+    expect(changedShare(.01, faintTimes)).toBeLessThan(1e-4);
+    expect(changedShare(.03, faintTimes)).toBeLessThan(.002);
+    expect(changedShare(1, [.35, 1.35])).toBeGreaterThan(.1);
   });
 
   it('freezes at Speed 0 and changes over time otherwise', () => {
