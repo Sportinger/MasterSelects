@@ -36,14 +36,18 @@ class GraphBuilder {
 }
 
 /** Canonical staged Voronoi graph. Seed generation and jump flooding remain
- * specialized pass boundaries; every resolve operation is an explicit shared node. */
+ * specialized pass boundaries; every resolve operation is an explicit shared node.
+ * Cell Size counts 1080p pixels inside the seed pass (voronoiSeedCompute). A cell takes its
+ * seed's colour weighted by the seed's alpha, so a transparent seed keeps the pixel's own colour. */
 export function createDefaultVoronoiGraph(): EffectOperatorGraph {
   const g = new GraphBuilder();
   const frame = g.node('frame', 'image.frame', 0), uv = g.node('uv', 'image.normalized-uv', 0);
   const resolution = g.node('resolution', 'image.resolution', 0);
   const zero = g.literal('zero', 0), one = g.literal('one', 1), half = g.literal('half', .5);
-  const pointEightTwo = g.literal('point-eight-two', .82), pointOneEight = g.literal('point-one-eight', .18);
-  const amount = g.node('amount', 'values.number', 0, undefined, { value: 'amount' });
+  const pointEightTwo = g.literal('cell-shade', .82), pointOneEight = g.literal('edge-lift', .18);
+  const amountValue = g.node('amount', 'values.number', 0, undefined, { value: 'amount' });
+  const amount = g.node('amount-clamped', 'math.clamp.scalar', 1);
+  g.connect(amountValue, amount, 'value'); g.connect(zero, amount, 'min'); g.connect(one, amount, 'max');
   const seeds = g.node('seeds', 'geometry.voronoi-seeds', 1, undefined, { scale: 'scale', speed: 'speed' });
   const field = g.node('jump-flood', 'geometry.jump-flood', 2); g.connect(seeds, field, 'field');
 
@@ -83,7 +87,11 @@ export function createDefaultVoronoiGraph(): EffectOperatorGraph {
   const originalSplit = g.unary('original-color', 'vector.split.rgba', original, 8, 'image');
   const scaleDelta = g.binary('border-scale-delta', 'math.multiply.scalar', pointOneEight, border, 9);
   const styleScale = g.binary('style-scale', 'math.add.scalar', pointEightTwo, scaleDelta, 10);
-  const styled = g.node('styled', 'math.multiply.rgb-scalar', 10); g.connect(component(sampledSplit, 'rgb'), styled, 'a'); g.connect(styleScale, styled, 'b');
+  // The seed's colour where the seed is opaque, the pixel's own where it is transparent (cut-out edge, inset frame).
+  const seedAlpha = g.unary('seed-alpha', 'convert.alpha-to-scalar', component(sampledSplit, 'alpha'), 9, 'alpha');
+  const cellColor = g.node('cell-color', 'math.mix.rgb', 9); g.connect(component(originalSplit, 'rgb'), cellColor, 'a');
+  g.connect(component(sampledSplit, 'rgb'), cellColor, 'b'); g.connect(seedAlpha, cellColor, 't');
+  const styled = g.node('styled', 'math.multiply.rgb-scalar', 10); g.connect(cellColor, styled, 'a'); g.connect(styleScale, styled, 'b');
   const mixed = g.node('mixed', 'math.mix.rgb', 11); g.connect(component(originalSplit, 'rgb'), mixed, 'a');
   g.connect(styled, mixed, 'b'); g.connect(amount, mixed, 't');
   const combined = g.node('combined', 'vector.combine.rgba', 12); g.connect(mixed, combined, 'rgb');

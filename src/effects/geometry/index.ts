@@ -1,19 +1,46 @@
 import shader from './shader.wgsl?raw';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { createGlyphEffect } from '../glyph/glyphEffectFactory';
-import { createComputeEffect } from './computeEffectFactory';
+import { createComputeEffect, VORONOI_CELL_SIZE_PARAM } from './computeEffectFactory';
 import { CONTOUR_MAP_PARAMS, CONTOUR_MAP_PRESETS } from './contourMap';
 import { CROSSHATCH_PARAMS, CROSSHATCH_PRESETS } from './crosshatch';
 import { VECTOR_ENGRAVING_PARAMS, VECTOR_ENGRAVING_PRESETS } from './vectorEngraving';
-import type { ComputeEffectDefinition } from '../types';
+import type { ComputeEffectDefinition, EffectPreset } from '../types';
+import { amountWarnings, cellSizeWarnings } from '../pixel/cellGridParams';
 
-export const voronoi = createComputeEffect({
-  id: 'voronoi',
-  name: 'Voronoi',
-  entryPoint: 'voronoiResolveCompute',
-  animated: true,
-  computeMode: 'jump-flood',
-});
+/** Voronoi's named starting points (the Preset row of its card; docs/Features/effects/voronoi.md). */
+export const VORONOI_PRESETS: readonly EffectPreset[] = [
+  { id: 'stained-glass', name: 'Stained Glass', params: { scale: 40, amount: 1, speed: 0 } },
+  { id: 'fine-crackle', name: 'Fine Crackle', params: { scale: 10, amount: 1, speed: 0.5 } },
+  { id: 'glass-veil', name: 'Glass Veil', params: { scale: 28, amount: 0.5, speed: 0.5 } },
+  { id: 'drifting-shards', name: 'Drifting Shards', params: { scale: 64, amount: 1, speed: 2 } },
+];
+
+export const voronoi: ComputeEffectDefinition = {
+  ...createComputeEffect({
+    id: 'voronoi',
+    name: 'Voronoi',
+    entryPoint: 'voronoiResolveCompute',
+    animated: true,
+    computeMode: 'jump-flood',
+    params: {
+      // 1080p pixels (voronoiSeedCompute), so preview quality, 4K and export show the same cells.
+      scale: VORONOI_CELL_SIZE_PARAM,
+      // The shared compute schema's Threshold never reached the Voronoi resolve: retired, not shown.
+      threshold: { type: 'number', label: 'Threshold', default: 0.45, min: 0, max: 1, step: 0.01, group: 'Style', hidden: true,
+        deprecated: 'Voronoi has no Threshold; the value is ignored.' },
+    },
+  }),
+  // The seeds drift with timeline time (Speed), so a paused playhead holds still and export matches the preview.
+  requiresContinuousRender: false,
+  timelineAnimated: true,
+  paramWarnings: values => [
+    ...(typeof values.scale === 'number' && values.scale < 4
+      ? [`scale: ${values.scale} is below 4 px; Voronoi uses cells of 4 px (of a 1080p frame).`] : []),
+    ...amountWarnings(values.amount),
+  ],
+  presets: VORONOI_PRESETS,
+};
 export const pixelSort: ComputeEffectDefinition = {
   ...createComputeEffect({
     id: 'pixel-sort',
@@ -37,16 +64,41 @@ export const pixelSort: ComputeEffectDefinition = {
   ],
 };
 
-export const quadtreeZoom = createComputeEffect({
-  id: 'quadtree-zoom',
-  name: 'Quadtree Zoom',
-  entryPoint: 'quadtreeZoomCompute',
-  animated: true,
-  params: {
-    scale: { type: 'number', label: 'Minimum Cell', default: 8, min: 2, max: 32, step: 1, group: 'Structure' },
-    threshold: { type: 'number', label: 'Detail Threshold', default: 0.025, min: 0.001, max: 0.2, step: 0.001, group: 'Structure' },
-  },
-});
+/** Quadtree Zoom's named starting points (the Preset row of its card; docs/Features/effects/quadtree-zoom.md). */
+export const QUADTREE_ZOOM_PRESETS: readonly EffectPreset[] = [
+  // Small cells that follow every edge: the picture stays readable, flat areas turn into calm tiles.
+  { id: 'fine-print', name: 'Fine Print', params: { scale: 4, threshold: 0.005, amount: 1, speed: 0 } },
+  // Chunky tiles on the figure and large squares on the stage (the 4 x 4 grid test keeps the figure in large blocks).
+  { id: 'big-tiles', name: 'Big Tiles', params: { scale: 16, threshold: 0.015, amount: 1, speed: 0 } },
+  // Tiles laid half over the original: a soft mosaic veil that keeps faces and lines.
+  { id: 'tile-veil', name: 'Tile Veil', params: { scale: 8, threshold: 0.02, amount: 0.6, speed: 0.5 } },
+  // The split threshold pulses quickly, so cells keep splitting and merging.
+  { id: 'breathing-grid', name: 'Breathing Grid', params: { scale: 12, threshold: 0.025, amount: 0.9, speed: 3 } },
+];
+
+export const quadtreeZoom: ComputeEffectDefinition = {
+  ...createComputeEffect({
+    id: 'quadtree-zoom',
+    name: 'Quadtree Zoom',
+    entryPoint: 'quadtreeZoomCompute',
+    animated: true,
+    params: {
+      // 1080p pixels (quadtreeEffectGraph: Cell Size folder), so preview quality, 4K and export show the same cells.
+      scale: { type: 'number', label: 'Minimum Cell', default: 8, min: 2, max: 32, step: 1, unit: ' px', group: 'Structure' },
+      threshold: { type: 'number', label: 'Detail Threshold', default: 0.025, min: 0.001, max: 0.2, step: 0.001, group: 'Structure' },
+    },
+  }),
+  // The split pulses with timeline time (Speed), so a paused playhead holds still and export matches the preview.
+  requiresContinuousRender: false,
+  timelineAnimated: true,
+  paramWarnings: (values, width, height) => [
+    ...cellSizeWarnings('scale', values.scale, 2, width, height, 'Quadtree Zoom uses cells of 2 pixels'),
+    ...amountWarnings(values.amount),
+    ...(typeof values.threshold === 'number' && values.threshold <= 0
+      ? [`threshold: ${values.threshold} is 0 or below, so every cell splits down to Minimum Cell.`] : []),
+  ],
+  presets: QUADTREE_ZOOM_PRESETS,
+};
 export const contour = createComputeEffect({
   id: 'contour',
   name: 'Contour',

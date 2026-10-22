@@ -12,8 +12,11 @@ describe('Voronoi compute graph ownership', () => {
   it('supplies the canonical graph and authoritative catalog defaults without joining image-effect classification', () => {
     expect(hasEffectOperatorGraph('voronoi')).toBe(true);
     const definition = getEffect('voronoi')!;
-    const graph = effectOperatorGraph({ type: 'voronoi', params: {} });
-    expect(graph).toEqual(createDefaultVoronoiGraph());
+    // The untouched recipe opens in its stage folders; the nodes and cables stay the canonical recipe.
+    const graph = effectOperatorGraph({ type: 'voronoi', params: {} }), canonical = createDefaultVoronoiGraph();
+    expect(graph.nodes).toEqual(canonical.nodes); expect(graph.edges).toEqual(canonical.edges);
+    expect(graph.groups?.map(group => group.label)).toEqual(expect.arrayContaining(['Seeds & Distance Field', 'Cell Colour', 'Cell Edges', 'Mix with Original']));
+    expect(graph.groups?.find(group => group.label === 'Cell Colour')?.nodeIds).toEqual(expect.arrayContaining(['seed-alpha', 'cell-color']));
     expect(effectOperatorParams({ type: 'voronoi', params: {} })).toEqual(
       Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.default])));
   });

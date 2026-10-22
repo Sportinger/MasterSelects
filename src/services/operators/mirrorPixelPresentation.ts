@@ -1,6 +1,6 @@
 import type { EffectPresentationPlan } from './effectPresentationPlans';
 
-/** Folder names and port labels of the Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block Mosaic recipes. */
+/** Folder names and port labels of the Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify, Block Mosaic, Quadtree Zoom and Voronoi recipes. */
 const READ = /-(mirrored-uv|clamped-uv|edge-uv|sample|low-px|high-uv|high-px|low-min|high-min|inside-px|inside-centered|coverage|weight|read)$/;
 const STRAIGHT = /^cell-(split|alpha|alpha-floor|safe-alpha|rgb)$/;
 const COMMON_PORTS = { 'source-cache': 'Premultiplied Source', 'result:image': 'Result', 'one-vec2': '(1, 1)' };
@@ -58,6 +58,29 @@ export function mirrorPixelPresentationPlan(type: string): EffectPresentationPla
               : /^(effect-|original|mix-|mixed)/.test(id) ? 'mix'
                 : /^(large-|time-|hash|is-large|tile-size|group-|shuffle-)/.test(id) ? 'tiles'
                   : /^(pixel|origin-raw|origin|from-origin|zero-vec2|half-vec2)$/.test(id) ? 'position' : 'grid',
+  };
+  // Quadtree Zoom (quadtreeEffectGraph.ts): size in 1080p pixels, the adaptive split, the tile colour, then edges and mix.
+  if (type === 'quadtree-zoom') return {
+    labels: { split: 'Cell Size & Split', colour: 'Cell Colour', shade: 'Tile Edges', mix: 'Mix with Original' },
+    portLabels: { 'pixel-scale': 'Pixel Scale', 'minimum-px': 'Minimum (px)', 'partition:origin': 'Cell Origin', 'partition:size': 'Cell Size (px)',
+      pixel: 'Pixel', 'half-size': 'Half Cell', center: 'Cell Centre', 'center-alpha': 'Centre Alpha', 'cell-color': 'Cell Colour',
+      'edge-distance': 'Distance to Edge', style: 'Shade', 'original-color:rgb': 'Original', 'original-color:alpha': 'Alpha', styled: 'Shaded Tile', mixed: 'Mixed', 'amount-clamped': 'Amount (0–1)' },
+    stage: ({ id }) => /^(short-side|pixel-scale|minimum-px|pixel-unfloored|pixel|partition)$/.test(id) ? 'split'
+      : /^(half-size|half-vector|center|sampled-color|original-sample|original-color|cell-color)/.test(id) ? 'colour'
+        : /^(amount-clamped|mixed|combined)$/.test(id) ? 'mix' : 'shade',
+  };
+  // Voronoi (voronoiEffectGraph.ts): seeds and their distance field, the nearest seed's colour, the cell edges, then the mix.
+  if (type === 'voronoi') return {
+    labels: { seeds: 'Seeds & Distance Field', colour: 'Cell Colour', edges: 'Cell Edges', mix: 'Mix with Original' },
+    portLabels: { seeds: 'Seed Field', 'jump-flood': 'Nearest Seed Field', pixel: 'Pixel', 'current-seed': 'Seed Record', 'current-seed-pixel': 'Seed Pixel', 'current-components:x': 'Seed X', 'current-components:y': 'Seed Y',
+      valid: 'Has Seed', 'source-pixel': 'Read Pixel', 'nearest-color:rgb': 'Seed Colour', 'nearest-color:alpha': 'Seed Alpha', 'seed-alpha': 'Seed Alpha',
+      'original-color:rgb': 'Original', 'original-color:alpha': 'Alpha', 'cell-color': 'Cell Colour', 'right-pixel': 'Right Pixel', 'down-pixel': 'Pixel Below',
+      'right-seed': 'Right Seed', 'down-seed': 'Seed Below', 'neighbor-distance': 'Seed Distance', border: 'Edge', 'style-scale': 'Shade',
+      styled: 'Shaded Cell', mixed: 'Mixed', 'amount-clamped': 'Amount (0–1)' },
+    stage: ({ id }) => /^(seeds|jump-flood)$/.test(id) ? 'seeds'
+      : /^(amount-clamped|mixed|combined)$/.test(id) ? 'mix'
+        : /^(pixel|current-seed|current-components|current-seed-pixel|valid|source-pixel|nearest-sample|nearest-color|original-sample|original-color|seed-alpha|cell-color)$/.test(id)
+          ? 'colour' : 'edges',
   };
   return undefined;
 }

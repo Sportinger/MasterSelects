@@ -659,12 +659,13 @@ Amount outside 0 to 1 and a Threshold of 1 or more are reported in the inspector
 and tool results.
 
 Quadtree Zoom exposes a bounded adaptive partition with jointly computed cell
-origin and size. Its six-level search preserves the legacy five-sample variance
-and timeline-driven threshold pulse. Center sampling, cell borders, RGB styling,
+origin and size. Its six-level search keeps the legacy five-sample variance, adds a
+4 x 4 grid variance test, and keeps the timeline-driven threshold pulse. Center sampling, cell borders, RGB styling,
 amount mixing, and original alpha remain separate shared nodes. The default
 graph uses one compute output pass with no intermediate textures; wiring Frame
-directly to Output bypasses it. Minimum cell size defaults to 8 (2–32), variance
-threshold to 0.025 (0.001–0.2), amount to 0.8, and speed to 0.5.
+directly to Output bypasses it. Minimum cell size defaults to 8 (2–32, in 1080p
+pixels), variance threshold to 0.025 (0.001–0.2), amount to 0.8, and speed to 0.5.
+Details: [Pixel & Mosaic notes](#pixel--mosaic-notes).
 
 Contour separates integer cell coordinates, corner luminance samples, threshold
 crossings, Marching Squares topology, segment distance, and color mixing into
@@ -3229,7 +3230,7 @@ Notes for developers; each effect page adds its own formula and limits.
 
 ### Pixel & Mosaic notes
 
-Notes for developers on Pixelate, Blockify and Block Mosaic; each effect page adds its own limits.
+Notes for developers on Pixelate, Blockify, Block Mosaic, Quadtree Zoom and Voronoi; each effect page adds its own limits.
 
 - **Cell grid.** Pixel Size, Block Size, Tile Size and Grout Width are pixels of a 1080p frame,
   rounded to whole rendered pixels, so preview, export and 4K show the same blocks relative to the
@@ -3242,7 +3243,26 @@ Notes for developers on Pixelate, Blockify and Block Mosaic; each effect page ad
 - **Software preview and export.** Without WebGPU, Pixelate runs as a hand-written pass that averages
   every cell exactly, within 1/255 of the graph; Blockify, Block Mosaic and edited graphs run
   through the graph interpreter, which is slower.
-- **Code.** The recipes live in `src/services/operators/cellGridRecipes.ts`. More:
+- **Quadtree Zoom** (2026-10-22). Minimum Cell is scaled by the shorter frame side over 1080 before
+  the partition (Cell Size & Split folder); the partition still rounds it and keeps at least 2
+  rendered pixels, which the card reports. The tile colour mixes from the pixel's own colour to the
+  centre sample by the centre's alpha, so a transparent centre no longer paints opaque pixels black;
+  the original alpha is kept. Amount is clamped to 0–1 and reported. The pulse follows timeline time
+  (`timelineAnimated`, no continuous render while paused). Compute-image recipes with a presentation
+  plan now open in stage folders (`effectGraphOwner.ts` calls `organizeEffectFamilyGraph`).
+  The split also tests a 4 x 4 grid inside the block when the legacy five pixels (corners, centre)
+  find no detail (`imageOperatorQuadtreeWgsl.ts`, CPU oracle `imageQuadtreePartitionSemantics.ts`,
+  legacy `compute.wgsl` kept in parity, including the 1080p Minimum Cell, the centre-alpha colour and the Amount clamp; `image-graph-probe.html?suite=compute-quadtree`): blocks only ever split further, so a figure between the
+  corners no longer vanishes into a large block.
+- **Voronoi** (2026-10-22). Cell Size is scaled by the shorter frame side over 1080 inside the
+  fixed seed pass (`voronoiSeedCompute`, at least 4 such pixels and 2 rendered ones), and each seed
+  is clamped to the pixels of its own cell, so a fractional cell size cannot drop a cell. The cell
+  colour mixes from the pixel's own colour to the seed sample by the seed's alpha, Amount is
+  clamped to 0–1 (both in the graph and the legacy resolve, reported in the card), the seeds drift
+  with timeline time (`timelineAnimated`), and the shared compute schema's Threshold, which the
+  resolve never read, is retired (`deprecated`). The recipe opens in four stage folders.
+- **Code.** The recipes live in `src/services/operators/cellGridRecipes.ts` (Quadtree Zoom:
+  `quadtreeEffectGraph.ts`; Voronoi: `voronoiEffectGraph.ts`). More:
   [Effect system: editable mirror, split and pixel graphs](./Effect-System.md#editable-mirror-split-and-pixel-graphs),
   [Node Catalog](./Node-Catalog.md) and [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 

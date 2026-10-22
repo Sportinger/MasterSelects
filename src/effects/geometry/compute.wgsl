@@ -46,16 +46,33 @@ fn blockVariance(origin: vec2i, size: i32) -> f32 {
     + (e - mean) * (e - mean)) / 5.0;
 }
 
+// The 4 x 4 grid test of the partition graph (imageOperatorQuadtreeWgsl.ts), kept in parity.
+fn blockGridVariance(origin: vec2i, size: i32) -> f32 {
+  var tones: array<f32, 16>;
+  var sum = 0.0;
+  for (var index = 0; index < 16; index += 1) {
+    let cell = vec2i(index % 4, index / 4);
+    tones[index] = tonePixel(origin + ((cell * 2 + vec2i(1)) * size) / 8);
+    sum += tones[index];
+  }
+  let mean = sum / 16.0;
+  var squares = 0.0;
+  for (var index = 0; index < 16; index += 1) { squares += (tones[index] - mean) * (tones[index] - mean); }
+  return squares / 16.0;
+}
+
 @compute @workgroup_size(8, 8)
 fn quadtreeZoomCompute(@builtin(global_invocation_id) invocation: vec3u) {
   if (invocation.x >= u32(params.resolution.x) || invocation.y >= u32(params.resolution.y)) { return; }
   let pixel = vec2i(invocation.xy);
-  let minimumSize = max(2, i32(round(params.scale)));
+  // Minimum Cell counts pixels of a 1080p frame, as in the graph's Cell Size folder.
+  let minimumSize = max(2, i32(round(params.scale * min(params.resolution.x, params.resolution.y) / 1080.0)));
   let pulse = 0.82 + 0.18 * sin(params.time * params.speed * 2.0);
   var blockSize = minimumSize * 32;
   for (var level = 0; level < 6; level += 1) {
     let origin = (pixel / blockSize) * blockSize;
-    if (blockSize <= minimumSize || blockVariance(origin, blockSize) <= params.threshold * pulse) { break; }
+    if (blockSize <= minimumSize || (blockVariance(origin, blockSize) <= params.threshold * pulse
+      && blockGridVariance(origin, blockSize) <= params.threshold * pulse)) { break; }
     blockSize = max(minimumSize, blockSize / 2);
   }
   let origin = (pixel / blockSize) * blockSize;
@@ -63,9 +80,11 @@ fn quadtreeZoomCompute(@builtin(global_invocation_id) invocation: vec3u) {
   let sampled = loadClamped(center);
   let local = pixel - origin;
   let border = select(0.0, 1.0, local.x == 0 || local.y == 0);
-  let styled = sampled.rgb * (0.82 + 0.18 * border);
   let original = loadClamped(pixel);
-  textureStore(outputTex, pixel, vec4f(mix(original.rgb, styled, params.amount), original.a));
+  // A transparent centre keeps the pixel's own colour (the graph's Cell Colour folder).
+  let cellColor = mix(original.rgb, sampled.rgb, sampled.a);
+  let styled = cellColor * (0.82 + 0.18 * border);
+  textureStore(outputTex, pixel, vec4f(mix(original.rgb, styled, clamp(params.amount, 0.0, 1.0)), original.a));
 }
 
 fn edgePosition(a: f32, b: f32) -> f32 {
@@ -137,11 +156,17 @@ struct JumpStep {
 fn voronoiSeedCompute(@builtin(global_invocation_id) invocation: vec3u) {
   if (invocation.x >= u32(params.resolution.x) || invocation.y >= u32(params.resolution.y)) { return; }
   let pixel = vec2i(invocation.xy);
-  let cellSize = max(4.0, params.scale);
+  // Cell Size counts pixels of a 1080p frame (cellGridParams.cellPixelScale), so preview quality, 4K and export
+  // show the same cells; at least 4 such pixels and never below 2 rendered pixels.
+  let cellSize = max(2.0, max(4.0, params.scale) * min(params.resolution.x, params.resolution.y) / 1080.0);
   let cell = floor(vec2f(pixel) / cellSize);
   let jitter = random2(cell);
   let motion = 0.14 * sin(params.time * params.speed + jitter * 6.2831853);
-  let seed = vec2i(clamp((cell + clamp(jitter + motion, vec2f(0.08), vec2f(0.92))) * cellSize, vec2f(0.0), params.resolution - 1.0));
+  // The seed stays on a pixel of its own cell, so a fractional cell size cannot lose a cell to its neighbour.
+  let cellFirst = ceil(cell * cellSize);
+  let cellLast = ceil((cell + 1.0) * cellSize) - 1.0;
+  let seedRaw = floor((cell + clamp(jitter + motion, vec2f(0.08), vec2f(0.92))) * cellSize);
+  let seed = vec2i(clamp(clamp(seedRaw, cellFirst, cellLast), vec2f(0.0), params.resolution - 1.0));
   let value = select(vec4f(-1.0), vec4f(vec2f(seed), 1.0, 0.0), all(pixel == seed));
   textureStore(seedOutput, pixel, value);
 }
@@ -182,6 +207,8 @@ fn voronoiResolveCompute(@builtin(global_invocation_id) invocation: vec3u) {
   let sampled = loadClamped(sourcePixel);
   let original = loadClamped(pixel);
   let border = select(0.0, 1.0, any(abs(seed.xy - rightSeed.xy) > vec2f(0.5)) || any(abs(seed.xy - downSeed.xy) > vec2f(0.5)));
-  let styled = sampled.rgb * (0.82 + 0.18 * border);
-  textureStore(outputTex, pixel, vec4f(mix(original.rgb, styled, params.amount), original.a));
+  // Parity with voronoiEffectGraph: a transparent seed leaves the pixel its own colour; Amount stays in 0..1.
+  let cellColor = mix(original.rgb, sampled.rgb, sampled.a);
+  let styled = cellColor * (0.82 + 0.18 * border);
+  textureStore(outputTex, pixel, vec4f(mix(original.rgb, styled, clamp(params.amount, 0.0, 1.0)), original.a));
 }

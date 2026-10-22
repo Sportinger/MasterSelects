@@ -28,6 +28,59 @@
       ],
       "top": "card",
       "layout": "float"
+    },
+    {
+      "name": "blockify-inspector",
+      "effect": "blockify",
+      "params": { "scale": 20, "levels": 4, "dither": 0.75 },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Blockify card: Preset menu showing Arcade, then Block Size 20 px, Levels 4, Dither 0.75 and Amount 1, beside a strip of the preview with the dancer in chunky blocks",
+      "caption": "Blockify with the Arcade preset. 1 — Preset: pick a starting point. 2 — Block Size. 3 — Levels: shades per colour. 4 — Dither. 5 — Amount.",
+      "marks": [
+        { "target": "Preset", "label": "Preset" },
+        { "target": "Block Size", "label": "Block Size" },
+        { "target": "Levels", "label": "Levels" },
+        { "target": "Dither", "label": "Dither" },
+        { "target": "Amount", "label": "Amount" }
+      ],
+      "hide": ["Particle Out"]
+    },
+    {
+      "name": "quadtree-zoom-inspector",
+      "effect": "quadtree-zoom",
+      "params": { "scale": 16, "threshold": 0.015, "amount": 1, "speed": 0 },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Quadtree Zoom card: Preset menu showing Big Tiles, then Minimum Cell 16 px, Detail Threshold 0.015, Amount 1 and Speed 0, beside a strip of the preview with the harbour rebuilt from chunky tiles, large over the sky and smaller over the houses",
+      "caption": "Quadtree Zoom with the Big Tiles preset. 1 — Preset: pick a starting point. 2 — Minimum Cell. 3 — Detail Threshold. 4 — Amount. 5 — Speed.",
+      "marks": [
+        { "target": "Preset", "label": "Preset" },
+        { "target": "Minimum Cell", "label": "Minimum Cell" },
+        { "target": "Detail Threshold", "label": "Detail Threshold" },
+        { "target": "Amount", "label": "Amount" },
+        { "target": "Speed", "label": "Speed" }
+      ],
+      "hide": ["Particle Out"]
+    },
+    {
+      "name": "voronoi-inspector",
+      "effect": "voronoi",
+      "params": { "scale": 40, "amount": 1, "speed": 0 },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Voronoi card: Preset menu showing Stained Glass, then Cell Size 40 px, Amount 1 and Speed 0, beside a strip of the preview with the harbour broken into irregular cells of flat colour",
+      "caption": "Voronoi with the Stained Glass preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Amount. 4 — Speed.",
+      "marks": [
+        { "target": "Preset", "label": "Preset" },
+        { "target": "Cell Size", "label": "Cell Size" },
+        { "target": "Amount", "label": "Amount" },
+        { "target": "Speed", "label": "Speed" }
+      ],
+      "hide": ["Particle Out"]
     }
   ]
 }

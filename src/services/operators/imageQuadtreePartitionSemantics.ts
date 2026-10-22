@@ -10,9 +10,9 @@ const add = (a: number, b: number) => f(f(a) + f(b));
 const subtract = (a: number, b: number) => f(f(a) - f(b));
 const multiply = (a: number, b: number) => f(f(a) * f(b));
 
-/** Pure CPU reference for the legacy six-level Quadtree Zoom partition.
- * Keep the five loads and variance arithmetic in source order: this is the
- * parity oracle for the future scoped Image IR lowering, not a faster solver. */
+/** Pure CPU reference for the six-level Quadtree Zoom partition.
+ * Keep the five legacy loads, then the 4 x 4 grid test (only when the five find no detail), and the
+ * variance arithmetic in source order: this is the parity oracle for the scoped Image IR lowering. */
 export function partitionImageQuadtree(options: {
   pixel: QuadtreePixel;
   resolution: QuadtreePixel;
@@ -65,10 +65,23 @@ export function partitionImageQuadtree(options: {
     const square = (value: number) => multiply(subtract(value, mean), subtract(value, mean));
     return f(add(add(add(add(square(a), square(b)), square(c)), square(d)), square(e)) / f(5));
   };
+  // The 4 x 4 grid at 1/8, 3/8, 5/8 and 7/8 of the block catches a figure between the corners and the centre.
+  const gridVariance = (originX: number, originY: number, size: number) => {
+    const tones: number[] = [];
+    let sum = 0;
+    for (let index = 0; index < 16; index++) {
+      const tone = loadTone(originX + Math.trunc(((index % 4) * 2 + 1) * size / 8), originY + Math.trunc((Math.trunc(index / 4) * 2 + 1) * size / 8));
+      tones.push(tone); sum = add(sum, tone);
+    }
+    const mean = f(sum / f(16));
+    let squares = 0;
+    for (const tone of tones) squares = add(squares, multiply(subtract(tone, mean), subtract(tone, mean)));
+    return f(squares / f(16));
+  };
   for (let level = 0; level < 6; level++) {
     const originX = Math.trunc(pixelX / blockSize) * blockSize;
     const originY = Math.trunc(pixelY / blockSize) * blockSize;
-    if (blockSize <= minimumSize || variance(originX, originY, blockSize) <= limit) break;
+    if (blockSize <= minimumSize || variance(originX, originY, blockSize) <= limit && gridVariance(originX, originY, blockSize) <= limit) break;
     blockSize = Math.max(minimumSize, Math.trunc(blockSize / 2));
   }
   return { origin: [Math.trunc(pixelX / blockSize) * blockSize, Math.trunc(pixelY / blockSize) * blockSize], size: blockSize };

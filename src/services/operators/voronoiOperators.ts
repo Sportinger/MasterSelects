@@ -1,4 +1,4 @@
-import { createComputeEffectParameterSchema } from '../../effects/geometry/computeEffectFactory';
+import { createComputeEffectParameterSchema, VORONOI_CELL_SIZE_PARAM } from '../../effects/geometry/computeEffectFactory';
 import type { EffectParam } from '../../effects/types';
 import type { OperatorDefinition, OperatorParameter, OperatorPort } from '../../types/operatorGraph';
 
@@ -11,7 +11,7 @@ const numberParameter = (id: 'scale' | 'speed', spec: EffectParam): OperatorPara
   return { id, label: spec.label, type: 'number', default: spec.default, min: spec.min, max: spec.max,
     step: spec.step, animatable: spec.animatable };
 };
-const schema = createComputeEffectParameterSchema({ animated: true });
+const schema = createComputeEffectParameterSchema({ animated: true, params: { scale: VORONOI_CELL_SIZE_PARAM } });
 
 export const VORONOI_OPERATORS: readonly OperatorDefinition[] = [
   {

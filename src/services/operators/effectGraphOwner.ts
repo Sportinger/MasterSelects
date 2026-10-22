@@ -175,7 +175,9 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const fallback = effect.type === 'voronoi' ? createDefaultVoronoiGraph
       : effect.type === 'pixel-sort' ? createDefaultPixelSortGraph
         : effect.type === 'quadtree-zoom' ? createDefaultQuadtreeGraph : createDefaultContourGraph;
-    const graph = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
+    const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
+    // An untouched recipe with a presentation plan (Quadtree Zoom) opens in its stage folders.
+    const graph = organizeEffectFamilyGraph(saved, saved, effect.type, fallback);
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
     if (!graph.incomplete) compileComputeImageGraph(graph, effectOperatorParams(effect), effectOperatorCompileContext(effect));
