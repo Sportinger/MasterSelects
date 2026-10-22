@@ -28,8 +28,16 @@ export function organizeFisheyeGraph(source: EffectOperatorGraph): EffectOperato
     owner.nodeIds = owner.nodeIds.filter(id => !nodeIds.includes(id));
     groups.push({ id: `fisheye-${id}`, label, color: owner.color, parentId: owner.id, nodeIds, collapsedByDefault: true });
   };
-  section('parameters', 'constants', 'Lens Constants', source.nodes.filter(node =>
+  // Literal numbers and the frame size get the top-level Constants and Coordinates & Resources folders every
+  // organized effect has, so Fisheye Parameters holds only the controls (and a graph overview can fold them away).
+  const topLevel = (id: string, label: string, members: string[]) => {
+    const owner = area('parameters'), nodeIds = owner.nodeIds.filter(id => members.includes(id));
+    owner.nodeIds = owner.nodeIds.filter(id => !nodeIds.includes(id));
+    groups.push({ id: `fisheye-${id}`, label, color: owner.color, nodeIds, collapsedByDefault: true });
+  };
+  topLevel('constants', 'Constants', source.nodes.filter(node =>
     node.operator === 'values.number' && node.constants && area('parameters').nodeIds.includes(node.id)).map(node => node.id));
+  topLevel('sources', 'Coordinates & Resources', ['resolution', 'resolution-split']);
   section('aa', 'jitter-pattern', 'Eight Sample Offsets', area('aa').nodeIds.filter(id => /^jitter-(?:\d|threshold|before|select)/.test(id)));
   section('lens', 'lens-coordinates', 'Image to Lens Coordinates', [
     'center', 'centered-uv', 'aspect-scale', 'aspect-delta', 'aspect-select', 'negative-rotation', 'lens-rotate-in',

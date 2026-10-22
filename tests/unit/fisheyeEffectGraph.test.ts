@@ -36,7 +36,7 @@ describe('Fisheye image operator graph ownership', () => {
     const params = effectOperatorParams({ type: 'fisheye', params: {
       fieldOfView: 999, rotation: -999, samples: 6, projection: 'invalid', customBinding: 17,
     } });
-    expect(params).toMatchObject({ ...defaults, fieldOfView: 175, rotation: -180, samples: 4, projection: 'equidistant', customBinding: 17 });
+    expect(params).toMatchObject({ ...defaults, fieldOfView: 175, rotation: -180, samples: 6, projection: 'equidistant', customBinding: 17 });
   });
 
   it('retains persisted edits instead of replacing them with the default graph', () => {

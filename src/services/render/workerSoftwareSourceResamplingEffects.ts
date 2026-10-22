@@ -4,6 +4,7 @@ import {
   directionalBlurPlan, directionalBlurStreakPx, fillCoveredCellTaps, type DirectionalBlurPlan, type DirectionalBlurType,
 } from '../../effects/blur/blurSampling';
 import { Logger } from '../logger';
+import { FISHEYE_SAMPLE_OFFSETS } from '../../effects/distort/fisheye/sampleOffsets';
 import { applyWorkerSoftwareUvDistort } from './workerSoftwareUvDistortEffects';
 
 function clampIndex(value: number, maxExclusive: number): number {
@@ -325,10 +326,6 @@ function renderFisheyeSample(
   return mixRgba(outside, lensColor, coverage);
 }
 
-const FISHEYE_JITTER: readonly (readonly [number, number])[] = [
-  [-0.375, -0.125], [0.125, -0.375], [0.375, 0.125], [-0.125, 0.375],
-  [-0.4375, 0.3125], [-0.3125, -0.4375], [0.4375, -0.3125], [0.3125, 0.4375],
-];
 
 function applyFisheyeAdjustment(
   sourceData: Uint8ClampedArray,
@@ -346,7 +343,7 @@ function applyFisheyeAdjustment(
   let blue = 0;
   let alpha = 0;
   for (let index = 0; index < adjustment.samples; index += 1) {
-    const jitter = FISHEYE_JITTER[index];
+    const jitter = FISHEYE_SAMPLE_OFFSETS[index];
     const sample = renderFisheyeSample(
       sourceData,
       width,

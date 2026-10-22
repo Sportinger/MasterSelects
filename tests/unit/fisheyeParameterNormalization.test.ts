@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fisheye, FISHEYE_PARAMS, normalizeFisheyeParameters } from '../../src/effects/distort/fisheye';
+import { fisheyeParameterWarnings } from '../../src/effects/distort/fisheye/normalization';
+import { FISHEYE_SAMPLE_OFFSETS } from '../../src/effects/distort/fisheye/sampleOffsets';
 
 describe('Fisheye parameter normalization', () => {
   it('retains the legacy 24-slot packing order and degree conversion', () => {
@@ -22,10 +24,26 @@ describe('Fisheye parameter normalization', () => {
     expect(fisheye.params).toBe(FISHEYE_PARAMS);
   });
 
-  it.each([[undefined, 1], ['bad', 1], [3.999, 1], ['4', 4], [7.999, 4], ['8', 8], [99, 8]] as const)(
-    'preserves legacy sample threshold coercion for %s', (samples, expected) => {
+  it.each([[undefined, 1], ['bad', 1], [0, 1], [2, 2], [3, 3], ['4', 4], [5, 5], [6.4, 6], [7, 7], ['8', 8], [99, 8]] as const)(
+    'renders every whole Edge Sampling count from 1 to 8 (%s gives %s)', (samples, expected) => {
       expect(normalizeFisheyeParameters({ samples }).samples).toBe(expected);
+      expect(fisheye.packUniforms({ samples }, 16, 9)[17]).toBe(expected);
     });
+
+  it('names an Edge Sampling value it rounds or caps, and accepts every whole count', () => {
+    for (const samples of [1, 2, 3, 4, 5, 6, 7, 8]) expect(fisheyeParameterWarnings({ samples })).toEqual([]);
+    expect(fisheyeParameterWarnings({ samples: 6.4 })).toEqual(['samples: 6.4 is not a whole number from 1 to 8; using 6.']);
+    expect(fisheyeParameterWarnings({ samples: 99 })).toEqual(['samples: 99 is not a whole number from 1 to 8; using 8.']);
+  });
+
+  it('orders the sample offsets in opposite pairs, so every even count is centred on the pixel', () => {
+    for (const count of [2, 4, 6, 8]) {
+      const used = FISHEYE_SAMPLE_OFFSETS.slice(0, count);
+      expect(used.reduce((sum, [x]) => sum + x, 0)).toBeCloseTo(0, 12);
+      expect(used.reduce((sum, [, y]) => sum + y, 0)).toBeCloseTo(0, 12);
+    }
+    expect(new Set(FISHEYE_SAMPLE_OFFSETS.map(offset => offset.join())).size).toBe(8);
+  });
 
   it('keeps preserveAspect false-only and validates choices against schema defaults', () => {
     expect(normalizeFisheyeParameters({ preserveAspect: false }).preserveAspect).toBe(false);

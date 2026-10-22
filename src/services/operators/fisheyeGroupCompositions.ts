@@ -16,11 +16,12 @@ const outputPort = (nodeId: string, portId: string): OperatorPort => {
 };
 
 /** Reuse the executable formulas. Only boundary signals become sockets; literals stay inside.
- * Parameter folders are deliberately excluded: their bindings belong to the original effect.
+ * Parameter, Constants and Coordinates & Resources folders are deliberately excluded: their bindings
+ * belong to the original effect, and the frame size and literals are no processing step.
  * These v1 definitions must retain their port/formula contract when the source graph changes.
  */
 export const FISHEYE_GROUP_COMPOSITIONS: readonly OperatorDefinition[] = source.groups!
-  .filter(group => !['fisheye-parameters', 'fisheye-constants'].includes(group.id))
+  .filter(group => !['fisheye-parameters', 'fisheye-constants', 'fisheye-sources'].includes(group.id))
   .map(group => {
     const descendants = (id: string): string[] => source.groups!.filter(child => child.parentId === id)
       .flatMap(child => [...child.nodeIds, ...descendants(child.id)]);

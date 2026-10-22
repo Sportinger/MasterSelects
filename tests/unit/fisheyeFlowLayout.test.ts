@@ -17,7 +17,7 @@ describe('Fisheye dynamic hierarchy layout', () => {
     const clip = fixture(), all = project(clip, true);
     clip.nodeGraph = { version: 1, nodes: [], groups: Object.fromEntries(all.groups!.map(group => [group.id, { collapsed: group.id !== 'effect:f' }])) };
     const compact = project(clip);
-    expect(compact.nodes).toHaveLength(10);
+    expect(compact.nodes).toHaveLength(12);
     for (const area of all.groups!.filter(group => group.parentId === 'effect:f')) {
       const proxy = compact.nodes.find(node => node.id === area.proxyId)!;
       const ids = new Set(area.nodeIds);

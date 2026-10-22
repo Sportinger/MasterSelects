@@ -1,3 +1,4 @@
+import { FISHEYE_SAMPLE_OFFSETS } from '../../effects/distort/fisheye/sampleOffsets';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge, OperatorGroup, OperatorValue } from '../../types/operatorGraph';
 
 interface Ref { node: string; port: string }
@@ -101,9 +102,9 @@ export function createDefaultFisheyeGraph(): EffectOperatorGraph {
   const rotation = g.unary('rotation-radians', 'convert.degrees-to-radians.scalar', rotationDegrees, 1, 'lens');
   const aspect = g.binary('frame-aspect', 'math.divide-ieee.scalar', width, height, 1, 'lens');
 
-  // Fixed eight-position AA pattern, selected from the lexical sequence index.
+  // Fixed eight-position AA pattern (FISHEYE_SAMPLE_OFFSETS), selected from the lexical sequence index.
   const sequence = g.node('aa-sequence', 'image.sequence-index', 2, 'aa'), sequenceIndex = { node: sequence.node, port: 'index' };
-  const offsets = [[-.375, -.125], [.125, -.375], [.375, .125], [-.125, .375], [-.4375, .3125], [-.3125, -.4375], [.4375, -.3125], [.3125, .4375]]
+  const offsets = FISHEYE_SAMPLE_OFFSETS
     .map(([x, y], index) => g.vec2(`jitter-${index}`, g.scalar(`jitter-${index}-x`, x, 1, 'aa'), g.scalar(`jitter-${index}-y`, y, 1, 'aa'), 2, 'aa'));
   let jitter = offsets[7];
   for (let index = 6; index >= 0; index--) {

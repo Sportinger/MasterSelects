@@ -38,12 +38,12 @@ describe('distort effects report values they clamp or cannot show', () => {
   });
 
   it('names clamped Fisheye values instead of normalizing them silently', () => {
-    expect(fisheyeParameterWarnings({ strength: 3, fieldOfView: 140, samples: 5, edgeMode: 'wrap' })).toEqual([
+    expect(fisheyeParameterWarnings({ strength: 3, fieldOfView: 140, samples: 12, edgeMode: 'wrap' })).toEqual([
       'strength: 3 is outside -1..1; using 1.',
       'edgeMode: "wrap" is not an option; using transparent.',
-      'samples: 5 is not 1, 4 or 8; using 4.',
+      'samples: 12 is not a whole number from 1 to 8; using 8.',
     ]);
-    expect(fisheyeParameterWarnings({ strength: -.5, samples: 8 })).toEqual([]);
+    expect(fisheyeParameterWarnings({ strength: -.5, samples: 5 })).toEqual([]);
   });
   it('names unknown Shape and Frame Edges choices instead of falling back silently', async () => {
     const warnings = (type: string, params: Record<string, string | number>) => (getEffect(type) as EffectDefinition).paramWarnings!(params);

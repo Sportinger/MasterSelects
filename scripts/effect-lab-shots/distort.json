@@ -51,6 +51,23 @@
       },
       "alt": "The rainy night street photographed with the camera tilted up, original left and with Guided Perspective right: on the left the house edges on both sides lean in towards the top; on the right they stand upright and parallel, and the picture is enlarged so it still fills the frame",
       "caption": "Left: a photo taken with the camera tilted up. Right: two vertical guides along the house edges, with the Fill Frame preset."
+    },
+    {
+      "name": "fisheye",
+      "out": "docs/Features/assets/effects/fisheye.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "compare",
+      "outWidth": 1600,
+      "maxBytes": 190000,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "fisheye"
+      },
+      "alt": "The rainy night street with neon signs, original left and with Fisheye Lens right: on the right the walker with the umbrella in the middle comes much closer and the shop fronts at both sides bend round towards the edges, as through an ultra-wide fisheye lens, while the corners stay where they were",
+      "caption": "Left: original. Right: the default settings."
     }
   ],
   "strips": [
@@ -92,6 +109,21 @@
         "matrix8": 1.203914
       },
       "note": "params: the guides and correction drawn on the tilted street, under every preset (presets keep the drawn guides)."
+    },
+    {
+      "effect": "fisheye",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "cellWidth": 480,
+      "columns": 3,
+      "backdrop": "#3c6ec8",
+      "note": "Blue: the transparent outside of Peephole."
     }
   ]
 }

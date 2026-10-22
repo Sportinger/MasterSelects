@@ -142,16 +142,18 @@ fn renderFisheyeSample(outputUv: vec2f) -> vec4f {
   return mix(outsideColor, lensColor, lensCoverage(radius));
 }
 
+// FISHEYE_SAMPLE_OFFSETS (sampleOffsets.ts): opposite offsets follow each other, so every even
+// count is centred on the pixel; one sample reads the centre.
 fn sampleJitter(index: u32, count: u32) -> vec2f {
   if (count <= 1u) { return vec2f(0.0); }
   switch index {
     case 0u: { return vec2f(-0.375, -0.125); }
-    case 1u: { return vec2f(0.125, -0.375); }
-    case 2u: { return vec2f(0.375, 0.125); }
+    case 1u: { return vec2f(0.375, 0.125); }
+    case 2u: { return vec2f(0.125, -0.375); }
     case 3u: { return vec2f(-0.125, 0.375); }
     case 4u: { return vec2f(-0.4375, 0.3125); }
-    case 5u: { return vec2f(-0.3125, -0.4375); }
-    case 6u: { return vec2f(0.4375, -0.3125); }
+    case 5u: { return vec2f(0.4375, -0.3125); }
+    case 6u: { return vec2f(-0.3125, -0.4375); }
     default: { return vec2f(0.3125, 0.4375); }
   }
 }

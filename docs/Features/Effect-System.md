@@ -1760,9 +1760,11 @@ service ownership, other consumers and migration candidates.
 correction with equidistant, equisolid-angle, stereographic, and orthographic
 projection models. Lens strength, field of view, curve bias, radius, center,
 zoom, anamorphic squeeze, rotation, edge behavior, feathering, chromatic
-aberration, vignette, and 1/4/8-sample quality are configurable and keyframeable
+aberration, vignette, and 1 to 8 samples per pixel are configurable and keyframeable
 where applicable. The WebGPU shader and worker-software export path implement
-the same parameter contract.
+the same parameter contract. The card uses the shared Resolve rows with short labels
+(Squeeze, Round Lens, Color Fringe, Softness; keys and stored values unchanged) and
+offers five presets: Wide Angle, Skate Fisheye, Crystal Ball, Peephole and Flatten Fisheye.
 
 Fisheye's default image graph is editable rather than an opaque distortion
 node. It exposes AA jitter, lens projection, edge policy, chromatic sampling,
@@ -1771,8 +1773,13 @@ Persisted edits therefore change preview and export execution, not merely the
 workspace diagram. Each sample is premultiplied as it is read and the averaged
 result is unpremultiplied, so lens and frame feathering, the outside mix and edge
 sampling lower coverage instead of darkening colour; the worker CPU path does the
-same. Untouched saved graphs of the earlier straight-alpha recipe (recognized by a
-frozen recipe fingerprint) load as the current recipe; edited graphs stay as saved.
+same. Untouched saved graphs of the earlier straight-alpha recipe and of the recipe
+whose eight sample offsets ran round the pixel (each recognized by a frozen recipe
+fingerprint) load as the current recipe; edited graphs stay as saved. The offsets
+(`sampleOffsets.ts`) come in opposite pairs, so every even count is centred on the
+pixel and every count from 1 to 8 adds samples. The presentation files the literal
+numbers under a top-level Constants folder and the frame size under Coordinates &
+Resources, like the other organized effects, so Fisheye Parameters holds only the controls.
 
 Image effects reuse a bounded cache of validated graphs and compiled CPU render
 plans across playback, inline rendering, previews and worker-software export.
@@ -1792,7 +1799,8 @@ in `0.25..4`, Center X/Y are `0.5` in `0..1`, and Rotation is `0` in
 defaults to `transparent` (also `clamp`, `mirror`, `repeat`), and Edge Feather
 is `0.005` in `0..0.1`. Chromatic Aberration is `0` in `0..0.05`, Vignette is
 `0` in `0..1`, Vignette Softness is `0.25` in `0.01..1`, and Samples defaults
-to `4` in `1..8`, normalized to the supported 1/4/8 quality levels. Numeric
+to `4` in `1..8`, rounded to a whole count (a rounded or capped value is named in
+the card and the tool result). Numeric
 bindings keep their existing keyframe IDs.
 
 Image graphs have an image-specific structural ceiling of 512 nodes and 2048
