@@ -38,6 +38,19 @@ export const EFFECT_DOC_EXTRAS = {
   // A current Sharpen's card has only these rows: its own control (a note with Use the new Sharpen)
   // shows on Sharpens saved with 3.2.7 alone, and the page's Saved projects note describes it.
   sharpen: { rows: ['amount', 'radius'] },
+  // Lens Correction's own card (LensCorrectionControls): Framing is a menu for Fit Entire Photo at the top of
+  // Geometry, the Vignette Correction switch sits in the Vignette header, and the lens rows show their units.
+  'lens-correction': {
+    sectionLabels: { Profile: 'Lens profile' },
+    rows: [
+      { key: 'focalLength', range: '24 to 105 mm', default: '24 mm', before: 'aperture' },
+      { key: 'aperture', range: 'f/4 to f/22', default: 'f/4' },
+      { key: 'focusDistance', range: '0.45 to 1000 m', default: '1000 m', before: 'cropFactor' },
+      { key: 'cropFactor', range: '1× to 2×', default: '1×' },
+      { key: 'fitFullImage', label: 'Framing', range: 'Original size or Fit entire photo', default: 'Original size', before: 'distortion' },
+      { key: 'vignetteEnabled', range: 'On or off', before: 'vignette' },
+    ],
+  },
   'ai-edge-fill': {
     rows: [
       'resolution',

@@ -1,0 +1,41 @@
+{
+  "about": "Stills of the Lens & Distort pages (docs/Features/effects/<id>.md): compare pairs and preset strips. Make them with node scripts/docs-media.mjs <effect id>.",
+  "pairs": [
+    {
+      "name": "lens-correction",
+      "out": "docs/Features/assets/effects/lens-correction.webp",
+      "image": "neon_rain_street_barrel",
+      "width": 1920,
+      "layout": "compare",
+      "outWidth": 1600,
+      "maxBytes": 190000,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "lens-correction",
+        "params": {
+          "distortion": -28,
+          "scale": 120
+        }
+      },
+      "alt": "The rainy night street as a strong wide-angle lens bends it, original left and with Lens Correction right: on the left the shop fronts at both edges bow outward like a barrel; on the right they stand straight and upright, the street runs straight to the vanishing point and the picture is slightly enlarged",
+      "caption": "Left: a shot from a strong wide-angle lens. Right: Distortion −28, Scale 120 (the Action Cam preset)."
+    }
+  ],
+  "strips": [
+    {
+      "effect": "lens-correction",
+      "image": "neon_rain_street_barrel",
+      "width": 1920,
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "cellWidth": 480,
+      "backdrop": "#3c6ec8"
+    }
+  ]
+}

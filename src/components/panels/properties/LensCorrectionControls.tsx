@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { EffectControlProps } from '../../../effects/types';
 import { LENS_CORRECTION_PARAMS, normalizeLensCorrection } from '../../../effects/distort/lens-correction';
 import { CANON_24_105_PROFILE, LENS_PROFILE_OPTIONS } from '../../../effects/distort/lens-correction/lensProfile';
@@ -12,16 +12,17 @@ import { EffectKeyframeToggle } from './shared';
 
 export function LensCorrectionControls({ params, onChange, clipId, effectInstanceId }: EffectControlProps) {
   const file = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.file);
-  const [metadata, setMetadata] = useState<RawPhotoMetadata>();
-  const [metadataError, setMetadataError] = useState(false);
+  // Metadata belongs to the file it was read from, so a new file shows nothing until its own read ends.
+  const [loaded, setLoaded] = useState<{ file: typeof file; metadata?: RawPhotoMetadata; error?: boolean }>();
+  const metadata = loaded?.file === file ? loaded?.metadata : undefined;
+  const metadataError = loaded?.file === file && loaded?.error === true;
   const latest = useRef({ params, onChange });
-  latest.current = { params, onChange };
+  useEffect(() => { latest.current = { params, onChange }; });
   useEffect(() => {
     let current = true;
-    setMetadata(undefined); setMetadataError(false);
     if (file && isRawImageFile(file)) void getRawPhotoMetadata(file).then(value => {
-      if (current) setMetadata(value);
-    }).catch(() => { if (current) setMetadataError(true); });
+      if (current) setLoaded({ file, metadata: value });
+    }).catch(() => { if (current) setLoaded({ file, error: true }); });
     return () => { current = false; };
   }, [file]);
   const p = normalizeLensCorrection(params);
@@ -48,7 +49,12 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
       onChange={value => change(key, value)}
       keyframeToggle={clipId && effectInstanceId && def.animatable
         ? <EffectKeyframeToggle clipId={clipId} effectId={effectInstanceId} paramName={key} value={p[key]} /> : undefined} />);
-  return <div className="effects-tab transform-tab-compact">
+  // Pointer activation must not leave a focus ring on selects or buttons (keyboard focus stays visible).
+  const blurPointerFocus = (event: PointerEvent) => {
+    if (event.target instanceof Element) event.target.closest<HTMLElement>('button, select')?.blur();
+  };
+  // The shared effect-section layout (as Chroma Key): rows keep label, slider and value on one line in the card.
+  return <div className="effects-tab effect-sections" onPointerUp={blurPointerFocus}>
     <ResolveInspectorSection title="Lens profile" indicator="none">
       <ResolveInspectorRow label="Lens"><InspectorSelect ariaLabel="Lens profile" value={profile}
         options={LENS_PROFILE_OPTIONS} onChange={selectProfile} /></ResolveInspectorRow>

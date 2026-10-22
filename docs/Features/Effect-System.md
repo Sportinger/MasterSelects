@@ -2450,19 +2450,19 @@ Camera Raw/LCP compatibility or a claim of matching Photoshop's output. Profile
 selection and numeric settings persist in project data and participate in undo;
 numeric controls support keyframes. Manual adjustments below are added on top.
 
-- **Geometry:** Remove Distortion controls radial barrel/pincushion correction;
+- **Geometry:** Distortion controls radial barrel/pincushion correction;
   negative values sample inward to correct barrel distortion, positive values
   correct pincushion distortion. Fine Distortion adds a fourth-order adjustment.
-  Scale zooms to crop uncovered borders; Optical Center X/Y moves the lens center.
-- **Chromatic aberration:** Red/Cyan Fringe and Blue/Yellow Fringe independently
+  Scale zooms to crop uncovered borders; Center X/Y moves the lens center.
+- **Chromatic aberration:** Red/Cyan and Blue/Yellow independently
   scale the red and blue channels around the optical center.
 - **Vignette:** Positive Amount lifts dark corners, negative Amount darkens them;
   Midpoint controls where the falloff starts.
 
 The default is an identity transform. Uncovered borders are transparent, and
 corrections are nondestructive, saved with the effect, and applied during export.
-Barrel correction strong enough to fold the outer picture back on itself (Remove
-Distortion below about −33, Fine Distortion below about −20, or less together with
+Barrel correction strong enough to fold the outer picture back on itself
+(Distortion below about −33, Fine Distortion below about −20, or less together with
 a profile) stops at the fold: pixels beyond it stay transparent, and the inspector
 and tool results say so. The fringe channels repeat the border pixel instead of
 turning black, so no coloured line runs along the frame.
@@ -2471,15 +2471,16 @@ not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed
 in [Third-party notices](../../THIRD_PARTY_NOTICES.md#lensfun-lens-calibration-data).
 
 The **Vignette** section of Lens Correction has its own enable switch. Bypassing
-it disables both calibrated profile vignetting and manual Vignette Amount while
-retaining their settings. Distortion and chromatic-aberration correction continue
+it disables both calibrated profile vignetting and the manual Amount while
+retaining their settings (the switch is the parameter Vignette Correction, `vignetteEnabled`). Distortion and chromatic-aberration correction continue
 unchanged. This applies equally to Preview, guide photos, AI Edge Fill captures and export.
 
 Under **Geometry → Framing**, **Fit entire photo** automatically fits the corrected
 source perimeter into the image texture instead of cropping it. Free areas remain
 transparent (black against an opaque viewer/export background), and the composition
-dimensions stay unchanged. The existing manual Scale setting is retained for
-**Original size**; automatic fitting caps it so increasing Scale cannot crop the photo.
+dimensions stay unchanged. The manual Scale setting is kept for **Original size**;
+**Fit entire photo** sets the scale itself and hides the Scale row, so a Scale kept from
+**Original size** never shrinks the fitted picture.
 The fit follows distortion, focal length, sensor crop and optical center adjustments.
 
 ### Guided Perspective

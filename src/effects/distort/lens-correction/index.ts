@@ -6,21 +6,21 @@ import { LENS_NO_FOLD, lensFoldRadius, lensFullImageScale } from './lensFrameFit
 const number = (label: string, value: number, min: number, max: number, step: number, group: string): EffectParam =>
   ({ type: 'number', label, default: value, min, max, step, animatable: true, group });
 export const LENS_CORRECTION_PARAMS: Record<string, EffectParam> = {
-  profile: { type: 'select', label: 'Lens Profile', default: 'manual', options: LENS_PROFILE_OPTIONS, group: 'profile' },
+  profile: { type: 'select', label: 'Lens', default: 'manual', options: LENS_PROFILE_OPTIONS, group: 'profile' },
   focalLength: number('Focal Length', 24, 24, 105, 0.1, 'profile'),
   aperture: number('Aperture', 4, 4, 22, 0.1, 'profile'),
   focusDistance: number('Focus Distance', 1000, 0.45, 1000, 0.05, 'profile'),
   cropFactor: number('Sensor Crop', 1, 1, 2, 0.001, 'profile'),
   sourceAspect: { type: 'number', label: 'Source Aspect', default: 0, min: 0, max: 100, step: 0.0001, hidden: true, animatable: false },
-  distortion: number('Remove Distortion', 0, -100, 100, 0.1, 'geometry'),
+  distortion: number('Distortion', 0, -100, 100, 0.1, 'geometry'),
   fineDistortion: number('Fine Distortion', 0, -50, 50, 0.1, 'geometry'),
   scale: number('Scale', 100, 50, 200, 0.1, 'geometry'),
   fitFullImage: { type: 'boolean', label: 'Fit Entire Photo', default: false, animatable: false, group: 'geometry' },
-  centerX: number('Optical Center X', 0.5, 0, 1, 0.001, 'geometry'),
-  centerY: number('Optical Center Y', 0.5, 0, 1, 0.001, 'geometry'),
-  redFringe: number('Red/Cyan Fringe', 0, -20, 20, 0.1, 'chromatic aberration'),
-  blueFringe: number('Blue/Yellow Fringe', 0, -20, 20, 0.1, 'chromatic aberration'),
-  vignette: number('Vignette Amount', 0, -100, 100, 0.1, 'vignette'),
+  centerX: number('Center X', 0.5, 0, 1, 0.001, 'geometry'),
+  centerY: number('Center Y', 0.5, 0, 1, 0.001, 'geometry'),
+  redFringe: number('Red/Cyan', 0, -20, 20, 0.1, 'chromatic aberration'),
+  blueFringe: number('Blue/Yellow', 0, -20, 20, 0.1, 'chromatic aberration'),
+  vignette: number('Amount', 0, -100, 100, 0.1, 'vignette'),
   vignetteEnabled: { type: 'boolean', label: 'Vignette Correction', default: true, animatable: false, group: 'vignette' },
   midpoint: number('Midpoint', 50, 0, 100, 0.1, 'vignette'),
 };
@@ -45,7 +45,8 @@ function lensGeometry(params: LensParams, width: number, height: number) {
   const aspect = p.sourceAspect || Math.max(1,width)/Math.max(1,height);
   const geometry = { aspect, centerX: p.centerX, centerY: p.centerY, cropFactor: p.cropFactor,
     distortion: p.distortion / 100, fineDistortion: p.fineDistortion / 100, profile };
-  const scale = params.fitFullImage === true ? Math.min(p.scale/100, lensFullImageScale(geometry)) : p.scale/100;
+  // Fit picks the scale itself (the card hides Scale meanwhile), so a hidden Scale never shrinks the picture further.
+  const scale = params.fitFullImage === true ? lensFullImageScale(geometry) : p.scale/100;
   // Largest output radius in the frame: the farthest corner from the optical centre, divided by scale.
   const radiusScale = 2 / Math.hypot(aspect, 1);
   const corner = Math.max(...[[0, 0], [1, 0], [0, 1], [1, 1]].map(([u, v]) =>
@@ -65,7 +66,7 @@ export function lensCorrectionWarnings(params: LensParams, width = 1920, height 
     }
   }
   const { fold } = lensGeometry(params, width, height);
-  if (fold < LENS_NO_FOLD) warnings.push('This much barrel correction would fold the outer picture back on itself, so the area beyond the fold stays transparent. Use less Remove Distortion or Fine Distortion, or raise Scale to crop it.');
+  if (fold < LENS_NO_FOLD) warnings.push('This much barrel correction would fold the outer picture back on itself, so the area beyond the fold stays transparent. Use less Distortion or Fine Distortion, or raise Scale to crop it.');
   return warnings;
 }
 
@@ -73,6 +74,12 @@ export const lensCorrection: EffectDefinition = {
   id: 'lens-correction', name: 'Lens Correction', category: 'distort',
   shader, entryPoint: 'lensCorrectionFragment', uniformSize: 96,
   params: LENS_CORRECTION_PARAMS,
+  presets: [
+    { id: 'wide-angle', name: 'Wide Angle', params: { distortion: -14 } },
+    { id: 'action-cam', name: 'Action Cam', params: { distortion: -28, scale: 120 } },
+    { id: 'whole-photo', name: 'Whole Photo', params: { distortion: -14, fitFullImage: true } },
+    { id: 'even-corners', name: 'Even Corners', params: { vignette: 40, midpoint: 30 } },
+  ],
   paramWarnings: (params, width, height) => lensCorrectionWarnings(params, width, height),
   packUniforms: (params, width, height) => {
     const { p, vignetteEnabled, profile, aspect, scale, fold } = lensGeometry(params, width, height);

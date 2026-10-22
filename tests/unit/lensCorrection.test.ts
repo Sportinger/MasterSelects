@@ -13,6 +13,22 @@ describe('Lens Correction', () => {
     expect(lensCorrection.packUniforms({fitFullImage:true},6000,4000)![2]).toBe(1);
     expect(lensCorrection.packUniforms({distortion:-10,fitFullImage:false},6000,4000)![2]).toBe(1);
   });
+  it('lets Fit Entire Photo pick the scale alone: a Scale kept from Original size (its row is hidden) never shrinks the fit', () => {
+    const fit=lensCorrection.packUniforms({distortion:-10,scale:125,fitFullImage:true},6000,4000)![2];
+    expect(lensCorrection.packUniforms({distortion:-10,scale:60,fitFullImage:true},6000,4000)![2]).toBeCloseTo(fit,6);
+    expect(lensCorrection.packUniforms({scale:50,fitFullImage:true},6000,4000)![2]).toBe(1);
+  });
+  it('declares presets that set only its own controls, within range, without folding the picture', () => {
+    expect(lensCorrection.presets!.map(preset => preset.name)).toEqual(['Wide Angle', 'Action Cam', 'Whole Photo', 'Even Corners']);
+    for (const preset of lensCorrection.presets!) {
+      for (const [key, value] of Object.entries(preset.params)) {
+        const definition = lensCorrection.params[key];
+        expect(definition && !definition.hidden, `${preset.name}: ${key}`).toBe(true);
+        if (typeof value === 'number') expect(value).toBe(Math.min(definition.max!, Math.max(definition.min!, value)));
+      }
+      expect(lensCorrectionWarnings(preset.params), preset.name).toEqual([]);
+    }
+  });
   it.each([
     [24,1.5,.5,.5,1], [105,2/3,.37,.61,1], [35,1.5,.25,.75,1.6],
   ])('keeps the full corrected source perimeter visible at %s mm with offset optical centers', (focal,aspect,centerX,centerY,cropFactor) => {

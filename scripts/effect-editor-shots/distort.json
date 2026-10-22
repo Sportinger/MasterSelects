@@ -1,6 +1,49 @@
 {
   "shots": [
     {
+      "name": "lens-correction-inspector",
+      "effect": "lens-correction",
+      "params": {
+        "distortion": -28,
+        "scale": 120
+      },
+      "image": "neon_rain_street_barrel.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1100
+      },
+      "alt": "Properties, Effects with a Lens Correction card: the Preset menu showing Action Cam, the Lens menu on Manual, the Geometry section with Framing on Original size, Distortion −28, Fine Distortion 0, Scale 120 and Center X and Y 0.5, the folded Chromatic aberration section and the Vignette section with its switch, Amount and Midpoint, beside a strip of the preview with the straightened night street",
+      "caption": "Lens Correction with the Action Cam preset. 1 — Preset: pick a starting point. 2 — Lens: a measured lens or Manual. 3 — Framing: keep the size or show the whole photo. 4 — Distortion: straightens bowed lines. 5 — Scale: zooms in or out.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Lens",
+          "label": "Lens"
+        },
+        {
+          "target": "Framing",
+          "label": "Framing"
+        },
+        {
+          "target": "Distortion",
+          "label": "Distortion",
+          "reach": 150
+        },
+        {
+          "target": "Scale",
+          "label": "Scale"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
       "name": "twirl-inspector",
       "effect": "twirl",
       "params": {

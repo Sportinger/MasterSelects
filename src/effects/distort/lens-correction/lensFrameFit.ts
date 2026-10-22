@@ -18,7 +18,7 @@ const FOLD_SCAN_STEPS = 1024;
 
 /**
  * First output radius where the correction stops moving outward: strong barrel removal
- * (Remove Distortion below about -33, Fine Distortion below -20, or a profile combined with
+ * (Distortion below about -33, Fine Distortion below -20, or a profile combined with
  * them) maps the outer ring back inside and would mirror the picture. Pixels beyond it have
  * no valid source; the shader leaves them transparent. LENS_NO_FOLD when none up to `maxRadius`.
  */
