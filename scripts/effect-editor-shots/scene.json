@@ -1,14 +1,16 @@
 {
   "shots": [
     { "name": "weave-inspector", "effect": "weave", "params": { "color": "#7d5b3a", "weave_value": 2, "reveal_value": 0.32, "irregularity_value": 2.5, "wind": 0.2 },
-      "image": "dancer_stage.jpg", "preview": 0, "top": "card", "gutter": 70, "layout": "float", "viewport": { "width": 1600, "height": 1500 }, "hide": ["Particle Out"],
+      "image": "dancer_stage.jpg", "preview": 0, "top": "card", "gutter": 70, "layout": "float", "viewport": { "width": 1600, "height": 1300 }, "hide": ["Particle Out"],
       "marks": [{ "target": "Preset", "label": "Preset" }, { "target": "Form", "label": "Form" }, { "target": "Reveal", "label": "Reveal" },
-        { "target": "Wind", "label": "Wind" }, { "target": "Pulse Rate", "label": "Pulse Rate" }],
-      "alt": "TODO", "caption": "TODO" },
+        { "target": "Wind", "label": "Wind" }, { "target": "Qualle controls", "label": "Qualle controls: folded, they act on the Qualle only" }],
+      "alt": "The Weave card in Properties, Effects, with the Nest preset: Preset menu showing Nest, Form Woven Cloth, a brown Color swatch, then the sections Weave In (Weave Speed 2), Reveal by Shape (Reveal 0.32), Handmade (Irregularity 2.5) and Wind Cloth (Wind 0.2), each with an on-off switch, and at the end the closed section Qualle controls",
+      "caption": "Weave with the Nest preset." },
     { "name": "flocking-inspector", "effect": "flocking", "params": {},
       "image": "dancer_stage.jpg", "preview": 0, "top": "card", "gutter": 70, "layout": "float", "viewport": { "width": 1600, "height": 1700 }, "hide": ["Particle Out"],
       "marks": [{ "target": "Preset", "label": "Preset" }, { "target": "Cohesion", "label": "Cohesion" }, { "target": "Turbulence", "label": "Turbulence" },
         { "target": "Size", "label": "Size" }, { "target": "Warm-up", "label": "Warm-up" }],
-      "alt": "TODO", "caption": "TODO" }
+      "alt": "The Flocking card in Properties, Effects, with the default swarm: Preset menu showing Free Swarm and a sentence about it, Open Nodes, then the sections Population (a slider and 4000), Behavior (Cohesion, Separation, Alignment, Speed 45, Turbulence 18 with sliders), Appearance (Size and a pale blue Color), the folded More controls, Time & Quality (Step rate 60 Hz, Warm-up 0 s, Loop Continuous) and the folded Simulation status",
+      "caption": "Flocking with its default swarm." }
   ]
 }

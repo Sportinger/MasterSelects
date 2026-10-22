@@ -3,7 +3,7 @@ import { createDefaultWeaveGraph, geometryParameterReader, validateWeaveGraph } 
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { evaluateGeometryProgram } from '../../src/services/operators/geometry/geometryEvaluation';
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
-import { compileClothSpec, type ClothSpec } from '../../src/services/operators/geometry/clothProgram';
+import { compileClothSpec, isClothSpec, type ClothSpec } from '../../src/services/operators/geometry/clothProgram';
 import { CLOTH_STEP_RATE, ClothSimulation } from '../../src/services/operators/geometry/clothSolver';
 import { bindToCloth, clothGridAt, sampleClothGrid } from '../../src/services/operators/geometry/clothSurface';
 import { weaveSimulationTime } from '../../src/services/operators/geometry/strandsLayerSource';
@@ -12,7 +12,7 @@ import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const read = geometryParameterReader({});
 const defaultSpec = (graph = createDefaultWeaveGraph()) => compileClothSpec(graph, graph.nodes.find(node => node.id === 'cloth')!, read);
-const small = (overrides: Partial<ClothSpec> = {}): ClothSpec => ({ ...defaultSpec(), columns: 12, rows: 8, substeps: 4, ...overrides });
+const small = (overrides: Partial<ClothSpec> = {}): ClothSpec => ({ ...defaultSpec(), columns: 12, rows: 8, substeps: 4, turn: 0, ...overrides });
 const compile = (graph: EffectOperatorGraph, simulationTime: number) => compileGeometryGraph(graph, read, undefined, { simulationTime });
 
 describe('Weave cloth', () => {
@@ -51,6 +51,22 @@ describe('Weave cloth', () => {
     // Nearly inextensible: the bottom edge keeps its rest width.
     const width = Math.hypot(moved[spec.columns * 3] - moved[0], moved[spec.columns * 3 + 1] - moved[1], moved[spec.columns * 3 + 2] - moved[2]);
     expect(width).toBeLessThanOrEqual(spec.width * 1.02);
+  });
+
+  it('turns the finished sheet about its upright axis without changing its motion (Turn)', () => {
+    const head = clothGridAt(small(), 1.5), turned = clothGridAt(small({ turn: 90 }), 1.5);
+    for (let index = 0; index < head.positions.length; index += 3) {
+      // x' = x cos + z sin, z' = z cos − x sin at 90°: x' = z, z' = −x; the height stays.
+      expect(turned.positions[index]).toBeCloseTo(head.positions[index + 2], 9);
+      expect(turned.positions[index + 1]).toBe(head.positions[index + 1]);
+      expect(turned.positions[index + 2]).toBeCloseTo(-head.positions[index], 9);
+    }
+    expect(isClothSpec(small({ turn: 32 }))).toBe(true);
+    expect(isClothSpec(small({ turn: 400 }))).toBe(false);
+    // A graph saved before Turn existed compiles to a head-on sheet.
+    const saved = createDefaultWeaveGraph();
+    delete saved.nodes.find(node => node.id === 'cloth')!.constants!.turn;
+    expect(compileClothSpec(saved, saved.nodes.find(node => node.id === 'cloth')!, read).turn).toBe(0);
   });
 
   it('binds rest-sheet curves onto the simulated surface', () => {

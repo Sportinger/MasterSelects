@@ -12,7 +12,7 @@
       },
       "image": "dancer_stage.jpg",
       "preview": 0,
-      "alt": "The Perspective Grid card in Properties \u2192 Effects, open in its Grid, Motion and Look sections: Horizon 60 %, Columns 16, Row Density 6, Line Width 10 px, Lines Thin with depth, Speed 1.5 rows/s, Line Color, Opacity 1, Horizon Fade 1.4, Blend Add (glow); every number row has a keyframe diamond and a reset arrow",
+      "alt": "The Perspective Grid card in Properties → Effects, open in its Grid, Motion and Look sections: Horizon 60 %, Columns 16, Row Density 6, Line Width 10 px, Lines Thin with depth, Speed 1.5 rows/s, Line Color, Opacity 1, Horizon Fade 1.4, Blend Add (glow); every number row has a keyframe diamond and a reset arrow",
       "marks": [
         {
           "target": "Horizon",
@@ -71,8 +71,8 @@
       "image": "dancer_stage.jpg",
       "params": {
         "spine": 20,
-        "head": -14,
-        "shoulderL": 150,
+        "head": -20,
+        "shoulderL": 118,
         "elbowL": 10,
         "shoulderR": -85,
         "elbowR": 6,
@@ -132,8 +132,8 @@
       "image": "dancer_stage.jpg",
       "params": {
         "spine": 20,
-        "head": -14,
-        "shoulderL": 150,
+        "head": -20,
+        "shoulderL": 118,
         "elbowL": 10,
         "shoulderR": -85,
         "elbowR": 6,
@@ -179,10 +179,10 @@
         },
         {
           "target": "Hip R",
-          "label": "Hip R: \u2212100\u00b0 lifts the leg behind"
+          "label": "Hip R: −100° lifts the leg behind"
         }
       ],
-      "alt": "The Pose section of the Stick Figure card with the Arabesque preset: Pelvis X, Pelvis Y and Lift at 0 px, Spine Lean 20\u00b0, Head Tilt \u221214\u00b0, Shoulder L 150\u00b0, Elbow L 10\u00b0, Shoulder R \u221285\u00b0, Elbow R 6\u00b0, Hip L 0\u00b0, Knee L 0\u00b0, Hip R \u2212100\u00b0, Knee R 0\u00b0, each with a slider, a keyframe diamond and a reset arrow",
+      "alt": "The Pose section of the Stick Figure card with the Arabesque preset: Pelvis X, Pelvis Y and Lift at 0 px, Spine Lean 20°, Head Tilt −14°, Shoulder L 150°, Elbow L 10°, Shoulder R −85°, Elbow R 6°, Hip L 0°, Knee L 0°, Hip R −100°, Knee R 0°, each with a slider, a keyframe diamond and a reset arrow",
       "caption": "The Pose section with the Arabesque preset.",
       "note": "Needs clicks (card buttons pressed first), collapse (card sections folded) and nodeClicks (Nodes toolbar buttons), which scripts/effect-editor-shot.mjs does not read yet: made with a review-folder copy that adds them (ledger, GEN1)."
     },
@@ -215,7 +215,7 @@
       ],
       "alt": "The Nodes tab after Walk: a Gait Cycle card on the left with inputs time, speed, stride, lean and phase and one output per joint (Spine to Knee R), cables from each output to the matching joint input of the Stick Figure card, which also takes the picture from the clip's Source card and passes it to Target",
       "caption": "The node setup after Walk.",
-      "note": "Needs clicks (card buttons pressed first), collapse (card sections folded) nodeClicks (Nodes toolbar buttons) and title:<card> marks, which scripts/effect-editor-shot.mjs does not read yet: made with a review-folder copy that adds them (ledger, GEN1)."
+      "note": "Replaced by docs/Features/assets/effects/graphs/stick-figure-walk.webp: the Rig nodes live in the clip's node graph, which effect-graph-shot cannot show, so the picture comes from a review-folder script (review/GEN1/stick/r1/nodes.mjs with moves.json: a black clip, Walk, Previews off, Avoid on, Source and Target dragged below, canvas cropped to Gait Cycle and Stick Figure; ledger, GEN1). Kept as the recipe of the earlier full-tab view."
     }
   ]
 }

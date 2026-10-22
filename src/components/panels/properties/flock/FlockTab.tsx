@@ -103,7 +103,6 @@ function FlockTabHeader({ clip }: { clip: TimelineClip }) {
         <button type="button" className="flock-button flock-button-primary" onPointerUp={blurOnPointer} onClick={() => openFlockNodeView(clip.id)}>
           Open Nodes
         </button>
-        <span className="flock-meta">{clip.flock?.nodes.length ?? 0} nodes · {clip.flock?.exposed.length ?? 0} controls</span>
       </div>
     </div>
   );

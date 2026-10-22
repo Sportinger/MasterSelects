@@ -7,8 +7,9 @@ export const STICK_FIGURE_PRESETS: readonly EffectPreset[] = [
   {
     id: 'arabesque',
     name: 'Arabesque',
-    // Standing leg straight, the other stretched back, one arm reaching forward and up; thin lines, a ring head.
-    params: { spine: 20, head: -14, shoulderL: 150, elbowL: 10, shoulderR: -85, elbowR: 6, hipL: 0, kneeL: 0, hipR: -100, kneeR: 0,
+    // Standing leg straight, the other stretched back, one arm reaching forward and up past the face
+    // (150° ran through the ring head); thin lines, a ring head.
+    params: { spine: 20, head: -20, shoulderL: 118, elbowL: 10, shoulderR: -85, elbowR: 6, hipL: 0, kneeL: 0, hipR: -100, kneeR: 0,
       thickness: 8, headStyle: 'ring' },
   },
   {

@@ -22,6 +22,7 @@ import type { AudioEffectParamValue } from '../../../types/audio';
 import { isAudioEffect, type EffectType } from '../../../types/effects';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects, getEffectDisplayName, getRenderedDefaultParams } from '../../../effects';
 import { groupEffectParameters } from '../../../effects/parameterGroups';
+import { foldInactiveParamSections } from './inactiveParamSections';
 import { VoxelReliefControls } from './VoxelReliefControls';
 import { EXTRA_CONTROLS_REGISTRY } from '../../../effects/extraControlsRegistry';
 import '../../../effects/effectParameterGroups.css';
@@ -273,16 +274,18 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   const parameterGroups = groupEffectParameters(effectParamDefinitions(effect));
   const resolveRows = RESOLVE_ROW_EFFECTS.has(effect.type);
   const rowsClass = (base: string) => resolveRows ? `${base} effect-params--resolve-rows` : base;
-  const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false) => {
+  const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false, noteShown = false) => {
     const value = effect.params[paramName] ?? paramDef.legacyDefault ?? paramDef.default;
     // Decide before creating the element: a rendered-null Resolve row would hide the parameter.
-    if (resolveRows && hasResolveEffectParamRow(paramDef)) return <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef}
+    if (resolveRows && hasResolveEffectParamRow(paramDef)) return <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef} noteShown={noteShown}
       value={value} effect={effect} clipId={clipId} onChange={onChange} onDragStart={onDragStart} onDragEnd={onDragEnd} onParamCommit={onParamCommit} />;
     return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, noMaxLimit, onDragStart, onDragEnd, onParamCommit);
   };
   const ExtraControls = EXTRA_CONTROLS_REGISTRY[effectDef.id];
   const ungroupedParams = parameterGroups.find((group) => group.id === '__ungrouped__')?.params ?? [];
-  const namedGroups = parameterGroups.filter((group) => !group.quality && group.label);
+  // Sections that act only in another mode fold into one closed section with the reason shown once.
+  const { active: namedGroups, folded: inactiveSections } = foldInactiveParamSections(
+    parameterGroups.filter((group) => !group.quality && group.label), effectDef.params, effect.params);
   const qualityParams = parameterGroups.find((group) => group.quality)?.params ?? [];
 
   const handleResetQuality = () => {
@@ -316,6 +319,10 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
           </ResolveInspectorSection>
         );
       })}
+      {inactiveSections.map(section => <ResolveInspectorSection key={section.key} title={section.title} defaultOpen={false}>
+        <p className="resolve-effect-row-note">{section.note}</p>
+        <div className={rowsClass('effect-quality-params')}>{section.params.map(([paramName, paramDef]) => row(paramName, paramDef, false, true))}</div>
+      </ResolveInspectorSection>)}
 
       {/* Quality section (collapsible) */}
       {qualityParams.length > 0 && (

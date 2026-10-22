@@ -18,7 +18,7 @@ const operator = (definition: Pick<OperatorDefinition, 'id' | 'label' | 'descrip
 
 export const CLOTH_OPERATORS: readonly OperatorDefinition[] = [
   operator({ id: 'geometry.cloth-sheet', label: 'Cloth Sheet',
-    description: 'Simulates a flat sheet of cloth in the source time of its clip. Connect Wind, Gravity, Turbulence and Drag; Pin keeps an edge in place and Pre-roll starts the motion before the clip.',
+    description: 'Simulates a flat sheet of cloth in the source time of its clip. Connect Wind, Gravity, Turbulence and Drag; Pin keeps an edge in place and Pre-roll starts the motion before the clip. Turn turns the simulated sheet about its upright axis (degrees) without changing its motion, so wind blowing at the camera shows as a sideways bow.',
     inputs: [{ id: 'forces', label: 'Forces', type: 'force', repeated: true }, { id: 'drag', label: 'Drag', type: 'drag', repeated: true }],
     outputs: [surface()], state: 'simulation', bypass: 'mute',
     parameters: [number('columns', 'Columns', 40, 2, CLOTH_GRID_LIMIT, 1), number('rows', 'Rows', 27, 2, CLOTH_GRID_LIMIT, 1),
@@ -26,7 +26,7 @@ export const CLOTH_OPERATORS: readonly OperatorDefinition[] = [
       { id: 'pin', label: 'Pin', type: 'select', default: 'top', options: [{ value: 'none', label: 'None' }, { value: 'top', label: 'Top edge' },
         { value: 'left', label: 'Left edge' }, { value: 'top-corners', label: 'Top corners' }, { value: 'corners', label: 'All corners' }] },
       number('stretch', 'Stretch Stiffness', 0.9, 0, 1), number('bend', 'Bend Stiffness', 0.6, 0, 1), number('damping', 'Damping', 0.3, 0, 20),
-      number('substeps', 'Substeps', 6, 1, 32, 1), number('preroll', 'Pre-roll', 2, 0, 30, 0.1)] }),
+      number('substeps', 'Substeps', 6, 1, 32, 1), number('preroll', 'Pre-roll', 2, 0, 30, 0.1), number('turn', 'Turn (°)', 0, -180, 180, 1)] }),
   operator({ id: 'geometry.surface-bind', label: 'Surface Bind',
     description: 'Places curves drawn on the flat rest sheet onto the connected cloth: X and Y find the spot on the sheet, Z becomes height along its normal.',
     inputs: [curves(true), surface(true)], outputs: [curves()], invalidates: 'appearance', state: 'stateless', bypass: 'passthrough',

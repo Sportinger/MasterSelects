@@ -13,14 +13,15 @@ import { DraggableNumber, KeyframeToggle, MultiKeyframeToggle } from '../shared'
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import { ResolveInspectorNumberRow } from '../resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorRow, ResolveInspectorSection } from '../resolveInspector/ResolveInspectorPrimitives';
+import { FlockPopulationRow } from './FlockPopulationRow';
 import {
-  FLOCK_POPULATION_HINT,
   clampFlockNumber,
+  flockNumberDecimals,
   flockSliderRange,
   getFlockInvalidationHint,
-  getFlockNodeLabel,
   getFlockNumberDecimals,
   getFlockNumberSensitivity,
+  isPresetFlockControl,
   isStructuralFlockParam,
 } from './flockControlUtils';
 
@@ -51,8 +52,14 @@ function withBatch(label: string, action: () => void) {
   }
 }
 
+/** × of a control added through Add (or in the Nodes tab); the preset's own controls have none. */
 function RemoveControlButton({ clipId, exposed }: { clipId: string; exposed: FlockExposedParam }) {
   const unexposeFlockGraphParam = useTimelineStore((state) => state.unexposeFlockGraphParam);
+  const own = useTimelineStore((state) => {
+    const flock = state.clips.find((clip) => clip.id === clipId)?.flock;
+    return !!flock && isPresetFlockControl(flock, exposed);
+  });
+  if (own) return null;
   return (
     <button
       type="button"
@@ -89,7 +96,7 @@ function FlockNumberControl({ ctx, exposed, descriptor }: ControlProps) {
         numberMax={range.hardMax}
         hardMin={range.hardMin}
         hardMax={range.hardMax}
-        decimals={getFlockNumberDecimals(descriptor.step)}
+        decimals={flockNumberDecimals(descriptor, range.step, value)}
         sensitivity={getFlockNumberSensitivity(descriptor, range.min, range.max)}
         suffix={descriptor.unit ? ` ${descriptor.unit}` : ''}
         persistenceKey={`flock.${ctx.clip.id}.${exposed.id}`}
@@ -261,6 +268,14 @@ function FlockStructuralControl({ ctx, exposed, descriptor }: ControlProps) {
     withBatch(`Set ${exposed.label}`, () => setFlockGraphParam(ctx.clip.id, exposed.nodeId, exposed.param, next));
   };
   const isPopulation = exposed.param === 'count' || exposed.param.endsWith('__count');
+  if (isPopulation && typeof rawValue === 'number') {
+    return <div data-flock-control={exposed.id}>
+      <FlockPopulationRow label={exposed.label} value={rawValue} defaultValue={typeof descriptor.default === 'number' ? descriptor.default : 4000}
+        min={exposed.min ?? descriptor.min ?? 1} max={exposed.max ?? descriptor.max ?? 100_000} onCommit={commit}
+        actions={<RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />} />
+    </div>;
+  }
+  // How a change takes effect (it restarts or rebuilds the swarm) is said on hover, not as a line under the row.
   const hint = getFlockInvalidationHint(descriptor);
   let control: React.ReactNode;
   switch (descriptor.type) {
@@ -298,13 +313,12 @@ function FlockStructuralControl({ ctx, exposed, descriptor }: ControlProps) {
     <div data-flock-control={exposed.id} className="flock-control-structural">
       <ResolveInspectorRow
         label={exposed.label}
-        title={isPopulation ? FLOCK_POPULATION_HINT : descriptor.description}
+        title={`${descriptor.description ?? exposed.label} ${hint}.`}
         className="resolve-inspector-row--extra-action"
         actions={<RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />}
       >
         {control}
       </ResolveInspectorRow>
-      <span className="flock-control-hint">{hint}</span>
     </div>
   );
 }
@@ -353,9 +367,6 @@ export function FlockExposedControls({ ctx }: { ctx: FlockControlContext }) {
             {controls.map((exposed) => (
               <FlockExposedControl key={exposed.id} ctx={ctx} exposed={exposed} />
             ))}
-            <span className="flock-control-group-nodes" aria-hidden="true">
-              {[...new Set(controls.map((exposed) => getFlockNodeLabel(definition, exposed.nodeId)))].join(' · ')}
-            </span>
           </ResolveInspectorSection>
         </div>
       ))}

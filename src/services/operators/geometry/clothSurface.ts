@@ -6,7 +6,10 @@ const SIMULATION_LIMIT = 4;
 const simulations = new Map<string, ClothSimulation>();
 
 function simulationFor(spec: ClothSpec): ClothSimulation {
-  const key = JSON.stringify(spec);
+  // Turn only places the finished sheet: one simulation serves every angle.
+  const { turn: _turn, ...motion } = spec;
+  void _turn;
+  const key = JSON.stringify(motion);
   let simulation = simulations.get(key);
   if (simulation) simulations.delete(key);
   else simulation = new ClothSimulation(spec);
@@ -30,6 +33,14 @@ export function clothGridAt(spec: ClothSpec, time: number): ClothGrid {
   if (alpha > 1e-6) {
     const next = simulation.positionsAt(step + 1);
     for (let index = 0; index < positions.length; index++) positions[index] += (next[index] - positions[index]) * alpha;
+  }
+  // Turn: x' = x cos + z sin, z' = z cos − x sin about the sheet's upright axis.
+  if (spec.turn) {
+    const angle = spec.turn * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle);
+    for (let index = 0; index < positions.length; index += 3) {
+      const x = positions[index], z = positions[index + 2];
+      positions[index] = x * cos + z * sin; positions[index + 2] = z * cos - x * sin;
+    }
   }
   return { columns: spec.columns, rows: spec.rows, width: spec.width, height: spec.height, positions };
 }

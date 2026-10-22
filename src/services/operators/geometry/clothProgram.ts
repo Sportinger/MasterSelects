@@ -13,6 +13,8 @@ export type ClothTurbulence = SimulationTurbulence;
 export interface ClothSpec extends SimulationForces {
   nodeId: string; columns: number; rows: number; width: number; height: number; pin: number;
   stretch: number; bend: number; damping: number; substeps: number; preroll: number;
+  /** Degrees the simulated sheet is turned about its upright axis; the motion itself does not depend on it. */
+  turn?: number;
 }
 
 const finite = (value: unknown, label: string) => {
@@ -34,6 +36,8 @@ export function compileClothSpec(graph: EffectOperatorGraph, cloth: BoundOperato
     damping: Math.max(0, finite(read(cloth, 'damping'), 'Damping')),
     substeps: Math.round(clamp(finite(read(cloth, 'substeps'), 'Substeps'), 1, 32)),
     preroll: clamp(finite(read(cloth, 'preroll'), 'Pre-roll'), 0, 30),
+    // A graph saved before Cloth Sheet had Turn reads the parameter default 0: its sheet stays head-on.
+    turn: clamp(finite(read(cloth, 'turn') ?? 0, 'Turn'), -180, 180),
     ...compileSimulationForces(graph, cloth, read),
   };
 }
@@ -47,7 +51,8 @@ const integer = (value: unknown, min: number, max: number) => Number.isInteger(v
 /** Validates a transported spec: bounded grid, substeps, force counts and finite values. */
 export function isClothSpec(value: unknown): value is ClothSpec {
   if (!record(value) || !exact(value, ['nodeId', 'columns', 'rows', 'width', 'height', 'pin', 'stretch', 'bend', 'damping', 'substeps',
-    'preroll', ...SIMULATION_FORCE_KEYS]) || typeof value.nodeId !== 'string') return false;
+    'preroll', 'turn', ...SIMULATION_FORCE_KEYS]) || typeof value.nodeId !== 'string') return false;
+  if (value.turn !== undefined && !within(value.turn, -180, 180)) return false;
   if (!integer(value.columns, 2, CLOTH_GRID_LIMIT) || !integer(value.rows, 2, CLOTH_GRID_LIMIT) || !integer(value.pin, 0, CLOTH_PINS.length - 1)
     || !integer(value.substeps, 1, 32) || !within(value.preroll, 0, 30) || !within(value.stretch, 0, 1) || !within(value.bend, 0, 1)
     || !within(value.width, 1e-3, 1e6) || !within(value.height, 1e-3, 1e6) || !within(value.damping, 0, 1e6)) return false;

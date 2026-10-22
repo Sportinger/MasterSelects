@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { WEAVE_PARAMS, WEAVE_PRESETS } from '../../src/effects/generate/weave';
-import { createDefaultWeaveGraph, geometryParameterReader, validateWeaveGraph, weaveBoundParameters, weaveOperatorGraph, weaveRecipeForm, weaveRecipeGraph }
+import { createDefaultWeaveGraph, geometryParameterReader, WEAVE_CLOTH_TURN, validateWeaveGraph, weaveBoundParameters, weaveOperatorGraph, weaveRecipeForm, weaveRecipeGraph }
   from '../../src/services/operators/geometry/weaveGraph';
 import { createQualleGraph, QUALLE_CARD_CONTROLS } from '../../src/services/operators/geometry/qualleGraph';
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
@@ -65,7 +65,7 @@ describe('Weave forms', () => {
   it('changes the strands with every control of each Form', () => {
     const cases: Array<[Params, string, number | string, number]> = [
       [{}, 'weave_value', 0.3, 2], [{}, 'reveal_value', 0.4, 6], [{}, 'irregularity_value', 0, 6], [{}, 'wind', 1.5, 3],
-      [{ form: 'qualle' }, 'pulse-rate_value', 1.2, 2.2], [{ form: 'qualle' }, 'pulse-strength_value', 0.1, 1.2], [{ form: 'qualle' }, 'curl-strength_value', 0.4, 2],
+      [{ form: 'qualle' }, 'pulse-rate_value', 1.2, 2.2], [{ form: 'qualle' }, 'pulse-strength_value', 0.1, 1.2], [{ form: 'qualle' }, 'curl-strength_value', 0.2, 2],
     ];
     for (const [base, key, value, time] of cases) {
       const before = strands({ ...defaults(), ...base }, time).curves, after = strands({ ...defaults(), ...base, [key]: value }, time).curves;
@@ -120,8 +120,44 @@ describe('Weave forms', () => {
     expect(weaveRecipeForm(bypassed)).toBeUndefined();
   });
 
+  it('turns the Woven Cloth three quarters, so the wind bows the sheet sideways in the picture', () => {
+    const graph = createDefaultWeaveGraph();
+    expect(node(graph, 'cloth').constants?.turn).toBe(WEAVE_CLOTH_TURN);
+    // Head-on (Turn 0, as Weaves saved before Turn) the wind only moves the threads towards the camera; turned, across the frame.
+    const across = (turn: number, wind: number) => {
+      const turned = structuredClone(graph);
+      node(turned, 'cloth').constants = { ...node(turned, 'cloth').constants, turn };
+      const effect = { type: 'weave', params: { ...defaults(), wind }, operatorGraph: turned };
+      const program = compileGeometryGraph(turned, geometryParameterReader(effectOperatorParams(effect)), undefined, { time: 5, simulationTime: 5 });
+      const positions = evaluateGeometryProgram(program).positions, xs: number[] = [];
+      for (let index = 0; index < positions.length; index += 3) xs.push(positions[index]);
+      return xs;
+    };
+    const shift = (a: number[], b: number[]) => Math.max(...a.map((value, index) => Math.abs(value - b[index])));
+    expect(shift(across(0, 0), across(0, 2))).toBeLessThan(0.03);
+    expect(shift(across(WEAVE_CLOTH_TURN, 0), across(WEAVE_CLOTH_TURN, 2))).toBeGreaterThan(0.08);
+  });
+
+  it('makes Irregularity 3 clearly crooked while 1 keeps the familiar look', () => {
+    // Meander and tension grow with the square of Irregularity: 1 is unchanged, 3 is nine times as uneven.
+    const offset = (irregularity: number) => {
+      const flat = strands({ ...defaults(), irregularity_value: 0, wind: 0 }, 6).curves.positions;
+      const rough = strands({ ...defaults(), irregularity_value: irregularity, wind: 0 }, 6).curves.positions;
+      return Math.max(...Array.from(rough, (value, index) => Math.abs(value - flat[index])));
+    };
+    const one = offset(1), three = offset(3);
+    expect(one).toBeGreaterThan(0.005);
+    expect(one).toBeLessThan(0.03);
+    expect(three / one).toBeGreaterThan(5);
+  });
+
+  it('keeps Curl Strength within the frame: the card stops at 0.25', () => {
+    expect(WEAVE_PARAMS['curl-strength_value'].max).toBe(0.25);
+    expect(QUALLE_CARD_CONTROLS['curl-strength_value'].max).toBe(0.25);
+  });
+
   it('declares presets the Preset row can apply to a fresh Weave', () => {
-    expect(WEAVE_PRESETS.map(preset => preset.name)).toEqual(['Red Thread', 'Linen Grid', 'Nest', 'Qualle']);
+    expect(WEAVE_PRESETS.map(preset => preset.name)).toEqual(['Veil', 'Red Sail', 'Nest', 'Qualle']);
     const fresh = { type: 'weave', params: defaults() };
     for (const preset of WEAVE_PRESETS) {
       expect(Object.keys(preset.params).filter(key => !(key in WEAVE_PARAMS))).toEqual([]);

@@ -13,11 +13,26 @@ import {
 import { flockSliderRange } from '../../src/components/panels/properties/flock/flockControlUtils';
 import { getFlockOperator } from '../../src/services/flock/operators/flockOperatorRegistry';
 import type { FlockParamDescriptor } from '../../src/services/flock/operators/flockOperatorTypes';
+import { compileFlockDefinition } from '../../src/services/flock/compiler/flockCompiler';
 
 const param = (operator: string, id: string): FlockParamDescriptor =>
   getFlockOperator(operator)!.params.find(candidate => candidate.id === id)!;
 
 describe('Flocking presets', () => {
+  it('compiles every card preset without warnings, with Technical Network and Violet Filaments held in frame', () => {
+    for (const id of FLOCKING_CARD_PRESET_IDS) {
+      const result = compileFlockDefinition(createFlockPresetDefinition(id));
+      expect(result.ok, id).toBe(true);
+      // A preset value past a node's limit makes the swarm invalid (Violet's 72-sample trails did, briefly).
+      expect(result.diagnostics.filter(item => item.severity !== 'info'), id).toEqual([]);
+    }
+    const boundary = (id: string) => createFlockPresetDefinition(id).nodes.find(node => node.operator === 'flock.boundary')!.params;
+    expect(boundary('technical-network')).toMatchObject({ mode: 'contain' });
+    expect((boundary('technical-network').size as number[])[2]).toBeLessThanOrEqual(80);
+    expect((boundary('violet-filaments').size as number[])[0]).toBeLessThanOrEqual(72);
+  });
+
+
   it('offers three to five named presets, all of them known swarms', () => {
     expect(FLOCKING_CARD_PRESET_IDS.length).toBeGreaterThanOrEqual(3);
     expect(FLOCKING_CARD_PRESET_IDS.length).toBeLessThanOrEqual(5);

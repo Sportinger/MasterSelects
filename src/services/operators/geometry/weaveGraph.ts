@@ -13,6 +13,13 @@ export const WEAVE_EFFECT_TYPE = 'weave';
 export const WEAVE_CLOTH_COLOR = '#8a857c';
 /** Wind strength of a new Woven Cloth (the card's Wind default). */
 export const WEAVE_CLOTH_WIND = 0.35;
+/**
+ * Turn: Cloth Sheet turns the finished sheet 32° about its upright axis, so the camera sees it at
+ * three quarters. Head-on, the wind's bellying runs straight at the camera and hardly shows;
+ * turned, it bows the threads sideways and the gusts read as motion. Saved Weaves have no Turn on
+ * their Cloth Sheet and stay head-on (the parameter's default 0).
+ */
+export const WEAVE_CLOTH_TURN = 32;
 const FIELD_SIGNALS = new Set(['number', 'boolean', 'vec2', 'vec3', 'vec4']);
 /** Shared force nodes Cloth Sheet and Rod Simulation read (the same identities cables and particles use). */
 const SIMULATION_FORCE_OPERATORS = ['forces.wind', 'forces.gravity', 'forces.turbulence', 'forces.drag'];
@@ -105,12 +112,12 @@ const FABRIC_NODES: Spec[] = [
   ['flyaways', 'geometry.flyaways', 1640, 80, { density: 3, length: 0.08, lift: 2.5, hair: 0.35, seed: 0 }],
   ['fiber', 'material.fiber', 1960, 80, { preset: 'custom', color: WEAVE_CLOTH_COLOR }],
 ];
-/** Wind Cloth: the woven sheet is held at its corners and billows like a sail in gusty, swirling wind (no gravity). */
+/** Wind Cloth: the woven sheet is held at its corners and billows like a sail in gusty, swirling wind (no gravity), turned towards the camera. */
 const CLOTH_NODES: Spec[] = [
   ['wind', 'forces.wind', 1320, 620, { direction: [0.2, 0, 1], strength: WEAVE_CLOTH_WIND, gust: 0.5 }],
   ['swirl', 'forces.turbulence', 1320, 860, { strength: 0.15, frequency: 1.5 }],
   ['cloth', 'geometry.cloth-sheet', 1640, 620, { columns: 40, rows: 24, width: 1.6, height: 0.96, pin: 'corners', stretch: 0.9, bend: 0.6,
-    damping: 0.5, substeps: 6, preroll: 2 }],
+    damping: 0.5, substeps: 6, preroll: 2, turn: WEAVE_CLOTH_TURN }],
   ['bind', 'geometry.surface-bind', 2280, 80, { height: 1 }],
 ];
 /**
@@ -141,10 +148,12 @@ const WEAVE_IN_NODES: Spec[] = [
 /**
  * Handmade: Irregularity scales a meander of each thread along its length (uneven spacing),
  * a per-thread tension that varies the crimp, and slubs that thicken the yarn in places;
- * 1 is the default look, 0 a machine-perfect weave.
+ * 1 is the default look, 0 a machine-perfect weave. Meander and tension grow with the square of
+ * Irregularity, so 1 keeps the familiar look and 3 is clearly crooked (nine times the meander,
+ * about two thirds of the thread spacing) instead of a slightly fuzzier grid.
  */
 const HANDMADE_NODES: Spec[] = [
-  ['hand-amount', 'values.number', 0, 1400, { value: 1 }],
+  ['hand-amount', 'values.number', 0, 1400, { value: 1 }], ['hand-amount-squared', 'math.multiply.scalar', 130, 1300],
   ['hand-wobble-scale', 'values.number', 0, 1540, { value: 0.008 }], ['hand-tension-scale', 'values.number', 0, 1680, { value: 0.35 }],
   ['hand-wobble-amplitude', 'math.multiply.scalar', 260, 1440], ['hand-tension-amplitude', 'math.multiply.scalar', 260, 1680],
   ['hand-wobble-x', 'field.noise', 520, 1400, { frequency: 1, amplitude: 0.008, octaves: 2, seed: 11 }],
@@ -176,8 +185,9 @@ const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: stri
   ['weave-scaled', 'value', 'weave-progress-raw', 'a'], ['weave-rate', 'value', 'weave-progress-raw', 'b'],
   ['weave-progress-raw', 'value', 'weave-progress', 'a'], ['weave-one', 'value', 'weave-progress', 'b'],
   ['weave-progress', 'value', 'thread', 'progress'],
-  ['hand-amount', 'value', 'hand-wobble-amplitude', 'a'], ['hand-wobble-scale', 'value', 'hand-wobble-amplitude', 'b'],
-  ['hand-amount', 'value', 'hand-tension-amplitude', 'a'], ['hand-tension-scale', 'value', 'hand-tension-amplitude', 'b'],
+  ['hand-amount', 'value', 'hand-amount-squared', 'a'], ['hand-amount', 'value', 'hand-amount-squared', 'b'],
+  ['hand-amount-squared', 'value', 'hand-wobble-amplitude', 'a'], ['hand-wobble-scale', 'value', 'hand-wobble-amplitude', 'b'],
+  ['hand-amount-squared', 'value', 'hand-tension-amplitude', 'a'], ['hand-tension-scale', 'value', 'hand-tension-amplitude', 'b'],
   ['hand-wobble-amplitude', 'value', 'hand-wobble-x', 'amplitude'], ['hand-wobble-amplitude', 'value', 'hand-wobble-y', 'amplitude'],
   ['hand-info', 'u', 'hand-meander', 'a'], ['hand-meander-scale', 'value', 'hand-meander', 'b'],
   ['hand-meander', 'value', 'hand-meander-vector', 'x'], ['hand-thread-key', 'value', 'hand-meander-vector', 'y'], ['hand-zero', 'value', 'hand-meander-vector', 'z'],
@@ -200,7 +210,7 @@ const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: stri
  * whose threads are pulled in over the first four seconds of the clip and billow in the wind.
  * Reveal (1 = fully grown), Weave Speed and Irregularity are keyframeable in the Effects tab;
  * bypassing Weave In shows the finished weave at once, Handmade a regular one, Yarn the bare
- * curves, Reveal by Shape the full sheet and Wind Cloth a flat one.
+ * curves, Reveal by Shape the full sheet and Wind Cloth a flat, head-on one.
  */
 export function createDefaultWeaveGraph(): EffectOperatorGraph {
   const specs = [...FABRIC_NODES, ...REVEAL_NODES, ...WEAVE_IN_NODES, ...HANDMADE_NODES, ...CLOTH_NODES];
@@ -216,8 +226,9 @@ export function createDefaultWeaveGraph(): EffectOperatorGraph {
   irregularity.bindings = { value: 'irregularity_value' };
   irregularity.exposed = { label: 'Irregularity', min: 0, max: 3, step: 0.01 };
   // Named graph-local values, so their cards read as what they are in the Nodes tab.
-  for (const [id, label, max] of [['reach', 'Reach', 3], ['weave-rate', 'Weave Rate', 2], ['weave-one', 'Finished', 1], ['hand-wobble-scale', 'Wobble Scale', 0.05]] as const) {
-    nodes.find(node => node.id === id)!.valueControl = { label, min: 0, max, step: 0.01 };
+  for (const [id, label, min, max] of [['reach', 'Reach', 0, 3], ['weave-rate', 'Weave Rate', 0, 2], ['weave-one', 'Finished', 0, 1],
+    ['hand-wobble-scale', 'Wobble Scale', 0, 0.05]] as const) {
+    nodes.find(node => node.id === id)!.valueControl = { label, min, max, step: 0.01 };
   }
   // Wind and Color are card controls bound straight to their node parameters (a simulation reads its
   // force values from the node, so Wind has no Value node).

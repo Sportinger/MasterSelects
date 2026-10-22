@@ -5,6 +5,7 @@ import {
   getFlockOperator,
 } from '../../../../services/flock/operators/flockOperatorRegistry';
 import type { FlockParamDescriptor } from '../../../../services/flock/operators/flockOperatorTypes';
+import { getFlockPreset } from '../../../../services/flock/presets/flockPresets';
 
 export interface FlockParamEntry {
   /** Param id, or `${innerNodeId}__${paramId}` on group instances. */
@@ -50,13 +51,13 @@ export function isStructuralFlockParam(descriptor: FlockParamDescriptor): boolea
 export function getFlockInvalidationHint(descriptor: FlockParamDescriptor): string {
   switch (descriptor.invalidation) {
     case 'topology':
-      return 'Resimulates from start';
+      return 'A change restarts the swarm from the clip start';
     case 'behavior':
-      return 'Resimulates from the change';
+      return 'A change lets the swarm react from that moment on';
     case 'derived':
-      return 'Rebuilds lines';
+      return 'A change redraws the lines';
     default:
-      return 'Redraw only';
+      return 'A change only redraws';
   }
 }
 
@@ -66,6 +67,37 @@ export function getFlockNumberDecimals(step?: number): number {
   if (step >= 0.1) return 1;
   if (step >= 0.01) return 2;
   return 3;
+}
+
+/**
+ * Decimals of a promoted number: from its declared step, else from its slider step (Speed 45 and
+ * Turbulence 18 read as whole numbers), keeping one decimal for a value that has one (Size 4.2).
+ */
+export function flockNumberDecimals(descriptor: FlockParamDescriptor, sliderStep: number, value: number): number {
+  if (descriptor.step !== undefined) return getFlockNumberDecimals(descriptor.step);
+  if (sliderStep >= 1) return Number.isInteger(Math.round(value * 1e6) / 1e6) ? 0 : 1;
+  return getFlockNumberDecimals(sliderStep);
+}
+
+const presetSignatures = new Map<string, ReadonlySet<string>>();
+const controlSignature = (definition: FlockDefinition, exposed: { nodeId: string; param: string }) =>
+  `${definition.nodes.find((node) => node.id === exposed.nodeId)?.operator ?? '?'}:${exposed.param}`;
+/**
+ * Whether a control is one the swarm's preset shows by itself (Population, Cohesion, …), not one
+ * added later through Add or the Nodes tab. Preset node ids are generated, so controls compare by
+ * node operator and parameter.
+ */
+export function isPresetFlockControl(definition: FlockDefinition, exposed: { nodeId: string; param: string }): boolean {
+  const presetId = definition.presetId;
+  const preset = presetId ? getFlockPreset(presetId) : undefined;
+  if (!presetId || !preset) return false;
+  let signatures = presetSignatures.get(presetId);
+  if (!signatures) {
+    const built = preset.create();
+    signatures = new Set(built.exposed.map((item) => controlSignature(built, item)));
+    presetSignatures.set(presetId, signatures);
+  }
+  return signatures.has(controlSignature(definition, exposed));
 }
 
 export function getFlockNumberSensitivity(descriptor: FlockParamDescriptor, min?: number, max?: number): number {
@@ -112,3 +144,13 @@ export function formatFlockBytes(bytes: number): string {
 
 export const FLOCK_POPULATION_HINT =
   'Population is structural and cannot be keyframed. Animate the emitter Active Fraction or Lifetime instead.';
+
+/** The slider spans 100 to 100 000 points on a logarithmic scale; typing reaches the node's own limits. */
+export const FLOCK_POPULATION_SLIDER = { min: 100, max: 100_000 } as const;
+
+/** A slider position (log10 of the count) as a count with two significant digits: 4000, 12 000, 350. */
+export function populationFromSlider(position: number): number {
+  const count = 10 ** position, unit = 10 ** Math.max(0, Math.floor(Math.log10(count)) - 1);
+  return Math.round(count / unit) * unit;
+}
+

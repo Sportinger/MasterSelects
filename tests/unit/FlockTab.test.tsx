@@ -7,6 +7,7 @@ import { useDockStore } from '../../src/stores/dockStore';
 import { useNodeWorkspaceNavigation } from '../../src/services/nodeGraph/nodeWorkspaceNavigation';
 import { flockRuntime } from '../../src/engine/flock/runtime/flockRuntimeApi';
 import type { FlockDefinition } from '../../src/types/flock';
+import { populationFromSlider } from '../../src/components/panels/properties/flock/flockControlUtils';
 
 const initialTimeline = useTimelineStore.getState();
 const initialDock = useDockStore.getState();
@@ -86,6 +87,30 @@ describe('FlockTab', () => {
     editNumber('Population', '1200');
     const emitterId = nodeIdFor(clipId, 'flock.emitter');
     expect(getDefinition(clipId).nodes.find((node) => node.id === emitterId)?.params.count).toBe(1200);
+  });
+
+  it('gives Population the full inspector row on a logarithmic slider, with a reset', async () => {
+    await renderTab(clipId);
+    const slider = screen.getByRole('slider', { name: 'Population slider' });
+    // 4000 sits about halfway along 100 … 100 000 on a log scale.
+    expect(Number(slider.getAttribute('aria-valuenow'))).toBeCloseTo(Math.log10(4000), 3);
+    act(() => { fireEvent.keyDown(slider, { key: 'ArrowRight' }); });
+    const emitterId = nodeIdFor(clipId, 'flock.emitter');
+    const count = () => getDefinition(clipId).nodes.find((node) => node.id === emitterId)?.params.count;
+    expect(count()).toBe(4200);
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Reset Population' })); });
+    expect(count()).toBe(4000);
+    expect(populationFromSlider(Math.log10(12345))).toBe(12000);
+    expect(populationFromSlider(Math.log10(347))).toBe(350);
+  });
+
+  it('shows whole numbers for Speed and Turbulence, and no remove button on the preset\'s own controls', async () => {
+    await renderTab(clipId);
+    expect(screen.getByRole('slider', { name: 'Speed' })).toHaveTextContent(/^45$/);
+    expect(screen.getByRole('slider', { name: 'Turbulence' })).toHaveTextContent(/^18$/);
+    expect(screen.queryByRole('button', { name: /^Remove control/ })).toBeNull();
+    expect(screen.queryByText(/nodes · /)).toBeNull();
+    expect(screen.queryByText('Resimulates from start')).toBeNull();
   });
 
   it('opens the Flock node view from the header', async () => {

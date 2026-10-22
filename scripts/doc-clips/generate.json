@@ -15,17 +15,17 @@
       ],
       "layout": "single",
       "crop": [
-        410,
-        250,
-        960,
-        540
+        394,
+        146,
+        1066,
+        600
       ],
       "width": 960,
-      "loop": 0.5,
+      "loop": 0,
       "poster": 2.95,
       "maxBytes": 600000,
       "float": "left",
-      "alt": "A white stick figure on black at its default settings walks a few steps to the right, crouches and jumps with both arms up, lands and throws a punch, then fades back to its starting place",
+      "alt": "A white stick figure on black at its default settings walks a few steps to the right, crouches and jumps with both arms up, the whole figure inside the frame, lands and throws a punch; then the loop starts again at its first place on the left",
       "caption": "Stick Figure at its default settings with three actions on its lane: Walk, Jump and Punch."
     }
   ]

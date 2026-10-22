@@ -461,7 +461,7 @@ node is one node in every graph rather than a per-domain copy.
 | Clip Time | Seconds of the host clip's source time (0 at its start, continuing across splits); the clock cloth runs on |
 | Yarn Profile | Curves (+ optional per-point Radius Scale) → curves drawn as plies and fibers twisted along curve length |
 | Flyaways | Curves → curves whose Yarn Profile lets single fibers stray: loops arc off and return, free ends stick out (Density, Length, Lift, Free Ends, Seed) |
-| Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll) |
+| Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll, Turn: the finished sheet turned about its upright axis, motion unchanged) |
 | Surface Bind | Curves + Cloth → curves placed on the cloth: X/Y of the flat rest sheet find the spot, Z becomes height along its normal |
 | Extend | Curves → every curve continued straight beyond both ends along its end tangent (Length, Points per End) |
 | Rod Simulation | Curves (+ per-point Pin, Pull Start and Form Time) + Forces + Drag → the curves simulated as elastic rods with thickness, self- and mutual contact with friction and an optional floor; optionally starting as straight threads that are formed into the curves (Radius, Segment Length, Stretch/Bend Stiffness, Friction, Damping, Substeps, Pre-roll, Pin, Pull, Pull Time, Floor, Floor Height, Start, Form Ease) |
@@ -548,6 +548,9 @@ instead of chattering. Forces are the shared Wind, Gravity, Turbulence and Drag
 nodes that cables and particles use. Wind acts as air speed across the sheet with
 strong air drag, so the cloth follows gusts smoothly. The cloth reads the parameter
 values of these nodes; wiring into their inputs is rejected rather than ignored.
+**Turn** (degrees) turns the finished grid about its upright axis after the simulation, so the
+motion is the same at every angle; Weave's Woven Cloth uses 32° so wind blowing at the camera
+shows as a sideways bow. Graphs saved before Turn existed read 0 and stay head-on.
 The clock is the **source time of the host clip**, as with Flock: split and trimmed
 clips continue the motion instead of restarting it. Speed keyframes are not followed
 yet. Time runs at 60 fixed steps per second, and **Pre-roll** starts the simulation

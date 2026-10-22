@@ -5,7 +5,7 @@ A posable stick figure for choreography sketches, storyboards and animated chara
 Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot docs-clip docs-shot--float-left">
-<video src="../assets/effects/clips/stick-figure.mp4" poster="../assets/effects/clips/stick-figure.webp" width="960" height="540" autoplay muted loop playsinline preload="none" aria-label="A white stick figure on black at its default settings walks a few steps to the right, crouches and jumps with both arms up, lands and throws a punch, then fades back to its starting place"></video>
+<video src="../assets/effects/clips/stick-figure.mp4" poster="../assets/effects/clips/stick-figure.webp" width="960" height="540" autoplay muted loop playsinline preload="none" aria-label="A white stick figure on black at its default settings walks a few steps to the right, crouches and jumps with both arms up, the whole figure inside the frame, lands and throws a punch; then the loop starts again at its first place on the left"></video>
 <figcaption>Stick Figure at its default settings with three actions on its lane: Walk, Jump and Punch.</figcaption>
 </figure>
 
@@ -22,14 +22,14 @@ Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.m
 
 <figure class="docs-shot docs-shot--detail">
 
-![Four Stick Figure presets alone on black, named under each: Arabesque, a thin white figure with a ring head standing on one leg, the other leg stretched back and one arm reaching up; Curtain Call, a gold figure in a deep bow with one hand at its chest and the other arm swept back; Walking Man, a tall, thin bronze-grey figure with a small head in mid-stride; Pictogram, a bold green running figure with a large round head, like the one on an exit sign](../assets/effects/presets/stick-figure.webp)
+![Four Stick Figure presets alone on black, named under each: Arabesque, a thin white figure with a ring head standing on one leg, the other leg stretched back, one arm reaching forward and up clear of the head and the other out behind; Curtain Call, a gold figure in a deep bow with one hand at its chest and the other arm swept back; Walking Man, a tall, thin bronze-grey figure with a small head in mid-stride; Pictogram, a bold green running figure with a large round head, like the one on an exit sign](../assets/effects/presets/stick-figure.webp)
 
 <figcaption>The four presets alone on black.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets the whole figure at once, pose, proportions, line and colour, in one undo step, and the row then shows its name until you change something. The action lane stays as it is, and a joint with keyframes keeps them; the card says so.
 
-**Arabesque** – a dancer on one straight leg, the other stretched far behind, one arm reaching forward and up, drawn in thin white lines with a ring head. A clean starting point for dance sketches.
+**Arabesque** – a dancer on one straight leg, the other stretched far behind, one arm reaching forward and up past the face and the other out behind, drawn in thin white lines with a ring head. A clean starting point for dance sketches.
 
 **Curtain Call** – a deep bow in warm gold, one hand at the chest and the other arm swept back. For the end of a scene, a thank-you, or a title card.
 
@@ -75,7 +75,7 @@ Angles are in degrees. Lengths and positions are in figure pixels: pixels of a 1
 
 <div class="docs-shot-stage">
 
-![The Pose section of the Stick Figure card with the Arabesque preset: Pelvis X, Pelvis Y and Lift at 0 px, Spine Lean 20°, Head Tilt −14°, Shoulder L 150°, Elbow L 10°, Shoulder R −85°, Elbow R 6°, Hip L 0°, Knee L 0°, Hip R −100°, Knee R 0°, each with a slider, a keyframe diamond and a reset arrow; the other sections are folded](../assets/effects/editor/stick-figure-pose.webp)
+![The Pose section of the Stick Figure card with the Arabesque preset: Pelvis X, Pelvis Y and Lift at 0 px, Spine Lean 20°, Head Tilt −20°, Shoulder L 118°, Elbow L 10°, Shoulder R −85°, Elbow R 6°, Hip L 0°, Knee L 0°, Hip R −100°, Knee R 0°, each with a slider, a keyframe diamond and a reset arrow; the other sections are folded](../assets/effects/editor/stick-figure-pose.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 590 1236" aria-hidden="true" focusable="false">
 <defs><marker id="stick-figure-pose-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -92,7 +92,7 @@ Angles are in degrees. Lengths and positions are in figure pixels: pixels of a 1
 </svg>
 </div>
 
-<figcaption>The Pose section with the Arabesque preset. 1 — Pelvis X: where the figure stands. 2 — Lift: up off the ground. 3 — Spine Lean: the upper body forward. 4 — Shoulder L: the arm reaching up. 5 — Hip R: −100° lifts the leg behind.</figcaption>
+<figcaption>The Pose section with the Arabesque preset. 1 — Pelvis X: where the figure stands. 2 — Lift: up off the ground. 3 — Spine Lean: the upper body forward. 4 — Shoulder L: the arm reaching forward and up. 5 — Hip R: −100° lifts the leg behind.</figcaption>
 </figure>
 
 **Pelvis X** – where the figure stands across the frame: 0 is the middle, negative values move it left, positive right; about ±960 reaches the edges of a 16:9 frame. Facing mirrors the figure around this point, and Walk and Run add their distance to it. −2000 to 2000 px, default 0 px.
@@ -195,22 +195,22 @@ Angles are in degrees. Lengths and positions are in figure pixels: pixels of a 1
 
 ## Node setup
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![The Nodes tab after pressing Walk: a Gait Cycle card on the left with the inputs time, speed, stride, lean and phase and one output per joint, Spine to Knee R; a cable runs from each output to the matching joint input of the Stick Figure card, which also takes the picture from the clip's Source card and passes it on to Target](../assets/effects/editor/stick-figure-walk-nodes.webp)
+![The node setup after pressing Walk, on a black clip: a Gait Cycle card on the left with the inputs time, speed, stride, lean and phase and one output per joint, Spine to Knee R; a cable runs from each output to the matching joint input of the Stick Figure card on the right. Two blue cables leave the picture at the bottom: the clip's picture coming in and going out](../assets/effects/graphs/stick-figure-walk.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1229" aria-hidden="true" focusable="false">
-<defs><marker id="stick-figure-walk-nodes-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M22 445 L86 445" marker-end="url(#stick-figure-walk-nodes-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="445" r="18" /><text x="22" y="445" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M586 618 L586 728" marker-end="url(#stick-figure-walk-nodes-arrow)" />
-<circle class="docs-shot-number" cx="586" cy="618" r="18" /><text x="586" y="618" class="docs-shot-number-text">2</text>
+<svg class="docs-shot-overlay" viewBox="0 0 1000 665" aria-hidden="true" focusable="false">
+<defs><marker id="stick-figure-walk-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M330 72 L222 72" marker-end="url(#stick-figure-walk-arrow)" />
+<circle class="docs-shot-number" cx="330" cy="72" r="18" /><text x="330" y="72" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M900 122 L728 122" marker-end="url(#stick-figure-walk-arrow)" />
+<circle class="docs-shot-number" cx="900" cy="122" r="18" /><text x="900" y="122" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
-<figcaption>The Nodes tab after Walk under Motion. 1 — Gait Cycle: one output per joint. 2 — Stick Figure: the joints as inputs.</figcaption>
+<figcaption>The node setup after Walk under Motion, the clip's Source and Target moved aside. 1 — Gait Cycle: one output per joint. 2 — Stick Figure: the joints as inputs.</figcaption>
 </figure>
 
 The figure itself is drawn in one built-in step, so there is no graph inside it to open. Instead every number of the card is an input that a node can drive. **Walk**, **Run** and **Idle** under Motion build the most common setup:

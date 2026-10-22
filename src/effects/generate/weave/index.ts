@@ -25,15 +25,15 @@ export const WEAVE_PARAMS: Record<string, EffectParam> = {
   wind: number('Wind', 0.35, 0, 2, 0.01, 'Wind Cloth', CLOTH_ONLY),
   'pulse-rate_value': number('Pulse Rate', 0.4, 0, 2, 0.01, 'Jellyfish Pulse', QUALLE_ONLY, ' Hz'),
   'pulse-strength_value': number('Pulse Size', 0.54, 0, 0.6, 0.01, 'Jellyfish Pulse', QUALLE_ONLY),
-  'curl-strength_value': number('Curl Strength', 0.063, 0, 0.5, 0.001, 'Return Curls', QUALLE_ONLY),
+  'curl-strength_value': number('Curl Strength', 0.063, 0, 0.25, 0.001, 'Return Curls', QUALLE_ONLY),
 };
 
 /** Named starting points of the card (values that differ from the defaults). */
 export const WEAVE_PRESETS: readonly EffectPreset[] = [
-  // Deep red yarn, woven slowly and unevenly, like a hand-made net.
-  { id: 'red-thread', name: 'Red Thread', params: { color: '#a3201c', weave_value: 0.75, irregularity_value: 1.6 } },
-  // Pale, even linen that hardly moves: a calm, precise grid.
-  { id: 'linen-grid', name: 'Linen Grid', params: { color: '#ece4d2', irregularity_value: 0, wind: 0.08 } },
+  // A loose, crooked net of pale yarn that drifts in a light wind: a veil.
+  { id: 'veil', name: 'Veil', params: { color: '#d9d2c4', weave_value: 1.5, irregularity_value: 2.8, wind: 0.6 } },
+  // An even, deep red cloth in a strong, gusting wind: it billows like a sail.
+  { id: 'red-sail', name: 'Red Sail', params: { color: '#b0261e', weave_value: 2, irregularity_value: 0.4, wind: 2 } },
   // Only a round patch grows, very uneven, in brown wool with a swollen, frayed rim: a bird's nest.
   { id: 'nest', name: 'Nest', params: { color: '#7d5b3a', weave_value: 2, reveal_value: 0.32, irregularity_value: 2.5, wind: 0.2 } },
   // Roman's jellyfish: a knitted bell with long cream ribbons that pulse and curl.

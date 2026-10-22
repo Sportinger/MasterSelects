@@ -21,8 +21,8 @@ Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](..
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/flocking-presets.mp4" poster="../assets/effects/clips/flocking-presets.webp" width="960" height="550" autoplay muted loop playsinline preload="none" aria-label="The five Flocking presets on black in a grid, in sync: Free Swarm, a cloud of pale points; Krill Cloud, orange krill swimming in clusters; Follow Path, a school tracing a figure eight with fine trails; Technical Network, points joined by thin blue lines; Violet Filaments, a dense violet cloud with curved filaments and small wire cubes"></video>
-<figcaption>The five presets on black, in sync.</figcaption>
+<video src="../assets/effects/clips/flocking-presets.mp4" poster="../assets/effects/clips/flocking-presets.webp" width="962" height="972" autoplay muted loop playsinline preload="none" aria-label="Six Flocking swarms on black in a grid, in sync: Free Swarm, a cloud of pale points; Krill Cloud, orange krill swimming in clusters; Follow Path, a school tracing a figure eight with fine trails; Technical Network, points joined by blue lines in a flat band; Violet Filaments, a violet cloud with curved filaments and small wire cubes; and Lilac Sculpture from More swarms, a lilac sheet settling in folds inside a lit white box"></video>
+<figcaption>The five presets and the Lilac Sculpture (under More swarms), in sync.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. A preset builds a whole swarm, so it replaces the swarm and every value in the card in one undo step; when you have keyframed values of the swarm, the card asks first, because those keyframes go with it. Each preset brings its own controls: Krill Cloud adds Line Density, Follow Path a Path Strength.
@@ -33,11 +33,11 @@ Pick one in the **Preset** row of the effect card. A preset builds a whole swarm
 
 **Follow Path** – a school that swims a figure eight and draws its path as fine trails. A loop that never ends, for a cycle, a ritual or a waiting scene.
 
-**Technical Network** – points joined to their neighbours by thin blue lines, with small square markers, bouncing inside an invisible box. A data sculpture for surveillance, networks and digital space.
+**Technical Network** – points joined to their neighbours by blue lines, with small square markers, drifting in a flat band held by an invisible box. A data sculpture for surveillance, networks and digital space.
 
-**Violet Filaments** – a dense violet cloud in clusters, with long curved filaments and small wire cubes at their tips. Rich and slow, for a large projection surface.
+**Violet Filaments** – a violet cloud in clusters, with long curved filaments and small wire cubes at their tips, brightest where the points crowd. Rich and slow, for a large projection surface.
 
-Under **More swarms** the menu offers four larger scenes: **Vortex** (a swirling shell of points), **Shrimp Pullback** (one large shrimp inside a huge swarm, made for a camera move) and two sculptures, Terracotta and Lilac, which are not swarms but a sheet of colour settling in folds inside a lit box.
+Under **More swarms** (the last cell of the grid shows the Lilac Sculpture) the menu offers four larger scenes, made for a big frame or a camera move rather than for the default picture: **Vortex** (a swirling shell of points), **Shrimp Pullback** (one large shrimp inside a huge swarm, made for a camera move) and two sculptures, Terracotta and Lilac, which are not swarms but a sheet of colour settling in folds inside a lit box.
 
 ## Controls
 
@@ -45,20 +45,20 @@ Under **More swarms** the menu offers four larger scenes: **Vortex** (a swirling
 
 <div class="docs-shot-stage">
 
-![The Flocking card in Properties, Effects, with the default swarm: Preset menu showing Free Swarm and a sentence about it, Open Nodes, then the sections Population (Population 4000), Behavior (Cohesion, Separation, Alignment, Speed, Turbulence with sliders), Appearance (Size and a pale blue Color), the folded More controls, Time & Quality (Step rate 60 Hz, Warm-up 0 s, Loop Continuous) and the folded Simulation status](../assets/effects/editor/flocking-inspector.webp)
+![The Flocking card in Properties, Effects, with the default swarm: Preset menu showing Free Swarm and a sentence about it, Open Nodes, then the sections Population (a slider and 4000), Behavior (Cohesion, Separation, Alignment, Speed 45, Turbulence 18 with sliders), Appearance (Size and a pale blue Color), the folded More controls, Time & Quality (Step rate 60 Hz, Warm-up 0 s, Loop Continuous) and the folded Simulation status](../assets/effects/editor/flocking-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 1201" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 1102" aria-hidden="true" focusable="false">
 <defs><marker id="flocking-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M137 138 L221 138" marker-end="url(#flocking-inspector-arrow)" />
 <circle class="docs-shot-number" cx="137" cy="138" r="18" /><text x="137" y="138" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M111 490 L195 490" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="111" cy="490" r="18" /><text x="111" y="490" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M98 646 L182 646" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="98" cy="646" r="18" /><text x="98" y="646" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M152 781 L236 781" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="152" cy="781" r="18" /><text x="152" y="781" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M114 1047 L198 1047" marker-end="url(#flocking-inspector-arrow)" />
-<circle class="docs-shot-number" cx="114" cy="1047" r="18" /><text x="114" y="1047" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M111 444 L195 444" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="111" cy="444" r="18" /><text x="111" y="444" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M98 600 L182 600" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="98" cy="600" r="18" /><text x="98" y="600" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M152 708 L236 708" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="152" cy="708" r="18" /><text x="152" y="708" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M114 948 L198 948" marker-end="url(#flocking-inspector-arrow)" />
+<circle class="docs-shot-number" cx="114" cy="948" r="18" /><text x="114" y="948" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -76,54 +76,54 @@ The rows below are those of the default swarm, Free Swarm. Other presets show ot
 <figcaption>Population 500, 4000 and 20000, two seconds each.</figcaption>
 </figure>
 
-**Population** – how many particles fly. 500 gives a sparse flight of single points, 4000 a light haze, 20 000 a dense, glowing cloud; more costs more graphics power. A new value restarts the swarm from the start of the clip, so it cannot be keyframed: to let a swarm thin out or grow, add the Emitter's **Active Fraction** with **Add** and keyframe that. 1 to 4 194 304, default 4000.
+**Population** – how many particles fly. 500 gives a sparse flight of single points, 4000 a light haze, 20 000 a dense, glowing cloud; more costs more graphics power. Its slider runs from 100 to 100 000 on a logarithmic scale, so small and large swarms are both in reach; type a number for more. A new value restarts the swarm from the start of the clip, so it cannot be keyframed and a drag applies when you let go: to let a swarm thin out or grow, add the Emitter's **Active Fraction** with **Add** and keyframe that. 1 to 4 194 304, default 4000.
 
 <div class="docs-float-end"></div>
 
 ### Behavior
 
-<figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/flocking-cohesion.mp4" poster="../assets/effects/clips/flocking-cohesion.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm while Cohesion runs from 0 to 10 and back: the loose cloud pulls together into tight clumps and arms that reach out and fold back, then loosens again; the value is shown at the bottom left"></video>
-<figcaption>Cohesion from 0 to 10 and back.</figcaption>
+<figure class="docs-shot docs-clip">
+<video src="../assets/effects/clips/flocking-cohesion.mp4" poster="../assets/effects/clips/flocking-cohesion.webp" width="840" height="268" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm at three Cohesion values side by side, in sync, each fixed from the clip start: at 0 the points spread into a wide, even haze; at the default 1 they hold together as one cloud; at 10 they pull into a tight, dense core with a few loose arms"></video>
+<figcaption>Cohesion 0, 1 (default) and 10, side by side.</figcaption>
 </figure>
 
-**Cohesion** – how strongly each particle steers towards the middle of its neighbours. At 0 the swarm drifts apart into a loose haze; 1 holds it together as one cloud; 5 and more pulls it into clumps and arms that reach out and fold back. It works against **Separation**. 0 to 10, default 1.
+**Cohesion** – how strongly each particle steers towards the middle of its neighbours. From 0 to the default 1 the swarm stays one loose, hazy cloud; at 10 it pulls into a tight, bright core and splits off clumps that drift apart. It works against **Separation**. 0 to 10, default 1.
 
 <div class="docs-float-end"></div>
 
-<figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/flocking-separation.mp4" poster="../assets/effects/clips/flocking-separation.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm while Separation runs from 0 to 10 and back: at 0 the points pack into bright knots, higher values space them evenly into a smooth, airy cloud, then they pack again; the value is shown at the bottom left"></video>
-<figcaption>Separation from 0 to 10 and back.</figcaption>
+<figure class="docs-shot docs-clip">
+<video src="../assets/effects/clips/flocking-separation.mp4" poster="../assets/effects/clips/flocking-separation.webp" width="840" height="268" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm at three Separation values side by side, in sync, each fixed from the clip start: at 0 the points pack into bright knots; at the default 1.6 they are evenly spaced; at 10 they spread into a wide, airy cloud"></video>
+<figcaption>Separation 0, 1.6 (default) and 10, side by side.</figcaption>
 </figure>
 
-**Separation** – how strongly each particle keeps its distance from its nearest neighbours. At 0 they pack into bright knots and threads; 1.6 spaces them evenly; 5 and more spreads them into a smooth, airy cloud. 0 to 10, default 1.6.
+**Separation** – how strongly each particle keeps its distance from its nearest neighbours. At 0 they pack into thin, bright sheets and knots; 1.6 spaces them evenly; 10 spreads them into a wide, airy cloud that fills the whole space. 0 to 10, default 1.6.
 
 <div class="docs-float-end"></div>
 
-<figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/flocking-alignment.mp4" poster="../assets/effects/clips/flocking-alignment.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm while Alignment runs from 0 to 10 and back: the cloud turns into one compact body that moves together, then loosens again; the value is shown at the bottom left"></video>
-<figcaption>Alignment from 0 to 10 and back.</figcaption>
+<figure class="docs-shot docs-clip">
+<video src="../assets/effects/clips/flocking-alignment.mp4" poster="../assets/effects/clips/flocking-alignment.webp" width="840" height="268" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm at three Alignment values side by side, in sync, each fixed from the clip start: at 0 the points buzz in place as a round cloud; at the default 1.2 the cloud turns and drifts; at 10 the points stream together in long, parallel bands"></video>
+<figcaption>Alignment 0, 1.2 (default) and 10, side by side.</figcaption>
 </figure>
 
-**Alignment** – how strongly each particle flies the way its neighbours fly. At 0 every point keeps its own course and the cloud buzzes; 1.2 lets the swarm turn together; 5 and more makes one compact body that moves like a school of fish. 0 to 10, default 1.2.
+**Alignment** – how strongly each particle flies the way its neighbours fly. At 0 every point keeps its own course and the swarm spreads into an even haze; 1.2 lets it turn together as one cloud; 10 draws it into one compact body with a trailing tail, like a school of fish. 0 to 10, default 1.2.
 
 <div class="docs-float-end"></div>
 
-<figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/flocking-speed.mp4" poster="../assets/effects/clips/flocking-speed.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm while Speed runs from 10 to 120 and back: the slow, hovering cloud speeds up into fast sweeping streams and calms again; the value is shown at the bottom left"></video>
-<figcaption>Speed from 10 to 120 and back.</figcaption>
+<figure class="docs-shot docs-clip">
+<video src="../assets/effects/clips/flocking-speed.mp4" poster="../assets/effects/clips/flocking-speed.webp" width="840" height="268" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm at three speeds side by side, in sync, each fixed from the clip start: at 10 the cloud hovers almost still; at the default 45 it turns calmly; at 120 the points race around inside their sphere"></video>
+<figcaption>Speed 10, 45 (default) and 120, side by side.</figcaption>
 </figure>
 
-**Speed** – the top speed of a particle. 10 hovers slowly, 45 is a calm flight in which a particle crosses the picture in about five seconds, 100 and more sweeps fast. 0 and up, default 45.
+**Speed** – the top speed of a particle. At 10 the cloud hovers, rounded and slow; 45 is a calm flight in which a particle crosses the picture in about five seconds; at 120 the points race and the cloud stretches out to the edges of its space. 0 and up, default 45.
 
 <div class="docs-float-end"></div>
 
-<figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/flocking-turbulence.mp4" poster="../assets/effects/clips/flocking-turbulence.webp" width="640" height="480" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm while Turbulence runs from 0 to 80 and back: the smooth swarm starts to swirl and fray into eddies, then smooths out again; the value is shown at the bottom left"></video>
-<figcaption>Turbulence from 0 to 80 and back.</figcaption>
+<figure class="docs-shot docs-clip">
+<video src="../assets/effects/clips/flocking-turbulence.mp4" poster="../assets/effects/clips/flocking-turbulence.webp" width="840" height="268" autoplay muted loop playsinline preload="none" aria-label="The Free Swarm at three Turbulence values side by side, in sync, each fixed from the clip start: at 0 the cloud moves smoothly; at the default 18 it swirls; at 80 it is torn into eddies and stringy arms"></video>
+<figcaption>Turbulence 0, 18 (default) and 80, side by side.</figcaption>
 </figure>
 
-**Turbulence** – how hard a slowly changing current pushes the swarm around. At 0 only the flocking rules act and the cloud moves smoothly; 18 makes it swirl; 60 and more frays it into eddies and long arms. 0 and up, default 18.
+**Turbulence** – how hard a slowly changing current pushes the swarm around. At 0 only the flocking rules act and the swarm stays a calm, round ball; 18 makes it swirl and fold; 80 tears it into eddies and long, stringy arms. 0 and up, default 18.
 
 <div class="docs-float-end"></div>
 
@@ -138,11 +138,11 @@ The rows below are those of the default swarm, Free Swarm. Other presets show ot
 
 <div class="docs-float-end"></div>
 
-**Color** – the colour of the points. Pale colours glow on black; a warm colour reads well under stage light. Keyframe it to let the swarm change colour on a cue. a colour, default `#b4e2ff`.
+**Color** – the colour of the points. Pale colours glow on black, and you can keyframe it to let the swarm change colour on a cue; a warm colour reads well under stage light: a colour, default `#b4e2ff`.
 
 ### More controls
 
-**Add** – lists every value of the swarm's node setup, node by node; pick one and it becomes a row in the card, in a section named after its node. The × on a row takes it out of the card again and leaves its value as it is. any value of the swarm graph, default none.
+**Add** – lists every value of the swarm's node setup, node by node; pick one and it becomes a row in the card, in a section named after its node. A row added this way has a ×, which takes it out of the card again and leaves its value as it is; the preset's own rows have none: any value of the swarm graph, default none.
 
 ### Time & Quality
 
@@ -162,18 +162,18 @@ The folded **Simulation status** section shows how much memory the swarm needs a
 
 ![The Flocking swarm opened in the Nodes tab: inside the green Flocking group, Turbulence and Flock Rules feed Compose Behavior; Emitter, Compose Behavior and Boundary feed Simulation, which feeds Points and Scene Output; the clip's Source on the left and its Target on the right](../assets/effects/graphs/flocking.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 608" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 385" aria-hidden="true" focusable="false">
 <defs><marker id="flocking-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M368 22 L368 73" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="368" cy="22" r="18" /><text x="368" y="22" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M228 22 L228 73" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="228" cy="22" r="18" /><text x="228" y="22" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M93 291 L177 291" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="93" cy="291" r="18" /><text x="93" y="291" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M509 144 L509 228" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="144" r="18" /><text x="509" y="144" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M649 152 L649 236" marker-end="url(#flocking-arrow)" />
-<circle class="docs-shot-number" cx="649" cy="152" r="18" /><text x="649" y="152" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M368 78 L368 162" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="368" cy="78" r="18" /><text x="368" y="78" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M228 94 L228 178" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="228" cy="94" r="18" /><text x="228" y="94" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M93 73 L177 73" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="93" cy="73" r="18" /><text x="93" y="73" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M509 54 L509 138" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="54" r="18" /><text x="509" y="54" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M649 62 L649 146" marker-end="url(#flocking-arrow)" />
+<circle class="docs-shot-number" cx="649" cy="62" r="18" /><text x="649" y="62" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 

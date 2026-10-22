@@ -23,6 +23,8 @@ interface ResolveEffectParamRowProps {
   effect: { id: string; params: Record<string, Value> };
   clipId?: string;
   onChange: (params: Record<string, Value>) => void;
+  /** The inactive note is already shown once above the row (a folded section of inactive rows). */
+  noteShown?: boolean;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   onParamCommit?: (paramName: string, controlKind: 'checkbox' | 'number' | 'select',
@@ -38,7 +40,7 @@ export function ResolveEffectParamRow(props: ResolveEffectParamRowProps) {
   const when = props.definition.activeWhen, controller = when ? props.effect.params[when.param] : undefined;
   const inactive = !!when && controller !== undefined && !when.values.includes(controller);
   const row = <ResolveEffectParamControl {...props} inactive={inactive} />;
-  return inactive && when ? <>{row}<div className="resolve-effect-row-note">{when.note}</div></> : row;
+  return inactive && when && !props.noteShown ? <>{row}<div className="resolve-effect-row-note">{when.note}</div></> : row;
 }
 
 function ResolveEffectParamControl({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit, inactive }:

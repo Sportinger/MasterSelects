@@ -1,6 +1,6 @@
 // The Weave card: a new Weave shows Form and its recipe controls (it used to say "No parameters"),
 // and a Weave saved with its own graph shows each exposed value once, without Form.
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
 import { getDefaultParams } from '../../src/effects';
@@ -22,13 +22,24 @@ const weave = (extra: Partial<Effect> = {}): Effect => ({ id: 'weave-card', type
   params: getDefaultParams('weave') as Effect['params'], ...extra });
 
 describe('Weave card', () => {
-  it('shows Form, Color and the controls of both forms on a new Weave, the other form dimmed', () => {
+  it('shows Form, Color and the controls of the Woven Cloth on a new Weave, the Qualle rows folded into one closed section', () => {
     render(<EffectsTab clipId="clip:weave-card" effects={[weave()]} />);
     expect(screen.queryByText('No parameters')).toBeNull();
-    for (const label of ['Preset', 'Form', 'Color', 'Weave Speed', 'Reveal', 'Irregularity', 'Wind', 'Pulse Rate', 'Pulse Size', 'Curl Strength']) {
+    for (const label of ['Preset', 'Form', 'Color', 'Weave Speed', 'Reveal', 'Irregularity', 'Wind', 'Qualle controls']) {
       expect(screen.getAllByText(label), label).toHaveLength(1);
     }
-    expect(screen.getAllByText('Acts on the Qualle form only.')).toHaveLength(3);
+    // The Qualle rows stay in the card (presets and tools reach them) but sit folded, with the reason once.
+    for (const label of ['Pulse Rate', 'Pulse Size', 'Curl Strength', 'Jellyfish Pulse', 'Return Curls']) expect(screen.queryByText(label), label).toBeNull();
+    expect(screen.queryByText('Acts on the Qualle form only.')).toBeNull();
+    fireEvent.click(screen.getByText('Qualle controls'));
+    for (const label of ['Pulse Rate', 'Pulse Size', 'Curl Strength']) expect(screen.getAllByText(label), label).toHaveLength(1);
+    expect(screen.getAllByText('Acts on the Qualle form only.')).toHaveLength(1);
+  });
+
+  it('folds the Woven Cloth rows when Form is Qualle', () => {
+    render(<EffectsTab clipId="clip:weave-card" effects={[weave({ params: { ...getDefaultParams('weave'), form: 'qualle' } as Effect['params'] })]} />);
+    for (const label of ['Pulse Rate', 'Pulse Size', 'Curl Strength', 'Woven Cloth controls']) expect(screen.getAllByText(label), label).toHaveLength(1);
+    for (const label of ['Weave Speed', 'Reveal', 'Irregularity', 'Wind']) expect(screen.queryByText(label), label).toBeNull();
   });
 
   it('shows each exposed value of a graph saved before Form once and leaves Form out', () => {

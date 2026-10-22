@@ -16,7 +16,8 @@ export const QUALLE_RIBBON_VALUES: Readonly<Record<string, number>> = {
 export const QUALLE_CARD_CONTROLS = {
   'pulse-rate_value': { node: 'pulse-rate', label: 'Pulse Rate', value: 0.4, min: 0, max: 2, step: 0.01 },
   'pulse-strength_value': { node: 'pulse-strength', label: 'Pulse Size', value: 0.54, min: 0, max: 0.6, step: 0.01 },
-  'curl-strength_value': { node: 'curl-strength', label: 'Curl Strength', value: 0.063, min: 0, max: 0.5, step: 0.001 },
+  // Above 0.25 the curls throw the ribbons far out of the frame, so the card stops there.
+  'curl-strength_value': { node: 'curl-strength', label: 'Curl Strength', value: 0.063, min: 0, max: 0.25, step: 0.001 },
 } as const;
 
 /**
