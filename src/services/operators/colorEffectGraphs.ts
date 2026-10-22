@@ -19,7 +19,10 @@ export const COLOR_RECIPE_EFFECT_TYPES: ReadonlySet<string> = new Set<EditableCo
 export const COLOR_RECIPE = Object.freeze({
   /** Brightness multiplies each channel's odds x/(1-x) by 2^(stops * amount). */
   brightnessStops: 2.5,
-  /** Contrast below this slope renders as this slope (0 itself is a flat grey). */
+  /**
+   * Floor of the S-curve's slope. It acted only in the former recipe (createFormerContrastGraph), where
+   * the curve also ran below 1; the current Steepness is never below 1. Kept for that node structure.
+   */
   contrastMinimumSlope: 0.01,
   /** Contrast keeps inputs this far inside 0..1 so 0^0 never occurs. */
   contrastEdge: 1e-6,
@@ -125,7 +128,8 @@ export function createDefaultContrastGraph(): EffectOperatorGraph {
   const amount = boundParameter(g, 'amount', CONTRAST_AMOUNT_PARAM);
   const one = g.number('flatten-one', 1);
   const steepness = g.binary('amount-steepness', 'math.max.scalar', amount, one);
-  const factor = g.binary('amount-flatten', 'math.min.scalar', amount, one);
+  // Clamped to 0..1, so an Image graph that drives the shared block below 0 gets plain grey, not a negative.
+  const factor = g.add('amount-flatten', 'math.clamp.scalar', { value: amount, min: g.number('flatten-zero', 0), max: one });
   // At most one of the two stages acts: Flatten up to Amount 1, the curve from 1 on.
   const flat = g.add('flatten', 'math.mix.rgb', { a: rgbOf(g, g.number('flatten-grey', 0.5)), b: ['split', 'rgb'], t: factor });
   return finish(g, contrastCurve(g, steepness, flat));
@@ -133,8 +137,8 @@ export function createDefaultContrastGraph(): EffectOperatorGraph {
 
 /**
  * The Contrast recipe of 2026-10 before the flat branch: the S-curve family at every amount, so
- * below 1 an inverse S with an infinite slope at black and white. Kept to recognise and upgrade
- * saved graphs, and as the source of the shared Contrast Curve block, whose ports must not change.
+ * below 1 an inverse S with an infinite slope at black and white. Saved graphs of it are recognised
+ * by a frozen fingerprint (contrastFlattenUpgrade.ts); this builder is kept for tests and comparisons.
  */
 export function createFormerContrastGraph(): EffectOperatorGraph {
   const g = begin();

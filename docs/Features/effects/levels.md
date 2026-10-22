@@ -23,20 +23,20 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot docs-shot--detail">
 
-![The dancer on the dark stage four times, each with one preset: Clean Points top left with a deeper black stage and a brighter dress, Open Mids top right with lighter haze and skin, Deep Mids bottom left darker and denser, Matte Film bottom right with a dark grey stage instead of black and a duller dress](../assets/effects/presets/levels.webp)
+![The harbour town four times, each with one preset: Clean Points top left firmer, with deeper shadows and brighter whites, Open Mids top right lighter and airy, Deep Mids bottom left dark and dense with a deep blue sky and sea, Matte Film bottom right flat, with grey-blue shadows and no pure white on the boats](../assets/effects/presets/levels.webp)
 
-<figcaption>The four presets on the dancer.</figcaption>
+<figcaption>The four presets on the harbour town, which has real blacks and whites.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all five controls in one undo step, and the row then shows its name until you change a value. A keyframed control keeps its keyframes, and the card says so.
 
 **Clean Points** – the darkest and the brightest 6 % of the tones become pure black and pure white (Input Black 0.06, Input White 0.94). The picture gets firmer without a new look: a good first step for slightly grey footage.
 
-**Open Mids** – lighter mid-tones (Gamma 1.4) while black and white stay where they are. The haze and the skin open up; the stage stays dark.
+**Open Mids** – lighter mid-tones (Gamma 1.4) while black and white stay where they are. The picture turns light and airy; on a stage the haze and the skin open up while the dark stays dark.
 
-**Deep Mids** – heavier mid-tones on a slightly deeper black (Input Black 0.04, Gamma 0.75). A darker, denser mood without losing the highlights.
+**Deep Mids** – heavier mid-tones on a slightly deeper black (Input Black 0.04, Gamma 0.6). A darker, denser mood without losing the highlights.
 
-**Matte Film** – black is lifted to a dark grey and white is held below white (Output Black 0.12, Output White 0.9), like a matte film print. Nothing on the picture is pure black or pure white any more.
+**Matte Film** – black is lifted to a dark grey and white is held below white (Output Black 0.12, Output White 0.9), like a matte film print. Nothing on the picture is pure black or pure white any more; unlike Open Mids, the shadows turn grey while the mid-tones stay where they were.
 
 ## Controls
 

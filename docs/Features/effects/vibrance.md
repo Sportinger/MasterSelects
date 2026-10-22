@@ -6,7 +6,7 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot docs-compare">
 
-![The harbour town on the coast, original left and with Vibrance at Amount 2 right: the pale sky turns a deep blue and the pale pink and yellow house fronts fill with colour, while the already strong turquoise of the sea and the white boats change little](../assets/effects/vibrance.webp)
+![The dancer on a dark stage, original left and with Vibrance at Amount 2 right: the blue side light and the warm haze around her deepen into strong colour, while her face and arms keep their natural tone and the pale dress turns only a little warmer](../assets/effects/vibrance.webp)
 
 <figcaption>Left: original. Right: Amount 2 (the Strong preset).</figcaption>
 </figure>
@@ -17,7 +17,7 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 **Tip:** for a close-up of a face, Vibrance is the safer push. For the same push on the background, [Saturation](./saturation.md) turns skin orange, Vibrance leaves it as it is. Drag the slider across her face:
 
-<figure class="docs-shot docs-compare">
+<figure class="docs-shot docs-compare" data-before="Saturation 2.2" data-after="Vibrance 2">
 
 ![The dancer's face, shoulders and outstretched arm in front of the green screen, with the same strong green on both sides: left with Saturation 2.2, where her skin turns orange-red, right with Vibrance 2, where the skin keeps its natural tone](../assets/effects/vibrance-skin.webp)
 
@@ -28,16 +28,16 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot">
 
-![The harbour town three times, each with one preset: Vibrant left with a deeper sky and a little more colour in the house fronts, Strong in the middle with a deep blue sky and pink and yellow walls full of colour, Muted right with a greyish sky and pale, quiet house fronts while the sea keeps some of its turquoise](../assets/effects/presets/vibrance.webp)
+![The dancer on the dark stage three times, each with one preset: Vibrant left with a bluer side light and warmer haze, Strong in the middle with a deep blue light and brown-orange haze, Muted right with a greyish blue and a duller haze; her skin looks much the same in all three](../assets/effects/presets/vibrance.webp)
 
-<figcaption>The three presets on the harbour town.</figcaption>
+<figcaption>The three presets on the dancer.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets Amount in one undo step, and the row then shows its name until you change the value. A keyframed Amount keeps its keyframes, and the card says so.
 
-**Vibrant** – a clear push (Amount 1): the sky deepens and pale walls fill up, while faces stay as they were. A good first step for a dull recording.
+**Vibrant** – a clear push (Amount 1): the coloured light and the haze around a performer gain colour, while faces stay as they were. A good first step for a dull recording.
 
-**Strong** – the top of the slider (Amount 2). Pale colours bloom, while colours that are already strong and skin move only a little.
+**Strong** – the top of the slider (Amount 2). Pale colours bloom, such as the blue side light and the warm haze; skin moves only a little. Pale warm surfaces, like light wood or a cream wall, count as skin and gain less too. On a scene without people, Strong looks much like [Saturation](./saturation.md) at 1.8.
 
 **Muted** – pale colours fade toward grey (Amount −0.6), strong colours and skin keep most of theirs: a quiet, subdued look that still has life in the faces. For a cool look, add [Temperature](./temperature.md).
 
@@ -47,7 +47,7 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Vibrance card: the Preset menu showing Strong and the Amount row at 2.00, beside a strip of the preview with the harbour town, its sky deep blue and the house fronts full of colour](../assets/effects/editor/vibrance-inspector.webp)
+![Properties, Effects with a Vibrance card: the Preset menu showing Strong and the Amount row at 2.00, beside a strip of the preview with the dancer's arm and dress against a deep blue side light, her skin natural](../assets/effects/editor/vibrance-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 393" aria-hidden="true" focusable="false">
 <defs><marker id="vibrance-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -65,7 +65,7 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 **Preset** – one of the three starting points above; it sets Amount.
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/vibrance-amount.mp4" poster="../assets/effects/clips/vibrance-amount.webp" width="720" height="540" autoplay muted loop playsinline preload="none" aria-label="The harbour town while Vibrance runs from −1 to 2 and back: at −1 the pale sky and the pastel house fronts turn almost grey while the turquoise sea keeps much of its colour, then the sky deepens to a strong blue and the pink and yellow walls fill with colour, while the sea and the white boats change little; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/vibrance-amount.mp4" poster="../assets/effects/clips/vibrance-amount.webp" width="720" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage with Vibrance while Amount runs from −1 to 2 and back: at −1 the haze and the blue backlight turn almost grey while her skin keeps a little warmth, then the haze turns brown-orange, the backlight deep blue and her backlit hair glows orange, while her skin and the pale dress change far less; the current value is shown at the bottom left"></video>
 <figcaption>Amount from −1 to 2 and back.</figcaption>
 </figure>
 
@@ -220,7 +220,7 @@ Skin Protection asks two questions: is the hue that of skin, and is the pixel li
 
 <div class="docs-shot-stage">
 
-![Inside Skin Protection, the light test: Saturation into a Smoothstep between Skin Pale Saturation 0.6 and Skin Vivid Saturation 0.8, Subtract from 1; Value (HSV) into a Smoothstep between Skin Dark Value 0.15 and Skin Lit Value 0.35; a Multiply joins both, a second Multiply adds the Skin Hue Match, a third the Skin Protection 0.7, and a final Subtract from 1 gives the Skin Weight](../assets/effects/graphs/vibrance-skin-weight.webp)
+![Inside Skin Protection, the light test: Saturation into a Smoothstep between Skin Pale Saturation 0.6 and Skin Vivid Saturation 0.8, Subtract from 1; Value (HSV) into a Smoothstep between Skin Dark Value 0.15 and Skin Lit Value 0.35; a Multiply joins both, a second Multiply adds the Skin Hue Match, a third the protection strength 0.7, and a final Subtract from 1 gives the Skin Weight](../assets/effects/graphs/vibrance-skin-weight.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 882" aria-hidden="true" focusable="false">
 <defs><marker id="vibrance-skin-weight-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -239,11 +239,11 @@ Skin Protection asks two questions: is the hue that of skin, and is the pixel li
 
 **Smoothstep** – there are two. The upper one rises smoothly from 0 to 1 as the saturation goes from **Skin Pale Saturation** (0.6) to **Skin Vivid Saturation** (0.8); the Subtract after it turns that round: 1 for colours that could be skin, 0 for strong orange light, which then gets the full push. The lower one rises from 0 to 1 as the value goes from **Skin Dark Value** (0.15) to **Skin Lit Value** (0.35): a dark, warm stage floor has the hue of skin but is not lit like it, so it is not protected.
 
-**Multiply** – three in a row. The first joins both tests: lit and not too vivid. The second joins that with the **Skin Hue Match** from the hue test. The third scales it by **Skin Protection**, 0.7: clear skin is spared 70 % of the push.
+**Multiply** – three in a row. The first joins both tests: lit and not too vivid. The second joins that with the **Skin Hue Match** from the hue test. The third scales it by the protection strength, the value card at 0.7 (its card shares the folder's name): clear skin is spared 70 % of the push.
 
 **Subtract** – 1 minus that: the **Skin Weight**, which the Muted-Colour Weight multiplies with the paleness.
 
-**Remix:** set **Skin Protection** to 1 to leave skin completely untouched, or move **Skin Hue** to 0.6 to spare a blue instead, say the sky of a scene.
+**Remix:** set the 0.7 strength card to 1 to leave skin completely untouched, or move **Skin Hue** to 0.6 to spare a blue instead, say the sky of a scene.
 
 ### Saturation (Gamut-Safe)
 

@@ -186,8 +186,8 @@ Exposure works in four stages, one folder each in the Nodes tab: **Parameters** 
 <circle class="docs-shot-number" cx="509" cy="141" r="18" /><text x="509" y="141" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M703 141 L703 225" marker-end="url(#exposure-tone-arrow)" />
 <circle class="docs-shot-number" cx="703" cy="141" r="18" /><text x="703" y="141" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M509 674 L509 590" marker-end="url(#exposure-tone-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="674" r="18" /><text x="509" y="674" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M509 426 L509 450" marker-end="url(#exposure-tone-arrow)" />
+<circle class="docs-shot-number" cx="509" cy="426" r="18" /><text x="509" y="426" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M897 141 L897 225" marker-end="url(#exposure-tone-arrow)" />
 <circle class="docs-shot-number" cx="897" cy="141" r="18" /><text x="897" y="141" class="docs-shot-number-text">4</text>
 </svg>

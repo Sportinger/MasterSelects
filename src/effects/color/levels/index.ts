@@ -11,7 +11,7 @@ export const LEVELS_PRESETS: readonly EffectPreset[] = [
   // Lighter mid-tones while black and white stay: the haze and the skin open up.
   { id: 'open-mids', name: 'Open Mids', params: { gamma: 1.4 } },
   // Heavier mid-tones on a slightly deeper black: a darker, denser mood.
-  { id: 'deep-mids', name: 'Deep Mids', params: { inputBlack: 0.04, gamma: 0.75 } },
+  { id: 'deep-mids', name: 'Deep Mids', params: { inputBlack: 0.04, gamma: 0.6 } },
   // Blacks lifted to a dark grey and whites held below white, like a matte film print.
   { id: 'matte-film', name: 'Matte Film', params: { outputBlack: 0.12, outputWhite: 0.9 } },
 ];

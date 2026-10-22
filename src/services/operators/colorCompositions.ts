@@ -59,7 +59,7 @@ const RECIPE_COMPOSITIONS: readonly OperatorDefinition[] = [
   }),
   extractImageComposition(contrast, {
     id: 'color.contrast-curve.rgb', label: 'Contrast Curve',
-    description: 'Contrast with slope c at mid-grey on 0–1 RGB. From 1 up an S-curve y = x^c / (x^c + (1 − x)^c): black and white stay put and highlights roll off instead of clipping. Below 1 an even fade toward mid-grey, y = 0.5 + (x − 0.5)·c: blacks lift and whites soften, 0 is plain grey.',
+    description: 'Contrast with slope c at mid-grey on 0–1 RGB. From 1 up an S-curve y = x^c / (x^c + (1 − x)^c): black and white stay put and highlights roll off instead of clipping. Below 1 an even fade toward mid-grey, y = 0.5 + (x − 0.5)·c: blacks lift and whites soften, 0 and below is plain grey.',
     members: [...ids(contrast, /^(curve|flatten)(-|$)|^amount-(steepness|flatten)$/), 'input'], consumers: consumers('Contrast'),
     inputLabels: { ...rgbIn, 'amount-clamped-value': 'Contrast' }, outputLabels: { 'curve-value': 'RGB' },
   }),

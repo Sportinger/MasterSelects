@@ -77,8 +77,8 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 427" aria-hidden="true" focusable="false">
 <defs><marker id="contrast-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M314 276 L314 192" marker-end="url(#contrast-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="276" r="18" /><text x="314" y="276" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M150 126 L234 126" marker-end="url(#contrast-arrow)" />
+<circle class="docs-shot-number" cx="150" cy="126" r="18" /><text x="150" y="126" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M509 106 L509 190" marker-end="url(#contrast-arrow)" />
 <circle class="docs-shot-number" cx="509" cy="106" r="18" /><text x="509" y="106" class="docs-shot-number-text">2</text>
 </svg>
@@ -87,7 +87,7 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 <figcaption>Contrast opened in the Nodes tab (the Constants folder left out). 1 — Parameters: Amount, kept within its range. 2 — Contrast Curve: fades the picture below 1, adds punch above.</figcaption>
 </figure>
 
-Contrast works in two stages, as every colour effect does ([Color & Tone](../Effects-Color.md#the-shared-idea)): **Parameters** keeps Amount within its range, and **Contrast Curve** does the work. It is a shared block from Reusable Nodes, so the same curve can be dropped into any graph. Inside it, one half fades the picture below 1 and the other bends it into an S above 1; only one of them acts at a time, the other passes the picture on unchanged. **Split RGB + Alpha** takes the transparency aside first and **Combine RGB + Alpha** puts it back untouched. Click a folder's header to open it; the sections below show what is inside.
+Contrast works in two stages ([Color & Tone](../Effects-Color.md#the-shared-idea) shows the shape all colour effects share): **Parameters** keeps Amount within its range, and **Contrast Curve** does the work. It is a shared block from Reusable Nodes, so the same curve can be dropped into any graph. Inside it, one half fades the picture below 1 and the other bends it into an S above 1; only one of them acts at a time, the other passes the picture on unchanged. **Split RGB + Alpha** takes the transparency aside first and **Combine RGB + Alpha** puts it back untouched. Click a folder's header to open it; the sections below show what is inside.
 
 ### Parameters
 
@@ -117,23 +117,23 @@ Contrast works in two stages, as every colour effect does ([Color & Tone](../Eff
 
 <div class="docs-shot-stage">
 
-![Inside the Contrast Curve block, its first half: the Amount from outside and a Value of 1 go into a Minimum, whose output is Flatten, and into a Maximum, whose output is Steepness; a Value of 0.5 becomes an RGB colour through Scalar to RGB and goes into input A of a Mix, the RGB from outside into B and Flatten into T; the Mix output is the Flattened RGB](../assets/effects/graphs/contrast-flatten.webp)
+![Inside the Contrast Curve block, its first half: the Amount from outside and a Value of 1 go into a Maximum, whose output is Steepness, and with a Value of 0 into Value, Max and Min of a Clamp, whose output is Flatten; a Value of 0.5 becomes an RGB colour through Scalar to RGB and goes into input A of a Mix, the RGB from outside into B and Flatten into T; the Mix output is the Flattened RGB](../assets/effects/graphs/contrast-flatten.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 869" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 933" aria-hidden="true" focusable="false">
 <defs><marker id="contrast-flatten-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M295 287 L295 371" marker-end="url(#contrast-flatten-arrow)" />
-<circle class="docs-shot-number" cx="295" cy="287" r="18" /><text x="295" y="287" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M295 847 L295 763" marker-end="url(#contrast-flatten-arrow)" />
-<circle class="docs-shot-number" cx="295" cy="847" r="18" /><text x="295" y="847" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M295 911 L295 827" marker-end="url(#contrast-flatten-arrow)" />
+<circle class="docs-shot-number" cx="295" cy="911" r="18" /><text x="295" y="911" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M295 347 L295 371" marker-end="url(#contrast-flatten-arrow)" />
+<circle class="docs-shot-number" cx="295" cy="347" r="18" /><text x="295" y="347" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M478 132 L478 216" marker-end="url(#contrast-flatten-arrow)" />
 <circle class="docs-shot-number" cx="478" cy="132" r="18" /><text x="478" y="132" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
-<figcaption>Inside Contrast Curve, the fade. 1 — Minimum: the Flatten share, at most 1. 2 — Maximum: the Steepness, at least 1. 3 — Mix: between mid-grey and the picture.</figcaption>
+<figcaption>Inside Contrast Curve, the fade. 1 — Clamp: the Flatten share, between 0 and 1. 2 — Maximum: the Steepness, at least 1. 3 — Mix: between mid-grey and the picture.</figcaption>
 </figure>
 
-**Minimum** – the smaller of Amount and 1: how much of the picture's spread the fade keeps. From Amount 1 up it stays 1, so the fade does nothing.
+**Clamp** – keeps Amount between 0 and 1: how much of the picture's spread the fade keeps. From Amount 1 up it stays 1, so the fade does nothing. The 0 matters only when you drive the block yourself in an [Image graph](../Node-Workspace.md): a value below 0 gives plain grey, not a negative.
 
 **Maximum** – the larger of Amount and 1: the Steepness of the S-curve. Below Amount 1 it stays 1, so the curve does nothing.
 
@@ -175,5 +175,5 @@ Contrast works in two stages, as every colour effect does ([Color & Tone](../Eff
 - **Range.** The slider covers 0 to 3; typed values, keyframes and nodes render up to 10. Beyond that the picture uses the limit, and the inspector and the tool result say so.
 - **Colour.** It works per channel, so strong values also raise the saturation and push warm lights toward red-orange; flattening softens colours in the same way.
 - **Transparency.** Only the colour is changed; the transparency passes through untouched.
-- **Saved projects.** Until 22 October 2026 Contrast ran its S-curve below 1 too. That stretched the darkest shadows so far that their grain turned into coloured blotches. Saved effects with that recipe now fade evenly below 1, and so does a Contrast Curve block placed in your own graph; from 1 up both look exactly as before. A saved Contrast whose folders you bypassed or edited keeps what you built.
+- **Saved projects.** Before this fix Contrast ran its S-curve below 1 too. That stretched the darkest shadows so far that their grain turned into coloured blotches. A saved Contrast with that recipe now fades evenly below 1, and so does a Contrast Curve block placed in your own graph; from 1 up both look exactly as before. A saved Contrast whose folders you bypassed, or whose curve you edited inside the block, keeps what you built; an edit outside the block (in Parameters, say) keeps that edit, and the block itself gets the even fade.
 - What all colour effects share (8-bit range, saved projects, adjustment layers): [Color & Tone](../Effect-System.md#color--tone-notes). Formulas: [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks: [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

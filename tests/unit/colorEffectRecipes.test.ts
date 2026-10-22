@@ -15,6 +15,9 @@ import type { Layer } from '../../src/types/layers';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { COLOR_COMPOSITIONS } from '../../src/services/operators/colorCompositions';
 import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
+import { extractImageComposition } from '../../src/services/operators/extractImageComposition';
+import { effectRecipeFingerprint } from '../../src/services/operators/recipeFingerprint';
+import { FORMER_CONTRAST_FINGERPRINT } from '../../src/services/operators/contrastFlattenUpgrade';
 
 /**
  * Independent CPU references for the rebuilt color effects (2026-10). The formulas below are
@@ -45,6 +48,32 @@ function expectPixel(actual: number[], expected: number[], digits = 5) {
   expected.forEach((value, index) => expect(actual[index]).toBeCloseTo(value, digits));
 }
 const finite = (pixel: number[]) => pixel.every(Number.isFinite);
+
+/**
+ * The former Contrast recipe as a Nodes-tab save stored it before the fade: the Contrast Curve block
+ * packed into one instance whose nodeIds list the members the block had then (curve…, input and
+ * their literals), next to a Parameters folder.
+ */
+function packFormerContrast(): EffectOperatorGraph {
+  const former = createFormerContrastGraph();
+  const block = extractImageComposition(former, { id: 'color.contrast-curve.rgb', label: 'Contrast Curve', description: '', consumers: [],
+    members: former.nodes.filter(node => (/^curve/.test(node.id) || node.id === 'input') && !(node.operator === 'values.number' && node.constants)).map(node => node.id) });
+  const body = new Set(block.composition!.graph.nodes.map(node => node.id));
+  const instance = { id: 'contrast-curve', operator: block.id, operatorVersion: 1, bindings: {},
+    composition: { nodeIds: Object.fromEntries([...body].map(id => [id, id])), layout: block.composition!.graph.layout } };
+  const edges = new Map<string, EffectOperatorGraph['edges'][number]>();
+  for (const edge of former.edges) {
+    const inside = [body.has(edge.from), body.has(edge.to)];
+    if (inside[0] && inside[1]) continue;
+    const packed = inside[1] ? { ...edge, to: instance.id, input: `${edge.from}-${edge.output}` }
+      : inside[0] ? { ...edge, from: instance.id, output: `${edge.from}-${edge.output}` } : edge;
+    edges.set(`${packed.from}.${packed.output}>${packed.to}.${packed.input}`, { ...packed, id: `e${edges.size}` });
+  }
+  const parameters = former.nodes.filter(node => node.id.startsWith('amount')).map(node => node.id);
+  return { ...former, nodes: [...former.nodes.filter(node => !body.has(node.id)), instance], edges: [...edges.values()],
+    layout: { ...Object.fromEntries(Object.entries(former.layout).filter(([id]) => !body.has(id))), [instance.id]: { x: 600, y: 0 } },
+    groups: [{ id: 'parameters', label: 'Parameters', color: '#888', nodeIds: parameters }] };
+}
 
 describe('rebuilt color effect recipes', () => {
   it.each(['brightness', 'contrast', 'saturation', 'vibrance', 'exposure', 'levels', 'hue-shift', 'temperature'] as const)(
@@ -96,6 +125,26 @@ describe('rebuilt color effect recipes', () => {
       (render('contrast', { amount: 0.3 }, [step, step, step, 1], graph)[0] - render('contrast', { amount: 0.3 }, [0, 0, 0, 1], graph)[0]) / step;
     expect(gain(createFormerContrastGraph())).toBeGreaterThan(30);
     expect(gain(createDefaultColorEffectGraph('contrast'))).toBeCloseTo(0.3, 3);
+  });
+
+  it('recognises the former Contrast recipe by its frozen fingerprint', () => {
+    // Pinned: a later change to the curve helpers must not quietly change what counts as the former recipe.
+    expect(FORMER_CONTRAST_FINGERPRINT).toBe('173cd1faa98e02');
+    expect(effectRecipeFingerprint(createFormerContrastGraph())).toBe(FORMER_CONTRAST_FINGERPRINT);
+  });
+
+  it('upgrades a former Contrast packed by a Nodes-tab save, whose block instance lists only the former members', () => {
+    const packed = packFormerContrast();
+    expect(effectRecipeFingerprint(packed)).not.toBe(FORMER_CONTRAST_FINGERPRINT);
+    expect(colorEffectGraphState('contrast', packed)).toBe('recipe');
+    expect(matchesEffectRecipe(flattenContrastGraph(packed), createDefaultColorEffectGraph('contrast'))).toBe(true);
+    const rendered = effectOperatorGraph({ id: 'fx', name: 'contrast', type: 'contrast', enabled: true, params: { amount: 0.3 }, operatorGraph: packFormerContrast() });
+    expectPixel(render('contrast', { amount: 0.3 }, [0.1, 0.1, 0.1, 1], rendered), [0.38, 0.38, 0.38, 1]);
+    // An edit outside the block is the author's work: kept and reported as edited (the block itself has the fade).
+    const edited = packFormerContrast();
+    edited.nodes.find(node => node.id === 'amount-render-max')!.constants = { value: 4 };
+    expect(flattenContrastGraph(edited)).toBe(edited);
+    expect(colorEffectGraphState('contrast', edited)).toBe('edited');
   });
 
   it('upgrades a saved Contrast of the former recipe and leaves edited graphs alone', () => {
@@ -312,6 +361,8 @@ describe('rebuilt color effect recipes', () => {
     const step = 1 / 255;
     expect((alone(0.3, [step, step, step, 1])[0] - alone(0.3, [0, 0, 0, 1])[0]) / step).toBeCloseTo(0.3, 3);
     for (const amount of [0.3, 1.5]) for (const texel of TEXELS) expectPixel(alone(amount, texel), render('contrast', { amount }, texel));
+    // Driven below 0 from a value card or an oscillator, the block stays plain grey, never a negative.
+    for (const amount of [0, -1, -5]) for (const texel of TEXELS) expectPixel(alone(amount, texel), [0.5, 0.5, 0.5, texel[3]]);
   });
 
   it('presents Contrast as Parameters and one Contrast Curve block, and names the Vibrance hue match', () => {

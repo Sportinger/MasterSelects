@@ -50,6 +50,6 @@ How to open a graph: [The node setup](./Effects.md#the-node-setup).
 
 ## Technical details
 
-Colour effects work on the 8-bit picture, from black to white, with no extra headroom between effects. You can type a value past the end of a slider up to what the effect can show; beyond that the card says which value it uses. Colour effects in projects saved before October 2026 keep the look they were saved with; add the effect again for the current one. One bug fix changes saved looks: a Contrast saved between October 2026 and 22 October 2026 with Amount below 1 now fades evenly toward grey instead of breaking dark shadows into coloured blotches; from Amount 1 up it looks exactly as before.
+Colour effects work on the 8-bit picture, from black to white, with no extra headroom between effects. You can type a value past the end of a slider up to what the effect can show; beyond that the card says which value it uses. Colour effects in projects saved before October 2026 keep the look they were saved with; add the effect again for the current one. One bug fix changes saved looks: a Contrast saved with Amount below 1 before this fix (with the October 2026 recipe) now fades evenly toward grey instead of breaking dark shadows into coloured blotches; from Amount 1 up it looks exactly as before.
 
 Developer notes: [Effect system: Color & Tone notes](./Effect-System.md#color--tone-notes).
