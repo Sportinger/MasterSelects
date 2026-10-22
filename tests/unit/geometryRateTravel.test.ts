@@ -43,6 +43,23 @@ describe('integrated rates in geometry graphs', () => {
     expect(geometryRateTravel({ id: 'blur', type: 'gaussian-blur' }, keys, 1, clocks)).toBeUndefined();
   });
 
+  it('keeps rate × time for a keyed rate a node or the Constant mode drives, and logs it once', async () => {
+    const { vi } = await import('vitest');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const keys = [key('grid', 'speed', 0, 0), key('grid', 'speed', 2, 4)];
+      const driven = { 'effect.grid.speed': { source: { nodeId: 'lfo', portId: 'value' }, enabled: true } } as never;
+      const travel = geometryRateTravel({ ...grid, name: 'Grid' }, keys, 1, clocks, driven)!;
+      expect(travel('speed', 'clip')).toBeUndefined();
+      expect(travel('speed', 'timeline')).toBeUndefined();
+      expect(warn.mock.calls.filter(call => call.join(' ').includes('Grid speed is driven by a source')).length).toBe(1);
+      // A disabled source leaves the keyframes in charge (the 0 → 4 ramp travelled 1 by second 1); Constant mode overrides them.
+      const off = { 'effect.grid.speed': { source: { nodeId: 'lfo', portId: 'value' }, enabled: false } } as never;
+      expect(geometryRateTravel(grid, keys, 1, { clipClockAt: local => local, timelineStart: 0 }, off)!('speed', 'clip')).toBeCloseTo(1, 10);
+      expect(geometryRateTravel(grid, keys, 1, clocks, { 'effect.grid.speed': { localMode: 'constant' } } as never)!('speed', 'clip')).toBeUndefined();
+    } finally { warn.mockRestore(); }
+  });
+
   it('lowers Clip Time × a travelling rate in the Weave In progress to the travelled distance', () => {
     const graph = flatWeave();
     const withTravel = evaluateGeometryProgram(compileGeometryGraph(graph, geometryParameterReader({ weave_value: 9 }), undefined,

@@ -78,7 +78,7 @@ function curveSourceNode(graph: EffectOperatorGraph, nodeId: string, portId: str
 
 /** CPU reference evaluation at the playhead; opening a viewer never touches GPU state. */
 export function geometryPreview(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number, simulationTime = time,
-  clocks?: GeometryRateClocks): PreviewFrame {
+  clocks?: GeometryRateClocks, bindings?: Parameters<typeof geometryRateTravel>[4]): PreviewFrame {
   const base = { key: request.key, revision: request.revision, time: request.time };
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return { ...base, status: 'missing', label: 'Curve node unavailable' };
@@ -95,7 +95,7 @@ export function geometryPreview(request: PreviewRequest, effect: Effect, keys: K
     const target = curveSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
     if (!target) return { ...base, status: 'live', label: 'Per-point value', presentation: 'text',
       drawing: { kind: 'text', lines: ['Evaluated once per curve point', 'where a modifier reads it'] } };
-    const rateTravel = clocks ? geometryRateTravel(effect, keys, time, clocks) : undefined;
+    const rateTravel = clocks ? geometryRateTravel(effect, keys, time, clocks, bindings) : undefined;
     const program = compileGeometryGraph(graph, reader, target,
       { time: request.time, simulationTime, ...(rateTravel ? { rateTravel } : {}) });
     let curves: CurveSet, label = `${program.strandCount.toLocaleString('en-US')} curves · ${program.pointCount.toLocaleString('en-US')} points`;

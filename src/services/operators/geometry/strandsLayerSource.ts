@@ -65,7 +65,7 @@ export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effect
     try {
       // Keyframes use clip time; Time nodes read the composition clock like image graphs.
       const rateTravel = geometryRateTravel(effect, keyframes ?? [], clipTime,
-        { clipClockAt: local => weaveSimulationTime(clip, local), timelineStart: clip.startTime ?? 0 });
+        { clipClockAt: local => weaveSimulationTime(clip, local), timelineStart: clip.startTime ?? 0 }, clip.nodeGraph?.parameterSources?.targets);
       const program = compileGeometryGraph(weaveGraphOf(effect),
         geometryParameterReader(effectOperatorParams(effect), effect.id, [...keyframes ?? []], clipTime), undefined,
         { time: (clip.startTime ?? 0) + clipTime, simulationTime, ...(rateTravel ? { rateTravel } : {}) });
