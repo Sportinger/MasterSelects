@@ -5,6 +5,7 @@ import type { TimelineClip } from '../../../types/timeline';
 import { effectOperatorGraph, effectOperatorParams } from '../effectGraphOwner';
 import { compileGeometryGraph, type GeometryProgram } from './geometryProgram';
 import { geometryParameterReader, WEAVE_EFFECT_TYPE } from './weaveGraph';
+import { geometryRateTravel, keyframesBindingsLeave } from './geometryRateTravel';
 import { createFlockClipTimeMap } from '../../flock/time/flockTimeMapper';
 import { applyParameterSourcesToEffects } from '../../parameterSources/parameterSourceRendering';
 import type { ParameterSourceClip } from '../../parameterSources/parameterSourceTargets';
@@ -62,10 +63,14 @@ export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effect
     : renderingWeaveEffects(clip);
   return effects.flatMap(effect => {
     try {
-      // Keyframes use clip time; Time nodes read the composition clock like image graphs.
+      // Keyframes use clip time; Time nodes read the composition clock like image graphs. A property a
+      // node or the Constant mode drives reads its driven value, not its keyframes.
+      const keys = keyframesBindingsLeave(effect, keyframes ?? [], clip.nodeGraph?.parameterSources?.targets);
+      const rateTravel = geometryRateTravel(effect, keys, clipTime,
+        { clipClockAt: local => weaveSimulationTime(clip, local), timelineStart: clip.startTime ?? 0 });
       const program = compileGeometryGraph(weaveGraphOf(effect),
-        geometryParameterReader(effectOperatorParams(effect), effect.id, [...keyframes ?? []], clipTime), undefined,
-        { time: (clip.startTime ?? 0) + clipTime, simulationTime });
+        geometryParameterReader(effectOperatorParams(effect), effect.id, keys, clipTime), undefined,
+        { time: (clip.startTime ?? 0) + clipTime, simulationTime, ...(rateTravel ? { rateTravel } : {}) });
       return program.render ? [{ effectId: effect.id, source: { type: 'strands' as const, strands: { clipId: clip.id, effectId: effect.id, program } } }] : [];
     } catch {
       return [];

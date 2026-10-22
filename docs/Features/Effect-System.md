@@ -59,6 +59,24 @@ and source. Other effects and structural settings are not implicitly enabled.
   style switch keeps them. `tests/unit/effectControlsRead.test.ts` fails when a shown control is not
   bound by the effect's default graph, or, for shader effects of the shared catalog and tracking
   uniforms, not read by its entry point (helper functions included).
+- **Styles.** Looks of one engine (`effectCatalogGroups.ts`) are each other's Style menu entries
+  when every key they share has the same parameter type (`effectStyles.ts`). A switch carries a
+  value the user set, with its keyframes, between controls of the same key and role; a value still at
+  the old look's default (no keyframes, no node source) takes the new look's default. A key whose
+  control does something else in one look declares `styleRole` there (Crystal Glass Facets and
+  Refraction, Glass Dispersion Dispersion, Ribbon Scan Ribbons and Displacement, Wave Lines Line
+  Density, CRT Screen Mask Density, Film Prism Fringe, Riso and Riso Glow Registration, Contour Map
+  Band Density, Drift Lines Drift): between different roles the value starts at the new default and
+  its keyframes are removed (one undo step). Labels never decide this, but two looks that give one key
+  different roles must label it differently (else the note reads "has no Scale: Scale"). For the
+  session, a switch remembers which look a carried or kept value was set in, with that value
+  (`styleOrigins`): later switches judge it against that look's role and default, so a value set by
+  the user survives a round trip through a look whose default it equals, and a kept value nobody
+  touched opens at the next look's default. Projects do not store this; after a reload a kept value
+  carries only when every look with that key agrees on the role, and counts as untouched only when it
+  is the default of all of them. The row notes a reset control only when the user had changed or
+  keyed it, and names reset node graph edits (a stored graph that is not the look's default).
+  `tests/unit/effectStyles.test.ts`.
 - Every visible effect has its own docs page; `tests/unit/effectDocsCatalog.test.ts` fails otherwise
   (see [Effect pages](./Documentation-Site.md#effect-pages)).
 - **Presets.** An effect declares its named starting points in its definition: `presets: [{ id, name,
@@ -72,9 +90,11 @@ and source. Other effects and structural settings are not implicitly enabled.
   list presets yet. Three to five presets per effect; the docs check names them
   ([Effect pages](./Documentation-Site.md#effect-pages)).
 - **Animated looks keep time with the playhead.** A look rendered by its node graph reads `image.timeline-time`,
-  so it holds still while paused; `createCatalogEffect({ animated: true, clock: 'timeline' })` marks it
-  `timelineAnimated` instead of `requiresContinuousRender` (no wall-clock re-rendering while paused, the
-  docs still show it as a loop). Looks still flagged as continuous re-render an unchanged frame while paused.
+  so it holds still while paused. Its definition says so with `timelineAnimated` instead of
+  `requiresContinuousRender` (catalog looks get the flag from `createCatalogEffect`): no wall-clock
+  re-rendering while paused, the docs show it as a loop, and its look tile plays it on hover at a
+  running time (`LookTile`, `lookThumbnailRuntime.renderLook`). A look still flagged
+  `requiresContinuousRender` re-renders an unchanged frame while paused.
 
 ## Registry and catalog
 
@@ -348,7 +368,10 @@ No editor control mounts `SplitCompareOverlay` (`src/components/preview/SplitCom
 ### Glyph, Cell, And Compute Effects
 
 Glyph effects share one exact cell-grid model, curated ASCII ramps, and a
-generated glyph atlas cached beside the effect runtime. The same grid contract
+generated glyph atlas cached beside the effect runtime (`_shared/glyphAtlas.ts`: least
+recently used atlases go first, 16 per device and 128 MB; when frames use more atlases at
+once, the device raises its count up to 64 and logs it instead of rebuilding them every
+frame, and says so once if the byte budget still forces rebuilds). The same grid contract
 drives rendering and artifact export, so the exported rows match the visible
 cell selection instead of approximating it independently.
 All 18 glyph variants store that shared pipeline as editable generic graphs.
@@ -570,6 +593,15 @@ pattern (Perspective Grid Speed, Color Wheel Spin; see
 [Generate Effects](./Effect-System.md#generate-notes)). Stored travel values are
 dropped, `addEffect`/`updateEffect` do not store them, and a node source that drives
 such a rate drops the travel (logged), so the source runs at rate × time.
+Geometry graphs (Weave) reach the same rule in their compiler: a Multiply of Clip Time
+or Time with a Value node bound to a keyframed integrating parameter compiles to the
+distance travelled on that clock (`geometryRateTravel.ts`, supplied by the strand layer
+source and the node previews), so a keyed Weave Speed or Pulse Rate eases instead of
+jumping. The clip clock runs in source time (speed, reversal, trim), so its travel is
+scaled by that clock's rate. A geometry graph reads a value that a node source or the
+Constant mode drives, not its keyframes (`keyframesBindingsLeave` leaves those keys out
+for the parameter reader, the travel and the Weave node previews), so a driven rate runs
+at its driven value × time, logged once like the image path.
 
 A parameter added after instances were saved can declare `legacyDefault`: what a saved
 instance without it renders. Renderers, keyframe base values and the inspector
@@ -1927,7 +1959,9 @@ direction by sin(band × 0.71 + timeline time × Speed × 2) × **Drift** × 6 %
 every second band is shaded to 0.64–0.82 of its brightness. Band Size below 2 is clamped by the
 `scale-clamped` node (`renderMin`, reported by `paramRangeNotes`); bands under one output pixel are
 reported by `driftLinesWarnings`. The parameter ids stay the engine's (`scale`, `amount`, `angle`,
-`speed`), so the Style menu keeps values; only the labels differ. Angle is `graphOnly`: a node setup
+`speed`); Band Size, Angle and Speed keep the engine's shared roles (no `styleRole`), so the Style
+menu carries the values the user set. Drift (`amount`) is a distance, not a mix (`styleRole: 'drift'`):
+it starts at the new look's default in every other look, and the row says so. Angle is `graphOnly`: a node setup
 edited before it acted does not read it and the card hides it. The stage folders come from its
 presentation plan (Bands, Drift Wave, Shifted Sample, Line Shading & Alpha). Its four presets live in
 `src/effects/halftone/driftLines.ts`. Tests: `tests/unit/imageMotionHalftoneGraphs.test.ts`, `tests/unit/effectPresets.test.ts`.

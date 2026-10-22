@@ -69,12 +69,32 @@ export function docLogicalPath(file, env = process.env) {
 /** Whether this run writes into a scratch folder instead of the repository. */
 export const scratchRun = (env = process.env) => Boolean(env.DOCS_MEDIA_OUT_ROOT);
 
-/** Switches the open editor to the theme of the settings (the editor starts dark). */
+/**
+ * The URL the running editor loaded one of its modules from. Once a file was edited, Vite serves the
+ * changed module's importers with `?t=<time>` imports, and `import('/src/x.ts')` from a script would load
+ * a second copy whose stores the editor never reads. `importer` is a module that imports it.
+ */
+export async function appModuleUrl(page, modulePath, importer) {
+  return page.evaluate(async ({ modulePath, importer }) => {
+    const source = await (await fetch(importer)).text();
+    const escaped = modulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return source.match(new RegExp(`["'](${escaped}(?:\\?[^"']*)?)["']`))?.[1] ?? modulePath;
+  }, { modulePath, importer });
+}
+
+/** Switches the open editor to the theme of the settings (the editor starts dark) and checks that it shows it. */
 export async function applyEditorTheme(page, theme = docShotSettings().theme) {
-  const applied = await page.evaluate(async (value) => {
-    const { useSettingsStore } = await import('/src/stores/settingsStore.ts');
+  const url = await appModuleUrl(page, '/src/stores/settingsStore.ts', '/src/hooks/useTheme.ts');
+  const shown = await page.evaluate(async ({ url, value }) => {
+    const { useSettingsStore } = await import(url);
     useSettingsStore.getState().setTheme(value);
-    return useSettingsStore.getState().theme;
-  }, theme);
-  if (applied !== theme) throw new Error(`Editor theme "${theme}" is not available (the editor kept "${applied}").`);
+    const wanted = value === 'system' ? ['dark', 'light'] : [value];
+    for (let frame = 0; frame < 60 && !wanted.includes(document.documentElement.dataset.theme); frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    return document.documentElement.dataset.theme;
+  }, { url, value: theme });
+  if (shown !== theme && !(theme === 'system' && (shown === 'dark' || shown === 'light'))) {
+    throw new Error(`Editor theme "${theme}" did not reach the editor (it shows "${shown}").`);
+  }
 }

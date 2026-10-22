@@ -276,7 +276,13 @@ export function compactRecipeLayout(graph: NodeGraph): NodeGraph {
         && edgeCablePoints(placed.get(edge.fromNodeId)!, placed.get(edge.toNodeId)!, edge).some(point => inside(box, point, -CABLE_CLEARANCE)));
     };
     // Below is cheaper than above: stacked inputs keep the order of the ports they feed.
-    const y = (aboveNeighbour ? SLOT_OFFSETS_ABOVE : SLOT_OFFSETS).map(offset => desired + offset).find(fits) ?? desired;
+    // A card that feeds several later columns stays in the row: the nearest clear slot for all its
+    // cables can lie far below or above it, so it searches one card height and otherwise keeps its
+    // place; the crossing pass below then moves the cards its long cables run through.
+    const spansColumns = new Set((consumers.get(node.id) ?? []).map(edge => depth.get(edge.toNodeId))).size > 1;
+    const reach = spansColumns ? getNodeHeight(node) + COMPACT_ROW_GAP : Infinity;
+    const y = (aboveNeighbour ? SLOT_OFFSETS_ABOVE : SLOT_OFFSETS).filter(offset => Math.abs(offset) <= reach)
+      .map(offset => desired + offset).find(fits) ?? desired;
     at(node, y);
   }
   const firstPass = new Map([...placed.values()].map(card => [card.id, card.layout.y]));

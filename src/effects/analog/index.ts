@@ -18,8 +18,8 @@ const floorNote = (label: string, floor: number) => (values: Record<string, numb
 export const crystal = createCatalogEffect({
   id: 'crystal', name: 'Crystal Glass', category: 'analog', shader, entryPoint: 'crystalFragment', animated: true,
   params: {
-    scale: { type: 'number', label: 'Facets', default: 14, min: 4, max: 80, step: 1, group: 'Pattern' },
-    amount: { type: 'number', label: 'Refraction', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style' },
+    scale: { type: 'number', label: 'Facets', default: 14, min: 4, max: 80, step: 1, group: 'Pattern', styleRole: 'facet-count' },
+    amount: { type: 'number', label: 'Refraction', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style', styleRole: 'refraction' },
     speed: { type: 'number', label: 'Shimmer Speed', default: 1, min: 0, max: 5, step: 0.05, group: 'Motion' },
   },
   retired: { angle: NO_ANGLE('Crystal Glass'), ...NO_COLORS('Crystal Glass') },
@@ -30,7 +30,7 @@ export const glassDispersion = createCatalogEffect({
   id: 'glass-dispersion', name: 'Glass Dispersion', category: 'analog', shader, entryPoint: 'glassDispersionFragment', animated: true,
   params: {
     scale: { type: 'number', label: 'Cell Size (px)', default: 14, min: 4, max: 80, step: 1, group: 'Pattern' },
-    amount: { type: 'number', label: 'Dispersion', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style' },
+    amount: { type: 'number', label: 'Dispersion', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style', styleRole: 'dispersion' },
     speed: { type: 'number', label: 'Pulse Speed', default: 1, min: 0, max: 5, step: 0.05, group: 'Motion' },
   },
   retired: { angle: NO_ANGLE('Glass Dispersion'), ...NO_COLORS('Glass Dispersion') },
@@ -38,8 +38,8 @@ export const glassDispersion = createCatalogEffect({
   experimental: 'Cells are sized in output pixels (the look changes with the resolution) and each cell splits red and blue its own way, so strong Dispersion reads as blocks of RGB noise.',
 });
 const ribbonScanParams: Record<string, EffectParam> = {
-  scale: { type: 'number', label: 'Ribbons', default: 14, min: RIBBON_SCAN_MIN_RIBBONS, max: 80, step: 1, group: 'Pattern' },
-  amount: { type: 'number', label: 'Displacement', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style' },
+  scale: { type: 'number', label: 'Ribbons', default: 14, min: RIBBON_SCAN_MIN_RIBBONS, max: 80, step: 1, group: 'Pattern', styleRole: 'ribbon-count' },
+  amount: { type: 'number', label: 'Displacement', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style', styleRole: 'displacement' },
   edges: { type: 'select', label: 'Edges', default: 'mirror', options: RIBBON_SCAN_EDGE_OPTIONS, group: 'Style', graphOnly: true },
 };
 export const ribbonScan = createCatalogEffect({
@@ -53,7 +53,7 @@ export const ribbonScan = createCatalogEffect({
 export const waveLines = createCatalogEffect({
   id: 'wave-lines', name: 'Wave Lines', category: 'analog', shader, entryPoint: 'waveLinesFragment', animated: true,
   params: {
-    scale: { type: 'number', label: 'Line Density', default: 14, min: 3, max: 80, step: 1, group: 'Pattern' },
+    scale: { type: 'number', label: 'Line Density', default: 14, min: 3, max: 80, step: 1, group: 'Pattern', styleRole: 'line-count' },
     // A graphic line-art look: from about 0.5 the drawing covers most of the picture, so new effects start at 0.3.
     amount: { type: 'number', label: 'Amount', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style' },
     colorA: { type: 'color', label: 'Lines', default: '#111827', group: 'Color' },

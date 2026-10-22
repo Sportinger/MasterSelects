@@ -1,6 +1,6 @@
 # Glitch Grid
 
-<!-- effect-docs: basic page sha=93aa245d9553, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=423982a7d305, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Randomly jumps grid cells sideways in flickering bursts for a blocky digital glitch; Scale sets cell size, Amount the displacement.
 
@@ -22,13 +22,13 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 |---|---|---|
 | **Pattern** | | |
 | Scale | 2 to 80 | 14 |
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults. Looks of Analog & Glitch: [CRT Screen](./crt-screen.md), [Glitch](./glitch.md), [Ribbon Scan](./ribbon-scan.md). Further looks under [Lens & Distort](../Effects-Distort.md) (4), [Pixel & Mosaic](../Effects-Pixel.md) (2), [Print & Halftone](../Effects-Print.md) (8), [Lines & Engraving](../Effects-Lines.md) (6), [Textile & Craft](../Effects-Textile.md) (3), [3D & Particles](../Effects-3D-Particles.md) (1).
 
 ## Technical details
 

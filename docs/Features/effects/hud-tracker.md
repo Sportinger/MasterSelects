@@ -1,6 +1,6 @@
 # HUD Tracker
 
-<!-- effect-docs: basic page sha=d9555e784117, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=67968806273f, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Overlays a sci-fi HUD with a corner-bracket target box around the tracked subject, landmark dots and a sweeping scan line in the Overlay color.
 
@@ -20,14 +20,15 @@ Group: [Tracking & Overlays](../Effects-Tracking.md) · [How to add an effect](.
 <!-- generated:controls start -->
 | Control | Range | Default |
 |---|---|---|
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.8 |
+| **Color** | | |
 | Overlay | a colour | `#36f59a` |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [CCTV](./cctv.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md), [Tracked Scene](./tracked-scene.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults. Looks of Tracking & Overlays: [CCTV](./cctv.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md), [Tracked Scene](./tracked-scene.md).
 
 ## Technical details
 

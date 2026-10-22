@@ -1,9 +1,10 @@
 import type { PreviewFrame, PreviewValueControl } from '../../../../services/nodePreview/previewTypes';
 import type { CanvasNode, Rect } from '../canvas/rendering/nodeCanvasTypes';
 import type { DrawContext } from '../canvas/rendering/paintNodeCanvas';
+import { nodeValueText } from './nodeValueFormat';
 
 function valueText(value: number | boolean | string | undefined) {
-  return typeof value === 'number' ? String(Number(value.toFixed(4))) : value === undefined ? '—' : String(value);
+  return typeof value === 'number' ? nodeValueText(value) : value === undefined ? '—' : String(value);
 }
 function controlText(control: PreviewValueControl) {
   return control.options?.find(option => option.value === control.value)?.label ?? valueText(control.value);

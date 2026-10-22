@@ -1,13 +1,18 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as historyStore from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 
 import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
 import { hasResolveEffectParamRow } from '../../src/components/panels/properties/resolveEffectRows';
-import { getEffect } from '../../src/effects';
-import type { EffectParam } from '../../src/effects/types';
 import type { Effect } from '../../src/types/effects';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
+
+// Watched to check that a text row is one undo step from focus to blur.
+vi.mock('../../src/stores/historyStore', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/stores/historyStore')>();
+  return { ...actual, startBatch: vi.fn(actual.startBatch), endBatch: vi.fn(actual.endBatch) };
+});
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -52,19 +57,31 @@ describe('EffectsTab numeric controls', () => {
     expect(screen.queryByText('Quality')).toBeNull();
   });
 
-  it('keeps the generic control for parameter types without a Resolve row in a Resolve-row effect', () => {
-    const params = getEffect('gaussian-blur')!.params as Record<string, EffectParam>;
-    params.previewNote = { type: 'text', label: 'Preview Note', default: 'a' };
-    try {
-      const effect: Effect = { id: 'gaussian-text', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewNote: 'b' } };
-      render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
-      expect(screen.getByText('Preview Note')).toBeInTheDocument();
-      expect(screen.getByLabelText('Radius slider')).toBeInTheDocument();
-      expect(hasResolveEffectParamRow({ type: 'text' })).toBe(false);
-      expect(hasResolveEffectParamRow({ type: 'select' })).toBe(true);
-    } finally {
-      delete params.previewNote;
-    }
+  it('shows a glyph card in Resolve rows only: Custom Ramp is a text row with a reset, one undo step from focus to blur', () => {
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
+    const ascii: Effect = { id: 'ascii-ramp', type: 'ascii', name: 'ASCII', enabled: true,
+      params: { cellSize: 14, amount: 1, rampPreset: 'standard', customRamp: ' .:-=+*#', fontFamily: 'monospace', fontWeight: 600 } };
+    const { container } = render(<EffectsTab clipId="clip:effects-controls" effects={[ascii]} />);
+    // No row of the older generic design is left in the card.
+    expect(container.querySelectorAll('.control-row')).toHaveLength(0);
+    expect(hasResolveEffectParamRow({ type: 'text' })).toBe(true);
+    const field = screen.getByLabelText('Custom Ramp');
+    expect(field).toHaveAttribute('type', 'text');
+    expect(field).toHaveClass('resolve-inspector-text-input');
+    expect(field.closest('.resolve-inspector-row')).not.toBeNull();
+    const start = vi.mocked(historyStore.startBatch), end = vi.mocked(historyStore.endBatch);
+    start.mockClear(); end.mockClear();
+    fireEvent.focus(field);
+    expect(start).toHaveBeenCalledTimes(1);
+    fireEvent.change(field, { target: { value: ' .' } });
+    fireEvent.change(field, { target: { value: ' .#' } });
+    expect(end).not.toHaveBeenCalled();
+    fireEvent.blur(field);
+    expect(end).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'ascii-ramp', expect.objectContaining({ customRamp: ' .#' }));
+    fireEvent.click(screen.getByLabelText('Reset Custom Ramp'));
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'ascii-ramp', expect.objectContaining({ customRamp: '' }));
   });
 
   it('renders switches and colours as Resolve rows: Mirror axes as checkboxes, the Block Mosaic grout as a colour well', () => {
@@ -125,6 +142,24 @@ describe('EffectsTab numeric controls', () => {
     expect(hex).toHaveValue('#f472b6');
     fireEvent.click(screen.getByLabelText('Reset Spectrum A'));
     expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'holo-colours', expect.objectContaining({ colorA: '#22d3ee' }));
+  });
+
+  it('shows a card with colours in Resolve rows only (Riso numbers get sliders and resets, its inks the colour row) and writes them', () => {
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
+    const riso: Effect = { id: 'riso-inks', type: 'riso', name: 'Riso', enabled: true,
+      params: { amount: 0.75, scale: 8, colorA: '#123456', colorB: '#ef476f' } };
+    const { container } = render(<EffectsTab clipId="clip:effects-controls" effects={[riso]} />);
+    // One design per card: Registration and Amount are full rows with a reset, like the inks.
+    expect(screen.getByLabelText('Reset Registration')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reset Amount')).toBeInTheDocument();
+    expect(container.querySelectorAll('.effect-params--resolve-rows').length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Dark Ink')).toHaveAttribute('type', 'color');
+    expect(screen.getByLabelText('Warm Ink hex')).toHaveValue('#ef476f');
+    fireEvent.click(screen.getByLabelText('Reset Dark Ink'));
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'riso-inks', expect.objectContaining({ colorA: '#2046b3' }));
+    fireEvent.change(screen.getByLabelText('Warm Ink hex'), { target: { value: '#00ff00' } });
+    fireEvent.keyDown(screen.getByLabelText('Warm Ink hex'), { key: 'Enter' });
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'riso-inks', expect.objectContaining({ colorB: '#00ff00' }));
   });
 
   it('renders color controls as Resolve rows: Transform-style draggable value, thin slider and reset', () => {

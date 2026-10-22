@@ -30,12 +30,13 @@ export const patternHalftone = createCatalogEffect({
 });
 export const riso = createCatalogEffect({
   id: 'riso', name: 'Riso', category: 'halftone', shader, entryPoint: 'risoFragment',
-  params: { scale: { type: 'number', label: 'Registration', default: 8, min: 1, max: 32, step: 1, group: 'Pattern' }, colorA: { type: 'color', label: 'Dark Ink', default: '#2046b3', group: 'Color' }, colorB: { type: 'color', label: 'Warm Ink', default: '#ef476f', group: 'Color' } },
+  params: { scale: { type: 'number', label: 'Registration', default: 8, min: 1, max: 32, step: 1, group: 'Pattern', styleRole: 'registration' }, colorA: { type: 'color', label: 'Dark Ink', default: '#2046b3', group: 'Color' }, colorB: { type: 'color', label: 'Warm Ink', default: '#ef476f', group: 'Color' } },
   retired: ignoredBaseParams('Riso', ['angle']),
 });
 export const risoGlow = createCatalogEffect({
   id: 'riso-glow', name: 'Riso Glow', category: 'halftone', shader, entryPoint: 'risoGlowFragment', animated: true,
-  params: { colorA: { type: 'color', label: 'Shadow Ink', default: '#4f46e5', group: 'Color' }, colorB: { type: 'color', label: 'Glow Ink', default: '#f43f5e', group: 'Color' } },
+  // Scale is the inks' sideways offset, like Riso's Registration (risoColor in shader.wgsl); range kept for saved projects.
+  params: { scale: catalogBaseParam('scale', { label: 'Registration', styleRole: 'registration' }), colorA: { type: 'color', label: 'Shadow Ink', default: '#4f46e5', group: 'Color' }, colorB: { type: 'color', label: 'Glow Ink', default: '#f43f5e', group: 'Color' } },
   retired: ignoredBaseParams('Riso Glow', ['angle']),
 });
 export const paperPrint = createCatalogEffect({
@@ -72,7 +73,8 @@ export const driftLines = createCatalogEffect({
   // Same parameter ids as the other looks of the engine (the Style menu keeps values); labels of its own.
   params: {
     scale: catalogBaseParam('scale', { label: 'Band Size', unit: ' px', renderMin: 2 }),
-    amount: catalogBaseParam('amount', { label: 'Drift', group: 'Motion' }),
+    // How far the bands slide, not a mix: it carries only to looks whose Amount is a drift too.
+    amount: catalogBaseParam('amount', { label: 'Drift', group: 'Motion', styleRole: 'drift' }),
     // An edited graph saved before Angle acted does not read it: the card hides it then (graphOnly).
     angle: catalogBaseParam('angle', { unit: '°', graphOnly: true }),
   },

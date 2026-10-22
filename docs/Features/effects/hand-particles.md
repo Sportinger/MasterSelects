@@ -1,6 +1,6 @@
 # Hand Particles
 
-<!-- effect-docs: basic page sha=97bb344557c6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=307a405e14e7, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Adds drifting glowing particles around tracked hands in the Overlay color; Particle Source picks fingertips, all landmarks or hand centers.
 
@@ -13,8 +13,9 @@ Group: [Tracking & Overlays](../Effects-Tracking.md) · [How to add an effect](.
 <!-- generated:controls start -->
 | Control | Range | Default |
 |---|---|---|
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.8 |
+| **Color** | | |
 | Overlay | a colour | `#36f59a` |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |

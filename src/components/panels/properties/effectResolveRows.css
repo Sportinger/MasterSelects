@@ -70,6 +70,29 @@
     outline-offset: 1px !important;
   }
 
+  /* A choice without row actions (no keyframes, no reset) also takes the free action column, like
+     the Style menu, so option names fit a narrow card ('Monospace'). Not in the stacked layout of
+     ResolveInspectorNarrow.css (280 px and less), where the control already has the whole row. */
+  @container (min-width: 281px) {
+    .effect-params .resolve-inspector-row:has(> .resolve-inspector-row-control > .inspector-select):has(> .resolve-inspector-row-actions:empty) {
+      > .resolve-inspector-row-control { grid-column: 3 / -1; }
+      /* The empty action cell would otherwise wrap into a second grid row. */
+      > .resolve-inspector-row-actions { display: none; }
+    }
+  }
+
+  /* In a narrow card the hex field keeps all seven characters (#081018) beside its swatch. */
+  @container (max-width: 380px) {
+    .effect-params .resolve-inspector-color {
+      gap: 4px;
+    }
+
+    .effect-params .resolve-inspector-color input[type="text"] {
+      padding: 0 3px;
+      font-size: 11px;
+    }
+  }
+
   /* Among Resolve rows, a parameter-source row sizes like its siblings (the panel is their container). */
   .effect-params--resolve-rows > .parameter-source-control,
   .effect-sections .parameter-source-control { container-type: normal; }

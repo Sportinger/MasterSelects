@@ -217,6 +217,17 @@ describe('effect graph doc shots: graph selection', () => {
     expect(second - firstRowBottom).toBeLessThanOrEqual(120);
   });
 
+  it('keeps a card fed by nothing that feeds two later columns in the row (Vignette Parameters)', () => {
+    const { graph } = doc('?effect=vignette&plumbing=hide');
+    const ids = new Set(graph.nodes.map(node => node.id));
+    const fed = new Set(graph.edges.filter(edge => ids.has(edge.fromNodeId) && ids.has(edge.toNodeId)).map(edge => edge.toNodeId));
+    const rowBottom = Math.max(...graph.nodes.filter(node => fed.has(node.id)).map(node => node.layout.y + getNodeHeight(node)));
+    const parameters = graph.nodes.find(node => node.label === 'Parameters')!;
+    // It used to sit below the whole row, its cables running up across the picture.
+    expect(parameters.layout.y + getNodeHeight(parameters)).toBeLessThanOrEqual(rowBottom);
+    expect(cableCrossings(graph.nodes, graph.edges)).toEqual([]);
+  });
+
   it('routes every cable of a wrapped focus around the cards with cables=avoid, as the Distort page pictures need', () => {
     // Port tips sit 24 units out from the port dots, as the canvas draws them.
     const behindCards = (graph: NodeGraph, avoid: boolean) => {

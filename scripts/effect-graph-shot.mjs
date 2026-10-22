@@ -49,13 +49,14 @@
 // its overview size: card titles use the canvas' enlarged overview lettering and stay legible.
 // A --manifest run records its shots in scripts/docs-media-manifest.json (scripts/docs-media.mjs runs every
 // recipe and passes a manifest's shots by name with --only).
-// Needs a running Vite of this checkout (`npx vite --port 5176 --strictPort`).
+// The editor theme comes from scripts/docShotSettings.mjs (dark; DOCS_THEME for one run), as in the
+// editor excerpts. Needs a running Vite of this checkout (`npx vite --port 5176 --strictPort`).
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeDocShotWebp } from './docShotWebp.mjs';
 import { calloutOverlay, cropWithCallouts, docsFigure } from './docShotFigure.mjs';
-import { docLogicalPath, docOutput } from './docShotSettings.mjs';
+import { applyEditorTheme, docLogicalPath, docOutput, docShotSettings } from './docShotSettings.mjs';
 import { parseGraphShot, recordShotList } from './docsMediaRecipes.mjs';
 
 const args = process.argv.slice(2);
@@ -117,6 +118,8 @@ try {
   page.on('console', message => { if (message.type() === 'error' && !noise.test(message.text())) errors.push(message.text().slice(0, 300)); });
   const open = async (shot) => {
     await page.goto(`${url}/?test=effect-graph&effect=${encodeURIComponent(shot.effect)}${shot.query ? `&${shot.query}` : ''}`);
+    // The page follows the editor's theme setting; the canvas repaints when it changes.
+    await applyEditorTheme(page, docShotSettings().theme);
     await page.waitForFunction(() => window.__effectGraphDoc?.ready, null, { timeout: 120000 });
     const state = await page.evaluate(() => window.__effectGraphDoc);
     if (state.error) throw new Error(`${shot.effect}: ${state.error}`);

@@ -22,8 +22,7 @@ export function applyParameterSourcesToEffects(clip: ParameterSourceClip, keys: 
   return effects.map(effect => {
     if (effect.enabled === false) return effect;
     const prefix = `effect.${effect.id}.`;
-    const entries = Object.entries(bindings).filter(([path, binding]) => path.startsWith(prefix)
-      && ((binding.source && binding.enabled !== false) || binding.localMode === 'constant'));
+    const entries = Object.entries(bindings).filter(([path, binding]) => path.startsWith(prefix) && bindingOverridesKeyframes(binding));
     if (!entries.length) return effect;
     const params = { ...effect.params };
     for (const [path, binding] of entries) {
@@ -46,12 +45,31 @@ export function dropKeyedRateTravel(effect: Pick<Effect, 'type' | 'name'>, name:
   const travel = getEffect(effect.type)?.params[name]?.integratedAs;
   if (!travel || !(travel in params)) return undefined;
   delete params[travel];
+  return keyedRateOverrideNote(effect, name, binding);
+}
+
+/** Whether a parameter binding replaces the keyframed value (a running source, or the Constant mode). */
+export function bindingOverridesKeyframes(binding: Pick<ParameterSourceBinding, 'source' | 'enabled' | 'localMode'> | undefined): boolean {
+  return !!binding && ((!!binding.source && binding.enabled !== false) || binding.localMode === 'constant');
+}
+
+/**
+ * The geometry graphs' counterpart of dropKeyedRateTravel (geometryRateTravel.ts): a keyed rate whose
+ * binding overrides its keyframes runs at rate × time there too, logged once per effect and rate.
+ */
+export function reportKeyedRateOverride(effect: Pick<Effect, 'id' | 'type' | 'name'>, name: string,
+  binding: Pick<ParameterSourceBinding, 'source' | 'enabled' | 'localMode'>): void {
+  reportOnce(effect, name, keyedRateOverrideNote(effect, name, binding));
+}
+
+function keyedRateOverrideNote(effect: Pick<Effect, 'name'>, name: string,
+  binding: Pick<ParameterSourceBinding, 'source' | 'enabled' | 'localMode'>): string {
   return binding.source && binding.enabled !== false
     ? `${effect.name} ${name} is driven by a source, so it runs at ${name} × time; its keyframes do not set the travelled distance.`
     : `${effect.name} ${name} is set to Constant, so it runs at its constant value × time; its keyframes are ignored.`;
 }
 
-function reportOnce(effect: Effect, name: string, note: string | undefined): void {
+function reportOnce(effect: Pick<Effect, 'id'>, name: string, note: string | undefined): void {
   if (!note) return;
   const key = `${effect.id}\0${name}`;
   if (reportedSourceRates.has(key)) return;
