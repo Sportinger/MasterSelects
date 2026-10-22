@@ -4,83 +4,233 @@
       "name": "kaleidoscope-inspector",
       "effect": "kaleidoscope",
       "params": {
-        "segments": 8
+        "segments": 3,
+        "zoom": 1.5,
+        "sourceAngle": 1.0471975511965976
       },
       "image": "dancer_stage.jpg",
-      "preview": 0,
-      "alt": "The Kaleidoscope effect card in Properties → Effects: Segments 8, Rotation 0°, Source Angle 0°, Zoom 1.00, Center X and Center Y 0.50, Shape Circle and Frame Edges Mirror",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Kaleidoscope card: the Preset menu showing Crystal, Segments 3, Rotation 0°, Source Angle 60°, Zoom 1.50, Center X and Center Y 0.50, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the dancer's dress and legs folded into large mirrored facets",
+      "caption": "Kaleidoscope with the Crystal preset. 1 — Preset: pick a starting point. 2 — Segments: how many mirrored pairs. 3 — Rotation: spins the pattern. 4 — Source Angle: which slice the mirrors show. 5 — Zoom: how close the slice is.",
       "marks": [
         {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
           "target": "Segments",
-          "label": "Segments",
-          "reach": 60
+          "label": "Segments"
+        },
+        {
+          "target": "Rotation",
+          "label": "Rotation"
         },
         {
           "target": "Source Angle",
-          "label": "Source Angle, which part of the picture the mirrors show",
-          "reach": 60
+          "label": "Source Angle"
         },
         {
-          "target": "Frame Edges",
-          "label": "Frame Edges, what fills reads past the picture",
-          "reach": 60
+          "target": "Zoom",
+          "label": "Zoom"
         }
       ],
-      "top": "card",
-      "layout": "float"
+      "hide": [
+        "Particle Out"
+      ]
     },
     {
       "name": "blockify-inspector",
       "effect": "blockify",
-      "params": { "scale": 20, "levels": 4, "dither": 0.75 },
+      "params": {
+        "scale": 20,
+        "levels": 4,
+        "dither": 0.75
+      },
       "image": "dancer_stage.jpg",
       "preview": 380,
       "top": "tabs",
       "alt": "Properties, Effects with a Blockify card: Preset menu showing Arcade, then Block Size 20 px, Levels 4, Dither 0.75 and Amount 1, beside a strip of the preview with the dancer in chunky blocks",
       "caption": "Blockify with the Arcade preset. 1 — Preset: pick a starting point. 2 — Block Size. 3 — Levels: shades per colour. 4 — Dither. 5 — Amount.",
       "marks": [
-        { "target": "Preset", "label": "Preset" },
-        { "target": "Block Size", "label": "Block Size" },
-        { "target": "Levels", "label": "Levels" },
-        { "target": "Dither", "label": "Dither" },
-        { "target": "Amount", "label": "Amount" }
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Block Size",
+          "label": "Block Size"
+        },
+        {
+          "target": "Levels",
+          "label": "Levels"
+        },
+        {
+          "target": "Dither",
+          "label": "Dither"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
       ],
-      "hide": ["Particle Out"]
+      "hide": [
+        "Particle Out"
+      ]
     },
     {
       "name": "quadtree-zoom-inspector",
       "effect": "quadtree-zoom",
-      "params": { "scale": 16, "threshold": 0.015, "amount": 1, "speed": 0 },
+      "params": {
+        "scale": 16,
+        "threshold": 0.015,
+        "amount": 1,
+        "speed": 0
+      },
       "image": "harbor_town.jpg",
       "preview": 380,
       "top": "tabs",
       "alt": "Properties, Effects with a Quadtree Zoom card: Preset menu showing Big Tiles, then Minimum Cell 16 px, Detail Threshold 0.015, Amount 1 and Speed 0, beside a strip of the preview with the harbour rebuilt from chunky tiles, large over the sky and smaller over the houses",
       "caption": "Quadtree Zoom with the Big Tiles preset. 1 — Preset: pick a starting point. 2 — Minimum Cell. 3 — Detail Threshold. 4 — Amount. 5 — Speed.",
       "marks": [
-        { "target": "Preset", "label": "Preset" },
-        { "target": "Minimum Cell", "label": "Minimum Cell" },
-        { "target": "Detail Threshold", "label": "Detail Threshold" },
-        { "target": "Amount", "label": "Amount" },
-        { "target": "Speed", "label": "Speed" }
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Minimum Cell",
+          "label": "Minimum Cell"
+        },
+        {
+          "target": "Detail Threshold",
+          "label": "Detail Threshold"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Speed",
+          "label": "Speed"
+        }
       ],
-      "hide": ["Particle Out"]
+      "hide": [
+        "Particle Out"
+      ]
     },
     {
       "name": "voronoi-inspector",
       "effect": "voronoi",
-      "params": { "scale": 40, "amount": 1, "speed": 0 },
+      "params": {
+        "scale": 40,
+        "amount": 1,
+        "speed": 0
+      },
       "image": "harbor_town.jpg",
       "preview": 380,
       "top": "tabs",
       "alt": "Properties, Effects with a Voronoi card: Preset menu showing Stained Glass, then Cell Size 40 px, Amount 1 and Speed 0, beside a strip of the preview with the harbour broken into irregular cells of flat colour",
       "caption": "Voronoi with the Stained Glass preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Amount. 4 — Speed.",
       "marks": [
-        { "target": "Preset", "label": "Preset" },
-        { "target": "Cell Size", "label": "Cell Size" },
-        { "target": "Amount", "label": "Amount" },
-        { "target": "Speed", "label": "Speed" }
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Speed",
+          "label": "Speed"
+        }
       ],
-      "hide": ["Particle Out"]
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "mirror-inspector",
+      "effect": "mirror",
+      "params": {
+        "horizontal": false,
+        "vertical": true,
+        "keep": "start",
+        "angle": 0
+      },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Mirror card: the Preset menu showing Still Lake, Left / Right off, Top / Bottom on, Keep Left / Top, Center X and Center Y 0.50, Angle 0° and Frame Edges Mirror, beside a strip of the preview where the harbour town is reflected upside down below the middle of the picture",
+      "caption": "Mirror with the Still Lake preset. 1 — Preset: pick a starting point. 2 — Left / Right: mirror across the upright line. 3 — Top / Bottom: mirror across the level line. 4 — Keep: which side is copied. 5 — Angle: turns the lines.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Left / Right",
+          "label": "Left / Right"
+        },
+        {
+          "target": "Top / Bottom",
+          "label": "Top / Bottom"
+        },
+        {
+          "target": "Keep",
+          "label": "Keep"
+        },
+        {
+          "target": "Angle",
+          "label": "Angle"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "rgb-split-inspector",
+      "effect": "rgb-split",
+      "params": {
+        "amount": 0.02,
+        "angle": 0,
+        "mode": "offset"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with an RGB Split card: the Preset menu showing Glitch, Amount 0.020, Angle 0°, Mode Offset and Frame Edges Mirror, beside a strip of the preview where the dancer's arm and dress repeat in red, green and blue copies side by side",
+      "caption": "RGB Split with the Glitch preset. 1 — Preset: pick a starting point. 2 — Amount: how far the colours move. 3 — Angle: which way. 4 — Mode: a straight shift or a lens. 5 — Frame Edges: what fills in at the edge.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Angle",
+          "label": "Angle"
+        },
+        {
+          "target": "Mode",
+          "label": "Mode"
+        },
+        {
+          "target": "Frame Edges",
+          "label": "Frame Edges"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

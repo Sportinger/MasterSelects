@@ -42,6 +42,10 @@ export const EFFECT_DOC_EXTRAS = {
   // Lens shapes that read at card size: the round Crystal Ball and the Magnifying Glass, not the page's whole-frame still.
   fisheye: { thumb: { shot: 'scripts/effect-lab-shots/distort-thumbs.json' } },
   bulge: { thumb: { shot: 'scripts/effect-lab-shots/distort-thumbs.json' } },
+  // Wave: the default ripple barely shows at thumbnail size; cut it from the Wave Height loop's poster (above its value label).
+  wave: { thumb: { source: 'assets/effects/clips/wave-height.webp', region: [0, 0.15, 1, 0.75] } },
+  // Kaleidoscope: the pattern half of the compare loop's poster (the left half is the original).
+  kaleidoscope: { thumb: { source: 'assets/effects/clips/kaleidoscope.webp', region: [0.5, 0.21875, 0.5, 0.5625] } },
   // Stick Figure: the thumbnail is cut from the still, the default figure walking alone on black (the
   // loop's poster catches it mid-jump at the right edge); below its parameters the card has the
   // Pose library, Motion and Actions sections of its own (StickFigureControls, StickFigureActionLane).

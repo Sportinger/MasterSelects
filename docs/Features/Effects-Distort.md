@@ -50,14 +50,14 @@ RGB Split all work this way, and each is a small node graph you can open: select
 
 <div class="docs-shot-stage">
 
-![The Twirl effect card in Properties → Effects: Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror](assets/effects/editor/twirl-inspector.webp)
+![The Twirl effect card in Properties → Effects: Preset row, Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror](assets/effects/editor/distort-shared-controls.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 418" aria-hidden="true" focusable="false">
-<defs><marker id="twirl-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M101 132 L161 132" marker-end="url(#twirl-inspector-arrow)" />
-<circle class="docs-shot-number" cx="101" cy="132" r="18" /><text x="101" y="132" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M23 359 L83 359" marker-end="url(#twirl-inspector-arrow)" />
-<circle class="docs-shot-number" cx="23" cy="359" r="18" /><text x="23" y="359" class="docs-shot-number-text">2</text>
+<svg class="docs-shot-overlay" viewBox="0 0 590 479" aria-hidden="true" focusable="false">
+<defs><marker id="distort-shared-controls-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M101 193 L161 193" marker-end="url(#distort-shared-controls-arrow)" />
+<circle class="docs-shot-number" cx="101" cy="193" r="18" /><text x="101" y="193" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M23 420 L83 420" marker-end="url(#distort-shared-controls-arrow)" />
+<circle class="docs-shot-number" cx="23" cy="420" r="18" /><text x="23" y="420" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 

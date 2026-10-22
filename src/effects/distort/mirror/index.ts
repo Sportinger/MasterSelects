@@ -2,7 +2,7 @@
 // The editable graph is the runtime (services/operators/mirrorRecipes.ts); shader.wgsl is its WGSL reference.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { EDGES_PARAM, UV_DISTORT_COMMON_WGSL, choiceWarnings, distortNumber, edgeIndex } from '../uvDistortParams';
 import { MIRROR_KEEP_OPTIONS } from '../../../services/operators/mirrorRecipes';
 
@@ -16,6 +16,22 @@ export function mirrorWarnings(params: Params): string[] {
     ...choiceWarnings(params, ['edges']),
   ];
 }
+
+/**
+ * Presets name the look-defining controls: which lines mirror, the kept side and a level line
+ * (Angle 0, or 45° for Diagonal Fold). Like every control a preset does not name,
+ * Center X / Center Y and Frame Edges return to their defaults (resolveEffectPreset).
+ */
+export const MIRROR_PRESETS: readonly EffectPreset[] = [
+  // The top half reflected into the bottom, like a landscape in still water.
+  { id: 'still-lake', name: 'Still Lake', params: { horizontal: false, vertical: true, keep: 'start', angle: 0 } },
+  // The bottom half folded up into the sky: the ground closes over the picture like a bent city.
+  { id: 'folded-city', name: 'Folded City', params: { horizontal: false, vertical: true, keep: 'end', angle: 0 } },
+  // The Left / Right line turned to 45°: the picture folds along a diagonal, the only preset that turns the line.
+  { id: 'diagonal-fold', name: 'Diagonal Fold', params: { horizontal: true, vertical: false, keep: 'start', angle: Math.PI / 4 } },
+  // Both lines: the top-left quarter four times, an emblem around the centre.
+  { id: 'four-way', name: 'Four Way', params: { horizontal: true, vertical: true, keep: 'start', angle: 0 } },
+];
 
 export const mirror: EffectDefinition = {
   id: 'mirror',
@@ -69,11 +85,14 @@ export const mirror: EffectDefinition = {
       max: Math.PI,
       step: 0.01,
       animatable: true,
+      wraps: true,
       displayUnit: 'degrees',
       graphOnly: true,
     },
     edges: EDGES_PARAM,
   },
+
+  presets: MIRROR_PRESETS,
 
   paramWarnings: mirrorWarnings,
   packUniforms: (params, width, height) => new Float32Array([

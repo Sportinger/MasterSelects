@@ -25,7 +25,7 @@ import { kaleidoscope as kaleidoscopeTransition } from '../../src/transitions/ka
 
 type Case = [Effect['type'], () => EffectOperatorGraph, () => EffectOperatorGraph, Record<string, number | boolean | string>, Record<string, number | string>];
 const cases: Case[] = [
-  ['kaleidoscope', createLegacyKaleidoscopeGraph, createDefaultKaleidoscopeGraph, { segments: 7, rotation: .4 }, { shape: 'frame', edges: 'clamp' }],
+  ['kaleidoscope', createLegacyKaleidoscopeGraph, createDefaultKaleidoscopeGraph, { segments: 7, rotation: .4 }, { shape: 'frame', edges: 'clamp', sourceAngle: 0 }],
   ['mirror', createLegacyMirrorGraph, createDefaultMirrorGraph, { horizontal: true, vertical: true }, {}],
   ['rgb-split', createLegacyRgbSplitGraph, createDefaultRgbSplitGraph, { amount: .02, angle: 1.2 }, { edges: 'clamp' }],
   ['pixelate', createLegacyPixelateGraph, createDefaultPixelateGraph, { size: 10 }, {}],
@@ -69,7 +69,8 @@ describe('saved mirror and pixel effects', () => {
     const edited = legacy();
     edited.nodes.push({ id: 'user-note', operator: 'math.sin.scalar', operatorVersion: 1, bindings: {} });
     const migrated = migratePersistedEffectOperatorGraph(effect(type, { ...params }, edited));
-    expect(migrated.params).toEqual(params);
+    // Only a control saved without its key gets the value it rendered with then (Kaleidoscope Source Angle 0°, not the new 75° default).
+    expect(migrated.params).toEqual({ ...params, ...(type === 'kaleidoscope' ? { sourceAngle: 0 } : {}) });
     expect(effectOperatorGraph(migrated).nodes.some(node => node.id === 'user-note')).toBe(true);
   });
 

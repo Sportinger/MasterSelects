@@ -76,9 +76,7 @@ export const RECIPE_PENDING = {
     'radial-blur.webp',
     'saturation.webp',
     'scanlines.webp',
-    'twirl.webp',
     'vibrance.webp',
-    'wave.webp',
     'zoom-blur.webp',
   ].map((asset) => [`${ASSET_DIR}/effects/${asset}`, BEFORE_RECIPES])),
 };

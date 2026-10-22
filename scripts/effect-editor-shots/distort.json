@@ -155,12 +155,50 @@
       "name": "twirl-inspector",
       "effect": "twirl",
       "params": {
+        "amount": 6.283185307179586,
+        "radius": 0.6
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Twirl card: the Preset menu showing Whirlpool, Twist at 360°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror, beside a strip of the preview where the dancer winds into a spiral",
+      "caption": "Twirl with the Whirlpool preset. 1 — Preset: pick a starting point. 2 — Twist: how far the middle turns. 3 — Radius: how large the area is. 4 — Center X: where the middle sits. 5 — Frame Edges: what fills in beyond the frame.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Twist",
+          "label": "Twist"
+        },
+        {
+          "target": "Radius",
+          "label": "Radius"
+        },
+        {
+          "target": "Center X",
+          "label": "Center X"
+        },
+        {
+          "target": "Frame Edges",
+          "label": "Frame Edges"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "distort-shared-controls",
+      "effect": "twirl",
+      "params": {
         "amount": 3.49,
         "radius": 0.6
       },
       "image": "dancer_stage.jpg",
       "preview": 0,
-      "alt": "The Twirl effect card in Properties → Effects: Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror",
+      "alt": "The Twirl effect card in Properties → Effects: Preset row, Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror",
       "marks": [
         {
           "target": "Twist",
@@ -276,6 +314,47 @@
       ],
       "layout": "float",
       "gutter": 56
+    },
+    {
+      "name": "wave-inspector",
+      "effect": "wave",
+      "params": {
+        "amplitudeX": 0.035,
+        "frequencyX": 1.2,
+        "amplitudeY": 0,
+        "frequencyY": 4,
+        "speed": 0.5
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Wave card: the Preset menu showing Flag, Wave Height 0.035, Wave Count 1.2, Sway 0, Sway Count 4 and Frame Edges Mirror, then the Motion section with Speed 0.50 and Phase 0°, beside a strip of the preview with the dancer",
+      "caption": "Wave with the Flag preset. 1 — Preset: pick a starting point. 2 — Wave Height: how far the picture lifts. 3 — Wave Count: how many waves fit across. 4 — Frame Edges: what fills in beyond the frame. 5 — Speed: how fast the waves travel.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Wave Height",
+          "label": "Wave Height"
+        },
+        {
+          "target": "Wave Count",
+          "label": "Wave Count"
+        },
+        {
+          "target": "Frame Edges",
+          "label": "Frame Edges"
+        },
+        {
+          "target": "Speed",
+          "label": "Speed"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

@@ -95,9 +95,29 @@ describe('effect graph doc shots: graph selection', () => {
       expect(ports.some(label => /^(Divide|Multiply|Add|Switch|Combine Vector|Vector): Value$/.test(label) || label === 'Vector')).toBe(false);
     }
     const twirl = doc('?effect=twirl').graph.nodes.find(node => node.label === 'Centre, Shape & Radius')!;
-    expect(twirl.outputs.map(port => port.label)).toEqual(expect.arrayContaining(['Centre', 'Shape Scale', 'Offset', 'Distance / Radius']));
+    expect(twirl.outputs.map(port => port.label)).toEqual(expect.arrayContaining(['Centre', 'Shape Scale', 'Offset', 'Radius Share']));
     const stubs = doc('?effect=twirl&focus=twirl-angle').graph.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label);
-    expect(stubs).toEqual(expect.arrayContaining(['Distance / Radius', 'Twist', 'Offset', 'Shape Scale', 'Centre']));
+    expect(stubs).toEqual(expect.arrayContaining(['Radius Share', 'Twist', 'Offset', 'Shape Scale', 'Centre']));
+    for (const effect of ['twirl', 'wave', 'kaleidoscope', 'mirror', 'rgb-split']) {
+      const labels = doc(`?effect=${effect}`).graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
+      expect(labels).not.toContain('(1, 1)');
+      expect(labels).not.toContain('Distance / Radius');
+    }
+    // Kaleidoscope's two crossfaded patterns are told apart on every folder port.
+    const kaleidoscope = doc('?effect=kaleidoscope').graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
+    expect(kaleidoscope).toEqual(expect.arrayContaining(['Read Position A', 'Read Position B', 'Pattern A', 'Pattern B', 'One Vector']));
+    const counts = doc('?effect=kaleidoscope&focus=wedge-fold').graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
+    expect(counts).toEqual(expect.arrayContaining(['Count A', 'Count B']));
+    // No folder card of these effects shows two ports with the same name, not even one that differs
+    // only by case ('One' beside the scalar 'one'), and RGB Split's three plates carry their colour.
+    for (const effect of ['twirl', 'wave', 'kaleidoscope', 'mirror', 'rgb-split']) {
+      for (const node of doc(`?effect=${effect}`).graph.nodes) {
+        const names = [...node.inputs, ...node.outputs].map(port => port.label.toLowerCase());
+        expect(names.filter((name, index) => names.indexOf(name) !== index), `${effect} / ${node.label}`).toEqual([]);
+      }
+    }
+    const reads = doc('?effect=rgb-split').graph.nodes.find(node => node.label === 'Channel Reads & Frame Edges')!;
+    expect(reads.outputs.map(port => port.label)).toEqual(['Red Plate', 'Green Plate', 'Blue Plate']);
   });
 
   it('hides the plumbing folders on request, so the stages read as one path', () => {

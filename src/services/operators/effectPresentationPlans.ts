@@ -67,6 +67,8 @@ const UV_DISTORT_PORTS = { 'source-cache': 'Premultiplied Source', 'edge-uv': 'S
   'space-center': 'Centre', 'space-scale': 'Shape Scale', 'space-p': 'Offset', 'space-r': 'Distance / Radius', 'one-vec2': '(1, 1)',
   'bulge-scale': 'Lens Scale', 'bulge-moved': 'Moved Offset', 'twirl-angle': 'Turn Angle', 'twirl-moved': 'Moved Offset',
   'space-sample-uv': 'Read Position', 'wave-sample-uv': 'Read Position', phase: 'Phase' };
+// Twirl and Wave read plain words on their folder ports: '(1, 1)' said nothing, 'Distance / Radius' was cut off on the cards.
+const PLAIN_UV_DISTORT_PORTS = { ...UV_DISTORT_PORTS, 'space-r': 'Radius Share', 'one-vec2': 'One Vector', phase: 'Wave Phase' };
 
 // What the outputs that cross into Chroma Key's Spill folder carry (the docs' Spill recipe shows the same names).
 const CHROMA_KEY_PORTS = { 'unmix-color': 'Color', 'screen-channel': 'Screen Channel', 'screen-other-channels': 'Other Channels',
@@ -507,7 +509,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
     labels: { premultiply: 'Premultiplied Source (cached)', space: 'Centre, Shape & Radius', phase: 'Phase & Speed', edges: 'Frame Edges & Sampling',
       coordinates: type === 'wave' ? 'Wave Displacement' : type === 'twirl' ? 'Twirl Angle' : 'Bulge & Pinch Curve', finish: 'Straight Alpha Output' },
-    portLabels: UV_DISTORT_PORTS,
+    portLabels: type === 'bulge' ? UV_DISTORT_PORTS : PLAIN_UV_DISTORT_PORTS,
     stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : /^(result|coverage-floor)/.test(id) ? 'finish'
       : id === 'sample' || /^edge-/.test(id) ? 'edges'
       : id === 'one-vec2' ? (type === 'wave' ? 'edges' : 'space')

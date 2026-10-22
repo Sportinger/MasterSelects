@@ -1,0 +1,401 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "dancer_stage_motion.mp4",
+  "clips": [
+    {
+      "name": "wave",
+      "effect": "wave",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        300,
+        40,
+        1320,
+        990
+      ],
+      "width": 960,
+      "float": "left",
+      "alt": "The dancer turning on a dark stage, original left and with Wave right: her arms, her dress and the edge of the stage floor ripple in small waves that travel slowly through the picture",
+      "caption": "Left: original. Right: Wave at its default settings.",
+      "loop": 0.35,
+      "poster": 1.4,
+      "maxBytes": 900000
+    },
+    {
+      "name": "wave-presets",
+      "kind": "presets",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "crop": [
+        400,
+        60,
+        1040,
+        900
+      ],
+      "width": 960,
+      "loop": 0.35,
+      "poster": 1.4,
+      "maxBytes": 1200000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Heat Shimmer top left with fine trembling edges, Dream top right with the whole figure swaying in long slow waves, Flag bottom left bending up and down like a banner, Funhouse Mirror bottom right pushed sideways into one broad curve",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "wave-height",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeY": 0
+      },
+      "sweep": {
+        "param": "amplitudeX",
+        "label": "Wave Height",
+        "from": 0,
+        "to": 0.06,
+        "decimals": 3
+      },
+      "alt": "The dancer with Wave while Wave Height runs from 0 to 0.06 and back: the picture starts to bend up and down in broad waves across the frame, the edge of the floor turns into hills, and it settles again; the current value is shown at the bottom left",
+      "caption": "Wave Height from 0 to 0.06 and back, Sway 0."
+    },
+    {
+      "name": "wave-count",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeX": 0.02,
+        "amplitudeY": 0
+      },
+      "sweep": {
+        "param": "frequencyX",
+        "label": "Wave Count",
+        "from": 1,
+        "to": 16,
+        "decimals": 1
+      },
+      "alt": "The dancer with Wave while Wave Count runs from 1 to 16 and back: one slow bend across the frame becomes many tight ripples that make her outline tremble, and widens again; the current value is shown at the bottom left",
+      "caption": "Wave Count from 1 to 16 and back, at Wave Height 0.02."
+    },
+    {
+      "name": "wave-sway",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeX": 0
+      },
+      "sweep": {
+        "param": "amplitudeY",
+        "label": "Sway",
+        "from": 0,
+        "to": 0.06,
+        "decimals": 3
+      },
+      "alt": "The dancer with Wave while Sway runs from 0 to 0.06 and back: her figure is pushed left and right into a snake-like curve from head to feet, and straightens again; the current value is shown at the bottom left",
+      "caption": "Sway from 0 to 0.06 and back, Wave Height 0."
+    },
+    {
+      "name": "wave-sway-count",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeX": 0,
+        "amplitudeY": 0.02
+      },
+      "sweep": {
+        "param": "frequencyY",
+        "label": "Sway Count",
+        "from": 1,
+        "to": 16,
+        "decimals": 1
+      },
+      "alt": "The dancer with Wave while Sway Count runs from 1 to 16 and back: one broad sideways bend becomes a tight zigzag through the whole figure, and widens again; the current value is shown at the bottom left",
+      "caption": "Sway Count from 1 to 16 and back, at Sway 0.02."
+    },
+    {
+      "name": "wave-speed",
+      "effect": "wave",
+      "range": [
+        0,
+        4.8
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.4,
+      "params": {
+        "amplitudeX": 0.03,
+        "amplitudeY": 0.03,
+        "frequencyX": 2,
+        "frequencyY": 2
+      },
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          0.5,
+          2
+        ]
+      },
+      "alt": "The dancer, held still, with Wave at three speeds, 1.6 seconds each: at Speed 0 the waves stand still, at 0.5 they travel slowly through her dress and the floor, at 2 they wobble quickly; the speed is shown at the bottom left",
+      "caption": "Speed 0, 0.5 and 2, 1.6 seconds each, on a held frame.",
+      "source": "dancer_stage.jpg"
+    },
+    {
+      "name": "wave-phase",
+      "effect": "wave",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        340,
+        40,
+        1240,
+        930
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 2.5,
+      "params": {
+        "amplitudeX": 0.03,
+        "amplitudeY": 0.03,
+        "frequencyX": 2,
+        "frequencyY": 2,
+        "speed": 0
+      },
+      "sweep": {
+        "param": "phase",
+        "label": "Phase",
+        "from": 0,
+        "to": 360,
+        "unit": "°"
+      },
+      "alt": "The dancer with Wave at Speed 0 while Phase runs from 0° to 360° and back: the waves slide along by one whole wave and back again; the current angle is shown at the bottom left",
+      "caption": "Phase from 0° to 360° and back, at Speed 0."
+    },
+    {
+      "name": "kaleidoscope",
+      "effect": "kaleidoscope",
+      "params": {},
+      "range": [
+        0.4,
+        3.0
+      ],
+      "layout": "compare",
+      "crop": [
+        600,
+        180,
+        720,
+        720
+      ],
+      "width": 960,
+      "float": "left",
+      "loop": 0.2,
+      "poster": 1.2,
+      "maxBytes": 900000,
+      "alt": "The dancer turning on a dark stage, original left and with Kaleidoscope right: her white dress is folded into a six-pointed flower in the middle of the frame that opens, closes and changes shape as she moves",
+      "caption": "Left: original. Right: Kaleidoscope at its default settings, six mirrored pairs."
+    },
+    {
+      "name": "kaleidoscope-segments",
+      "effect": "kaleidoscope",
+      "range": [
+        0,
+        4.6
+      ],
+      "layout": "single",
+      "crop": [
+        600,
+        180,
+        720,
+        720
+      ],
+      "width": 600,
+      "loop": 0,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 1.2,
+      "params": {},
+      "sweep": {
+        "param": "segments",
+        "label": "Segments",
+        "from": 2,
+        "to": 12,
+        "decimals": 1
+      },
+      "alt": "The dancer with Kaleidoscope while Segments runs from 2 to 12 and back: a broad four-part shape gains more and more petals until it is a dense flower, each new count fading in over the last, and loses them again; the current value is shown at the bottom left",
+      "caption": "Segments from 2 to 12 and back.",
+      "source": "dancer_stage.jpg"
+    },
+    {
+      "name": "kaleidoscope-source-angle",
+      "effect": "kaleidoscope",
+      "range": [
+        0,
+        4.6
+      ],
+      "layout": "single",
+      "crop": [
+        600,
+        180,
+        720,
+        720
+      ],
+      "width": 600,
+      "loop": 0,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 1.2,
+      "params": {},
+      "sweep": {
+        "param": "sourceAngle",
+        "label": "Source Angle",
+        "from": 0.5236,
+        "to": 2.618,
+        "fontSize": 0.001
+      },
+      "alt": "The dancer with Kaleidoscope while Source Angle turns from 30° to 150° and back: the flower stays in place while its petals flow outwards and change, as if the tube of a kaleidoscope were turned",
+      "caption": "Source Angle from 30° to 150° and back.",
+      "source": "dancer_stage.jpg"
+    },
+    {
+      "name": "kaleidoscope-zoom",
+      "effect": "kaleidoscope",
+      "range": [
+        0,
+        4.6
+      ],
+      "layout": "single",
+      "crop": [
+        600,
+        180,
+        720,
+        720
+      ],
+      "width": 600,
+      "loop": 0,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 1.2,
+      "params": {},
+      "sweep": {
+        "param": "zoom",
+        "label": "Zoom",
+        "from": 0.5,
+        "to": 2.5,
+        "decimals": 2
+      },
+      "alt": "The dancer with Kaleidoscope while Zoom runs from 0.5 to 2.5 and back: a small flower ringed by mirrored copies of the stage grows until only a few large folds of the dress fill the frame, and shrinks again; the current value is shown at the bottom left",
+      "caption": "Zoom from 0.5 to 2.5 and back.",
+      "source": "dancer_stage.jpg"
+    },
+    {
+      "name": "kaleidoscope-center",
+      "effect": "kaleidoscope",
+      "range": [
+        0,
+        4.6
+      ],
+      "layout": "single",
+      "crop": [
+        240,
+        60,
+        1440,
+        960
+      ],
+      "width": 720,
+      "loop": 0,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 1.2,
+      "params": {},
+      "sweep": {
+        "param": "centerX",
+        "label": "Center X",
+        "from": 0.4,
+        "to": 0.6,
+        "decimals": 2
+      },
+      "alt": "The dancer with Kaleidoscope while Center X runs from 0.4 to 0.6 and back: the flower slides left and right with its centre and its petals change, because the mirrors now fold another part of the picture; the current value is shown at the bottom left",
+      "caption": "Center X from 0.4 to 0.6 and back.",
+      "source": "dancer_stage.jpg"
+    }
+  ]
+}

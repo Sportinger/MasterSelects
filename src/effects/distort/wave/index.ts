@@ -2,8 +2,24 @@
 // The editable graph is the runtime; shader.wgsl is its WGSL reference.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { EDGES_PARAM, UV_DISTORT_COMMON_WGSL, choiceWarnings, distortNumber, edgeIndex } from '../uvDistortParams';
+
+// Labels: the waves that run across the picture lift it up and down (Wave Height, Wave Count); the waves that
+// run down it push it sideways (Sway, Sway Count). The earlier 'Horizontal …' / 'Vertical …' labels were cut
+// to the same 'Horizontal …' in the card. Keys stay, so saved projects and tool calls are unchanged.
+
+/** Presets name both heights, both counts and Speed: together they make the look. */
+export const WAVE_PRESETS: readonly EffectPreset[] = [
+  // Fine, fast ripples, mostly sideways: air over a hot stage floor; the picture stays readable.
+  { id: 'heat-shimmer', name: 'Heat Shimmer', params: { amplitudeX: 0.002, frequencyX: 9, amplitudeY: 0.005, frequencyY: 16, speed: 1.5 } },
+  // Long, slow waves both ways: the picture breathes as if seen through deep water.
+  { id: 'dream', name: 'Dream', params: { amplitudeX: 0.03, frequencyX: 2, amplitudeY: 0.03, frequencyY: 2, speed: 0.4 } },
+  // One wave and a bit across the frame, up and down only: a banner in the wind.
+  { id: 'flag', name: 'Flag', params: { amplitudeX: 0.035, frequencyX: 1.2, amplitudeY: 0, frequencyY: 4, speed: 0.5 } },
+  // A single broad sideways bend that drifts slowly: a fairground mirror.
+  { id: 'funhouse-mirror', name: 'Funhouse Mirror', params: { amplitudeX: 0, frequencyX: 4, amplitudeY: 0.06, frequencyY: 1, speed: 0.2 } },
+];
 
 export const wave: EffectDefinition = {
   id: 'wave',
@@ -17,7 +33,7 @@ export const wave: EffectDefinition = {
   params: {
     amplitudeX: {
       type: 'number',
-      label: 'Horizontal Height',
+      label: 'Wave Height',
       default: 0.015,
       min: 0,
       max: 0.1,
@@ -26,7 +42,7 @@ export const wave: EffectDefinition = {
     },
     frequencyX: {
       type: 'number',
-      label: 'Horizontal Waves',
+      label: 'Wave Count',
       default: 4,
       min: 0.5,
       max: 20,
@@ -35,7 +51,7 @@ export const wave: EffectDefinition = {
     },
     amplitudeY: {
       type: 'number',
-      label: 'Vertical Height',
+      label: 'Sway',
       default: 0.015,
       min: 0,
       max: 0.1,
@@ -44,7 +60,7 @@ export const wave: EffectDefinition = {
     },
     frequencyY: {
       type: 'number',
-      label: 'Vertical Waves',
+      label: 'Sway Count',
       default: 4,
       min: 0.5,
       max: 20,
@@ -71,10 +87,16 @@ export const wave: EffectDefinition = {
       max: 360,
       step: 1,
       animatable: true,
+      wraps: true,
+      unit: '°',
       group: 'motion',
       graphOnly: true,
     },
   },
+
+  presets: WAVE_PRESETS,
+  // Speed × timeline time moves the waves: playback, scrubbing and export agree, a paused frame holds still.
+  timelineAnimated: true,
 
   paramWarnings: params => choiceWarnings(params, ['edges']),
   packUniforms: (params, width, height, time = 0) => new Float32Array([

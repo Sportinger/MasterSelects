@@ -31,7 +31,7 @@ describe('effect rows with a degree display unit', () => {
     fireEvent.change(field, { target: { value: '360' } });
     expect(changed).toHaveBeenLastCalledWith({ amount: expect.closeTo(2 * Math.PI, 12), radius: .5 });
     fireEvent.click(screen.getByRole('button', { name: 'Reset Twist' }));
-    expect(changed).toHaveBeenLastCalledWith({ amount: expect.closeTo(2, 12), radius: .5 });
+    expect(changed).toHaveBeenLastCalledWith({ amount: expect.closeTo(2 * Math.PI / 3, 12), radius: .5 });
   });
 
   it('leaves rows without a display unit in their stored unit', () => {
