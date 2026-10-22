@@ -150,7 +150,7 @@ describe('legacy blur graph upgrade', () => {
   });
 
   it('names a negative Motion Blur Length in the percent its card shows', () => {
-    expect(blurBudgetNotes('motion-blur', { ...getDefaultParams('motion-blur'), amount: -0.05 }, 1920, 1080)[0]).toMatch(/^Length -5% is below 0/);
+    expect(blurBudgetNotes('motion-blur', { ...getDefaultParams('motion-blur'), amount: -0.05 }, 1920, 1080)[0]).toMatch(/^Length -5% \(amount -0\.05\) is below 0/);
     expect(blurBudgetNotes('radial-blur', { ...getDefaultParams('radial-blur'), amount: -0.5 }, 1920, 1080)[0]).toMatch(/^Amount -0.5 is below 0/);
   });
 });

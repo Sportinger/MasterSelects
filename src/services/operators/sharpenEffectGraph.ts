@@ -18,9 +18,10 @@ export function createDefaultSharpenGraph(): EffectOperatorGraph {
 }
 
 /**
- * The Sharpen recipe released on 2026-10-21 (3.2.7): its window spread the taps of a fractional
- * reach evenly, so the extremes jumped whenever Radius made the window one tap wider. Kept only to
- * recognize untouched saved graphs, which `upgradeSharpenGraph` replaces with the current recipe.
+ * The Sharpen recipe released with 3.2.7: its window spread the taps of a fractional reach evenly,
+ * so the extremes jumped whenever Radius made the window one tap wider. Kept to recognize untouched
+ * saved 3.2.7 graphs, which keep their look (isPreviousStylizeGraph; the inspector offers Use the
+ * new Sharpen).
  */
 export function createSpreadWindowSharpenGraph(): EffectOperatorGraph {
   return createSharpenGraph('spread');

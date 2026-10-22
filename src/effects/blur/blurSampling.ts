@@ -185,22 +185,28 @@ export function transformDirectionalPixel(plan: DirectionalBlurPlan, pixel: [num
 }
 
 /**
- * Stage A taps at a pixel: the box of length h in one-pixel cells from the centre out (wider cells
- * beyond DIRECTIONAL_MAX_FINE_TAPS), a pair per ring. The outermost pair counts with the share of
- * its cell the box covers and sits at the centre of that share, so the box grows continuously with
- * the amount and even a box under a pixel blurs a little (taps spread evenly over a rounded-up
- * count jumped whenever the count did).
+ * Taps over a centred span of `span` group units that covers `reachPx` pixels: one-pixel cells
+ * from the middle out (wider cells beyond `maxTaps`), a pair per ring. The outermost pair counts
+ * with the share of its cell the span covers and sits at the centre of that share, so the taps
+ * follow a growing span continuously and even a span under a pixel blurs a little (taps spread
+ * evenly over a rounded-up count jumped whenever the count did). Offsets are in group units from
+ * the middle of the span.
  */
-export function directionalFineTaps(plan: DirectionalBlurPlan, pixel: [number, number]): Array<{ u: number; weight: number }> {
-  const step = Math.max(plan.step, 1e-9), reachPx = step * plan.speed(pixel);
-  const cell = Math.max(reachPx / DIRECTIONAL_MAX_FINE_TAPS, 1), halfCells = reachPx * 0.5 / cell;
-  const pairs = clamp(Math.ceil(halfCells), 1, DIRECTIONAL_MAX_FINE_TAPS / 2);
-  const unitsPerCell = step * 0.5 / Math.max(halfCells, 1e-9);
+export function coveredCellTaps(span: number, reachPx: number, maxTaps: number): Array<{ offset: number; weight: number }> {
+  const cell = Math.max(reachPx / maxTaps, 1), halfCells = reachPx * 0.5 / cell;
+  const pairs = clamp(Math.ceil(halfCells), 1, Math.floor(maxTaps / 2));
+  const unitsPerCell = span * 0.5 / Math.max(halfCells, 1e-9);
   return Array.from({ length: 2 * pairs }, (_, index) => {
     const slot = index + 0.5 - pairs, distance = Math.abs(slot), ring = distance - 0.5;
     const covered = clamp(halfCells - ring, 0, 1);
-    return { u: slot * ((ring + 0.5 * covered) / distance) * unitsPerCell, weight: Math.max(covered, 1e-6) };
+    return { offset: slot * ((ring + 0.5 * covered) / distance) * unitsPerCell, weight: Math.max(covered, 1e-6) };
   });
+}
+
+/** Stage A taps at a pixel: the box of length h in covered one-pixel cells (coveredCellTaps). */
+export function directionalFineTaps(plan: DirectionalBlurPlan, pixel: [number, number]): Array<{ u: number; weight: number }> {
+  const step = Math.max(plan.step, 1e-9);
+  return coveredCellTaps(step, step * plan.speed(pixel), DIRECTIONAL_MAX_FINE_TAPS).map(tap => ({ u: tap.offset, weight: tap.weight }));
 }
 
 /**
@@ -240,8 +246,8 @@ export function blurBudgetNotes(type: string, params: Record<string, unknown>, w
   }
   if (!isDirectional(type)) return [];
   const requested = finite(params.amount, Number.NaN);
-  // Motion Blur's card shows Length in percent of the frame (displayScale 100): the note uses the same unit.
-  if (type !== 'zoom-blur' && requested < 0) return [`${type === 'motion-blur' ? `Length ${Number((requested * 100).toPrecision(6))}%` : `Amount ${requested}`} is below 0: `
+  // Motion Blur's card shows Length in percent of the frame (displayScale 100), tools set the share: name both.
+  if (type !== 'zoom-blur' && requested < 0) return [`${type === 'motion-blur' ? `Length ${Number((requested * 100).toPrecision(6))}% (amount ${requested})` : `Amount ${requested}`} is below 0: `
     + `${type === 'motion-blur' ? 'Motion' : 'Radial'} Blur leaves the picture unchanged (as in earlier versions).`];
   const plan = directionalBlurPlan(type, params, width, height);
   const farthest = Math.hypot(Math.max(plan.center[0], width - plan.center[0]), Math.max(plan.center[1], height - plan.center[1]));

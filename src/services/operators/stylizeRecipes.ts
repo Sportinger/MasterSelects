@@ -99,7 +99,7 @@ export function stylizePresentation(type: string, graph: EffectOperatorGraph): {
 /**
  * Previous recipes: released versions that read every value as the current recipe does and share
  * its folders, but render a little differently. Saved projects keep them (their look does not
- * change on load); the inspector offers the current one. Sharpen of 3.2.7 (2026-10-21): its halo
+ * change on load); the inspector offers the current one. Sharpen of 3.2.7: its halo
  * window spread the taps of a fractional reach evenly, so the limit jumped whenever an animated
  * Radius made the window one tap wider. Both agree only where twice the blur sigma is a whole
  * number of pixels; elsewhere a strong Sharpen differs by up to about 60 levels on fine detail.

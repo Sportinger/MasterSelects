@@ -810,8 +810,10 @@ kernel is spread or capped there.
 **Worker hosts.** The opt-in worker render modes follow the same units: worker
 software draws Gaussian and Box as a canvas blur with the contract's sigma, and
 Motion, Radial (Zoom and Spin) and Zoom along the contract's paths in one stage of
-up to 64 taps with premultiplied alpha (longer streaks step visibly there; the
-`SoftwareBlur` log says so once per effect, size and streak); worker GPU runs the
+covered one-pixel cells (`coveredCellTaps`, as stage A of the graph), up to 64 bilinear
+premultiplied reads, so an animated amount changes smoothly there too (streaks longer
+than 64 px spread their reads and can look stepped; the `SoftwareBlur` log says so once
+per effect, size and streak); worker GPU runs the
 blur graphs. Gaussian
 Blur on a motion-adjustment layer in the worker GPU host
 (`workerGpuAdjustmentBlur.ts`) renders the tap list of `separableBlurTaps` itself:
