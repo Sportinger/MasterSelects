@@ -14,6 +14,8 @@ import { recognizeOperatorCompositions } from '../../src/services/operators/reco
 import { useTimelineStore } from '../../src/stores/timeline';
 import { executeAITool } from '../../src/services/aiTools';
 import { motionBlur } from '../../src/effects/blur/motion';
+import { radialBlur } from '../../src/effects/blur/radial';
+import { resolveEffectPreset } from '../../src/services/effects/effectPresets';
 import { effectParamDisplay } from '../../src/effects/paramDisplay';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
@@ -116,6 +118,20 @@ describe('Motion Blur card and presets', () => {
       expect(Math.abs(angle * 180 / Math.PI - Math.round(angle * 180 / Math.PI))).toBeLessThan(1e-9);
     }
     expect(motionBlur.presets?.find(preset => preset.id === 'falling')?.params.angle).toBe(Math.PI / 2);
+  });
+});
+
+describe('Radial Blur presets', () => {
+  it('name a valid Type and an Amount in range, and keep the centre in the middle', () => {
+    expect(radialBlur.presets?.map(preset => preset.name)).toEqual(['Dizzy', 'Turning Stage', 'Whirlpool', 'Tunnel Vision']);
+    const modes = (radialBlur.params.mode.options ?? []).map(option => option.value);
+    for (const preset of radialBlur.presets ?? []) {
+      const { mode, amount } = preset.params as { mode: string; amount: number };
+      expect(modes).toContain(mode);
+      expect(amount).toBeGreaterThan(0);
+      expect(amount).toBeLessThanOrEqual(2);
+      expect(resolveEffectPreset({ type: 'radial-blur', params: {} }, preset)).toMatchObject({ mode, amount, centerX: 0.5, centerY: 0.5 });
+    }
   });
 });
 

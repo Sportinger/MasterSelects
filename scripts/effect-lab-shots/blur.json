@@ -86,6 +86,25 @@
       },
       "alt": "The dancer on the dark stage, original left and with Motion Blur at Length 2% right: her body, arms and dress smear sideways into soft streaks, as if she rushed across the stage while the shutter was open",
       "caption": "Left: original. Right: Length 2%."
+    },
+    {
+      "name": "radial-blur",
+      "out": "docs/Features/assets/effects/radial-blur.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "compare",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "radial-blur",
+        "params": {
+          "mode": "spin",
+          "amount": 0.5
+        }
+      },
+      "alt": "The dancer on the dark stage, original left and with Radial Blur in Spin mode at Amount 0.5 right: her arms, dress and the stage floor smear in arcs around her middle, as if she spun in a pirouette while the shutter was open",
+      "caption": "Left: original. Right: Type Spin, Amount 0.5."
     }
   ]
 }

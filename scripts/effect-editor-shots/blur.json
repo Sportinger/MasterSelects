@@ -107,6 +107,44 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "radial-blur-inspector",
+      "effect": "radial-blur",
+      "params": {
+        "mode": "spin",
+        "amount": 1.5
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Radial Blur card: the Preset menu showing Whirlpool, Type on Spin, Amount at 1.5 and Center X and Center Y at 0.5, beside a strip of the preview where the night street turns into rings of light around the walker",
+      "caption": "Radial Blur with the Whirlpool preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Type: streaks towards the centre or circles around it. 3 \u2014 Amount: how strong. 4 \u2014 Center X: where the sharp middle sits across. 5 \u2014 Center Y: and up or down.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Type",
+          "label": "Type"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Center X",
+          "label": "Center X"
+        },
+        {
+          "target": "Center Y",
+          "label": "Center Y"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }
