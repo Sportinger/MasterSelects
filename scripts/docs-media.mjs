@@ -16,7 +16,8 @@
 //            --theme <mode>   editor theme for this run (default: the theme setting, dark)
 //            --keep <folder>  keep the doc-clip exports there (doc-clip.mjs --reencode can reuse them)
 //            --sheet <file>   where the contact sheet goes (default: <out>/contact-sheet.jpg or a temp folder)
-// Prints a summary and writes one contact sheet of everything the run made. A run into the repository
+// Prints a summary and writes a contact sheet of everything the run made (pages of 36 for a long run). A
+// scratch run (--out) skips the screenshots, which only write into the repository. A run into the repository
 // refreshes effects/catalog.json afterwards (node scripts/effect-docs.mjs).
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -177,7 +178,9 @@ try {
       continue;
     }
     if (kind === 'screenshot' && scratch) {
-      for (const recipe of ofKind) results.push({ recipe, ok: false, ms: 0, error: 'capture-feature-doc-screenshots.mjs writes into the repository only; run it without --out' });
+      // Not a failure: the screenshot tool writes into the repository only.
+      for (const recipe of ofKind) results.push({ recipe, ok: true, skipped: true, ms: 0 });
+      console.log(`screenshot: ${ofKind.length} skipped (capture-feature-doc-screenshots.mjs writes into the repository only; run without --out)`);
       continue;
     }
     vite ??= await ensureVite();
@@ -199,7 +202,12 @@ try {
       if (failed) console.log(failed.tail.trim().split('\n').slice(-6).map((line) => `    ${line}`).join('\n'));
       // The shot scripts record their own fingerprints; the generated basic stills and screenshots are recorded here.
       if (!failed && ['basic-still', 'screenshot'].includes(kind)) recordFingerprints(group, { code });
-      for (const recipe of group) results.push({ recipe, ok: !failed, ms: ms / group.length, error: failed?.tail.trim().split('\n').at(-1) });
+      // When a shot list fails part-way, the entries it wrote before the failure still count (and show on the sheet).
+      const wrote = (recipe) => recipe.outputs.every((output) => fs.existsSync(docOutput(output)) && fs.statSync(docOutput(output)).mtimeMs >= begin - 1000);
+      for (const recipe of group) {
+        const ok = !failed || wrote(recipe);
+        results.push({ recipe, ok, ms: ms / group.length, error: ok ? undefined : failed.tail.trim().split('\n').at(-1) });
+      }
     }
   }
 } finally {
@@ -207,11 +215,13 @@ try {
 }
 
 // The contact sheet: every output this run wrote.
-const made = results.filter((result) => result.ok).flatMap(({ recipe }) => recipe.outputs.map((output) => ({ output, file: docOutput(output) })))
+const made = results.filter((result) => result.ok && !result.skipped).flatMap(({ recipe }) => recipe.outputs.map((output) => ({ output, file: docOutput(output) })))
   .filter(({ file }) => fs.existsSync(file) && fs.statSync(file).mtimeMs >= started - 1000);
 const sheetFile = path.resolve(option('--sheet') ?? (scratch ? path.join(process.env.DOCS_MEDIA_OUT_ROOT, 'contact-sheet.jpg') : path.join(work, 'contact-sheet.jpg')));
+// A failing sheet must not cost the summary and the catalog refresh after hours of rendering.
 const sheet = await writeContactSheet(made.map(({ output, file }) => ({ file, label: path.relative('docs/Features/assets', output) })), sheetFile,
-  { title: `docs media ${new Date().toLocaleString('sv-SE').slice(0, 16)} · ${made.length} files${scratch ? ` · scratch: ${process.env.DOCS_MEDIA_OUT_ROOT}` : ''}` });
+  { title: `docs media ${new Date().toLocaleString('sv-SE').slice(0, 16)} · ${made.length} files${scratch ? ` · scratch: ${process.env.DOCS_MEDIA_OUT_ROOT}` : ''}` })
+  .catch((error) => { console.warn(`warning: no contact sheet: ${error.message}`); return []; });
 
 if (!scratch && made.length) {
   const refresh = await run(['scripts/effect-docs.mjs'], 'effect-docs');
@@ -219,10 +229,12 @@ if (!scratch && made.length) {
 }
 
 const failures = results.filter((result) => !result.ok);
+const skipped = results.filter((result) => result.skipped).length;
 const after = recipeStatus(recipes, { code: effectCodeIndex(), manifest: readManifest(), exists });
 const stillStale = recipes.filter((recipe) => after.get(recipe) === 'stale' || after.get(recipe) === 'missing');
-console.log(`\n${results.length - failures.length} of ${results.length} recipes made, ${made.length} files${scratch ? ` under ${process.env.DOCS_MEDIA_OUT_ROOT}` : ''}, in ${seconds(Date.now() - started)}.`);
+console.log(`\n${results.length - failures.length - skipped} of ${results.length - skipped} recipes made${skipped ? ` (${skipped} skipped)` : ''}, ${made.length} files${scratch ? ` under ${process.env.DOCS_MEDIA_OUT_ROOT}` : ''}, in ${seconds(Date.now() - started)}.`);
 for (const failure of failures) console.log(`  FAILED ${failure.recipe.id}: ${failure.error ?? ''}`);
-if (!scratch) console.log(stillStale.length ? `Still stale: ${stillStale.map((recipe) => recipe.id).join(', ')}` : 'No stale assets left.');
-console.log(`Contact sheet: ${sheet ?? '(nothing made)'}\nLog: ${logFile}`);
+const listed = (list) => `${list.slice(0, 20).map((recipe) => recipe.id).join(', ')}${list.length > 20 ? ` and ${list.length - 20} more (--check lists them)` : ''}`;
+if (!scratch) console.log(stillStale.length ? `Still stale: ${stillStale.length}: ${listed(stillStale)}` : 'No stale assets left.');
+console.log(`Contact sheet: ${sheet.length ? sheet.join(', ') : '(nothing made)'}\nLog: ${logFile}`);
 if (failures.length) process.exitCode = 1;

@@ -12,8 +12,10 @@
 //   sectionLabels  card titles for registry parameter groups ({ 'Time map': 'Time field source' }).
 //   note      the controls text when the card shows no fixed rows.
 //   deeper    [[text, link relative to docs/Features/effects]] for a basic page's Technical details.
-//   thumb     the gallery thumbnail: { region: [left, top, width, height] } as fractions of the still
-//             (default: its effect half), or { shot: <Effect Lab --pairs file> } that renders it.
+//   thumb     the gallery thumbnail: { region: [left, top, width, height] } as fractions of the source
+//             (default: its effect half), { source: <asset path relative to docs/Features> } to cut it from
+//             another picture (default: the clip poster when the page plays the effect's loop, else the
+//             still), or { shot: <Effect Lab --pairs file> } that renders it.
 
 const LANDMARK_EFFECTS = ['Effect system: landmark tracking effects', '../Effect-System.md#landmark-tracking-effects'];
 
@@ -29,6 +31,8 @@ export const EFFECT_DOC_EXTRAS = {
   levels: { thumb: SPLIT_THUMB },
   // The still has three panels (original, Saturation, Vibrance): the card shows the last.
   vibrance: { thumb: { region: [0.67, 0, 0.33, 1] } },
+  // The whole blurred half at card size hides the blur: the houses and boats, closer.
+  'gaussian-blur': { thumb: { region: [0.66, 0.2, 0.3, 0.6] } },
   // Generators: the still is the effect frame alone.
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },

@@ -65,14 +65,15 @@ const option = (name, fallback) => { const index = args.indexOf(name); return in
 const manifest = option('--manifest');
 // `--only a,b` with --manifest: just the manifest's shots with these names (the part after `@`, else the effect).
 const only = option('--only')?.split(',').map(name => name.trim()).filter(Boolean);
-const manifestShots = (manifest ? JSON.parse(fs.readFileSync(manifest, 'utf8')).shots : [])
+const manifestData = manifest ? JSON.parse(fs.readFileSync(manifest, 'utf8')) : {};
+const manifestShots = (manifestData.shots ?? [])
   .filter(spec => !only || only.includes(parseGraphShot(spec).name));
 const unknownShots = (only ?? []).filter(name => !manifestShots.some(spec => parseGraphShot(spec).name === name));
 if (unknownShots.length) throw new Error(`No shot named ${unknownShots.join(', ')} in ${manifest}`);
 const shots = [...manifestShots, ...args.filter((arg, index) => !arg.startsWith('--') && !valueOptions.has(args[index - 1]))];
 if (!shots.length) throw new Error('Name at least one shot, e.g. gaussian-blur or "gaussian-blur?focus=vertical-pass@gaussian-vertical".');
 const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
-const out = docOutput(option('--out', 'docs/Features/assets/effects/graphs'));
+const out = docOutput(option('--out', manifestData.out ?? 'docs/Features/assets/effects/graphs'));
 const cssWidth = Number(option('--width', '800'));
 const maxCssHeight = Number(option('--max-height', '900'));
 const scale = Number(option('--scale', '2'));
@@ -212,7 +213,7 @@ try {
     fs.mkdirSync(out, { recursive: true });
     const file = path.join(out, `${shot.name}.webp`);
     fs.writeFileSync(file, encoded.buffer);
-    if (manifest && manifestShots.includes(spec) && !option('--out')) recordShotList('graph', manifest, [shot.name]);
+    if (manifest && manifestShots.includes(spec)) recordShotList('graph', manifest, [shot.name], { written: file });
     const crop = clip ? { left: clip.x, top: clip.y, right: clip.x + clip.width, bottom: clip.y + clip.height }
       : { left: 0, top: 0, right: viewport.width, bottom: viewport.height };
     const figure = docsFigure({ file: docLogicalPath(file), alt: state.title, caption: shot.marks.map((mark, index) => `${index + 1} — ${mark.id}.`).join(' ') || state.title,

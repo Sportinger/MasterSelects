@@ -13,9 +13,11 @@ import { catalogText } from '../../src/services/nodeGraph/catalogText';
 import { snapshotRegistry } from '../../scripts/effectDocsCatalog.mjs';
 import { docLogicalPath, docOutput, findMedia } from '../../scripts/docShotSettings.mjs';
 import {
-  HAND_MADE, RECIPE_PENDING, assetFiles, collectRecipes, handMadeReason, parseGraphShot, recipeProblems, selectRecipes, shotListRecipes,
+  HAND_MADE, RECIPE_PENDING, assetFiles, collectRecipes, handMadeReason, parseGraphShot, recipeProblems, recordShotList, selectRecipes, shotListRecipes, thumbRecipe,
 } from '../../scripts/docsMediaRecipes.mjs';
-import { effectCodeIndex, manifestText, readManifest, recipeFingerprint, recipeStatus } from '../../scripts/docsMediaFingerprint.mjs';
+import { effectCodeIndex, fingerprintParts, manifestText, readManifest, recipeFingerprint, recipeStatus } from '../../scripts/docsMediaFingerprint.mjs';
+import { effectAssets, labPair, labShot, thumbSource } from '../../scripts/effectDocsCatalog.mjs';
+import { sheetPages } from '../../scripts/docsMediaSheet.mjs';
 
 const root = path.resolve(__dirname, '../..');
 const exists = (file: string) => fs.existsSync(path.join(root, file));
@@ -55,6 +57,46 @@ describe('every docs asset has a recipe', () => {
     const orphans = Object.keys(manifest).filter((asset) => !exists(asset));
     if (orphans.length) console.warn(`docs media: the manifest names assets that are gone: ${orphans.join(', ')}`);
     expect(status.size).toBe(recipes.length);
+  });
+});
+
+describe('the fingerprint covers one effect\'s own code', () => {
+  const code = effectCodeIndex(root);
+  const ids: string[] = snapshot.effects.map((effect: { id: string }) => effect.id);
+  /** The effects an edit of this file marks stale. */
+  const touched = (file: string) => ids.filter((id) => code.codeFiles(id).includes(file));
+
+  it('takes the definition, shader and graph of Drift Lines and nothing of other effects or the catalog hubs', () => {
+    const files = code.codeFiles('drift-lines');
+    expect(files).toEqual(expect.arrayContaining(['src/effects/halftone/driftLines.ts', 'src/effects/halftone/index.ts',
+      'src/effects/halftone/shader.wgsl', 'src/services/operators/motionHalftoneEffectGraphs.ts']));
+    expect(files.filter((file) => /acuarela|chroma-key|keyer|glitch|signal-lab|fisheye|effectGraphOwner|effectPresentationPlans/iu.test(file))).toEqual([]);
+    expect(files.length).toBeLessThan(12);
+  });
+
+  it('marks only the edited effect stale (its family for a shared family shader)', () => {
+    expect(touched('src/effects/halftone/driftLines.ts')).toEqual(['drift-lines']);
+    expect(touched('src/services/operators/acuarelaEffectGraph.ts')).toEqual(['acuarela']);
+    expect(touched('src/effects/stylize/vignette/vignetteModel.ts')).toEqual(['vignette']);
+    expect(touched('src/effects/blur/separableBlur.wgsl').toSorted()).toEqual(['box-blur', 'gaussian-blur']);
+    expect(touched('src/services/operators/effectGraphOwner.ts')).toEqual([]);
+    expect(touched('src/services/operators/effectPresentationPlans.ts')).toEqual([]);
+    // A graph registered only in the graph owner (`type === 'slit-scan' ? createDefaultSlitScanGraph`) still counts.
+    expect(code.codeFiles('slit-scan')).toContain('src/services/operators/slitScanEffectGraph.ts');
+    const driftRecipes = recipes.filter((recipe) => recipe.effects.some((id) => code.codeFiles(id).includes('src/effects/halftone/driftLines.ts')));
+    expect(driftRecipes.length).toBeGreaterThan(0);
+    expect(driftRecipes.every((recipe) => recipe.effects.includes('drift-lines'))).toBe(true);
+  });
+
+  it('counts the effect an operation clip adds through the picker, and the services of an effect family', () => {
+    const addGlitch = shotListRecipes('clip', 'scripts/doc-clips/analog.json', { root }).find((recipe) => recipe.name === 'add-glitch');
+    expect(addGlitch?.effects).toEqual(['glitch']);
+    expect(code.codeFiles('face-cables')).toContain('src/services/faceCables/cableOperatorGraph.ts');
+  });
+
+  it('keeps every effect\'s code small: no effect reaches the operator library', () => {
+    const largest = ids.map((id) => [id, code.codeFiles(id).length] as const).toSorted((a, b) => b[1] - a[1])[0];
+    expect(largest[1], `${largest[0]} fingerprints ${largest[1]} files`).toBeLessThanOrEqual(40);
   });
 });
 
@@ -118,7 +160,7 @@ describe('docs media recipe helpers', () => {
     write('src/effects/demo/demoBlur.ts', "import shader from './demo.wgsl?raw';\nexport const demo = { id: 'demo-blur', name: 'Demo', shader };\n");
     write('src/effects/demo/demo.wgsl', 'fn main() {}\n');
     write('src/effects/other.ts', "export const other = { id: 'other', name: 'Other' };\n");
-    write('src/services/operators/demoBlurGraph.ts', "export const graphOf = { 'demo-blur': 1 };\n");
+    write('src/services/operators/demoBlurGraph.ts', "export const graphOf = (type: string) => type === 'demo-blur';\n");
     write('media/frame.jpg', 'frame-1');
     const recipe = { id: 'still s.json#demo', kind: 'still', spec: { radius: 4 }, effects: ['demo-blur'], inputs: [path.join(scratch, 'media/frame.jpg')], outputs: ['a.webp'] };
     const index = effectCodeIndex(scratch);
@@ -142,6 +184,65 @@ describe('docs media recipe helpers', () => {
       .toEqual(['    "a.webp": {"recipe":"r","fingerprint":"2"},', '    "b.webp": {"recipe":"r","fingerprint":"1"}']);
   });
 
+  it('records a shot only for the file it wrote, and keeps the code and footage of a kept export', () => {
+    write('scripts/effect-graph-shots/rec.json', JSON.stringify({ shots: ['demo-blur'] }));
+    write('docs/Features/assets/effects/graphs/demo-blur.webp', 'x');
+    const manifestFile = path.join(scratch, 'scripts/docs-media-manifest.json');
+    fs.rmSync(manifestFile, { force: true });
+    const env = process.env.DOCS_MEDIA_OUT_ROOT;
+    delete process.env.DOCS_MEDIA_OUT_ROOT;
+    try {
+      // An explicit --out elsewhere: the asset in the repository stays as it was recorded.
+      recordShotList('graph', path.join(scratch, 'scripts/effect-graph-shots/rec.json'), ['demo-blur'], { root: scratch, written: path.join(scratch, 'elsewhere/demo-blur.webp') });
+      expect(readManifest(scratch)).toEqual({});
+      recordShotList('graph', path.join(scratch, 'scripts/effect-graph-shots/rec.json'), ['demo-blur'], { root: scratch, written: path.join(scratch, 'docs/Features/assets/effects/graphs/demo-blur.webp') });
+      const [recipe] = shotListRecipes('graph', 'scripts/effect-graph-shots/rec.json', { root: scratch });
+      const today = recipeFingerprint(recipe, { code: effectCodeIndex(scratch) });
+      expect(readManifest(scratch)['docs/Features/assets/effects/graphs/demo-blur.webp'].fingerprint).toBe(today);
+      // Encoded again from an export made with older code: the older code is recorded, so the asset stays stale.
+      const older = { ...fingerprintParts(recipe, { code: effectCodeIndex(scratch) }), code: 'older-code' };
+      recordShotList('graph', path.join(scratch, 'scripts/effect-graph-shots/rec.json'), ['demo-blur'], { root: scratch, written: path.join(scratch, 'docs/Features/assets/effects/graphs/demo-blur.webp'), parts: older });
+      expect(readManifest(scratch)['docs/Features/assets/effects/graphs/demo-blur.webp'].fingerprint).not.toBe(today);
+      expect(recipeStatus([recipe], { code: effectCodeIndex(scratch), manifest: readManifest(scratch), exists: () => true }).get(recipe)).toBe('stale');
+    } finally {
+      if (env !== undefined) process.env.DOCS_MEDIA_OUT_ROOT = env;
+    }
+  });
+
+  it('cuts a thumbnail from the loop the page plays, and takes a single picture whole', () => {
+    const { still, poster, clip } = effectAssets('demo');
+    const has = (...files: string[]) => (file: string) => files.includes(file);
+    expect(thumbSource('demo', { exists: has(still), page: `![x](../${still})` })).toBe(still);
+    // The page plays its loop (the model page): the poster, even when an older still is around.
+    expect(thumbSource('demo', { exists: has(still, poster), page: `<video src="../${clip}">` })).toBe(poster);
+    // A still the page does not show is out of date.
+    expect(thumbSource('demo', { exists: has(still, poster), page: 'text' })).toBe(poster);
+    expect(thumbSource('demo', { exists: has(still, poster), page: `![x](../${still}) <video src="../assets/effects/clips/other.mp4">` })).toBe(still);
+    expect(thumbSource('demo', { exists: has(still, poster), page: undefined, override: poster })).toBe(poster);
+    expect(thumbRecipe('demo', { source: poster, layout: 'compare' }).spec.region).toBeUndefined();
+    expect(thumbRecipe('demo', { source: poster, layout: 'single' }).spec.region).toEqual([0, 0, 1, 1]);
+    expect(thumbRecipe('demo', { source: still, layout: 'single' }).spec.region).toEqual([0, 0, 1, 1]);
+    expect(thumbRecipe('demo', { source: still, layout: 'still' }).spec.region).toBeUndefined();
+    // The model page Drift Lines: its card comes from the loop's poster.
+    expect(collectRecipes({ root, snapshot }).find((recipe) => recipe.id === 'thumb scripts/effect-docs.mjs#drift-lines')?.spec.source)
+      .toBe('assets/effects/clips/drift-lines.webp');
+  });
+
+  it('shows a new generator alone on black and can turn a split still into a compare pair', () => {
+    const generator = { id: 'demo-gen', name: 'Demo Gen', group: 'generate' };
+    expect(labShot(generator).layout).toBe('single');
+    expect(labPair(generator)).toMatchObject({ image: 'black', layout: 'single', right: { effect: 'demo-gen' } });
+    expect(fs.existsSync(path.join(root, 'tests/browser/effect-lab/images/black.jpg'))).toBe(true);
+    const filter = { id: 'demo-filter', name: 'Demo', group: 'blur' };
+    expect(labShot(filter, { width: 1200, height: 675 }).layout).toBe('split');
+    expect(labShot(filter, undefined).layout).toBe('compare');
+  });
+
+  it('splits a long contact sheet into pages', () => {
+    expect(sheetPages('/x/contact-sheet.jpg', 1)).toEqual(['/x/contact-sheet.jpg']);
+    expect(sheetPages('/x/contact-sheet.jpg', 2)).toEqual(['/x/contact-sheet-1.jpg', '/x/contact-sheet-2.jpg']);
+  });
+
   it('writes a scratch run under its own folder and finds footage in the repository', () => {
     const env = { DOCS_MEDIA_OUT_ROOT: scratch };
     const written = docOutput('docs/Features/assets/effects/x.webp', env);
@@ -149,7 +250,7 @@ describe('docs media recipe helpers', () => {
     expect(docLogicalPath(written, env)).toBe(path.join(root, 'docs/Features/assets/effects/x.webp'));
     expect(docOutput('docs/Features/assets/effects/x.webp', {})).toBe(path.join(root, 'docs/Features/assets/effects/x.webp'));
     expect(findMedia('dancer_stage_motion.mp4', { env: {} })).toBe(path.join(root, 'tests/browser/effect-lab/footage/dancer_stage_motion.mp4'));
-    expect(fs.statSync(path.join(root, 'tests/browser/effect-lab/footage/dancer_stage_motion.mp4')).size).toBeLessThanOrEqual(3_000_000);
+    expect(fs.statSync(path.join(root, 'tests/browser/effect-lab/footage/dancer_stage_motion.mp4')).size).toBeLessThanOrEqual(2_000_000);
     expect(findMedia('greenscreen_dancer.jpg', { env: {} })).toBe(path.join(root, 'tests/browser/effect-lab/images/greenscreen_dancer.jpg'));
   });
 });

@@ -1,6 +1,7 @@
-// The contact sheet of a docs media run (scripts/docs-media.mjs): every picture and clip the run made in one
-// JPEG, labelled, so a reviewer sees all of them at once. A picture fills its cell; a clip shows four frames
-// (at 10, 35, 60 and 85 % of its length) in a 2 × 2 grid.
+// The contact sheet of a docs media run (scripts/docs-media.mjs): every picture and clip the run made,
+// labelled, so a reviewer sees all of them at once. A picture fills its cell; a clip shows four frames
+// (at 10, 35, 60 and 85 % of its length) in a 2 × 2 grid. A long run gets several pages of ROWS_PER_PAGE
+// rows (contact-sheet-1.jpg, -2 …), so no JPEG comes near the format's 65,535 px limit.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,6 +10,8 @@ const CELL = 640;
 const LABEL = 30;
 const GAP = 10;
 const COLUMNS = 3;
+/** Rows per page: a clip cell is at most about 1,100 px tall, so a page stays below 15,000 px. */
+export const ROWS_PER_PAGE = 12;
 const BACKGROUND = { r: 17, g: 17, b: 17, alpha: 1 };
 
 const escapeXml = (text) => text.replace(/[<>&"]/gu, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[char]);
@@ -37,13 +40,29 @@ async function cell(sharp, { file, label }) {
     .composite([{ input: body, left: 0, top: 0 }, { input: Buffer.from(text), left: 0, top: height }]).png().toBuffer() };
 }
 
-/** Writes the sheet of `items` ({ file, label }) to `out` (JPEG); returns its path, or undefined when there is nothing to show. */
+/** The files of a sheet with `pages` pages: `out` itself for one page, else out-1.jpg, out-2.jpg … */
+export const sheetPages = (out, pages) => (pages === 1 ? [out]
+  : Array.from({ length: pages }, (_, index) => out.replace(/(\.jpe?g)?$/iu, (ext) => `-${index + 1}${ext || '.jpg'}`)));
+
+/**
+ * Writes the sheet of `items` ({ file, label }) to `out` (JPEG, split into pages); returns the written files,
+ * or [] when there is nothing to show.
+ */
 export async function writeContactSheet(items, out, { title = 'docs media' } = {}) {
   const shown = items.filter((item) => fs.existsSync(item.file) && /\.(webp|png|jpe?g|mp4|webm)$/iu.test(item.file));
-  if (!shown.length) return undefined;
+  if (!shown.length) return [];
   const { default: sharp } = await import('sharp');
-  const cells = [];
-  for (const item of shown) cells.push(await cell(sharp, item));
+  const perPage = ROWS_PER_PAGE * COLUMNS;
+  const files = sheetPages(out, Math.ceil(shown.length / perPage));
+  for (const [page, file] of files.entries()) {
+    const cells = [];
+    for (const item of shown.slice(page * perPage, (page + 1) * perPage)) cells.push(await cell(sharp, item));
+    await writePage(sharp, cells, file, files.length > 1 ? `${title} · page ${page + 1} of ${files.length}` : title);
+  }
+  return files;
+}
+
+async function writePage(sharp, cells, out, title) {
   const rows = [];
   for (let index = 0; index < cells.length; index += COLUMNS) rows.push(cells.slice(index, index + COLUMNS));
   const heading = 40;
@@ -58,5 +77,4 @@ export async function writeContactSheet(items, out, { title = 'docs media' } = {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   await sharp({ create: { width, height, channels: 4, background: BACKGROUND }, limitInputPixels: false })
     .composite(layers).jpeg({ quality: 82 }).toFile(out);
-  return out;
 }

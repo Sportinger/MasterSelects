@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const DOC_SHOT_DEFAULTS = Object.freeze({
-  /** Moving footage of the docs clips (dancer_stage_motion.mp4, 720p, see its README). */
+  /** Moving footage of the docs clips (dancer_stage_motion.mp4, 1080p, see its README). */
   footageDir: 'tests/browser/effect-lab/footage',
   /** Stills of the Effect Lab and the editor shots (dancer_stage, harbor_town, neon_rain_street, greenscreen_dancer). */
   imageDir: 'tests/browser/effect-lab/images',

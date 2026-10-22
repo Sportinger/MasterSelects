@@ -36,7 +36,6 @@ const repoRoot = path.resolve(siteDir, '..');
 const featuresDir = path.join(repoRoot, 'docs', 'Features');
 const contentDir = path.join(siteDir, 'src', 'content', 'docs');
 const generatedDir = path.join(siteDir, 'src', 'generated');
-const assetsOut = path.join(siteDir, 'public', 'assets');
 const astroCacheDir = path.join(siteDir, '.astro');
 const featurePath = 'docs/Features';
 const groupsPath = 'src/effects/effectCatalogGroups.ts';
@@ -120,9 +119,10 @@ if (!devServer) fs.rmSync(astroCacheDir, { recursive: true, force: true });
 // removing the whole folder would end those watches (the site then keeps
 // serving the previous text). Unchanged files are not rewritten.
 function writeIfChanged(file, content) {
-  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === content) return;
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === content) return false;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
+  return true;
 }
 
 // Hand-written site pages (Welcome, the home page) can be listed in the index too.
@@ -240,19 +240,29 @@ for (const folder of generatedContent) {
 // The dev server restarts for the new sidebar at the same moment and misses the deletions.
 if (devServer && removedPages) report({ level: 'warn', text: `${removedPages} page(s) were removed: restart the running astro dev, which keeps serving them until then.` });
 
-// Shared assets (pictures, clips, posters, captions) move into the site's public/ folder.
-const assetFiles = sourceRef ? gitFiles.filter((name) => name.startsWith('assets/')) : [];
-const hasAssets = sourceRef ? assetFiles.length > 0 : fs.existsSync(path.join(featuresDir, 'assets'));
-if (hasAssets) {
-  fs.rmSync(assetsOut, { recursive: true, force: true });
-  if (sourceRef) {
-    for (const relativePath of assetFiles) {
-      const destination = path.join(siteDir, 'public', relativePath);
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, readAsset(relativePath));
-    }
-  } else {
-    fs.cpSync(path.join(featuresDir, 'assets'), assetsOut, { recursive: true });
+// Shared assets (pictures, clips, posters, captions) move into the site's public/ folder, in place like the
+// pages: a running `astro dev` (Vite) watches public/, and a removed and recreated folder drops out of that
+// watch, so the server answered 404 for every asset until it was restarted. Unchanged files stay untouched.
+/** Files under `base`/assets, as assets/… paths. */
+const listAssets = (base) => (fs.existsSync(path.join(base, 'assets')) ? fs.readdirSync(path.join(base, 'assets'), { recursive: true, withFileTypes: true })
+  .filter((entry) => entry.isFile())
+  .map((entry) => path.relative(base, path.join(entry.parentPath ?? entry.path, entry.name)).split(path.sep).join('/')) : []);
+const assetFiles = sourceRef ? gitFiles.filter((name) => name.startsWith('assets/')) : listAssets(featuresDir);
+let assetsWritten = 0;
+let assetsRemoved = 0;
+if (assetFiles.length) {
+  const wanted = new Set(assetFiles);
+  for (const relativePath of assetFiles) {
+    const destination = path.join(siteDir, 'public', relativePath);
+    const content = sourceRef ? readAsset(relativePath) : fs.readFileSync(path.join(featuresDir, relativePath));
+    if (fs.existsSync(destination) && fs.statSync(destination).size === content.length && fs.readFileSync(destination).equals(content)) continue;
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, content);
+    assetsWritten += 1;
+  }
+  for (const stale of listAssets(path.join(siteDir, 'public')).filter((file) => !wanted.has(file))) {
+    fs.rmSync(path.join(siteDir, 'public', stale), { force: true });
+    assetsRemoved += 1;
   }
 }
 
@@ -271,9 +281,14 @@ const anchorRedirects = buildAnchorRedirects(anchorEntries, routes, (slug) => an
 anchorRedirects.notes.forEach(report);
 
 // Rewrite generated JSON only on change: a running `astro dev` restarts when these files change.
-writeIfChanged(path.join(generatedDir, 'sidebar.json'), `${JSON.stringify(sidebar, null, 2)}\n`);
-writeIfChanged(path.join(generatedDir, 'redirects.json'), `${JSON.stringify(redirects.redirects, null, 2)}\n`);
-writeIfChanged(path.join(generatedDir, 'anchor-redirects.json'), `${JSON.stringify(anchorRedirects.anchors, null, 2)}\n`);
+const configChanged = [
+  writeIfChanged(path.join(generatedDir, 'sidebar.json'), `${JSON.stringify(sidebar, null, 2)}\n`),
+  writeIfChanged(path.join(generatedDir, 'redirects.json'), `${JSON.stringify(redirects.redirects, null, 2)}\n`),
+  writeIfChanged(path.join(generatedDir, 'anchor-redirects.json'), `${JSON.stringify(anchorRedirects.anchors, null, 2)}\n`),
+].some(Boolean);
+// astro.config.mjs reads these files: a running astro dev restarts for them, and after that restart it no longer
+// reloads edited pages (it keeps serving their old text, sometimes a 500) until it is started again.
+if (devServer && configChanged) report({ level: 'warn', text: 'The sidebar or redirects changed: restart the running astro dev (npx astro dev stop, then start it), which no longer reloads edited pages after its own config restart.' });
 
 // A figure that stays as written is checked again by the general pass: report each problem once.
 const uniqueWarnings = [...new Set(warnings)];
@@ -281,4 +296,4 @@ for (const text of uniqueWarnings) console.warn(text);
 for (const text of infos) console.log(text);
 const sourceLabel = sourceRef ? `Git ref ${sourceRef}` : 'working tree';
 console.log(`Sidebar: ${sidebar.length} groups, ${countSidebarPages(sidebar)} entries; ${unpublished.size} pages unpublished. Effect groups from ${catalog.source}.`);
-console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects, ${anchorRedirects.count} anchor redirects; assets ${hasAssets ? 'copied' : 'not found'}; ${uniqueWarnings.length} warnings.`);
+console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects, ${anchorRedirects.count} anchor redirects; assets ${assetFiles.length ? `${assetFiles.length} (${assetsWritten} written, ${assetsRemoved} removed)` : 'not found'}; ${uniqueWarnings.length} warnings.`);

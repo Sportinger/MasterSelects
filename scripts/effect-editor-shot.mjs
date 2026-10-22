@@ -60,11 +60,12 @@ const option = (name, fallback) => { const index = args.indexOf(name); return in
 const shotFile = args.find((arg, index) => !arg.startsWith('--') && !['--only', '--url', '--out'].includes(args[index - 1]));
 if (!shotFile) throw new Error('Name a shot file, e.g. scripts/effect-editor-shots/blur.json');
 const only = option('--only')?.split(',').map(name => name.trim()).filter(Boolean);
-const shots = JSON.parse(fs.readFileSync(shotFile, 'utf8')).shots.filter(shot => !only || only.includes(shot.name));
+const shotList = JSON.parse(fs.readFileSync(shotFile, 'utf8'));
+const shots = shotList.shots.filter(shot => !only || only.includes(shot.name));
 const unknown = (only ?? []).filter(name => !shots.some(shot => shot.name === name));
 if (unknown.length || !shots.length) throw new Error(`No shot named ${unknown.join(', ') || only} in ${shotFile}`);
 const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
-const out = docOutput(option('--out', 'docs/Features/assets/effects/editor'));
+const out = docOutput(option('--out', shotList.out ?? 'docs/Features/assets/effects/editor'));
 const settings = docShotSettings();
 const imageDir = path.resolve(settings.imageDir);
 const defaultViewport = { width: 1600, height: 900 };
@@ -319,7 +320,7 @@ for (const shot of shots) {
       const file = shot.file ? docOutput(shot.file) : path.join(out, `${shot.name}.webp`);
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, encoded.buffer);
-      recordShotList('editor', shotFile, [shot.name]);
+      recordShotList('editor', shotFile, [shot.name], { written: file });
       const pageErrors = [...new Set(errors)];
       console.log(`\n${path.relative(process.cwd(), file)}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes`
         + `${pageErrors.length ? `, page errors: ${pageErrors.join(' | ')}` : ''}\n`);
@@ -342,7 +343,7 @@ for (const shot of shots) {
     fs.mkdirSync(out, { recursive: true });
     const file = path.join(out, `${shot.name}.webp`);
     fs.writeFileSync(file, encoded.buffer);
-    recordShotList('editor', shotFile, [shot.name]);
+    recordShotList('editor', shotFile, [shot.name], { written: file });
     const pageErrors = [...new Set(errors)];
     console.log(`\n${path.relative(process.cwd(), file)}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes`
       + `${pageErrors.length ? `, page errors: ${pageErrors.join(' | ')}` : ''}\n`);

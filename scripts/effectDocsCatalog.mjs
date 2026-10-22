@@ -39,6 +39,19 @@ export const effectAssets = (id) => ({
 });
 export const pageFile = (id) => `effects/${id}.md`;
 
+/**
+ * The picture a gallery thumbnail is cut from (relative to docs/Features): `override` (thumb.source of
+ * effectDocsExtras.mjs), else the clip poster when the page plays the effect's loop, has no still or does not
+ * show it (the still of a rewritten page is out of date), else the still. `page` is the page's markdown.
+ */
+export function thumbSource(id, { exists, page, override }) {
+  if (override) return exists(override) ? override : undefined;
+  const { still, poster, clip } = effectAssets(id);
+  const shows = (asset) => page !== undefined && page.includes(`/${asset}`);
+  if (exists(poster) && (!exists(still) || shows(clip) || (page !== undefined && !shows(still)))) return poster;
+  return exists(still) ? still : undefined;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Registry snapshot
 
@@ -422,13 +435,15 @@ export function catalogJson(catalog) {
 // Basic pages
 
 /** Effect Lab test image (tests/browser/effect-lab/images) for an effect's basic still, and how alt texts name it. */
-const LAB_IMAGE_BY_GROUP = { print: 'harbor_town', textile: 'harbor_town', text: 'dancer_stage', scene: 'harbor_town', pixel: 'neon_rain_street', analog: 'neon_rain_street' };
+const LAB_IMAGE_BY_GROUP = { generate: 'black', print: 'harbor_town', textile: 'harbor_town', text: 'dancer_stage', scene: 'harbor_town', pixel: 'neon_rain_street', analog: 'neon_rain_street' };
 /**
- * Stills that are not a whole-frame split. Glyph looks: an enlarged detail of the dancer's lit dress, side by
+ * Stills that are not a compare pair. Generators: the effect alone on black. Glyph looks: an enlarged detail of the dancer's lit dress, side by
  * side, so the characters can be read at page width. Tracking overlays: both whole frames side by side, so the
  * seam never cuts the target box in half.
  */
 const LAB_SHOT_BY_GROUP = {
+  // A generator draws its own picture: shown alone on black (an original beside it would show nothing).
+  generate: { layout: 'single', outWidth: 1600 },
   text: { layout: 'pair', crop: [740, 140, 460, 360], zoom: 1.3, gap: 6, detail: true },
 };
 const LAB_SHOT_BY_ENGINE = {
@@ -459,6 +474,7 @@ export const LAB_STILL_SKIP = {
 /** Effects without a still or thumbnail yet, and why; every other effect with a page needs both. */
 export const PICTURE_PENDING = { ...LAB_STILL_SKIP, 'ai-edge-fill': 'needs a generated fill of a corrected photo (cloud credits)' };
 const LAB_IMAGE_TEXT = {
+  black: 'black',
   dancer_stage: 'the dancer on a dark stage',
   harbor_town: 'the harbour town',
   neon_rain_street: 'the night street with neon signs',
@@ -466,12 +482,14 @@ const LAB_IMAGE_TEXT = {
 export const labImage = (effect) => LAB_IMAGE_BY_GROUP[effect.group] ?? 'dancer_stage';
 export function stillAlt(effect) {
   const shot = labShot(effect);
+  if (shot.layout === 'single') return `${effect.name} at its default settings, drawn on black`;
   const where = shot.detail ? `an enlarged detail of ${LAB_IMAGE_TEXT[labImage(effect)]}` : LAB_IMAGE_TEXT[labImage(effect)];
   const frames = shot.layout === 'pair' && !shot.detail ? ': the whole frame twice, ' : ': ';
   return `${effect.name} on ${where}${frames}the original on the left, ${effect.name} at its default settings on the right`;
 }
 /** The caption of a basic page's still. */
 export function stillCaption(effect) {
+  if (labShot(effect).layout === 'single') return `${effect.name} at its default settings, on black${effect.moving ? ': one frame of its movement' : ''}.`;
   const detail = labShot(effect).detail ? ' An enlarged detail, so the characters can be read.' : '';
   return `Left: the original. Right: ${effect.name} at its default settings${effect.moving ? ', one frame of its movement' : ''}.${detail}`;
 }

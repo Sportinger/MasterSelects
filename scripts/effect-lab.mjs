@@ -40,6 +40,8 @@
 // `"layout": "compare"` makes the pair of a docs compare slider: the same crop (default: the whole
 // frame) of both sides at the same size, side by side without a gap, `outWidth` (default 1600) wide
 // in all, always even; `alt` and `caption` go into the printed <figure class="docs-shot docs-compare">.
+// `"layout": "single"` shows the right side alone (its crop, default the whole frame, `outWidth` wide, at
+// most 1600): a generator on the black test image, where an original to compare with would show nothing.
 // `--presets` reads `{ "strips": [{ "effect", "image", "width": 1920, "crop": [x, y, w, h], "times": [1.2],
 //   "cellWidth": 400, "columns": 2, "backdrop", "maxBytes" }] }` and renders every preset the effect declares
 // (EffectPreset in src/effects/types.ts, read from the live registry, so names and values never drift)
@@ -60,7 +62,9 @@ async function composePair(page, entry) {
   const side = spec => page.evaluate(job => window.__effectLab.render(job), {
     effectId: spec.effect === 'original' ? 'gaussian-blur' : spec.effect, image: `${entry.image}.jpg`, width: entry.width ?? 1920,
     params: spec.params ?? {}, bypass: spec.effect === 'original', times: spec.times });
-  const [left, right] = [await side(entry.left), await side(entry.right)];
+  const single = entry.layout === 'single';
+  const right = await side(entry.right);
+  const left = single ? right : await side(entry.left);
   for (const [label, cell] of [['left', left], ['right', right]]) if (cell.gpuFailure) throw new Error(`${entry.name} ${label}: ${cell.gpuFailure}`);
   // Each side may set its own crop, zoom and smooth (e.g. a whole frame beside a magnified detail);
   // split and stack show both sides through the left side's crop.
@@ -84,7 +88,12 @@ async function composePair(page, entry) {
       }
       else if (typeof backdrop === 'string' && backdrop.startsWith('#')) { context.fillStyle = backdrop; context.fillRect(left, top, w, h); }
     };
-    if (layout === 'compare') {
+    if (layout === 'single') {
+      const [x, y, w, h] = crops[1];
+      const cw = Math.round(Math.min(outWidth ?? 1600, 1600, w * cells[1].zoom) / 2) * 2, ch = Math.round(cw * h / w);
+      start(cw, ch); smoothing(cells[1].smooth); paintBackdrop(0, 0, cw, ch);
+      context.drawImage(bitmaps[1], x, y, w, h, 0, 0, cw, ch);
+    } else if (layout === 'compare') {
       // Two halves of exactly the same size, no gap: the docs slider stacks them and clips one.
       const [x, y, w, h] = crops[0];
       const half = Math.floor(Math.min(outWidth ?? 1600, 1600, 2 * w * cells[0].zoom) / 2);

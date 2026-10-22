@@ -8,7 +8,8 @@
 //   graph        scripts/effect-graph-shots/<group>.json "shots"   effect-graph-shot.mjs <shots>
 //   editor       scripts/effect-editor-shots/<group>.json "shots"  effect-editor-shot.mjs <file> --only <names>
 //   clip         scripts/doc-clips/<group>.json "clips"            doc-clip.mjs <file> --only <names> (mp4 + poster)
-//   thumb        the gallery thumbnail cut from a still or poster  docShotThumb.mjs (effect-docs.mjs --thumbs)
+//   thumb        the gallery thumbnail cut from a still or poster  docShotThumb.mjs (effect-docs.mjs --thumbs);
+//                (effectDocsCatalog.mjs thumbSource picks which)
 //   screenshot   docs/Features/assets/docs-screenshot-manifest.json capture-feature-doc-screenshots.mjs --id=<id>
 //
 // The test tests/unit/docsMediaRecipes.test.ts fails when an asset has no recipe (unless HAND_MADE names
@@ -16,10 +17,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { imageSize } from '../docs-site/scripts/lib/media.mjs';
-import { docShotSettings, findMedia, REPO_ROOT } from './docShotSettings.mjs';
-import { effectAssets, isBasicPage, labPair } from './effectDocsCatalog.mjs';
+import { docLogicalPath, docShotSettings, findMedia, REPO_ROOT } from './docShotSettings.mjs';
+import { effectAssets, isBasicPage, labPair, labShot, thumbSource } from './effectDocsCatalog.mjs';
 import { EFFECT_DOC_EXTRAS } from './effectDocsExtras.mjs';
-import { recordFingerprints } from './docsMediaFingerprint.mjs';
+import { fingerprintParts, recordFingerprints, recordIndex } from './docsMediaFingerprint.mjs';
 
 export const ASSET_DIR = 'docs/Features/assets';
 const FEATURES = 'docs/Features';
@@ -84,7 +85,6 @@ export const RECIPE_PENDING = {
     'wave.webp',
     'zoom-blur.webp',
   ].map((asset) => [`${ASSET_DIR}/effects/${asset}`, BEFORE_RECIPES])),
-  [`${ASSET_DIR}/effects/drift-lines.webp`]: 'the default still of the basic page Drift Lines started from (the page shows its loop; the catalog cuts the thumbnail from it)',
 };
 
 const posix = (file) => file.split(path.sep).join('/');
@@ -94,6 +94,23 @@ const listJson = (root, dir) => (fs.existsSync(path.join(root, dir))
   ? fs.readdirSync(path.join(root, dir)).filter((name) => name.endsWith('.json')).toSorted().map((name) => `${dir}/${name}`) : []);
 const groupOf = (file) => path.basename(file, '.json');
 const image = (name, settings) => path.resolve(REPO_ROOT, settings.imageDir, name.endsWith('.jpg') ? name : `${name}.jpg`);
+
+/** Effect ids of the picker groups (src/effects/effectCatalogGroups.ts), read once per root. */
+const groupIds = new Map();
+function knownEffectIds(root) {
+  if (!groupIds.has(root)) {
+    const file = path.join(root, 'src/effects/effectCatalogGroups.ts');
+    const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    groupIds.set(root, new Set([...text.matchAll(/effects:\s*\[([^\]]*)\]/gu)].flatMap((match) => [...match[1].matchAll(/'([a-z0-9-]+)'/gu)].map((id) => id[1]))));
+  }
+  return groupIds.get(root);
+}
+
+/** Effects an operation clip adds through the picker (a typed effect id, "type": "glitch"): its pictures depend on their code too. */
+const addedEffects = (clip, root) => (clip.kind === 'operation'
+  ? (clip.steps ?? []).map((step) => step.type).filter((typed) => typeof typed === 'string' && knownEffectIds(root).has(typed.trim().toLowerCase()))
+    .map((typed) => typed.trim().toLowerCase())
+  : []);
 
 /** `<effect>[?query][@name]` of a graph shot. */
 export function parseGraphShot(spec) {
@@ -133,7 +150,7 @@ export function shotListRecipes(kind, file, { root = REPO_ROOT, settings = docSh
       const source = clip.source ?? data.source;
       return recipe({ kind: 'clip', name: clip.name, spec: { ...clip, source, out },
         theme: clip.kind === 'operation' ? settings.theme : undefined,
-        effects: [clip.effect, ...(clip.effects ?? []).map((extra) => extra.effect)].filter(Boolean),
+        effects: [...new Set([clip.effect, ...(clip.effects ?? []).map((extra) => extra.effect), ...addedEffects(clip, root)].filter(Boolean))],
         outputs: [`${out}/${clip.name}.mp4`, `${out}/${clip.name}.webp`], inputs: [findMedia(source, { media }) ?? `missing:${source}`] });
     });
   }
@@ -147,12 +164,46 @@ export function basicStillRecipe(effect, { size, settings = docShotSettings() } 
     name: effect.id, spec, effects: [effect.id], outputs: [spec.out], inputs: [image(spec.image, settings)] };
 }
 
-/** A gallery thumbnail cut from `source` (asset path relative to docs/Features). */
-export function thumbRecipe(id, { source, root = REPO_ROOT }) {
-  const region = EFFECT_DOC_EXTRAS[id]?.thumb?.region;
+/** Clip layouts that show the effect in their right half (original | effect, or crop | detail). */
+const HALF_LAYOUTS = new Set(['pair', 'compare', 'split', 'detail']);
+
+/**
+ * A gallery thumbnail cut from `source` (asset path relative to docs/Features). The region is thumb.region of
+ * effectDocsExtras.mjs, else the effect half of a still or of a two-part clip poster; a single picture (layout
+ * "single": a generator's still, or a single-picture clip poster) is taken whole. `layout`: the layout of the
+ * clip whose poster is the source, or "single" / "still" for a still.
+ */
+export function thumbRecipe(id, { source, root = REPO_ROOT, layout }) {
+  const extra = EFFECT_DOC_EXTRAS[id]?.thumb;
+  const whole = layout === 'single' || (source === effectAssets(id).poster && !HALF_LAYOUTS.has(layout));
+  const region = extra?.region ?? (whole ? [0, 0, 1, 1] : undefined);
   return { id: `thumb scripts/effect-docs.mjs#${id}`, kind: 'thumb', file: 'scripts/effect-docs.mjs', group: 'thumbs', name: id,
     spec: { source, ...(region ? { region } : {}) }, effects: [], outputs: [`${FEATURES}/${effectAssets(id).thumb}`],
     inputs: [path.join(root, FEATURES, source)] };
+}
+
+/** The layout of the clip that makes an effect's poster (assets/effects/clips/<id>.webp), from the shot lists. */
+export function posterLayout(id, root = REPO_ROOT) {
+  const poster = `${ASSET_DIR}/effects/clips/${id}.webp`;
+  for (const file of listJson(root, SHOT_LISTS.clip)) {
+    const data = readJson(root, file);
+    const clip = (data.clips ?? []).find((entry) => `${data.out ?? DEFAULT_OUT.clip}/${entry.name}.webp` === poster);
+    if (clip) return clip.layout ?? 'single';
+  }
+  return undefined;
+}
+
+/**
+ * The thumbnail recipe of an effect, or undefined when it has nothing to cut from. `wholeStill`: the still is
+ * one picture (a generator's basic still, labShot layout "single"), not original | effect.
+ */
+export function effectThumbRecipe(id, root = REPO_ROOT, { wholeStill = false } = {}) {
+  const exists = (asset) => fs.existsSync(path.join(root, FEATURES, asset));
+  const pageFile = path.join(root, FEATURES, 'effects', `${id}.md`);
+  const page = fs.existsSync(pageFile) ? fs.readFileSync(pageFile, 'utf8') : undefined;
+  const source = thumbSource(id, { exists, page, override: EFFECT_DOC_EXTRAS[id]?.thumb?.source });
+  const layout = source === effectAssets(id).poster ? posterLayout(id, root) : wholeStill ? 'single' : 'still';
+  return source ? thumbRecipe(id, { source, root, layout }) : undefined;
 }
 
 /** Pictures and clips under docs/Features/assets (manifests and notes left out), repository paths. */
@@ -196,8 +247,8 @@ export function collectRecipes({ root = REPO_ROOT, snapshot, settings = docShotS
       claimed.add(still);
     }
     const thumb = `${FEATURES}/${assets.thumb}`;
-    const source = [assets.still, assets.poster].find((file) => exists(`${FEATURES}/${file}`));
-    if (exists(thumb) && !claimed.has(thumb) && source) recipes.push(thumbRecipe(effect.id, { source, root }));
+    const recipe = exists(thumb) && !claimed.has(thumb) ? effectThumbRecipe(effect.id, root, { wholeStill: labShot(effect).layout === 'single' }) : undefined;
+    if (recipe) recipes.push(recipe);
   }
   return recipes;
 }
@@ -244,11 +295,23 @@ export function selectRecipes(recipes, { ids = [], kinds = [], snapshot } = {}) 
 /**
  * Records the fingerprints of entries a shot script just rendered from a shot list (kind: lab, graph, editor
  * or clip). Shot files outside the recipe folders (a generated manifest) and scratch runs record nothing.
+ * `written`: the file the script wrote for the entry; a recipe whose output it is not (an explicit --out to
+ * another folder) is left alone, so the untouched asset in the repository keeps its fingerprint. `parts`:
+ * the code and media the render was made from (fingerprintParts), when they are not today's.
  */
-export function recordShotList(kind, shotFile, names, { root = REPO_ROOT, media, recipeKind } = {}) {
+export function recordShotList(kind, shotFile, names, { root = REPO_ROOT, media, recipeKind, written, parts } = {}) {
   const file = repoPath(shotFile, root);
   if (!file.startsWith(`${SHOT_LISTS[kind]}/`)) return;
   const wanted = new Set(names);
+  const writes = written === undefined ? undefined : posix(path.relative(root, docLogicalPath(path.resolve(written))));
   recordFingerprints(shotListRecipes(kind, file, { root, media })
-    .filter((recipe) => wanted.has(recipe.name) && (!recipeKind || recipe.kind === recipeKind)), { root });
+    .filter((recipe) => wanted.has(recipe.name) && (!recipeKind || recipe.kind === recipeKind) && (writes === undefined || recipe.outputs.includes(writes))),
+  { root, parts });
+}
+
+/** The code and media one shot-list entry is rendered from today (saved with kept exports for --reencode). */
+export function shotListParts(kind, shotFile, name, { root = REPO_ROOT, media } = {}) {
+  const file = repoPath(shotFile, root);
+  const recipe = file.startsWith(`${SHOT_LISTS[kind]}/`) ? shotListRecipes(kind, file, { root, media }).find((entry) => entry.name === name) : undefined;
+  return recipe ? fingerprintParts(recipe, { code: recordIndex(root) }) : undefined;
 }

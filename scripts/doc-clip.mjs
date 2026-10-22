@@ -6,13 +6,15 @@
 //
 // --keep keeps the editor exports and screencast frames there; with --reencode a clip whose exports
 // or recording are already kept is only encoded again (layout, crop, loop, poster or size changes
-// need no browser).
+// need no browser). The kept <name>.sources.json names the effect code and footage of the export, and
+// that is what the manifest records for the new encode, so an effect fixed since then stays stale.
 // Prints the docs <figure> of every clip. The shot file is { "out", "source", "clips": [clip, ...] };
 // "out" (default docs/Features/assets/clips) holds <name>.mp4 and <name>.webp (the poster). Media
 // ("source", per clip or for all) is a file name looked up in --media, $DOC_CLIP_MEDIA, the footage folder of
 // scripts/docShotSettings.mjs (tests/browser/effect-lab/footage: dancer_stage_motion.mp4) and the test images,
 // or a path. Effect clips render in the docs frame of the settings (1920 × 1080) whatever the footage size,
-// so `crop` is in its pixels. Each clip is recorded in scripts/docs-media-manifest.json (scripts/docs-media.mjs).
+// so `crop` is in its pixels. Each clip is recorded in scripts/docs-media-manifest.json (scripts/docs-media.mjs),
+// unless --out sends it somewhere else.
 //
 // Effect clip – the clip on the timeline with an effect, exported by the editor (debugExport →
 // FrameExporter, the export panel's own path) and made into a loop:
@@ -57,7 +59,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { humanMouse } from './docClipPointer.mjs';
 import { applyEditorTheme, docLogicalPath, docOutput, docShotSettings, findMedia, mediaDirs } from './docShotSettings.mjs';
-import { recordShotList } from './docsMediaRecipes.mjs';
+import { recordShotList, shotListParts } from './docsMediaRecipes.mjs';
 import { ORIGINAL_LAYOUTS, encodeEffectClip, encodePresetGrid, encodeRecording, probeVideo, sweepValue } from './docClipVideo.mjs';
 
 const args = process.argv.slice(2);
@@ -108,7 +110,7 @@ async function openProject(page, media) {
   }
   if (!item) throw new Error(`${path.basename(media)} was not imported`);
   const duration = item.duration ?? 5;
-  // The footage fills the docs frame whatever its size (the 720p footage in the repository scales up 1.5×),
+  // The footage fills the docs frame whatever its size (other footage than the 1080p dancer scales to it),
   // so a recipe's crop and an effect's pixel sizes read the same on any footage.
   const added = await tool('addClipSegment', { mediaFileId: item.id, trackId: null, startTime: 0, inPoint: 0, outPoint: duration, visualScaleMode: 'fill' });
   return { tool, item, clipId: added.clips[0].id, duration };
@@ -277,8 +279,19 @@ function figure(clip, size) {
     + `autoplay muted loop playsinline preload="none" aria-label="${label}"></video>\n<figcaption>${clip.caption ?? ''}</figcaption>\n</figure>`;
 }
 
-function report(clip, result, errors) {
-  recordShotList('clip', shotFile, [clip.name], { media: option('--media') });
+/** The code and media a kept export was made from, saved next to it so --reencode records that, not today's. */
+const sourcesFile = name => path.join(work, `${name}.sources.json`);
+
+function report(clip, result, errors, { reencoded = false } = {}) {
+  const written = path.join(out, `${clip.name}.mp4`);
+  if (!reencoded) {
+    if (keep) fs.writeFileSync(sourcesFile(clip.name), JSON.stringify(shotListParts('clip', shotFile, clip.name, { media: option('--media') }) ?? null));
+    recordShotList('clip', shotFile, [clip.name], { media: option('--media'), written });
+  } else {
+    const parts = fs.existsSync(sourcesFile(clip.name)) ? JSON.parse(fs.readFileSync(sourcesFile(clip.name), 'utf8')) : null;
+    if (parts) recordShotList('clip', shotFile, [clip.name], { media: option('--media'), written, parts });
+    else console.warn(`${clip.name}: encoded again from exports kept without ${path.basename(sourcesFile(clip.name))}; no fingerprint recorded (node scripts/docs-media.mjs --stale remakes it from the current code).`);
+  }
   const pageErrors = [...new Set(errors)];
   console.log(`\n${path.relative(process.cwd(), path.join(out, `${clip.name}.mp4`))}: ${result.width}x${result.height}, `
     + `${result.duration.toFixed(2)} s at ${Math.round(result.fps)} fps, ${result.size} bytes (CRF ${result.crf}); poster ${result.posterBytes} bytes`
@@ -296,16 +309,16 @@ try {
     const files = { output: path.join(out, `${clip.name}.mp4`), poster: path.join(out, `${clip.name}.webp`) };
     const recording = path.join(work, `${clip.name}.recording.json`);
     if (reencode && clip.kind === 'operation' && fs.existsSync(recording)) {
-      report(clip, encodeRecording(clip, { ...JSON.parse(fs.readFileSync(recording, 'utf8')), workDir: work, ...files }), []);
+      report(clip, encodeRecording(clip, { ...JSON.parse(fs.readFileSync(recording, 'utf8')), workDir: work, ...files }), [], { reencoded: true });
       continue;
     }
     const presetList = path.join(work, `${clip.name}.presets.json`);
     if (reencode && clip.kind === 'presets' && fs.existsSync(presetList)) {
-      report(clip, encodePresetGrid(clip, { exports: JSON.parse(fs.readFileSync(presetList, 'utf8')), ...files }), []);
+      report(clip, encodePresetGrid(clip, { exports: JSON.parse(fs.readFileSync(presetList, 'utf8')), ...files }), [], { reencoded: true });
       continue;
     }
     if (reencode && !['operation', 'presets'].includes(clip.kind) && fs.existsSync(kept('effect'))) {
-      report(clip, encodeEffectClip(clip, { effect: kept('effect'), original: fs.existsSync(kept('original')) ? kept('original') : undefined, ...files }), []);
+      report(clip, encodeEffectClip(clip, { effect: kept('effect'), original: fs.existsSync(kept('original')) ? kept('original') : undefined, ...files }), [], { reencoded: true });
       continue;
     }
     const viewport = clip.viewport ?? { width: 1600, height: 900 };

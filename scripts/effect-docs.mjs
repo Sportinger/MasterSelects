@@ -9,8 +9,9 @@
 //   node scripts/effect-docs.mjs --basic halftone,print   # ...for these effect or picker group ids
 //   node scripts/effect-docs.mjs --lab-manifest <file> # Effect Lab --pairs manifest for basic pages
 //                                                      # without a still (render it, then rerun this)
-//       [--reshoot <effect or group ids>]              # ...also for these basic pages that have one
-//   node scripts/effect-docs.mjs --thumbs [--force [ids]] # gallery thumbnails from the effect stills (an effect's
+//       [--reshoot <effect or group ids>]              # ...also for these basic pages that have one (keeping
+//       [--layout compare]                             # its layout; --layout compare makes a split still a compare pair)
+//   node scripts/effect-docs.mjs --thumbs [--force [ids]] # gallery thumbnails from the still or clip poster (an effect's
 //                                                      # `thumb` in effectDocsExtras.mjs picks the region or
 //                                                      # names the Effect Lab shot file that makes it); --force
 //                                                      # remakes them all, or only these effect or group ids
@@ -24,12 +25,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONTROLS_END, CONTROLS_START, LAB_STILL_SKIP, controlDefault, controlsTable, effectAssets, isBasicPage, labPair, pageFile, planEffectDocs } from './effectDocsCatalog.mjs';
+import { CONTROLS_END, CONTROLS_START, LAB_STILL_SKIP, controlDefault, controlsTable, effectAssets, isBasicPage, labPair, labShot, pageFile, planEffectDocs } from './effectDocsCatalog.mjs';
 import { imageSize } from '../docs-site/scripts/lib/media.mjs';
 import { makeThumb } from './docShotThumb.mjs';
 import { recordFingerprints } from './docsMediaFingerprint.mjs';
 import { loadEffectSnapshot } from './effectDocsRegistry.mjs';
-import { thumbRecipe } from './docsMediaRecipes.mjs';
+import { effectThumbRecipe } from './docsMediaRecipes.mjs';
 import { EFFECT_DOC_EXTRAS } from './effectDocsExtras.mjs';
 import { controlParagraphSkeletons, handWrittenPageProblems, presetsVisual } from './effectDocsPageCheck.mjs';
 
@@ -80,13 +81,13 @@ if (args.includes('--thumbs') && !check) {
   const forced = (effect) => forceOption !== undefined && (!forceIds || forceIds.includes(effect.id) || forceIds.includes(effect.group));
   for (const effect of snapshot.effects) {
     const assets = effectAssets(effect.id);
-    const source = [assets.still, assets.poster].find(exists);
-    if (!source || (exists(assets.thumb) && !forced(effect))) continue;
+    const recipe = effectThumbRecipe(effect.id, undefined, { wholeStill: labShot(effect).layout === 'single' });
+    if (!recipe || (exists(assets.thumb) && !forced(effect))) continue;
     const thumb = EFFECT_DOC_EXTRAS[effect.id]?.thumb;
     if (thumb?.shot) { notes.push(`${assets.thumb}: made by node scripts/effect-lab.mjs --pairs ${thumb.shot} --only ${effect.id}; left alone.`); continue; }
-    const bytes = await makeThumb({ source: feature(source), out: feature(assets.thumb), region: thumb?.region });
-    recordFingerprints([thumbRecipe(effect.id, { source })]);
-    console.log(`${assets.thumb}: ${bytes} bytes from ${source}`);
+    const bytes = await makeThumb({ source: feature(recipe.spec.source), out: feature(assets.thumb), region: recipe.spec.region });
+    recordFingerprints([recipe]);
+    console.log(`${assets.thumb}: ${bytes} bytes from ${recipe.spec.source}`);
   }
 }
 
@@ -133,7 +134,9 @@ if (manifestFile) {
     .filter((effect) => isBasicPage(plan.texts.get(pageFile(effect.id)) ?? '')
       && (!exists(effectAssets(effect.id).still) || reshoot.includes(effect.id) || reshoot.includes(effect.group)))
     .filter((effect) => !LAB_STILL_SKIP[effect.id] || void notes.push(`${effect.id}: no Effect Lab still, it ${LAB_STILL_SKIP[effect.id]}.`))
-    .map((effect) => labPair(effect, size(effectAssets(effect.id).still)));
+    // --layout compare: shoot the reshot ones as compare pairs, also those that are an older split still.
+    .map((effect) => labPair(effect, option('--layout') === 'compare' && reshoot.some((id) => id === effect.id || id === effect.group)
+      ? undefined : size(effectAssets(effect.id).still)));
   fs.writeFileSync(path.resolve(manifestFile), `${JSON.stringify({ pairs }, null, 2)}\n`);
   console.log(`${manifestFile}: ${pairs.length} stills: node scripts/effect-lab.mjs --pairs ${manifestFile} --url http://localhost:<vite port>, then rerun this script.`);
 }
