@@ -60,25 +60,32 @@ describe('shared glyph graph variants', () => {
     expect(output[3]).toBe(.6);
   });
 
-  it('builds Grid Glyph border coverage through the shared glyph ink path', () => {
-    const graph = createDefaultGridGlyphGraph(), { output, samples } = evaluate('grid-glyph', graph,
-      { cellSize: 10, amount: .8, colorMode: 'source' });
-    const value = cell(), edgeDistance = Math.min(value.local[0], 1 - value.local[0], value.local[1], 1 - value.local[1]);
-    const t = Math.max(0, Math.min(1, (edgeDistance - .02) / (.07 - .02))), smooth = t * t * (3 - 2 * t);
-    const coverage = Math.max(value.alpha, (1 - smooth) * .28);
-    const background = value.source.slice(0, 3).map(channel => channel * .08);
-    const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .8));
-    expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
-    expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
-    expect(output[3]).toBe(.6);
+  it('builds Grid Glyph ruled lines through the shared glyph ink path', () => {
+    // Line Width 1 px of a 1080p frame (here 1 px) along the top and left border of every 10 px cell; each pixel takes
+    // the share of it the line covers, and inside the line the coverage becomes Line Glow (0.28 without a stored value).
+    const lineCover = (pixel: number, halfWidth: number, cellPixels: number) => {
+      const fromLine = Math.abs(pixel - halfWidth), distance = Math.min(fromLine, cellPixels - fromLine);
+      return Math.max(0, Math.min(distance + .5, halfWidth) - Math.max(distance - .5, -halfWidth));
+    };
+    for (const coords of [uv, [(64 + .05) / 216, .7] as [number, number], [.3, (75 + .97) / 108] as [number, number]]) {
+      const graph = createDefaultGridGlyphGraph(), { output, samples } = evaluate('grid-glyph', graph, { cellSize: 10, amount: .8, colorMode: 'source' }, coords);
+      const value = cell(coords), line = Math.max(lineCover(value.local[0] * 10, .5, 10), lineCover(value.local[1] * 10, .5, 10));
+      const coverage = mix(value.alpha, .28, line);
+      const background = value.source.slice(0, 3).map(channel => channel * .08);
+      const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
+      const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .8));
+      expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
+      expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
+      expect(output[3]).toBe(.6);
+    }
   });
 
-  it('builds Pixel Code with deterministic cell hash indexing and its legacy code ink', () => {
+  it('builds Pixel Code with Random (Cell) indexing over the whole ramp and its legacy code ink', () => {
+    // Saved before Scramble, Shadow and Highlight existed: every cell draws any character, in deep blue to mint.
     const graph = createDefaultPixelCodeGraph(), base = cell();
-    const value = cell(uv, Math.floor(hash2d(base.id) * 4));
+    const value = cell(uv, Math.floor(imageCellHash(base.id) * 4));
     const { output, samples } = evaluate('pixel-code', graph, { cellSize: 10, amount: .7 });
-    const dark = [.08, .3, .48], light = [.28, .95, .72];
+    const dark = [0x14, 0x4d, 0x7a].map(channel => channel / 255), light = [0x47, 0xf2, 0xb8].map(channel => channel / 255);
     const code = dark.map((channel, index) => mix(channel, light[index], value.tone) * value.alpha);
     const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, code[index], .7));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
@@ -261,18 +268,34 @@ describe('shared glyph graph variants', () => {
     expect(output[3]).toBe(.6);
   });
 
-  it('builds Matrix with column rain indexing and exact green head resolve', () => {
-    const coords: [number, number] = [.8, .7], time = .39, speed = 1.45, base = cell(coords);
-    const rain = Math.floor(time * speed * 8 + hash2d([base.id[0], 0]) * 4 - base.id[1]);
-    const value = cell(coords, rain), amount = .84;
-    const { output, samples } = evaluate('matrix', createDefaultMatrixGraph(),
-      { cellSize: 10, amount, speed }, coords, time);
-    const phase = base.id[1] * .43 - time * speed * 5 + hash2d([base.id[0], base.id[0]]) * 6.28318530718;
-    const head = Math.pow(.5 + .5 * Math.sin(phase), 4), green = [.04, .35 + head * .65, .13];
-    const marked = green.map(channel => channel * value.alpha);
-    const expected = base.pixel.slice(0, 3).map((channel, index) => mix(channel, marked[index], amount));
-    expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
-    expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
-    expect(output[3]).toBe(.6);
+  it('builds Matrix Rain from falling drops with fading trails, lit by the picture, and staggered character swaps', () => {
+    // Each column falls at its own pace and spacing (Random (Cell) of the column with seeds 1, 2, 3); Behind is how many
+    // rows the cell lies above the nearest head below it. The trail fades over Trail × the spacing (squared), the head cell
+    // turns towards white, and the light is the brighter of the fade × (0.05 + 1.5 × tone²) and the head's own 0.85 (Black
+    // Level 0: shown everywhere). Characters swap like Symbol Matrix's, twice a second.
+    const coords: [number, number] = [.8, .7], speed = 1.45, amount = .84, base = cell(coords), [column, row] = base.id;
+    const rain = [0x29 / 255, 1, 0x6b / 255], clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+    const rate = 12 * (.6 + .8 * imageCellHash([column, 1])), spacing = 32 * (.6 + .8 * imageCellHash([column, 2]));
+    const rainAt = (time: number) => {
+      const drops = (time * speed * rate - row) / spacing + imageCellHash([column, 3]), behind = (drops - Math.floor(drops)) * spacing;
+      const tail = clamp01(1 - behind / Math.max(.5 * spacing, 1));
+      return { fade: tail * tail, head: clamp01(1 - behind) };
+    };
+    const times = Array.from({ length: 48 }, (_, index) => index / 24);
+    // Over two seconds a drop passes the cell: lit by its trail at one moment, dark between two drops at another.
+    expect(Math.max(...times.map(time => rainAt(time).fade))).toBeGreaterThan(.5);
+    expect(Math.min(...times.map(time => rainAt(time).fade))).toBe(0);
+    for (const time of times.filter((_, index) => index % 6 === 0).concat(times.filter(time => rainAt(time).head > 0))) {
+      const cellRandom = imageCellHash(base.id), tick = Math.floor(time * speed * 2 + cellRandom);
+      const value = cell(coords, Math.floor(imageHashPcg2d([cellRandom, tick]) * 4)), { fade, head } = rainAt(time);
+      const { output, samples } = evaluate('matrix', createDefaultMatrixGraph(), { cellSize: 10, amount, speed }, coords, time);
+      const light = Math.max(fade * (.05 + 1.5 * value.tone * value.tone), head * .85);
+      // Saved without Background (0): no ground, only the lit characters.
+      const glyph = rain.map(channel => mix(channel, 1, head * .8) * light * value.alpha);
+      const expected = base.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
+      expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
+      expected.forEach((channel, index) => expect(output[index], `t ${time}`).toBeCloseTo(channel, 12));
+      expect(output[3]).toBe(.6);
+    }
   });
 });

@@ -183,6 +183,207 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "matrix-inspector",
+      "effect": "matrix",
+      "params": {
+        "cellSize": 12,
+        "rampPreset": "numeric",
+        "customRamp": "",
+        "roll": 0.4,
+        "background": 0.3,
+        "blackLevel": 0.2,
+        "trail": 0.8,
+        "speed": 0.7
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 700,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1550
+      },
+      "alt": "Properties, Effects with a Matrix Rain card: Style menu, Preset menu showing Code Portrait, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Rain Color with a green swatch, then Speed, Roll and Trail, beside a strip of the preview where the dancer is drawn in green digits on a black stage",
+      "caption": "Matrix Rain with the Code Portrait preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Black Level: empties the dark stage. 4 — Rain Color: the colour of the code. 5 — Trail: how long the falling tails are.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Black Level",
+          "label": "Black Level"
+        },
+        {
+          "target": "Rain Color",
+          "label": "Rain Color"
+        },
+        {
+          "target": "Trail",
+          "label": "Trail"
+        }
+      ],
+      "hide": [
+        "Edit",
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "grid-glyph-inspector",
+      "effect": "grid-glyph",
+      "params": {
+        "cellSize": 14,
+        "rampPreset": "binary",
+        "customRamp": "",
+        "background": 0.25,
+        "blackLevel": 0.15,
+        "lineWidth": 1,
+        "lineGlow": 0.6,
+        "fontWeight": 700,
+        "colorMode": "duotone",
+        "colorA": "#05301a",
+        "colorB": "#ffd36b"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1550
+      },
+      "alt": "Properties, Effects with a Grid Glyph card: Style menu, Preset menu showing Circuit Board, then Cell Size, Line Width and Line Glow, then Amount, Background, Black Level and Invert Ramp, then Ramp set to Binary, Custom Ramp, Font and Weight, then Color Source set to Duotone with a dark board-green Dark and a gold Light, beside a strip of the preview where the dancer is drawn in gold zeros and ones in a fine grid on dark green",
+      "caption": "Grid Glyph with the Circuit Board preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Line Width: how thick the lines are. 4 — Line Glow: how brightly they shine. 5 — Color Source: here Duotone.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Line Width",
+          "label": "Line Width"
+        },
+        {
+          "target": "Line Glow",
+          "label": "Line Glow"
+        },
+        {
+          "target": "Color Source",
+          "label": "Color Source"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "number-field-inspector",
+      "effect": "number-field",
+      "params": {
+        "cellSize": 18,
+        "rampPreset": "numeric",
+        "customRamp": "12345",
+        "steps": 5,
+        "background": 0.6,
+        "blackLevel": 0.05,
+        "fontFamily": "system-ui, sans-serif",
+        "fontWeight": 600,
+        "colorA": "#1e2f5c",
+        "colorB": "#ffd166"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 700,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1500
+      },
+      "alt": "Properties, Effects with a Number Field card: Style menu, Preset menu showing Paint by Numbers, Cell Size, then Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp holding 12345, Font and Weight, then Dark in navy, Light in gold and Steps at 5, beside a strip of the preview where the dancer is drawn in gold and grey numbers 1 to 5 on a navy field",
+      "caption": "Number Field with the Paint by Numbers preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Background: how much colour fills each cell. 4 — Custom Ramp: here the figures 1 to 5. 5 — Steps: how many colours.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Background",
+          "label": "Background"
+        },
+        {
+          "target": "Custom Ramp",
+          "label": "Custom Ramp"
+        },
+        {
+          "target": "Steps",
+          "label": "Steps"
+        }
+      ],
+      "hide": [
+        "Edit",
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "pixel-code-inspector",
+      "effect": "pixel-code",
+      "params": {
+        "cellSize": 14,
+        "rampPreset": "numeric",
+        "customRamp": "",
+        "scramble": 0.25,
+        "background": 0.3,
+        "blackLevel": 0.08,
+        "fontFamily": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        "fontWeight": 700,
+        "shadow": "#2b0a5a",
+        "highlight": "#ffd23f"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1500
+      },
+      "alt": "Properties, Effects with a Pixel Code card: Style menu, Preset menu showing Heat Map, Cell Size, then Amount, Background, Black Level and Invert Ramp, then Ramp, an empty Custom Ramp, Font, Weight and Scramble at 0.25, then Shadow in deep violet and Highlight in yellow, beside a strip of the preview where the dancer's dress is written in yellow figures on a violet field of dim ones",
+      "caption": "Pixel Code with the Heat Map preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Black Level: clears the dark stage. 4 — Scramble: how random the characters are. 5 — Shadow: the colour of the code in the dark.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Black Level",
+          "label": "Black Level"
+        },
+        {
+          "target": "Scramble",
+          "label": "Scramble"
+        },
+        {
+          "target": "Shadow",
+          "label": "Shadow"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

@@ -17,10 +17,10 @@ What each style changes; everything else works the same.
 | characters that roll on to their neighbours in diagonal waves | [Glyph Matrix](./effects/glyph-matrix.md) |
 | signs that twinkle: each swaps for a neighbour at its own moment and breathes | [Symbol Matrix](./effects/symbol-matrix.md) |
 | glowing terminal text that scrolls up through the picture, with scanlines | [Retro Matrix](./effects/retro-matrix.md) |
-| falling green code with bright heads | [Matrix Rain](./effects/matrix.md) |
-| characters inside a faint grid | [Grid Glyph](./effects/grid-glyph.md) |
-| digits in five colour steps | [Number Field](./effects/number-field.md) |
-| random code from deep blue to mint | [Pixel Code](./effects/pixel-code.md) |
+| code that rains down in streaks with bright heads, the figure glowing in it | [Matrix Rain](./effects/matrix.md) |
+| characters, each in its own ruled box, like a type case or a table of figures | [Grid Glyph](./effects/grid-glyph.md) |
+| figures in a few flat colours, like a picture to paint by numbers | [Number Field](./effects/number-field.md) |
+| zeros and ones that write the picture, denser and lighter where it is bright | [Pixel Code](./effects/pixel-code.md) |
 | rows of characters joined like words | [Word Mosaic](./effects/word-mosaic.md) |
 | characters only along the edges | [Inscribe](./effects/inscribe.md) |
 | characters in a flickering dither | [Dither Text](./effects/dither-text.md) |
@@ -45,8 +45,9 @@ drawn and coloured.
   rows, so a preset leaves those values out. At the default 14 they are small; 24 or more
   reads well on a projection.
 - **Background** – how much of the picture fills each cell behind its character: 0 is the dark
-  ground of classic ASCII art, 1 the full colour. New effects start at 0.2, so the
-  picture stays readable; effects saved earlier keep their dark ground.
+  ground of classic ASCII art, 1 the full colour. New effects start at 0.2 (Matrix Rain at 0.3, a
+  soft glow of the figure behind its rain), so the picture stays readable; effects saved earlier keep
+  their dark ground.
 - **Black Level** – the brightness up to which the picture counts as black: darker parts get the first
   character of the ramp (a space in most ramps; with Invert Ramp the last, densest one), so a grey stage drops out and only the lit figure is
   drawn; in the moving looks those cells also stop rolling, even at Roll 1. 0 (the default, also for saved effects) keeps the picture's tones; 0.15–0.25 suits stage footage.
@@ -56,7 +57,7 @@ drawn and coloured.
   any font. **Font** and **Weight** change the lettering. While a Custom Ramp is typed, the card dims Ramp.
 - **Amount** – fades from the untouched picture (0) to the full look (1).
 - **Color Source** – **Source** takes the picture's colours; **Duotone** draws between **Dark** and
-  **Light**. Matrix Rain and Pixel Code use their own colours, Retro Matrix its **Phosphor** colour,
+  **Light**. Pixel Code uses its own **Shadow** and **Highlight**, Matrix Rain its **Rain Color**, Retro Matrix its **Phosphor** colour,
   Number Field and Dither Glow always draw between Dark and Light; their cards hide what they do not use,
   and dim Dark and Light while Color Source is Source.
 - **Invert Ramp** swaps light and dense characters;
@@ -64,12 +65,14 @@ drawn and coloured.
   when it stops, and a keyframed Speed speeds up smoothly.
 - **Roll** – how much of the ramp the characters of a moving style roll through, around the
   character of their own brightness: 0 holds them still, 1 runs through the whole ramp. Glyph Matrix
-  starts at 0.2, Retro Matrix at 0.3 and Symbol Matrix at 0.4, so their figures stay readable; the other
+  starts at 0.2, Retro Matrix at 0.3, Symbol Matrix at 0.4 and Matrix Rain at 0.5, so their figures stay readable; the other
   moving styles start at 1, their look before Roll existed. Where Roll is the only motion (Glyph Matrix,
   Data Hatching, Dither Glow, Tag Pills, Creative UI Collage, ASCII Ghost), Roll 0 holds the characters
   still and the card says that Speed then does nothing.
 - Retro Matrix adds **Scanlines** (the lines of an old screen) and **Phosphor**, Symbol Matrix
-  **Twinkle** (how deep its signs breathe); see their pages.
+  **Twinkle** (how deep its signs breathe), Matrix Rain **Rain Color** and **Trail** (how long its falling tails are), Grid Glyph
+  **Line Width** and **Line Glow** (its ruled lines), Number Field **Steps** (how many flat colours), Pixel Code
+  **Scramble** (how random its characters are); see their pages.
 
 **Tip:** bright, contrasty footage reads best. For pure characters on black, set **Background** to 0 and **Black Level** to about 0.2;
 for a projection, raise **Cell Size** to 24 or more. The **Style** menu in the card switches to another look

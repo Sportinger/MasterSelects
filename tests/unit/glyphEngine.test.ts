@@ -85,7 +85,8 @@ describe('glyph engine', () => {
     for (const type of GLYPH_LOOKS) {
       const background = getEffect(type)!.params.background;
       expect(background).toMatchObject({ legacyDefault: 0, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true });
-      expect(background.default).toBe(type === 'stitch-poster' ? 0 : .2);
+      // Matrix Rain starts at 0.3, so the figure glows behind its rain; Stitch Poster has its paper.
+      expect(background.default).toBe(type === 'stitch-poster' ? 0 : type === 'matrix' ? .3 : .2);
     }
     // ASCII, no character in the cell: the ground is the source colour × .08, lifted towards the ink.
     const dark = render('ascii', { background: 0 }).output, lifted = render('ascii', { background: .5 }).output;
@@ -96,10 +97,15 @@ describe('glyph engine', () => {
     // A param missing from an edited setup renders the dark ground, not the full picture.
     const missing = render('ascii', {}, { omit: 'background' });
     expect(missing.output[0]).toBeCloseTo(source[0] * .08, 12);
-    // Matrix: the green ground follows the cell's tone (its rain colour ignores the picture).
-    const matrix = render('matrix', { background: 1 }, { time: 0 }).output;
-    expect(matrix[0]).toBeCloseTo(.04 * tone, 12);
-    expect(matrix[2]).toBeCloseTo(.13 * tone, 12);
+    // Matrix Rain: no character in the cell, so only the ground shows: the Rain Color × Background × the cell's tone,
+    // from 0.45 of it between two drops up to all of it where a trail passes.
+    const matrix = render('matrix', { background: 1 }, { time: 0 }).output, halfMatrix = render('matrix', { background: .5 }, { time: 0 }).output;
+    expect(matrix[0] / matrix[1]).toBeCloseTo(0x29 / 255, 12);
+    expect(matrix[2] / matrix[1]).toBeCloseTo(0x6b / 255, 12);
+    expect(matrix[1]).toBeGreaterThanOrEqual(.45 * tone - 1e-12);
+    expect(matrix[1]).toBeLessThanOrEqual(tone + 1e-12);
+    expect(halfMatrix[1]).toBeCloseTo(matrix[1] / 2, 12);
+    expect(render('matrix', { background: 0 }, { time: 0 }).output[1]).toBe(0);
     // Out-of-range values render clamped and say so.
     expect(render('ascii', { background: 3 }).output[0]).toBeCloseTo(render('ascii', { background: 1 }).output[0], 12);
     expect(paramRangeNotes(getEffect('ascii')!.params, { background: 3 }, effectOperatorGraph({ type: 'ascii', params: getDefaultParams('ascii') }))[0].message)
@@ -197,7 +203,7 @@ describe('glyph engine', () => {
       const roll = getEffect(type)!.params.roll;
       if (!('speed' in getEffect(type)!.params)) { expect(roll, type).toBeUndefined(); continue; }
       expect(roll, type).toMatchObject({ legacyDefault: 1, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true, animatable: true, group: 'Motion' });
-      expect(roll.default, type).toBe(type === 'glyph-matrix' ? .2 : type === 'symbol-matrix' ? .4 : type === 'retro-matrix' ? .3 : 1);
+      expect(roll.default, type).toBe(type === 'glyph-matrix' ? .2 : type === 'symbol-matrix' ? .4 : type === 'retro-matrix' ? .3 : type === 'matrix' ? .5 : 1);
     }
     // The test atlas ' .#@' is 2 × 2 glyphs; the source tone (.63) picks '#' (index 2).
     const glyphAt = (params: Record<string, unknown>, time: number) => {

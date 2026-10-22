@@ -21,6 +21,72 @@
       },
       "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with ASCII right: the picture is rebuilt from small characters in a grid, dense signs like # and % where the dress is bright, dots and dashes in the shadows, each in the colour of the picture behind it, on dim square cells",
       "caption": "Left: original. Right: ASCII at its default settings."
+    },
+    {
+      "name": "grid-glyph",
+      "out": "docs/Features/assets/effects/grid-glyph.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        760,
+        150,
+        480,
+        360
+      ],
+      "layout": "compare",
+      "outWidth": 1600,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "grid-glyph"
+      },
+      "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with Grid Glyph right: the picture is rebuilt from characters, each in its own square cell ruled by a thin line in the colour of the cell, so her dress becomes a lit table of # and % signs while the lines fade into the dark stage",
+      "caption": "Left: original. Right: Grid Glyph at its default settings."
+    },
+    {
+      "name": "number-field",
+      "out": "docs/Features/assets/effects/number-field.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        760,
+        150,
+        480,
+        360
+      ],
+      "layout": "compare",
+      "outWidth": 1600,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "number-field"
+      },
+      "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with Number Field right: the picture is rebuilt from the digits 1 to 9, the brighter the part the higher the digit, coloured in five flat steps from near-black to pale mint, so her dress becomes a block of bright 7s and 8s on stepped grey ground while the dark stage holds faint 1s",
+      "caption": "Left: original. Right: Number Field at its default settings."
+    },
+    {
+      "name": "pixel-code",
+      "out": "docs/Features/assets/effects/pixel-code.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        760,
+        150,
+        480,
+        360
+      ],
+      "layout": "compare",
+      "outWidth": 1600,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "pixel-code"
+      },
+      "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with Pixel Code right: the picture is written in small zeros and ones, dense and mint green where her dress and arm are lit, sparse dim blue zeros on the dark stage, so the figure appears in the colour and the density of the code",
+      "caption": "Left: original. Right: Pixel Code at its default settings."
     }
   ],
   "strips": [
@@ -33,6 +99,45 @@
         170,
         420,
         315
+      ],
+      "cellWidth": 600,
+      "columns": 2
+    },
+    {
+      "effect": "grid-glyph",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        640,
+        100,
+        720,
+        540
+      ],
+      "cellWidth": 600,
+      "columns": 2
+    },
+    {
+      "effect": "number-field",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        640,
+        100,
+        720,
+        540
+      ],
+      "cellWidth": 600,
+      "columns": 2
+    },
+    {
+      "effect": "pixel-code",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        640,
+        100,
+        720,
+        540
       ],
       "cellWidth": 600,
       "columns": 2

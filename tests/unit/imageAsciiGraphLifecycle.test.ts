@@ -14,7 +14,7 @@ const initial = useTimelineStore.getState();
 const glyphEffects = [
   { type: 'ascii', name: 'ASCII', cellSize: 14 },
   { type: 'number-field', name: 'Number Field', cellSize: 14 },
-  { type: 'grid-glyph', name: 'Grid Glyph', cellSize: 14 },
+  { type: 'grid-glyph', name: 'Grid Glyph', cellSize: 18 },
   { type: 'pixel-code', name: 'Pixel Code', cellSize: 10 },
   { type: 'word-mosaic', name: 'Word Mosaic', cellSize: 22 },
   { type: 'brand-generator', name: 'Brand Generator', cellSize: 24 },
