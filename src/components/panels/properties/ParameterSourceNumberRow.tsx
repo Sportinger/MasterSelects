@@ -39,6 +39,10 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false, d
   const nodes = clip.nodeGraph?.parameterSources?.graph.nodes ?? [];
   const selection = driven ? `node:${binding!.source!.nodeId}|${binding!.source!.portId}` : binding?.localMode === 'constant' ? 'fixed' : 'auto';
   const navigate = (id: string) => { requestNodeAnimation(clipId, id, false); useDockStore.getState().activatePanelType('node-workspace'); };
+  // The source line shows only what differs from a plain row: a driving node, a fixed value that ignores
+  // its keys, or a failing source (or while its menu is open). An undriven row looks like every other row;
+  // a node is attached from the Nodes tab.
+  const showStatus = driven || !!error || binding?.localMode === 'constant' || open;
   const row = { label: target.label, ariaLabel: target.label, value: value * scale, defaultValue: target.defaultValue * scale,
     min: target.min * scale, max: target.max * scale, step: shownAs?.step ?? target.step * scale, suffix: shownAs?.suffix, decimals: shownAs?.decimals,
     disabled: readOnly || driven || !!error, persistenceKey: `parameter.${property}`,
@@ -56,10 +60,10 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false, d
     {/* A cyclic target (Hue Shift) puts its handle at its place on one turn and types without a limit. */}
     {target.wraps ? <ResolveWrappingNumberRow {...row} />
       : <ResolveInspectorNumberRow {...row} hardMin={scaled(target.hardMin)} hardMax={scaled(target.hardMax)} />}
-    <div className="parameter-source-status">
+    {showStatus && <div className="parameter-source-status">
       <button type="button" aria-expanded={open} title={`Parameter source: ${kind}`} onClick={() => setOpen(previous => !previous)}>{kind} · Source</button>
       {driven && <button type="button" onClick={() => navigate(binding!.source!.nodeId)}>Go to source</button>}
-    </div>
+    </div>}
     {open && <>
       <ResolveInspectorRow label="Source"><InspectorSelect ariaLabel={`${target.label} source`} disabled={readOnly} value={selection}
         options={[{ value: 'auto', label: 'Local value / keyframes' }, { value: 'fixed', label: 'Fixed (keep keys)' },

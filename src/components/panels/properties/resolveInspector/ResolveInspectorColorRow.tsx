@@ -1,6 +1,7 @@
-// Colour row in the shared Resolve inspector design: swatch picker, editable hex field and reset.
+// Colour row in the shared Resolve inspector design: swatch picker, editable hex field, optional extra
+// action and keyframe diamond (as on number rows) and reset.
 // One row for effect colour parameters (ResolveEffectParamRow) and custom controls (Chroma Key).
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveResetIcon } from './ResolveInspectorPrimitives';
 import './ResolveInspector.css';
 import './ResolveInspectorColorRow.css';
@@ -28,9 +29,13 @@ interface ResolveInspectorColorRowProps {
   onChange: (value: string) => void;
   /** A finished edit (picker closed, hex field committed or reset) for history and telemetry. */
   onCommit?: (method: 'select' | 'type' | 'reset') => void;
+  /** Keyframe diamond before the reset, as on number rows (ResolveInspectorNumberRow). */
+  keyframeToggle?: ReactNode;
+  /** One extra action before the keyframe diamond (a remove button), as on number rows. */
+  actions?: ReactNode;
 }
 
-export function ResolveInspectorColorRow({ label, ariaLabel = label, value, defaultValue, disabled = false, title, onChange, onCommit }: ResolveInspectorColorRowProps) {
+export function ResolveInspectorColorRow({ label, ariaLabel = label, value, defaultValue, disabled = false, title, onChange, onCommit, keyframeToggle, actions }: ResolveInspectorColorRowProps) {
   const colour = normalizeHexColor(value) ?? normalizeHexColor(defaultValue) ?? '#000000';
   // The swatch edits the colour; an alpha stored with it (#rrggbbaa) is kept.
   const alpha = colour.length === 9 ? colour.slice(7) : '';
@@ -44,10 +49,10 @@ export function ResolveInspectorColorRow({ label, ariaLabel = label, value, defa
     setDraft(null);
   };
   return (
-    <ResolveInspectorRow label={label} disabled={disabled} title={title}
-      actions={<ResolveInspectorIconButton ariaLabel={`Reset ${label}`} className="resolve-inspector-reset-button" disabled={disabled}
+    <ResolveInspectorRow label={label} disabled={disabled} title={title} className={actions ? 'resolve-inspector-row--extra-action' : undefined}
+      actions={<>{actions}{keyframeToggle}<ResolveInspectorIconButton ariaLabel={`Reset ${label}`} className="resolve-inspector-reset-button" disabled={disabled}
         onClick={event => { if (event.detail > 0) event.currentTarget.blur(); onChange(normalizeHexColor(defaultValue) ?? colour); onCommit?.('reset'); }}>
-        <ResolveResetIcon /></ResolveInspectorIconButton>}>
+        <ResolveResetIcon /></ResolveInspectorIconButton></>}>
       <span className="resolve-inspector-color">
         {/* Pointer activation shows no focus ring (ResolveInspectorColorRow.css); keyboard focus keeps the product ring. */}
         <input type="color" aria-label={ariaLabel} value={colour.slice(0, 7)} disabled={disabled}
