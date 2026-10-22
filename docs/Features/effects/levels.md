@@ -46,20 +46,20 @@ Pick one in the **Preset** row of the effect card. It sets all five controls in 
 
 ![Properties, Effects with a Levels card: the Preset menu showing Matte Film, Input Black at 0, Input White at 1, Gamma at 1, Output Black at 0.12 and Output White at 0.90, beside a strip of the preview with the grey, matte stage](../assets/effects/editor/levels-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 543" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 433" aria-hidden="true" focusable="false">
 <defs><marker id="levels-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#levels-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M529 344 L613 344" marker-end="url(#levels-inspector-arrow)" />
-<circle class="docs-shot-number" cx="529" cy="344" r="18" /><text x="529" y="344" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M528 382 L612 382" marker-end="url(#levels-inspector-arrow)" />
-<circle class="docs-shot-number" cx="528" cy="382" r="18" /><text x="528" y="382" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M554 419 L638 419" marker-end="url(#levels-inspector-arrow)" />
-<circle class="docs-shot-number" cx="554" cy="419" r="18" /><text x="554" y="419" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M516 457 L600 457" marker-end="url(#levels-inspector-arrow)" />
-<circle class="docs-shot-number" cx="516" cy="457" r="18" /><text x="516" y="457" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M514 494 L598 494" marker-end="url(#levels-inspector-arrow)" />
-<circle class="docs-shot-number" cx="514" cy="494" r="18" /><text x="514" y="494" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M639 224 L723 224" marker-end="url(#levels-inspector-arrow)" />
+<circle class="docs-shot-number" cx="639" cy="224" r="18" /><text x="639" y="224" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M610 274 L694 274" marker-end="url(#levels-inspector-arrow)" />
+<circle class="docs-shot-number" cx="610" cy="274" r="18" /><text x="610" y="274" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M609 304 L693 304" marker-end="url(#levels-inspector-arrow)" />
+<circle class="docs-shot-number" cx="609" cy="304" r="18" /><text x="609" y="304" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M630 334 L714 334" marker-end="url(#levels-inspector-arrow)" />
+<circle class="docs-shot-number" cx="630" cy="334" r="18" /><text x="630" y="334" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M600 364 L684 364" marker-end="url(#levels-inspector-arrow)" />
+<circle class="docs-shot-number" cx="600" cy="364" r="18" /><text x="600" y="364" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M598 394 L682 394" marker-end="url(#levels-inspector-arrow)" />
+<circle class="docs-shot-number" cx="598" cy="394" r="18" /><text x="598" y="394" class="docs-shot-number-text">6</text>
 </svg>
 
 </div>

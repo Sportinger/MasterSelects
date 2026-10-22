@@ -44,12 +44,12 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 
 ![Properties, Effects with a Brightness card: the Preset menu showing Full Light and the Amount row at 0.70, beside a strip of the preview with the lifted stage](../assets/effects/editor/brightness-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 393" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 313" aria-hidden="true" focusable="false">
 <defs><marker id="brightness-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#brightness-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M555 344 L639 344" marker-end="url(#brightness-inspector-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="344" r="18" /><text x="555" y="344" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M639 224 L723 224" marker-end="url(#brightness-inspector-arrow)" />
+<circle class="docs-shot-number" cx="639" cy="224" r="18" /><text x="639" y="224" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M631 274 L715 274" marker-end="url(#brightness-inspector-arrow)" />
+<circle class="docs-shot-number" cx="631" cy="274" r="18" /><text x="631" y="274" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 

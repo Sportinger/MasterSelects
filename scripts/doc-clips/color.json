@@ -22,9 +22,9 @@
       "sweep": { "param": "amount", "label": "Amount", "from": 0, "to": 1.8, "decimals": 2 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
       "alt": "The dancer turning on a dark stage with Saturation while Amount runs from 0 to 1.8 and back: first the whole picture is black and white, then the warm stage light, her skin and the blue backlight come back and grow strong and glowing, while the brightness of every part stays the same; the current value is shown at the bottom left",
       "caption": "Amount from 0 to 1.8 and back." },
-    { "name": "vibrance-amount", "effect": "vibrance", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
-      "sweep": { "param": "amount", "label": "Amount", "from": -1, "to": 1, "decimals": 2 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
-      "alt": "The dancer turning on a dark stage with Vibrance while Amount runs from −1 to 1 and back: at −1 the brown haze and the floor turn grey and the stage looks cool and quiet, then the warm haze, the floor and the blue backlight grow fuller, while her skin keeps its colour throughout; the current value is shown at the bottom left",
-      "caption": "Amount from −1 to 1 and back." }
+    { "name": "vibrance-amount", "effect": "vibrance", "source": "harbor_town.jpg", "params": {}, "range": [0, 5], "layout": "single", "crop": [680, 0, 1240, 930], "width": 720,
+      "sweep": { "param": "amount", "label": "Amount", "from": -1, "to": 2, "decimals": 1 }, "loop": 0.35, "poster": 3.5, "maxBytes": 600000, "float": "right",
+      "alt": "The harbour town while Vibrance runs from −1 to 2 and back: at −1 the pale sky and the pastel house fronts turn almost grey while the turquoise sea keeps much of its colour, then the sky deepens to a strong blue and the pink and yellow walls fill with colour, while the sea and the white boats change little; the current value is shown at the bottom left",
+      "caption": "Amount from −1 to 2 and back." }
   ]
 }

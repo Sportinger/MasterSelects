@@ -10,10 +10,12 @@ let former: EffectOperatorGraph | undefined;
  * the S-curve family below Amount 1 too, an inverse S whose slope at black and white is infinite,
  * so 8-bit shadow noise became colour blotches (Amount 0.3 turned one code value into about 40).
  * A saved graph that is exactly that recipe gets the current one, which is identical from Amount 1
- * up and flattens toward mid-grey below it. Edited graphs keep what their author built.
+ * up and flattens toward mid-grey below it. Edited graphs keep what their author built, and so
+ * do incomplete graphs and graphs with a bypassed folder (the recipe match ignores folders).
  */
 export function flattenContrastGraph(source: EffectOperatorGraph): EffectOperatorGraph {
   const known = upgraded.get(source); if (known) return known;
+  if (source.incomplete || source.groups?.some(group => group.bypassed)) { upgraded.set(source, source); return source; }
   former ??= createFormerContrastGraph();
   const result = matchesEffectRecipe(source, former) ? createDefaultContrastGraph() : source;
   upgraded.set(source, result); upgraded.set(result, result);

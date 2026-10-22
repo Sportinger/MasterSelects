@@ -512,11 +512,13 @@ bypasses the RGB math. New instances (since the 2026-10 rebuild,
 - **Contrast**: slope `c` = Amount at mid-grey 0.5. From 1 up an S-curve
   `y = x^c / (x^c + (1 − x)^c)`: highlights and shadows roll off instead of clipping;
   per channel, so strong values also raise saturation. Below 1 a straight line toward
-  mid-grey, `y = 0.5 + (x − 0.5) · c` (the Flatten folder; the curve then gets slope 1).
-  Until 2026-10-22 the S-curve ran below 1 too, an inverse S with an infinite slope at
-  black and white that turned one 8-bit shadow step into about 40 at Amount 0.3; saved
-  graphs of that recipe are upgraded on load (`contrastFlattenUpgrade.ts`), identical
-  from Amount 1 up.
+  mid-grey, `y = 0.5 + (x − 0.5) · c` (a Mix toward grey; the curve then gets slope 1).
+  Both halves sit in the shared Contrast Curve block. Until 2026-10-22 the S-curve ran
+  below 1 too, an inverse S with an infinite slope at black and white that turned one
+  8-bit shadow step into about 40 at Amount 0.3; saved graphs of that recipe are upgraded
+  on load (`contrastFlattenUpgrade.ts`; not when a folder is bypassed or the graph is
+  incomplete), identical from Amount 1 up, and saved instances of the block get the fade
+  under their unchanged ports.
 - **Saturation**: mix of Rec.709 luma and RGB by Amount, stopped where the first
   channel reaches 0 or 1, so hue and luma stay (gamut-safe).
 - **Vibrance**: the same gamut-safe mix, with Amount weighted by `1 − S` (HSV

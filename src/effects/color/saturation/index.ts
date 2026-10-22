@@ -9,8 +9,8 @@ export const SATURATION_PRESETS: readonly EffectPreset[] = [
   // Pure black and white from the Rec.709 brightness of each pixel.
   { id: 'black-and-white', name: 'Black & White', params: { amount: 0 } },
   // Only a memory of colour: an old photograph, a flashback.
-  { id: 'faded', name: 'Faded', params: { amount: 0.3 } },
-  // Fuller colour for dull or washed-out footage without a garish look.
+  { id: 'washed-out', name: 'Washed Out', params: { amount: 0.3 } },
+  // Fuller colour for dull footage without a garish look.
   { id: 'rich', name: 'Rich', params: { amount: 1.35 } },
   // Strong colour; every colour stops at its strongest version instead of clipping.
   { id: 'vivid', name: 'Vivid', params: { amount: 1.8 } },

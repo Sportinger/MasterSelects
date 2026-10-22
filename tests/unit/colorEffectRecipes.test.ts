@@ -12,6 +12,9 @@ import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
 import { applyWorkerSoftwareImageGraphs } from '../../src/services/render/workerSoftwareImageGraphs';
 import type { Layer } from '../../src/types/layers';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
+import { COLOR_COMPOSITIONS } from '../../src/services/operators/colorCompositions';
+import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 
 /**
  * Independent CPU references for the rebuilt color effects (2026-10). The formulas below are
@@ -109,6 +112,14 @@ describe('rebuilt color effect recipes', () => {
     expect(flattenContrastGraph(edited)).toBe(edited);
     const legacy = createLegacyColorEffectGraph('contrast');
     expect(flattenContrastGraph(legacy)).toBe(legacy);
+    // A bypassed folder or an incomplete graph is the author's work: kept, and not reported as the recipe.
+    const bypassed = { ...structuredClone(former), groups: [{ id: 'g1', label: 'Tone Curve', color: '#888', bypassed: true,
+      nodeIds: former.nodes.filter(node => node.id.startsWith('curve')).map(node => node.id) }] };
+    expect(flattenContrastGraph(bypassed)).toBe(bypassed);
+    expect(colorEffectGraphState('contrast', bypassed)).not.toBe('recipe');
+    const incomplete = { ...structuredClone(former), incomplete: 'missing wire' };
+    expect(flattenContrastGraph(incomplete)).toBe(incomplete);
+    expect(colorEffectGraphState('contrast', incomplete)).not.toBe('recipe');
   });
 
   it('Saturation mixes Rec.709 luma and stops at the gamut edge without turning the hue', () => {
@@ -276,6 +287,38 @@ describe('rebuilt color effect recipes', () => {
     expect(plan.stage({ id: 'inputBlack-rgb' } as never)).toBe('remap');
     expect(['output-range', 'outputBlack-rgb', 'outputWhite-rgb'].map(id => plan.stage({ id } as never))).toEqual(['output', 'output', 'output']);
     expect(plan.labels.output).toBe('Output Range');
+  });
+
+  it('the shared Contrast Curve block holds the even fade below 1 too, under its former ports (2026-10-22 fix)', () => {
+    const block = COLOR_COMPOSITIONS.find(definition => definition.id === 'color.contrast-curve.rgb')!;
+    expect(block.inputs.map(port => [port.id, port.label]).toSorted()).toEqual([['amount-clamped-value', 'Contrast'], ['split-rgb', 'RGB']]);
+    // The block alone in a graph: Frame → Split → block (Contrast from a value card) → Combine → Output.
+    const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', nodes: [
+      { id: 'frame', operator: 'image.frame', operatorVersion: 1, bindings: {} },
+      { id: 'split', operator: 'vector.split.rgba', operatorVersion: 1, bindings: {} },
+      { id: 'contrast', operator: 'values.number', operatorVersion: 1, bindings: { value: 'amount' } },
+      { id: 'block', operator: block.id, operatorVersion: 1, bindings: {} },
+      { id: 'combine', operator: 'vector.combine.rgba', operatorVersion: 1, bindings: {} },
+      { id: 'output', operator: 'image.output', operatorVersion: 1, bindings: {} }],
+    edges: [
+      { id: 'e1', from: 'frame', output: 'image', to: 'split', input: 'image' },
+      { id: 'e2', from: 'split', output: 'rgb', to: 'block', input: 'split-rgb' },
+      { id: 'e3', from: 'contrast', output: 'value', to: 'block', input: 'amount-clamped-value' },
+      { id: 'e4', from: 'block', output: 'curve-value', to: 'combine', input: 'rgb' },
+      { id: 'e5', from: 'split', output: 'alpha', to: 'combine', input: 'alpha' },
+      { id: 'e6', from: 'combine', output: 'image', to: 'output', input: 'image' }],
+    layout: {} };
+    const alone = (amount: number, pixel: Pixel) => evaluateImageOperatorPlan(compileImageOperatorGraph(expandOperatorCompositions(graph), { amount }), pixel);
+    const step = 1 / 255;
+    expect((alone(0.3, [step, step, step, 1])[0] - alone(0.3, [0, 0, 0, 1])[0]) / step).toBeCloseTo(0.3, 3);
+    for (const amount of [0.3, 1.5]) for (const texel of TEXELS) expectPixel(alone(amount, texel), render('contrast', { amount }, texel));
+  });
+
+  it('presents Contrast as Parameters and one Contrast Curve block, and names the Vibrance hue match', () => {
+    const graph = effectOperatorGraph({ id: 'fx', name: 'Contrast', type: 'contrast', enabled: true, params: getDefaultParams('contrast') }, { inspectionOnly: true });
+    expect(graph.groups?.map(group => group.label).toSorted()).toEqual(['Constants', 'Contrast Curve', 'Parameters']);
+    expect(graph.groups?.find(group => group.label === 'Contrast Curve')?.parentId).toBeUndefined();
+    expect(effectPresentationPlan('vibrance')?.portLabels?.['skin-match']).toBe('Skin Hue Match');
   });
 
   it('keeps the original formulas in the legacy graphs that saved projects still carry', () => {

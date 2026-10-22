@@ -21,7 +21,7 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot docs-shot--detail">
 
-![The harbour town four times, each with one preset: Black & White top left in pure grey tones, Faded top right with only a hint of blue and ochre, Rich bottom left with fuller blue water and warm house fronts, Vivid bottom right with a deep blue sky, a strong turquoise sea and glowing house colours](../assets/effects/presets/saturation.webp)
+![The harbour town four times, each with one preset: Black & White top left in pure grey tones, Washed Out top right with only a hint of blue and ochre, Rich bottom left with fuller blue water and warm house fronts, Vivid bottom right with a deep blue sky, a strong turquoise sea and glowing house colours](../assets/effects/presets/saturation.webp)
 
 <figcaption>The four presets on the harbour town.</figcaption>
 </figure>
@@ -30,9 +30,9 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 
 **Black & White** – no colour at all (Amount 0). Each pixel becomes the grey of its own brightness, measured the way the eye sees it: green counts most, blue least.
 
-**Faded** – only a memory of colour is left (Amount 0.3), like an old photograph or a flashback. The brightness stays as it was.
+**Washed Out** – only a memory of colour is left (Amount 0.3), like a flashback or a sun-bleached poster. The brightness stays as it was. For a faded print with lifted blacks, use [Contrast](./contrast.md) or [Levels](./levels.md).
 
-**Rich** – fuller colour without a garish look (Amount 1.35). A good first step for dull or washed-out footage.
+**Rich** – fuller colour without a garish look (Amount 1.35). A good first step for dull footage.
 
 **Vivid** – strong, glowing colour (Amount 1.8). The brightest colours have reached the edge of what the screen can show and stay there, so the sky does not clip into a flat blue and white stays white.
 
@@ -91,7 +91,7 @@ Pick one in the **Preset** row of the effect card. It sets Amount in one undo st
 <figcaption>Saturation opened in the Nodes tab (the Constants folder left out). 1 — Parameters: Amount, kept within its range. 2 — Clamp: keeps the colour within 0 to 1. 3 — Saturation (Gamut-Safe): mixes between grey and colour, never past the edge.</figcaption>
 </figure>
 
-Saturation works in one block: **Parameters** holds Amount, **Clamp** keeps each colour channel of the picture between 0 and 1, and **Saturation (Gamut-Safe)** does the work. **Split RGB + Alpha** takes the transparency aside first and **Combine RGB + Alpha** puts it back untouched. Every colour effect has this shape ([Color & Tone](../Effects-Color.md#the-shared-idea)). Click a folder's header to open it; the sections below show what is inside. The same block is in **right-click → Reusable Nodes**, and [Vibrance](./vibrance.md) uses it too.
+Saturation works in three steps: **Parameters** holds Amount, **Clamp** keeps each colour channel of the picture between 0 and 1, and the block **Saturation (Gamut-Safe)** does the work. **Split RGB + Alpha** takes the transparency aside first and **Combine RGB + Alpha** puts it back untouched. Every colour effect has this shape ([Color & Tone](../Effects-Color.md#the-shared-idea)). Click a folder's header to open it; the sections below show what is inside. The same block is in **right-click → Reusable Nodes**, and [Vibrance](./vibrance.md) uses it too.
 
 ### Parameters
 
@@ -116,9 +116,9 @@ Saturation works in one block: **Parameters** holds Amount, **Clamp** keeps each
 
 <div class="docs-float-end"></div>
 
-### Saturation (Gamut-Safe)
+### Saturation (Gamut-Safe): the mix
 
-The block has two parts: a mix between grey and colour, and the limit that keeps that mix inside what the screen can show.
+The block has two parts: a mix between grey and colour, and the limit that keeps that mix inside what the screen can show (next section).
 
 <figure class="docs-shot docs-shot--graph">
 
@@ -149,6 +149,8 @@ The block has two parts: a mix between grey and colour, and the limit that keeps
 
 **Remix:** wire **Amount** straight into **T** of **Mix**, past the Minimum: you get the classic, harsher saturation, where strong colours run into the edge, clip and change their shade.
 
+### Saturation (Gamut-Safe): the limit
+
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
@@ -163,24 +165,20 @@ The block has two parts: a mix between grey and colour, and the limit that keeps
 <circle class="docs-shot-number" cx="508" cy="23" r="18" /><text x="508" y="23" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M787 23 L787 107" marker-end="url(#saturation-limit-arrow)" />
 <circle class="docs-shot-number" cx="787" cy="23" r="18" /><text x="787" y="23" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M787 492 L787 408" marker-end="url(#saturation-limit-arrow)" />
-<circle class="docs-shot-number" cx="787" cy="492" r="18" /><text x="787" y="492" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M926 23 L926 107" marker-end="url(#saturation-limit-arrow)" />
-<circle class="docs-shot-number" cx="926" cy="23" r="18" /><text x="926" y="23" class="docs-shot-number-text">5</text>
+<circle class="docs-shot-number" cx="926" cy="23" r="18" /><text x="926" y="23" class="docs-shot-number-text">4</text>
 </svg>
 
 </div>
 
-<figcaption>Inside Saturation (Gamut-Safe), the limit (the constants 0, 1 and 0.000001 are left out). 1 — Subtract: the colour without its grey. 2 — Largest Component: the channel furthest above the grey. 3 — Divide: how far until that channel reaches 1. 4 — Divide: how far until the lowest channel reaches 0. 5 — Minimum: the nearer of the two edges.</figcaption>
+<figcaption>Inside Saturation (Gamut-Safe), the limit (the constants 0, 1 and 0.000001 are left out). 1 — Subtract: the colour without its grey. 2 — Largest Component: the channel furthest above the grey. 3 — Divide: how far until the top channel reaches 1; the Divide below it, until the lowest reaches 0. 4 — Minimum: the nearer of the two edges.</figcaption>
 </figure>
 
 **Subtract** – the colour minus its grey: what makes the pixel coloured. A grey pixel has nothing left here.
 
-**Largest Component** – the channel that lies furthest above the grey; **Smallest Component** the one furthest below it, which **Subtract** turns into a positive distance. The two **Maximum** cards keep both at least 0.000001, so a grey pixel does not divide by zero.
+**Largest Component** – the channel that lies furthest above the grey; **Smallest Component** the one furthest below it, which a second Subtract turns into a positive distance. The two **Maximum** cards keep both at least 0.000001, so a grey pixel does not divide by zero.
 
-**Divide** (top) – the room up to white (**Subtract**: 1 minus the grey) divided by the largest channel: the Amount at which that channel reaches 1.
-
-**Divide** (bottom) – the grey divided by the lowest channel's distance: the Amount at which that channel reaches 0.
+**Divide** – there are two, one per edge. The upper one divides the room up to white (one more Subtract: 1 minus the grey) by the largest channel: the Amount at which that channel reaches 1. The lower one divides the grey by the lowest channel's distance: the Amount at which that channel reaches 0.
 
 **Minimum** – the nearer of the two edges. That is the **Limit**: the strongest Amount at which this pixel still keeps its shade. For a grey pixel it is huge, so grey stays grey at every Amount.
 

@@ -7,7 +7,7 @@
         "amount": 0.7
       },
       "image": "dancer_stage.jpg",
-      "preview": 380,
+      "preview": 560,
       "top": "tabs",
       "alt": "Properties, Effects with a Brightness card: the Preset menu showing Full Light and the Amount row at 0.70, beside a strip of the preview with the lifted stage",
       "caption": "Brightness with the Full Light preset. 1 — Preset: pick a starting point. 2 — Amount: lighter or darker.",
@@ -32,7 +32,7 @@
         "amount": 1.5
       },
       "image": "dancer_stage.jpg",
-      "preview": 380,
+      "preview": 560,
       "top": "tabs",
       "alt": "Properties, Effects with a Contrast card: the Preset menu showing Bold and the Amount row at 1.50, beside a strip of the preview with the deep black stage",
       "caption": "Contrast with the Bold preset. 1 — Preset: pick a starting point. 2 — Amount: flatter or punchier.",
@@ -58,7 +58,7 @@
         "gamma": 1.25
       },
       "image": "dancer_stage.jpg",
-      "preview": 380,
+      "preview": 560,
       "top": "tabs",
       "alt": "Properties, Effects with an Exposure card: the Preset menu showing Milky Haze, Exposure at 0.0 EV, Offset at 0.06 and Gamma at 1.25, beside a strip of the preview with the hazy, lifted stage",
       "caption": "Exposure with the Milky Haze preset. 1 — Preset: pick a starting point. 2 — Exposure: the light, in camera stops. 3 — Offset: lifts or lowers everything. 4 — Gamma: the mid-tones.",
@@ -92,7 +92,7 @@
         "outputWhite": 0.9
       },
       "image": "dancer_stage.jpg",
-      "preview": 380,
+      "preview": 560,
       "top": "tabs",
       "alt": "Properties, Effects with a Levels card: the Preset menu showing Matte Film, Input Black at 0, Input White at 1, Gamma at 1, Output Black at 0.12 and Output White at 0.90, beside a strip of the preview with the grey, matte stage",
       "caption": "Levels with the Matte Film preset. 1 — Preset: pick a starting point. 2 — Input Black: what becomes black. 3 — Input White: what becomes white. 4 — Gamma: the mid-tones. 5 — Output Black: how dark black is. 6 — Output White: how bright white is.",
@@ -155,13 +155,13 @@
       "name": "vibrance-inspector",
       "effect": "vibrance",
       "params": {
-        "amount": 0.7
+        "amount": 2
       },
-      "image": "greenscreen_dancer.jpg",
+      "image": "harbor_town.jpg",
       "preview": 380,
       "top": "tabs",
-      "alt": "Properties, Effects with a Vibrance card: the Preset menu showing Lively and the Amount row at 0.7, beside a strip of the preview with the dancer in front of a brighter green screen",
-      "caption": "Vibrance with the Lively preset. 1 — Preset: pick a starting point. 2 — Amount: muted or livelier colour.",
+      "alt": "Properties, Effects with a Vibrance card: the Preset menu showing Strong and the Amount row at 2.00, beside a strip of the preview with the harbour town, its sky deep blue and the house fronts full of colour",
+      "caption": "Vibrance with the Strong preset. 1 — Preset: pick a starting point. 2 — Amount: muted or livelier colour.",
       "marks": [
         {
           "target": "Preset",

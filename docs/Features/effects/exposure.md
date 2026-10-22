@@ -6,16 +6,16 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot docs-compare">
 
-![The dancer on a dark stage, original left and with Exposure at +1 EV right: twice the light, so her skin, the dress, the haze and the floor all turn brighter, the shadows open up and the brightest folds of the dress come close to white](../assets/effects/exposure.webp)
+![The dancer on a dark stage, original left and with Exposure at +1.5 EV right: almost three times the light, so the haze, the floor and the shadows open up, her skin glows and the brightest folds of the dress burn out to flat white](../assets/effects/exposure.webp)
 
-<figcaption>Left: original. Right: Exposure +1 EV, twice the light.</figcaption>
+<figcaption>Left: original. Right: Exposure +1.5 EV (the Overexposed preset).</figcaption>
 </figure>
 
 **Use it for:** under- or overexposed footage · matching shots filmed with different camera settings · a light change that feels like the light itself, not a fade.
 
 - **Exposure** – the light, in camera stops (EV).
 
-**Tip:** keyframe **Exposure** from −3 EV up to 0 for a fade-in that looks like a light being switched up, not like a dissolve. To brighten without burning out the whites, use [Brightness](./brightness.md).
+**Tip:** for a fade-in that looks like a light being switched up, not like a dissolve, keyframe **Exposure** from −10 EV up to 0. Type −10 into the number field: there even white is almost black. From −3 EV, the end of the slider, the picture starts as a dim stage instead. To brighten without burning out the whites, use [Brightness](./brightness.md).
 
 ## Presets
 
@@ -34,7 +34,7 @@ Pick one in the **Preset** row of the effect card. It sets Exposure, Offset and 
 
 **One Stop Down** – half the light. For a shot that is too bright, or a stage after the light has dimmed.
 
-**Milky Haze** – lifted blacks and open mid-tones (Offset 0.06, Gamma 1.25), like haze in front of the lens or a faded print. The light itself stays as it was.
+**Milky Haze** – lifted blacks and open mid-tones (Offset 0.06, Gamma 1.25), like haze in front of the lens. The light itself stays as it was.
 
 ## Controls
 
@@ -44,16 +44,16 @@ Pick one in the **Preset** row of the effect card. It sets Exposure, Offset and 
 
 ![Properties, Effects with an Exposure card: the Preset menu showing Milky Haze, Exposure at 0.0 EV, Offset at 0.06 and Gamma at 1.25, beside a strip of the preview with the hazy, lifted stage](../assets/effects/editor/exposure-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 468" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 373" aria-hidden="true" focusable="false">
 <defs><marker id="exposure-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#exposure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M542 344 L626 344" marker-end="url(#exposure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="542" cy="344" r="18" /><text x="542" y="344" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M569 382 L653 382" marker-end="url(#exposure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="569" cy="382" r="18" /><text x="569" y="382" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M554 419 L638 419" marker-end="url(#exposure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="554" cy="419" r="18" /><text x="554" y="419" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M639 224 L723 224" marker-end="url(#exposure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="639" cy="224" r="18" /><text x="639" y="224" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M620 274 L704 274" marker-end="url(#exposure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="620" cy="274" r="18" /><text x="620" y="274" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M642 304 L726 304" marker-end="url(#exposure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="642" cy="304" r="18" /><text x="642" y="304" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M630 334 L714 334" marker-end="url(#exposure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="630" cy="334" r="18" /><text x="630" y="334" class="docs-shot-number-text">4</text>
 </svg>
 
 </div>
@@ -72,7 +72,7 @@ Pick one in the **Preset** row of the effect card. It sets Exposure, Offset and 
 
 <div class="docs-float-end"></div>
 
-**Offset** – lifts or lowers every tone by the same amount, after the exposure. Up lays a pale veil over the blacks (haze, a faded print); down sinks the darkest tones into pure black. Small values are enough: 0.03–0.1. −0.5 to 0.5, default 0.
+**Offset** – lifts or lowers every tone by the same amount, after the exposure. Up lays a pale veil over the blacks, like haze; down sinks the darkest tones into pure black. Small values are enough: 0.03–0.1. −0.5 to 0.5, default 0.
 
 <figure class="docs-shot docs-shot--float-right">
 
@@ -120,22 +120,18 @@ Exposure works in four stages, one folder each in the Nodes tab: **Parameters** 
 
 ![Inside the Parameters folder: the Exposure card at 0 feeds a Clamp whose output is Exposure, the Gamma card at 1 feeds a second Clamp whose output is Gamma, and the Offset card at 0 goes out directly](../assets/effects/graphs/exposure-parameters.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 983" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 926" aria-hidden="true" focusable="false">
 <defs><marker id="exposure-parameters-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M432 22 L432 106" marker-end="url(#exposure-parameters-arrow)" />
 <circle class="docs-shot-number" cx="432" cy="22" r="18" /><text x="432" y="22" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M432 961 L432 877" marker-end="url(#exposure-parameters-arrow)" />
-<circle class="docs-shot-number" cx="432" cy="961" r="18" /><text x="432" y="961" class="docs-shot-number-text">2</text>
 </svg>
 
 </div>
 
-<figcaption>Inside Parameters (the limits of the Clamps left out). 1 — Clamp: keeps Exposure between −20 and 20 EV. 2 — Clamp: keeps Gamma between 0.2 and 10.</figcaption>
+<figcaption>Inside Parameters (the limits of the Clamps left out). 1 — Clamp: keeps Exposure between −20 and 20 EV; the Clamp below it does the same for Gamma.</figcaption>
 </figure>
 
-**Clamp** (1) – keeps Exposure between −20 and 20 EV, the values in **Exposure Render Min** and **Exposure Render Max**. A keyframe, a node or the AI agent may send more; the picture then uses the limit, and the card and the tool result say so. Beyond ±20 EV every pixel is black or white anyway.
-
-**Clamp** (2) – keeps Gamma between 0.2 and 10. At 0 the curve would have no answer, so the floor keeps it at a very dark but valid picture.
+**Clamp** – there are two. The upper one keeps Exposure between −20 and 20 EV, the values in **Exposure Render Min** and **Exposure Render Max**; beyond ±20 EV every pixel is black or white anyway. The lower one keeps Gamma between 0.2 and 10: at 0 the curve would have no answer, so the floor keeps it at a very dark but valid picture. A keyframe, a node or the AI agent may send more; the picture then uses the limit, and the card and the tool result say so.
 
 **Offset** goes out as it is: any value has a clear result, at most a black or a white picture.
 
@@ -174,7 +170,7 @@ Exposure works in four stages, one folder each in the Nodes tab: **Parameters** 
 
 **Linear to sRGB** – turns the light back into screen colours. That is why +1 EV looks like twice the light and not like a flat brightening. Values above 1 still leave this block; Clamp & Alpha cuts them off at the end.
 
-**Remix:** for a twice as strong Exposure slider, put a **Multiply** with a **Value** of 2 between the **Exposure** input and **Power of Two** (2).
+**Remix:** for a twice as strong Exposure slider, put a new Multiply with a Value of 2 between the **Exposure** input and **Power of Two** (2).
 
 ### Offset & Gamma
 
