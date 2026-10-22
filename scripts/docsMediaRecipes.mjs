@@ -44,6 +44,7 @@ export const HAND_MADE = [
   { path: `${ASSET_DIR}/workflows/`, reason: 'editor walkthrough screenshots of the guides, taken by hand; the ui-shot tooling will give them recipes' },
   { path: `${ASSET_DIR}/transitions/`, reason: 'Crossfade filmstrips composed by hand from editor frames' },
   { path: `${ASSET_DIR}/keyframes/real-editor-current.png`, reason: 'a screenshot of the editor with a real project, taken by hand' },
+  { path: `${ASSET_DIR}/keyframes/graph-mode.webp`, reason: 'the timeline in Graph mode, made by scripts/ui-shots/keyframes-graph.mjs against a running editor (a solid with Bezier keys set through the timeline store); the ui-shot tooling will give it a shot-list recipe' },
   { path: `${ASSET_DIR}/effects/graphs/glitch-stages.svg`, reason: 'a stage diagram of Glitch drawn by hand as SVG' },
   { path: `${ASSET_DIR}/effects/graphs/flocking.webp`, reason: 'the Free Swarm\'s Flock group in the Nodes tab (a clip node graph, which effect-graph-shot cannot show), taken by hand with Expand all; its callouts are placed by hand' },
   { path: `${ASSET_DIR}/effects/graphs/stick-figure-walk.webp`, reason: 'the Rig nodes after Walk live in the clip\'s node graph, which effect-graph-shot cannot show: a review-folder script (review/GEN1/stick/r1/nodes.mjs: a black clip, Walk, Previews off, Avoid on, Source and Target dragged below, canvas cropped to Gait Cycle and Stick Figure) made it' },

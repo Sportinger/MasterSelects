@@ -191,8 +191,8 @@ When recording is enabled:
 ### Curve Editor
 
 <figure class="docs-shot">
-  <img src="./assets/workflows/keyframes-graph.webp" alt="The editor with the timeline in Graph mode: the Graph list on the left holds Position X and Position Y of the clip, and the Position X curve rises from 0 px at the start to 150 px at the playhead, where its keyframe is selected." />
-  <figcaption>Graph mode under the timeline: the animated properties of the selected clip on the left, the curve of Position X on the right.</figcaption>
+  <img src="./assets/keyframes/graph-mode.webp" alt="The timeline in Graph mode below a solid clip: the Graph list on the left holds Position X (active) and Position Y; on the right the orange Position X curve runs through four keys, and the selected key at the playhead shows its two cyan Bezier handles. The grey Position Y curve runs behind it." />
+  <figcaption>Graph mode: the <strong>Graph list</strong> picks the property, the orange <strong>curve</strong> shows its values over time, the <strong>selected key</strong> (red) shows its cyan <strong>Bezier handles</strong>, and inactive properties stay grey behind it.</figcaption>
 </figure>
 
 - Double-click a property row or keyframe diamond to open Graph mode.
