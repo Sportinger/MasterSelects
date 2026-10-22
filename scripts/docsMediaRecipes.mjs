@@ -66,7 +66,6 @@ export const RECIPE_PENDING = {
     'fisheye.webp',
     'grain.webp',
     'guided-perspective.webp',
-    'hue-shift.webp',
     'invert.webp',
     'lens-correction.webp',
     'levels.webp',

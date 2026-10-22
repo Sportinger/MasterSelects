@@ -29,6 +29,10 @@
     { "name": "temperature-temperature", "effect": "temperature", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
       "sweep": { "param": "temperature", "label": "Temperature", "from": -1, "to": 1, "decimals": 2 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
       "alt": "The dancer turning on a dark stage with Temperature while it runs from −1 to 1 and back: at −1 her dress turns a cold white and the backlight a deep blue, then the dress, her skin and the haze grow warmer until at 1 the whole stage glows orange like firelight, while the brightness stays the same; the current value is shown at the bottom left",
-      "caption": "Temperature from −1 to 1 and back." }
+      "caption": "Temperature from −1 to 1 and back." },
+    { "name": "hue-shift-shift", "effect": "hue-shift", "params": {}, "range": [0.5, 6], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
+      "sweep": { "param": "shift", "label": "Shift", "from": 0, "to": 1, "unit": " turn", "decimals": 2 }, "loop": 0.35, "poster": 1.4, "maxBytes": 650000, "float": "right",
+      "alt": "The dancer turning on a dark stage while Shift runs once round the colour wheel and back: the warm orange light, her skin and the dress turn yellow, then green, cyan and blue at half a turn, then violet and pink, and back again, while the brightness of every part stays the same; the current value in turns is shown at the bottom left",
+      "caption": "Shift from 0 to 1 turn (360°) and back." }
   ]
 }

@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { COLOR_RECIPE, createDefaultColorEffectGraph, createFormerContrastGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
 import { flattenContrastGraph } from '../../src/services/operators/contrastFlattenUpgrade';
-import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
+import { matchesEffectRecipe, organizeEffectFamilyGraph } from '../../src/services/operators/effectFamilyPresentation';
+import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
+import { HUE_SHIFT_PRESETS } from '../../src/effects/color/hue-shift';
 import { effectPresentationPlan } from '../../src/services/operators/effectPresentationPlans';
 import { effectOperatorGraph, migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { colorEffectGraphState } from '../../src/services/operators/colorEffectGraphState';
@@ -305,6 +307,27 @@ describe('rebuilt color effect recipes', () => {
       expect(after[1]).toBeCloseTo(before[1], 4);
       expect(((after[2] - before[2] - shift) % 1 + 1.5) % 1 - 0.5).toBeCloseTo(0, 4);
     }
+  });
+
+  it('Hue Shift presets turn by their named angles: Nudge makes orange rosier, Opposite and Two Thirds make it blue, Third Turn green', () => {
+    const presets = Object.fromEntries(HUE_SHIFT_PRESETS.map(preset => [preset.id, preset.params.shift as number]));
+    expect(Object.fromEntries(Object.entries(presets).map(([id, shift]) => [id, Math.round(shift * 360)])))
+      .toEqual({ nudge: 340, 'third-turn': 120, opposite: 180, 'two-thirds': 240 });
+    const orange: Pixel = [0.8, 0.5, 0.2, 1];
+    const [nudge, third, opposite, twoThirds] = ['nudge', 'third-turn', 'opposite', 'two-thirds'].map(id => render('hue-shift', { shift: presets[id] }, orange));
+    expect(nudge[1] / nudge[0]).toBeLessThan(orange[1] / orange[0]);
+    expect(nudge[2]).toBeGreaterThan(orange[2]);
+    expect(third[1]).toBeGreaterThan(Math.max(third[0], third[2]));
+    for (const cold of [opposite, twoThirds]) expect(cold[2]).toBeGreaterThan(Math.max(cold[0], cold[1]));
+  });
+
+  it('keeps the single Hue Shift control in a Parameters folder like every colour recipe', () => {
+    const graph = createDefaultColorEffectGraph('hue-shift');
+    const organized = organizeEffectFamilyGraph(graph, recognizeOperatorCompositions(graph), 'hue-shift', () => createDefaultColorEffectGraph('hue-shift'));
+    const parameters = organized.groups?.find(group => group.label === 'Parameters');
+    expect(parameters?.nodeIds).toEqual(['shift']);
+    // Other single-card stages still stay loose (Hue Rotation is one block, not a folder around it).
+    expect(organized.groups?.map(group => group.label)).not.toContain('Hue Rotation');
   });
 
   it('never produces NaN and clamps out-of-range values to the declared render range', () => {

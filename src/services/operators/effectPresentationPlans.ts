@@ -14,6 +14,8 @@ export interface EffectPresentationPlan {
   inputLabels?: Record<string, string>;
   /** Port labels apply only to graphs this accepts (an effect id can carry more than one recipe). */
   portLabelsApply?: (graph: Pick<EffectOperatorGraph, 'nodes'>) => boolean;
+  /** Stages that get their folder even with a single card (a lone control still sits in Parameters). */
+  singleCardStages?: readonly string[];
 }
 const includes = (list: string, id: string) => list.split(' ').includes(id);
 /** A clamped parameter's output carries the parameter, not "Clamp: Value". */
@@ -285,6 +287,8 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     labels: { processing: 'Color Processing', ...Object.fromEntries(COLOR_STAGES.map(([, stage, label]) => [stage, label])) },
     portLabels: COLOR_PORTS,
     inputLabels: { 'hue-lch-combine:x': 'Lightness', 'hue-lch-combine:y': 'Chroma', 'hue-lch-combine:z': 'Hue' },
+    // Hue Shift's only control (it wraps instead of clamping) sits in Parameters like every colour recipe's.
+    singleCardStages: ['controls'],
     stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
   // Threshold and Posterize name their hard step and soft ramp (Softness, 2026-10-21).

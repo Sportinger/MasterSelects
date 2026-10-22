@@ -152,6 +152,31 @@
       ]
     },
     {
+      "name": "hue-shift-inspector",
+      "effect": "hue-shift",
+      "params": {
+        "shift": 0.3333333333333333
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Hue Shift card: the Preset menu showing Third Turn and Shift at 120°, beside a strip of the preview with the night street, its pink sign turned yellow and its orange sign green",
+      "caption": "Hue Shift with the Third Turn preset. 1 — Preset: pick a starting point. 2 — Shift: how far round the colour wheel.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Shift",
+          "label": "Shift"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
       "name": "temperature-inspector",
       "effect": "temperature",
       "params": {

@@ -106,7 +106,7 @@ export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed:
     } else stage = plan.stage(node);
     members.set(stage, [...(members.get(stage) ?? []), node.id]);
   }
-  const groups: OperatorGroup[] = [...members].filter(([, nodeIds]) => nodeIds.length > 1).map(([stage, nodeIds]) => ({
+  const groups: OperatorGroup[] = [...members].filter(([stage, nodeIds]) => nodeIds.length > 1 || plan.singleCardStages?.includes(stage)).map(([stage, nodeIds]) => ({
     id: `organized-${type}-${stage}`, label: labels[stage as keyof typeof labels] ?? stage,
     color: '#6b99bd', nodeIds, collapsedByDefault: true,
   }));
