@@ -3,7 +3,7 @@ import { matchesEffectRecipe } from './effectFamilyPresentation';
 import { createEarlierGrainGraph, createEarlierScanlinesGraph, createEarlierVignetteGraph } from './contextualEffectGraphs';
 // The earlier Sharpen recipe still lives with the blur graphs it was built next to.
 import { createDefaultSharpenGraph as createEarlierSharpenGraph } from './blurEffectGraphs';
-import { createDefaultEdgeDetectGraph, createEarlierEdgeDetectGraph } from './edgeDetectEffectGraph';
+import { createDefaultEdgeDetectGraph, createEarlierEdgeDetectGraph, createWholeTapEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultGlowGraph } from './glowBloomEffectGraph';
 import { createRingGlowGraph } from './glowEffectGraph';
 import { isRingGlowGraph } from './glowGraphUpgrade';
@@ -103,9 +103,12 @@ export function stylizePresentation(type: string, graph: EffectOperatorGraph): {
  * window spread the taps of a fractional reach evenly, so the limit jumped whenever an animated
  * Radius made the window one tap wider. Both agree only where twice the blur sigma is a whole
  * number of pixels; elsewhere a strong Sharpen differs by up to about 60 levels on fine detail.
+ * Edge Detect of 3.2.7: whole window taps out to ceil(2 sigma), so its lines jumped whenever an
+ * animated Width made the window one tap wider; both agree where 2 sigma is a whole number of pixels.
  */
 const previousRecognizers: Partial<Record<StylizeRecipeEffectType, (graph: EffectOperatorGraph | undefined) => boolean>> = {
   sharpen: recognizer(createSpreadWindowSharpenGraph),
+  'edge-detect': recognizer(createWholeTapEdgeDetectGraph),
 };
 
 /** True when `graph` is an untouched previous release of this stylize effect's current recipe (see above). */
@@ -152,6 +155,9 @@ const PREVIOUS_STYLIZE_RECIPE_UPDATES: Partial<Record<StylizeRecipeEffectType, S
   sharpen: { message: 'This Sharpen was saved with version 3.2.7 and keeps that look; its halo limit can jump a step when Radius is animated.',
     label: 'Use the new Sharpen',
     toolNote: 'This Sharpen runs the 3.2.7 version saved with its project: the same values, but its halo limit can jump a step while Radius is animated (between whole steps of twice the blur sigma).' },
+  'edge-detect': { message: 'This Edge Detect was saved with version 3.2.7 and keeps that look; its lines can jump a step when Width is animated.',
+    label: 'Use the new Edge Detect',
+    toolNote: 'This Edge Detect runs the 3.2.7 version saved with its project: the same values, but its lines can jump a step while Width is animated (whenever twice the line sigma passes a whole pixel).' },
 };
 
 /** What the inspector offers for an untouched earlier or previous recipe of this stylize effect; undefined for the current one. */

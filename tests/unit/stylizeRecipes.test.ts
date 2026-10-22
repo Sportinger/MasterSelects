@@ -9,6 +9,7 @@ import { createEarlierPointwiseEffectGraph } from '../../src/services/operators/
 import { createStylizeRecipeGraph, earlierStylizeRecipeNote, isEarlierStylizeGraph, isPreviousStylizeGraph, previousStylizeRecipeNote, STYLIZE_RECIPE_EFFECT_TYPES, stylizeRecipeUpdate } from '../../src/services/operators/stylizeRecipes';
 import { unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
 import { createSpreadWindowSharpenGraph } from '../../src/services/operators/sharpenEffectGraph';
+import { createWholeTapEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
 import { applyWorkerSoftwareImageGraphs, canApplyWorkerSoftwareImageGraphPlan } from '../../src/services/render/workerSoftwareImageGraphs';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
@@ -69,6 +70,18 @@ describe('stylize recipes: ownership and saved projects', () => {
     edited.nodes = edited.nodes.map(node => (node.id === 'overshoot' ? { ...node, constants: { value: 0.5 } } : node));
     expect(isPreviousStylizeGraph('sharpen', edited)).toBe(false);
     expect(stylizeRecipeUpdate('sharpen', edited)).toBeUndefined();
+  });
+
+  it('keeps an untouched Edge Detect of 3.2.7 (whole-tap window) as saved and offers the current recipe', () => {
+    const released = createWholeTapEdgeDetectGraph(), current = createStylizeRecipeGraph('edge-detect')!;
+    expect(matchesEffectRecipe(released, current)).toBe(false);
+    const resolved = effectOperatorGraph({ type: 'edge-detect', params: getDefaultParams('edge-detect') as Effect['params'], operatorGraph: released }, { inspectionOnly: true });
+    expect(matchesEffectRecipe(resolved, released)).toBe(true);
+    expect(isPreviousStylizeGraph('edge-detect', released)).toBe(true);
+    expect(isEarlierStylizeGraph('edge-detect', released)).toBe(false);
+    expect(stylizeRecipeUpdate('edge-detect', released)).toMatchObject({ label: 'Use the new Edge Detect', message: expect.stringContaining('3.2.7') });
+    expect(stylizeRecipeUpdate('edge-detect', current)).toBeUndefined();
+    expect(previousStylizeRecipeNote('edge-detect', released)).toContain('Width is animated');
   });
 
   it('gives new stylize effects their current recipe graph', () => {
@@ -317,6 +330,27 @@ describe('Edge Detect', () => {
     expect(Math.abs(response(peak(2, 540)) - response(peak(2, 1080)))).toBeLessThan(0.06);
     // Strong edges approach white without clipping flat: twice the contrast is still brighter.
     expect(peak(1, 1080, 0.75)).toBeGreaterThan(peak(1, 1080, 0.5) + 0.05);
+  });
+
+  it('changes smoothly when Width is animated across a step of the window (no jump)', () => {
+    // The window grows by one tap per side whenever 2 sigma passes a whole pixel. The new outer taps
+    // enter with their covered share, so a 0.02 px sigma step there changes the lines no more than
+    // the same step between two window sizes (before, the Gaussian's outer ring popped in at once).
+    const size = 40, pixel = (x: number, y: number): Pixel => {
+      const v = (x > 19 ? 0.65 : 0.3) + 0.15 * Math.sin(1.3 * x + 0.4 * y) * Math.cos(1.1 * y); return [v, v, v, 1];
+    };
+    const frame = (sigma: number) => render('edge-detect', { strength: 1, width: sigma * 1080 / size }, size, size, pixel);
+    const change = (sigma: number) => {
+      const [before, after] = [frame(sigma - 0.01), frame(sigma + 0.01)];
+      let largest = 0;
+      for (let index = 0; index < before.length; index++) largest = Math.max(largest, Math.abs(after[index] - before[index]));
+      return largest;
+    };
+    // Compared with the same step just before and after (the lines change faster at small Widths).
+    for (const edge of [1, 1.5, 2, 2.5]) {
+      const steady = Math.max(change(edge - 0.06), change(edge + 0.06));
+      expect(change(edge)).toBeLessThanOrEqual(steady + 1 / 255);
+    }
   });
 
   it('finds no edges in a flat picture and keeps transparent surroundings transparent', () => {

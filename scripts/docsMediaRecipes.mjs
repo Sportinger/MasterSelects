@@ -61,7 +61,6 @@ export const RECIPE_PENDING = {
     'chroma-key-matte.webp',
     'chroma-key.webp',
     'contrast.webp',
-    'edge-detect.webp',
     'exposure.webp',
     'fisheye.webp',
     'grain.webp',

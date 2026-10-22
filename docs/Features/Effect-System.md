@@ -906,7 +906,11 @@ the brighter side. Lines are composited over the background premultiplied: alpha
 `edge + source alpha × (1 − edge)`, colour = `(line × edge + background × source
 alpha × (1 − edge)) / alpha`, so transparent surroundings stay transparent and a
 layer's outline shows outside it in its full line colour. Cost grows with Width:
-(2⌈2σ⌉ + 1)² taps, 25 at the default on 1080p, at most 289, plus two colour taps. Edge Detects saved earlier
+(2⌈2σ⌉ + 1)² taps, 25 at the default on 1080p, at most 289, plus two colour taps. The
+outermost ring counts with the share of it 2σ covers (`clamp(min(2σ, 8) − |offset| + 1, 0, 1)`
+per axis), so an animated Width changes smoothly; Edge Detects saved with 3.2.7 keep whole taps
+out to ⌈2σ⌉ (their lines jump a step whenever 2σ passes a whole pixel), and their card offers
+the current recipe. Edge Detects saved earlier
 keep the eight-tap Sobel at render resolution (alpha always one); its Sobel Magnitude
 stays available as a reusable block.
 

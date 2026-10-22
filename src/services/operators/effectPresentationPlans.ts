@@ -280,7 +280,9 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   };
   if (type === 'edge-detect') return {
     labels: { scale: 'Line Width (sigma & window)', window: 'Window Taps (premultiplied brightness)', gradient: 'Gradient & Edge Strength', finish: 'Line Color & Alpha' },
-    portLabels: { sigma: 'Sigma (px)', reach: 'Reach (px)', 'window-size': 'Window Size', 'tap-moment': 'Moments', edge: 'Edge', 'line-color': 'Line Color' },
+    portLabels: { sigma: 'Sigma (px)', reach: 'Reach (px)', 'window-size': 'Window Size', 'tap-moment': 'Moments', edge: 'Edge', 'line-color': 'Line Color',
+      'two-sigma': '2 Sigma (px)', 'reach-needed': 'Whole Taps', 'reach-covered': 'Covered Reach (px)', 'tap-coverage': 'Tap Share', 'tap-weight': 'Gaussian Weight', 'tap-weight-covered': 'Tap Weight',
+      'window-reduce:sum': 'Window Sums', 'gradient-sums': 'Gradient (x, y)', vivid: 'Picture Colour (full brightness)', 'edge-premultiplied': 'Premultiplied Line + Background' },
     stage: ({ id }) => /^(pixel-scale|short-side|width-safe|sigma|two-sigma|reach|window-size)/.test(id) ? 'scale'
       : /^(tap-|window-reduce|window-index)/.test(id) ? 'window'
         : /^(window-|gradient-(sums|length|normalized)|edge-contrast|edge-raw|edge-falloff|edge-negative|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',

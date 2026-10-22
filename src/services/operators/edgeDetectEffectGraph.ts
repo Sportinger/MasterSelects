@@ -63,8 +63,23 @@ export function createEarlierEdgeDetectGraph(): EffectOperatorGraph {
  * derivative-of-Gaussian gradient of premultiplied brightness from one window reduction,
  * normalized by the window's own second moment (exact for ramps at every Width and resolution),
  * a soft roll-off, and line/background colours composited premultiplied. One fullscreen pass.
+ * The outermost taps count with the share of them two sigma covers, so the window grows
+ * continuously while Width is animated.
  */
 export function createDefaultEdgeDetectGraph(): EffectOperatorGraph {
+  return createEdgeDetectGraph('covered');
+}
+
+/**
+ * The Edge Detect recipe released with 3.2.7: whole taps out to ceil(2 sigma), so the lines jumped
+ * whenever an animated Width made the window one tap wider. Kept to recognize untouched saved 3.2.7
+ * graphs, which keep their look (isPreviousStylizeGraph; the inspector offers Use the new Edge Detect).
+ */
+export function createWholeTapEdgeDetectGraph(): EffectOperatorGraph {
+  return createEdgeDetectGraph('whole');
+}
+
+function createEdgeDetectGraph(windowKind: 'covered' | 'whole'): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
   g.number('zero', 0); g.number('one', 1); g.number('two', 2);
@@ -85,7 +100,15 @@ export function createDefaultEdgeDetectGraph(): EffectOperatorGraph {
   const dx = g.binary('tap-x', 'math.subtract.scalar', [index, 'x'], reach), dy = g.binary('tap-y', 'math.subtract.scalar', [index, 'y'], reach);
   const offset = g.add('tap-offset', 'vector.combine.vec2', { x: dx, y: dy });
   const sampleUv = g.binary('tap-uv', 'math.add.vec2', ['uv', 'uv'], g.binary('tap-offset-uv', 'math.divide-ieee.vec2', offset, 'resolution'));
-  const weight = g.add('tap-weight', 'math.gaussian.scalar', { value: g.unary('tap-distance', 'vector.length.vec2', offset), sigma });
+  const gaussian = g.add('tap-weight', 'math.gaussian.scalar', { value: g.unary('tap-distance', 'vector.length.vec2', offset), sigma });
+  // Covered window: a tap counts with the share of it two sigma (capped at the reach limit) covers,
+  // 1 inside, the covered part for the outermost ring, so no ring of taps pops in at once.
+  const reachCovered = windowKind === 'covered' ? g.binary('reach-covered', 'math.min.scalar', 'two-sigma', 'reach-limit') : '';
+  const coverage = (axis: 'x' | 'y', tapOffset: string) => g.add(`tap-${axis}-coverage`, 'math.clamp.scalar', { value: g.binary(`tap-${axis}-coverage-raw`, 'math.add.scalar',
+    g.binary(`tap-${axis}-inside`, 'math.subtract.scalar', reachCovered, g.unary(`tap-${axis}-distance`, 'math.abs.scalar', tapOffset)), 'one'), min: 'zero', max: 'one' });
+  const weight = windowKind === 'covered'
+    ? g.binary('tap-weight-covered', 'math.multiply.scalar', gaussian, g.binary('tap-coverage', 'math.multiply.scalar', coverage('x', dx), coverage('y', dy)))
+    : gaussian;
   const tap = g.add('tap-split', 'vector.split.rgba', { image: [g.add('tap-sample', 'image.sample', { image: ['frame', 'image'], uv: sampleUv }), 'image'] });
   const tapLuma = g.binary('tap-luma', 'math.multiply.scalar', g.add('tap-luma-straight', 'color.luminance-rec709.rgb', { rgb: [tap, 'rgb'] }),
     g.add('tap-alpha', 'convert.alpha-to-scalar', { alpha: [tap, 'alpha'] }));

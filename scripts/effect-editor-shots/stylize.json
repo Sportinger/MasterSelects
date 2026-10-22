@@ -127,6 +127,46 @@
         "Particle Out"
       ],
       "caption": "Vignette with the Spotlight preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how dark the edges get. 3 \u2014 Size: where the darkening begins. 4 \u2014 Softness: how gradually it fades in. 5 \u2014 Roundness: circle or frame shape."
+    },
+    {
+      "name": "edge-detect-inspector",
+      "effect": "edge-detect",
+      "params": {
+        "strength": 2,
+        "width": 1.5,
+        "colorize": 1,
+        "invert": false
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 560,
+      "alt": "Properties, Effects with an Edge Detect card: the Preset menu showing Neon Outline, Strength 2, Width 1.5 px, Color 1 and Invert off, beside a strip of the preview where the dancer's arm, hair and dress are drawn as glowing warm lines on black",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Strength",
+          "label": "Strength"
+        },
+        {
+          "target": "Width",
+          "label": "Width"
+        },
+        {
+          "target": "Color",
+          "label": "Color"
+        },
+        {
+          "target": "Invert",
+          "label": "Invert"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "caption": "Edge Detect with the Neon Outline preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Strength: how bright and how many lines. 3 \u2014 Width: how thick. 4 \u2014 Color: white or the picture's colours. 5 \u2014 Invert: dark lines on white."
     }
   ]
 }

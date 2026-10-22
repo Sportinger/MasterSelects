@@ -4,8 +4,19 @@
 // the WGSL reference of that Sobel and only prewarms the generic effect layout.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { edgeDetectParamNotes } from './edgeDetectModel';
+
+export const EDGE_DETECT_PRESETS: readonly EffectPreset[] = [
+  // Glowing contours in the picture's own colours on black, for projection or a neon look.
+  { id: 'neon-outline', name: 'Neon Outline', params: { strength: 2, width: 1.5, colorize: 1, invert: false } },
+  // Dark grey pencil lines on white paper.
+  { id: 'pencil-sketch', name: 'Pencil Sketch', params: { strength: 1.5, width: 0.8, colorize: 0, invert: true } },
+  // Lines in the picture's colours on white, like a coloured-pencil drawing.
+  { id: 'coloured-pencil', name: 'Coloured Pencil', params: { strength: 2, width: 1, colorize: 0.6, invert: true } },
+  // Thick white contours that keep only the big shapes, like a chalk drawing or a cartoon.
+  { id: 'bold-contours', name: 'Bold Contours', params: { strength: 1.5, width: 3, colorize: 0, invert: false } },
+];
 
 export const edgeDetect: EffectDefinition = {
   id: 'edge-detect',
@@ -35,6 +46,7 @@ export const edgeDetect: EffectDefinition = {
       min: 0.5,
       max: 6,
       step: 0.1,
+      unit: ' px',
       animatable: true,
       graphOnly: true,
     },
@@ -54,6 +66,8 @@ export const edgeDetect: EffectDefinition = {
       default: false,
     },
   },
+
+  presets: EDGE_DETECT_PRESETS,
 
   paramWarnings: (params, width, height) => edgeDetectParamNotes(params, width, height),
 

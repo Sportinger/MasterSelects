@@ -5,7 +5,9 @@
  * - Edges are the brightness gradient of a Gaussian of sigma = Width pixels of a 1080p frame
  *   (a derivative-of-Gaussian, the first stage of Canny), measured on premultiplied brightness, so
  *   the outline of a title on a transparent layer is an edge too. The window reaches two sigma,
- *   at most EDGE_MAX_REACH_PX pixels; sigma is never below EDGE_MIN_SIGMA_PX pixels.
+ *   at most EDGE_MAX_REACH_PX pixels; sigma is never below EDGE_MIN_SIGMA_PX pixels. The outermost
+ *   taps count with the share of them two sigma covers, so an animated Width changes smoothly
+ *   (the 3.2.7 recipe used whole taps out to ceil(2 sigma) and jumped at each step; saved ones keep it).
  * - The gradient is divided by the window's own second moment, so it is exact for a brightness
  *   ramp at any Width and resolution; a hard step of contrast c then gives a response of about
  *   x = c * EDGE_GAIN * Strength (EDGE_GAIN matches the brightness of the earlier Sobel edges).
