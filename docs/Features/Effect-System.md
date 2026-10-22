@@ -2720,7 +2720,9 @@ blocks: [Node Catalog](./Node-Catalog.md); graph contract:
 - **Range.** The effect chain carries 8-bit, display-referred colour; the recipes limit their input
   to 0–1, so there is no HDR headroom between effects.
 - **Beyond the slider.** In the number field you can type past the end of a slider, up to what the
-  effect can show (each page names its range). If a keyframe, a node or the AI agent goes further,
+  effect can show (each page names its range). The Keyframe node's typed keys, the value card in the
+  Nodes tab and the agent's keyframe tool take the same range (`renderMin`/`renderMax`, the property
+  catalog's `ui.renderMin`/`ui.renderMax`); a cyclic control (`wraps`) has none. If a keyframe, a node or the AI agent goes further,
   the effect uses the limit, and the inspector, `addEffect`/`updateEffect` warnings and
   `listEffects` (`renderRange`) report it.
 - **Performance.** All recipes are per-pixel math without extra texture reads. A single colour

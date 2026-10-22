@@ -72,7 +72,7 @@ describe('editable color effect graphs', () => {
     expect(saved.params.amount).toBe(0.75);
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'amount')).toMatchObject({ bindings: { value: 'amount' } });
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'amount')?.constants?.value).toBeUndefined();
-    expect(() => setOperatorParameter(clip.id, canonical.id, 'amount', 'value', 1.25)).toThrow('outside its supported range');
+    expect(() => setOperatorParameter(clip.id, canonical.id, 'amount', 'value', 4.5)).toThrow('outside its supported range'); // typed values pass the slider up to the render range ±4, as in the card
   });
 
   it('names folder ports after the parameter a render-range clamp carries, not "Clamp: Value"', () => {

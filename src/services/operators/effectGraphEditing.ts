@@ -92,7 +92,9 @@ export function setOperatorParameter(clipId: string, effectId: string, nodeId: s
     const range = ownerSpec?.type === 'number' ? ownerSpec : name === 'value' && node.exposed ? { min: node.exposed.min ?? spec.min, max: node.exposed.max ?? spec.max } : spec;
     // A cyclic owner parameter (Hue Shift) takes any number: its min/max are one turn of the slider.
     const wraps = ownerSpec?.type === 'number' && ownerSpec.wraps === true;
-    const min = wraps ? undefined : range.min, max = wraps ? undefined : range.max;
+    // An owner parameter with a render range (renderMin/renderMax) takes typed values up to it, as its card row does.
+    const typed = ownerSpec?.type === 'number' ? { min: ownerSpec.renderMin ?? ownerSpec.min, max: ownerSpec.renderMax ?? ownerSpec.max } : range;
+    const min = wraps ? undefined : typed.min, max = wraps ? undefined : typed.max;
     if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value) || value < (min ?? -Infinity) || value > (max ?? Infinity))) throw new Error('Parameter is outside its supported range.');
     if (spec.type === 'boolean' && typeof value !== 'boolean') throw new Error('Parameter requires a boolean value.');
     if (spec.type === 'color' && (typeof value !== 'string' || !/^#[\da-f]{6}([\da-f]{2})?$/i.test(value))) throw new Error('Parameter requires a hex color.');

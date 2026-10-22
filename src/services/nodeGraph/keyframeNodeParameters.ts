@@ -51,6 +51,12 @@ export interface KeyframeNodeParameter {
   discrete?: boolean;
   /** Cyclic value (Hue Shift): min/max are one turn of the slider, not a limit. */
   wraps?: boolean;
+  /**
+   * Limits of typed keys: the render range of an effect parameter (renderMin/renderMax, as its card's
+   * typed field), else min/max; none for a cyclic value.
+   */
+  hardMin?: number;
+  hardMax?: number;
 }
 
 /** Only expose channels that the existing timeline/render path actually animates. */
@@ -68,11 +74,11 @@ export function keyframeNodeParameters(clip: TimelineClip): KeyframeNodeParamete
       unit: descriptor.authoring?.storageUnit ?? descriptor.ui?.unit ??
         (property.startsWith('position.') ? 'position' : property.startsWith('rotation.') ? 'degrees' : 'number'),
       discrete: descriptor.valueType === 'boolean',
-      ...(descriptor.ui?.wraps ? { wraps: true } : {}),
+      ...(descriptor.ui?.wraps ? { wraps: true } : { hardMin: descriptor.ui?.renderMin ?? descriptor.ui?.min, hardMax: descriptor.ui?.renderMax ?? descriptor.ui?.max }),
     });
   }
   const add = (property: string, label: string, group: string, value: number, min?: number, max?: number, unit = 'number') => {
-    result.set(property, { property: property as AnimatableProperty, label, group, value, defaultValue: value, min, max, unit });
+    result.set(property, { property: property as AnimatableProperty, label, group, value, defaultValue: value, min, max, hardMin: min, hardMax: max, unit });
   };
   for (const node of clip.nodeGraph?.customNodes ?? []) for (const param of node.parameterSchema ?? []) {
     const value = node.params?.[param.id] ?? param.default;
