@@ -1,5 +1,6 @@
 // Shared inspector rows: a switch row has a reset like number rows, the colour row takes a keyframe diamond
-// and one extra action, and a node-drivable number row shows its source line only when it says something.
+// and one extra action, and a node-drivable number row shows its source line only when it says something,
+// while its quiet source icon always opens the Source menu.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ResolveEffectParamRow } from '../../src/components/panels/properties/ResolveEffectParamRow';
@@ -64,5 +65,32 @@ describe('shared inspector rows', () => {
       targets: { 'effect.twirl-1.amount': { enabled: false, localMode: 'constant' } } } } as never });
     show(fixed);
     expect(screen.getByRole('button', { name: 'Fixed · Source' })).toBeTruthy();
+  });
+
+  it('an undriven row still reaches the Source menu through its quiet source icon: Fixed and New Oscillator (LFO)', () => {
+    const operatorGraph = createDefaultUvDistortGraph('twirl');
+    operatorGraph.nodes.find(node => node.id === 'twirl-amount')!.exposed = { label: 'Twist', min: -4 * Math.PI, max: 4 * Math.PI, step: .01 };
+    const effect = { id: 'twirl-1', name: 'Twirl', type: 'twirl', enabled: true, params: { amount: 1, radius: .5 }, operatorGraph } as Effect;
+    const clip = createMockClip({ id: 'clip-1', trackId: 'track-1', effects: [effect] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 'track-1' })], clipKeyframes: new Map(), playheadPosition: clip.startTime });
+    const { container } = render(<ResolveEffectParamRow paramName="amount" definition={getEffect('twirl')!.params.amount} value={1}
+      effect={{ id: 'twirl-1', params: { amount: 1, radius: .5 } }} clipId="clip-1" onChange={vi.fn()} />);
+    const icon = screen.getByRole('button', { name: 'Source of Twist' });
+    // It sits in the action column before the keyframe diamond and the reset, like any extra action.
+    expect(icon.parentElement?.classList.contains('resolve-inspector-row-actions')).toBe(true);
+    expect(icon.closest('.resolve-inspector-row--extra-action')).toBeTruthy();
+    expect(icon.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(icon);
+    expect(icon.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByRole('combobox', { name: 'Twist source' }));
+    const options = screen.getAllByRole('option').map(option => option.textContent);
+    expect(options).toEqual(expect.arrayContaining(['Fixed (keep keys)', 'New Oscillator', 'New Value', 'New Keyframes']));
+    fireEvent.click(screen.getByRole('option', { name: 'Fixed (keep keys)' }));
+    const target = useTimelineStore.getState().clips[0].nodeGraph?.parameterSources?.targets['effect.twirl-1.amount'];
+    expect(target?.localMode).toBe('constant');
+    // Fixed now shows as the source line, and the icon is lit.
+    expect(screen.getByRole('button', { name: 'Fixed · Source' })).toBeTruthy();
+    expect(icon.classList.contains('transform-node-source-button')).toBe(true);
+    expect(container.querySelectorAll('.parameter-source-error')).toHaveLength(0);
   });
 });

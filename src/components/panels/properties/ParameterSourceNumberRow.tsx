@@ -9,7 +9,7 @@ import { requestNodeAnimation } from '../../../services/nodeGraph/nodeWorkspaceN
 import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { ResolveWrappingNumberRow } from './ResolveWrappingNumberRow';
-import { ResolveInspectorIconButton, ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveNodeSourceIcon } from './resolveInspector/ResolveInspectorPrimitives';
 import { KeyframeToggle } from './shared';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 import type { ParamDisplay } from '../../../effects/paramDisplay';
@@ -39,10 +39,17 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false, d
   const nodes = clip.nodeGraph?.parameterSources?.graph.nodes ?? [];
   const selection = driven ? `node:${binding!.source!.nodeId}|${binding!.source!.portId}` : binding?.localMode === 'constant' ? 'fixed' : 'auto';
   const navigate = (id: string) => { requestNodeAnimation(clipId, id, false); useDockStore.getState().activatePanelType('node-workspace'); };
-  // The source line shows only what differs from a plain row: a driving node, a fixed value that ignores
-  // its keys, or a failing source (or while its menu is open). An undriven row looks like every other row;
-  // a node is attached from the Nodes tab.
-  const showStatus = driven || !!error || binding?.localMode === 'constant' || open;
+  // The quiet source icon in the action column opens the Source menu on every row. The text line below
+  // shows only what differs from a plain row: a driving node, a fixed value that ignores its keys, or a
+  // failing source. An undriven row otherwise looks like every other row.
+  const fixed = binding?.localMode === 'constant';
+  const showStatus = driven || !!error || fixed;
+  const sourceButton = <ResolveInspectorIconButton ariaLabel={`Source of ${target.label}`} expanded={open}
+    className={`parameter-source-button${driven || fixed ? ' transform-node-source-button' : ''}${error ? ' has-error' : ''}`}
+    title={driven ? 'Source: a node drives this value. Change or go to the source'
+      : fixed ? 'Source: fixed value, keys ignored. Change the source'
+      : 'Source: let an LFO, a value node or keyframes drive this value, or fix it'}
+    onClick={() => setOpen(previous => !previous)}><ResolveNodeSourceIcon /></ResolveInspectorIconButton>;
   const row = { label: target.label, ariaLabel: target.label, value: value * scale, defaultValue: target.defaultValue * scale,
     min: target.min * scale, max: target.max * scale, step: shownAs?.step ?? target.step * scale, suffix: shownAs?.suffix, decimals: shownAs?.decimals,
     disabled: readOnly || driven || !!error, persistenceKey: `parameter.${property}`,
@@ -51,8 +58,9 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false, d
       if (readOnly || driven) return;
       useTimelineStore.getState().setPropertyValue(clipId, property as AnimatableProperty, next / scale);
     }),
-    keyframeToggle: !readOnly && !driven && !error && binding?.localMode !== 'constant'
-      ? <KeyframeToggle clipId={clipId} property={property as AnimatableProperty} value={value} /> : undefined };
+    keyframeToggle: !readOnly && !driven && !error && !fixed
+      ? <KeyframeToggle clipId={clipId} property={property as AnimatableProperty} value={value} /> : undefined,
+    actions: sourceButton };
   return <div className="parameter-source-control" onPointerUp={event => {
     const button = event.target instanceof Element ? event.target.closest('button') : null;
     if (button) requestAnimationFrame(() => { if (document.activeElement === button) button.blur(); });
@@ -85,7 +93,7 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false, d
         const ownerId = property.startsWith('effect.') ? `effect-${property.split('.')[1]}` : 'color';
         requestNodeAnimation(clipId, binding?.source?.nodeId ?? ownerId, false); useDockStore.getState().activatePanelType('node-workspace');
       }}>↗</ResolveInspectorIconButton>}>
-        <button type="button" disabled={readOnly || !!binding?.source} onClick={() => safely(() => setParameterSourceBinding(clipId, property, { exposed: binding?.exposed === false }))}>
+        <button type="button" className="resolve-inspector-icon-button resolve-inspector-text-button" disabled={readOnly || !!binding?.source} onClick={() => safely(() => setParameterSourceBinding(clipId, property, { exposed: binding?.exposed === false }))}>
           {binding?.source ? 'Connected port is visible' : binding?.exposed === false ? 'Show port' : 'Hide unused port'}
         </button>
       </ResolveInspectorRow>

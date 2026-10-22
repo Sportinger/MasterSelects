@@ -90,6 +90,8 @@ interface ResolveInspectorIconButtonProps {
   children: ReactNode;
   className?: string;
   disabled?: boolean;
+  /** For a button that opens a menu or panel: its open state (aria-expanded). */
+  expanded?: boolean;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   title?: string;
 }
@@ -100,11 +102,13 @@ export function ResolveInspectorIconButton({
   children,
   className,
   disabled = false,
+  expanded,
   onClick,
   title,
 }: ResolveInspectorIconButtonProps) {
   return (
     <button
+      aria-expanded={expanded}
       aria-label={ariaLabel}
       aria-pressed={active === undefined ? undefined : active}
       className={[
@@ -127,6 +131,17 @@ export function ResolveResetIcon() {
     <svg aria-hidden="true" viewBox="0 0 16 16">
       <path d="M4.1 5.1A5.1 5.1 0 1 1 3 9.7" />
       <path d="M1.8 3.2v3.5h3.5" />
+    </svg>
+  );
+}
+
+/** Two nodes joined by a wire: a value that comes from (or can come from) a node. */
+export function ResolveNodeSourceIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16">
+      <circle cx="4" cy="4.5" r="2" />
+      <circle cx="12" cy="11.5" r="2" />
+      <path d="M6 4.5h2.5a2 2 0 0 1 2 2v3" />
     </svg>
   );
 }

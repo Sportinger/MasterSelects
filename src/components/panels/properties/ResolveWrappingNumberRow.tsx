@@ -30,6 +30,8 @@ interface ResolveWrappingNumberRowProps {
   persistenceKey?: string;
   midiTarget?: ComponentProps<typeof LabeledValue>['midiTarget'];
   keyframeToggle?: ReactNode;
+  /** One extra action before the keyframe diamond, placed like on number rows. */
+  actions?: ReactNode;
   onChange: (value: number) => void;
   onReset?: (value: number) => void;
   onDragStart?: () => void;
@@ -46,7 +48,7 @@ function wrappedSliderValue(value: number, min: number, max: number): number {
 
 export function ResolveWrappingNumberRow({
   label, ariaLabel = label, value, defaultValue, min, max, step, suffix, decimals, sensitivity = 2, disabled = false,
-  title, persistenceKey, midiTarget, keyframeToggle, onChange, onReset, onDragStart, onDragEnd, onCommit,
+  title, persistenceKey, midiTarget, keyframeToggle, actions, onChange, onReset, onDragStart, onDragEnd, onCommit,
 }: ResolveWrappingNumberRowProps) {
   const drag = useInspectorHistoryBatch(label, onDragStart, onDragEnd);
   useEditableDraggableNumberSettingsRevision(persistenceKey);
@@ -55,7 +57,8 @@ export function ResolveWrappingNumberRow({
   const change = (next: number) => { if (Number.isFinite(next)) onChange(next); };
   // The turn is the declared one (min..max), also when the slider range was narrowed in its settings.
   const sliderValue = wrappedSliderValue(value, min, max);
-  return <ResolveInspectorRow label={label} disabled={disabled} title={title} actions={<>
+  return <ResolveInspectorRow label={label} disabled={disabled} title={title} className={actions ? 'resolve-inspector-row--extra-action' : undefined} actions={<>
+    {actions}
     {keyframeToggle}
     <ResolveInspectorIconButton ariaLabel={`Reset ${label}`} className="resolve-inspector-reset-button"
       disabled={disabled} onClick={() => { (onReset ?? change)(range.defaultValue ?? defaultValue); onCommit?.('reset'); }}><ResolveResetIcon /></ResolveInspectorIconButton>
