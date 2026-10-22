@@ -1,10 +1,25 @@
 import { SEQUENCE_BLEND_MODES } from '../../../services/operators/sequenceBlendModes';
-import type { FullscreenEffectDefinition } from '../../types';
+import type { EffectPreset, FullscreenEffectDefinition } from '../../types';
 import { TIME_STACK_DEFAULT_DECAY, TIME_STACK_LEGACY_DECAY } from './settings';
+
+/**
+ * Named starting points (the card's Preset row). They set only the four look controls; Preview size and
+ * Frame cache return to their defaults like every unnamed control. Echo Trail is the default look.
+ */
+export const TIME_STACK_PRESETS: readonly EffectPreset[] = [
+  { id: 'echo-trail', name: 'Echo Trail', params: { count: 20, offset: 0.1, decay: 0.8, blendMode: 'lighten' } },
+  { id: 'long-exposure', name: 'Long Exposure', params: { count: 32, offset: 0.08, decay: 0.95, blendMode: 'lighten' } },
+  { id: 'stroboscope', name: 'Stroboscope', params: { count: 8, offset: 0.2, decay: 1, blendMode: 'lighten' } },
+  { id: 'chorus', name: 'Chorus', params: { count: 5, offset: 0.5, decay: 0.9, blendMode: 'lighten' } },
+  // Few, quickly fading copies: Screen adds them up, so more or brighter copies would lift a dark stage into haze.
+  { id: 'afterglow', name: 'Afterglow', params: { count: 6, offset: 0.08, decay: 0.5, blendMode: 'screen' } },
+];
+
 export const timeStack: FullscreenEffectDefinition = {
   id: 'time-stack', name: 'Time Stack', category: 'time',
   shader: '// Rendered by the editable Time Stack image graph.', entryPoint: 'timeStackFragment', uniformSize: 0,
   usesInputHistory: true, sourceTimeOwner: 'time-stack', packUniforms: () => null,
+  presets: TIME_STACK_PRESETS,
   params: {
     count: { type: 'number', label: 'Instances', default: 20, min: 1, max: 32, step: 1, animatable: false },
     offset: { type: 'number', label: 'Time offset (s)', default: 0.1, min: 0, max: 10, step: 0.01, animatable: false },

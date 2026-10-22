@@ -123,3 +123,12 @@ it('says when the clip shows no screen of the chosen colour (inspector and tools
   expect(await probeChromaKeyScreen(['data:green'], 'green')).toBeGreaterThan(.9);
   expect(chromaKeyScreenProbeMessage(await probeChromaKeyScreen(['data:green'], 'blue'), 'blue')).toMatch(/^No blue screen found/);
 });
+
+it('says on a Blue or picked screen that a preset sets Screen back to Green, and shows edge sizes as "0.0 px"', () => {
+  const { unmount } = render(<ChromaKeyControls effectId="chroma-key" params={{ ...getDefaultParams('chroma-key'), keyColor: 'blue' }} onChange={vi.fn()} />);
+  expect(screen.getByText('A preset sets Screen back to Green: choose Blue again after one.')).toBeInTheDocument();
+  expect(screen.getAllByText(/0\.0 px/).length).toBeGreaterThan(0);
+  unmount();
+  render(<ChromaKeyControls effectId="chroma-key" params={getDefaultParams('chroma-key')} onChange={vi.fn()} />);
+  expect(screen.queryByText(/A preset sets Screen back to Green/)).toBeNull();
+});

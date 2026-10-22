@@ -11,7 +11,7 @@ import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 /** Time map value (delay in seconds) across one row, through the owner exactly as the editor resolves a saved graph. */
 function timeRow(saved: EffectOperatorGraph, overrides: Record<string, number | string>) {
-  const params = { ...getDefaultParams('slit-scan'), ...overrides };
+  const params = { ...getDefaultParams('slit-scan'), delay: 1, ...overrides };
   const effect = { type: 'slit-scan', params, operatorGraph: saved };
   const plan = compileImageOperatorGraph(effectOperatorGraph(effect), params, effectOperatorCompileContext(effect));
   return [0.1, 0.3, 0.5, 0.7, 0.9].map(x => evaluateMaterializedImage(plan, [0, 0, 0, 1], {
@@ -21,7 +21,7 @@ function timeRow(saved: EffectOperatorGraph, overrides: Record<string, number | 
 }
 
 function sample(uv: [number, number], overrides: Record<string, number | string> = {}, time = 0) {
-  const params = { ...getDefaultParams('slit-scan'), ...overrides };
+  const params = { ...getDefaultParams('slit-scan'), delay: 1, ...overrides };
   const plan = compileImageOperatorGraph(createDefaultSlitScanGraph(), params, effectOperatorCompileContext({ type: 'slit-scan' }));
   return evaluateMaterializedImage(plan, [0, 0, 0, 1], {
     uv, resolution: [100, 100], timelineTimeSeconds: time,

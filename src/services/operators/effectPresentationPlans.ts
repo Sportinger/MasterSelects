@@ -69,7 +69,16 @@ const UV_DISTORT_PORTS = { 'source-cache': 'Premultiplied Source', 'edge-uv': 'S
 // What the outputs that cross into Chroma Key's Spill folder carry (the docs' Spill recipe shows the same names).
 const CHROMA_KEY_PORTS = { 'unmix-color': 'Color', 'screen-channel': 'Screen Channel', 'screen-other-channels': 'Other Channels',
   'screen-found': 'Screen Found', 'spill-primary': 'Screen Level', 'spill-other': 'Stronger Other', 'spill-other-sum': 'Other Sum',
-  'spill-other-mean': 'Other Mean', 'spill-is-gentle': 'Is Gentle', 'spill-limit': 'Limit', 'spill-strength': 'Strength', 'spill-excess': 'Excess' };
+  'spill-other-mean': 'Other Mean', 'spill-is-gentle': 'Is Gentle', 'spill-limit': 'Limit', 'spill-strength': 'Strength', 'spill-excess': 'Excess',
+  // What crosses between the keyer's folders, so its overview reads as one path.
+  'screen-rgb': 'Screen Color', 'screen-key-primary': 'Screen Level', 'screen-safe-difference': 'Difference', 'screen-purity': 'Screen Purity',
+  'matte-source-split:alpha': 'Source Alpha', 'matte-source-positive': 'Source Color', 'matte-source-primary': 'Source Level', 'matte-clipped': 'Matte',
+  'edge-source-alpha': 'Source Alpha', 'edge-negative-sharpness': '−Sharpness', 'edge-key-cache': 'Keyed Matte', 'edge-shrunk-cache': 'Shrunk Matte',
+  'edge-matte': 'Edge Matte', 'spill-despilled': 'Despilled Color', 'spill-alpha': 'Alpha',
+  // Short enough for the overview cards: the kernel sizes' operator names were cut off.
+  'kernel-shrink-sigma': 'Sigma', 'kernel-shrink-side': 'Side Taps', 'kernel-shrink-stride': 'Stride',
+  'kernel-shrink-count': 'Taps', 'kernel-soften-sigma': 'Sigma', 'kernel-soften-side': 'Side Taps', 'kernel-soften-stride': 'Stride',
+  'kernel-soften-count': 'Taps', 'kernel-shrink-used': 'Shrink Used' };
 // What crosses between the glyph engine's folders: the cell, its colour and tone, the glyph and its coverage.
 const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels (XY)', 'safe-cell-frame-scale': 'Frame Scale', grid: 'Cells Across',
   'scaled-uv': 'Grid Position', 'cell-id': 'Cell Number', 'local-uv': 'Position in Cell', luminance: 'Luminance', 'blackLevel-clamped': 'Black Level', 'sample-uv': 'Cell Center', 'source-split:rgb': 'Cell Color',
@@ -107,7 +116,10 @@ const MATRIX_RAIN_PORTS = { 'rain-ground-tone': 'Glow', 'background-tone': 'Back
 /** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */
 const GRAPH_PORT_LABELS: Record<string, Record<string, string>> = {
   'slit-scan': { 'smooth-or-banded': 'Time Map', 'subject-protected': 'Protection', 'safe-delay': 'Delay (s)',
-    'masked-delay': 'Protected Time', 'sample-delay': 'Delay per Pixel' },
+    'masked-delay': 'Protected Time', 'sample-delay': 'Delay per Pixel', 'centered-uv': 'Offset from Center',
+    coordinate: 'Scan Position', linear: 'Linear Scan', 'out-from-center': 'Out from Center', 'radius-distance': 'Distance',
+    'spatial-profile': 'Profile Time', 'protection-mask': 'Center Protection', 'time-map-mix-0': 'Field Time',
+    'time-map-mix-1': 'Field Time', 'subject-clamp': 'Subject Mask', 'rgb-time-preview': 'Time Map Preview' },
   'time-stack': { 'decay-clamped': 'Decay', opacity: 'Opacity', delay: 'Delay', history: 'Past Frame' },
 };
 

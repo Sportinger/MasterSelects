@@ -66,6 +66,16 @@ export const EFFECT_DOC_EXTRAS = {
   sharpen: { rows: ['amount', 'radius'] },
   // The still is a detail at twice the size: the card shows the dithered face and raised arm.
   dither: { thumb: { region: [0.6, 0.06, 0.34, 0.38] } },
+  // Chroma Key's own card: four sections, View under Screen, short labels inside Edge and Spill.
+  'chroma-key': {
+    sections: ['Key', 'Matte', 'Edge', 'Spill'],
+    rows: [
+      { key: 'keyColor', section: 'Key' }, { key: 'screenColor', section: 'Key' }, { key: 'view', section: 'Key' },
+      { key: 'clipBlack', section: 'Matte' }, { key: 'clipWhite', section: 'Matte' },
+      { key: 'edgeShrink', section: 'Edge' }, { key: 'edgeSoftness', section: 'Edge', label: 'Softness' },
+      { key: 'spillSuppression', section: 'Spill', label: 'Suppression' }, { key: 'spillMethod', section: 'Spill', label: 'Method' },
+    ],
+  },
   'ai-edge-fill': {
     rows: [
       'resolution',
@@ -121,6 +131,9 @@ export const EFFECT_DOC_EXTRAS = {
       cableRow('Time & Quality', 'Loop', 'Continuous, Reset each loop', 'Continuous'),
     ],
   },
+  'time-stack': {
+    rows: ['count', { key: 'offset', label: 'Time offset', range: '0 to 10 s', default: '0.1 s' }, 'decay', 'blendMode', 'previewSize', 'memoryMiB'],
+  },
   'slit-scan': {
     sections: ['Time', 'Wave', 'Sampling', 'Motion compensation', 'Preview quality', '3D geometry', 'Space-time slice', 'Stabilization',
       'Time map', 'Shape target', 'Motion field', 'Field shaping', 'Field noise', 'Field combination', 'RGB time', 'Protection mask',
@@ -130,7 +143,6 @@ export const EFFECT_DOC_EXTRAS = {
     omitSections: ['Resources'],
     omit: ['temporalMode', 'temporalResolution'],
     rows: [
-      { section: 'Time', before: 'preview', label: 'Look', range: 'Sweep, Falling time, Center out, Wave folds, Radial bloom, Time rings, Time steps', default: 'Sweep' },
       { section: 'Time', before: 'angle', label: 'Scan direction', range: 'Left → right, Top → bottom, Bottom → top, Right → left', default: 'Left → right' },
       { section: 'Motion compensation', before: 'temporalMotionStrength', label: 'Motion compensation (section switch)', range: 'off or DIS optical flow', default: 'off' },
       { section: 'Preview quality', before: 'temporalPreview', label: 'Quality', range: 'Small preview · 160 px, Full size', default: 'Full size' },
@@ -146,5 +158,6 @@ export const EFFECT_DOC_EXTRAS = {
   'tracked-scene': { deeper: [LANDMARK_EFFECTS] },
   stardust: { deeper: [LANDMARK_EFFECTS] },
   'rain-reveal': { deeper: [LANDMARK_EFFECTS] },
-  'kinetic-trace': { deeper: [LANDMARK_EFFECTS] },
+  // History Loop has no section, so the card shows it right under the Preset row.
+  'kinetic-trace': { rows: ['historyLoop', 'trail', 'softness', 'tint', 'color', 'amount'], deeper: [LANDMARK_EFFECTS] },
 };

@@ -2,6 +2,8 @@ import { createTrackingEffect } from './trackingEffectFactory';
 export { surfaceOverlay } from './surfaceOverlay';
 export { terrainOverlay } from './terrainOverlay';
 export { faceCables } from './faceCables';
+// Motion Trails (variant 4) has its own feedback shader and controls; it stays registered with the tracking family.
+export { kineticTrace } from '../time/kinetic-trace';
 
 export const subject = createTrackingEffect({ id: 'subject', name: 'Subject Highlight', entryPoint: 'subjectFragment', variant: 0,
   retired: { color: 'Subject Highlight brightens the tracked subject and has no overlay color; the value is ignored.' } });
@@ -9,8 +11,6 @@ export const trackedScene = createTrackingEffect({ id: 'tracked-scene', name: 'T
   retired: { speed: 'Tracked Scene draws the tracked points as they are and has no speed; the value is ignored.' } });
 export const hudTracker = createTrackingEffect({ id: 'hud-tracker', name: 'HUD Tracker', entryPoint: 'hudTrackerFragment', variant: 2, animated: true });
 export const cctv = createTrackingEffect({ id: 'cctv', name: 'CCTV', entryPoint: 'cctvFragment', variant: 3, animated: true });
-export const kineticTrace = createTrackingEffect({ id: 'kinetic-trace', name: 'Motion Trails', entryPoint: 'kineticTraceFragment', variant: 4, animated: true, feedback: true,
-  retired: { speed: 'Motion Trails follow the tracked movement and have no speed; the value is ignored.' } });
 export const rainReveal = createTrackingEffect({ id: 'rain-reveal', name: 'Rain Reveal', entryPoint: 'rainRevealFragment', variant: 5, animated: true });
 export const stardust = createTrackingEffect({ id: 'stardust', name: 'Stardust', entryPoint: 'stardustFragment', variant: 6, animated: true });
 export const handParticles = createTrackingEffect({

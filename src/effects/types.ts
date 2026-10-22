@@ -156,6 +156,14 @@ export interface FullscreenEffectDefinition {
   // Optional: Effect samples its own previous output frame through binding 3.
   usesFeedback?: boolean;
 
+  /**
+   * Optional, with usesFeedback: the params of the state the next frame reads when it is not the
+   * visible output, e.g. `{ amount: 1 }` so a trail feeds back unmixed and Amount stays an opacity.
+   * The engine renders that state first (one extra pass), keeps it, then renders the output.
+   * Undefined: the output itself is fed back.
+   */
+  feedbackStateParams?: (params: Record<string, number | boolean | string>) => Record<string, number | boolean | string> | undefined;
+
   // Samples a bounded history of this pass's input (not recursive feedback).
   usesInputHistory?: boolean;
 

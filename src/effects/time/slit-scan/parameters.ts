@@ -8,6 +8,11 @@ import { slitScanTimeFieldParams, timeFieldChannelOptions } from './timeFieldPar
 const number = (label: string, value: number, min: number, max: number, step: number, group: string): EffectParam =>
   ({ type: 'number', label, default: value, min, max, step, group, animatable: true });
 
+// Radial scan and Time rings measure the distance from Center X/Y, so the scan Angle does nothing there; the
+// Wave section shapes only the two wave profiles. The card dims these rows with the note (SlitScanControls).
+const SCAN_AXIS_PROFILES = { param: 'profile', values: ['linear', 'center', 'wave'], note: 'Radial scan and Time rings spread from the centre: Angle does nothing there.' };
+const WAVE_PROFILES = { param: 'profile', values: ['wave', 'rings'], note: 'Acts in the Wave / folds and Time rings profiles.' };
+
 export const slitScanParams: Record<string, EffectParam> = {
   ...slitScanGeometryParams,
   ...spaceTimeParams,
@@ -73,7 +78,9 @@ export const slitScanParams: Record<string, EffectParam> = {
     { value: 'result', label: 'Result' }, { value: 'time', label: 'Time map' }, { value: 'mask', label: 'Protection mask' },
   ] },
   maskStrength: number('Protection strength', 1, 0, 1, 0.01, 'Subject protection'),
-  delay: number('Delay (s)', 1, 0, 60, 0.01, 'Time'),
+  // 3 s (until 3.2.7: 1 s, where a figure in the middle of the frame barely changes). Every instance stores its
+  // Delay, so saved projects keep theirs.
+  delay: number('Delay (s)', 3, 0, 60, 0.01, 'Time'),
   timeFactor: number('Time factor (×)', 1, 1, 100, 0.1, 'Time'),
   bypassSlowdown: { type: 'boolean', label: 'Bypass slowdown', default: false, group: 'Resources' },
   profile: { type: 'select', label: 'Profile', default: 'linear', group: 'Time', options: [
@@ -81,16 +88,16 @@ export const slitScanParams: Record<string, EffectParam> = {
     { value: 'wave', label: 'Wave / folds' },
     { value: 'radial', label: 'Radial scan' }, { value: 'rings', label: 'Time rings' },
   ] },
-  angle: number('Angle (°)', 0, -180, 180, 1, 'Time'),
+  angle: { ...number('Angle (°)', 0, -180, 180, 1, 'Time'), activeWhen: SCAN_AXIS_PROFILES },
   mix: number('Mix', 1, 0, 1, 0.01, 'Time'),
-  bands: number('Time bands (0 = off)', 0, 0, 64, 1, 'Time'),
+  bands: number('Time bands', 0, 0, 64, 1, 'Time'),
   centerX: number('Center X', 0.5, 0, 1, 0.01, 'Protected center'),
   centerY: number('Center Y', 0.5, 0, 1, 0.01, 'Protected center'),
   protect: number('Radius', 0, 0, 1, 0.01, 'Protected center'),
   feather: number('Feather', 0.15, 0.001, 1, 0.01, 'Protected center'),
-  waves: number('Waves', 2, 0.1, 10, 0.1, 'Wave'),
-  phase: number('Phase', 0, 0, 1, 0.01, 'Wave'),
-  speed: number('Speed (cycles/s)', 0.15, -2, 2, 0.01, 'Wave'),
+  waves: { ...number('Waves', 2, 0.1, 10, 0.1, 'Wave'), activeWhen: WAVE_PROFILES },
+  phase: { ...number('Phase', 0, 0, 1, 0.01, 'Wave'), activeWhen: WAVE_PROFILES },
+  speed: { ...number('Speed (cycles/s)', 0.15, -2, 2, 0.01, 'Wave'), activeWhen: WAVE_PROFILES },
 };
 
 /** A number param clamped to its range; null, NaN or text read as the default, like the graph (effectNumberParam.ts). */
@@ -98,4 +105,13 @@ export function slitScanNumber(params: Record<string, unknown>, key: string): nu
   const definition = slitScanParams[key];
   const value = finiteEffectNumber(params[key], Number(definition.default));
   return Math.max(definition.min!, Math.min(definition.max!, value));
+}
+
+/**
+ * Notes on values the graph ignores (shown in the card and tool results): Time bands use-bands is
+ * `bands > 1`, so a value above 0 up to 1 renders as off.
+ */
+export function slitScanParamWarnings(params: Record<string, unknown>): string[] {
+  const bands = finiteEffectNumber(params.bands, 0);
+  return bands > 0 && bands <= 1 ? [`Time bands ${bands} acts as off (0): set 2 or more to cut the picture into bands.`] : [];
 }

@@ -51,6 +51,10 @@ export const HAND_MADE = [
   { path: `${ASSET_DIR}/effects/graphs/flocking.webp`, reason: 'the Free Swarm\'s Flock group in the Nodes tab (a clip node graph, which effect-graph-shot cannot show), taken by hand with Expand all; its callouts are placed by hand' },
   { path: `${ASSET_DIR}/effects/graphs/stick-figure-walk.webp`, reason: 'the Rig nodes after Walk live in the clip\'s node graph, which effect-graph-shot cannot show: a review-folder script (review/GEN1/stick/r1/nodes.mjs: a black clip, Walk, Previews off, Avoid on, Source and Target dragged below, canvas cropped to Gait Cycle and Stick Figure) made it' },
   { path: `${ASSET_DIR}/effects/stick-figure.webp`, reason: 'the default figure alone on black, crop [504, 252, 960, 540] of the Effect Lab --variants-file render with --inset 0.001 that also made the preset strip (scripts/effect-lab-shots/presets.json: --pairs and --presets do not read inset yet)' },
+  // Slit Scan's presets live in its own Preset row (SLIT_SCAN_LOOKS in src/effects/time/slit-scan/looks.ts), not in the
+  // definition, while the shared preset row would reset its other controls; doc-clip reads definition presets only.
+  ...['mp4', 'webp'].map((extension) => ({ path: `${ASSET_DIR}/effects/clips/slit-scan-presets.${extension}`,
+    reason: 'the Slit Scan presets grid, exported with doc-clip from SLIT_SCAN_LOOKS; a recipe once the presets can live in the definition' })),
 ];
 export const handMadeReason = (asset) => HAND_MADE.find((entry) => (entry.path.endsWith('/') ? asset.startsWith(entry.path) : asset === entry.path))?.reason;
 
@@ -64,8 +68,6 @@ export const RECIPE_PENDING = {
   ...Object.fromEntries([
     'box-blur.webp',
     'bulge.webp',
-    'chroma-key-matte.webp',
-    'chroma-key.webp',
     'contrast.webp',
     'edge-detect.webp',
     'exposure.webp',
@@ -78,8 +80,6 @@ export const RECIPE_PENDING = {
     'radial-blur.webp',
     'saturation.webp',
     'scanlines.webp',
-    'slit-scan.webp',
-    'time-stack.webp',
     'twirl.webp',
     'vibrance.webp',
     'vignette.webp',

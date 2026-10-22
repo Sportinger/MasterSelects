@@ -3,7 +3,7 @@ import type { EffectControlProps } from '../../../effects/types';
 import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 import { timeStack } from '../../../effects/time/time-stack';
-import { TIME_STACK_DEFAULT_DECAY, timeStackDecay, timeStackSettings } from '../../../effects/time/time-stack/settings';
+import { TIME_STACK_DEFAULT_DECAY, timeStackDecay, timeStackReach, timeStackSettings } from '../../../effects/time/time-stack/settings';
 import { getTemporalStatus, subscribeTemporalStatus } from '../../../effects/time/temporalResourcePreparation';
 import { effectOperatorGraph } from '../../../services/operators/effectGraphOwner';
 import { timeStackGraphReadsDecay } from '../../../services/operators/timeStackEffectGraph';
@@ -24,6 +24,8 @@ function TimeStackStatus({ effectId }: { effectId: string }) {
 export function TimeStackControls({ params, onChange, effectInstanceId, clipId, operatorGraph }: EffectControlProps & { operatorGraph?: EffectOperatorGraph }) {
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
   const settings = timeStackSettings(params);
+  const clipDuration = useTimelineStore(state => clipId ? state.clips.find(clip => clip.id === clipId)?.duration : undefined);
+  const reach = clipDuration === undefined ? undefined : timeStackReach(params, clipDuration);
   const decay = timeStackDecay(params);
   const readsDecay = useMemo(() => {
     try { return timeStackGraphReadsDecay(effectOperatorGraph({ type: 'time-stack', params: {}, operatorGraph }, { inspectionOnly: true })); } catch { return true; }
@@ -38,7 +40,7 @@ export function TimeStackControls({ params, onChange, effectInstanceId, clipId, 
     <ResolveInspectorNumberRow label="Instances" value={settings.count} defaultValue={20} min={1} max={32}
       step={1} onChange={value => change('count', Math.trunc(value))} onReset={() => change('count', 20)} />
     <ResolveInspectorNumberRow label="Time offset" value={settings.offset} defaultValue={0.1} min={0} max={10}
-      step={0.01} suffix="s" onChange={value => change('offset', value)} onReset={() => change('offset', 0.1)} />
+      step={0.01} decimals={2} suffix=" s" onChange={value => change('offset', value)} onReset={() => change('offset', 0.1)} />
     <ResolveInspectorNumberRow label="Decay" value={decayValue} defaultValue={TIME_STACK_DEFAULT_DECAY} min={0} max={1} step={0.01} decimals={2}
       keyframeToggle={clipId && effectInstanceId ? <KeyframeToggle clipId={clipId} property={decayProperty} value={decayValue} /> : undefined}
       onChange={value => clipId && effectInstanceId ? setPropertyValue(clipId, decayProperty, value) : change('decay', value)} />
@@ -47,6 +49,9 @@ export function TimeStackControls({ params, onChange, effectInstanceId, clipId, 
         groups={key === 'blendMode' ? blendGroups : undefined} options={timeStack.params[key].options!} onChange={value => change(key, value)} />
     </ResolveInspectorRow>)}
     <p className="tracking-panel-status">{settings.count} instances span {((settings.count - 1) * settings.offset).toFixed(2)} s. Each older instance keeps {Math.round(decay.decay * 100)} % of the previous one's opacity. Delayed instances start progressively. Export uses original frames.</p>
+    {reach?.nextStart !== undefined && <p className="tracking-panel-status" role="status">{reach.visible === 1
+      ? `This clip is ${clipDuration!.toFixed(1)} s long, so no older copy appears: the first would start ${reach.nextStart.toFixed(1)} s into it. Lower Time offset or use a longer clip.`
+      : `This clip is ${clipDuration!.toFixed(1)} s long, so only ${reach.visible} of the ${reach.count} instances appear; the next would start ${reach.nextStart.toFixed(1)} s into it.`}</p>}
     {decay.clamped && <p className="tracking-panel-status" role="status">Decay is outside 0–1 and is used as {decay.decay.toFixed(2)}.</p>}
     {decay.invalid && <p className="tracking-panel-status" role="status">Decay is not a number and is used as {decay.decay.toFixed(2)}.</p>}
     {readsDecay && blendMode === 'normal' && decay.decay < 1 && <p className="tracking-panel-status" role="status">In Normal each older copy is drawn
