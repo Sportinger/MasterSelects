@@ -1,38 +1,37 @@
 # Export
 
-[Back to Index](./README.md)
-
-Video export, animated GIF export, image export, audio-only export, transparent stacked-alpha export, FFmpeg WASM intermediates, named export presets, batch source export, and FCPXML interchange.
+Export renders your timeline, or a range of it, to a video, an animated GIF, a still or image sequence, an audio file or an FCPXML timeline for other editors. Open the **Export** tab (in the Video layout it sits beside Properties on the right), pick a container, and press the green **Export** button at the bottom; related: [Project Persistence](./Project-Persistence.md) for saving and archiving the project itself.
 
 ---
 
 ## Overview
 
-The export panel currently exposes three live encoder paths:
+The Export panel offers four video methods:
 
-- `webcodecs` for the fast frame-by-frame pipeline
-- `htmlvideo` for the precise HTML-video-seeking pipeline
-- `ffmpeg` for the CPU FFmpeg WASM pipeline
+- **WebCodecs Fast**: the browser's hardware encoder, frame by frame. The default.
+- **HTMLVideo Precise**: seeks each frame with the browser's own video player; slower, the safe choice for files or timing that the fast path cannot handle.
+- **FFmpeg CPU**: the FFmpeg build that runs in the browser, for intermediates such as ProRes or DNxHR (only where that build is available; load it with **Load FFmpeg Runtime**).
+- **HAP GPU**: HAP files for media servers and show playback ([Browser-Native HAP Export](#browser-native-hap-export)).
 
-FCPXML is exposed as a selectable export container for NLE interchange.
+FCPXML is a container choice of its own, under **Timeline**.
 
-### Current Panel Layout
+### The Export panel
 
-- During video export, red `Cancel` discards the run. Yellow `Finish File Early` below it finishes the current frame, finalizes the partial file, and downloads it. Available after the first frame in WebCodecs, HTMLVideo, FFmpeg, and HAP; disabled during preparation and finalization. Audio ends with the partial video (browser-compressed audio keeps only complete packets). Audio-only, GIF, image sequences, and batch conversion do not offer early finish.
+From top to bottom:
 
-- A sticky summary bar at the top wraps compact badges in at least two columns, ending in a green Export pill that includes the estimated file size when a byte estimate is available.
-- Its first badge shows `SaC` when export resolution and frame rate match the active composition, or `NaC` otherwise; clicking `NaC` copies those composition settings into Export.
-- Clicking a summary badge smooth-scrolls within that Export panel to the related control group and briefly highlights it.
-- A compact command row above `Basic` contains a project-persistent preset list plus `Load`, `Update`, and `Save`.
-- The workflow picker (`WebCodecs`, `HTMLVideo`, `FFmpeg`) is its own section above `Basic`.
-- `Basic` contains output naming and container selection. The container row is grouped by `Video`, `Image`, `Audio`, and `XML`, and switches output mode by selecting a deliverable directly.
-- The `Video` group contains codec selection, resolution, frame rate, bitrate/rate controls, animated GIF palette controls, stacked-alpha, and range toggles.
-- The video resolution header includes a compact orientation pictogram. Orientation is independent from the selected preset, so `1080p`, `4K`, and the other preset pills stay selectable in portrait and `Custom` remains reserved for genuinely custom dimensions.
-- Narrow dock panels never scroll horizontally: lower option groups stack to one column, chip grids step from three to two and finally one column at the narrowest breakpoint, and summary navigation scrolls only the panel's vertical form.
-- In `Image` mode the same middle group becomes an `Image` panel with format-aware resolution and quality controls, and it can export either the current playhead frame or a numbered image sequence folder.
-- The `Audio` group contains audio-only format selection, sample rate, bitrate for browser-compressed audio, normalization, and audio-only range controls.
-- Lower in the panel, `Advanced Video`, `Advanced Audio`, and `Range & Summary` sections provide raw-value access.
-- Export settings, presets, and the batch queue live in `exportStore` and are restored with the project. They are not timeline undo/redo history entries.
+1. **Presets**: the **Preset** list holds the project's saved export settings; choosing one loads it. **Save** stores the current settings under a name, **Update** overwrites the selected preset.
+2. **Output**: **Same as composition** keeps resolution and frame rate in step with the active composition. **Name** is the file name, **Container** chooses the deliverable, grouped as Video, Image, Audio and Timeline (`.fcpxml`), and **Method** chooses how a video is encoded.
+3. **Video** (or **Image** for a still or image sequence): codec, resolution, frame rate, rate control and bitrate, and under **Alpha** the **Alpha Channel** and **Stacked Alpha** options. Animated GIF shows its palette controls here.
+4. **Audio**: codec, sample rate, bitrate for compressed audio and **Normalize** under Processing.
+5. **Range & Summary** (closed at first): **Range** is **Full timeline** or **In / Out markers**, followed by the timecode, duration, frame count, output size and the estimated file size.
+6. **Render Quality** (closed at first, for video and images): how 3D scenes are rendered ([Render Quality](#render-quality)).
+7. **Batch Export**: appears when files are dropped onto the panel and lists them as a queue; **All same** shares one set of settings between them.
+8. **Glyph Artifacts** (closed at first): appears when the selected clip has a Glyph effect and exports its cell grid as files ([Glyph Artifact Export](#glyph-artifact-export)).
+9. The green **Export** button, with the estimated size beside its label.
+
+While a video export runs, red **Cancel** discards the run and yellow **Finish File Early** finishes the current frame, closes the file and downloads what is done so far. Finish File Early becomes available after the first frame with WebCodecs, HTMLVideo, FFmpeg and HAP; it is not offered while the export prepares or finalises, and not for audio-only, GIF, image-sequence or batch exports. The audio ends with the shortened video.
+
+Narrow panels never scroll sideways: rows stack into one column as the panel gets narrower. Export settings, presets and the batch queue are saved with the project; changing them is not an undo step.
 
 ### Opaque preview/export parity
 
@@ -79,7 +78,7 @@ counted as completed samples. Diagnostics include the render quality and render 
 - Presets are stored per project, not in browser-only local storage.
 - `Save` prompts for a name and creates a new preset or overwrites an existing preset with the same name.
 - `Update` overwrites the currently selected preset without asking for a new name.
-- `Load` restores the selected preset back into the live export settings.
+- Choosing a preset in the list loads it into the live export settings.
 - Presets and the current export settings are written into the project UI state and restored with the project.
 
 ---
