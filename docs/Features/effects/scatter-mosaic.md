@@ -1,6 +1,6 @@
 # Scatter Mosaic
 
-<!-- effect-docs: basic page sha=4e2f8b04de88, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=4da4b9665d07, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Breaks the image into tiles that sample from randomly jittered, drifting positions; Scale sets tile size, Amount the scatter distance.
 
@@ -28,7 +28,7 @@ Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effect
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
 
 ## Technical details
 

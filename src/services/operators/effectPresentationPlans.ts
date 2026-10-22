@@ -103,6 +103,36 @@ export function legacyEffectPresentationPlans(type: string): Array<{ create: () 
   return type === 'crt-screen' ? [{ create: createLegacyCrtScreenGraph, plan: LEGACY_CRT_PLAN }] : [];
 }
 
+/** Riso's folders (createRisoPrintGraph), shared by Riso Glow's print. */
+const RISO_PLAN: EffectPresentationPlan = {
+  labels: { inks: 'Paper & Inks', screen: 'Screens (Dot Size, Registration)', cell: 'Cell Colour', separation: 'Separation',
+    tone: 'Tone', dot: 'Dots', finish: 'Print & Mix (Amount)' },
+  portLabels: { 'registration-frame-pixels': 'Registration (px)', slip: 'Slip (px)', 'dark-layer': 'Dark Drum (px)', 'warm-layer': 'Warm Drum (px)',
+    'frame-center': 'Frame Centre (px)', 'paper-linear': 'Paper Light', 'paper-luma': 'Paper Brightness', 'dark-ink-linear': 'Dark Ink Light',
+    'warm-ink-linear': 'Warm Ink Light', 'dark-ink-absorbs': 'Dark Ink Takes', 'warm-ink-absorbs': 'Warm Ink Takes',
+    'dark-ink-absorbed': 'Dark Ink Takes (brightness)', 'warm-ink-absorbed': 'Warm Ink Takes (brightness)', 'both-absorbed': 'Both Inks Take (brightness)',
+    'fit-dark-dark': 'Dark · Dark', 'fit-warm-warm': 'Warm · Warm', 'fit-dark-warm': 'Dark · Warm', 'fit-determinant': 'Determinant',
+    'safe-dot-size-pixels': 'Dot Size (px)', 'edge-width': 'Half Edge (cells)', 'tap-reach': 'Quarter Cell (px)', 'half-vec2': 'Half (0.5, 0.5)',
+    'dark-cells': 'Dark Position in Cells', 'warm-cells': 'Warm Position in Cells', 'dark-place': 'Dark Place in Cell', 'warm-place': 'Warm Place in Cell',
+    'dark-cell-center': 'Dark Cell Centre (px)', 'warm-cell-center': 'Warm Cell Centre (px)', 'dark-cell-colour': 'Dark Cell Colour', 'warm-cell-colour': 'Warm Cell Colour',
+    'dark-cell-absorbs': 'Dark Cell Takes', 'warm-cell-absorbs': 'Warm Cell Takes', 'dark-towards-dark': 'Cell · Dark Ink', 'dark-towards-warm': 'Cell · Warm Ink',
+    'warm-towards-dark': 'Cell · Dark Ink', 'warm-towards-warm': 'Cell · Warm Ink', 'dark-free': 'Free Dark Share', 'warm-free': 'Free Warm Share',
+    'dark-first': 'First Dark Share', 'warm-first': 'First Warm Share',
+    'dark-share': 'Dark Share', 'dark-other-share': 'Warm Share (Dark Cell)', 'warm-share': 'Warm Share', 'warm-other-share': 'Dark Share (Warm Cell)',
+    'dark-tone-scale': 'Dark Tone Scale', 'warm-tone-scale': 'Warm Tone Scale', 'dark-other-coverage': 'Warm Coverage (Dark Cell)',
+    'warm-other-coverage': 'Dark Coverage (Warm Cell)', 'dark-coverage': 'Dark Coverage', 'warm-coverage': 'Warm Coverage',
+    'dark-mark': 'Dark Dots', 'warm-mark': 'Warm Dots', printed: 'Print', 'sample-split:rgb': 'Pixel RGB', 'sample-split:alpha': 'Pixel Alpha',
+    'min-uv': 'Lowest UV', 'max-uv': 'Highest UV', 'one-rgb': 'One (RGB)', 'zero-rgb': 'Zero (RGB)', 'dark-radians': 'Dark Angle (rad)', 'warm-radians': 'Warm Angle (rad)',
+    'dark-ink-absorbed-rgb': 'Dark Ink Takes from Paper', 'warm-ink-absorbed-rgb': 'Warm Ink Takes from Paper' },
+  portLabelsApply: graph => graph.nodes.some(node => node.id === 'dark-share'),
+  stage: ({ id }) => /^(paper|paper-vector|paper-linear|paper-luma|paper-dark-absorbs|one-rgb|zero-rgb|color-[ab]-rgb)$|^both-absorbed|^(dark|warm)-ink-/.test(id) ? 'inks'
+      : /^fit-|^(dark|warm)-(paper-ratio|cell-absorbs|towards-|free|first$|other-share|share)/.test(id) ? 'separation'
+        : /^(dark|warm)-(cell-luma$|tone-|other-coverage|other-takes$|other-overlap$|coverage$|coverage-(raw|left|reach)$)/.test(id) ? 'tone'
+          : /^(dark|warm)-(dot-|paper-left$|paper-root$|paper-gap$|dots-touch$|radius|coverage-(twice|signed)$|edge|distance$|mark$)/.test(id) ? 'dot'
+            : /^tap-reach$|^(dark|warm)-(back-radians|cell-center|cell-index|tap-|paper-light|cell-colour)/.test(id) ? 'cell'
+              : /^(dark-filter|warm-filter|paper-dark|printed-linear|printed|mixed-color|combine|sample|sample-split|clamped-uv)$/.test(id) ? 'finish' : 'screen',
+};
+
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
   if (type === 'crt-screen') return {
@@ -230,33 +260,23 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   // Riso (createRisoPrintGraph): paper and inks, each ink's slipped and turned dot screen, the colour of its cells, the
   // split between the inks, the tone that keeps the brightness, the round dots and the print. Each folder holds the dark
   // ink's nodes and the warm ink's; stages only feed later ones.
-  if (type === 'riso') return {
-    labels: { inks: 'Paper & Inks', screen: 'Screens (Dot Size, Registration)', cell: 'Cell Colour', separation: 'Separation',
-      tone: 'Tone', dot: 'Dots', finish: 'Print & Mix (Amount)' },
-    portLabels: { 'registration-frame-pixels': 'Registration (px)', slip: 'Slip (px)', 'dark-layer': 'Dark Drum (px)', 'warm-layer': 'Warm Drum (px)',
-      'frame-center': 'Frame Centre (px)', 'paper-linear': 'Paper Light', 'paper-luma': 'Paper Brightness', 'dark-ink-linear': 'Dark Ink Light',
-      'warm-ink-linear': 'Warm Ink Light', 'dark-ink-absorbs': 'Dark Ink Takes', 'warm-ink-absorbs': 'Warm Ink Takes',
-      'dark-ink-absorbed': 'Dark Ink Takes (brightness)', 'warm-ink-absorbed': 'Warm Ink Takes (brightness)', 'both-absorbed': 'Both Inks Take (brightness)',
-      'fit-dark-dark': 'Dark · Dark', 'fit-warm-warm': 'Warm · Warm', 'fit-dark-warm': 'Dark · Warm', 'fit-determinant': 'Determinant',
-      'safe-dot-size-pixels': 'Dot Size (px)', 'edge-width': 'Half Edge (cells)', 'tap-reach': 'Quarter Cell (px)', 'half-vec2': 'Half (0.5, 0.5)',
-      'dark-cells': 'Dark Position in Cells', 'warm-cells': 'Warm Position in Cells', 'dark-place': 'Dark Place in Cell', 'warm-place': 'Warm Place in Cell',
-      'dark-cell-center': 'Dark Cell Centre (px)', 'warm-cell-center': 'Warm Cell Centre (px)', 'dark-cell-colour': 'Dark Cell Colour', 'warm-cell-colour': 'Warm Cell Colour',
-      'dark-cell-absorbs': 'Dark Cell Takes', 'warm-cell-absorbs': 'Warm Cell Takes', 'dark-towards-dark': 'Cell · Dark Ink', 'dark-towards-warm': 'Cell · Warm Ink',
-      'warm-towards-dark': 'Cell · Dark Ink', 'warm-towards-warm': 'Cell · Warm Ink', 'dark-free': 'Free Dark Share', 'warm-free': 'Free Warm Share',
-      'dark-first': 'First Dark Share', 'warm-first': 'First Warm Share',
-      'dark-share': 'Dark Share', 'dark-other-share': 'Warm Share (Dark Cell)', 'warm-share': 'Warm Share', 'warm-other-share': 'Dark Share (Warm Cell)',
-      'dark-tone-scale': 'Dark Tone Scale', 'warm-tone-scale': 'Warm Tone Scale', 'dark-other-coverage': 'Warm Coverage (Dark Cell)',
-      'warm-other-coverage': 'Dark Coverage (Warm Cell)', 'dark-coverage': 'Dark Coverage', 'warm-coverage': 'Warm Coverage',
-      'dark-mark': 'Dark Dots', 'warm-mark': 'Warm Dots', printed: 'Print', 'sample-split:rgb': 'Pixel RGB', 'sample-split:alpha': 'Pixel Alpha',
-      'min-uv': 'Lowest UV', 'max-uv': 'Highest UV', 'one-rgb': 'One (RGB)', 'zero-rgb': 'Zero (RGB)', 'dark-radians': 'Dark Angle (rad)', 'warm-radians': 'Warm Angle (rad)',
-      'dark-ink-absorbed-rgb': 'Dark Ink Takes from Paper', 'warm-ink-absorbed-rgb': 'Warm Ink Takes from Paper' },
-    portLabelsApply: graph => graph.nodes.some(node => node.id === 'dark-share'),
-    stage: ({ id }) => /^(paper|paper-vector|paper-linear|paper-luma|paper-dark-absorbs|one-rgb|zero-rgb|color-[ab]-rgb)$|^both-absorbed|^(dark|warm)-ink-/.test(id) ? 'inks'
-        : /^fit-|^(dark|warm)-(paper-ratio|cell-absorbs|towards-|free|first$|other-share|share)/.test(id) ? 'separation'
-          : /^(dark|warm)-(cell-luma$|tone-|other-coverage|other-takes$|other-overlap$|coverage$|coverage-(raw|left|reach)$)/.test(id) ? 'tone'
-            : /^(dark|warm)-(dot-|paper-left$|paper-root$|paper-gap$|dots-touch$|radius|coverage-(twice|signed)$|edge|distance$|mark$)/.test(id) ? 'dot'
-              : /^tap-reach$|^(dark|warm)-(back-radians|cell-center|cell-index|tap-|paper-light|cell-colour)/.test(id) ? 'cell'
-                : /^(dark-filter|warm-filter|paper-dark|printed-linear|printed|mixed-color|combine|sample|sample-split|clamped-uv)$/.test(id) ? 'finish' : 'screen',
+  if (type === 'riso') return RISO_PLAN;
+  // Riso Glow (createRisoGlowGraph): Riso's six print folders, then the print cached with the glow ink's share, that share
+  // gathered from the window around each pixel, the pulse, and the glow screened onto the print.
+  if (type === 'riso-glow') return {
+    labels: { ...RISO_PLAN.labels, print: 'Print & Glow Share', spill: 'Glow Spill', pulse: 'Pulse (Glow, Speed)', finish: 'Glow & Mix (Amount)' },
+    // Its inks are the Shadow Ink and the Glow Ink (Riso's Dark and Warm Ink).
+    portLabels: { ...Object.fromEntries(Object.entries(RISO_PLAN.portLabels ?? {}).map(([id, label]) => [id, label.replace(/\bDark\b/gu, 'Shadow').replace(/\bWarm\b/gu, 'Glow')])),
+      pixel: 'Pixel (px)', 'glow-visible': 'Glow Share', 'glow-cache': 'Print + Glow Share (cached)', 'glow-cached-split:rgb': 'Print',
+      'glow-tap': 'Tap (taps)', 'glow-tap-weight': 'Tap Weight', 'glow-step': 'Tap Step (px)', 'glow-tap-pixels': 'Tap Position (px)',
+      'glow-field': 'Gathered Share', 'glow-light': 'Glow Light', pulse: 'Pulse', 'glow-strength': 'Strength', 'glow-keep': 'Dark Kept',
+      'glowing-linear': 'Glowing Print', ...clampLabels({ glow: 'Glow' }) },
+    portLabelsApply: graph => graph.nodes.some(node => node.id === 'glow-cache'),
+    stage: node => /^(dark-filter|warm-filter|paper-dark|printed-linear|glow-visible|glow-uncovered|glow-visible-alpha|glow-print|glow-cache)$/.test(node.id) ? 'print'
+      : /^(glow-window|glow-centre-tap|glow-index|glow-kernel|glow-tap|glow-step|glow-last-centre|glow-gather|glow-sums|glow-field|glow-light)/.test(node.id) ? 'spill'
+        : /^(time|speed|pulse|glow|glow-clamped|glow-strength|glow-pulse-gain|glow-gain)$|^pulse-/.test(node.id) ? 'pulse'
+          : /^(glow-cached|glow-fade|glow-negative|glow-keep|glow-print-dark|glow-dark-kept|glowing-linear)/.test(node.id) ? 'finish'
+            : RISO_PLAN.stage(node),
   };
   // Dithering (createDefaultDitheringGraph): the big pixels, each cell's colour, its two nearest steps, the Bayer step, the mix.
   if (type === 'dither') return {

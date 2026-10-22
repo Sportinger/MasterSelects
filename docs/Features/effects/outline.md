@@ -1,6 +1,6 @@
 # Outline
 
-<!-- effect-docs: basic page sha=bbe8240c23b3, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=90f50c471f5a, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Turns the image into an edge drawing: brightness edges in Ink on Paper with a subtle pulse; Amount blends with the original.
 
@@ -29,7 +29,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md).
 
 ## Technical details
 

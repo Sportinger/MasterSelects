@@ -226,8 +226,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'crystal' ? createDefaultCrystalGraph
         : effectType === 'glass-dispersion' ? createDefaultGlassDispersionGraph
         : effectType === 'holo' ? createDefaultHoloGraph
-        // A graph-less Riso saved before Dot Size keeps the look it was saved with (the earlier recipe).
-        : effectType === 'riso' && hasEarlierRisoParams(effect.params) ? () => createEarlierRisoGraph('riso')
+        // A graph-less Riso or Riso Glow saved before Dot Size keeps the look it was saved with (the earlier recipe).
+        : (effectType === 'riso' || effectType === 'riso-glow') && hasEarlierRisoParams(effect.params) ? () => createEarlierRisoGraph(effectType)
         : effectType === 'riso' || effectType === 'riso-glow' ? () => createDefaultRisoGraph(effectType)
         // A graph-less Dithering saved before Levels keeps the look it was saved with (the earlier recipe).
         : effectType === 'dither' ? (hasEarlierDitheringParams(effect.params) ? () => createDefaultDitherGraph('dither') : createDefaultDitheringGraph)

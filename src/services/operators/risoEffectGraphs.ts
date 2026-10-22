@@ -1,6 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { measureInReferenceFrame } from './patternReferenceFrame';
-import { createRisoPrintGraph } from './risoPrintEffectGraph';
+import { createRisoGlowGraph, createRisoPrintGraph } from './risoPrintEffectGraph';
 
 export type EditableRisoEffectType = 'riso' | 'riso-glow';
 type Ref = { node: string; port: string };
@@ -18,16 +18,16 @@ class Builder {
 
 /**
  * The default graph of each look: Riso prints its two-ink separation (createRisoPrintGraph in risoPrintEffectGraph.ts),
- * Riso Glow keeps the earlier shared recipe below.
+ * Riso Glow the same print with a fluorescent glow ink that breathes (createRisoGlowGraph).
  */
 export function createDefaultRisoGraph(type: EditableRisoEffectType): EffectOperatorGraph {
-  return type === 'riso' ? createRisoPrintGraph() : createEarlierRisoGraph(type);
+  return type === 'riso' ? createRisoPrintGraph() : createRisoGlowGraph();
 }
 
 /**
  * The earlier shared construction of the risoColor pipeline: both inks print the same darkness (1 − luminance), read a
- * little left and right, without a dot screen. Riso Glow still renders it (its WGSL reference is risoGlowFragment in
- * src/effects/halftone/shader.wgsl); a graph-less Riso saved before Dot Size keeps it (hasEarlierRisoParams).
+ * little left and right, without a dot screen; Riso Glow adds a pulse of both inks' light. A graph-less Riso or Riso
+ * Glow saved before Dot Size keeps it (hasEarlierRisoParams); its WGSL reference is risoColor in src/effects/halftone/shader.wgsl.
  */
 export function createEarlierRisoGraph(type: EditableRisoEffectType): EffectOperatorGraph {
   const g = new Builder(), frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');

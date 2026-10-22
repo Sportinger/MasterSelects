@@ -1,6 +1,6 @@
 # Embroidery
 
-<!-- effect-docs: basic page sha=325f15a0d21a, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=969b243b53aa, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Covers the image in wavy animated thread rows tinted with the Ink color for a knitted fabric look; Scale sets the stitch size.
 
@@ -30,7 +30,7 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Outline](./outline.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Outline](./outline.md).
 
 ## Technical details
 

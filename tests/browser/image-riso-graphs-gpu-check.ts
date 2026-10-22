@@ -1,10 +1,11 @@
 import common from '../../src/effects/_shared/commonShader';
 import { colorToRgba } from '../../src/effects/_shared/catalogColor';
 import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDefinition';
+import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
 import { riso, risoGlow } from '../../src/effects/halftone';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { createDefaultRisoGraph } from '../../src/services/operators/risoEffectGraphs';
-import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
+import { compileImageOperatorGraph, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
@@ -32,9 +33,15 @@ const fixtures: Fixture[] = [
     // The 47 × 29 frame is 1/37 of 1080p: these sizes give cells of about 8 pixels and a slip of 6, as on a real frame.
     { name: 'real-cells', params: { dotSize: 300, scale: 220, amount: 1 }, time: 0 },
   ] },
+  // Riso Glow (createRisoGlowGraph): Riso's print cached with the glow share, gathered over 9 × 9 taps (two passes).
   { type: 'riso-glow', definition: risoGlow as FullscreenEffectDefinition, cases: [
-    ...baseCases, { name: 'scale-minimum', params: { scale: 2, amount: 1 }, time: 0 },
-    { name: 'scale-maximum', params: { scale: 80, amount: 1 }, time: 0 },
+    ...baseCases, { name: 'registration-maximum', params: { scale: 32, amount: 1 }, time: 0 },
+    { name: 'dot-size-maximum', params: { dotSize: 40, amount: 1 }, time: 0 },
+    { name: 'glow-off', params: { glow: 0, amount: 1 }, time: 0 },
+    { name: 'glow-maximum', params: { glow: 2, amount: 1 }, time: 0 },
+    { name: 'black-and-white-inks', params: { colorA: '#000000', colorB: '#ffffff', amount: 1 }, time: 0 },
+    // The 47 × 29 frame is 1/37 of 1080p: these sizes give cells of about 8 pixels and glow taps 6 apart, as on a real frame.
+    { name: 'real-cells', params: { dotSize: 300, scale: 220, amount: 1 }, time: 0 },
     { name: 'speed-minimum', params: { speed: 0, amount: .82, colorA: '#24375c', colorB: '#694052' }, time: 1.25 },
     { name: 'speed-maximum', params: { speed: 5, amount: .82, colorA: '#24375c', colorB: '#694052' }, time: 1.25 },
     { name: 'timeline', params: { speed: 1.7, amount: .82, scale: 8.5, colorA: '#24375c', colorB: '#694052' }, time: 2.375 },
@@ -47,10 +54,11 @@ function resolved(definition: FullscreenEffectDefinition, overrides: Record<stri
 function numberAt(values: Record<string, Primitive>, id: string, fallback = 0): number {
   const value = values[id]; return typeof value === 'number' ? value : fallback;
 }
-function legacyUniforms(values: Record<string, Primitive>, time: number): Float32Array<ArrayBuffer> {
+function legacyUniforms(type: RisoType, values: Record<string, Primitive>, time: number): Float32Array<ArrayBuffer> {
   const colorA = colorToRgba(values.colorA, '#111827'), colorB = colorToRgba(values.colorB, '#f8fafc');
+  // Riso Glow's twin reads Glow from the Angle slot (createCatalogEffect angleSlotParam).
   return new Float32Array([width, height, numberAt(values, 'scale', 14), numberAt(values, 'amount', .75),
-    numberAt(values, 'angle'), time, numberAt(values, 'speed'), numberAt(values, 'dotSize'), ...colorA, ...colorB]);
+    numberAt(values, type === 'riso-glow' ? 'glow' : 'angle'), time, numberAt(values, 'speed'), numberAt(values, 'dotSize'), ...colorA, ...colorB]);
 }
 function pixels(): Uint8Array {
   const data = new Uint8Array(bytesPerRow * height);
@@ -65,16 +73,19 @@ function compact(data: Uint8Array) {
   for (let y = 0; y < height; y++) result.set(data.subarray(y * bytesPerRow, y * bytesPerRow + width * 4), y * width * 4);
   return result;
 }
-/** Riso Glow matches its twin byte for byte. Riso's print recipe sums channels and dot products node by node, its twin
- * with WGSL dot() and luminance(): a channel on a rounding boundary may land one step apart (at most 0.5 % of bytes). */
+/** Riso's print recipe sums channels and dot products node by node, its twin with WGSL dot() and luminance(): a channel
+ * on a rounding boundary may land one step apart (at most 0.5 % of bytes). Riso Glow's graph also keeps the print and
+ * the glow share in an rgba16float cache between its passes, which its single-pass twin does not: one step apart on at most
+ * 3 % of bytes (RISO_GLOW_TOLERANCE; the defaults measure 1.6 %). */
+const RISO_GLOW_TOLERANCE = { delta: 1, share: .03 };
 function matches(type: RisoType, expected: Uint8Array, actual: Uint8Array) {
-  if (type === 'riso-glow') return expected.every((value, index) => value === actual[index]);
+  const limit = type === 'riso-glow' ? RISO_GLOW_TOLERANCE : { delta: 1, share: .005 };
   let off = 0;
   for (let index = 0; index < expected.length; index++) {
     const delta = Math.abs(expected[index] - actual[index]);
-    if (delta > 1) return false; if (delta) off++;
+    if (delta > limit.delta) return false; if (delta) off++;
   }
-  return off <= expected.length * .005;
+  return off <= expected.length * limit.share;
 }
 function mismatch(expected: Uint8Array, actual: Uint8Array) {
   let first = -1, count = 0, maximum = 0;
@@ -105,6 +116,19 @@ async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTexture
   } catch (error) { const validation = popped ? null : await pop(); if (validation) throw new Error(validation.message, { cause: error }); throw error;
   } finally { uniform?.destroy(); }
 }
+/** A graph plan on the GPU: one generated shader, or the pass runtime for a multi-pass plan (Riso Glow's cache). */
+async function renderPlan(device: GPUDevice, runtime: ImageGraphPassRuntime, sampler: GPUSampler, source: GPUTexture, target: GPUTexture,
+  readback: GPUBuffer, plan: ImageOperatorPlan, entryPoint: string, time: number) {
+  if (!plan.passes?.length) return render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, entryPoint), entryPoint,
+    packImageOperatorRuntimeUniforms(plan, time, width, height));
+  device.pushErrorScope('validation');
+  const encoder = device.createCommandEncoder();
+  runtime.encode({ encoder, sampler, source: { kind: 'texture', view: source.createView() }, width, height,
+    timelineTimeSeconds: time, plan, outputView: target.createView(), instanceId: `riso-${entryPoint}` });
+  encoder.copyTextureToBuffer({ texture: target }, { buffer: readback, bytesPerRow }, [width, height]); device.queue.submit([encoder.finish()]);
+  await readback.mapAsync(GPUMapMode.READ); const result = compact(new Uint8Array(readback.getMappedRange())); readback.unmap();
+  const validation = await device.popErrorScope(); if (validation) throw new Error(validation.message); return result;
+}
 function directGraph(type: RisoType): EffectOperatorGraph {
   const graph = structuredClone(createDefaultRisoGraph(type));
   const frame = graph.nodes.find(node => node.operator === 'image.frame'), output = graph.nodes.find(node => node.operator === 'image.output');
@@ -126,6 +150,7 @@ export async function checkRisoGraphsGpu(device: GPUDevice): Promise<number> {
   const sampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
   const source = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
   const target = device.createTexture({ size: [width, height], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+  const runtime = new ImageGraphPassRuntime(device);
   const readback = device.createBuffer({ size: bytesPerRow * height, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
   device.queue.writeTexture({ texture: source }, input, { bytesPerRow }, [width, height]); let comparisons = 0;
   try {
@@ -135,18 +160,15 @@ export async function checkRisoGraphsGpu(device: GPUDevice): Promise<number> {
         const values = resolved(fixture.definition, item.params), plan = compileImageOperatorGraph(createDefaultRisoGraph(fixture.type), values,
           { parameterSchema: fixture.definition.params });
         const expected = await render(device, sampler, source.createView(), target, readback, fixture.definition.shader, fixture.definition.entryPoint,
-          legacyUniforms(values, item.time));
-        const entryPoint = `${fixture.type.replace('-', '')}GraphFragment`;
-        const actual = await render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, entryPoint), entryPoint,
-          packImageOperatorRuntimeUniforms(plan, item.time, width, height));
+          legacyUniforms(fixture.type, values, item.time));
+        const actual = await renderPlan(device, runtime, sampler, source, target, readback, plan, `${fixture.type.replace('-', '')}GraphFragment`, item.time);
         if (!matches(fixture.type, expected, actual)) throw new Error(`${fixture.type}/${item.name}: ${mismatch(expected, actual)}`);
         if (item.name === 'amount-maximum') processed = actual; comparisons++;
       }
       const values = resolved(fixture.definition, { amount: 1 });
       for (const [name, graph] of [['bypass', bypassGraph(fixture.type)], ['direct', directGraph(fixture.type)]] as const) {
-        const plan = compileImageOperatorGraph(graph, values, { parameterSchema: fixture.definition.params }), entryPoint = `${fixture.type.replace('-', '')}${name}Fragment`;
-        const actual = await render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, entryPoint), entryPoint,
-          packImageOperatorRuntimeUniforms(plan, 0, width, height));
+        const plan = compileImageOperatorGraph(graph, values, { parameterSchema: fixture.definition.params });
+        const actual = await renderPlan(device, runtime, sampler, source, target, readback, plan, `${fixture.type.replace('-', '')}${name}Fragment`, 0);
         const expected = name === 'bypass' ? processed : compactInput;
         if (!expected) throw new Error(`${fixture.type}/${name}: processed reference unavailable`);
         if (expected.some((value, index) => value !== actual[index])) throw new Error(`${fixture.type}/${name}: ${mismatch(expected, actual)}`); comparisons++;
@@ -154,5 +176,5 @@ export async function checkRisoGraphsGpu(device: GPUDevice): Promise<number> {
       if (!processed || processed.every((value, index) => value === compactInput[index])) throw new Error(`${fixture.type} processed output did not change`);
     }
     return comparisons;
-  } finally { source.destroy(); target.destroy(); readback.destroy(); }
+  } finally { runtime.dispose(); source.destroy(); target.destroy(); readback.destroy(); }
 }

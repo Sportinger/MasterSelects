@@ -14,6 +14,12 @@
    "alt": "Properties, Effects with a Riso card: Preset menu showing Postcard, Dot Size and Registration under Pattern, Dark Ink, Warm Ink and Amount under Color, beside a strip of the preview printed in teal and red dots on cream paper",
    "caption": "Riso with the Postcard preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Registration: how far the inks slip apart. 4 — Dark Ink. 5 — Warm Ink. 6 — Amount.",
    "marks": [{"target": "Preset", "label": "Preset"}, {"target": "Dot Size", "label": "Dot Size"}, {"target": "Registration", "label": "Registration"}, {"target": "Dark Ink", "label": "Dark Ink"}, {"target": "Warm Ink", "label": "Warm Ink"}, {"target": "Amount", "label": "Amount"}],
+   "hide": ["Particle Out"]},
+  {"name": "riso-glow-inspector", "effect": "riso-glow", "params": {"dotSize": 5, "scale": 2, "glow": 1.5, "speed": 1.2, "amount": 1, "colorA": "#00838a", "colorB": "#ff7477"}, "image": "dancer_stage.jpg", "preview": 260, "top": "tabs",
+   "viewport": {"width": 1600, "height": 1060},
+   "alt": "Properties, Effects with a Riso Glow card: Preset menu showing Neon Sign, Dot Size and Registration under Pattern, Glow and Speed under Glow & Pulse, Shadow Ink, Glow Ink and Amount under Color, beside a strip of the preview printed in teal and coral dots with a warm glow",
+   "caption": "Riso Glow with the Neon Sign preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Glow: how brightly the glow ink shines. 4 — Speed: how fast the glow breathes. 5 — Glow Ink: the colour that glows.",
+   "marks": [{"target": "Preset", "label": "Preset"}, {"target": "Dot Size", "label": "Dot Size"}, {"target": "Glow", "label": "Glow"}, {"target": "Speed", "label": "Speed"}, {"target": "Glow Ink", "label": "Glow Ink"}],
    "hide": ["Particle Out"]}
  ]
 }

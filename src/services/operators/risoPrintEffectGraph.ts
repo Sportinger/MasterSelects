@@ -48,6 +48,17 @@ export function hasEarlierRisoParams(params: Record<string, unknown>): boolean {
   return params.dotSize === undefined;
 }
 
+/** Riso Glow gathers its glow over a square window of this many taps a side (odd, centred on the glow ink's drum position). */
+export const RISO_GLOW_KERNEL = 9;
+/** Distance between two glow taps, in cells of the dot screen: the glow reaches four taps (three cells) each way. */
+export const RISO_GLOW_STEP = .75;
+/** Width (sigma) of the glow's Gaussian weights, in taps. */
+export const RISO_GLOW_SIGMA = 2;
+/** Light the glow ink gives off at Glow 1 and the top of its pulse, as a multiple of a full layer of its colour. */
+export const RISO_GLOW_GAIN = 1.5;
+/** Riso Glow's pulse: the glow breathes between rest − swing and rest + swing of Glow (cos of 2 × time × Speed). */
+export const RISO_GLOW_PULSE = { rest: .55, swing: .45 } as const;
+
 /**
  * Riso: the picture printed with two inks on cream paper, like a risograph. Every cell of each ink's dot screen is
  * read as one colour (four reads in linear light, weighted by alpha) and separated into the two inks: a least-squares
@@ -57,6 +68,21 @@ export function hasEarlierRisoParams(params: Record<string, unknown>): boolean {
  * (HALFTONE_DOT). The dark ink's screen is turned 15°, the warm ink's 75°; Registration slips the two drums apart. Dot Size and Registration count pixels of a 1080p frame (patternReferenceFrame.ts).
  */
 export function createRisoPrintGraph(): EffectOperatorGraph {
+  return buildRisoPrint(false);
+}
+
+/**
+ * Riso Glow: the Riso print with a fluorescent second ink (colorB, the Glow Ink) that gives off light in its own colour:
+ * every glow-ink dot shines, and lights its cell around it in proportion to its coverage (a halo that fades out at the
+ * cell's inscribed circle, so neighbouring halos meet at zero); the shadow ink's dots filter that light. It is screened
+ * onto the print in linear light (1 − (1 − print) × e^(−strength × light), so it never clips), with strength Glow × a
+ * pulse that breathes with the timeline time × Speed (full at Speed 0 and at second 0).
+ */
+export function createRisoGlowGraph(): EffectOperatorGraph {
+  return buildRisoPrint(true);
+}
+
+function buildRisoPrint(glowing: boolean): EffectOperatorGraph {
   const g = new Builder(), frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const resolution = g.node('resolution', 'image.resolution');
   const scale = g.node('scale', 'values.number', 'value', { value: 'scale' }), dotSize = g.node('dot-size', 'values.number', 'value', { value: 'dotSize' });
@@ -104,31 +130,14 @@ export function createRisoPrintGraph(): EffectOperatorGraph {
   const reach = g.binary('tap-reach', 'math.multiply.scalar', size, g.number('quarter', .25));
   const four = g.number('four', 4), toneFloor = g.number('tone-floor', 1e-6), toneBlend = g.number('tone-blend', RISO_TONE_BLEND);
   const paperWeight = g.number('paper-weight', RISO_PAPER_WEIGHT), zeroRgb = g.node('zero-rgb', 'convert.scalar-to-rgb', 'rgb'); g.edge(zero, zeroRgb, 'value');
-  const marks = RISO_INKS.map((ink, inkIndex) => {
-    const p = ink.id;
-    // Screen: the paper pixel on this ink's drum, turned to its screen angle and cut into cells.
-    const layer = g.binary(`${p}-layer`, inkIndex === 0 ? 'math.add.vec2' : 'math.subtract.vec2', pixel, slip);
-    const radians = g.unary(`${p}-radians`, 'convert.degrees-to-radians.scalar', g.number(`${p}-angle`, ink.angle));
-    const screen = g.node(`${p}-screen`, 'coordinates.rotate.vec2'); g.edge(g.binary(`${p}-centered`, 'math.subtract.vec2', layer, center), screen, 'value'); g.edge(radians, screen, 'angle');
-    const cells = g.binary(`${p}-cells`, 'math.divide-ieee.vec2', screen, size2);
-    const place = g.binary(`${p}-place`, 'math.subtract.vec2', g.unary(`${p}-cell-fract`, 'math.fract.vec2', cells), half2);
-    // Cell Colour: four reads a quarter cell from the cell's centre, turned back onto the picture, in linear light.
-    const backRadians = g.binary(`${p}-back-radians`, 'math.subtract.scalar', zero, radians);
-    const centerScreen = g.node(`${p}-cell-center-screen`, 'math.multiply.vec2-scalar');
-    g.edge(g.binary(`${p}-cell-center-cells`, 'math.add.vec2', g.unary(`${p}-cell-index`, 'math.floor.vec2', cells), half2), centerScreen, 'a'); g.edge(size, centerScreen, 'b');
-    const turnedBack = g.node(`${p}-cell-center-turned`, 'coordinates.rotate.vec2'); g.edge(centerScreen, turnedBack, 'value'); g.edge(backRadians, turnedBack, 'angle');
-    const cellCenter = g.binary(`${p}-cell-center`, 'math.add.vec2', turnedBack, center);
-    const axis = (name: 'x' | 'y') => {
-      const along = g.node(`${p}-tap-${name}-screen`, 'vector.combine.vec2'); g.edge(name === 'x' ? reach : zero, along, 'x'); g.edge(name === 'x' ? zero : reach, along, 'y');
-      const turned = g.node(`${p}-tap-${name}`, 'coordinates.rotate.vec2'); g.edge(along, turned, 'value'); g.edge(backRadians, turned, 'angle'); return turned;
-    };
-    const stepX = axis('x'), stepY = axis('y');
-    const diagonal = g.binary(`${p}-tap-diagonal`, 'math.add.vec2', stepX, stepY), antiDiagonal = g.binary(`${p}-tap-anti-diagonal`, 'math.subtract.vec2', stepX, stepY);
+
+  /** Cell Colour: four reads around `centre` (pixels; ± diagonal and ± anti-diagonal), in linear light and weighted by alpha. */
+  const cellColourAt = (p: string, centre: Ref, diagonal: Ref, antiDiagonal: Ref): Ref => {
     let lightSum: Ref = g.node(`${p}-paper-light`, 'math.multiply.rgb-scalar'); g.edge(paperLinear, lightSum, 'a'); g.edge(paperWeight, lightSum, 'b');
     let alphaSum: Ref = paperWeight;
     HALFTONE_TAPS.forEach(([x, y], index) => {
       const id = `${p}-tap-${index + 1}`, offset = x * y > 0 ? diagonal : antiDiagonal;
-      const at = g.binary(`${id}-pixels`, x > 0 ? 'math.add.vec2' : 'math.subtract.vec2', cellCenter, offset);
+      const at = g.binary(`${id}-pixels`, x > 0 ? 'math.add.vec2' : 'math.subtract.vec2', centre, offset);
       const sample = g.node(`${id}-sample`, 'image.sample', 'image'); g.edge(frame, sample, 'image');
       g.edge(g.clamp(`${id}-clamped-uv`, 'math.clamp.vec2', g.binary(`${id}-uv`, 'math.divide-ieee.vec2', at, resolution), minUv, maxUv), sample, 'uv');
       const split = g.node(`${id}-split`, 'vector.split.rgba', 'rgb'); g.edge(sample, split, 'image');
@@ -139,6 +148,11 @@ export function createRisoPrintGraph(): EffectOperatorGraph {
       alphaSum = g.binary(`${id}-alpha-sum`, 'math.add.scalar', alphaSum, alpha);
     });
     const cellColour = g.node(`${p}-cell-colour`, 'math.divide-ieee.rgb-scalar'); g.edge(lightSum, cellColour, 'a'); g.edge(alphaSum, cellColour, 'b');
+    return cellColour;
+  };
+
+  /** Separation and Tone of one colour for ink `inkIndex`: its coverage and the other ink's, as shares of a full layer. */
+  const inkCoverage = (p: string, inkIndex: number, cellColour: Ref): { coverage: Ref; otherCoverage: Ref } => {
     // Separation: the light the cell takes from the paper, per channel, fitted with both inks; this ink's share of a full layer.
     const ratio = g.binary(`${p}-paper-ratio`, 'math.divide-ieee.rgb', cellColour, paperLinear);
     const taken = g.binary(`${p}-cell-absorbs`, 'math.max.rgb', g.binary(`${p}-cell-absorbs-raw`, 'math.subtract.rgb', oneRgb, ratio), zeroRgb);
@@ -157,7 +171,7 @@ export function createRisoPrintGraph(): EffectOperatorGraph {
     // Tone: both shares scaled by one factor so that the dots, mixed with the paper, keep the cell's brightness (the
     // smaller root of a quadratic: inks multiply where they overlap), then this ink's coverage solved exactly for that
     // brightness beside the other ink's (so a saturated ink hands the rest to this one).
-    const ownInk = inks[p], otherInk = inks[inkIndex === 0 ? 'warm' : 'dark'];
+    const ownInk = inks[inkIndex === 0 ? 'dark' : 'warm'], otherInk = inks[inkIndex === 0 ? 'warm' : 'dark'];
     const [darkShare, warmShare] = inkIndex === 0 ? [share, otherShare] : [otherShare, share];
     const cellLuma = g.unary(`${p}-cell-luma`, 'color.luminance-rec709.rgb', cellColour, 'rgb');
     const gap = g.binary(`${p}-tone-gap`, 'math.max.scalar', g.binary(`${p}-tone-gap-raw`, 'math.subtract.scalar', paperLuma, cellLuma), zero);
@@ -179,6 +193,32 @@ export function createRisoPrintGraph(): EffectOperatorGraph {
     const blendedShare = g.binary(`${p}-tone-own-share`, 'math.multiply.scalar', g.binary(`${p}-tone-own-scaled`, 'math.multiply.scalar', toneScale, share), toneBlend);
     const coverage = g.clamp(`${p}-coverage`, 'math.clamp.scalar', g.binary(`${p}-coverage-raw`, 'math.divide-ieee.scalar',
       g.binary(`${p}-coverage-left`, 'math.add.scalar', left, blendedShare), g.binary(`${p}-coverage-reach`, 'math.add.scalar', ownReach, toneBlend)), zero, one);
+    return { coverage, otherCoverage };
+  };
+
+  let glowInk: { coverage: Ref; otherCoverage: Ref } | undefined;
+  const marks = RISO_INKS.map((ink, inkIndex) => {
+    const p = ink.id;
+    // Screen: the paper pixel on this ink's drum, turned to its screen angle and cut into cells.
+    const layer = g.binary(`${p}-layer`, inkIndex === 0 ? 'math.add.vec2' : 'math.subtract.vec2', pixel, slip);
+    const radians = g.unary(`${p}-radians`, 'convert.degrees-to-radians.scalar', g.number(`${p}-angle`, ink.angle));
+    const screen = g.node(`${p}-screen`, 'coordinates.rotate.vec2'); g.edge(g.binary(`${p}-centered`, 'math.subtract.vec2', layer, center), screen, 'value'); g.edge(radians, screen, 'angle');
+    const cells = g.binary(`${p}-cells`, 'math.divide-ieee.vec2', screen, size2);
+    const place = g.binary(`${p}-place`, 'math.subtract.vec2', g.unary(`${p}-cell-fract`, 'math.fract.vec2', cells), half2);
+    // Cell Colour: four reads a quarter cell from the cell's centre, turned back onto the picture, in linear light.
+    const backRadians = g.binary(`${p}-back-radians`, 'math.subtract.scalar', zero, radians);
+    const centerScreen = g.node(`${p}-cell-center-screen`, 'math.multiply.vec2-scalar');
+    g.edge(g.binary(`${p}-cell-center-cells`, 'math.add.vec2', g.unary(`${p}-cell-index`, 'math.floor.vec2', cells), half2), centerScreen, 'a'); g.edge(size, centerScreen, 'b');
+    const turnedBack = g.node(`${p}-cell-center-turned`, 'coordinates.rotate.vec2'); g.edge(centerScreen, turnedBack, 'value'); g.edge(backRadians, turnedBack, 'angle');
+    const cellCenter = g.binary(`${p}-cell-center`, 'math.add.vec2', turnedBack, center);
+    const axis = (name: 'x' | 'y') => {
+      const along = g.node(`${p}-tap-${name}-screen`, 'vector.combine.vec2'); g.edge(name === 'x' ? reach : zero, along, 'x'); g.edge(name === 'x' ? zero : reach, along, 'y');
+      const turned = g.node(`${p}-tap-${name}`, 'coordinates.rotate.vec2'); g.edge(along, turned, 'value'); g.edge(backRadians, turned, 'angle'); return turned;
+    };
+    const stepX = axis('x'), stepY = axis('y');
+    const diagonal = g.binary(`${p}-tap-diagonal`, 'math.add.vec2', stepX, stepY), antiDiagonal = g.binary(`${p}-tap-anti-diagonal`, 'math.subtract.vec2', stepX, stepY);
+    const { coverage, otherCoverage } = inkCoverage(p, inkIndex, cellColourAt(p, cellCenter, diagonal, antiDiagonal));
+    if (inkIndex === 1) glowInk = { coverage, otherCoverage };
     // Dot: the round dot that covers exactly that share of its cell (HALFTONE_DOT), one output pixel soft.
     const smallRadius = g.unary(`${p}-dot-radius-small`, 'math.sqrt.scalar', g.binary(`${p}-dot-area`, 'math.multiply.scalar', coverage, g.number(`${p}-inverse-pi`, HALFTONE_DOT.inversePi)));
     const paperRoot = g.unary(`${p}-paper-root`, 'math.sqrt.scalar', g.binary(`${p}-paper-left`, 'math.subtract.scalar', one, coverage));
@@ -199,7 +239,50 @@ export function createRisoPrintGraph(): EffectOperatorGraph {
   const filters = RISO_INKS.map((ink, index) => {
     const filter = g.node(`${ink.id}-filter`, 'math.mix.rgb'); g.edge(oneRgb, filter, 'a'); g.edge(inks[ink.id].linear, filter, 'b'); g.edge(marks[index], filter, 't'); return filter;
   });
-  const printedLinear = g.binary('printed-linear', 'math.multiply.rgb', g.binary('paper-dark', 'math.multiply.rgb', paperLinear, filters[0]), filters[1]);
+  let printedLinear = g.binary('printed-linear', 'math.multiply.rgb', g.binary('paper-dark', 'math.multiply.rgb', paperLinear, filters[0]), filters[1]);
+  if (glowing && glowInk) {
+    // Glow Source: where the glow ink prints and the shadow ink does not, cell by cell (its coverage × (1 − the shadow
+    // ink's)). The print and this share are cached together (one pass), then gathered over a RISO_GLOW_KERNEL ×
+    // RISO_GLOW_KERNEL window of taps RISO_GLOW_STEP cells apart with Gaussian weights: a soft field that spills past
+    // the edges of the glow ink's colours.
+    const visible = g.binary('glow-visible', 'math.multiply.scalar', glowInk.coverage, g.binary('glow-uncovered', 'math.subtract.scalar', one, glowInk.otherCoverage));
+    const packed = g.node('glow-print', 'vector.combine.rgba', 'image'); g.edge(printedLinear, packed, 'rgb');
+    g.edge({ node: g.unary('glow-visible-alpha', 'convert.scalar-to-alpha', visible).node, port: 'alpha' }, packed, 'alpha');
+    const cache = g.node('glow-cache', 'image.materialize', 'image', {}, { scale: '1' }); g.edge(packed, cache, 'image');
+    const sampleOf = (id: string, at: Ref) => { const out = g.node(id, 'image.sample', 'image'); g.edge(cache, out, 'image'); g.edge(at, out, 'uv'); return out; };
+    const cached = g.node('glow-cached-split', 'vector.split.rgba', 'rgb'); g.edge(sampleOf('glow-cached', uv), cached, 'image');
+    const window = g.number('glow-window', RISO_GLOW_KERNEL), centreTap = g.number('glow-centre-tap', (RISO_GLOW_KERNEL - 1) / 2);
+    const index = g.node('glow-index', 'vector.split.vec2', 'x'); g.edge(g.node('glow-kernel', 'image.kernel-index'), index, 'value');
+    const tap = g.node('glow-tap', 'vector.combine.vec2');
+    g.edge(g.binary('glow-tap-x', 'math.subtract.scalar', { node: index.node, port: 'x' }, centreTap), tap, 'x');
+    g.edge(g.binary('glow-tap-y', 'math.subtract.scalar', { node: index.node, port: 'y' }, centreTap), tap, 'y');
+    const weight = g.node('glow-tap-weight', 'math.gaussian.scalar'); g.edge(g.unary('glow-tap-distance', 'vector.length.vec2', tap), weight, 'value');
+    g.edge(g.number('glow-sigma', RISO_GLOW_SIGMA), weight, 'sigma');
+    // Taps RISO_GLOW_STEP cells apart (the same share of the frame at every size), kept within the frame's outer pixel centres.
+    const step = g.binary('glow-step', 'math.multiply.scalar', size, g.number('glow-step-cells', RISO_GLOW_STEP));
+    const offset = g.node('glow-tap-offset', 'math.multiply.vec2-scalar'); g.edge(tap, offset, 'a'); g.edge(step, offset, 'b');
+    const at = g.clamp('glow-tap-pixels', 'math.clamp.vec2', g.binary('glow-tap-pixels-raw', 'math.add.vec2', pixel, offset), half2,
+      g.binary('glow-last-centre', 'math.subtract.vec2', resolution, half2));
+    const tapSample = sampleOf('glow-tap-sample', g.binary('glow-tap-uv', 'math.divide-ieee.vec2', at, resolution));
+    const reduce = g.node('glow-gather', 'image.kernel-rect-reduce', 'sum');
+    g.edge(tapSample, reduce, 'sample'); g.edge(weight, reduce, 'weight'); g.edge(window, reduce, 'width'); g.edge(window, reduce, 'height');
+    const sums = g.node('glow-sums', 'vector.split.vec4', 'w'); g.edge(reduce, sums, 'value');
+    const field = g.binary('glow-field', 'math.divide-ieee.scalar', { node: sums.node, port: 'w' }, { node: reduce.node, port: 'weightSum' });
+    const light = g.node('glow-light', 'math.multiply.rgb-scalar'); g.edge(inks.warm.linear, light, 'a'); g.edge(field, light, 'b');
+    // Pulse: RISO_GLOW_PULSE.rest + swing × cos(2 × time × Speed); the compiler turns Time × Speed into the distance a keyed Speed travelled.
+    const time = g.node('time', 'image.timeline-time'), speed = g.node('speed', 'values.number', 'value', { value: 'speed' });
+    const phase = g.binary('pulse-phase', 'math.multiply.scalar', g.binary('pulse-time', 'math.multiply.scalar', time, speed), two);
+    const pulse = g.binary('pulse', 'math.add.scalar', g.number('pulse-rest', RISO_GLOW_PULSE.rest),
+      g.binary('pulse-wave', 'math.multiply.scalar', g.unary('pulse-cos', 'math.cos.scalar', phase), g.number('pulse-swing', RISO_GLOW_PULSE.swing)));
+    const glow = g.node('glow', 'values.number', 'value', { value: 'glow' });
+    const strength = g.binary('glow-strength', 'math.multiply.scalar', g.binary('glow-clamped', 'math.max.scalar', glow, zero),
+      g.binary('glow-pulse-gain', 'math.multiply.scalar', pulse, g.number('glow-gain', RISO_GLOW_GAIN)));
+    // Screened onto the print in linear light: 1 − (1 − print) × e^(−strength × light), so a strong glow never clips.
+    const fade = g.unary('glow-fade', 'convert.scalar-to-rgb', g.unary('glow-fade-scalar', 'math.exp.scalar', g.binary('glow-negative', 'math.subtract.scalar', zero, strength)));
+    const keep = g.binary('glow-keep', 'math.power.rgb', { node: fade.node, port: 'rgb' }, light);
+    const darkLeft = g.binary('glow-print-dark', 'math.subtract.rgb', oneRgb, { node: cached.node, port: 'rgb' });
+    printedLinear = g.binary('glowing-linear', 'math.subtract.rgb', oneRgb, g.binary('glow-dark-kept', 'math.multiply.rgb', darkLeft, keep));
+  }
   const printed = g.node('printed', 'color.linear-to-srgb.rgb', 'rgb'); g.edge(printedLinear, printed, 'rgb');
   // Mix: the print over the picture by Amount, with the pixel's own alpha.
   const mixed = g.node('mixed-color', 'math.mix.rgb'); g.edge({ node: own.node, port: 'rgb' }, mixed, 'a'); g.edge(printed, mixed, 'b'); g.edge(amount, mixed, 't');

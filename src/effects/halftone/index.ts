@@ -4,6 +4,7 @@ import { DRIFT_LINES_PRESETS, driftLinesWarnings } from './driftLines';
 import { HALFTONE_PRESETS } from './halftonePresets';
 import { DITHER_PRESETS } from './ditherPresets';
 import { RISO_PRESETS } from './risoPresets';
+import { RISO_GLOW_PRESETS } from './risoGlowPresets';
 
 /** Dither cells are whole output pixels (patternReferenceFrame.ts wholePixels): say when Pixel Size rounds on this frame. */
 function ditherWholePixelNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080): string[] {
@@ -21,11 +22,11 @@ function ditherNotes(params: Record<string, number | boolean | string>, width?: 
   return [...earlier, ...ditherWholePixelNotes(params, width, height)];
 }
 
-/** A graph-less Riso saved before Dot Size (no `dotSize`, hasEarlierRisoParams) renders its earlier recipe; a Dot Size
- * thinner than one pixel of a small frame renders one pixel. Say both in the card. */
-function risoNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080): string[] {
+/** A graph-less Riso or Riso Glow saved before Dot Size (no `dotSize`, hasEarlierRisoParams) renders its earlier recipe;
+ * a Dot Size thinner than one pixel of a small frame renders one pixel. Say both in the card. */
+function risoNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080, name = 'Riso'): string[] {
   if (params.dotSize === undefined) {
-    return ['This Riso was saved before Dot Size and keeps its earlier look (both inks print the same darkness, without dots); add Riso again to use Dot Size and the presets as designed.'];
+    return [`This ${name} was saved before Dot Size and keeps its earlier look (both inks print the same darkness, without dots); add ${name} again to use Dot Size and the presets as designed.`];
   }
   const size = Math.max(typeof params.dotSize === 'number' && Number.isFinite(params.dotSize) ? params.dotSize : 6, 2);
   const pixels = size * Math.min(width, height) / 1080;
@@ -85,7 +86,8 @@ export const riso = createCatalogEffect({
   // Pattern, then the two inks and Amount under Color.
   params: {
     // How far the two inks slip apart, in 1080p pixels (0: in register). Effects saved without a value had 8.
-    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 32, step: 0.5, unit: ' px', group: 'Pattern', legacyDefault: 8 },
+    // Below 0 renders 0 (the graph's max), and the card says so (renderMin).
+    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 32, step: 0.5, unit: ' px', renderMin: 0, group: 'Pattern', legacyDefault: 8 },
     // The cells of both dot screens, in 1080p pixels. A graph saved before Dot Size does not read it (graphOnly).
     dotSize: { type: 'number', label: 'Dot Size', default: 6, min: 2, max: 40, step: 1, unit: ' px', renderMin: 2, graphOnly: true, group: 'Pattern' },
     colorA: { type: 'color', label: 'Dark Ink', default: '#2046b3', group: 'Color' },
@@ -101,8 +103,27 @@ export const riso = createCatalogEffect({
 });
 export const risoGlow = createCatalogEffect({
   id: 'riso-glow', name: 'Riso Glow', category: 'halftone', shader, entryPoint: 'risoGlowFragment', animated: true,
-  params: { colorA: { type: 'color', label: 'Shadow Ink', default: '#4f46e5', group: 'Color' }, colorB: { type: 'color', label: 'Glow Ink', default: '#f43f5e', group: 'Color' } },
+  // Riso's print (same parameter ids) with a fluorescent Glow Ink that breathes. Card: Dot Size and Registration under
+  // Pattern, Glow and Speed under Glow & Pulse, then the two inks and Amount under Color.
+  params: {
+    // How far the two inks slip apart, in 1080p pixels (0: in register). Effects saved without a value had 14.
+    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 32, step: 0.5, unit: ' px', renderMin: 0, group: 'Pattern', legacyDefault: 14 },
+    // The cells of both dot screens, in 1080p pixels. A graph saved before Dot Size does not read it (graphOnly).
+    dotSize: { type: 'number', label: 'Dot Size', default: 6, min: 2, max: 40, step: 1, unit: ' px', renderMin: 2, graphOnly: true, group: 'Pattern' },
+    // How brightly the Glow Ink shines at the top of its pulse (0: a plain two-ink print). Reaches the twin through the Angle slot.
+    glow: { type: 'number', label: 'Glow', default: 1, min: 0, max: 2, step: 0.05, renderMin: 0, graphOnly: true, group: 'Glow & Pulse' },
+    speed: { type: 'number', label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, group: 'Glow & Pulse' },
+    colorA: { type: 'color', label: 'Shadow Ink', default: '#4f46e5', group: 'Color' },
+    colorB: { type: 'color', label: 'Glow Ink', default: '#f43f5e', group: 'Color' },
+    // The print alone by default; effects saved without an Amount keep the earlier 0.75.
+    amount: catalogBaseParam('amount', { group: 'Color', default: 1, legacyDefault: 0.75 }),
+  },
+  cardEnd: ['scale', 'glow', 'speed', 'colorA', 'colorB', 'amount'],
+  variantParam: 'dotSize',
+  angleSlotParam: 'glow',
   retired: ignoredBaseParams('Riso Glow', ['angle']),
+  paramWarnings: (params, width, height) => risoNotes(params, width, height, 'Riso Glow'),
+  presets: RISO_GLOW_PRESETS,
 });
 export const paperPrint = createCatalogEffect({
   id: 'paper-print', name: 'Paper Print', category: 'halftone', shader, entryPoint: 'paperPrintFragment', scaleFloor: 1,

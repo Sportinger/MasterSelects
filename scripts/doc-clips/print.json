@@ -1,0 +1,204 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "dancer_stage_motion.mp4",
+  "clips": [
+    {
+      "name": "riso-glow",
+      "effect": "riso-glow",
+      "params": {},
+      "range": [
+        1.0,
+        4.14
+      ],
+      "layout": "compare",
+      "crop": [
+        0,
+        60,
+        1340,
+        960
+      ],
+      "width": 1200,
+      "float": "left",
+      "alt": "The dancer turning on a dark stage, original left and with Riso Glow right: a two-ink print of fine pink and indigo dots on a deep plum ground, where her warm-lit skin, dress and the lamp at the left edge give off a soft pink glow that swells and fades about every three seconds",
+      "caption": "Left: original. Right: Riso Glow at its default settings, one breath of the glow.",
+      "loop": 0.35,
+      "poster": 0.2,
+      "maxBytes": 950000
+    },
+    {
+      "name": "riso-glow-presets",
+      "kind": "presets",
+      "effect": "riso-glow",
+      "range": [
+        1.0,
+        4.14
+      ],
+      "crop": [
+        300,
+        60,
+        1100,
+        960
+      ],
+      "width": 960,
+      "loop": 0.35,
+      "poster": 0.2,
+      "maxBytes": 1100000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Blacklight top left, violet and pink dots with a slowly breathing pink glow; Neon Sign top right, coral light on dark teal; Embers bottom left, an orange glow smouldering in a near-black print; Heartbeat bottom right, a red glow that beats fast on dark maroon",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "riso-glow-dot-size",
+      "effect": "riso-glow",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        300,
+        60,
+        1100,
+        960
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "dotSize",
+        "label": "Dot Size",
+        "from": 3,
+        "to": 20,
+        "unit": " px"
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 650000,
+      "float": "right",
+      "alt": "The dancer with Riso Glow while Dot Size runs from 3 to 20 px and back: the fine print of pink and indigo dots coarsens into large round dots and the glow widens with them, then both shrink again; the current value is shown at the bottom left",
+      "caption": "Dot Size from 3 to 20 px and back."
+    },
+    {
+      "name": "riso-glow-registration",
+      "effect": "riso-glow",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        300,
+        60,
+        1100,
+        960
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "scale",
+        "label": "Registration",
+        "from": 0,
+        "to": 16,
+        "unit": " px"
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 650000,
+      "float": "right",
+      "alt": "The dancer with Riso Glow while Registration runs from 0 to 16 px and back: the pink and indigo prints slide apart until pink fringes stand beside every edge, and come together again; the current value is shown at the bottom left",
+      "caption": "Registration from 0 to 16 px and back."
+    },
+    {
+      "name": "riso-glow-glow",
+      "effect": "riso-glow",
+      "params": {
+        "speed": 0
+      },
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        300,
+        60,
+        1100,
+        960
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "glow",
+        "label": "Glow",
+        "from": 0,
+        "to": 2,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 650000,
+      "float": "right",
+      "alt": "The dancer with Riso Glow while Glow runs from 0 to 2 and back at Speed 0: a plain two-ink print starts to shine pink around her skin, dress and the lamp, the glow grows strong and fades again; the current value is shown at the bottom left",
+      "caption": "Glow from 0 to 2 and back, at Speed 0 so the pulse holds still."
+    },
+    {
+      "name": "riso-glow-speed",
+      "effect": "riso-glow",
+      "params": {},
+      "range": [
+        0.2,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        300,
+        60,
+        1100,
+        960
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 650000,
+      "float": "right",
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          1,
+          3
+        ]
+      },
+      "poster": 2.6,
+      "alt": "The dancer with Riso Glow at three speeds, about two seconds each: at Speed 0 the glow holds steady, at 1 it swells and fades slowly, at 3 it pulses quickly; the speed is shown at the bottom left",
+      "caption": "Speed 0, 1 and 3, about two seconds each."
+    },
+    {
+      "name": "riso-glow-amount",
+      "effect": "riso-glow",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "single",
+      "crop": [
+        300,
+        60,
+        1100,
+        960
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "amount",
+        "label": "Amount",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 650000,
+      "float": "right",
+      "alt": "The dancer with Riso Glow while Amount runs from 0 to 1 and back: the original stage picture turns into the glowing pink and indigo print and back again; the current value is shown at the bottom left",
+      "caption": "Amount from 0 to 1 and back."
+    }
+  ]
+}

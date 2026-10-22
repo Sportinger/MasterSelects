@@ -34,6 +34,9 @@ export interface CatalogEffectOptions {
   cardEnd?: readonly string[];
   /** A number parameter of the look's own that the shader twin reads from the variant slot (Dithering's Levels). */
   variantParam?: string;
+  /** A number parameter of the look's own that the shader twin reads from the Angle slot, for a look without Angle
+   * (Riso Glow's Glow). */
+  angleSlotParam?: string;
 }
 /** Runtime-only distance a keyframed Speed has travelled (EffectParam.integratedAs); never stored. */
 export const CATALOG_SPEED_TRAVEL = 'speedTravel';
@@ -136,7 +139,9 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
         width, height,
         numberParam(values, 'scale', 14),
         numberParam(values, 'amount', 0.75),
-        numberParam(values, 'angle', 0),
+        options.angleSlotParam
+          ? numberParam(values, options.angleSlotParam, Number(params[options.angleSlotParam]?.default ?? 0))
+          : numberParam(values, 'angle', 0),
         timelineTimeSeconds,
         numberParam(values, 'speed', 0),
         variant,

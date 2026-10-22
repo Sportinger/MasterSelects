@@ -1867,9 +1867,9 @@ source alpha. Pattern Halftone keeps its Circle, Diamond and Line choice bound
 to the catalog-owned select schema instead of persisting duplicate options.
 
 Riso prints a two-ink separation through two dot screens as an editable graph
-([Riso](#riso)). Riso Glow keeps the earlier recipe: offset registration samples,
-Rec.709 ink loads, subtractive paper blend and source-alpha path, plus a pulse from
-composition timeline time; colors and controls remain owned by the catalog schema.
+([Riso](#riso)); Riso Glow prints the same separation and screens a gathered,
+pulsing glow of its second ink onto it ([Riso Glow](#riso-glow)). Colors and
+controls remain owned by the catalog schema.
 
 Dithering and Dither Studio expose their Bayer/checker thresholds, quantization,
 ink selection and source-alpha path as editable graph operations (Dithering's own
@@ -1903,7 +1903,7 @@ The 25 looks of the `two-tone-pattern` engine (`effectEngineMembers('two-tone-pa
   rewires a recipe's clamped size node to size × shorter side / 1080 (`frame-scale`), at least one
   output pixel (`<size>-pixels`). Half-quality previews, thumbnails, 1080p and 4K exports show the same
   pattern. Measured: Halftone, Pattern Halftone, Dithering, Riso (Dot Size; Registration with no pixel
-  floor), Riso Glow (Registration, no pixel floor), Paper Print, Pixel Poster, Cross Stitch, Tone Geometry, Glitch Grid, Scatter Mosaic, Glass
+  floor), Riso Glow (as Riso), Paper Print, Pixel Poster, Cross Stitch, Tone Geometry, Glitch Grid, Scatter Mosaic, Glass
   Dispersion, Crosshatch, Kilim, Vector Engraving, Embroidery, Toy Bricks and the Outline edge step.
   Dithering rounds to whole pixels (`wholePixels`; a 1.5-pixel Bayer cell beats into a plaid) and its
   card says so for frames where Pixel Size is not whole. A size thinner than one pixel of a small frame
@@ -2019,12 +2019,50 @@ registration fringe, transparency, any ink pair, Amount, the earlier recipe), GP
 `tests/browser/image-graph-probe.html?suite=riso-graphs` (Riso within one 8-bit step on at most 0.5 % of
 bytes: the graph sums channels node by node, the twin with `dot()`).
 
-### Riso Glow inks
+### Riso Glow
 
-Riso Glow keeps the earlier shared recipe (`createEarlierRisoGraph('riso-glow')`): each ink filters the
-paper towards its own colour where it prints, `paper × mix(1, inkA, a) × mix(1, inkB, b)`, with `a` and
-`b` the coverage of the shadow and the glow ink (1 − luminance, read 0.35 × Registration pixels of a 1080p
-frame to the left and to the right), plus `glow × (a·inkA + b·inkB) × 0.3`, pulsing with Speed.
+`createRisoGlowGraph` (`src/services/operators/risoPrintEffectGraph.ts`, WGSL twin `risoGlowFragment`) is
+Riso's print ([Riso](#riso): same builder, same node ids, same parameters `scale`, `dotSize`, `colorA`,
+`colorB`, `amount`) with a fluorescent second ink (`colorB`, the Glow Ink) in two passes:
+
+- **Print & Glow Share** (pass 1): the print in linear light goes into the colour and the glow share into
+  the alpha of an `image.materialize` cache (`glow-cache`, full size). The share is the glow ink's coverage
+  of its cell × (1 − the shadow ink's coverage there), both from Tone (`warm-coverage`,
+  `warm-other-coverage`): 1 where only the glow ink prints, 0 on paper and where both inks print in full
+  (black), so the glow never lifts the darkest colour.
+- **Glow Spill** (pass 2): an `image.kernel-rect-reduce` over `RISO_GLOW_KERNEL` (9) × 9 taps
+  `RISO_GLOW_STEP` (0.75) cells apart around the pixel, kept within the frame's outer pixel centres, with
+  `math.gaussian.scalar` weights (sigma `RISO_GLOW_SIGMA`, 2 taps), reads the cached share: the gathered
+  share × the glow ink's linear light is the glow light. The reach follows Dot Size (three cells each way),
+  so preview, thumbnails and every export size show the same glow.
+- **Pulse:** `RISO_GLOW_PULSE` 0.55 + 0.45 × cos(2 × timeline seconds × **Speed**), full at second 0 and
+  at Speed 0; strength = max(**Glow**, 0) (`glow-clamped`, `renderMin` 0) × pulse × `RISO_GLOW_GAIN`
+  (1.5). Time × Speed is a rate product, so a keyframed Speed uses the distance it has travelled.
+- **Glow & Mix:** the glow is screened onto the cached print in linear light, 1 − (1 − print) ×
+  e^(−strength × light) (`math.exp.scalar`, `math.power.rgb`), back to sRGB and mixed over the pixel by
+  **Amount** (default 1; saves without one keep 0.75) with the pixel's own alpha.
+
+At Glow 0 it renders exactly Riso's print with the same inks. The graph has 434 nodes (Riso 384), leaving
+room under the 512-node budget for a remix. The twin computes the cached share at the four pixel centres
+around each tap (as the hardware's bilinear read of the cache does) and matches the graph within one 8-bit
+step on at most 3 % of bytes (the cache is rgba16float). Registration and Glow below 0 render 0 and the
+card says so (`renderMin`). Glow reaches the twin through the Angle slot, which Riso Glow does not use
+(`createCatalogEffect({ angleSlotParam })`). Card: Pattern (Dot Size, Registration), Glow & Pulse (Glow,
+Speed), Color (Shadow Ink, Glow Ink, Amount). Stage folders: Riso's six print folders, then Print & Glow
+Share, Glow Spill, Pulse (Glow, Speed), Glow & Mix (Amount). Presets in
+`src/effects/halftone/risoGlowPresets.ts`. Its own parameters (Dot Size, Glow) take it out of the Style
+menu of the other looks.
+
+A graph-less Riso Glow saved before Dot Size (`hasEarlierRisoParams`) keeps the earlier recipe,
+`createEarlierRisoGraph('riso-glow')`: each ink filters the paper towards its own colour where it prints,
+`paper × mix(1, inkA, a) × mix(1, inkB, b)`, with `a` and `b` the coverage of the shadow and the glow ink
+(1 − luminance, read 0.35 × Registration pixels of a 1080p frame to the left and to the right), plus
+`pulse × (a·inkA + b·inkB) × 0.3` with the pulse 0.55 + 0.45 × sin(2 × seconds × Speed). Its card hides
+Dot Size and Glow (`graphOnly`) and says so; Registration keeps 14 when it was saved without one
+(`legacyDefault`). Tests: `tests/unit/imageRisoGraphs.test.ts` (Glow 0 equals Riso, black and white
+unchanged, the glow on the ink and its spill into the dark, the pulse and Speed 0, transparency, the
+earlier recipe and the card notes, the node budget), `tests/unit/patternEngineLooks.test.ts`, GPU parity
+`tests/browser/image-graph-probe.html?suite=riso-graphs`.
 
 ### CCTV noise speed
 
