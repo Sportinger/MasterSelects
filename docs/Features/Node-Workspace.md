@@ -90,9 +90,10 @@ keyboard-accessible alternative to cable dragging.
 Color Corrector/Wheels numeric channels, Hue Shift's Shift, Gaussian Blur's
 Radius and the clip **Transform** (Position X/Y/Z, Anchor X/Y, Scale, Scale X/Y,
 Rotation X/Y/Z, Opacity) support **Fixed**, existing **Keyframes**, or a connected **Node**. Their
-compact Properties/Nodes controls have a **Source** selector and **Go to source**; in an effect card the
-line that opens them (**Node · Source**, **Fixed · Source**) appears only while a node drives the
-value, its value is fixed against its keys, or its source fails, so an undriven row looks like any other.
+compact Properties/Nodes controls have a **Source** selector and **Go to source**; the line under a row
+that opens them (**Node · Source**, **Fixed · Source**) appears only while a node drives the value, its
+value is fixed against its keys, or its source fails, so an undriven row looks like any other. To drive
+an undriven value, connect a node to its input in the Nodes tab.
 When the Nodes panel shows the **Timeline**, Go to source opens the clip's lane in
 place and selects the source node instead of leaving the timeline view.
 Nodes with optional scalar controls show a compact `+` directly below their last
