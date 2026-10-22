@@ -17,6 +17,34 @@ FCPXML is a container choice of its own, under **Timeline**.
 
 ### The Export panel
 
+<figure class="docs-shot docs-shot--float-right">
+
+<div class="docs-shot-stage">
+
+![The Export panel from top to bottom: Presets, Output with Name, Container and Method, Video, Audio, the closed Range & Summary and Render Quality sections, and the green Export button with the estimated size](./assets/export/export-panel.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 590 1620" aria-hidden="true" focusable="false">
+<defs><marker id="export-panel-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M89 26 L173 26" marker-end="url(#export-panel-arrow)" />
+<circle class="docs-shot-number" cx="89" cy="26" r="18" /><text x="89" y="26" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M89 249 L173 249" marker-end="url(#export-panel-arrow)" />
+<circle class="docs-shot-number" cx="89" cy="249" r="18" /><text x="89" y="249" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M125 528 L209 528" marker-end="url(#export-panel-arrow)" />
+<circle class="docs-shot-number" cx="125" cy="528" r="18" /><text x="125" y="528" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M125 1014 L209 1014" marker-end="url(#export-panel-arrow)" />
+<circle class="docs-shot-number" cx="125" cy="1014" r="18" /><text x="125" y="1014" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M89 1360 L173 1360" marker-end="url(#export-panel-arrow)" />
+<circle class="docs-shot-number" cx="89" cy="1360" r="18" /><text x="89" y="1360" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M89 1416 L173 1416" marker-end="url(#export-panel-arrow)" />
+<circle class="docs-shot-number" cx="89" cy="1416" r="18" /><text x="89" y="1416" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M72 1583 L156 1583" marker-end="url(#export-panel-arrow)" />
+<circle class="docs-shot-number" cx="72" cy="1583" r="18" /><text x="72" y="1583" class="docs-shot-number-text">7</text>
+</svg>
+</div>
+
+<figcaption>The Export panel. 1 — Presets. 2 — Output. 3 — Video. 4 — Audio. 5 — Range &amp; Summary. 6 — Render Quality. 7 — Export.</figcaption>
+</figure>
+
 From top to bottom:
 
 1. **Presets**: the **Preset** list holds the project's saved export settings; choosing one loads it. **Save** stores the current settings under a name, **Update** overwrites the selected preset. When the range holds storyboard scenes, a **Storyboard output** row follows: **Normal video** (blocked while a scene has no accepted media) or **Animatic (slates + stills)**, which renders empty scenes as labelled slates.
@@ -25,9 +53,9 @@ From top to bottom:
 4. **Audio**: codec, sample rate, bitrate for compressed audio and **Normalize** under Processing.
 5. **Range & Summary** (closed at first): **Range** is **Full timeline** or **In / Out markers**, followed by the timecode, duration, frame count, output size and the estimated file size.
 6. **Render Quality** (closed at first, for video and images): how 3D scenes are rendered ([Render Quality](#render-quality)).
-7. **Batch Export**: appears when files are dropped onto the panel and lists them as a queue; **All same** shares one set of settings between them.
-8. **Glyph Artifacts** (closed at first): appears when the selected clip has a Glyph effect and exports its cell grid as files ([Glyph Artifact Export](#glyph-artifact-export)).
-9. The green **Export** button, with the estimated size beside its label.
+7. The green **Export** button, with the estimated size beside its label.
+
+Two more sections appear above the Export button only when needed: **Batch Export** when files are dropped onto the panel (it lists them as a queue; **All same** shares one set of settings between them), and **Glyph Artifacts** (closed at first) when the selected clip has a Glyph effect; it exports the effect's cell grid as files ([Glyph Artifact Export](#glyph-artifact-export)).
 
 While a video export runs, red **Cancel** discards the run and yellow **Finish File Early** finishes the current frame, closes the file and downloads what is done so far. Finish File Early becomes available after the first frame with WebCodecs, HTMLVideo, FFmpeg and HAP; it is not offered while the export prepares or finalises, and not for audio-only, GIF, image-sequence or batch exports. The audio ends with the shortened video.
 
