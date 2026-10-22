@@ -64,7 +64,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>ASCII with the Shade Blocks preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Background. 4 — Ramp: the characters, here Blocks. 5 — Color Source.</figcaption>
 </figure>
 
-**Style** – switches to another look of the same engine and keeps your values and keyframes, for example [Matrix Rain](./matrix.md), [Glyph Matrix](./glyph-matrix.md) or [Word Mosaic](./word-mosaic.md).
+**Style** – switches to another look of the same engine and keeps your values and keyframes, for example [Word Mosaic](./word-mosaic.md), [Pixel Code](./pixel-code.md) or [Number Field](./number-field.md). The moving looks, such as [Glyph Matrix](./glyph-matrix.md), have Speed and Roll and form their own family.
 
 ### Grid
 

@@ -17,7 +17,7 @@ struct GlyphParams {
   colorB: vec4f,
   background: f32,
   travel: f32,
-  pad0: f32,
+  roll: f32,
   pad1: f32,
 };
 
@@ -36,6 +36,16 @@ struct GlyphCell {
 @group(0) @binding(2) var<uniform> params: GlyphParams;
 @group(0) @binding(3) var feedbackTex: texture_2d<f32>;
 
+// Roll: the cell runs through a window of 1 + ceil(roll × (count − 1)) characters around its own one,
+// kept inside the ramp; roll 1 is the whole ramp, 0 holds it on its own character.
+fn rolledIndex(baseIndex: f32, offset: f32) -> f32 {
+  let count = max(params.glyphCount, 1.0);
+  let window = ceil(clamp(params.roll, 0.0, 1.0) * (count - 1.0)) + 1.0;
+  let start = clamp(baseIndex - floor(window * 0.5), 0.0, count - window);
+  let shifted = baseIndex - start + offset;
+  return start + shifted - floor((shifted + 0.5) / window) * window;
+}
+
 fn glyphCell(uv: vec2f, indexOffset: f32) -> GlyphCell {
   let grid = params.resolution / max(params.cellSize, 2.0);
   let id = floor(uv * grid);
@@ -44,7 +54,7 @@ fn glyphCell(uv: vec2f, indexOffset: f32) -> GlyphCell {
   let sourceColor = textureSample(inputTex, texSampler, clamp(sampleUv, vec2f(0.001), vec2f(0.999)));
   let tone = luminance(sourceColor.rgb);
   let baseIndex = glyphIndexFromTone(tone, params.glyphCount, params.invert);
-  let index = baseIndex + indexOffset - floor((baseIndex + indexOffset) / params.glyphCount) * params.glyphCount;
+  let index = rolledIndex(baseIndex, indexOffset);
   let alpha = sampleGlyphAlpha(local, index, params.atlasColumns, params.atlasRows);
   let original = textureSample(inputTex, texSampler, uv);
   return GlyphCell(sourceColor, original, local, id, tone, index, alpha);

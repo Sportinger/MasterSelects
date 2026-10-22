@@ -1,13 +1,14 @@
 // The shared glyph-mosaic engine (createGlyphEffect + createDefaultGlyphGraph), checked across every look:
 // every shown control reaches the output, Background keeps saved looks and lifts new ones, Cell Size
-// counts pixels of a 1080p frame, a keyframed Speed moves by its travelled distance, the looks hold
-// still while paused, and the emitted WGSL has valid literals.
+// counts pixels of a 1080p frame, a keyframed Speed moves by its travelled distance, Roll keeps the moving
+// looks inside a window of their ramp, the looks hold still while paused, and the emitted WGSL has valid literals.
 import { describe, expect, it } from 'vitest';
 import { getAllEffects, getDefaultParams, getEffect } from '../../src/effects';
 import { GLYPH_NO_TRAVEL, GLYPH_SPEED_TRAVEL, glyphCellPixels, glyphCellWarnings } from '../../src/effects/glyph/glyphGrid';
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { effectParamDefinitions } from '../../src/services/operators/effectParamVisibility';
+import { effectStyleOptions } from '../../src/services/effects/effectStyles';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { evaluateEffectKeyframes } from '../../src/stores/timeline/keyframes/effectKeyframeEvaluation';
 import { FEEDBACK_PARAMETERS } from '../../src/effects/_shared/feedbackParameters';
@@ -188,6 +189,46 @@ describe('glyph engine', () => {
         sampleImage: pixel, sampleResource: () => [0, 0, 0, 1] }) as number[];
       expect(output.map(value => Number(value.toFixed(5))), type).toEqual(pixel(uv).map(value => Number(value.toFixed(5))));
     }
+  });
+
+  it('Roll keeps a moving look inside a window of its ramp: 1 runs through the whole ramp (the earlier look), 0 holds each cell still', () => {
+    for (const type of GLYPH_LOOKS) {
+      const roll = getEffect(type)!.params.roll;
+      if (!('speed' in getEffect(type)!.params)) { expect(roll, type).toBeUndefined(); continue; }
+      expect(roll, type).toMatchObject({ legacyDefault: 1, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true, animatable: true, group: 'Motion' });
+      expect(roll.default, type).toBe(type === 'glyph-matrix' ? .2 : 1);
+    }
+    // The test atlas ' .#@' is 2 × 2 glyphs; the source tone (.63) picks '#' (index 2).
+    const glyphAt = (params: Record<string, unknown>, time: number) => {
+      const [x, y] = render('glyph-matrix', { speed: 1, ...params }, { time }).atlas[0];
+      return Math.floor(x * 2) + Math.floor(y * 2) * 2;
+    };
+    const times = Array.from({ length: 40 }, (_, index) => index / 24);
+    const seen = (params: Record<string, unknown>) => new Set(times.map(time => glyphAt(params, time)));
+    // Roll 1: the earlier sweep, (tone index + floor(6 t + column + .35 row)) wrapped over the ramp; uv (.31, .47) is cell (42, 36).
+    for (const time of times) expect(glyphAt({ roll: 1 }, time), `t ${time}`).toBe((2 + Math.floor(6 * time + 42 + .35 * 36)) % 4);
+    expect(seen({ roll: 1 })).toEqual(new Set([0, 1, 2, 3]));
+    // Roll 0: the character of the cell's brightness, at every moment.
+    expect(seen({ roll: 0 })).toEqual(new Set([2]));
+    // 1 + ceil(Roll × 3) characters, centred on the cell's own and kept inside the ramp: any Roll above 0 moves.
+    expect(seen({ roll: .01 })).toEqual(new Set([1, 2]));
+    expect(seen({ roll: .3 })).toEqual(new Set([1, 2]));
+    expect(seen({ roll: .5 })).toEqual(new Set([1, 2, 3]));
+    expect(seen({ roll: .75 })).toEqual(new Set([0, 1, 2, 3]));
+    // Out of range renders clamped and says so; an instance saved before Roll existed loads with the whole ramp.
+    expect(seen({ roll: 3 })).toEqual(seen({ roll: 1 }));
+    expect(seen({ roll: -1 })).toEqual(new Set([2]));
+    expect(paramRangeNotes(getEffect('glyph-matrix')!.params, { roll: 3 }, effectOperatorGraph({ type: 'glyph-matrix', params: getDefaultParams('glyph-matrix') }))[0].message)
+      .toBe('Roll 3 is above the rendered range (0 to 1) and renders as 1.');
+    expect(migratePersistedEffectOperatorGraph({ id: 'old', name: 'Glyph Matrix', type: 'glyph-matrix', enabled: true, params: { cellSize: 14 } }).params.roll).toBe(1);
+    // A node setup saved before Roll existed hides it in the card.
+    const graph = structuredClone(effectOperatorGraph({ type: 'glyph-matrix', params: getDefaultParams('glyph-matrix') }));
+    graph.nodes.find(node => node.id === 'roll')!.bindings = {};
+    expect(effectParamDefinitions({ type: 'glyph-matrix', params: getDefaultParams('glyph-matrix'), operatorGraph: graph }).roll.hidden).toBe(true);
+    // The Style menu still offers the other moving looks: they share the same parameters.
+    expect(effectStyleOptions('glyph-matrix').map(option => option.value)).toEqual(expect.arrayContaining(['matrix', 'symbol-matrix', 'retro-matrix', 'data-hatch']));
+    expect(effectStyleOptions('ascii').map(option => option.value)).toEqual(expect.arrayContaining(['word-mosaic', 'pixel-code', 'number-field']));
+    expect(effectStyleOptions('ascii').map(option => option.value)).not.toContain('glyph-matrix');
   });
 
   it('Weight is not keyframeable and draws one of the nine font weights, so no value builds an atlas of its own', () => {

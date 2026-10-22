@@ -1,6 +1,6 @@
 # ASCII Ghost
 
-<!-- effect-docs: basic page sha=76708822bb60, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=607a1f5ad4f7, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 ASCII art whose characters cycle over time and leave fading ghost trails; Cell Size sets character size, Speed the cycling rate.
 
@@ -37,6 +37,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Light | a colour | `#e8fff5` |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |
+| Roll | 0 to 1 | 1 |
 | Reset Trail | on or off | off |
 | **General** | | |
 | History Loop | Reset, Continuous | Reset |

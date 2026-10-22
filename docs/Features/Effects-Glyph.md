@@ -14,7 +14,7 @@ What each style changes; everything else works the same.
 |---|---|
 | characters chosen by brightness, in the picture's colours | [ASCII](./effects/ascii.md) |
 | characters that cycle and leave fading ghosts | [ASCII Ghost](./effects/ascii-ghost.md) |
-| a diagonal wave sweeping through the characters | [Glyph Matrix](./effects/glyph-matrix.md) |
+| characters that roll on to their neighbours in diagonal waves | [Glyph Matrix](./effects/glyph-matrix.md) |
 | symbols that swap and pulse at random | [Symbol Matrix](./effects/symbol-matrix.md) |
 | amber terminal text scrolling with scanlines | [Retro Matrix](./effects/retro-matrix.md) |
 | falling green code with bright heads | [Matrix Rain](./effects/matrix.md) |
@@ -54,6 +54,10 @@ drawn and coloured.
 - **Invert Ramp** swaps light and dense characters;
   **Speed** sets how fast the moving styles change; they move with the playhead and stand still
   when it stops, and a keyframed Speed speeds up smoothly.
+- **Roll** – how much of the ramp the characters of a moving style roll through, around the
+  character of their own brightness: 0 holds them still, 1 runs through the whole ramp. Glyph Matrix
+  starts at 0.2, so its figure stays readable; the other moving styles start at 1, their look before
+  Roll existed.
 
 **Tip:** bright, contrasty footage reads best. For pure characters on black, set **Background** to 0;
 for a projection, raise **Cell Size** to 24 or more. The **Style** menu in the card switches to another look

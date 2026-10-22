@@ -3,21 +3,91 @@
     {
       "name": "ascii-inspector",
       "effect": "ascii",
-      "params": { "cellSize": 10, "rampPreset": "blocks", "customRamp": "", "background": 0.2 },
+      "params": {
+        "cellSize": 10,
+        "rampPreset": "blocks",
+        "customRamp": "",
+        "background": 0.2
+      },
       "image": "dancer_stage.jpg",
       "preview": 380,
       "top": "tabs",
-      "viewport": { "width": 1600, "height": 1300 },
+      "viewport": {
+        "width": 1600,
+        "height": 1300
+      },
       "alt": "Properties, Effects with an ASCII card: Style menu, Preset menu showing Shade Blocks, Cell Size, Amount, Background and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Color Source, beside a strip of the preview where the dancer is built from shaded blocks",
       "caption": "ASCII with the Shade Blocks preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Background. 4 — Ramp: the characters, here Blocks. 5 — Color Source.",
       "marks": [
-        { "target": "Preset", "label": "Preset" },
-        { "target": "Cell Size", "label": "Cell Size" },
-        { "target": "Background", "label": "Background" },
-        { "target": "Ramp", "label": "Ramp" },
-        { "target": "Color Source", "label": "Color Source" }
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Background",
+          "label": "Background"
+        },
+        {
+          "target": "Ramp",
+          "label": "Ramp"
+        },
+        {
+          "target": "Color Source",
+          "label": "Color Source"
+        }
       ],
-      "hide": ["Particle Out"]
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "glyph-matrix-inspector",
+      "effect": "glyph-matrix",
+      "params": {
+        "cellSize": 12,
+        "rampPreset": "bars",
+        "customRamp": "",
+        "roll": 1,
+        "background": 0.25
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1450
+      },
+      "alt": "Properties, Effects with a Glyph Matrix card: Style menu, Preset menu showing Data Wave, Cell Size, Amount, Background and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Color Source, Dark and Light, then Speed and Roll, beside a strip of the preview where the dancer is built from rising bars in diagonal stripes",
+      "caption": "Glyph Matrix with the Data Wave preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Background. 4 — Ramp: the characters, here Bars. 5 — Roll: how far they roll through the ramp.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Background",
+          "label": "Background"
+        },
+        {
+          "target": "Ramp",
+          "label": "Ramp"
+        },
+        {
+          "target": "Roll",
+          "label": "Roll"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

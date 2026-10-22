@@ -1,6 +1,6 @@
 # Symbol Matrix
 
-<!-- effect-docs: basic page sha=8cba891e98e8, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=c80d871463c0, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Symbol character art where each cell randomly swaps glyphs and pulses in brightness; Speed controls the flicker rate.
 
@@ -37,6 +37,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Light | a colour | `#e8fff5` |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |
+| Roll | 0 to 1 | 1 |
 <!-- generated:controls end -->
 
 **Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Tag Pills](./capsule-cloud.md), [Data Hatching](./data-hatch.md), [Dither Text](./dither-text.md), [Glyph Matrix](./glyph-matrix.md), [Matrix Rain](./matrix.md), [Dither Glow](./pixel-dither.md), [Retro Matrix](./retro-matrix.md), [Creative UI Collage](./ui-collage.md).

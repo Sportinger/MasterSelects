@@ -21,6 +21,9 @@ const clampLabels = (labels: Record<string, string>) => Object.fromEntries(Objec
 export const GLYPH_PRESENTATION_EFFECTS = new Set(['ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic',
   'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither',
   'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'contour-type']);
+/** Glyph looks that move with the playhead (Speed, Roll). */
+const GLYPH_MOVING_EFFECTS = new Set(['glyph-matrix', 'data-hatch', 'dither-text', 'symbol-matrix', 'pixel-dither', 'retro-matrix',
+  'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost']);
 /** Pointwise color effects whose graphs predate the 2026-10 recipes (and the saved original color graphs). */
 const COLORS = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'temperature', 'vibrance', 'threshold', 'posterize', 'invert']);
 const COLOR_RECIPES = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance']);
@@ -66,7 +69,7 @@ const CHROMA_KEY_PORTS = { 'unmix-color': 'Color', 'screen-channel': 'Screen Cha
   'spill-other-mean': 'Other Mean', 'spill-is-gentle': 'Is Gentle', 'spill-limit': 'Limit', 'spill-strength': 'Strength', 'spill-excess': 'Excess' };
 // What crosses between the glyph engine's folders: the cell, its colour and tone, the glyph and its coverage.
 const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'local-uv': 'Position in Cell', 'sample-uv': 'Cell Center', 'source-split:rgb': 'Cell Color',
-  'source-split:alpha': 'Cell Alpha', tone: 'Tone', 'glyph-index': 'Glyph Index', 'safe-count': 'Glyph Count', 'atlas-split:w': 'Glyph Coverage',
+  'source-split:alpha': 'Cell Alpha', tone: 'Tone', 'glyph-index': 'Glyph Index', 'wrapped-index': 'Glyph Index', 'rolled-index': 'Glyph Index', 'safe-count': 'Glyph Count', 'atlas-split:w': 'Glyph Coverage',
   duotone: 'Duotone', ink: 'Ink', background: 'Dark Ground', 'background-lift': 'Ground', 'glyph-result': 'Glyph Cell', mixed: 'Faded Color',
   'mixed-alpha': 'Faded Alpha', 'original-split:rgb': 'Original Color', 'original-split:alpha': 'Original Alpha' };
 /** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */
@@ -294,15 +297,29 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   };
   // Threshold and Posterize name their hard step and soft ramp (Softness, 2026-10-21).
   if (COLORS.has(type)) return type === 'threshold' || type === 'posterize' ? { ...ORIGINAL_COLOR_PRESENTATION, portLabels: POINTWISE_PORTS } : ORIGINAL_COLOR_PRESENTATION;
-  if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
+  // The moving looks split the glyph choice into Glyph Offset (how far each cell has moved on through
+  // the ramp right now) and Roll Window (the part of the ramp it may move through, Roll).
+  if (GLYPH_PRESENTATION_EFFECTS.has(type) && GLYPH_MOVING_EFFECTS.has(type)) {
+    const glyph = glyphPresentation();
+    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window' },
+      portLabels: { ...GLYPH_PORTS, 'glyph-index': 'Tone Glyph', 'index-offset': 'Glyph Offset', 'index-time-speed': 'Clock', 'index-time-phase': 'Ticks',
+        'index-sweep': 'Sweep', 'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window' },
+      stage: (node) => /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'
+        : /^(index-|cell-id-split$)/.test(node.id) ? 'offset' : glyph.stage(node) };
+  }
+  if (GLYPH_PRESENTATION_EFFECTS.has(type)) return glyphPresentation();
+  return undefined;
+}
+
+function glyphPresentation(): EffectPresentationPlan {
+  return {
     labels: { grid: 'Cell Grid', source: 'Cell Sampling & Tone', index: 'Glyph Selection', atlas: 'Atlas Sampling', appearance: 'Ink & Appearance', feedback: 'Feedback Resolve' },
     portLabels: GLYPH_PORTS,
     stage: ({ id }) => /^(tiny-vec2|almost-vec2)$/.test(id) ? 'sources'
       : /^(ghost-current|ghost-history|ghost-resolved|ghost-faded|ghost-max|ghost-image|ghost-decay)/.test(id) ? 'feedback'
       : /^(cellSize-clamped$|safe-cell|grid$|scaled-uv|cell-id$|local-uv|half-vec2|sample-pixel|sample-uv$)/.test(id) ? 'grid'
         : /^(clamped-source|source-sample|source-split|tone$)/.test(id) ? 'source'
-          : /^(inverse-tone|mapped-tone|clamped-tone|safe-count|glyph-scaled|glyph-index|index-|shifted-index|wrapped-index|cell-id-split|word-phase|word-index|brand-centered|brand-radius|brand-index|uv-split|contour-current|contour-index)/.test(id) ? 'index'
+          : /^(inverse-tone|mapped-tone|clamped-tone|safe-count|glyph-scaled|glyph-index|index-|shifted-index|wrapped-index|rolled-index$|roll-clamped$|cell-id-split|word-phase|word-index|brand-centered|brand-radius|brand-index|uv-split|contour-current|contour-index)/.test(id) ? 'index'
             : /^(safe-columns|safe-rows|column-ratio|atlas-|row-width|clamped-local)/.test(id) ? 'atlas' : 'appearance',
   };
-  return undefined;
 }

@@ -18,6 +18,8 @@ type GlyphGraphVariant = 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' 
  *   pixels, so preview qualities, thumbnails and exports show the same characters (glyphGrid.ts).
  * - Clock: moving looks advance by timeline time × Speed, or by the distance a keyframed Speed has
  *   travelled (`speedTravel`, written while rendering), so a Speed ramp never jumps.
+ * - Roll (moving looks): each cell runs through a window of 1 + ceil(Roll × (ramp − 1)) characters around
+ *   its own one; Roll 1 is the whole ramp (instances saved before Roll existed), 0 holds the cells still.
  * - Background: the cell ground is mixed from the look's dark ground towards the character colour
  *   (Background 0 = the original dark ground, which instances saved before it existed keep).
  */
@@ -120,9 +122,28 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-matrix-rain', 'math.subtract.scalar', rainStart, { node: idParts.node, port: 'y' }));
       } else offset = g.unary('index-offset', 'math.floor.scalar', phase);
     }
-    const shifted = g.binary('shifted-index', 'math.add.scalar', baseGlyphIndex, offset);
-    const cycles = g.unary('index-cycles', 'math.floor.scalar', g.binary('index-ratio', 'math.divide-ieee.scalar', shifted, safeCount));
-    glyphIndex = g.binary('wrapped-index', 'math.subtract.scalar', shifted, g.binary('index-wrap', 'math.multiply.scalar', cycles, safeCount));
+    if (animated) {
+      // Roll: the moving looks run each cell through a window of 1 + ceil(Roll × (ramp − 1)) characters around
+      // its own one (2 or more as soon as Roll > 0), kept inside the ramp, from its own character on. Roll 1
+      // is the whole ramp (the earlier look); 0 holds every cell on the character of its brightness.
+      const rollValue = g.node('roll', 'values.number', 'value', { value: 'roll' }, { value: 1 });
+      // Roll outside 0..1 renders clamped (renderMin/renderMax; paramRangeNotes reports it through this node's id).
+      const roll = g.node('roll-clamped', 'math.clamp.scalar'); g.edge(rollValue, roll, 'value'); g.edge(zero, roll, 'min'); g.edge(one, roll, 'max');
+      const steps = g.binary('index-roll-scaled', 'math.multiply.scalar', roll, g.binary('index-roll-steps', 'math.subtract.scalar', safeCount, one));
+      const window = g.binary('index-window', 'math.add.scalar', g.unary('index-roll-chars', 'math.ceil.scalar', steps), one);
+      const halfWindow = g.unary('index-window-half', 'math.floor.scalar', g.binary('index-window-halved', 'math.multiply.scalar', window, half));
+      const start = g.node('index-window-start', 'math.clamp.scalar'); g.edge(g.binary('index-window-centered', 'math.subtract.scalar', baseGlyphIndex, halfWindow), start, 'value');
+      g.edge(zero, start, 'min'); g.edge(g.binary('index-window-last-start', 'math.subtract.scalar', safeCount, window), start, 'max');
+      const shifted = g.binary('shifted-index', 'math.add.scalar', g.binary('index-in-window', 'math.subtract.scalar', baseGlyphIndex, start), offset);
+      // + ½ keeps the quotient off whole numbers, so GPU division never drops a cycle.
+      const cycles = g.unary('index-cycles', 'math.floor.scalar', g.binary('index-ratio', 'math.divide-ieee.scalar', g.binary('index-ratio-centered', 'math.add.scalar', shifted, half), window));
+      const wrapped = g.binary('index-window-wrapped', 'math.subtract.scalar', shifted, g.binary('index-wrap', 'math.multiply.scalar', cycles, window));
+      glyphIndex = g.binary('rolled-index', 'math.add.scalar', start, wrapped);
+    } else {
+      const shifted = g.binary('shifted-index', 'math.add.scalar', baseGlyphIndex, offset);
+      const cycles = g.unary('index-cycles', 'math.floor.scalar', g.binary('index-ratio', 'math.divide-ieee.scalar', shifted, safeCount));
+      glyphIndex = g.binary('wrapped-index', 'math.subtract.scalar', shifted, g.binary('index-wrap', 'math.multiply.scalar', cycles, safeCount));
+    }
   }
   const safeColumns = g.binary('safe-columns', 'math.max.scalar', columns, one), safeRows = g.binary('safe-rows', 'math.max.scalar', rows, one);
   const columnRatio = g.binary('column-ratio', 'math.divide-ieee.scalar', glyphIndex, safeColumns), atlasRow = g.unary('atlas-row', 'math.floor.scalar', columnRatio);

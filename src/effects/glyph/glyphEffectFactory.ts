@@ -29,6 +29,8 @@ export interface GlyphEffectOptions {
   defaultCellSize?: number;
   /** Background of new instances (0 = the look's own dark ground, 1 = the picture fills each cell). */
   defaultBackground?: number;
+  /** Roll of new instances of a moving look (1 = the whole ramp, the look before Roll existed). */
+  defaultRoll?: number;
   /** Shared colour controls this look never reads: hidden in the card, kept in saved projects. */
   ignoresColors?: readonly GlyphColorControl[];
   params?: Record<string, EffectParam>;
@@ -93,6 +95,12 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
       speed: {
         type: 'number' as const, label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion',
         integratedAs: GLYPH_SPEED_TRAVEL,
+      },
+      // How far the characters roll through the ramp: a window of Roll × ramp characters around each
+      // cell's own one. Instances saved before it existed roll through the whole ramp (1).
+      roll: {
+        type: 'number' as const, label: 'Roll', default: options.defaultRoll ?? 1, legacyDefault: 1, min: 0, max: 1, step: 0.01,
+        animatable: true, group: 'Motion', renderMin: 0, renderMax: 1, graphOnly: true,
       },
     } : {}),
     ...(options.feedback ? {
@@ -167,7 +175,8 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
         ...colorB,
         Math.min(Math.max(numeric(values.background, 0), 0), 1),
         numeric(values[GLYPH_SPEED_TRAVEL], GLYPH_NO_TRAVEL),
-        0, 0,
+        Math.min(Math.max(numeric(values.roll, 1), 0), 1),
+        0,
       ]);
     },
   };

@@ -377,7 +377,7 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
 (`src/services/operators/asciiEffectGraph.ts`); cell geometry and clock constants live in
 `src/effects/glyph/glyphGrid.ts`, and `shader.wgsl` is the WGSL twin. A look passes `id`, `name`,
 `entryPoint`, and optionally `animated`, `feedback`, `defaultRamp`, `defaultCellSize`,
-`defaultBackground`, `ignoresColors` and `presets`.
+`defaultBackground`, `defaultRoll`, `ignoresColors` and `presets`.
 
 - **Background** (`background`, 0–1, Style group): the ground behind each character is mixed from
   the look's dark ground (source × 0.08, Dark × 0.15, or its own paper/black) towards the
@@ -396,6 +396,16 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
   paused). Speed is `integratedAs: 'speedTravel'`: with keyframes the graph reads the travelled
   distance (`index-speed-travel`), otherwise timeline time × Speed (the sentinel `GLYPH_NO_TRAVEL`,
   −1e20, selects that), so a Speed ramp no longer makes the characters race.
+- **Roll** (`roll`, 0–1, Motion group, every moving look): each cell runs through a window of
+  `1 + ceil(Roll × (ramp − 1))` characters around its own (`index-window`), kept inside the ramp
+  (`index-window-start`), starting from its own character; the look's offset (Glyph Matrix: the
+  diagonal sweep) moves it through that window. Roll 1 is exactly the earlier full-ramp wrap
+  (`legacyDefault: 1`, and the default of every look but Glyph Matrix, which starts at 0.2), 0 holds
+  each cell on its tone's character, and any Roll above 0 moves at least two characters. The
+  quotient carries + ½ so GPU division never drops a cycle. `graphOnly`; outside 0–1 it renders
+  clamped (`roll-clamped`). The moving looks show these nodes in two folders, **Glyph Offset** and
+  **Roll Window**; `effectGraphProjection.ts` names the runtime-only travel card after its rate
+  ("Speed Travel"). Glyph Matrix's presets live in `glyphPresets.ts` (`GLYPH_MATRIX_PRESETS`).
 - **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light;
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).
@@ -422,7 +432,7 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
 
 Tests: `tests/unit/glyphEngine.test.ts` (every shown control reaches the output, Background,
 1080p cells, Speed travel, timeline clock, WGSL literals, Amount 0 gives the original, Ramp menu and
-warnings, Weight), `tests/unit/cellGrid.test.ts` (ramps), `tests/unit/glyphAtlasRaster.test.ts` (Block
+warnings, Weight, Roll window and its legacy full-ramp sweep), `tests/unit/cellGrid.test.ts` (ramps), `tests/unit/glyphAtlasRaster.test.ts` (Block
 Elements), `tests/unit/imageAsciiGraph.test.ts`, `tests/unit/imageGlyphVariantGraphs.test.ts`,
 `tests/unit/imageInscribeGraph.test.ts` and `tests/unit/imageContourTypeGraph.test.ts` (each look's
 recipe at Background 0), `tests/unit/EffectsTabValueControls.test.tsx` (the text row).
