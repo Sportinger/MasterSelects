@@ -45,12 +45,13 @@
     {
       "name": "blockify",
       "out": "docs/Features/assets/effects/blockify.webp",
-      "image": "neon_rain_street",
+      "image": "harbor_town",
       "width": 1920,
-      "layout": "stack",
-      "crop": [480, 0, 960, 540],
-      "outWidth": 960,
-      "gap": 4,
+      "layout": "compare",
+      "crop": [400, 200, 1120, 630],
+      "outWidth": 1600,
+      "alt": "The harbour town in a compare slider, original left and with Blockify right: the houses, boats and water rebuilt from square blocks in a few flat colours, with a fine checker of blocks where the sky and the sea change shade",
+      "caption": "Left: original. Right: Blockify at its default settings. A detail.",
       "left": { "effect": "original" },
       "right": { "effect": "blockify", "params": {} }
     },

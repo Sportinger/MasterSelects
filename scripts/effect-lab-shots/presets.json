@@ -84,6 +84,13 @@
       "cellWidth": 400,
       "columns": 2,
       "note": "A generator alone on black: --presets does not read inset yet (ledger, GEN1), so the strip was composed from `node scripts/effect-lab.mjs --effect stick-figure --variants-file <the presets> --inset 0.001 --width 1920` renders (the image shrinks to a 2 x 1 px speck under the pelvis) over black, this crop, 400 px cells, names under them. The page still assets/effects/stick-figure.webp is the default figure of the same render, crop [504, 252, 960, 540]."
+    },
+    {
+      "effect": "blockify",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [400, 40, 1200, 675],
+      "cellWidth": 640
     }
   ]
 }

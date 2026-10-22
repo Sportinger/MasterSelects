@@ -28,6 +28,24 @@
       ],
       "top": "card",
       "layout": "float"
+    },
+    {
+      "name": "blockify-inspector",
+      "effect": "blockify",
+      "params": { "scale": 20, "levels": 4, "dither": 0.75 },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Blockify card: Preset menu showing Arcade, then Block Size 20 px, Levels 4, Dither 0.75 and Amount 1, beside a strip of the preview with the dancer in chunky blocks",
+      "caption": "Blockify with the Arcade preset. 1 — Preset: pick a starting point. 2 — Block Size. 3 — Levels: shades per colour. 4 — Dither. 5 — Amount.",
+      "marks": [
+        { "target": "Preset", "label": "Preset" },
+        { "target": "Block Size", "label": "Block Size" },
+        { "target": "Levels", "label": "Levels" },
+        { "target": "Dither", "label": "Dither" },
+        { "target": "Amount", "label": "Amount" }
+      ],
+      "hide": ["Particle Out"]
     }
   ]
 }

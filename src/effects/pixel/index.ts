@@ -3,7 +3,7 @@
 
 import shader from './shader.wgsl?raw';
 import common from './cellGridCommon.wgsl?raw';
-import type { EffectDefinition, EffectParam } from '../types';
+import type { EffectDefinition, EffectParam, EffectPreset } from '../types';
 import { colorToRgba } from '../_shared/catalogColor';
 import { BLOCKIFY_MAX_LEVELS, BLOCKIFY_MIN_LEVELS } from '../../services/operators/cellGridRecipes';
 import { amountWarnings, cellSizeWarnings } from './cellGridParams';
@@ -29,11 +29,23 @@ function packBlock(params: Params, width: number, height: number, time: number, 
   ]);
 }
 
+/** Blockify's named starting points (the Preset row of its card; docs/Features/effects/blockify.md). */
+export const BLOCKIFY_PRESETS: readonly EffectPreset[] = [
+  // Small blocks and six shades per colour: detail stays readable, gradients break into a soft checker.
+  { id: 'sixteen-bit', name: '16-Bit', params: { scale: 8, levels: 6 } },
+  // Chunky blocks, four shades per colour and a strong checker where shades change.
+  { id: 'arcade', name: 'Arcade', params: { scale: 20, levels: 4, dither: 0.75 } },
+  // Two shades per colour: black, white and six pure colours, dithered in between.
+  { id: 'home-computer', name: 'Home Computer', params: { scale: 10, levels: 2, dither: 1 } },
+  // Large flat blocks laid half over the original picture.
+  { id: 'block-veil', name: 'Block Veil', params: { scale: 48, levels: 5, dither: 0, amount: 0.5 } },
+];
+
 export const blockify: EffectDefinition = {
   id: 'blockify', name: 'Blockify', category: 'pixel',
   shader: `${common}\n${shader}`, entryPoint: 'blockifyFragment', uniformSize: 64,
   params: {
-    scale: { type: 'number', label: 'Block Size', default: 16, min: 2, max: 128, step: 1, animatable: true },
+    scale: { type: 'number', label: 'Block Size', default: 16, min: 2, max: 128, step: 1, animatable: true, unit: ' px' },
     // Steps per channel: 8 (512 colours) with half dither keeps dark, low-key footage calm; fewer is a harder poster look.
     // The slider spans the whole range the recipe uses (2–64); values outside are clamped and reported.
     levels: { type: 'number', label: 'Levels', default: 8, min: BLOCKIFY_MIN_LEVELS, max: BLOCKIFY_MAX_LEVELS, step: 1, animatable: true, graphOnly: true },
@@ -55,6 +67,7 @@ export const blockify: EffectDefinition = {
         ? [`levels: ${levels} is outside ${BLOCKIFY_MIN_LEVELS}–${BLOCKIFY_MAX_LEVELS}; Blockify uses ${levels < BLOCKIFY_MIN_LEVELS ? BLOCKIFY_MIN_LEVELS : BLOCKIFY_MAX_LEVELS}.`] : []),
       ...(typeof dither === 'number' && (dither < 0 || dither > 1) ? [`dither: ${dither} is outside 0–1; Blockify uses ${dither < 0 ? 0 : 1}.`] : [])];
   },
+  presets: BLOCKIFY_PRESETS,
   packUniforms: (params, width, height) => packBlock(params, width, height, 0, 16),
 };
 

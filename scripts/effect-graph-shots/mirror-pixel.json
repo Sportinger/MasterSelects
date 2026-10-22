@@ -4,6 +4,12 @@
     "block-mosaic?focus=large-tiles&only=large-index,group-hash,group-key,shuffle-scaled,shuffle-seed,hash-input,hash,is-large,tile-size&cables=avoid@block-mosaic-large-tiles",
     "kaleidoscope?focus=wedge-fold&only=base-angle,angle,fold-low-wedge,compound-shared-fold-low-progress,fold-low-turned,fold-low-direction,fold-low-moved&cables=avoid@kaleidoscope-wedge-fold",
     "rgb-split?focus=channel-merge-and-straight-alpha&only=red-split,green-split,blue-split,combined&layout=float@rgb-split-channel-merge",
-    "mirror?focus=mirror-lines&only=local,local-split,x-magnitude,x-kept,x-mirrored,reflected,moved&cables=avoid&name.negative-angle=−Angle&name.y-mirrored=Y (Top / Bottom)&marks=x-magnitude:above:64,x-kept:below:64@mirror-lines"
+    "mirror?focus=mirror-lines&only=local,local-split,x-magnitude,x-kept,x-mirrored,reflected,moved&cables=avoid&name.negative-angle=−Angle&name.y-mirrored=Y (Top / Bottom)&marks=x-magnitude:above:64,x-kept:below:64@mirror-lines",
+    "blockify?plumbing=hide&omit=output,frame&marks=organized-blockify-size:above,organized-blockify-grid:above,organized-blockify-row:above,organized-blockify-poster:above,organized-blockify-mix:below",
+    "blockify?focus=cell-size&only=short-side,pixel-scale,cell-px-scaled,cell-px-shifted,cell-px-rounded,cell-px&cables=avoid&marks=short-side:above,cell-px-rounded:above,cell-px:below@blockify-cell-size",
+    "blockify?focus=centred-cell-grid&only=grid-cell,grid-position,grid-index,grid-offset,grid-start,grid-end,grid-low,grid-high&cables=avoid&name.zero-vec2=(0, 0)&marks=grid-position:above,grid-index:below,grid-low:above@blockify-cell-grid",
+    "blockify?focus=row-average-cached&only=row-count,row-half-count,row-pairs,row-taps,row-sample-uv,row-sample,row-reduce,row-cache&cables=avoid&name.row-position-uv=Read Position&marks=row-count:above,row-sample:below,row-reduce:above@blockify-row-average",
+    "blockify?focus=posterize&only=poster-steps,poster-scaled,bayer,bayer-centred,dither-offset,dither-rgb,dither-shadow-guard,dither-guarded,poster-half-rgb,poster-centred,poster-shifted,poster-floor,poster&cables=avoid&name.dither-shadow-ramp=Shadow Ramp&marks=bayer:above,dither-shadow-guard:below,poster-floor:above,poster:below@blockify-posterize",
+    "blockify?focus=mix-with-original&only=effect-rgb,effect-alpha,effect-image,effect-vec4,original,original-vec4,mix-amount,mixed,mixed-image&cables=avoid&name.cell-alpha=Cell Alpha&marks=effect-image:above,mix-amount:below,mixed:above@blockify-mix"
   ]
 }
