@@ -78,6 +78,18 @@
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.46);
   }
 
+  /* The field and menu above are drawn for dark grounds: the light theme gets dark text on its
+     light field and a light menu (the touch wheel keeps its dark glass). */
+  [data-theme='light'] .inspector-select-trigger,
+  [data-theme='light'] .inspector-select-chevron {
+    color: var(--text-primary);
+  }
+
+  [data-theme='light'] .inspector-select-menu:not(.inspector-select-menu--touch) {
+    background: var(--bg-elevated);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  }
+
   .inspector-select-menu[data-placement='above'] {
     top: auto;
     bottom: calc(100% + 1px);

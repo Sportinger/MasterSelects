@@ -58,7 +58,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { humanMouse } from './docClipPointer.mjs';
-import { applyEditorTheme, docLogicalPath, docOutput, docShotSettings, findMedia, mediaDirs } from './docShotSettings.mjs';
+import { applyEditorTheme, appModuleUrl, docLogicalPath, docOutput, docShotSettings, findMedia, mediaDirs } from './docShotSettings.mjs';
 import { recordShotList, shotListParts } from './docsMediaRecipes.mjs';
 import { ORIGINAL_LAYOUTS, encodeEffectClip, encodePresetGrid, encodeRecording, probeVideo, sweepValue } from './docClipVideo.mjs';
 
@@ -184,10 +184,11 @@ async function operationClip(page, clip, work, viewport) {
   for (const extra of clip.effects ?? []) await tool('addEffect', { clipId, effectType: extra.effect, params: extra.params ?? {} });
   await tool('selectClips', { clipIds: [clipId] });
   await tool('setPlayhead', { time: clip.playhead ?? 1 });
-  await page.evaluate(async ratios => {
-    const { useDockStore } = await import('/src/stores/dockStore/index.ts');
+  const dockStoreUrl = await appModuleUrl(page, '/src/stores/dockStore/index.ts', '/src/App.tsx');
+  await page.evaluate(async ({ url, ratios }) => {
+    const { useDockStore } = await import(url);
     for (const [id, ratio] of Object.entries(ratios)) useDockStore.getState().setSplitRatio(id, ratio);
-  }, clip.dock ?? {});
+  }, { url: dockStoreUrl, ratios: clip.dock ?? {} });
   await page.getByRole('tab', { name: 'Properties' }).first().click();
   await page.locator('button').filter({ hasText: /^Effects/ }).first().click();
   await page.mouse.move(viewport.width / 2, viewport.height - 4);
