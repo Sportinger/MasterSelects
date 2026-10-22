@@ -132,10 +132,12 @@ describe('stick figure notes and presets', () => {
 });
 
 describe('stick figure presets and placement', () => {
-  it('returns the figure to the centre at Scale 1 (the shared preset rule resets every control it does not name)', () => {
-    // Pinned on purpose: when presets can keep placement controls, flip this and the Presets paragraph.
-    const placed = { type: 'stick-figure', params: { ...getDefaultParams('stick-figure') as Record<string, number | string>, rootX: 600, groundY: 430, scale: 1.6, facing: 'left', opacity: 0.5, groundMode: 'off' } };
-    expect(resolveEffectPreset(placed, STICK_FIGURE_PRESETS[1])).toMatchObject({ rootX: 0, groundY: 144, scale: 1, facing: 'right', opacity: 1, groundMode: 'plant' });
+  it('keeps where the figure stands, its Scale and Facing (presetKeeps), and resets the rest it does not name', () => {
+    // Pinned with the Presets paragraph of stick-figure.md: placement stays, look and ground return to their defaults.
+    const placed = { type: 'stick-figure', params: { ...getDefaultParams('stick-figure') as Record<string, number | string>, rootX: 600, rootY: -40, groundY: 430, scale: 1.6, facing: 'left', opacity: 0.5, groundMode: 'off' } };
+    const values = resolveEffectPreset(placed, STICK_FIGURE_PRESETS[1]);
+    expect(values).toMatchObject({ groundY: 144, opacity: 1, groundMode: 'plant' });
+    for (const key of ['rootX', 'rootY', 'scale', 'facing']) expect(values).not.toHaveProperty(key);
   });
 });
 
