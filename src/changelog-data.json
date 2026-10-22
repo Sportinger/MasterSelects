@@ -2,6 +2,13 @@
   {
     "date": "2026-10-22",
     "type": "improve",
+    "title": "MasterSelects 3.2.8",
+    "description": "Almost every effect now has three to five presets in its card, and many were reworked: the blurs no longer jump when animated, Contrast, Hue Shift, Chroma Key, Lens Correction, Glow and Sheen were fixed, Matrix Rain falls in real drops, Weave gained the Qualle form, and the pattern, print and text looks follow the timeline, keep their size at every resolution and switch between related looks in a Style menu that keeps your values. A preset keeps what belongs to the shot, such as the key colour, the measured lens or where a figure stands. Every effect page in the documentation explains each control with its limits and shows the presets, short video loops and the node setup with interactive callouts.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-22",
+    "type": "improve",
     "title": "MasterSelects 3.2.7",
     "description": "Most effect groups were reviewed and improved: blur, colour, distortion, mirror and pixel, stylize, keying and time, analog, art styles and generators look better, handle transparency cleanly and tell you in the card when a value is limited. Effects can now carry presets in a Preset row of their card, starting with four for Drift Lines. Crossfades were rebuilt, including their preview audio. The documentation now has a page for every effect, with before/after sliders, short video loops, interactive callouts and a zoomable picture view.",
     "section": "Release"
