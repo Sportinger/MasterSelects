@@ -32,7 +32,7 @@ const SERIF = GLYPH_FONT_OPTIONS[1].value, SANS = GLYPH_FONT_OPTIONS[2].value;
 export const NUMBER_FIELD_PRESETS: readonly EffectPreset[] = [
   // Large amber serif figures in three steps on brown-black, like a countdown or a departure board.
   { id: 'countdown', name: 'Countdown', params: {
-    cellSize: 40, rampPreset: 'numeric', customRamp: '', steps: 3, background: 0.25, blackLevel: 0.1, fontFamily: SERIF, fontWeight: 600,
+    cellSize: 30, rampPreset: 'numeric', customRamp: '', steps: 3, background: 0.25, blackLevel: 0.1, fontFamily: SERIF, fontWeight: 600,
     colorA: '#1a0f00', colorB: '#ffb000',
   } },
   // Every cell carries the number of its colour, 1 to 5, from navy to gold: a picture to paint by numbers.

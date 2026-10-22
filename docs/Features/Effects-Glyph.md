@@ -45,8 +45,9 @@ drawn and coloured.
   rows, so a preset leaves those values out. At the default 14 they are small; 24 or more
   reads well on a projection.
 - **Background** – how much of the picture fills each cell behind its character: 0 is the dark
-  ground of classic ASCII art, 1 the full colour. New effects start at 0.2, so the
-  picture stays readable; effects saved earlier keep their dark ground.
+  ground of classic ASCII art, 1 the full colour. New effects start at 0.2 (Matrix Rain at 0.3, a
+  soft glow of the figure behind its rain), so the picture stays readable; effects saved earlier keep
+  their dark ground.
 - **Black Level** – the brightness up to which the picture counts as black: darker parts get the first
   character of the ramp (a space in most ramps; with Invert Ramp the last, densest one), so a grey stage drops out and only the lit figure is
   drawn; in the moving looks those cells also stop rolling, even at Roll 1. 0 (the default, also for saved effects) keeps the picture's tones; 0.15–0.25 suits stage footage.

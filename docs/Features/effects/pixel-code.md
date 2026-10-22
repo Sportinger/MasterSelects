@@ -24,14 +24,14 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot">
 
-![The dancer's head and arms four times in a grid, one preset each: Binary Portrait top left with ice-blue zeros and ones on a black stage, Hex Dump top right with pale grey hexadecimal figures over the whole frame, Heat Map bottom left with yellow figures where she is lit on a violet field of dim ones, Source Code bottom right with pink brackets and signs, denser on her body](../assets/effects/presets/pixel-code.webp)
+![The dancer's upper body four times in a grid, one preset each: Binary Portrait top left with ice-blue zeros and pale ones on a black stage, Hex Dump top right with pale grey hexadecimal figures over the whole frame, Heat Map bottom left with yellow figures where she is lit on a violet field of dim ones, Source Code bottom right with pink brackets and signs, denser on her body](../assets/effects/presets/pixel-code.webp)
 
 <figcaption>The four presets on the dancer, each named under its picture.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Binary Portrait** – bold zeros and ones in ice blue, only where the picture is lit: Black Level 0.15 leaves the dark stage black. A person written in binary; for data, identity, a figure scanned by a machine.
+**Binary Portrait** – bold zeros and ones in ice blue, turning pale where she is brightest, only where the picture is lit: Black Level 0.22 leaves the dark stage black. A person written in binary; for data, identity, a figure scanned by a machine.
 
 **Hex Dump** – larger pale grey figures `0`–`9` and `A`–`F` over the whole frame, like the raw bytes of a file in a terminal. The picture shows in how bright and how dense they are. Calm and technical; good under text.
 
@@ -62,7 +62,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 </svg>
 </div>
 
-<figcaption>Pixel Code with the Heat Map preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Black Level: clears the dark stage. 4 — Scramble: how random the characters are. 5 — Shadow: the colour of the code in the dark, Highlight below it in the light.</figcaption>
+<figcaption>Pixel Code with the Heat Map preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Black Level: clears the dark stage. 4 — Scramble: how random the characters are. 5 — Shadow: the colour of the code in the dark.</figcaption>
 </figure>
 
 
@@ -92,7 +92,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Weight** – how heavy the strokes are. Heavier characters carry more colour, so the code gets brighter; thin signs such as those of Source Code need 700 or more to glow. How many steps you see depends on the font: the built-in monospace font of many systems only has regular (up to 500) and bold (600 and more). Keyframes step from one weight to the next. 200 to 900, default 600.
 
-**Scramble** – how far each cell may stray from the character of its brightness. At 0 every cell takes that character, as in [ASCII](./ascii.md), and the picture reads in the characters. At 1 every cell draws any character of the ramp, and the picture shows only in the colour: a dense wall of code, the look of effects saved before Scramble existed. In between, each cell draws from a few neighbouring characters, so the lit figure is written densely and the dark parts sparsely. With the three characters of Binary there are three steps: 0, up to 0.5 (dark parts a space or 0, bright parts 0 or 1) and above 0.5. Each cell keeps its draw, so the code stands still on a still picture. Outside the range it renders as 0 or 1, and the card says so. 0 to 1, default 0.5.
+**Scramble** – how far each cell may stray from the character of its brightness. At 0 every cell takes that character, as in [ASCII](./ascii.md), and the picture reads in the characters. At 1 every cell draws any character of the ramp, and the picture shows only in the colour: a dense wall of code, the look of effects saved before Scramble existed. In between, each cell draws from a few neighbouring characters, so the lit figure is written densely and the dark parts sparsely. With Binary, Scramble changes in three steps: 0, up to 0.5 and above 0.5. Each cell keeps its draw, so the code stands still on a still picture. Outside the range it renders as 0 or 1, and the card says so. 0 to 1, default 0.5.
 
 ### Color
 
@@ -330,7 +330,6 @@ Pixel Code works in six stages, one folder each in the Nodes tab: **Cell Grid** 
 
 **Glyph Index** – Window Start plus the place in the window (Add): the character the cell draws, always inside the ramp. Atlas Alpha looks it up.
 
-**Remix:** open **Ink & Appearance** and drag a cable from **Glyph Coverage** onto T of the Mix that gives **Code Color**, in place of the Tone: every character now shines in Highlight and its ground in Shadow, so the colour no longer follows the picture and only the density of the code draws the figure. Try it with Scramble 0.5 and Background 0.3.
 
 ### Atlas Alpha
 
@@ -400,10 +399,12 @@ Pixel Code works in six stages, one folder each in the Nodes tab: **Cell Grid** 
 
 **Faded Color** – fades the untouched picture, pixel by pixel, towards the glyph cell by **Amount** and divides by the faded alpha. Both are first multiplied by their transparency, so the colour a transparent pixel hides never shows as a fringe around a cut-out figure.
 
+**Remix:** open **Ink & Appearance** and drag a cable from **Glyph Coverage** onto T of the Mix that gives **Code Color**, in place of the Tone: every character now shines in Highlight and its ground in Shadow, so the colour no longer follows the picture and only the density of the code draws the figure. Try it with Scramble 0.5 and Background 0.3.
+
 ## Technical details
 
 - **Size.** Cell Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same code. A cell is never smaller than 2 pixels; below that Cell Size renders as 2, and the card says so.
-- **Scramble.** Each cell draws one of `1 + ceil(Scramble × (ramp − 1))` characters around the one of its brightness, from Random (Cell) of the cell: the same in the preview, the export and on every graphics card. With Black Level above 0, cells at or below it keep their own character. Scramble renders between 0 and 1; outside that range the card says so.
+- **Scramble.** Each cell draws one of `1 + ceil(Scramble × (ramp − 1))` characters around the one of its brightness, from Random (Cell) of the cell: the same in the preview, the export and on every graphics card. With Black Level above 0, cells at or below it keep their own character. Scramble renders between 0 and 1; outside that range the card says so. With the three characters of Binary, Scramble up to 0.5 lets dark parts draw a space or 0 and bright parts 0 or 1; above 0.5 any of the three can appear anywhere.
 - **Characters.** The code comes from an atlas, a sheet the engine draws for the Ramp, Font and Weight and keeps. Its tallest character spans 88 % of the cell height. Weight is drawn in steps of 100.
 - **Time.** Pixel Code does not move by itself: every cell keeps its draw, so on footage the code changes only where the brightness of the picture changes, and a paused picture needs no extra rendering.
 - **Transparency.** Each cell, its character and its ground take the transparency of the cell's centre, so a cut-out figure keeps its outline in whole cells. Amount fades the transparency back to the original's, pixel by pixel, without a fringe.

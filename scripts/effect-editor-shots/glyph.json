@@ -198,7 +198,7 @@
         "speed": 0.7
       },
       "image": "dancer_stage.jpg",
-      "preview": 380,
+      "preview": 700,
       "top": "tabs",
       "viewport": {
         "width": 1600,
@@ -229,6 +229,7 @@
         }
       ],
       "hide": [
+        "Edit",
         "Particle Out"
       ]
     },
@@ -245,8 +246,8 @@
         "lineGlow": 0.6,
         "fontWeight": 700,
         "colorMode": "duotone",
-        "colorA": "#06142e",
-        "colorB": "#7fe3ff"
+        "colorA": "#05301a",
+        "colorB": "#ffd36b"
       },
       "image": "dancer_stage.jpg",
       "preview": 380,
@@ -255,7 +256,7 @@
         "width": 1600,
         "height": 1550
       },
-      "alt": "Properties, Effects with a Grid Glyph card: Style menu, Preset menu showing Circuit Board, then Cell Size, Line Width and Line Glow, then Amount, Background, Black Level and Invert Ramp, then Ramp set to Binary, Custom Ramp, Font and Weight, then Color Source set to Duotone with a deep blue Dark and a pale cyan Light, beside a strip of the preview where the dancer is drawn in cyan zeros and ones in a fine lit grid",
+      "alt": "Properties, Effects with a Grid Glyph card: Style menu, Preset menu showing Circuit Board, then Cell Size, Line Width and Line Glow, then Amount, Background, Black Level and Invert Ramp, then Ramp set to Binary, Custom Ramp, Font and Weight, then Color Source set to Duotone with a dark board-green Dark and a gold Light, beside a strip of the preview where the dancer is drawn in gold zeros and ones in a fine grid on dark green",
       "caption": "Grid Glyph with the Circuit Board preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Line Width: how thick the lines are. 4 — Line Glow: how brightly they shine. 5 — Color Source: here Duotone.",
       "marks": [
         {
@@ -299,7 +300,7 @@
         "colorB": "#ffd166"
       },
       "image": "dancer_stage.jpg",
-      "preview": 380,
+      "preview": 700,
       "top": "tabs",
       "viewport": {
         "width": 1600,
@@ -330,6 +331,7 @@
         }
       ],
       "hide": [
+        "Edit",
         "Particle Out"
       ]
     },
@@ -356,7 +358,7 @@
         "height": 1500
       },
       "alt": "Properties, Effects with a Pixel Code card: Style menu, Preset menu showing Heat Map, Cell Size, then Amount, Background, Black Level and Invert Ramp, then Ramp, an empty Custom Ramp, Font, Weight and Scramble at 0.25, then Shadow in deep violet and Highlight in yellow, beside a strip of the preview where the dancer's dress is written in yellow figures on a violet field of dim ones",
-      "caption": "Pixel Code with the Heat Map preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Black Level: clears the dark stage. 4 — Scramble: how random the characters are. 5 — Shadow: the colour of the code in the dark, Highlight below it in the light.",
+      "caption": "Pixel Code with the Heat Map preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Black Level: clears the dark stage. 4 — Scramble: how random the characters are. 5 — Shadow: the colour of the code in the dark.",
       "marks": [
         {
           "target": "Preset",

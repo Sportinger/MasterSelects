@@ -41,8 +41,8 @@ const MONO = GLYPH_FONT_OPTIONS[0].value;
 export const PIXEL_CODE_PRESETS: readonly EffectPreset[] = [
   // Zeros and ones in ice blue on a black stage: a person written in binary.
   { id: 'binary-portrait', name: 'Binary Portrait', params: {
-    cellSize: 12, rampPreset: 'binary', customRamp: '', scramble: 0.5, background: 0.15, blackLevel: 0.15, fontFamily: MONO, fontWeight: 700,
-    shadow: '#06204d', highlight: '#9be8ff',
+    cellSize: 12, rampPreset: 'binary', customRamp: '', scramble: 0.5, background: 0.08, blackLevel: 0.22, fontFamily: MONO, fontWeight: 700,
+    shadow: '#3f8fc8', highlight: '#e6faff',
   } },
   // Larger pale hexadecimal figures over the whole frame, like the raw bytes of a file.
   { id: 'hex-dump', name: 'Hex Dump', params: {

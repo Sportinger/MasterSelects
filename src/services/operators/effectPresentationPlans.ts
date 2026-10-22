@@ -76,7 +76,7 @@ const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels
   'mixed-alpha': 'Faded Alpha', 'original-premultiplied': 'Original Premultiplied', 'look-premultiplied': 'Glyph Premultiplied',
   'mixed-premultiplied': 'Faded Premultiplied', 'mixed-safe-alpha': 'Faded Alpha', 'original-alpha': 'Original Alpha', 'cell-alpha': 'Cell Alpha', 'original-split:rgb': 'Original Color', 'original-split:alpha': 'Original Alpha' };
 /** Grid Glyph: the ruled lines on the cell borders and the coverage they leave for the ink. */
-const GRID_LINE_PORTS = { 'grid-line-pixels': 'Line Pixels', 'grid-half-width': 'Half Line', 'grid-line-reach': 'Line Reach', 'grid-line-most': 'Most Coverage',
+const GRID_LINE_PORTS = { 'grid-line-wanted': 'Wanted Line', 'grid-line-cap': 'Line Cap', 'grid-line-pixels': 'Line Pixels', 'grid-half-width': 'Half Line', 'grid-line-reach': 'Line Reach', 'grid-line-most': 'Most Coverage',
   'grid-local-pixels': 'Pixel in Cell', 'grid-from-line-x': 'From Line', 'grid-from-line-y': 'From Line', 'grid-line-distance-x': 'Distance Across', 'grid-line-distance-y': 'Distance Down', 'grid-cover-x': 'Column Line', 'grid-cover-y': 'Row Line',
   'grid-line': 'Line Coverage', 'grid-alpha': 'Ruled Coverage' };
 /** Number Field: the colour step of every cell (Steps) and the flat colour it gives. */
@@ -95,7 +95,9 @@ const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-
   'retro-scan-pitch': 'Line Pitch', 'retro-scan-lines': 'Lines', 'retro-scan-dip': 'Line Dip', 'retro-scan-fade': 'Line Fade', 'retro-scan-faded': 'Faded Dip',
   'retro-scan': 'Scanline', 'retro-scanned': 'Glyph Cell' };
 /** Matrix Rain: its falling drops (Rain) and the lit rain ink. */
-const MATRIX_RAIN_PORTS = { 'rain-pace-random': 'Pace Random', 'rain-gap-random': 'Gap Random', 'rain-phase-random': 'Phase Random',
+const MATRIX_RAIN_PORTS = { 'rain-ground-tone': 'Glow', 'background-tone': 'Background Glow', 'ground-a-centre': 'Tap',
+  'ground-stretched': 'Stretched', 'rain-smooth-fade': 'Smooth Fade', 'rain-smooth-behind': 'Smooth Behind', 'rain-pixel-row': 'Pixel Row', 'ground-a-offset': 'Tap Offset', 'black-span': 'Black Span', 'half-vec2': 'Half Cell', 'rain-tone-curve': 'Tone²', 'rain-head-flash': 'Head Light', 'rain-head-shown': 'Head Shown', 'rain-head-light': 'Lit Head',
+  'rain-lit-trail': 'Trail Light', 'ground-luminance': 'Soft Luminance', 'ground-tone': 'Soft Tone', 'ground-upper': 'Upper Pair', 'ground-lower': 'Lower Pair', 'rain-pace-random': 'Pace Random', 'rain-gap-random': 'Gap Random', 'rain-phase-random': 'Phase Random',
   'rain-rate': 'Fall Rate', 'rain-spacing': 'Drop Spacing', 'rain-fallen': 'Fallen', 'rain-ahead': 'Ahead', 'rain-drops': 'Drop Phase',
   'rain-drop-place': 'Drop Place', 'rain-behind': 'Behind', 'rain-trail-rows': 'Trail Rows', 'rain-tail': 'Tail', 'rain-fade': 'Fade', 'rain-head': 'Head',
   'rain-rgb': 'Rain Color', 'rain-white-rgb': 'White', 'rain-head-color': 'Head Color', 'rain-tone-light': 'Brightness', 'rain-light': 'Light', 'rain-glyph': 'Lit Glyph',
@@ -147,7 +149,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     portLabels: { 'screen-uv': 'Tube Position', 'screen-tube': 'Tube Coverage', 'screen-vignette': 'Rim Shade', 'scan-linear': 'Beam Light',
       'scan-depth': 'Beam Depth', 'mask-factor:rgb': 'Mask', 'flicker-gain': 'Flicker Gain', 'flat-alpha': 'Coverage', 'zero-rgb': 'Black', 'line0-linear': 'Line Light', 'line1-linear': 'Next Line Light',
       'scan-d0': 'Distance to Line', 'scan-d1': 'Distance to Next Line', 'scan-w0-weight': 'Beam Weight', 'scan-w1-weight': 'Next Beam Weight',
-      'scan-sigma-floor': 'Half-Pixel Floor', 'scan-line-height': 'Line Height', 'scan-w0-brightness': 'Line Glow',
+      'scan-sigma-floor': 'Half-Pixel Floor', 'scan-line-height': 'Line Height', 'scan-w0-brightness': 'Line Brightness',
       'line-box': 'Line Box (cached)', 'line-box-width': 'Box Height', 'scan-line-reach': 'Line Reach',
       'source-cache': 'Linear Light Source', ...clampLabels({ amount: 'Mix', curvature: 'Curvature', 'line-count': 'Line Count', 'scanline-depth': 'Line Depth',
         'mask-strength': 'Mask Strength', 'mask-size': 'Mask Size', flicker: 'Flicker' }) },
@@ -338,7 +340,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   // brightness pulse has a folder of its own (Pulse).
   if (GLYPH_PRESENTATION_EFFECTS.has(type) && GLYPH_MOVING_EFFECTS.has(type)) {
     const glyph = glyphPresentation();
-    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse', scroll: 'Scroll', scanlines: 'Scanlines', rain: 'Rain' },
+    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse', scroll: 'Scroll', scanlines: 'Scanlines', rain: 'Rain', glow: 'Glow' },
       portLabels: { ...GLYPH_PORTS, 'glyph-index': 'Tone Glyph', 'index-offset': 'Glyph Offset', 'index-time-speed': 'Clock', 'index-time-phase': 'Ticks',
         'index-sweep': 'Sweep', 'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window',
         'index-cell-random': 'Cell Random', 'index-tick': 'Cell Tick', 'index-jitter': 'Draw', 'symbol-pulse': 'Pulse', 'symbol-alpha': 'Pulsed Coverage',
@@ -347,7 +349,10 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         ...(type === 'retro-matrix' ? RETRO_PORTS : {}), ...(type === 'matrix' ? MATRIX_RAIN_PORTS : {}) },
       stage: (node) => type === 'retro-matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|scroll-)/.test(node.id) ? 'scroll'
         // Matrix Rain: the clock and the drops of each column (Rain); the rain's colour and light stay in Ink & Appearance.
-        : type === 'matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|trail-clamped$|rain-(cell|pace|gap|phase|rate|spacing|fallen|ahead|lag|drops|drop-place|behind|trail|tail|fade|head$|head-left))/.test(node.id) ? 'rain'
+        : type === 'matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|trail-clamped$|rain-(cell|pace|gap|phase|rate|spacing|fallen|ahead|lag|drops|drop-place|behind|trail|tail|fade|head$|head-left|pixel|smooth))/.test(node.id) ? 'rain'
+        // Matrix Rain: the smooth glow of the picture behind the code (Background) has a folder of its own, Glow; it hands its
+        // strength to Ink & Appearance, which colours it (Ground), so no cable runs back between the two folders.
+        : type === 'matrix' && /^(ground-|rain-ground-|background-(tone|clamped)$)/.test(node.id) ? 'glow'
         : type === 'retro-matrix' && /^(scrolled-uv|sample-unscrolled)$/.test(node.id) ? 'grid'
         : /^(scanlines-clamped$|retro-scan(?!ned))/.test(node.id) ? 'scanlines'
         : /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'

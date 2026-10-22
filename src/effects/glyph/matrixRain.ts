@@ -16,11 +16,15 @@ export const MATRIX_GAP_MIN = 0.6;
 export const MATRIX_GAP_SPAN = 0.8;
 /** Character swaps per second of every cell at Speed 1 (each cell at its own moment). */
 export const MATRIX_SWAP_RATE = 2;
-/** Brightness of the rain: base + factor × the picture's tone, so the figure glows in the code and the dark stays dim. */
-export const MATRIX_TONE_BASE = 0.2;
-export const MATRIX_TONE_FACTOR = 1.3;
+/** Brightness of the trails: base + factor × the picture's tone squared, so the figure glows in the code and the dark stage stays dim. */
+export const MATRIX_TONE_BASE = 0.05;
+export const MATRIX_TONE_FACTOR = 1.5;
+/** Light of a drop's head whatever the picture, so the leading character always flashes (Black Level can still clear it on the stage). */
+export const MATRIX_HEAD_LIGHT = 0.85;
 /** Share of the ground (Background) that glows without rain; a passing trail lights the rest. */
-export const MATRIX_GROUND_FLOOR = 0.45;
+export const MATRIX_GROUND_FLOOR = 0.6;
+/** The glow behind the code reads the picture at four points this share of a cell away diagonally (a small blur). */
+export const MATRIX_GROUND_SPREAD = 0.3;
 /** How far the head of a drop turns towards white. */
 export const MATRIX_HEAD_WHITE = 0.8;
 /** Colour of the rain in new instances and in instances saved before Rain Color existed. */
@@ -50,9 +54,9 @@ export const MATRIX_RAIN_PRESETS: readonly EffectPreset[] = [
   { id: 'code-portrait', name: 'Code Portrait', params: {
     cellSize: 12, rampPreset: 'numeric', customRamp: '', roll: 0.4, background: 0.3, blackLevel: 0.2, trail: 0.8, speed: 0.7,
   } },
-  // Fine zeros and ones in cold cyan, falling fast.
+  // Fine zeros and ones in cold cyan, dense over the whole frame and falling fast.
   { id: 'binary-storm', name: 'Binary Storm', params: {
-    cellSize: 11, rampPreset: 'binary', customRamp: '', roll: 0.6, background: 0.22, blackLevel: 0.12, trail: 0.5, speed: 2, rainColor: '#4fd8ff', fontWeight: 700,
+    cellSize: 9, rampPreset: 'binary', customRamp: '', roll: 0.6, background: 0.25, blackLevel: 0, trail: 0.75, speed: 2.2, rainColor: '#4fd8ff', fontWeight: 700,
   } },
   // Large red digits with short trails: an alarm, a system in danger.
   { id: 'red-alert', name: 'Red Alert', params: {

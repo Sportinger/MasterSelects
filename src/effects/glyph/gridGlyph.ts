@@ -29,21 +29,33 @@ export const GRID_GLYPH_PARAMS: Record<string, EffectParam> = {
   },
 };
 
+const finite = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
+
+/** A line is at most half a cell wide, so the characters stay visible: the card says when Line Width is cut there. */
+export function gridGlyphWarnings(values: Record<string, number | boolean | string>): string[] {
+  const cell = Math.max(finite(values.cellSize, GRID_DEFAULT_CELL_SIZE), 2);
+  const width = Math.min(Math.max(finite(values.lineWidth, GRID_LINE_WIDTH), 0), GRID_MAX_LINE_WIDTH);
+  const round = (value: number) => Math.round(value * 10) / 10;
+  return width > cell / 2
+    ? [`Line Width ${round(width)} px is more than half the ${round(cell)} px cells and renders as ${round(cell / 2)} px (half a cell), so the characters stay visible; lower Line Width or raise Cell Size.`]
+    : [];
+}
+
 // Every preset names Custom Ramp (a text control keeps its value otherwise), Black Level and both line controls.
 export const GRID_GLYPH_PRESETS: readonly EffectPreset[] = [
   // Large serif letters, each in its own box, like the compartments of a printer's type case.
   { id: 'type-case', name: 'Type Case', params: {
-    cellSize: 40, rampPreset: 'detailed', customRamp: '', fontFamily: GLYPH_FONT_OPTIONS[1].value, fontWeight: 500, background: 0.15, blackLevel: 0.12, lineWidth: 1.5, lineGlow: 0.5,
+    cellSize: 26, rampPreset: 'detailed', customRamp: '', fontFamily: GLYPH_FONT_OPTIONS[1].value, fontWeight: 500, background: 0.15, blackLevel: 0.12, lineWidth: 1.5, lineGlow: 0.5,
   } },
   // Pale figures in a slate-blue table that rules the whole frame, like a spreadsheet of numbers.
   { id: 'data-sheet', name: 'Data Sheet', params: {
     cellSize: 16, rampPreset: 'numeric', customRamp: '', background: 0.35, blackLevel: 0.1, lineWidth: 1, lineGlow: 0.5,
     colorMode: 'duotone', colorA: '#1a2633', colorB: '#eef4f8',
   } },
-  // Bold cyan zeros and ones in a fine lit grid on deep blue, like a circuit board or an LED panel.
+  // Bold gold zeros and ones in a fine grid on dark board green, like the copper traces of a circuit board.
   { id: 'circuit-board', name: 'Circuit Board', params: {
     cellSize: 14, rampPreset: 'binary', customRamp: '', background: 0.25, blackLevel: 0.15, lineWidth: 1, lineGlow: 0.6, fontWeight: 700,
-    colorMode: 'duotone', colorA: '#06142e', colorB: '#7fe3ff',
+    colorMode: 'duotone', colorA: '#05301a', colorB: '#ffd36b',
   } },
   // One full block per cell in the picture's colour with dark joints between them: a wall of square tiles.
   { id: 'mosaic-tiles', name: 'Mosaic Tiles', params: {

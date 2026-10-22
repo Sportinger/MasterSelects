@@ -271,7 +271,8 @@ describe('shared glyph graph variants', () => {
   it('builds Matrix Rain from falling drops with fading trails, lit by the picture, and staggered character swaps', () => {
     // Each column falls at its own pace and spacing (Random (Cell) of the column with seeds 1, 2, 3); Behind is how many
     // rows the cell lies above the nearest head below it. The trail fades over Trail × the spacing (squared), the head cell
-    // turns towards white, and the light is the fade × (0.2 + 1.3 × tone). Characters swap like Symbol Matrix's, twice a second.
+    // turns towards white, and the light is the brighter of the fade × (0.05 + 1.5 × tone²) and the head's own 0.85 (Black
+    // Level 0: shown everywhere). Characters swap like Symbol Matrix's, twice a second.
     const coords: [number, number] = [.8, .7], speed = 1.45, amount = .84, base = cell(coords), [column, row] = base.id;
     const rain = [0x29 / 255, 1, 0x6b / 255], clamp01 = (value: number) => Math.max(0, Math.min(1, value));
     const rate = 12 * (.6 + .8 * imageCellHash([column, 1])), spacing = 32 * (.6 + .8 * imageCellHash([column, 2]));
@@ -288,7 +289,7 @@ describe('shared glyph graph variants', () => {
       const cellRandom = imageCellHash(base.id), tick = Math.floor(time * speed * 2 + cellRandom);
       const value = cell(coords, Math.floor(imageHashPcg2d([cellRandom, tick]) * 4)), { fade, head } = rainAt(time);
       const { output, samples } = evaluate('matrix', createDefaultMatrixGraph(), { cellSize: 10, amount, speed }, coords, time);
-      const light = fade * (.2 + 1.3 * value.tone);
+      const light = Math.max(fade * (.05 + 1.5 * value.tone * value.tone), head * .85);
       // Saved without Background (0): no ground, only the lit characters.
       const glyph = rain.map(channel => mix(channel, 1, head * .8) * light * value.alpha);
       const expected = base.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));

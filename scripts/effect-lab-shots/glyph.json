@@ -108,10 +108,10 @@
       "image": "dancer_stage",
       "width": 1920,
       "crop": [
-        800,
-        170,
-        420,
-        315
+        640,
+        100,
+        720,
+        540
       ],
       "cellWidth": 600,
       "columns": 2
@@ -121,10 +121,10 @@
       "image": "dancer_stage",
       "width": 1920,
       "crop": [
-        800,
-        170,
-        420,
-        315
+        640,
+        100,
+        720,
+        540
       ],
       "cellWidth": 600,
       "columns": 2
@@ -134,10 +134,10 @@
       "image": "dancer_stage",
       "width": 1920,
       "crop": [
-        800,
-        170,
-        420,
-        315
+        640,
+        100,
+        720,
+        540
       ],
       "cellWidth": 600,
       "columns": 2

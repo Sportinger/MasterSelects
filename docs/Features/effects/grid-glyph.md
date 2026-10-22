@@ -18,24 +18,24 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 - **Line Glow** – how brightly they shine.
 - **Background** – how much of the picture glows behind the characters.
 
-**Tip:** keyframe **Line Width** from 0 to 1.5 to rule the grid over a typed picture on a cue, or **Cell Size** from 72 down to 18 to let a few large boxes split into a fine table.
+**Tip:** on stage footage set **Black Level** to about 0.1: the dim stage no longer fills every box with a dot, and the figure stands clear in the grid. Keyframe **Line Width** from 0 to 1.5 to rule the grid over a typed picture on a cue.
 
 ## Presets
 
 <figure class="docs-shot">
 
-![The dancer's head and arms four times in a grid, one preset each: Type Case top left with large serif letters, each in a box with a fine lit frame, Data Sheet top right with pale digits in a slate-blue table that covers the whole frame, Circuit Board bottom left with bold cyan zeros and ones in a fine lit grid on deep blue, Mosaic Tiles bottom right with one square tile per cell in the picture's colours and dark joints between them](../assets/effects/presets/grid-glyph.webp)
+![The dancer's upper body four times in a grid, one preset each: Type Case top left with large serif letters, each in a box with a fine lit frame, Data Sheet top right with pale digits in a slate-blue table that covers the whole frame, Circuit Board bottom left with bold gold zeros and ones in a fine grid on dark board green, Mosaic Tiles bottom right with one square tile per cell in the picture's colours and dark joints between them](../assets/effects/presets/grid-glyph.webp)
 
 <figcaption>The four presets on the dancer, each named under its picture.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Type Case** – large serif letters, each in its own box with a fine lit frame, like the compartments of a printer's type case. Black Level 0.12 keeps the dark stage quiet, so the figure reads in the brightest boxes. For a world of print, archives, letters and memory.
+**Type Case** – serif letters, each in its own box with a fine lit frame, like the compartments of a printer's type case. Black Level 0.12 keeps the dark stage quiet, so the figure reads in the brightest boxes. For a world of print, archives, letters and memory.
 
 **Data Sheet** – pale figures in a slate-blue table, like a spreadsheet of numbers. Its Dark is a slate blue instead of black, so the grid rules the whole frame, the empty stage too. For data, offices, a person reduced to numbers.
 
-**Circuit Board** – bold cyan zeros and ones in a fine, brightly lit grid on deep blue, like a circuit board or an LED panel. For machines, control rooms and digital worlds.
+**Circuit Board** – bold gold zeros and ones in a fine grid on dark board green, like the copper traces of a circuit board. For machines, control rooms and digital worlds.
 
 **Mosaic Tiles** – one full block per cell in the picture's colour, with dark joints between them: the picture becomes a wall of square tiles. Line Glow 0.05 turns the lines into the joints. Calm and graphic; strong on large surfaces.
 
@@ -45,7 +45,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Grid Glyph card: Style menu, Preset menu showing Circuit Board, then Cell Size, Line Width and Line Glow, then Amount, Background, Black Level and Invert Ramp, then Ramp set to Binary, Custom Ramp, Font and Weight, then Color Source set to Duotone with a deep blue Dark and a pale cyan Light, beside a strip of the preview where the dancer is drawn in cyan zeros and ones in a fine lit grid](../assets/effects/editor/grid-glyph-inspector.webp)
+![Properties, Effects with a Grid Glyph card: Style menu, Preset menu showing Circuit Board, then Cell Size, Line Width and Line Glow, then Amount, Background, Black Level and Invert Ramp, then Ramp set to Binary, Custom Ramp, Font and Weight, then Color Source set to Duotone with a dark board-green Dark and a gold Light, beside a strip of the preview where the dancer is drawn in gold zeros and ones in a fine grid on dark green](../assets/effects/editor/grid-glyph-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 1207" aria-hidden="true" focusable="false">
 <defs><marker id="grid-glyph-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -71,7 +71,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Cell Size** – how big one box, and the character in it, is. 10–14 gives a fine table that reads as a picture from afar, 18 small boxed characters with a clearly visible grid, 30 and more large letters each in a box of its own, like a type case; at 72 the frame holds only 15 rows. It counts pixels of a 1080p picture, so the preview, the thumbnails and a 4K export show the same grid. 4 to 72 px, default 18 px.
 
-**Line Width** – how thick the ruled lines are. 1 is a hairline, one pixel of a 1080p picture; 2–3 gives the joints of a tiled wall; 6 and more broad frames that leave only a small window for each character. At 0 no lines are ruled, and the look is plain [ASCII](./ascii.md). Every box carries its line along its top and left edge, so each border is one line. Like Cell Size it counts pixels of a 1080p picture: a hairline stays a hairline at every Preview Quality and export size. 0 to 8 px, default 1 px.
+**Line Width** – how thick the ruled lines are. 1 is a hairline, one pixel of a 1080p picture; 2–3 gives the joints of a tiled wall; 6 and more broad frames that leave only a small window for each character. At 0 no lines are ruled, and the look is plain [ASCII](./ascii.md). Every box carries its line along its top and left edge, so each border is one line. A line is at most half a box wide, so the characters never disappear: with small boxes, say Cell Size 6 and Line Width 8, the line renders as 3 px, and the card says so. Like Cell Size it counts pixels of a 1080p picture: a hairline stays a hairline at every Preview Quality and export size. 0 to 8 px, default 1 px.
 
 **Line Glow** – how brightly the lines shine, in the colour of their box. At 0.4 they glow softly, so the grid lights up with the figure and fades into a dark stage; at 1 they take the full colour of the box; at 0 they become dark joints that cut through the characters, which suits full blocks (Mosaic Tiles). With Color Source on Source a line is never brighter than its box, so the grid stays dark where the picture is black. 0 to 1, default 0.4.
 
@@ -111,10 +111,10 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![The Grid Glyph graph in six stages: Parameters feed Cell Grid (Cell Size), which passes the cell centre to Cell Sampling & Tone and the position in the cell to Atlas Alpha and Grid Lines; Tone to Glyph turns the tone into the glyph index for Atlas Alpha; Grid Lines (Line Width, Line Glow) rules the lines into the glyph coverage; Ink & Appearance (Color Source, Dark, Light, Background, Amount) colours the character, its lines and its ground](../assets/effects/graphs/grid-glyph.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 734" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 729" aria-hidden="true" focusable="false">
 <defs><marker id="grid-glyph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M230 711 L230 627" marker-end="url(#grid-glyph-arrow)" />
-<circle class="docs-shot-number" cx="230" cy="711" r="18" /><text x="230" y="711" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M230 706 L230 622" marker-end="url(#grid-glyph-arrow)" />
+<circle class="docs-shot-number" cx="230" cy="706" r="18" /><text x="230" y="706" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M369 236 L369 320" marker-end="url(#grid-glyph-arrow)" />
 <circle class="docs-shot-number" cx="369" cy="236" r="18" /><text x="369" y="236" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M508 279 L508 195" marker-end="url(#grid-glyph-arrow)" />
@@ -283,27 +283,33 @@ Grid Glyph works in six stages, one folder each in the Nodes tab: **Cell Grid** 
 
 <div class="docs-shot-stage">
 
-![Inside the Grid Lines folder, first part: Line Width is clamped between Zero and Line Width Max 8, Multiply by Frame Scale gives Line Pixels and Multiply by Half the Half Line; Add with Half gives Line Reach, Minimum with One gives Most Coverage; Position in Cell times Cell Pixels (XY) gives the Pixel in Cell, which Split Vector splits into across and down](../assets/effects/graphs/grid-glyph-line-width.webp)
+![Inside the Grid Lines folder, first part: Line Width is clamped between Zero and Line Width Max 8, Multiply by Frame Scale gives the Wanted Line; Cell Pixels times Half gives the Line Cap, and Minimum of the two gives Line Pixels; Multiply by Half gives the Half Line; Add with Half gives Line Reach, Minimum with One gives Most Coverage; Position in Cell times Cell Pixels (XY) gives the Pixel in Cell, which Split Vector splits into across and down](../assets/effects/graphs/grid-glyph-line-width.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1131" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 935" aria-hidden="true" focusable="false">
 <defs><marker id="grid-glyph-line-width-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M509 721 L509 637" marker-end="url(#grid-glyph-line-width-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="721" r="18" /><text x="509" y="721" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M867 995 L783 995" marker-end="url(#grid-glyph-line-width-arrow)" />
-<circle class="docs-shot-number" cx="867" cy="995" r="18" /><text x="867" y="995" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M897 362 L897 446" marker-end="url(#grid-glyph-line-width-arrow)" />
-<circle class="docs-shot-number" cx="897" cy="362" r="18" /><text x="897" y="362" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M867 766 L783 766" marker-end="url(#grid-glyph-line-width-arrow)" />
-<circle class="docs-shot-number" cx="867" cy="766" r="18" /><text x="867" y="766" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M314 137 L314 221" marker-end="url(#grid-glyph-line-width-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="137" r="18" /><text x="314" y="137" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M427 217 L427 257" marker-end="url(#grid-glyph-line-width-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="217" r="18" /><text x="427" y="217" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M427 810 L427 726" marker-end="url(#grid-glyph-line-width-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="810" r="18" /><text x="427" y="810" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M589 422 L589 338" marker-end="url(#grid-glyph-line-width-arrow)" />
+<circle class="docs-shot-number" cx="589" cy="422" r="18" /><text x="589" y="422" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M752 130 L752 214" marker-end="url(#grid-glyph-line-width-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="130" r="18" /><text x="752" y="130" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M914 173 L914 257" marker-end="url(#grid-glyph-line-width-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="173" r="18" /><text x="914" y="173" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M904 526 L820 526" marker-end="url(#grid-glyph-line-width-arrow)" />
+<circle class="docs-shot-number" cx="904" cy="526" r="18" /><text x="904" y="526" class="docs-shot-number-text">6</text>
 </svg>
 </div>
 
-<figcaption>Inside Grid Lines (Line Width), first part. 1 — Line Pixels: the line in pixels of this frame. 2 — Half Line: half of it. 3 — Line Reach: how far from its middle a line still touches a pixel. 4 — Most Coverage: the most a line can cover of one pixel. 5 — Pixel in Cell: where the pixel lies in its cell.</figcaption>
+<figcaption>Inside Grid Lines (Line Width), first part. 1 — Wanted Line: Line Width in pixels of this frame. 2 — Line Cap: half a cell. 3 — Line Pixels: the line as it is drawn. 4 — Half Line: half of it. 5 — Line Reach: how far from its middle a line still touches a pixel. 6 — Most Coverage: the most a line can cover of one pixel.</figcaption>
 </figure>
 
-**Line Pixels** – Line Width times Frame Scale (the shorter side of the frame divided by 1080, from Cell Grid): how many pixels of this frame the line is wide. The Clamp before it keeps Line Width between Zero and Line Width Max 8; a larger value renders as 8, and the card says so.
+**Wanted Line** – Line Width times Frame Scale (the shorter side of the frame divided by 1080, from Cell Grid): how many pixels of this frame the line should be wide. The Clamp before it keeps Line Width between Zero and Line Width Max 8; a larger value renders as 8, and the card says so.
+
+**Line Cap** – Cell Pixels times Half (Multiply): half a cell, the widest a line may be, so the characters always keep part of their box.
+
+**Line Pixels** – the smaller of the Wanted Line and the Line Cap (Minimum): the line as it is drawn. When the cap cuts it, the card says so.
 
 **Half Line** – Line Pixels times Half: the part of the line on each side of its middle.
 
@@ -387,7 +393,7 @@ Grid Glyph works in six stages, one folder each in the Nodes tab: **Cell Grid** 
 
 ## Technical details
 
-- **Size.** Cell Size and Line Width count pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same grid. Each pixel takes the share of it a line covers, so a line thinner than a pixel draws fainter rather than vanishing, and the grid has the same weight at every size. A cell is never smaller than 2 pixels; below 2 px Cell Size renders as 2. Line Width above 8 px and Line Glow outside 0 to 1 render clamped. The card says when any of this happens.
+- **Size.** Cell Size and Line Width count pixels of a frame whose shorter side is 1080: a 4K export, a portrait 1080 × 1920 frame, a lower Preview Quality and the thumbnails show the same grid. Each pixel takes the share of it a line covers, so a line thinner than a pixel draws fainter rather than vanishing, and the grid has the same weight at every size. A cell is never smaller than 2 pixels; below 2 px Cell Size renders as 2. Line Width above 8 px or above half a cell, and Line Glow outside 0 to 1 render clamped. The card says when any of this happens.
 - **Lines.** Every cell rules its top and left edge, so each border is one line; where the frame ends inside a cell, at the right or bottom, that cell stays open. Inside a line the coverage is Line Glow whatever the character, so lines cut through characters that reach the edge of their box.
 - **Characters.** The characters come from an atlas, a sheet the engine draws for the Ramp, Font and Weight and keeps. Its tallest character spans 88 % of the box height; the Block Elements (█ ▀ ▄ ▌ ▐ ░ ▒ ▓ and the bars) are exact shapes that fill their box in any font. Weight is drawn in steps of 100.
 - **Time.** Grid Glyph does not move by itself: on footage it changes with every frame of the clip, the grid stays put, and a paused picture needs no extra rendering.

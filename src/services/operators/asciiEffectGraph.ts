@@ -4,7 +4,7 @@ import { GRID_LEGACY_LINE_GLOW, GRID_LINE_WIDTH, GRID_MAX_LINE_WIDTH } from '../
 import { SYMBOL_LEGACY_TWINKLE } from '../../effects/glyph/symbolMatrix';
 import { NUMBER_FIELD_MAX_STEPS, NUMBER_FIELD_MIN_STEPS, NUMBER_FIELD_STEPS } from '../../effects/glyph/numberField';
 import { PIXEL_CODE_LEGACY_HIGHLIGHT, PIXEL_CODE_LEGACY_SCRAMBLE, PIXEL_CODE_LEGACY_SHADOW } from '../../effects/glyph/pixelCode';
-import { MATRIX_DEFAULT_TRAIL, MATRIX_DROP_SPACING, MATRIX_FALL_RATE, MATRIX_GAP_MIN, MATRIX_GAP_SPAN, MATRIX_GROUND_FLOOR, MATRIX_HEAD_WHITE, MATRIX_PACE_MIN, MATRIX_PACE_SPAN, MATRIX_RAIN_COLOR,
+import { MATRIX_DEFAULT_TRAIL, MATRIX_DROP_SPACING, MATRIX_FALL_RATE, MATRIX_GAP_MIN, MATRIX_GAP_SPAN, MATRIX_GROUND_FLOOR, MATRIX_GROUND_SPREAD, MATRIX_HEAD_LIGHT, MATRIX_HEAD_WHITE, MATRIX_PACE_MIN, MATRIX_PACE_SPAN, MATRIX_RAIN_COLOR,
   MATRIX_SWAP_RATE, MATRIX_TONE_BASE, MATRIX_TONE_FACTOR } from '../../effects/glyph/matrixRain';
 import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_PERIOD, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
 type Ref = { node: string; port: string };
@@ -334,8 +334,9 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const rate = between('rate', columnRandom('pace', 1), MATRIX_PACE_MIN, MATRIX_PACE_SPAN, MATRIX_FALL_RATE);
     const spacing = between('spacing', columnRandom('gap', 2), MATRIX_GAP_MIN, MATRIX_GAP_SPAN, MATRIX_DROP_SPACING);
     const fallen = g.binary('rain-fallen', 'math.multiply.scalar', animatedTimeSpeed!, rate);
+    const phaseRandom = columnRandom('phase', 3);
     const drops = g.binary('rain-drops', 'math.add.scalar', g.binary('rain-lag', 'math.divide-ieee.scalar',
-      g.binary('rain-ahead', 'math.subtract.scalar', fallen, row), spacing), columnRandom('phase', 3));
+      g.binary('rain-ahead', 'math.subtract.scalar', fallen, row), spacing), phaseRandom);
     const behind = g.binary('rain-behind', 'math.multiply.scalar', g.unary('rain-drop-place', 'math.fract.scalar', drops), spacing);
     // Trail outside 0..1 renders clamped (renderMin/renderMax; paramRangeNotes reports it through this node's id).
     const trailValue = g.node('trail', 'values.number', 'value', { value: 'trail' }, { value: MATRIX_DEFAULT_TRAIL });
@@ -345,22 +346,57 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const tail = g.binary('rain-tail', 'math.max.scalar', g.binary('rain-tail-left', 'math.subtract.scalar', one,
       g.binary('rain-tail-share', 'math.divide-ieee.scalar', behind, trailRows)), zero);
     const fade = g.binary('rain-fade', 'math.multiply.scalar', tail, tail);
+    // Smooth Fade: the same drops at the pixel's exact height (its row in the grid less half a cell, so it matches the
+    // Fade in the middle of a cell): the glow behind the code brightens evenly down the column, not in whole-row steps.
+    const pixelSplit = g.node('rain-pixel-split', 'vector.split.vec2', 'y'); g.edge(gridUv, pixelSplit, 'value');
+    const pixelRow = g.binary('rain-pixel-row', 'math.subtract.scalar', pixelSplit, half);
+    const smoothDrops = g.binary('rain-smooth-drops', 'math.add.scalar', g.binary('rain-smooth-lag', 'math.divide-ieee.scalar',
+      g.binary('rain-smooth-ahead', 'math.subtract.scalar', fallen, pixelRow), spacing), phaseRandom);
+    const smoothBehind = g.binary('rain-smooth-behind', 'math.multiply.scalar', g.unary('rain-smooth-place', 'math.fract.scalar', smoothDrops), spacing);
+    const smoothTail = g.binary('rain-smooth-tail', 'math.max.scalar', g.binary('rain-smooth-left', 'math.subtract.scalar', one,
+      g.binary('rain-smooth-share', 'math.divide-ieee.scalar', smoothBehind, trailRows)), zero);
+    const smoothFade = g.binary('rain-smooth-fade', 'math.multiply.scalar', smoothTail, smoothTail);
     const head = g.binary('rain-head', 'math.max.scalar', g.binary('rain-head-left', 'math.subtract.scalar', one, behind), zero);
-    // Ink: the Rain Color, the head turned towards white, lit by the trail × the picture's brightness, on a ground of
-    // Background × tone in the Rain Color, so the figure glows in the code.
+    // Ink: the Rain Color, the head turned towards white, lit by the trail × the picture's brightness (a small base
+    // and the squared tone keep the dark stage dim, so the figure stands out), on a ground of Background × the smooth tone in the Rain Color.
     const rainColor = g.node('rain-color', 'values.color', 'value', { value: 'rainColor' }, { value: MATRIX_RAIN_COLOR });
     const rainRgb = g.node('rain-rgb', 'convert.vec4-to-rgb', 'rgb'); g.edge(rainColor, rainRgb, 'value');
     const white = g.node('rain-white-rgb', 'convert.vec4-to-rgb', 'rgb'); g.edge(g.node('rain-white', 'values.color', 'value', {}, { value: '#ffffff' }), white, 'value');
     const headColor = g.node('rain-head-color', 'math.mix.rgb'); g.edge(rainRgb, headColor, 'a'); g.edge(white, headColor, 'b');
     g.edge(g.binary('rain-head-white', 'math.multiply.scalar', head, g.number('head-white', MATRIX_HEAD_WHITE)), headColor, 't');
-    const toneLight = g.binary('rain-tone-light', 'math.add.scalar', g.number('tone-base', MATRIX_TONE_BASE), g.binary('rain-tone-scale', 'math.multiply.scalar', tone, g.number('tone-factor', MATRIX_TONE_FACTOR)));
-    const light = g.binary('rain-light', 'math.multiply.scalar', fade, toneLight);
+    // The tone counts squared, so the dim stage drops away and the lit figure carries the light.
+    const toneCurve = g.binary('rain-tone-curve', 'math.multiply.scalar', tone, tone);
+    const toneLight = g.binary('rain-tone-light', 'math.add.scalar', g.number('tone-base', MATRIX_TONE_BASE), g.binary('rain-tone-scale', 'math.multiply.scalar', toneCurve, g.number('tone-factor', MATRIX_TONE_FACTOR)));
+    // The head has a light of its own (Head Light) that does not drop with the picture, so it flashes on the dark stage
+    // too; with a Black Level above 0 a head below it (tone 0) goes out with the rest of the stage.
+    const headLit = g.node('rain-head-lit', 'compare.greater.scalar', 'condition'); g.edge(tone, headLit, 'a'); g.edge(zero, headLit, 'b');
+    const headLevelled = g.node('rain-head-levelled', 'compare.greater.scalar', 'condition'); g.edge(blackLevel, headLevelled, 'a'); g.edge(zero, headLevelled, 'b');
+    const headDark = g.node('rain-head-dark', 'select.scalar'); g.edge(one, headDark, 'falseValue'); g.edge(zero, headDark, 'trueValue'); g.edge(headLevelled, headDark, 'condition');
+    const headShown = g.node('rain-head-shown', 'select.scalar'); g.edge(headDark, headShown, 'falseValue'); g.edge(one, headShown, 'trueValue'); g.edge(headLit, headShown, 'condition');
+    const headLight = g.binary('rain-head-light', 'math.multiply.scalar', g.binary('rain-head-flash', 'math.multiply.scalar', head, g.number('head-light', MATRIX_HEAD_LIGHT)), headShown);
+    const light = g.binary('rain-light', 'math.max.scalar', g.binary('rain-lit-trail', 'math.multiply.scalar', fade, toneLight), headLight);
     const glyph = g.binary('rain-glyph', 'math.multiply.rgb-scalar', headColor, g.binary('rain-glyph-light', 'math.multiply.scalar', light, glyphAlpha));
-    // The ground glows brighter where a trail passes: Ground Floor of it always, the rest with the trail.
+    // Smooth Tone: the picture's brightness around the pixel, read at four points GROUND_SPREAD of a cell away
+    // diagonally and averaged (a small blur that follows the pixel, not the cells), with Black Level applied, so the
+    // glow of the figure behind the code has neither cell steps nor the full sharpness of the picture.
+    const cornerTone = (name: string, dx: number, dy: number) => {
+      const offset = g.node(`ground-${name}-offset`, 'vector.combine.vec2'); g.edge(g.number(`ground-${name}-dx`, dx * MATRIX_GROUND_SPREAD), offset, 'x'); g.edge(g.number(`ground-${name}-dy`, dy * MATRIX_GROUND_SPREAD), offset, 'y');
+      const cornerUv = g.binary(`ground-${name}-uv`, 'math.divide-ieee.vec2', g.binary(`ground-${name}-centre`, 'math.add.vec2', gridUv, offset), grid);
+      const clamped = g.node(`ground-${name}-clamped-uv`, 'math.clamp.vec2'); g.edge(cornerUv, clamped, 'value'); g.edge(tiny2, clamped, 'min'); g.edge(almost2, clamped, 'max');
+      const sample = g.node(`ground-${name}-sample`, 'image.sample', 'image'); g.edge(frame, sample, 'image'); g.edge(clamped, sample, 'uv');
+      const luma = g.node(`ground-${name}-tone`, 'color.luminance-rec709.image'); g.edge(sample, luma, 'image');
+      return luma;
+    };
+    const average = (id: string, a: Ref, b: Ref) => { const out = g.node(id, 'math.mix.scalar'); g.edge(a, out, 'a'); g.edge(b, out, 'b'); g.edge(half, out, 't'); return out; };
+    const groundLuma = average('ground-luminance', average('ground-upper', cornerTone('a', -1, -1), cornerTone('b', 1, -1)),
+      average('ground-lower', cornerTone('c', -1, 1), cornerTone('d', 1, 1)));
+    const groundTone = g.node('ground-tone', 'math.clamp.scalar'); g.edge(zero, groundTone, 'min'); g.edge(one, groundTone, 'max');
+    g.edge(g.binary('ground-stretched', 'math.divide-ieee.scalar', g.binary('ground-lowered', 'math.subtract.scalar', groundLuma, blackLevel), { node: 'black-span', port: 'value' }), groundTone, 'value');
+    // The ground glows brighter where a trail passes: Ground Floor of it always, the rest with the Smooth Fade (Rain).
     const groundRain = g.binary('rain-ground-light', 'math.add.scalar', g.number('ground-floor', MATRIX_GROUND_FLOOR),
-      g.binary('rain-ground-trail', 'math.multiply.scalar', fade, g.number('ground-trail', 1 - MATRIX_GROUND_FLOOR)));
+      g.binary('rain-ground-trail', 'math.multiply.scalar', smoothFade, g.number('ground-trail', 1 - MATRIX_GROUND_FLOOR)));
     const ground = g.binary('rain-ground', 'math.multiply.rgb-scalar', rainRgb, g.binary('rain-ground-tone', 'math.multiply.scalar',
-      g.binary('background-tone', 'math.multiply.scalar', backgroundAmount, tone), groundRain));
+      g.binary('background-tone', 'math.multiply.scalar', backgroundAmount, groundTone), groundRain));
     const lit = g.binary('rain-lit', 'math.add.rgb', ground, glyph);
     const combine = blend(lit); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     // It draws only in its Rain Color: the shared colour nodes (retired Color Source, Dark, Light) stay out of its setup.
@@ -381,7 +417,10 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     // dark ground, a darker joint through a full block. Outside 0..8 px and 0..1 they render clamped (paramRangeNotes).
     const widthValue = g.node('line-width', 'values.number', 'value', { value: 'lineWidth' }, { value: GRID_LINE_WIDTH });
     const width = g.node('lineWidth-clamped', 'math.clamp.scalar'); g.edge(widthValue, width, 'value'); g.edge(zero, width, 'min'); g.edge(g.number('line-width-max', GRID_MAX_LINE_WIDTH), width, 'max');
-    const linePixels = g.binary('grid-line-pixels', 'math.multiply.scalar', width, frameScale), halfWidth = g.binary('grid-half-width', 'math.multiply.scalar', linePixels, half);
+    // A line is at most half a cell wide (Line Cap), so the characters always stay visible; the card says when
+    // Line Width is cut there (gridGlyphWarnings).
+    const lineCap = g.binary('grid-line-cap', 'math.multiply.scalar', safeCell, half);
+    const linePixels = g.binary('grid-line-pixels', 'math.min.scalar', g.binary('grid-line-wanted', 'math.multiply.scalar', width, frameScale), lineCap), halfWidth = g.binary('grid-half-width', 'math.multiply.scalar', linePixels, half);
     // A pixel at distance d from the middle of a line is covered by clamp(half width + ½ − d, 0, min(width, 1)): fully
     // inside a line of a pixel or more, by its share at the line's edge, and by the line's width when it is thinner.
     const reach = g.binary('grid-line-reach', 'math.add.scalar', halfWidth, half), most = g.binary('grid-line-most', 'math.min.scalar', linePixels, one);

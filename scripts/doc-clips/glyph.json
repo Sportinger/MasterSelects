@@ -757,7 +757,7 @@
       "loop": 0.35,
       "poster": 2.0,
       "maxBytes": 1000000,
-      "alt": "The dancer turning on a dark stage, original left and with Matrix Rain right: green digits fall down every column in streaks with bright, almost white heads and fading trails; where she is lit, the digits glow brighter and denser and a soft green glow fills her shape, so she turns in the falling code",
+      "alt": "The dancer turning on a dark stage, original left and with Matrix Rain right: green digits fall down every column with bright, almost white heads and fading trails; on the dark stage the trails stay dim and only the heads flash, while on her the trails glow bright and a soft green glow fills her shape, arms included, so she turns in the falling code",
       "caption": "Left: original. Right: Matrix Rain at its default settings."
     },
     {
@@ -778,7 +778,7 @@
       "loop": 0.35,
       "poster": 2.2,
       "maxBytes": 1000000,
-      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Digital Rain top left with green katakana and digits falling over the whole frame, Code Portrait top right where only her lit figure is drawn in green digits on an empty black stage, Binary Storm bottom left with fine cyan zeros and ones racing down, Red Alert bottom right with large red digits and short trails",
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Digital Rain top left with green katakana and digits falling over the whole frame, Code Portrait top right where only her lit figure is drawn in green digits on an empty black stage, Binary Storm bottom left with dense, fine cyan zeros and ones racing down over the whole frame, Red Alert bottom right with large red digits and short trails",
       "caption": "The four presets on the moving dancer, in sync."
     },
     {
@@ -990,7 +990,7 @@
         "to": 1,
         "decimals": 2
       },
-      "alt": "The dancer with Matrix Rain while Trail runs from 0 to 1 and back: at 0 only single bright heads fall like sparks, then each head pulls a longer and longer fading tail, until the tails reach the next drop and the columns fill, and back; the current value is shown at the bottom left",
+      "alt": "The dancer with Matrix Rain while Trail runs from 0 to 1 and back: at 0 only single bright heads fall like sparks, then each head pulls a longer and longer fading tail, until each tail fades out just as the next head arrives and the columns are almost always lit, and back; the current value is shown at the bottom left",
       "caption": "Trail from 0 to 1 and back."
     }
   ]

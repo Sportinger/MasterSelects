@@ -5,14 +5,14 @@ Lets glowing code rain down the picture, and the figure appears in the falling c
 Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot docs-clip docs-compare">
-<video src="../assets/effects/clips/matrix.mp4" poster="../assets/effects/clips/matrix.webp" width="1280" height="608" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Matrix Rain right: green digits fall down every column in streaks with bright, almost white heads and fading trails; where she is lit, the digits glow brighter and denser and a soft green glow fills her shape, so she turns in the falling code"></video>
+<video src="../assets/effects/clips/matrix.mp4" poster="../assets/effects/clips/matrix.webp" width="1280" height="608" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Matrix Rain right: green digits fall down every column with bright, almost white heads and fading trails; on the dark stage the trails stay dim and only the heads flash, while on her the trails glow bright and a soft green glow fills her shape, arms included, so she turns in the falling code"></video>
 <figcaption>Left: original. Right: Matrix Rain at its default settings.</figcaption>
 </figure>
 
 **Use it for:** a digital world or a computer inside the story · a figure that dissolves into data · an alarm or a system failure, in red.
 
 - **Rain Color** – the colour of the code: green, cyan, red or any other.
-- **Trail** – how long the fading tails behind the falling heads are.
+- **Trail** – how long the fading tail behind each falling head is, as a share of the gap to the next drop in its column. At 0 only the heads fall, like single sparks; 0.5 gives the classic streaks; at 1 a tail fades out just as the next head arrives, so the columns are almost always lit. The tail fades from the full colour at the head to nothing at its end. 0 to 1, default 0.5.
 - **Speed** – how fast the drops fall.
 - **Background** – how strongly the figure glows behind the code.
 
@@ -21,7 +21,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/matrix-presets.mp4" poster="../assets/effects/clips/matrix-presets.webp" width="902" height="954" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Digital Rain top left with green katakana and digits falling over the whole frame, Code Portrait top right where only her lit figure is drawn in green digits on an empty black stage, Binary Storm bottom left with fine cyan zeros and ones racing down, Red Alert bottom right with large red digits and short trails"></video>
+<video src="../assets/effects/clips/matrix-presets.mp4" poster="../assets/effects/clips/matrix-presets.webp" width="902" height="954" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Digital Rain top left with green katakana and digits falling over the whole frame, Code Portrait top right where only her lit figure is drawn in green digits on an empty black stage, Binary Storm bottom left with dense, fine cyan zeros and ones racing down over the whole frame, Red Alert bottom right with large red digits and short trails"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
@@ -31,7 +31,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Code Portrait** – only the lit figure is drawn, in green digits with long trails; Black Level 0.2 leaves the dark stage empty and black. Calm and precise: a person scanned, remembered or rebuilt by a machine.
 
-**Binary Storm** – fine zeros and ones in cold cyan that race down; Black Level 0.12 keeps the storm on the figure. Restless and technical: data flowing, a system under load.
+**Binary Storm** – fine zeros and ones in cold cyan that race down densely over the whole frame, with long trails; the figure glows in the storm. Restless and technical: data flowing, a system under load.
 
 **Red Alert** – large red digits with short trails that fall fast, their heads flashing pale. For danger, an alarm or a system that breaks down.
 
@@ -43,18 +43,18 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![Properties, Effects with a Matrix Rain card: Style menu, Preset menu showing Code Portrait, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Rain Color with a green swatch, then Speed, Roll and Trail, beside a strip of the preview where the dancer is drawn in green digits on a black stage](../assets/effects/editor/matrix-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1247" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 857" aria-hidden="true" focusable="false">
 <defs><marker id="matrix-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 319 L649 319" marker-end="url(#matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="319" r="18" /><text x="565" y="319" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M583 425 L667 425" marker-end="url(#matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="583" cy="425" r="18" /><text x="583" y="425" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M563 616 L647 616" marker-end="url(#matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="563" cy="616" r="18" /><text x="563" y="616" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M569 997 L653 997" marker-end="url(#matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="569" cy="997" r="18" /><text x="569" y="997" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M618 1188 L702 1188" marker-end="url(#matrix-inspector-arrow)" />
-<circle class="docs-shot-number" cx="618" cy="1188" r="18" /><text x="618" y="1188" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M678 220 L762 220" marker-end="url(#matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="678" cy="220" r="18" /><text x="678" y="220" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M690 292 L774 292" marker-end="url(#matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="690" cy="292" r="18" /><text x="690" y="292" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M677 423 L761 423" marker-end="url(#matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="677" cy="423" r="18" /><text x="677" y="423" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M681 685 L765 685" marker-end="url(#matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="681" cy="685" r="18" /><text x="681" y="685" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M715 817 L799 817" marker-end="url(#matrix-inspector-arrow)" />
+<circle class="docs-shot-number" cx="715" cy="817" r="18" /><text x="715" y="817" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -90,7 +90,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Background from 0 to 1 and back.</figcaption>
 </figure>
 
-**Background** – how strongly the picture glows behind the code, in the Rain Color. At 0 only the falling characters show on black, and the figure reads in their brightness alone; 0.2 lets her shape glow softly, brighter wherever a trail passes; towards 1 she becomes a bright, solid shape in the rain. Dark parts of the picture stay dark at any value. 0 to 1, default 0.2.
+**Background** – how strongly the picture glows behind the code, in the Rain Color. At 0 only the falling characters show on black, and the figure reads in their brightness alone; 0.3 lets her shape glow softly, brighter wherever a trail passes; towards 1 she becomes a bright, solid shape in the rain. The glow is soft: a slightly blurred copy of the picture, not a square per cell. Dark parts of the picture stay dark at any value. 0 to 1, default 0.3.
 
 <div class="docs-float-end"></div>
 
@@ -117,7 +117,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Color
 
-**Rain Color** – the colour the code glows in: the green of the films (the default), cyan (Binary Storm), red (Red Alert) or any other. The head of each drop turns towards white, and the brightest parts of the picture glow paler than the colour itself. Pick a colour, default `#29ff6b`.
+**Rain Color** – the colour the code glows in: the green of the films (the default), cyan (Binary Storm), red (Red Alert) or any other. The head of each drop flashes almost white, on the dark stage as well as on the figure, and the brightest parts of the picture glow paler than the colour itself. Pick a colour, default `#29ff6b`.
 
 ### Motion
 
@@ -140,7 +140,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <div class="docs-float-end"></div>
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
-<video src="../assets/effects/clips/matrix-trail.mp4" poster="../assets/effects/clips/matrix-trail.webp" width="540" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Matrix Rain while Trail runs from 0 to 1 and back: at 0 only single bright heads fall like sparks, then each head pulls a longer and longer fading tail, until the tails reach the next drop and the columns fill, and back; the current value is shown at the bottom left"></video>
+<video src="../assets/effects/clips/matrix-trail.mp4" poster="../assets/effects/clips/matrix-trail.webp" width="540" height="540" autoplay muted loop playsinline preload="none" aria-label="The dancer with Matrix Rain while Trail runs from 0 to 1 and back: at 0 only single bright heads fall like sparks, then each head pulls a longer and longer fading tail, until each tail fades out just as the next head arrives and the columns are almost always lit, and back; the current value is shown at the bottom left"></video>
 <figcaption>Trail from 0 to 1 and back.</figcaption>
 </figure>
 
@@ -154,33 +154,35 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![The Matrix Rain graph in eight stages: Parameters feed Cell Grid (Cell Size), which passes the cell number to Rain and Glyph Offset, the cell centre to Cell Sampling & Tone and the position in the cell to Atlas Alpha; Tone to Glyph turns the tone into the cell's own character; Rain (Speed, Trail) passes the clock to Glyph Offset and the fade and head of the falling drops to Ink & Appearance; Roll Window (Roll) keeps each swap inside a part of the ramp and passes the glyph index to Atlas Alpha; Ink & Appearance (Rain Color, Background, Amount) lights the character and its ground](../assets/effects/graphs/matrix.webp)
+![The Matrix Rain graph in nine stages: Parameters feed Cell Grid (Cell Size), which passes the cell number to Rain and Glyph Offset, the cell centre to Cell Sampling & Tone, the grid position to Glow and the position in the cell to Atlas Alpha; Tone to Glyph turns the tone into the cell's own character; Rain (Speed, Trail) passes the clock to Glyph Offset and the fade and head of the falling drops to Glow and Ink & Appearance; Roll Window (Roll) keeps each swap inside a part of the ramp and passes the glyph index to Atlas Alpha; Glow (Background) reads the picture smoothly behind the code; Ink & Appearance (Rain Color, Amount) lights the character on that glow](../assets/effects/graphs/matrix.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 817" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1095" aria-hidden="true" focusable="false">
 <defs><marker id="matrix-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M204 441 L204 357" marker-end="url(#matrix-arrow)" />
-<circle class="docs-shot-number" cx="204" cy="441" r="18" /><text x="204" y="441" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M326 470 L326 554" marker-end="url(#matrix-arrow)" />
-<circle class="docs-shot-number" cx="326" cy="470" r="18" /><text x="326" y="470" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M448 604 L448 520" marker-end="url(#matrix-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="604" r="18" /><text x="448" y="604" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M448 115 L448 199" marker-end="url(#matrix-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="115" r="18" /><text x="448" y="115" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M569 231 L569 315" marker-end="url(#matrix-arrow)" />
-<circle class="docs-shot-number" cx="569" cy="231" r="18" /><text x="569" y="231" class="docs-shot-number-text">5</text>
-<path class="docs-shot-arrow" d="M691 794 L691 710" marker-end="url(#matrix-arrow)" />
-<circle class="docs-shot-number" cx="691" cy="794" r="18" /><text x="691" y="794" class="docs-shot-number-text">6</text>
-<path class="docs-shot-arrow" d="M813 365 L813 449" marker-end="url(#matrix-arrow)" />
-<circle class="docs-shot-number" cx="813" cy="365" r="18" /><text x="813" y="365" class="docs-shot-number-text">7</text>
-<path class="docs-shot-arrow" d="M935 344 L935 260" marker-end="url(#matrix-arrow)" />
-<circle class="docs-shot-number" cx="935" cy="344" r="18" /><text x="935" y="344" class="docs-shot-number-text">8</text>
+<path class="docs-shot-arrow" d="M204 825 L204 741" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="825" r="18" /><text x="204" y="825" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M326 610 L326 694" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="610" r="18" /><text x="326" y="610" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M448 557 L448 473" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="557" r="18" /><text x="448" y="557" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M448 22 L448 75" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="22" r="18" /><text x="448" y="22" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M569 359 L569 443" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="359" r="18" /><text x="569" y="359" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M691 338 L691 254" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="691" cy="338" r="18" /><text x="691" y="338" class="docs-shot-number-text">6</text>
+<path class="docs-shot-arrow" d="M813 286 L813 370" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="286" r="18" /><text x="813" y="286" class="docs-shot-number-text">7</text>
+<path class="docs-shot-arrow" d="M813 798 L813 714" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="798" r="18" /><text x="813" y="798" class="docs-shot-number-text">8</text>
+<path class="docs-shot-arrow" d="M935 1072 L935 988" marker-end="url(#matrix-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="1072" r="18" /><text x="935" y="1072" class="docs-shot-number-text">9</text>
 </svg>
 </div>
 
-<figcaption>Matrix Rain opened in the Nodes tab (input frame and output left out). 1 — Cell Grid: which cell a pixel lies in. 2 — Cell Sampling & Tone: the brightness of the cell. 3 — Tone to Glyph: the character of that brightness. 4 — Rain: the falling drops. 5 — Glyph Offset: the cell's random swap. 6 — Roll Window: the part of the ramp it swaps in. 7 — Atlas Alpha: where the character covers the cell. 8 — Ink & Appearance: the rain's light and ground.</figcaption>
+<figcaption>Matrix Rain opened in the Nodes tab (input frame and output left out). 1 — Cell Grid: which cell a pixel lies in. 2 — Cell Sampling & Tone: the brightness of the cell. 3 — Tone to Glyph: the character of that brightness. 4 — Rain: the falling drops. 5 — Glyph Offset: the cell's random swap. 6 — Roll Window: the part of the ramp it swaps in. 7 — Atlas Alpha: where the character covers the cell. 8 — Glow: the soft glow of the picture. 9 — Ink & Appearance: the rain's light on that glow.</figcaption>
 </figure>
 
-Matrix Rain works in eight stages, one folder each in the Nodes tab: **Cell Grid** cuts the frame into square cells, **Cell Sampling & Tone** reads the colour and brightness in the middle of each cell, **Tone to Glyph** picks the character of that brightness, **Rain** lets the drops fall down every column and works out how brightly each cell is lit right now, **Glyph Offset** draws each cell's random swaps, **Roll Window** keeps a swap inside a part of the ramp around the cell's own character, **Atlas Alpha** looks up where the character covers the cell, and **Ink & Appearance** lights it in the Rain Color on its ground. Click a folder's header to open it. Rain and Ink & Appearance make the rain; Glyph Offset works as in [Symbol Matrix](./symbol-matrix.md#glyph-offset), Roll Window as in [Glyph Matrix](./glyph-matrix.md#roll-window), the other four as in [ASCII](./ascii.md#node-setup). Matrix Rain is one look of the glyph engine that the [Text & Glyph](../Effects-Glyph.md#the-shared-idea) looks share; its **Style** menu switches between them.
+Matrix Rain works in nine stages, one folder each in the Nodes tab: **Cell Grid** cuts the frame into square cells, **Cell Sampling & Tone** reads the colour and brightness in the middle of each cell, **Tone to Glyph** picks the character of that brightness, **Rain** lets the drops fall down every column and works out how brightly each cell is lit right now, **Glyph Offset** draws each cell's random swaps, **Roll Window** keeps a swap inside a part of the ramp around the cell's own character, **Atlas Alpha** looks up where the character covers the cell, **Glow** reads a soft copy of the picture behind the code, and **Ink & Appearance** lights the character in the Rain Color on that glow. Click a folder's header to open it. Rain, Glow and Ink & Appearance make the rain; Glyph Offset works as in [Symbol Matrix](./symbol-matrix.md#glyph-offset), Roll Window as in [Glyph Matrix](./glyph-matrix.md#roll-window), the other four as in [ASCII](./ascii.md#node-setup). Matrix Rain is one look of the glyph engine that the [Text & Glyph](../Effects-Glyph.md#the-shared-idea) looks share; its **Style** menu switches between them.
 
 ### Cell Grid
 
@@ -300,10 +302,10 @@ Matrix Rain works in eight stages, one folder each in the Nodes tab: **Cell Grid
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 825" aria-hidden="true" focusable="false">
 <defs><marker id="matrix-rain-fall-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M813 243 L813 327" marker-end="url(#matrix-rain-fall-arrow)" />
-<circle class="docs-shot-number" cx="813" cy="243" r="18" /><text x="813" y="243" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M448 357 L448 273" marker-end="url(#matrix-rain-fall-arrow)" />
-<circle class="docs-shot-number" cx="448" cy="357" r="18" /><text x="448" y="357" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M813 530 L813 446" marker-end="url(#matrix-rain-fall-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="530" r="18" /><text x="813" y="530" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 102 L448 186" marker-end="url(#matrix-rain-fall-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="102" r="18" /><text x="448" y="102" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M813 102 L813 186" marker-end="url(#matrix-rain-fall-arrow)" />
 <circle class="docs-shot-number" cx="813" cy="102" r="18" /><text x="813" y="102" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M935 394 L935 310" marker-end="url(#matrix-rain-fall-arrow)" />
@@ -384,6 +386,8 @@ Matrix Rain works in eight stages, one folder each in the Nodes tab: **Cell Grid
 
 **Head** – one minus Behind, and not below 0 (Subtract, Maximum): 1 in the cell the head has just reached, fading as it moves on to the next row. Ink & Appearance turns that cell towards white.
 
+**Smooth Fade** – the same Fade worked out once more at the pixel's exact height instead of its cell's row (the Pixel Row, and Divide, Fraction, Multiply and Maximum nodes like the ones above). Glow uses it, so the glow behind the code brightens evenly down a column as a trail passes, instead of in steps of whole rows.
+
 ### Glyph Offset
 
 <figure class="docs-shot docs-shot--graph">
@@ -392,12 +396,12 @@ Matrix Rain works in eight stages, one folder each in the Nodes tab: **Cell Grid
 
 ![Inside the Glyph Offset folder: the Clock times Index Time Scale 2 gives the ticks; Random (Cell) of the Cell Number is added and Floor gives the cell's own tick; Combine Vector pairs the cell's random with its tick, Random (Integer Hash) draws a number, and Multiply by the Glyph Count and Floor give the glyph offset](../assets/effects/graphs/matrix-glyph-offset.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 475" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 487" aria-hidden="true" focusable="false">
 <defs><marker id="matrix-glyph-offset-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M204 172 L204 256" marker-end="url(#matrix-glyph-offset-arrow)" />
-<circle class="docs-shot-number" cx="204" cy="172" r="18" /><text x="204" y="172" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M204 323 L204 239" marker-end="url(#matrix-glyph-offset-arrow)" />
-<circle class="docs-shot-number" cx="204" cy="323" r="18" /><text x="204" y="323" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M204 464 L204 380" marker-end="url(#matrix-glyph-offset-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="464" r="18" /><text x="204" y="464" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M204 68 L204 152" marker-end="url(#matrix-glyph-offset-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="68" r="18" /><text x="204" y="68" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M448 68 L448 152" marker-end="url(#matrix-glyph-offset-arrow)" />
 <circle class="docs-shot-number" cx="448" cy="68" r="18" /><text x="448" y="68" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M691 68 L691 152" marker-end="url(#matrix-glyph-offset-arrow)" />
@@ -544,35 +548,103 @@ Matrix Rain works in eight stages, one folder each in the Nodes tab: **Cell Grid
 
 **Split Vector** – the Glyph Coverage: 1 inside the strokes of the character, 0 around them.
 
+### Glow
+
+<figure class="docs-shot docs-shot--graph">
+
+<div class="docs-shot-stage">
+
+![Inside the Glow folder, the soft tone: the Grid Position plus the Tap Offset (Ground A Dx and Dy, −0.3) gives the Tap, which divided by the cells across is read by Clamped Image Sample and turned into a Luminance; Mix blends it half and half with the Next Tap into the Upper Pair, and a second Mix blends the Upper Pair with the Lower Pair into the Soft Luminance](../assets/effects/graphs/matrix-glow-tone.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 753" aria-hidden="true" focusable="false">
+<defs><marker id="matrix-glow-tone-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M326 198 L326 282" marker-end="url(#matrix-glow-tone-arrow)" />
+<circle class="docs-shot-number" cx="326" cy="198" r="18" /><text x="326" y="198" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M569 198 L569 282" marker-end="url(#matrix-glow-tone-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="198" r="18" /><text x="569" y="198" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M813 22 L813 75" marker-end="url(#matrix-glow-tone-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="22" r="18" /><text x="813" y="22" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M935 198 L935 282" marker-end="url(#matrix-glow-tone-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="198" r="18" /><text x="935" y="198" class="docs-shot-number-text">4</text>
+</svg>
+</div>
+
+<figcaption>Inside Glow (Black Level), the soft tone. 1 — Tap: a point a little up and left of the pixel. 2 — Tap Sample: the picture's brightness there. 3 — Upper Pair: two taps averaged. 4 — Soft Luminance: all four averaged.</figcaption>
+</figure>
+
+**Tap** – the pixel's place in the grid plus a Tap Offset (Add): a point 0.3 of a cell up and to the left of it. The folder reads four such taps, one towards each corner.
+
+**Tap Sample** – the Tap divided by the cells across (Divide), read from the picture (Clamped Image Sample) and turned into a Luminance. The picture shows the first tap; the other three work the same way.
+
+**Upper Pair** – the two upper taps averaged (Mix at a half); the Lower Pair does the same below.
+
+**Soft Luminance** – the two pairs averaged (Mix): the brightness of the picture around the pixel, slightly blurred. It follows the pixel, not the cells, so the glow has no cell steps and is softer than the picture itself.
+
+<figure class="docs-shot docs-shot--graph">
+
+<div class="docs-shot-stage">
+
+![Inside the Glow folder, the glow: the Soft Luminance minus Black Level, divided by the Black Span, clamped between Zero and One, gives the Soft Tone; Background times it is the Background Glow; the Smooth Fade times Ground Trail 0.4 plus Ground Floor 0.6 gives the Ground Light; the Background Glow times the Ground Light is the Glow](../assets/effects/graphs/matrix-glow-ground.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1059" aria-hidden="true" focusable="false">
+<defs><marker id="matrix-glow-ground-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M427 237 L427 321" marker-end="url(#matrix-glow-ground-arrow)" />
+<circle class="docs-shot-number" cx="427" cy="237" r="18" /><text x="427" y="237" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M752 237 L752 321" marker-end="url(#matrix-glow-ground-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="237" r="18" /><text x="752" y="237" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M752 811 L752 727" marker-end="url(#matrix-glow-ground-arrow)" />
+<circle class="docs-shot-number" cx="752" cy="811" r="18" /><text x="752" y="811" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M914 237 L914 321" marker-end="url(#matrix-glow-ground-arrow)" />
+<circle class="docs-shot-number" cx="914" cy="237" r="18" /><text x="914" y="237" class="docs-shot-number-text">4</text>
+</svg>
+</div>
+
+<figcaption>Inside Glow (Background), the glow. 1 — Divide: Black Level. 2 — Background Glow: how strongly the picture glows. 3 — Ground Light: brighter where a trail passes. 4 — Glow: the strength of the glow.</figcaption>
+</figure>
+
+**Divide** – applies **Black Level** to the Soft Luminance, as in Cell Sampling & Tone: minus Black Level (Subtract), divided by the Black Span. The Clamp after it keeps the result between 0 and 1: the Soft Tone, black below Black Level.
+
+**Background Glow** – **Background** times the Soft Tone (Multiply): bright where the picture is bright, nothing where it is black.
+
+**Ground Light** – Ground Floor 0.6 plus Ground Trail 0.4 times the Smooth Fade (Multiply, Add): the glow shows at 60 % between two drops and in full where a trail passes. The Smooth Fade comes from Rain (see there).
+
+**Glow** – the Background Glow times the Ground Light (Multiply). Ink & Appearance colours it in the Rain Color.
+
+**Remix:** open the **Constants** folder and set **Ground Floor** from **0.6** to **0**: the figure glows only where a trail passes, as if the rain lit her up.
+
 ### Ink & Appearance
 
 <figure class="docs-shot docs-shot--graph">
 
 <div class="docs-shot-stage">
 
-![Inside the Ink and Appearance folder, the character: the Head times Head White 0.8 mixes the Rain Color towards White into the Head Color; Tone times Tone Factor 1.3 plus Tone Base 0.2 gives the Brightness; the Fade times it is the Light; the Light times the Glyph Coverage, times the Head Color, gives the Lit Glyph](../assets/effects/graphs/matrix-rain-ink.webp)
+![Inside the Ink and Appearance folder, the character: the Tone times itself is the Tone²; times Tone Factor 1.5, plus Tone Base 0.05, it is the Brightness; the Fade times it is the Trail Light; Maximum with the Lit Head gives the Light; the Head times Head White 0.8 mixes the Rain Color towards White into the Head Color; the Light times the Glyph Coverage, times the Head Color, gives the Lit Glyph](../assets/effects/graphs/matrix-rain-ink.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 855" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 718" aria-hidden="true" focusable="false">
 <defs><marker id="matrix-rain-ink-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M752 297 L752 381" marker-end="url(#matrix-rain-ink-arrow)" />
-<circle class="docs-shot-number" cx="752" cy="297" r="18" /><text x="752" y="297" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M427 439 L427 355" marker-end="url(#matrix-rain-ink-arrow)" />
-<circle class="docs-shot-number" cx="427" cy="439" r="18" /><text x="427" y="439" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M589 110 L589 194" marker-end="url(#matrix-rain-ink-arrow)" />
-<circle class="docs-shot-number" cx="589" cy="110" r="18" /><text x="589" y="110" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M914 439 L914 355" marker-end="url(#matrix-rain-ink-arrow)" />
-<circle class="docs-shot-number" cx="914" cy="439" r="18" /><text x="914" y="439" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M204 66 L204 150" marker-end="url(#matrix-rain-ink-arrow)" />
+<circle class="docs-shot-number" cx="204" cy="66" r="18" /><text x="204" y="66" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M448 358 L448 274" marker-end="url(#matrix-rain-ink-arrow)" />
+<circle class="docs-shot-number" cx="448" cy="358" r="18" /><text x="448" y="358" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M569 66 L569 150" marker-end="url(#matrix-rain-ink-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="66" r="18" /><text x="569" y="66" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M813 541 L813 457" marker-end="url(#matrix-rain-ink-arrow)" />
+<circle class="docs-shot-number" cx="813" cy="541" r="18" /><text x="813" y="541" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M935 358 L935 274" marker-end="url(#matrix-rain-ink-arrow)" />
+<circle class="docs-shot-number" cx="935" cy="358" r="18" /><text x="935" y="358" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Inside Ink & Appearance (Rain Color), the character. 1 — Head Color: the Rain Color, white at the head. 2 — Brightness: the glow of the picture. 3 — Light: the trail times that glow. 4 — Lit Glyph: the lit character.</figcaption>
+<figcaption>Inside Ink & Appearance (Rain Color), the character. 1 — Tone²: the tone times itself. 2 — Brightness: the glow of the picture. 3 — Trail Light: the trail times that glow. 4 — Head Color: the Rain Color, white at the head. 5 — Lit Glyph: the lit character.</figcaption>
 </figure>
 
+**Tone²** – the Tone times itself (Multiply): a dim stage counts much less than a lit figure, so the rain in the dark drops away.
+
+**Brightness** – Tone Base 0.05 plus Tone Factor 1.5 times the Tone² (Multiply, Add): faint rain in the dark parts, 1.55 in the brightest, where the colour overdrives and turns paler. This is what draws the figure into the rain.
+
+**Trail Light** – the Fade from Rain times the Brightness: how brightly the tail glows here right now. Maximum takes the brighter of it and the Lit Head (below): the **Light** of the character.
+
 **Head Color** – the Rain Color (Vector 4 to RGB) mixed towards White by the Head times Head White 0.8 (Multiply, Mix): the head of a drop glows almost white, the rest of the tail in the Rain Color.
-
-**Brightness** – Tone Base 0.2 plus Tone Factor 1.3 times the Tone (Multiply, Add): dim rain in the dark parts, 1.5 in the brightest, where the colour overdrives and turns paler. This is what draws the figure into the rain.
-
-**Light** – the Fade from Rain times the Brightness: how brightly the character glows right now.
 
 **Lit Glyph** – the Head Color times the Light times the Glyph Coverage (Multiply): the character, lit.
 
@@ -580,31 +652,34 @@ Matrix Rain works in eight stages, one folder each in the Nodes tab: **Cell Grid
 
 <div class="docs-shot-stage">
 
-![Inside the Ink and Appearance folder, the ground and the fade: the Fade times Ground Trail 0.55 plus Ground Floor 0.45 gives the Ground Light; Background times Tone times it, in the Rain Color, gives the Ground; the Ground plus the Lit Glyph gives the Glyph Cell; Original Color and the glyph cell, each times its alpha, are mixed by Amount into Faded Premultiplied, and a Divide by Faded Alpha gives the Faded Color](../assets/effects/graphs/matrix-rain-ground.webp)
+![Inside the Ink and Appearance folder, the head: Greater Than asks whether the Tone is above Zero and whether Black Level is above Zero; a Switch gives Zero or One from Black Level, a second Switch One for a lit cell, which is Head Shown; the Head times Head Light 0.85 is the Head Light, and times Head Shown it is the Lit Head](../assets/effects/graphs/matrix-rain-head.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 552" aria-hidden="true" focusable="false">
-<defs><marker id="matrix-rain-ground-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M292 48 L292 132" marker-end="url(#matrix-rain-ground-arrow)" />
-<circle class="docs-shot-number" cx="292" cy="48" r="18" /><text x="292" y="48" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M509 328 L509 244" marker-end="url(#matrix-rain-ground-arrow)" />
-<circle class="docs-shot-number" cx="509" cy="328" r="18" /><text x="509" y="328" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M617 48 L617 132" marker-end="url(#matrix-rain-ground-arrow)" />
-<circle class="docs-shot-number" cx="617" cy="48" r="18" /><text x="617" y="48" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M833 48 L833 132" marker-end="url(#matrix-rain-ground-arrow)" />
-<circle class="docs-shot-number" cx="833" cy="48" r="18" /><text x="833" y="48" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M941 328 L941 244" marker-end="url(#matrix-rain-ground-arrow)" />
-<circle class="docs-shot-number" cx="941" cy="328" r="18" /><text x="941" y="328" class="docs-shot-number-text">5</text>
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1372" aria-hidden="true" focusable="false">
+<defs><marker id="matrix-rain-head-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M702 326 L702 410" marker-end="url(#matrix-rain-head-arrow)" />
+<circle class="docs-shot-number" cx="702" cy="326" r="18" /><text x="702" y="326" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M702 901 L702 817" marker-end="url(#matrix-rain-head-arrow)" />
+<circle class="docs-shot-number" cx="702" cy="901" r="18" /><text x="702" y="901" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M896 326 L896 410" marker-end="url(#matrix-rain-head-arrow)" />
+<circle class="docs-shot-number" cx="896" cy="326" r="18" /><text x="896" y="326" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
-<figcaption>Inside Ink & Appearance (Background, Amount), the ground and the fade. 1 — Ground Light: brighter where a trail passes. 2 — Ground: the figure's glow in the Rain Color. 3 — Glyph Cell: the character on its ground. 4 — Faded Premultiplied: Amount. 5 — Faded Color: back to plain colour.</figcaption>
+<figcaption>Inside Ink & Appearance (Black Level), the head. 1 — Head Shown: whether the head may flash here. 2 — Head Light: its own light. 3 — Lit Head: the head's light here.</figcaption>
 </figure>
 
-**Ground Light** – Ground Floor 0.45 plus Ground Trail 0.55 times the Fade (Multiply, Add): the ground glows at almost half its strength between two drops and in full where a trail passes.
+**Head Shown** – two Switches: 1 in a cell brighter than Black Level (the Greater Than with the Tone), and 1 everywhere while Black Level is 0 (the other Greater Than); 0 only in a dark cell once Black Level is set. So Black Level clears the heads from the dark stage too.
 
-**Ground** – **Background** times the Tone (Multiply), times the Ground Light, in the Rain Color (Multiply): the soft glow of the figure behind the code.
+**Head Light** – the Head from Rain times Head Light 0.85 (Multiply): the head has a light of its own that does not drop with the picture, so it flashes on the dark stage as on the figure.
 
-**Glyph Cell** – the Ground plus the Lit Glyph (Add): the character shines on its glowing ground.
+**Lit Head** – the Head Light times Head Shown (Multiply). The Maximum above takes it when it is brighter than the trail.
+
+
+The last cards of the folder put it together, as in [ASCII](./ascii.md#ink--appearance).
+
+**Ground** – the Rain Color times the Glow from the Glow folder (Multiply): the soft glow of the figure behind the code.
+
+**Glyph Cell** – the Ground plus the Lit Glyph (Add): the character shines on its glowing ground, and a dim character never cuts a dark hole into it.
 
 **Faded Premultiplied** – fades the untouched picture, pixel by pixel, towards the rain by **Amount**. Both are first multiplied by their transparency (Original Alpha, Cell Alpha), and the transparency fades the same way (Faded Alpha).
 
@@ -613,9 +688,10 @@ Matrix Rain works in eight stages, one folder each in the Nodes tab: **Cell Grid
 ## Technical details
 
 - **Size.** Cell Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same grid. A cell is never smaller than 2 pixels of the frame; below 2 px Cell Size renders as 2, and the card says so.
-- **Rain.** Each column falls at its own pace, 7 to 17 rows a second × Speed, with its drops 19 to 45 rows apart; the tail covers Trail × that gap and fades with the square of the distance from the head. A character glows at Rain Color × fade × (0.2 + 1.3 × brightness), its ground at Background × brightness × (0.45 + 0.55 × fade). Trail and Roll outside 0 to 1 render as 0 or 1, and the card and the tools say so.
+- **Rain.** Each column falls at its own pace and spaces its drops in its own way, so neighbouring columns never fall in step. A tail fades with the square of its distance from the head, so it is bright just behind the head and soon faint. The head has a light of its own; the tail glows with the picture, and a dim stage counts much less than a lit figure. Trail and Roll outside 0 to 1 render as 0 or 1, and the card and the tools say so.
+- **Glow.** The glow behind the code is a slightly blurred copy of the picture's brightness, read at four points around each pixel, so it has no cell steps; it brightens evenly down a column where a trail passes.
 - **Time.** The rain follows the timeline time: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. With keyframes on Speed it moves by the distance Speed has travelled, so it never jumps. Hours into a show the drops stay in place to well under a row.
 - **Characters.** The whole ramp is drawn in one font size, so its tallest character spans 88 % of the cell height. Characters the Font lacks, such as katakana, are drawn from the system's fallback font; without one they show as boxes, and the card cannot tell.
 - **Transparency.** Each cell takes the transparency of the picture at its centre, so a cut-out figure keeps its outline in whole cells and the rain stays inside it. Amount fades the transparency back to the original's, pixel by pixel, and mixes the colours weighted by their transparency.
-- **Saved projects.** A Matrix Rain that stores its node setup keeps its look and its card. Effects saved without a stored setup now rain with heads and tails and show the picture; before, at the Roll 1 and Background 0 they load with, the picture did not show at all, a bug. They load in the default Rain Color with Trail 0.5. Presets fully apply only to effects added in this version: on a stored setup from before, the card has no Background, Black Level, Roll, Rain Color or Trail row, so a preset leaves those values out.
+- **Saved projects.** A Matrix Rain that stores its node setup keeps its look and its card. Before, effects saved without a stored setup loaded at Roll 1 and Background 0 and did not show the picture at all; that was a bug. They now rain with heads and tails and show the figure, in the default Rain Color with Trail 0.5. Presets fully apply only to effects added in this version: on a stored setup from before, the card has no Background, Black Level, Roll, Rain Color or Trail row, so a preset leaves those values out.
 - **More:** [Effect system](../Effect-System.md#glyph-cell-and-compute-effects) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

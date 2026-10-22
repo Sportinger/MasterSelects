@@ -79,6 +79,18 @@ describe('Grid Glyph', () => {
     ]);
   });
 
+  it('a line as wide as the cell is cut to half a cell, so the characters still show, and the card says so', () => {
+    // 6 px cells with an 8 px line: before, every pixel was line and a full block showed nowhere.
+    const block = renderer({ cellSize: 6, lineWidth: 8, lineGlow: 0 }, [1920, 1080], 1);
+    const cell = Array.from({ length: 36 }, (_, index) => block(60 + index % 6, 60 + Math.floor(index / 6)));
+    expect(cell.filter(value => Math.abs(value - 1) < 1e-6).length).toBe(9);
+    expect(cell.filter(value => Math.abs(value) < 1e-6).length).toBe(27);
+    const warnings = getEffect('grid-glyph')!.paramWarnings!;
+    expect(warnings({ ...getDefaultParams('grid-glyph'), cellSize: 6, lineWidth: 8 }, 1920, 1080)).toContain(
+      'Line Width 8 px is more than half the 6 px cells and renders as 3 px (half a cell), so the characters stay visible; lower Line Width or raise Cell Size.');
+    expect(warnings({ ...getDefaultParams('grid-glyph'), cellSize: 6, lineWidth: 3 }, 1920, 1080).filter(text => text.startsWith('Line Width'))).toEqual([]);
+  });
+
   it('a node setup saved without Line Width or Line Glow hides them in the card', () => {
     const graph = structuredClone(effectOperatorGraph({ type: 'grid-glyph', params: getDefaultParams('grid-glyph') }));
     for (const id of ['line-width', 'line-glow']) graph.nodes.find(node => node.id === id)!.bindings = {};

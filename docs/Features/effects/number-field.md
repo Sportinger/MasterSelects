@@ -24,20 +24,20 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot">
 
-![The dancer's head and arms four times in a grid, one preset each: Countdown top left with large amber serif figures on brown-black, Paint by Numbers top right with gold and grey figures 1 to 5 on a navy field, the figure matching its colour, Signal Red bottom left with bold vermilion figures on near-black, Census bottom right with fine pale violet figures in many shades](../assets/effects/presets/number-field.webp)
+![The dancer's upper body four times in a grid, one preset each: Countdown top left with large amber serif figures on brown-black, Paint by Numbers top right with gold and grey figures 1 to 5 on a navy field, the figure matching its colour, Signal Red bottom left with bold vermilion figures on near-black, Census bottom right with fine pale violet figures in many shades](../assets/effects/presets/number-field.webp)
 
 <figcaption>The four presets on the dancer, each named under its picture.</figcaption>
 </figure>
 
 Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
 
-**Countdown** – large amber serif figures in three steps on brown-black, like a countdown, a scoreboard or an old departure board. Every lit cell glows as an amber block behind its figure. For time running out, waiting, a station at night.
+**Countdown** – amber serif figures in three steps on brown-black, like a countdown, a scoreboard or an old departure board. Every lit cell glows as an amber block behind its figure. For time running out, waiting, a station at night.
 
 **Paint by Numbers** – every cell carries the number of its colour, 1 to 5, from navy to gold: the Custom Ramp `12345` has as many figures as there are Steps. Background 0.6 fills the cells, so the picture reads as numbered flat areas. For childhood, craft, a picture still waiting for its colours.
 
 **Signal Red** – two steps only: bold vermilion figures where the picture is lit, near-black everywhere else. Graphic and loud; for alarms, propaganda, a figure singled out.
 
-**Census** – fine pale violet figures in ten shades. With the Numeric ramp and Steps 10 every figure names its own shade, 1 for the darkest, 9 for the brightest. For statistics, crowds, a person counted.
+**Census** – fine pale violet figures in ten shades. With the Numeric ramp and Steps 10 the darkest shade stays blank, and 1 to 9 name the others. For statistics, crowds, a person counted.
 
 ## Controls
 
@@ -45,20 +45,20 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Number Field card: Style menu, Preset menu showing Paint by Numbers, Cell Size, then Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp holding 12345, Font and Weight, then Dark in navy, Light in gold and Steps at 5, beside a strip of the preview where the dancer is drawn in gold and grey figures 1 to 5 on a navy field](../assets/effects/editor/number-field-inspector.webp)
+![Properties, Effects with a Number Field card: Style menu, Preset menu showing Paint by Numbers, Cell Size, then Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp holding 12345, Font and Weight, then Dark in navy, Light in gold and Steps at 5, beside a strip of the preview where the dancer is drawn in gold and grey numbers 1 to 5 on a navy field](../assets/effects/editor/number-field-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1171" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 805" aria-hidden="true" focusable="false">
 <defs><marker id="number-field-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 319 L649 319" marker-end="url(#number-field-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="319" r="18" /><text x="565" y="319" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M583 425 L667 425" marker-end="url(#number-field-inspector-arrow)" />
-<circle class="docs-shot-number" cx="583" cy="425" r="18" /><text x="583" y="425" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M559 578 L643 578" marker-end="url(#number-field-inspector-arrow)" />
-<circle class="docs-shot-number" cx="559" cy="578" r="18" /><text x="559" y="578" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M541 845 L625 845" marker-end="url(#number-field-inspector-arrow)" />
-<circle class="docs-shot-number" cx="541" cy="845" r="18" /><text x="541" y="845" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M607 1111 L691 1111" marker-end="url(#number-field-inspector-arrow)" />
-<circle class="docs-shot-number" cx="607" cy="1111" r="18" /><text x="607" y="1111" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M678 220 L762 220" marker-end="url(#number-field-inspector-arrow)" />
+<circle class="docs-shot-number" cx="678" cy="220" r="18" /><text x="678" y="220" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M690 292 L774 292" marker-end="url(#number-field-inspector-arrow)" />
+<circle class="docs-shot-number" cx="690" cy="292" r="18" /><text x="690" y="292" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M674 397 L758 397" marker-end="url(#number-field-inspector-arrow)" />
+<circle class="docs-shot-number" cx="674" cy="397" r="18" /><text x="674" y="397" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M661 581 L745 581" marker-end="url(#number-field-inspector-arrow)" />
+<circle class="docs-shot-number" cx="661" cy="581" r="18" /><text x="661" y="581" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M707 764 L791 764" marker-end="url(#number-field-inspector-arrow)" />
+<circle class="docs-shot-number" cx="707" cy="764" r="18" /><text x="707" y="764" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 

@@ -85,7 +85,8 @@ describe('glyph engine', () => {
     for (const type of GLYPH_LOOKS) {
       const background = getEffect(type)!.params.background;
       expect(background).toMatchObject({ legacyDefault: 0, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true });
-      expect(background.default).toBe(type === 'stitch-poster' ? 0 : .2);
+      // Matrix Rain starts at 0.3, so the figure glows behind its rain; Stitch Poster has its paper.
+      expect(background.default).toBe(type === 'stitch-poster' ? 0 : type === 'matrix' ? .3 : .2);
     }
     // ASCII, no character in the cell: the ground is the source colour × .08, lifted towards the ink.
     const dark = render('ascii', { background: 0 }).output, lifted = render('ascii', { background: .5 }).output;

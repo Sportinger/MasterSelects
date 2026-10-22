@@ -391,7 +391,7 @@ fixed text in its Phosphor colour with 1080p scanlines. Both retain the sampled 
 composition timeline clock.
 Capsule Cloud adds signed-distance pill coverage; UI Collage adds cell borders
 and cursor marks. Their character offsets use deterministic spatial hashes.
-Matrix Rain lets drops with near-white heads and fading tails fall down every column, lit by the cell tone.
+Matrix Rain lets drops with near-white heads and fading tails fall down every column, lit by the cell tone, over a softly blurred glow of the picture.
 ASCII Ghost combines the current result with explicit previous-frame history using
 component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
@@ -409,7 +409,7 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   the look's dark ground (source × 0.08, Dark × 0.15, or its own paper/black) towards the
   character colour of the cell. Looks with their own palette (Matrix Rain, Retro Matrix, Pixel Code,
   Number Field, Dither Glow) colour the whole cell with their ink at Background strength (Matrix Rain
-  × the cell tone × 0.45–1 with its rain). New instances start at 0.2 (0.3 before the characters filled their cells; Stitch Poster at 0, it has its paper), so cards and
+  × a 4-tap blurred tone × 0.6–1 with its rain). New instances start at 0.2 (0.3 before the characters filled their cells; Stitch Poster at 0, it has its paper), so cards and
   stills keep about 40 % of the picture's brightness instead of about 10 %. `legacyDefault: 0` keeps
   instances saved before it on the dark ground; it is `graphOnly`, so a node setup saved before it
   hides the row; outside 0–1 it renders clamped (`background-clamped`, reported by `paramRangeNotes`).
@@ -476,8 +476,12 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   `Behind = fract((fallen − row) / spacing + phase) × spacing` (`rain-behind`) is how far the last head
   has fallen past the cell; the tail is `max(1 − Behind / max(Trail × spacing, 1), 0)`, squared
   (`rain-fade`), the head `max(1 − Behind, 0)` (`rain-head`). A character glows at Rain Color, mixed
-  towards white by 0.8 × head, × fade × (0.2 + 1.3 × tone) (`rain-light`, `rain-glyph`); its ground is
-  Background × tone × (0.45 + 0.55 × fade) in Rain Color (`rain-ground`), added under it (`rain-lit`).
+  towards white by 0.8 × head, × max(fade × (0.05 + 1.5 × tone²), 0.85 × head × shown) (`rain-light`,
+  `rain-glyph`): the squared tone keeps the dim stage faint, and the head has its own light (`rain-head-light`)
+  that Black Level clears only in cells at or below it (`rain-head-shown`). Its ground is Background × the
+  **Glow** folder's soft tone (the mean luminance of four taps 0.3 cell diagonally around the pixel, `ground-*`,
+  with Black Level applied) × (0.6 + 0.4 × the fade recomputed at the pixel's exact row, `ground-fade`) in Rain
+  Color (`rain-ground`), added under it (`rain-lit`), so the glow has no cell steps. New instances start at Background 0.3.
   Characters swap like Symbol Matrix's (`index-cell-random`, `index-tick`), twice a second × Speed.
   **Rain Color** (`rainColor`, default `#29ff6b`) and **Trail** (`trail`, 0–1, default 0.5, clamped by
   `trail-clamped`) are its own `graphOnly` controls; Roll starts at 0.5 and the Ramp at Numeric. This
@@ -488,7 +492,7 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   from the system's fallback font). Test: `tests/unit/matrixRain.test.ts`.
 - **Grid Glyph lines** (`src/effects/glyph/gridGlyph.ts`, the **Grid Lines** folder, `grid-*`). Every cell rules its
   top and left edge: **Line Width** (`lineWidth`, 0–8 px of a 1080p frame, default 1, clamped by `lineWidth-clamped`)
-  × Frame Scale is the line in output pixels (`grid-line-pixels`); per axis the pixel's distance d to the middle of
+  × Frame Scale, at most half a cell (`grid-line-cap`; the card says when it cuts), is the line in output pixels (`grid-line-pixels`); per axis the pixel's distance d to the middle of
   the nearest line (`grid-line-distance-x/y`, min(|x − w/2|, cell − |x − w/2|)) gives the coverage
   clamp(w/2 + ½ − d, 0, min(w, 1)) (`grid-cover-x/y`), the exact share of the pixel the line covers (a box filter), so
   a hairline carries the same light at every preview quality and export size and a 1 px line fills exactly one
