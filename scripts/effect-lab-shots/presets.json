@@ -21,6 +21,17 @@
         960,
         540
       ]
+    },
+    {
+      "effect": "motion-blur",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        160,
+        0,
+        1600,
+        900
+      ]
     }
   ]
 }

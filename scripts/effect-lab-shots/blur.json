@@ -67,6 +67,25 @@
           "radius": 10
         }
       }
+    },
+    {
+      "name": "motion-blur",
+      "out": "docs/Features/assets/effects/motion-blur.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "compare",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "motion-blur",
+        "params": {
+          "amount": 0.02,
+          "angle": 0
+        }
+      },
+      "alt": "The dancer on the dark stage, original left and with Motion Blur at Length 2% right: her body, arms and dress smear sideways into soft streaks, as if she rushed across the stage while the shutter was open",
+      "caption": "Left: original. Right: Length 2%."
     }
   ]
 }

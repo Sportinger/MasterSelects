@@ -10,7 +10,7 @@
       "preview": 380,
       "top": "tabs",
       "alt": "Properties, Effects with a Gaussian Blur card: the Preset menu showing Out of Focus and the Radius row at 10 px, beside a strip of the preview where the harbour town has gone soft",
-      "caption": "Gaussian Blur at its default, which is also the Out of Focus preset. 1 — Preset: pick a starting point. 2 — Radius: how soft the picture gets.",
+      "caption": "Gaussian Blur at its default, which is also the Out of Focus preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Radius: how soft the picture gets.",
       "marks": [
         {
           "target": "Preset",
@@ -34,7 +34,7 @@
         "radius": 10
       },
       "image": "harbor_town.jpg",
-      "alt": "The Nodes tab with the clip picked as its source: the clip's image source, the folded Gaussian Blur card with the › left of its title, and the output",
+      "alt": "The Nodes tab with the clip picked as its source: the clip's image source, the folded Gaussian Blur card with the \u203a left of its title, and the output",
       "marks": [
         {
           "target": "dock:Nodes",
@@ -49,7 +49,7 @@
         {
           "target": "expand:Gaussian Blur",
           "from": "above",
-          "label": "the › opens the effect"
+          "label": "the \u203a opens the effect"
         }
       ]
     },
@@ -63,7 +63,7 @@
       "preview": 380,
       "top": "tabs",
       "alt": "Properties, Effects with a Box Blur card: the Preset menu showing Square Lights and the Radius row at 20 px, beside a strip of the preview where the neon lights have turned into soft squares",
-      "caption": "Box Blur with the Square Lights preset. 1 — Preset: pick a starting point. 2 — Radius: how far the softening reaches.",
+      "caption": "Box Blur with the Square Lights preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Radius: how far the softening reaches.",
       "marks": [
         {
           "target": "Preset",
@@ -72,6 +72,36 @@
         {
           "target": "Radius",
           "label": "Radius"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "motion-blur-inspector",
+      "effect": "motion-blur",
+      "params": {
+        "amount": 0.04,
+        "angle": 1.5707963267948966
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Motion Blur card: the Preset menu showing Falling, the Length row at 4% and the Angle row at 90\u00b0, beside a strip of the preview where the lights of the night street run down in vertical streaks",
+      "caption": "Motion Blur with the Falling preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Length: how far the streak reaches. 3 \u2014 Angle: which way it points.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Length",
+          "label": "Length"
+        },
+        {
+          "target": "Angle",
+          "label": "Angle"
         }
       ],
       "hide": [

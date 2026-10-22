@@ -13,6 +13,8 @@ import { createLegacyRadialBlurGraph } from '../../src/services/operators/legacy
 import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { executeAITool } from '../../src/services/aiTools';
+import { motionBlur } from '../../src/effects/blur/motion';
+import { effectParamDisplay } from '../../src/effects/paramDisplay';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
@@ -95,6 +97,25 @@ describe('a skipped zero-strength blur still feeds its effect preview', () => {
     expect(result).toEqual({ finalView: input, swapped: false });
     expect(beginRenderPass).not.toHaveBeenCalled();
     expect(capture).toHaveBeenCalledWith('effect:soft', device, encoder, expect.anything(), input, 1920, 1080);
+  });
+});
+
+describe('Motion Blur card and presets', () => {
+  it('shows Length in percent and Angle in degrees while storing shares and radians', () => {
+    expect(effectParamDisplay(motionBlur.params.amount, 0.05)).toMatchObject({ scale: 100, suffix: '%' });
+    expect(motionBlur.params.amount).toMatchObject({ default: 0.05, min: 0, max: 0.3 });
+    expect(effectParamDisplay(motionBlur.params.angle).suffix).toBe('°');
+  });
+
+  it('declares presets whose angles land on whole degrees and whose lengths stay in range', () => {
+    expect(motionBlur.presets?.map(preset => preset.name)).toEqual(['Quick Move', 'Leap', 'Falling', 'Whip Pan']);
+    for (const preset of motionBlur.presets ?? []) {
+      const { amount, angle } = preset.params as { amount: number; angle: number };
+      expect(amount).toBeGreaterThan(0);
+      expect(amount).toBeLessThanOrEqual(0.3);
+      expect(Math.abs(angle * 180 / Math.PI - Math.round(angle * 180 / Math.PI))).toBeLessThan(1e-9);
+    }
+    expect(motionBlur.presets?.find(preset => preset.id === 'falling')?.params.angle).toBe(Math.PI / 2);
   });
 });
 

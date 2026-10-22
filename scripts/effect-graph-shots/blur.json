@@ -12,8 +12,13 @@
     "box-blur?focus=horizontal-pass&only=compound-shared-zero,horizontal-far-weight-coverage,horizontal-far-weight,horizontal-near-weight-raw-coverage,horizontal-near-weight-raw,compound-shared-weight-floor,horizontal-sample,horizontal-reduce,compound-shared-horizontal-weight-vec4,horizontal-cache&cables=avoid&marks=compound-shared-zero,horizontal-far-weight-coverage,horizontal-far-weight,horizontal-reduce,compound-shared-horizontal-weight-vec4@box-blur-horizontal-pass",
     "box-blur?focus=vertical-pass&only=vertical-offset-texels,vertical-offset,vertical-sample-uv,vertical-sample&cables=avoid&marks=vertical-offset-texels,vertical-sample@box-blur-vertical-pass",
     "box-blur?focus=straight-alpha-output&only=result-split,result-alpha,result-safe-alpha,result-rgb,result&cables=avoid&marks=result-safe-alpha,result-rgb,result@box-blur-straight-alpha",
-    "motion-blur?plumbing=hide&omit=output",
-    "motion-blur?focus=stage-b-coarse-taps&only=taper-double,taper-centered,taper-squared,taper-exponent,taper,coarse-weight&rows=1@motion-blur-taper",
+    "motion-blur?plumbing=hide&omit=output&marks=organized-motion-blur-range,organized-motion-blur-count,organized-motion-blur-premultiply,organized-motion-blur-fine,organized-motion-blur-coarse,organized-motion-blur-finish@motion-blur",
+    "motion-blur?focus=blur-range&only=amount-positive,direction,direction-frame,direction-extent,half-length,range-start,range-length,longest&cables=avoid&marks=amount-positive,direction,direction-extent,range-start,longest@motion-blur-blur-range",
+    "motion-blur?focus=tap-counts-and-box-length&only=longest-px-double,coarse-root,coarse-needed,coarse-count,step-raw,step&cables=avoid&marks=coarse-root,coarse-count,step@motion-blur-tap-counts",
+    "motion-blur?focus=premultiplied-source-cached&only=source-premultiplied-split,source-premultiplied-alpha,source-premultiplied-rgb,source-premultiplied,source-cache&cables=avoid&marks=source-premultiplied-rgb,source-cache@motion-blur-premultiplied-source",
+    "motion-blur?focus=stage-a-short-box-cached&only=fine-needed,fine-count,fine-uv,fine-sample,fine-reduce,compound-shared-fine-weight-vec4,fine-cache&name.fine-uv-raw=Read position&cables=avoid&marks=fine-count,fine-uv,fine-reduce,fine-cache@motion-blur-stage-a",
+    "motion-blur?focus=stage-b-coarse-taps&only=taper-t,taper-double,taper-centered,taper-squared,taper-exponent,taper,coarse-weight,coarse-uv,coarse-sample,coarse-reduce,compound-shared-coarse-weight-vec4&name.coarse-uv-raw=Read position&name.along=Distance along&name.range-span-safe=Streak length&rows=2&cables=avoid&marks=taper-t,taper,coarse-weight,coarse-uv,coarse-reduce@motion-blur-stage-b",
+    "motion-blur?focus=straight-alpha-output&only=result-split,result-alpha,result-safe-alpha,result-rgb,result&cables=avoid&marks=result-safe-alpha,result-rgb,result@motion-blur-straight-alpha",
     "radial-blur?focus=blur-range&only=is-spin,range-length&layout=float&marks=is-spin:above,range-length:above@radial-blur-type"
   ]
 }
