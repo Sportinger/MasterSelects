@@ -49,7 +49,7 @@ silhouette area with observed feature scale. This is not semantic video
 segmentation: blur, occlusion, wheel/background texture and large pose changes
 can still drift or lose the object; add user anchors and rerun short ranges.
 
-**Use track ? Create animated mask** produces an ordinary editable effect-input
+**Use track → Create animated mask** produces an ordinary editable effect-input
 mask with held path keys at composition frame times, including reverse and speed
 mapping. Untracked gaps use empty, zero-area paths. **Render outline** optionally
 includes the contour in the video and export; it is off by default.

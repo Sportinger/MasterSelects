@@ -1,6 +1,8 @@
 # Notebook
 
-Open **View → Editing → Notebook** or use a dock **+** button. An empty Notebook is immediately writable: typing creates the first note in one undo step. **New note** opens another blank writing surface. A title is optional; the first nonempty line names an untitled note in the note picker, Media panel and Story start screen. The active note is saved with the project.
+The Notebook holds the project's texts: notes, a libretto or a screenplay, with scenes, labels and media marked in the text. Open it from the **+** at the end of any tab bar, group **Editing → Notebook** (it is not in View → Panels). Related: [Annotations](./Annotations.md) for timed notes on the timeline, [Story Workflow](./Seedance-Preproduction.md).
+
+An empty Notebook is immediately writable: typing creates the first note in one undo step. **New note** opens another blank writing surface. A title is optional; the first nonempty line names an untitled note in the note picker, Media panel and Story start screen. The active note is saved with the project.
 
 The writing surface supports selection across paragraphs, Enter for a paragraph, Shift+Enter for a line break, paste, bold, italic, headings, lists and quotes. Search highlights actual text and provides previous/next navigation. The **Add** menu and a toolbar beside a text selection attach labels, scene ranges, comments and media links. A label changes no text or paragraph style; it can have a name and color, and labels may overlap. Scene ranges may cross paragraphs and have optional name, location, interior/exterior setting, time of day, labels and media. Click a scene in the annotation area to edit its properties, change its range, continue writing outside it or remove the scene mark while keeping the text. The **Focus** control hides supporting panels until **Exit focus** is selected.
 
