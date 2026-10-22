@@ -31,8 +31,9 @@ fn aiEdgeFillFragment(input: VertexOutput) -> @location(0) vec4f {
   let fill = fillAt(input.uv);
   // Seam Blend: near the photo, shift the fill's colour by how far the model's colours drift from the
   // photo's (photo minus fill, averaged over the photo pixels in a disc around this pixel). The fill keeps
-  // its own detail; the shift fades with the share of the disc the photo covers, so it is strongest next
-  // to the photo and gone at the Seam Blend distance, without rings. Opaque photo pixels are never touched.
+  // its own detail. The shift is full next to the photo and gone at the Seam Blend distance: its strength
+  // follows the distance to the nearest photo sample (so photo corners and wedges get it too) or the share
+  // of the disc the photo covers, whichever is larger. Opaque photo pixels are never touched.
   var fillRgb = fill.rgb;
   let dims = vec2f(textureDimensions(inputTex));
   let aspect = dims.x / dims.y;
@@ -50,11 +51,15 @@ fn aiEdgeFillFragment(input: VertexOutput) -> @location(0) vec4f {
     var drift = vec3f(0.0);
     var covered = 0.0;
     var total = 0.0;
-    // A per-pixel turn of the sample pattern (interleaved gradient noise) turns the steps a fixed pattern
-    // would leave as the disc slides over the photo edge into fine grain.
+    var nearest = 2.0;
+    // Per-pixel turns of the sample angle and ring radius (interleaved gradient noise) turn the steps a fixed
+    // pattern would leave, as the disc slides over the photo edge, into fine grain.
     let turn = fract(52.9829189 * fract(dot(input.position.xy, vec2f(0.06711056, 0.00583715))));
+    let shift = fract(52.9829189 * fract(dot(input.position.xy + vec2f(17.0, 59.0), vec2f(0.06711056, 0.00583715))));
+    let fillSize = vec2f(textureDimensions(fillTex));
     for (var ring = 1u; ring <= 6u; ring++) {
-      let radius = params.seamRadius * f32(ring) / 6.0;
+      let reach = (f32(ring) - 1.0 + max(shift, 0.05)) / 6.0;
+      let radius = params.seamRadius * reach;
       for (var direction = 0u; direction < 8u; direction++) {
         // Every other ring turns by half a step, so the 48 samples cover the disc evenly.
         let angle = (f32(direction) + 0.5 * f32(ring & 1u) + turn) * 0.785398163;
@@ -63,12 +68,17 @@ fn aiEdgeFillFragment(input: VertexOutput) -> @location(0) vec4f {
         if (any(point < vec2f(0.0)) || any(point > vec2f(1.0))) { continue; }
         let edge = originalAt(point);
         total += 1.0;
-        if (edge.a >= 0.999) { drift += edge.rgb - fillAt(point).rgb; covered += 1.0; }
+        if (edge.a >= 0.999) {
+          // The drift only carries low frequencies: the nearest fill pixel is enough (one read instead of four).
+          drift += edge.rgb - fillPixel(vec2i(point * fillSize)).rgb;
+          covered += 1.0;
+          nearest = min(nearest, reach);
+        }
       }
     }
     if (covered > 0.0) {
-      // Beside a straight photo edge about half the disc is photo: full shift there, none at the radius.
-      let weight = smoothstep(0.0, 1.0, min(1.0, 2.0 * covered / total));
+      // Beside a straight edge about half the disc is photo; at a corner less, but a photo sample is still close.
+      let weight = max(smoothstep(0.0, 1.0, min(1.0, 2.0 * covered / total)), smoothstep(0.0, 1.0, 1.0 - nearest));
       fillRgb = clamp(fill.rgb + drift / covered * weight, vec3f(0.0), vec3f(1.0));
     }
   }

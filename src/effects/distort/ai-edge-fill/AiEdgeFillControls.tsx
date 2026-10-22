@@ -8,7 +8,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { discardEdgeFill, edgeFillJob, generateEdgeFill, subscribeEdgeFillJobs } from './edgeFillGeneration';
 import { edgeFillFraming, edgeFillSource } from './edgeFillSource';
-import { EDGE_FILL_PROMPT, LEGACY_EDGE_FILL_PROMPT } from './edgeFillPrompt';
+import { DEFAULT_EDGE_FILL_SCENE, EDGE_FILL_SCENES, customEdgeFillPrompt } from './edgeFillPrompt';
 import { edgeFillArtifacts } from './edgeFillArtifacts';
 import '../../../components/panels/properties/perspectiveGuides/PerspectiveGuides.css';
 import './AiEdgeFillControls.css';
@@ -33,7 +33,10 @@ export default function AiEdgeFillControls({ params, onChange, clipId = '', effe
   const artifactId = String(params.artifactId || '');
   const artifactError = edgeFillArtifacts.error(artifactId);
   const pending = !!params.taskId || !!params.requestId || !!job.taskId;
-  const prompt = params.prompt === LEGACY_EDGE_FILL_PROMPT ? EDGE_FILL_PROMPT : String(params.prompt || EDGE_FILL_PROMPT);
+  const scene = String(params.scene ?? DEFAULT_EDGE_FILL_SCENE);
+  const sceneChoice = EDGE_FILL_SCENES.find(item => item.scene === scene.trim())?.id ?? 'own';
+  const customPrompt = customEdgeFillPrompt(params);
+  const locked = job.busy || pending;
   const status = sourceError || job.error || artifactError || (outdated ? 'Correction changed. Regenerate the fill to match it.' : job.message);
   const keyframes = (paramName: string, value: number) => clipId && effectInstanceId
     ? <EffectKeyframeToggle clipId={clipId} effectId={effectInstanceId} paramName={paramName} value={value} /> : undefined;
@@ -41,12 +44,25 @@ export default function AiEdgeFillControls({ params, onChange, clipId = '', effe
   return <div className="effects-tab effect-sections ai-edge-fill-card" onPointerUp={blurPointerFocus}>
     <ResolveInspectorSection title="Generate" indicator="none">
       <ResolveInspectorRow label="Resolution"><InspectorSelect ariaLabel="AI fill resolution"
-        disabled={job.busy || pending} value={String(params.resolution || '2K')}
+        disabled={locked} value={String(params.resolution || '2K')}
         options={['1K', '2K', '4K'].map(value => ({ value, label: value }))}
         onChange={resolution => onChange({ ...params, resolution })} /></ResolveInspectorRow>
-      <ResolveInspectorRow label="Prompt" className="ai-edge-fill-prompt-row"><textarea className="ai-edge-fill-prompt" aria-label="AI fill prompt"
-        rows={5} value={prompt} disabled={job.busy || pending}
-        onKeyDown={event => event.stopPropagation()} onChange={event => onChange({ ...params, prompt: event.target.value })} /></ResolveInspectorRow>
+      <ResolveInspectorRow label="Scene"><InspectorSelect ariaLabel="AI fill scene" disabled={locked || !!customPrompt}
+        value={sceneChoice} options={[...EDGE_FILL_SCENES.map(item => ({ value: item.id, label: item.label })), { value: 'own', label: 'Own words' }]}
+        onChange={id => { const picked = EDGE_FILL_SCENES.find(item => item.id === id); if (picked) onChange({ ...params, scene: picked.scene }); }} /></ResolveInspectorRow>
+      {customPrompt === undefined
+        ? <ResolveInspectorRow label="Scene text" className="ai-edge-fill-prompt-row"><textarea className="ai-edge-fill-prompt ai-edge-fill-scene" aria-label="AI fill scene text"
+          rows={2} value={scene} disabled={locked} placeholder={DEFAULT_EDGE_FILL_SCENE}
+          onKeyDown={event => event.stopPropagation()} onChange={event => onChange({ ...params, scene: event.target.value })} /></ResolveInspectorRow>
+        : <>
+          {/* A full request written in an earlier version is sent as it was until the user goes back to the scene text. */}
+          <ResolveInspectorRow label="Full prompt" className="ai-edge-fill-prompt-row"><textarea className="ai-edge-fill-prompt" aria-label="AI fill prompt"
+            rows={5} value={customPrompt} disabled={locked}
+            onKeyDown={event => event.stopPropagation()} onChange={event => onChange({ ...params, prompt: event.target.value })} /></ResolveInspectorRow>
+          <ResolveInspectorRow label="Prompt"><button type="button" className="perspective-action" disabled={locked}
+            onClick={() => onChange({ ...params, prompt: '' })}>Use scene text</button></ResolveInspectorRow>
+          <p className="effect-info">This fill uses a full prompt saved with an earlier version.</p>
+        </>}
       <ResolveInspectorRow label="Fill"><button type="button" className="perspective-action"
         disabled={job.busy || !!sourceError || !clipId || !effectInstanceId}
         onClick={() => { void generateEdgeFill(clipId, effectInstanceId); }}>

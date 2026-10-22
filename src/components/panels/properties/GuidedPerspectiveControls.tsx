@@ -3,7 +3,6 @@ import type { EffectControlProps } from '../../../effects/types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { IDENTITY, parsePerspectiveGuides } from '../../../effects/distort/guided-perspective/guideGeometry';
-import { guidedPerspectiveWarnings } from '../../../effects/distort/guided-perspective';
 import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
@@ -25,7 +24,10 @@ export function GuidedPerspectiveControls({ params, onChange, clipId, effectInst
   const clip = useTimelineStore(state => state.clips.find(c => c.id === clipId));
   const guides = parsePerspectiveGuides(params.guides);
   const vertical = guides.filter(guide => guide.axis === 'vertical').length;
-  const fillWarning = guidedPerspectiveWarnings(params).find(warning => warning.startsWith('Fill Frame'));
+  // A correction can be active without readable guides (a matrix set by a tool, or guide text that no longer parses).
+  const corrected = IDENTITY.some((value, i) => typeof params[`matrix${i}`] === 'number' && Math.abs(params[`matrix${i}`] as number - value) > 1e-9);
+  const lensBefore = !!clip?.effects.slice(0, Math.max(0, clip.effects.findIndex(effect => effect.id === effectInstanceId)))
+    .some(effect => effect.type === 'lens-correction' && effect.enabled);
   const commit = (next: EffectControlProps['params']) => {
     startBatch('Guided Perspective');
     try { onChange(next); } finally { endBatch(); }
@@ -47,7 +49,7 @@ export function GuidedPerspectiveControls({ params, onChange, clipId, effectInst
   return <div className="effects-tab effect-sections" onPointerUp={blurPointerFocus}>
     <ResolveInspectorSection title="Perspective" indicator="none">
       <ResolveInspectorRow label="Guides" className="perspective-guides-row" actions={<ResolveInspectorIconButton ariaLabel="Reset guides" className="resolve-inspector-reset-button"
-        disabled={!guides.length} onClick={() => commit({ ...params, guides: '[]',
+        disabled={!guides.length && !corrected} onClick={() => commit({ ...params, guides: '[]',
           ...Object.fromEntries(IDENTITY.map((value, i) => [`matrix${i}`, value])) })}><ResolveResetIcon /></ResolveInspectorIconButton>}>
         <button type="button" className="perspective-action"
           disabled={!clip || clip.source?.type !== 'image' || !effectInstanceId} aria-pressed={editing}
@@ -55,13 +57,14 @@ export function GuidedPerspectiveControls({ params, onChange, clipId, effectInst
       <p className="effect-info">{clip && clip.source?.type !== 'image' ? 'Guides can be drawn on still photos (image clips) only. ' : ''}
         {editing ? 'Draw along edges in the Preview. Wheel or pinch zooms, right-click removes a guide, Apply keeps them.'
           : guides.length ? `${[[vertical, 'vertical'], [guides.length - vertical, 'horizontal']].filter(([count]) => count)
-            .map(([count, axis]) => `${count} ${axis}`).join(' and ')} guides applied. Put Lens Correction before this effect.`
-            : 'No guides yet: choose Edit guides and draw at least two lines along edges that should be vertical (or horizontal).'}</p>
+            .map(([count, axis]) => `${count} ${axis}`).join(' and ')} guides applied.`
+            : corrected ? 'A correction is set without readable guides. Reset clears it; Edit guides draws new ones.'
+            : `No guides yet: choose Edit guides and draw at least two lines along edges that should be vertical (or horizontal).${lensBefore ? '' : ' For a bent wide-angle photo, put Lens Correction before this effect.'}`}</p>
       <ResolveInspectorRow label="Framing"><InspectorSelect ariaLabel="Guided Perspective framing"
         value={params.fillFrame === true ? 'fill' : 'whole'}
         options={[{ value: 'whole', label: 'Whole photo' }, { value: 'fill', label: 'Fill frame' }]}
         onChange={value => onChange({ ...params, fillFrame: value === 'fill' })} /></ResolveInspectorRow>
-      {fillWarning && <p className="effect-info" role="status">{fillWarning}</p>}
+      {/* The 20× Fill frame limit shows once, in the card's shared warning notice (paramWarnings). */}
       {NUMBER_ROWS.map(({ key, label, min, max }) => <ResolveInspectorNumberRow key={key}
         label={label} value={typeof params[key] === 'number' ? params[key] as number : 100}
         defaultValue={100} min={min} max={max} step={0.1} decimals={1} suffix="%" hardMin={min} hardMax={max}

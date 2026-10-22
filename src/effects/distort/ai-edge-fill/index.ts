@@ -1,7 +1,7 @@
 import type { FullscreenEffectDefinition } from '../../types';
 import { edgeFillArtifacts } from './edgeFillArtifacts';
 import shader from './shader.wgsl?raw';
-import { EDGE_FILL_PROMPT } from './edgeFillPrompt';
+import { DEFAULT_EDGE_FILL_SCENE } from './edgeFillPrompt';
 
 /** Captured canvas placement; a missing or non-numeric entry falls back to identity instead of NaN (a black frame). */
 const placement = (value: unknown, fallback: number) => {
@@ -16,7 +16,10 @@ export const aiEdgeFill: FullscreenEffectDefinition = {
     mix: { type: 'number', label: 'Fill Opacity', default: 100, min: 0, max: 100, step: .1, animatable: true, hidden: true },
     seamBlend: { type: 'number', label: 'Seam Blend', default: 12, min: 0, max: 64, step: 1, animatable: true, hidden: true },
     canvasWidth: { type: 'number', label: 'Canvas Width', default: 0, hidden: true, animatable: false },
-    prompt: { type: 'text', label: 'Prompt', default: EDGE_FILL_PROMPT, hidden: true },
+    // What the fill continues, in plain words; the card's Scene field. edgeFillPrompt.ts wraps it in the fixed request.
+    scene: { type: 'text', label: 'Scene', default: DEFAULT_EDGE_FILL_SCENE, hidden: true },
+    // A full request written by hand in an earlier version, sent as it was; empty (new effects) or an old default uses Scene.
+    prompt: { type: 'text', label: 'Prompt', default: '', hidden: true },
     resolution: { type: 'select', label: 'Resolution', default: '2K', hidden: true,
       options: ['1K', '2K', '4K'].map(value => ({ value, label: value })) },
     artifactId: { type: 'text', label: 'Fill Artifact', default: '', hidden: true },

@@ -29,11 +29,27 @@ describe('Guided Perspective controls', () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ fillFrame: true, guides }));
     fireEvent.click(screen.getByRole('button', { name: 'Reset guides' }));
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ guides: '[]', matrix7: 0, matrix8: 1, strength: 100 }));
-    // A correction no enlargement can fill says so in the card.
+    // The 20x limit is named once, by the card's shared warning notice (paramWarnings), not again in this card.
     rerender(<GuidedPerspectiveControls params={{ guides, matrix2: .8, fillFrame: true }} onChange={onChange} clipId="clip-1" effectInstanceId="gp-1" />);
-    expect(screen.getByRole('status').textContent).toMatch(/Fill Frame would have to enlarge/);
+    expect(screen.queryByText(/Fill Frame would have to enlarge/)).toBeNull();
+    // Applied guides need no lens reminder.
+    expect(screen.queryByText(/Lens Correction/)).toBeNull();
     rerender(<GuidedPerspectiveControls params={{}} onChange={onChange} clipId="clip-1" effectInstanceId="gp-1" />);
     expect((screen.getByRole('button', { name: 'Reset guides' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/No guides yet.*put Lens Correction before this effect/)).toBeTruthy();
+    // A correction without readable guides (a tool set the matrix) can still be cleared.
+    rerender(<GuidedPerspectiveControls params={{ guides: 'not json', matrix7: -.3 }} onChange={onChange} clipId="clip-1" effectInstanceId="gp-1" />);
+    expect(screen.getByText(/A correction is set without readable guides/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset guides' }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ guides: '[]', matrix7: 0 }));
+  });
+  it('leaves out the lens reminder when a Lens Correction already comes before it', () => {
+    const lens = { id: 'lens-1', type: 'lens-correction', name: 'Lens Correction', enabled: true, params: {} };
+    const gp = { id: 'gp-1', type: 'guided-perspective', name: 'Guided Perspective', enabled: true, params: {} };
+    const clip = createMockClip({ id: 'clip-1', trackId: 'track-1', source: { type: 'image' } as never, effects: [lens, gp] as never });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 'track-1' })], clipKeyframes: new Map() });
+    render(<GuidedPerspectiveControls params={{}} onChange={() => {}} clipId="clip-1" effectInstanceId="gp-1" />);
     expect(screen.getByText(/No guides yet/)).toBeTruthy();
+    expect(screen.queryByText(/Lens Correction/)).toBeNull();
   });
 });

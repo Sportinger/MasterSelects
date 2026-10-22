@@ -80,7 +80,7 @@ export function guidedPerspectiveWarnings(values: Values): string[] {
     warnings.push(`A perspective matrix entry exceeds ${MATRIX_LIMIT} and is clamped; redraw the guides.`);
   }
   if (values.fillFrame === true && guidedPerspectiveFillScale(values) === undefined) {
-    warnings.push(`Fill Frame would have to enlarge the photo more than ${MAX_FILL_SCALE}×; showing the whole photo. Redraw the guides along longer edges or lower Strength.`);
+    warnings.push(`Fill Frame would have to enlarge the photo more than ${MAX_FILL_SCALE}×; it keeps Whole photo framing. Redraw the guides along longer edges or lower Strength.`);
   }
   return warnings;
 }

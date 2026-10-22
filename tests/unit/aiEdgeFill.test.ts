@@ -14,6 +14,8 @@ vi.mock('../../src/services/project/repository/artifacts/RepositoryDomainPublica
 vi.mock('../../src/effects/distort/ai-edge-fill/edgeFillArtifacts', () => ({ edgeFillArtifacts: { save: mocks.save, get: () => null } }));
 import { edgeFillJob, generateEdgeFill } from '../../src/effects/distort/ai-edge-fill/edgeFillGeneration';
 import { aiEdgeFill } from '../../src/effects/distort/ai-edge-fill';
+import { EDGE_FILL_SCENES, LEGACY_EDGE_FILL_PROMPT, resolveEdgeFillPrompt } from '../../src/effects/distort/ai-edge-fill/edgeFillPrompt';
+import { getDefaultParams } from '../../src/effects';
 const fill = (): Effect => ({ id: 'fill', type: 'ai-edge-fill', name: 'Fill', enabled: true, params: { prompt: 'Continue the room', resolution: '2K', taskId: '' } });
 const lens = (): Effect => ({ id: 'lens', type: 'lens-correction', name: 'Lens', enabled: true, params: { distortion: 20, scale: 100 } });
 const file = new File(['original'], 'photo.CR2', { lastModified: 123 });
@@ -102,5 +104,25 @@ describe('AI edge fill lifecycle', () => {
     effects[0].params = { scale: 100, distortion: 20 }; effects.unshift({ ...lens(), type: 'blur', enabled: false });
     expect(edgeFillSource(file, effects, 'fill').signature).toBe(source.signature);
     effects[1].params.scale = 120; expect(edgeFillSource(file, effects, 'fill').signature).not.toBe(source.signature);
+  });
+  it('marks a fill out of date when its Lens Correction draws differently since 3.2.7, and only then', () => {
+    const effects = [lens(), fill()];
+    effects[0].params = { distortion: -20, scale: 100 }; const mild = edgeFillSource(file, effects, 'fill').signature;
+    expect(mild).not.toContain('lens-geometry-2');
+    effects[0].params = { distortion: -60, scale: 100 };
+    expect(edgeFillSource(file, effects, 'fill').signature).toContain('lens-geometry-2');
+  });
+  it('sends the scene text in the fixed request, word for word the old default for Room, and a saved full prompt unchanged', async () => {
+    const oldDefault = 'Image 1 is a photograph with missing pixels marked bright magenta. Image 2 is an edit mask: white marks ALL missing pixels, black marks the original photograph. Replace EVERY magenta area, including all four outer borders and corners, with a seamless natural continuation of this room, walls, ceiling and floor. Extend existing lines, perspective, lighting, colors and textures exactly across the edges. Preserve the original black-mask photograph, its framing and placement. Output only the completed full-frame photograph at the same aspect ratio. No border, no letterbox, no black bars, no magenta, no mask, no crop, no zoom, no repositioning.';
+    expect(resolveEdgeFillPrompt(getDefaultParams('ai-edge-fill'))).toBe(oldDefault);
+    expect(resolveEdgeFillPrompt({ prompt: oldDefault })).toBe(oldDefault);
+    expect(resolveEdgeFillPrompt({ prompt: LEGACY_EDGE_FILL_PROMPT })).toBe(oldDefault);
+    expect(resolveEdgeFillPrompt({ prompt: oldDefault, scene: 'this street, its buildings, pavement and sky' })).toContain('continuation of this street, its buildings, pavement and sky. Extend');
+    expect(resolveEdgeFillPrompt({ prompt: '', scene: '  ' })).toBe(oldDefault);
+    expect(resolveEdgeFillPrompt({ prompt: 'Continue the room', scene: 'ignored' })).toBe('Continue the room');
+    expect(EDGE_FILL_SCENES.map(item => item.label)).toEqual(['Room', 'Stage', 'Street', 'Landscape']);
+    state.clips[0].effects[1].params = { scene: 'this theatre stage, its floor, black masking and lighting rig', prompt: '', resolution: '2K', taskId: '' };
+    await generateEdgeFill(state.clips[0].id, 'fill');
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining('continuation of this theatre stage, its floor, black masking and lighting rig. Extend') }), expect.any(String));
   });
 });

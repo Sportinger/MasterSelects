@@ -12,7 +12,7 @@ import { canvasPlacement } from './canvasPlacement';
 import { edgeFillReference } from './edgeFillReference';
 import { getEffectiveScale } from '../../../utils/transformScale';
 import { rotationDegreesToRadians } from '../../../utils/rotationUnits';
-import { EDGE_FILL_PROMPT, LEGACY_EDGE_FILL_PROMPT } from './edgeFillPrompt';
+import { resolveEdgeFillPrompt } from './edgeFillPrompt';
 
 interface JobState { busy: boolean; message: string; error?: string; taskId?: string }
 const IDLE: JobState = { busy: false, message: '' };
@@ -76,9 +76,8 @@ export async function generateEdgeFill(clipId: string, effectId: string): Promis
     if (taskId) update(clipId, effectId, { busy: true, message: 'Resuming saved task…', taskId });
     if (taskId && pendingSignature !== source.signature) throw new Error('Pending task uses different corrections. Restore them or discard the task before generating again.');
     if (!taskId) {
-      const enteredPrompt = String(effect.params.prompt || '').trim();
-      const prompt = enteredPrompt === LEGACY_EDGE_FILL_PROMPT ? EDGE_FILL_PROMPT : enteredPrompt;
-      if (!prompt) throw new Error('Enter a prompt describing how to extend the photograph.');
+      // The scene text in its fixed frame; a full prompt saved by an earlier version is sent as it was.
+      const prompt = resolveEdgeFillPrompt(effect.params);
       const requestId = String(effect.params.requestId || checkpoint?.requestId || `edge-fill:${crypto.randomUUID()}`);
       const requestSignature = effect.params.requestId ? effect.params.requestSignature : checkpoint?.requestId ? checkpoint.signature : source.signature;
       if (requestSignature !== source.signature) throw new Error('Pending request uses different corrections. Restore them or discard it first.');

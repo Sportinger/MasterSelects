@@ -26,7 +26,8 @@ export const fisheye: EffectDefinition = {
       projection: 'stereographic', fieldOfView: 160, radius: .9, feather: .04, chromaticAberration: .012,
     } },
     { id: 'peephole', name: 'Peephole', params: {
-      fieldOfView: 170, radius: .95, outside: 'transparent', feather: .03, vignette: .6, vignetteSoftness: .35,
+      // A door viewer shows the whole scene small and bent: zoomed far out, the frame edges mirrored so no streaks show.
+      fieldOfView: 170, radius: .95, zoom: .25, edgeMode: 'mirror', outside: 'transparent', feather: .03, vignette: .6, vignetteSoftness: .35,
     } },
     { id: 'flatten-fisheye', name: 'Flatten Fisheye', params: { strength: -1, fieldOfView: 120, zoom: 1.5 } },
   ],

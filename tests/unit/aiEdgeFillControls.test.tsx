@@ -22,8 +22,21 @@ describe('AI Edge Fill controls', () => {
     const button = screen.getByRole('button', { name: 'Generate fill' }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     expect(screen.getByRole('status').textContent).toMatch(/Still images only/);
-    fireEvent.change(screen.getByRole('textbox', { name: 'AI fill prompt' }), { target: { value: 'Continue this stage' } });
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ prompt: 'Continue this stage', seamBlend: 12 }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI fill scene text' }), { target: { value: 'this opera stage' } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ scene: 'this opera stage', seamBlend: 12 }));
+    fireEvent.click(screen.getByRole('combobox', { name: 'AI fill scene' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Stage' }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ scene: 'this theatre stage, its floor, black masking and lighting rig' }));
+  });
+  it('keeps a full prompt saved by an earlier version until the user goes back to the scene text', () => {
+    const clip = createMockClip({ id: 'clip-1', trackId: 'track-1', source: { type: 'video' } as never });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 'track-1' })], clipKeyframes: new Map() });
+    const onChange = vi.fn();
+    render(<AiEdgeFillControls effectId="ai-edge-fill" params={{ prompt: 'Continue the rehearsal room with mirrors.' }} onChange={onChange} clipId="clip-1" effectInstanceId="fill-1" />);
+    expect((screen.getByRole('textbox', { name: 'AI fill prompt' }) as HTMLTextAreaElement).value).toBe('Continue the rehearsal room with mirrors.');
+    expect(screen.queryByRole('textbox', { name: 'AI fill scene text' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Use scene text' }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ prompt: '' }));
   });
   it('drops pointer focus from its buttons', () => {
     const clip = createMockClip({ id: 'clip-1', trackId: 'track-1', source: { type: 'video' } as never });

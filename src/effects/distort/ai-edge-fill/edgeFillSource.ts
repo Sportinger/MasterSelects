@@ -1,4 +1,5 @@
 import type { Effect } from '../../../types/effects';
+import { lensGeometryChangedSince327 } from '../lens-correction';
 
 /** Immutable description of the still and the geometry sampled by generation. */
 export function edgeFillSource(file: File, effects: Effect[], effectId: string, framing?: unknown): { effects: Effect[]; signature: string } {
@@ -10,7 +11,9 @@ export function edgeFillSource(file: File, effects: Effect[], effectId: string, 
   }
   return { effects: preceding, signature: JSON.stringify([
     file.name, file.size, file.lastModified, framing ?? null,
-    preceding.map(effect => [effect.id, effect.type, Object.entries(effect.params).toSorted(([a], [b]) => a.localeCompare(b))]),
+    preceding.map(effect => [effect.id, effect.type, Object.entries(effect.params).toSorted(([a], [b]) => a.localeCompare(b)),
+      // A Lens Correction that draws differently since 3.2.7 (no fold, Fit sets the scale alone) marks older fills out of date.
+      ...(effect.type === 'lens-correction' && lensGeometryChangedSince327(effect.params as Record<string, number | boolean | string>) ? ['lens-geometry-2'] : [])]),
   ]) };
 }
 

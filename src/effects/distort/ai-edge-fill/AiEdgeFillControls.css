@@ -1,5 +1,5 @@
 @layer features {
-  /* The prompt is a paragraph of text: its label sits above it and the field spans the card. */
+  /* The scene text (and an old full prompt) is free text: its label sits above it and the field spans the card. */
   .ai-edge-fill-card .ai-edge-fill-prompt-row { display: block; height: auto; }
   .ai-edge-fill-card .ai-edge-fill-prompt-row > .resolve-inspector-row-label { display: block; margin-bottom: 4px; text-align: left; }
   .ai-edge-fill-card .ai-edge-fill-prompt-row > .resolve-inspector-row-actions:empty { display: none; }
@@ -9,6 +9,8 @@
     background: var(--bg-tertiary); color: var(--text-primary); font: inherit; font-size: 11px; line-height: 1.4;
     -webkit-tap-highlight-color: transparent;
   }
+  /* The scene is a few words: two lines, the field grows when dragged. */
+  .ai-edge-fill-scene { min-height: 44px; }
   .ai-edge-fill-prompt:focus { outline: none; }
   .ai-edge-fill-prompt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
