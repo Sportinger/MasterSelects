@@ -72,9 +72,11 @@ and source. Other effects and structural settings are not implicitly enabled.
   list presets yet. Three to five presets per effect; the docs check names them
   ([Effect pages](./Documentation-Site.md#effect-pages)).
 - **Animated looks keep time with the playhead.** A look rendered by its node graph reads `image.timeline-time`,
-  so it holds still while paused; `createCatalogEffect({ animated: true, clock: 'timeline' })` marks it
-  `timelineAnimated` instead of `requiresContinuousRender` (no wall-clock re-rendering while paused, the
-  docs still show it as a loop). Looks still flagged as continuous re-render an unchanged frame while paused.
+  so it holds still while paused. Its definition says so with `timelineAnimated` instead of
+  `requiresContinuousRender` (catalog looks get the flag from `createCatalogEffect`): no wall-clock
+  re-rendering while paused, the docs show it as a loop, and its look tile plays it on hover at a
+  running time (`LookTile`, `lookThumbnailRuntime.renderLook`). A look still flagged
+  `requiresContinuousRender` re-renders an unchanged frame while paused.
 
 ## Registry and catalog
 
