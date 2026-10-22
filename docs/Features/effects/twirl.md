@@ -66,7 +66,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Preset** – a starting point for Twist and Radius; see [Presets](#presets).
 
-**Twist** – how far the middle of the area turns, in degrees. The turn is strongest in the middle and fades in a soft curve to nothing at the edge of the area, so the picture bends instead of tearing. 45° is a soft swirl, 115° a clear one, 360° a full turn and 720° two; negative values turn the other way. Animate it from 0 for a swirl that winds up. −720 to 720°, default 114.59°.
+**Twist** – how far the middle of the area turns, in degrees. The turn is strongest in the middle and fades in a soft curve to nothing at the edge of the area, so the picture bends instead of tearing. 45° is a soft swirl, 115° a clear one, 360° a full turn and 720° two; negative values turn the other way. Animate it from 0 for a swirl that winds up. −720 to 720°, default 120°. Effects saved before 120° became the default keep about 115°.
 
 **Radius** – how large the turning area is, as a share of the picture height (the width in a portrait picture). 0.5 makes a circle as tall as the picture, 0.25 a small spot around the centre, and 1 reaches almost into the corners. Outside the area the picture stays as it is. 0.05 to 1, default 0.5.
 

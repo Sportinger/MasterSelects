@@ -47,3 +47,12 @@ describe('Kaleidoscope Source Angle default', () => {
     expect(getEffect('wave')!.params.phase.unit).toBe('°');
   });
 });
+
+describe('Twirl Twist default', () => {
+  it('starts new effects at a round 120° and keeps 2 rad for instances saved without the key', () => {
+    expect(getDefaultParams('twirl').amount).toBeCloseTo(2 * Math.PI / 3, 12);
+    expect(getEffect('twirl')!.params.amount.legacyDefault).toBe(2);
+    const saved = { id: 't-1', name: 'Twirl', type: 'twirl', enabled: true, params: { radius: 0.5 } } as Effect;
+    expect(migratePersistedEffectOperatorGraph(saved).params.amount).toBe(2);
+  });
+});

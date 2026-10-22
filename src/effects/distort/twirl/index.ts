@@ -35,7 +35,9 @@ export const twirl: EffectDefinition = {
     amount: {
       type: 'number',
       label: 'Twist',
-      default: 2,
+      // 120° for new effects (the old 2 rad read as 114.59°); instances saved without the key keep 2 rad.
+      default: 2 * Math.PI / 3,
+      legacyDefault: 2,
       min: -4 * Math.PI,
       max: 4 * Math.PI,
       step: 0.01,
