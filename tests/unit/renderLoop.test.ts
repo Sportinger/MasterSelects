@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RenderLoop } from '../../src/engine/render/RenderLoop';
 
+const loopLog = vi.hoisted(() => ({ warn: [] as unknown[][] }));
 vi.mock('../../src/services/logger', () => ({
   Logger: {
-    create: vi.fn(() => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    })),
+    create: () => ({
+      debug: () => undefined,
+      info: () => undefined,
+      warn: (...args: unknown[]) => { loopLog.warn.push(args); },
+      error: () => undefined,
+    }),
   },
 }));
 
@@ -25,6 +26,9 @@ type RenderLoopTestAccess = {
   idleSuppressed: boolean;
   checkHealth: () => void;
   stop: () => void;
+  start: () => void;
+  animationId: number | null;
+  lastRafTick: number;
 };
 
 function createLoop() {
@@ -351,4 +355,88 @@ describe('RenderLoop watchdog', () => {
       loop.stop();
     }
   });
+
+  it('does not report a stall while the browser withholds animation frames from a visible page', () => {
+    const probes: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { probes.push(callback); return probes.length; });
+    loopLog.warn.length = 0;
+    const loop = createLoop();
+    loop.isPlaying = true;
+    loop.animationId = 7;
+    loop.lastRafTick = performance.now() - 13_000;
+    const start = vi.spyOn(loop, 'start').mockImplementation(() => undefined);
+    try {
+      loop.checkHealth();
+      loop.checkHealth();
+      expect(loopLog.warn).toEqual([]);
+      expect(loop.renderRequested).toBe(false);
+      expect(probes).toHaveLength(1);
+
+      // Frames resume: the loop ticks before the probe in the same frame.
+      loop.lastRafTick = performance.now() + 16;
+      probes[0](performance.now() + 16);
+      expect(start).not.toHaveBeenCalled();
+      expect(loopLog.warn).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('restarts a loop whose animation frame callback was lost while the probe frame still runs', () => {
+    const probes: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { probes.push(callback); return probes.length; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const loop = createLoop();
+    loop.isPlaying = true;
+    loop.animationId = 7;
+    loop.lastRafTick = performance.now() - 13_000;
+    const start = vi.spyOn(loop, 'start').mockImplementation(() => undefined);
+    try {
+      loop.checkHealth();
+      probes[0](performance.now() + 16);
+      expect(start).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not report a deliberate render hold (export, recovery, editing handover) as a stall once it ends', () => {
+    loopLog.warn.length = 0;
+    const loop = createLoop();
+    loop.isPlaying = true;
+    const callbacks = (loop as unknown as { callbacks: { isExporting: ReturnType<typeof vi.fn> } }).callbacks;
+    try {
+      callbacks.isExporting.mockReturnValue(true);
+      loop.checkHealth();
+      callbacks.isExporting.mockReturnValue(false);
+      loop.checkHealth();
+      expect(loopLog.warn).toEqual([]);
+      expect(loop.renderRequested).toBe(false);
+    } finally {
+      loop.stop();
+    }
+  });
+
+  it('measures a stall from when render demand began, not from the last render before an idle period', () => {
+    loopLog.warn.length = 0;
+    const loop = createLoop();
+    const now = vi.mocked(performance.now);
+    try {
+      // Idle for a long time (no demand): the watchdog keeps advancing its baseline.
+      loop.lastSuccessfulRender = 10_000 - 30_000;
+      loop.checkHealth();
+      // A request arrives just before the next watchdog tick.
+      now.mockReturnValue(12_000);
+      loop.renderRequested = true;
+      loop.checkHealth();
+      expect(loopLog.warn).toEqual([]);
+      // Still not rendered three watchdog ticks later: that is a real stall.
+      now.mockReturnValue(16_000);
+      loop.checkHealth();
+      expect(String(loopLog.warn[0]?.[0])).toContain('Render stall detected: 6000ms');
+    } finally {
+      loop.stop();
+    }
+  });
 });
+

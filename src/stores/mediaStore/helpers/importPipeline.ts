@@ -19,6 +19,7 @@ import { prepareRiveAsset } from '../../../services/vectorAnimation/riveMetadata
 import { readGaussianSplatFileStats } from './gaussianSplatStats';
 import { createRenderablePrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 import { resolveProjectMediaSourceLocation } from '../../../services/project/mediaSourceRoots';
+import { decideProjectMediaCopy, runProjectMediaCopy } from '../../../services/project/mediaCopy/projectMediaCopyPolicy';
 
 const log = Logger.create('Import');
 
@@ -138,7 +139,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     id,
     forceCopyToProject === true,
     projectFileName,
-    Boolean(handle || absolutePath),
+    { handle, absolutePath },
   );
   onProgress?.(75);
 
@@ -241,40 +242,31 @@ async function checkExistingProxy(
 }
 
 /**
- * Copy file to Raw folder if setting enabled.
- * UNIFIED: Replaces 3 duplicate blocks.
+ * Copy the file into the project's Raw folder when the setting asks for it or the
+ * link would not survive a reload (no handle, or a browser that cannot store handles).
  */
 async function copyToRawIfEnabled(
   file: File,
   mediaId: string,
   forceCopyToProject = false,
   projectFileName?: string,
-  hasPersistentSourceReference = false,
+  source: { handle?: FileSystemFileHandle; absolutePath?: string } = {},
 ): Promise<{ relativePath: string; handle?: FileSystemFileHandle } | null> {
   const { copyMediaToProject } = useSettingsStore.getState();
-  // A File obtained from an <input> or a drag/drop payload is only valid for
-  // the current page lifetime. Even when the browser supports a persistent
-  // project folder, the source itself is not reloadable unless the import also
-  // supplied a FileSystemFileHandle (or a native absolute path).
-  const requiresProjectLocalCopy =
-    projectFileService.requiresProjectLocalMediaCopies() ||
-    !hasPersistentSourceReference;
-
-  if (
-    (!copyMediaToProject && !forceCopyToProject && !requiresProjectLocalCopy)
-    || !projectFileService.isProjectOpen()
-  ) {
-    return null;
-  }
-
-  const result = await projectFileService.copyToRawFolder(file, projectFileName);
+  const decision = await decideProjectMediaCopy({
+    copySetting: copyMediaToProject,
+    force: forceCopyToProject,
+    handle: source.handle,
+    absolutePath: source.absolutePath,
+  });
+  const result = await runProjectMediaCopy(file, decision, () => projectFileService.copyToRawFolder(file, projectFileName));
   if (result) {
     // Store the project file handle for the RAW copy
     if (result.handle) {
       fileSystemService.storeFileHandle(`${mediaId}_project`, result.handle);
       await projectDB.storeHandle(`media_${mediaId}_project`, result.handle);
     }
-    log.debug('Copied to Raw folder:', result.relativePath);
+    log.debug('Copied to Raw folder:', { path: result.relativePath, reason: decision.reason });
     return { relativePath: result.relativePath, handle: result.handle };
   }
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Copies the hashed /assets/ files of recent production deployments into the
 // new build before it is deployed.
 //
@@ -12,9 +11,14 @@
 //
 // Usage: node scripts/retain-deployed-assets.mjs [--dist dist] [--project masterselects]
 //          [--keep 6] [--origin https://<id>.masterselects.pages.dev ...] [--strict]
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+// Production deploys go through `npm run deploy:pages` (scripts/deploy-pages.mjs), which runs
+// this retention and refuses to deploy unless the previous deployment's entry chunks and
+// project storage worker ended up in dist/assets.
+// No shebang on purpose: npm runs this with node, and a CRLF after a shebang breaks vitest imports.
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { runCommand } from './run-command.mjs';
 
 const ASSET_NAME = String.raw`[A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:js|mjs|css|wasm|webp|jpe?g|png|svg|ttf|woff2?|gz|json)`;
 // Vite references chunks as "./name.js" (dynamic import), "assets/name.js"
@@ -40,13 +44,15 @@ function parseArgs(argv) {
   return options;
 }
 
-function listProductionOrigins(project, keep) {
-  const output = execFileSync('npx', ['wrangler', 'pages', 'deployment', 'list',
-    '--project-name', project, '--environment', 'production', '--json'],
-  { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  const deployments = JSON.parse(output.slice(output.indexOf('[')));
+/** The newest `keep` production deployments, newest (the live one) first. */
+export function listProductionOrigins(project, keep, run = runCommand) {
+  const output = run('npx', ['wrangler', 'pages', 'deployment', 'list',
+    '--project-name', project, '--environment', 'production', '--json']);
+  const start = output.indexOf('[');
+  if (start < 0) throw new Error('wrangler pages deployment list returned no JSON list');
+  const deployments = JSON.parse(output.slice(start));
   // Newest first, as wrangler lists them.
-  return deployments.slice(0, keep).map(item => ({ origin: item.Deployment.replace(/\/+$/, ''), source: item.Source }));
+  return deployments.slice(0, keep).map(item => ({ origin: String(item.Deployment).replace(/\/+$/, ''), source: item.Source }));
 }
 
 export function extractAssetReferences(text) {
@@ -64,7 +70,12 @@ async function fetchAsset(url) {
   return { status: 200, bytes: Buffer.from(await response.arrayBuffer()) };
 }
 
-async function retainFromOrigin(origin, assetsDir, totals) {
+/**
+ * Copies every asset reachable from one deployment's entry pages into `assetsDir`. Returns the
+ * names its entry pages reference directly (`entries`) and every name the crawl reached
+ * (`reachable`), so a caller can check that the important ones really landed.
+ */
+export async function retainFromOrigin(origin, assetsDir, totals = { copied: new Set() }) {
   const queue = new Set();
   for (const page of ENTRY_PAGES) {
     try {
@@ -74,7 +85,7 @@ async function retainFromOrigin(origin, assetsDir, totals) {
   }
   const seen = new Set(queue);
   const pending = [...queue];
-  const result = { copied: 0, present: 0, missing: 0, unavailable: [] };
+  const result = { copied: 0, present: 0, missing: 0, unavailable: [], entries: new Set(queue), reachable: seen };
   while (pending.length) {
     const batch = pending.splice(0, CONCURRENCY);
     await Promise.all(batch.map(async (name) => {
@@ -123,6 +134,13 @@ async function main() {
   if (failures && options.strict) process.exitCode = 1;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare file URLs (not `file://${argv[1]}`) so the entry check also matches Windows drive paths,
+// paths that need URL encoding, and symlinked script paths.
+function isEntrypoint() {
+  if (!process.argv[1]) return false;
+  try { return import.meta.url === pathToFileURL(realpathSync(path.resolve(process.argv[1]))).href; } catch { return false; }
+}
+
+if (isEntrypoint()) {
   main().catch((error) => { console.error(`[retain-assets] ${error instanceof Error ? error.message : error}`); process.exitCode = 1; });
 }

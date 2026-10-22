@@ -61,6 +61,28 @@ Timeouts and unsupported runtimes terminate with a visible error rather than
 an indefinite loading state. Destroy/reinitialize invalidates older recovery
 work, and retained output canvases are rebound to the replacement device.
 
+Only the first real loss per session is reported as an error; repeats are
+warnings. A loss while the page is hidden, frozen, or unloading (Android Chrome
+reports it as "Device was destroyed.") is a warning and recovery waits until the
+page is visible again. Three real losses within a minute stop recovery and show
+a driver-reset message instead of looping lose/recover. That stop is its own
+incident and files one error, `GPU device lost repeatedly; recovery stopped`,
+with the loss message, its occurrence and the window (and `firstLoss` when an
+earlier loss of the same run was still held), since the GPU stays unavailable
+afterwards.
+
+Each loss incident files at most one error. The first real loss's error waits
+for the recovery outcome: a recovered device reports `Device lost`, while a
+recovery that gives up (for example when Chrome refuses a new adapter after
+repeated GPU-process crashes) reports only `GPU recovery failed`, including the
+loss message of that incident as `lostDevice` (also for a later loss whose
+`Device lost` was not filed again). The individual recovery attempts in between
+are warnings. The preview then says the GPU stopped responding and asks to save
+and reload the editor to restore it. Because the GPU already worked in this
+session, a recovery failure shows no setup advice: no Linux Vulkan banner and no
+driver/Vulkan help line (`setEngineInitFailed(..., { setupAdvice: false })`). The console capture in runtime diagnostics
+drops the Logger's clock prefix so a logged failure keeps one stable message.
+
 Targeted coverage: `webgpuContext.test.ts`, `contextRecoveryWiring.test.ts`,
 and `outputCanvasRecovery.test.ts` under `tests/unit/`.
 
@@ -196,11 +218,16 @@ Targeted coverage: `gpuUniformRing.test.ts`, `gpuFrameScopedRenderers.test.ts`
 - Idle detection is initially suppressed so browser video surfaces can warm up; it is lifted by the first play event or after about 3 seconds.
 - Playback is limited to about 60 fps.
 - Scrubbing is limited to about 60 fps unless a fresh video frame arrives, which bypasses the limiter.
+- A render request is consumed only by a frame that reaches the render callback. Frames skipped during device recovery, export, or while editor content publication is blocked (project open or composition switch) keep the request, so the first frame after the gate reopens shows the change. A direct `renderHostPort.render()` made while publication is blocked becomes such a request instead of being dropped.
+- During playback and scrubbing the preview keeps one GPU submission in flight and coalesces newer requests until `onSubmittedWorkDone()` settles; a paused preview submits every request for a new picture at once, however many earlier paused submissions are still pending, so a seek onto a new clip is shown immediately even when WebKit settles earlier fences late. A paused request waits and coalesces only when the same picture (composition, timeline time and layer/clip identities) is already in flight, which keeps slider drags bounded; a safety bound of 6 distinct paused targets in flight defers further frames and logs `Preview GPU queue saturated`. `getPreviewGpuBackpressureState(device)` reports in-flight submissions, a pending request and the stalled-fence count. A completion fence that does not settle within 1 second releases the queue, renders the newest request, and logs `Preview GPU completion did not settle` with a running count, so a stalled fence can no longer freeze the preview until a reload. Until a device completed its first preview fence (pipeline and shader compilation at cold start), the window is 5 seconds and a release is logged at info, so the warning always means a stall of a warmed-up device.
+- Paused and scrub-settle holds re-present the previous composite only while the current layers show the same clips and sources; a frame whose raster or nested composition is not ready yet on another clip renders empty instead of keeping the previous clip's picture, and canvas/image rasters that were not collected request follow-up frames.
 
 ### Watchdog
 
 - A watchdog checks for stalls every 2 seconds.
 - If the render loop stops producing frames for about 3 seconds while it should be active, it wakes the loop or restarts it.
+- Stall time is measured only while frames are wanted and possible: idle periods, a hidden tab, export, device recovery and a held publication (project switch, editing handed to another tab) advance the baseline instead of counting as a stall.
+- When the browser delivers no animation frames although the page reports visible (background or occluded window), the check is paused; a one-shot probe frame tells this apart from a loop that lost its callback, which is restarted with a warning.
 
 ### Export And RAM Preview
 
@@ -306,6 +333,7 @@ Runtime flags are exposed on `window.__ENGINE_FLAGS__`.
 | Black preview after reload | Video GPU surfaces may not be warm yet. The engine suppresses idle until first play, but browser readiness still matters. |
 | Firefox preview instability | HTML video fallback should be using copied textures, not external import. |
 | Export canvas missing | Verify WebGPU context creation on OffscreenCanvas and device validity. |
+| Preview stuck on an old frame until reload | Look for `Preview GPU completion did not settle` (stalled GPU fence; the queue now reopens after 1 second) and `RenderLoop` debug lines about deferred requests. |
 | Device lost | The engine attempts recovery and reconfigures canvases, but a manual reload may still be needed. |
 
 ---

@@ -60,7 +60,7 @@ describe('engine recovery UI state', () => {
     callbacks.failed('adapter_timeout');
     expect(handlers.setRecovering).toHaveBeenLastCalledWith(false);
     expect(store.setEngineReady).toHaveBeenLastCalledWith(false);
-    expect(store.setEngineInitFailed).toHaveBeenLastCalledWith(true, expect.stringContaining('did not respond in time'));
+    expect(store.setEngineInitFailed).toHaveBeenLastCalledWith(true, expect.stringContaining('did not respond in time'), { setupAdvice: false });
     expect(describeGPUInitializationFailure('adapter_timeout')).not.toContain('compatible GPU');
     expect(describeGPUInitializationFailure('device_failed')).toContain('A GPU was found');
   });

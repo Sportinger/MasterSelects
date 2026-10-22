@@ -9,9 +9,13 @@ import {
 import { createBuffer } from '../audioBufferFactory';
 
 export class MediaAudioRangeError extends Error {
-  constructor(message: string) {
+  /** 'no-audio-track': the container was read and holds no audio track at all. */
+  readonly code: 'no-audio-track' | undefined;
+
+  constructor(message: string, code?: 'no-audio-track') {
     super(message);
     this.name = 'MediaAudioRangeError';
+    this.code = code;
   }
 }
 
@@ -44,7 +48,7 @@ export class MediaAudioRangeReader {
     this.trackPromise ??= (async () => {
       const track = await this.input.getPrimaryAudioTrack();
       if (!track) {
-        throw new MediaAudioRangeError('Media source has no audio track');
+        throw new MediaAudioRangeError('Media source has no audio track', 'no-audio-track');
       }
       if (!(await track.canDecode())) {
         throw new MediaAudioRangeError(
@@ -117,6 +121,17 @@ export class MediaAudioRangeReader {
     }
 
     return output;
+  }
+
+  /** Decodes the whole primary audio track; the duration comes from the container itself. */
+  async readAll(signal?: AbortSignal, maxBytes = Infinity): Promise<AudioBuffer> {
+    const track = await this.getTrack();
+    signal?.throwIfAborted();
+    const duration = await track.computeDuration();
+    if (!Number.isFinite(duration) || duration <= 0) {
+      throw new MediaAudioRangeError('Media audio track has no measurable duration');
+    }
+    return this.read(0, duration, signal, maxBytes);
   }
 
   dispose(): void {

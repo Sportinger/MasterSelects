@@ -13,12 +13,7 @@ import { MAX_NESTING_DEPTH } from '../stores/timeline/constants';
 const log = Logger.create('CompositionRenderer');
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
-import { textRenderer } from './textRenderer';
 import { isVectorAnimationSourceType } from '../types/vectorAnimation';
-import {
-  createTimelineSolidCanvasRuntime,
-  createTimelineTransitionOverlayCanvasRuntime,
-} from './timeline/timelineGeneratedCanvasRuntime';
 import {
   buildEvaluatedClipLayer,
   evaluateNestedComposition,
@@ -34,13 +29,15 @@ import {
   invalidateCompositionCacheAndParents,
 } from './compositionRender/compositionCacheLifecycle';
 import {
-  buildSerializableMathSceneClip,
-  getBackgroundSessionKey,
   getSerializableImageSource,
-  getTimelineImageSource,
 } from './compositionRender/sourceSetup';
-import { disposeCompositionSources, reportCompositionSource } from './compositionRender/sourceLifecycle';
-import { renderFramedTextCanvas } from './text/textCanvasFrame';
+import { disposeCompositionSources } from './compositionRender/sourceLifecycle';
+import { createArrivedClipMediaWatch, reportClipMediaGap } from './compositionRender/clipMediaGap';
+import {
+  adoptActiveTimelineClipSource,
+  createSerializedCanvasSource,
+  preparesCompositionClipSource,
+} from './compositionRender/clipSourceAdoption';
 import {
   loadImageSource,
   loadVectorAnimationSource,
@@ -48,12 +45,10 @@ import {
   prepareNestedTimelineImageSources,
 } from './compositionRender/sourceLoaders';
 import type {
-  CompositionClipSourceEntry,
   CompositionSources,
   EvaluatedLayer,
 } from './compositionRender/sourceTypes';
 import { buildCompositionTransitionLayersForTrack } from './compositionRender/transitionEvaluation';
-import { liveInputRuntime } from './mediaRuntime/liveInputRuntime';
 export type { EvaluatedLayer } from './compositionRender/sourceTypes';
 
 export interface EvaluateCompositionOptions {
@@ -76,12 +71,15 @@ function pauseInactiveCompositionVideos(
 class CompositionRendererService {
   // Cache of prepared sources per composition
   private compositionSources: Map<string, CompositionSources> = new Map();
+  private readonly arrivedMedia = createArrivedClipMediaWatch(this.compositionSources, id => this.invalidateCompositionAndParents(id));
 
   // Callbacks for when a composition is ready
   private readyCallbacks: Map<string, (() => void)[]> = new Map();
 
   // Throttle "not ready" warnings per composition (avoid spam at 60fps)
   private notReadyWarned: Map<string, number> = new Map();
+  /** Clip-set signature per composition whose "no sources loaded" warning was already logged. */
+  private noSourcesWarned: Map<string, string> = new Map();
 
   // Track in-flight preparation promises to deduplicate concurrent calls
   private preparingPromises: Map<string, Promise<boolean>> = new Map();
@@ -168,6 +166,9 @@ class CompositionRendererService {
 
     // Load sources for all video/image clips
     const loadPromises: Promise<void>[] = [];
+    const current = (currentSources: CompositionSources) => this.isSourcesCurrent(currentSources);
+    let waitingForMedia = 0;
+    const expectedSourceClips: { id: string; sourceType?: string; mediaFileId?: string }[] = [];
 
     for (const clip of clips) {
       // Handle both TimelineClip (active) and SerializableClip (stored)
@@ -176,241 +177,28 @@ class CompositionRendererService {
 
       // Get source type - TimelineClip has source.type, SerializableClip has sourceType
       const sourceType = timelineClip.source?.type || serializableClip.sourceType;
+      // Audio, 3D, MIDI and similar clips never get a source here (other runtimes own them).
+      if (sourceType && !preparesCompositionClipSource(sourceType)) continue;
 
       // Get media file ID
       const mediaFileId = timelineClip.source?.mediaFileId || serializableClip.mediaFileId;
+      if (sourceType && !clip.isComposition) expectedSourceClips.push({ id: clip.id, sourceType, mediaFileId });
       const mediaFile = mediaFileId
         ? mediaFiles.find(f => f.id === mediaFileId)
         : undefined;
 
       log.debug(`Processing clip ${clip.id}: sourceType=${sourceType}, mediaFileId=${mediaFileId || 'NONE'}, isActive=${isActiveComp}`);
 
-      if (isActiveComp && timelineClip.source) {
-        const liveInputId = timelineClip.source.liveInputId;
-        if (sourceType === 'video' && liveInputId) {
-          // Live media items intentionally have no File/Blob. Resolve their
-          // active runtime surfaces before the regular file-backed path so a
-          // later composition rebuild cannot discard a still-running stream.
-          const fallbackVideo = liveInputRuntime.getVideoElement(liveInputId, true);
-          const presentationVideo = liveInputRuntime.getPresentationVideoElement(liveInputId)
-            ?? fallbackVideo;
-          if (presentationVideo) {
-            const presentation = liveInputRuntime.getVideoPresentation(liveInputId);
-            sources.clipSources.set(clip.id, {
-              clipId: clip.id,
-              type: 'video',
-              videoElement: presentationVideo,
-              canvasElement: liveInputRuntime.getPresentationCanvas(liveInputId) ?? undefined,
-              isLiveInput: true,
-              intrinsicWidth: presentation?.width,
-              intrinsicHeight: presentation?.height,
-              naturalDuration: clip.duration,
-            });
-            continue;
-          }
-        }
-
-        if (
-          sourceType === 'video' &&
-          (timelineClip.source.videoElement ||
-            timelineClip.source.webCodecsPlayer ||
-            timelineClip.source.runtimeSourceId)
-        ) {
-          sources.clipSources.set(clip.id, {
-            clipId: clip.id,
-            type: 'video',
-            videoElement: timelineClip.source.videoElement,
-            webCodecsPlayer: timelineClip.source.webCodecsPlayer,
-            file: timelineClip.file,
-            naturalDuration:
-              timelineClip.source.naturalDuration ||
-              timelineClip.source.videoElement?.duration ||
-              0,
-            runtimeSourceId: timelineClip.source.runtimeSourceId,
-            runtimeSessionKey: getBackgroundSessionKey(
-              compositionId,
-              clip.id,
-              timelineClip.source
-            ),
-          });
-          continue;
-        }
-
-        if (sourceType === 'image' && timelineClip.source.imageElement) {
-          sources.clipSources.set(clip.id, {
-            clipId: clip.id,
-            type: 'image',
-            imageElement: timelineClip.source.imageElement,
-            file: timelineClip.file,
-            naturalDuration: timelineClip.source.naturalDuration || 5,
-            runtimeSourceId: timelineClip.source.runtimeSourceId,
-            runtimeSessionKey: getBackgroundSessionKey(
-              compositionId,
-              clip.id,
-              timelineClip.source
-            ),
-          });
-          continue;
-        }
-
-        if (sourceType === 'image') {
-          const imageSource = getTimelineImageSource(timelineClip, mediaFile);
-          if (imageSource) {
-            loadPromises.push(loadImageSource(
-              sources,
-              {
-                id: timelineClip.id,
-                name: timelineClip.name,
-                mediaFileId,
-                naturalDuration: timelineClip.source.naturalDuration || timelineClip.duration,
-              },
-              imageSource,
-              (currentSources) => this.isSourcesCurrent(currentSources)
-            ));
-            continue;
-          }
-        }
-
-        if ((sourceType === 'text' || sourceType === 'solid' || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
-          sources.clipSources.set(clip.id, {
-            clipId: clip.id,
-            type: sourceType,
-            textCanvas: timelineClip.source.textCanvas,
-            naturalDuration: clip.duration,
-            ...(isVectorAnimationSourceType(sourceType) ? { lottieClip: timelineClip } : {}),
-            ...(sourceType === 'math-scene' ? { mathSceneClip: timelineClip } : {}),
-          });
-          continue;
-        }
-      }
+      if (isActiveComp && adoptActiveTimelineClipSource(sources, timelineClip, sourceType, mediaFileId, mediaFile, loadPromises, current)) continue;
 
       if (!mediaFileId) {
-        // For active composition, the video/image/text elements are already loaded
-        if (isActiveComp && timelineClip.source) {
-          if (sourceType === 'video' && timelineClip.source.videoElement) {
-            sources.clipSources.set(clip.id, {
-              clipId: clip.id,
-              type: 'video',
-              videoElement: timelineClip.source.videoElement,
-              webCodecsPlayer: timelineClip.source.webCodecsPlayer, // Pass through WebCodecsPlayer for hardware decoding
-              file: timelineClip.file,
-              naturalDuration: timelineClip.source.naturalDuration || timelineClip.source.videoElement.duration || 0,
-              runtimeSourceId: timelineClip.source.runtimeSourceId,
-              runtimeSessionKey: getBackgroundSessionKey(
-                compositionId,
-                clip.id,
-                timelineClip.source
-              ),
-            });
-          } else if (sourceType === 'image' && timelineClip.source.imageElement) {
-            sources.clipSources.set(clip.id, {
-              clipId: clip.id,
-              type: 'image',
-              imageElement: timelineClip.source.imageElement,
-              file: timelineClip.file,
-              naturalDuration: timelineClip.source.naturalDuration || 5,
-              runtimeSourceId: timelineClip.source.runtimeSourceId,
-              runtimeSessionKey: getBackgroundSessionKey(
-                compositionId,
-                clip.id,
-                timelineClip.source
-              ),
-            });
-          } else if ((sourceType === 'text' || sourceType === 'solid' || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
-            sources.clipSources.set(clip.id, {
-              clipId: clip.id,
-              type: sourceType,
-              textCanvas: timelineClip.source.textCanvas,
-              naturalDuration: clip.duration,
-              ...(isVectorAnimationSourceType(sourceType) ? { lottieClip: timelineClip } : {}),
-              ...(sourceType === 'math-scene' ? { mathSceneClip: timelineClip } : {}),
-            });
-          }
-        }
-
-        // Handle text clips from serialized data (non-active composition)
-        if (sourceType === 'text' && serializableClip.textProperties) {
-          // Every prepared text clip needs its own backing canvas. Rendering
-          // without a target uses TextRenderer's shared scratch canvas, so the
-          // next text clip overwrites the previous one in independent previews.
-          const frameWidth = Math.max(1, Math.round(composition.width));
-          const frameHeight = Math.max(1, Math.round(composition.height));
-          const textCanvas = textRenderer.createCanvas(frameWidth, frameHeight);
-          if (serializableClip.captionProperties) {
-            textRenderer.render(serializableClip.textProperties, textCanvas);
-          } else {
-            renderFramedTextCanvas(serializableClip.textProperties, textCanvas, frameWidth, frameHeight);
-          }
-          if (textCanvas) {
-            const entry: CompositionClipSourceEntry = {
-              clipId: clip.id,
-              compositionId,
-              type: 'text',
-              textCanvas,
-              naturalDuration: clip.duration,
-            };
-            sources.clipSources.set(clip.id, entry);
-            reportCompositionSource(compositionId, entry);
-          }
-        }
-
-        if (sourceType === 'math-scene' && serializableClip.mathScene) {
-          const mathSceneClip = buildSerializableMathSceneClip(serializableClip);
-          if (mathSceneClip?.source?.textCanvas) {
-            const entry: CompositionClipSourceEntry = {
-              clipId: clip.id,
-              compositionId,
-              type: 'math-scene',
-              textCanvas: mathSceneClip.source.textCanvas,
-              mathSceneClip,
-              naturalDuration: clip.duration,
-            };
-            sources.clipSources.set(clip.id, entry);
-            reportCompositionSource(compositionId, entry);
-          }
-        }
-
-        if (sourceType === 'transition-overlay' && serializableClip.transitionOverlay) {
-          const textCanvas = createTimelineTransitionOverlayCanvasRuntime({
-            overlay: serializableClip.transitionOverlay,
-            dimensions: { width: composition.width, height: composition.height },
-          });
-          const entry: CompositionClipSourceEntry = {
-            clipId: clip.id,
-            compositionId,
-            type: 'transition-overlay',
-            textCanvas,
-            naturalDuration: clip.duration,
-          };
-          sources.clipSources.set(clip.id, entry);
-          reportCompositionSource(compositionId, entry);
-        }
-
-        if (sourceType === 'solid' && serializableClip.solidColor) {
-          const textCanvas = createTimelineSolidCanvasRuntime({
-            color: serializableClip.solidColor,
-            dimensions: { width: composition.width, height: composition.height },
-          });
-          const entry: CompositionClipSourceEntry = {
-            clipId: clip.id,
-            compositionId,
-            type: 'solid',
-            textCanvas,
-            naturalDuration: clip.duration,
-          };
-          sources.clipSources.set(clip.id, entry);
-          reportCompositionSource(compositionId, entry);
-        }
-
+        // Media-less clips of the active timeline were adopted above; stored ones generate their canvas here.
+        createSerializedCanvasSource(sources, composition, serializableClip, sourceType);
         continue;
       }
 
       if (!mediaFile?.file && !(sourceType === 'image' && mediaFile?.url)) {
-        log.warn(`Media file not found for clip ${clip.id}`, {
-          mediaFileId,
-          availableFileIds: mediaFiles.map(f => f.id).slice(0, 5), // First 5 for brevity
-          totalFiles: mediaFiles.length,
-        });
+        if (reportClipMediaGap(log, sources, clip.id, mediaFileId, mediaFile, mediaFiles, mediaState.projectLoadProgress?.active === true, sourceType === 'image') === 'loading') waitingForMedia++;
         continue;
       }
 
@@ -422,7 +210,7 @@ class CompositionRendererService {
             sources,
             serializableClip,
             mediaFile.file,
-            (currentSources) => this.isSourcesCurrent(currentSources),
+            current,
             mediaFile.videoCodecId,
           ));
         }
@@ -433,7 +221,7 @@ class CompositionRendererService {
             sources,
             serializableClip,
             imageSource,
-            (currentSources) => this.isSourcesCurrent(currentSources)
+            current
           ));
         }
       } else if (isVectorAnimationSourceType(sourceType)) {
@@ -442,7 +230,7 @@ class CompositionRendererService {
             sources,
             serializableClip,
             mediaFile.file,
-            (currentSources) => this.isSourcesCurrent(currentSources)
+            current
           ));
         }
       }
@@ -459,11 +247,12 @@ class CompositionRendererService {
           clip.nestedClips,
           mediaFiles,
           loadPromises,
-          (currentSources) => this.isSourcesCurrent(currentSources)
+          current
         );
       }
     }
 
+    if (sources.pendingMediaFileIds?.size) this.arrivedMedia.arm();
     // Wait for all sources to load
     log.info(`prepareComposition: waiting for ${loadPromises.length} sources to load`);
     await Promise.all(loadPromises);
@@ -476,13 +265,7 @@ class CompositionRendererService {
     this.notReadyWarned.delete(compositionId);
     log.info(`Composition ready: ${composition.name}, ${sources.clipSources.size} sources loaded`);
 
-    if (sources.clipSources.size === 0 && clips.length > 0) {
-      log.warn(`prepareComposition: No sources loaded for ${clips.length} clips! Check mediaFileId values.`);
-      for (const clip of clips) {
-        const sc = clip as SerializableClip;
-        log.warn(`  Clip ${clip.id}: sourceType=${sc.sourceType}, mediaFileId=${sc.mediaFileId || 'MISSING'}`);
-      }
-    }
+    this.warnIfNoSourcesLoaded(compositionId, sources, expectedSourceClips, waitingForMedia);
 
     // Notify any waiting callbacks
     const callbacks = this.readyCallbacks.get(compositionId) || [];
@@ -490,6 +273,33 @@ class CompositionRendererService {
     this.readyCallbacks.delete(compositionId);
 
     return true;
+  }
+
+  /**
+   * Warns once per composition and clip set when visual clips that should have a source got none
+   * (clips still waiting for their media are excluded; they rebuild the composition on arrival).
+   */
+  private warnIfNoSourcesLoaded(
+    compositionId: string,
+    sources: CompositionSources,
+    expectedSourceClips: readonly { id: string; sourceType?: string; mediaFileId?: string }[],
+    waitingForMedia: number,
+  ): void {
+    if (sources.clipSources.size > 0 || expectedSourceClips.length <= waitingForMedia) {
+      this.noSourcesWarned.delete(compositionId);
+      return;
+    }
+    const signature = expectedSourceClips.map(clip => `${clip.id}:${clip.mediaFileId ?? ''}`).toSorted().join('|');
+    if (this.noSourcesWarned.get(compositionId) === signature) return;
+    this.noSourcesWarned.set(compositionId, signature);
+    log.warn(`prepareComposition: no sources loaded for ${expectedSourceClips.length} visual clips; check their media`, {
+      compositionId,
+      clips: expectedSourceClips.slice(0, 10).map(clip => ({
+        clipId: clip.id,
+        sourceType: clip.sourceType,
+        mediaFileId: clip.mediaFileId ?? 'MISSING',
+      })),
+    });
   }
 
   /**
@@ -704,6 +514,7 @@ class CompositionRendererService {
    * Dispose of a composition's sources
    */
   disposeComposition(compositionId: string): void {
+    this.noSourcesWarned.delete(compositionId);
     disposeCompositionCache(this.compositionSources, compositionId);
   }
 
@@ -755,7 +566,13 @@ class CompositionRendererService {
   invalidateAll(): void {
     invalidateAllCompositionCaches(this.compositionSources);
   }
+
+  /** Releases the media-store watch; the module's replacement creates its own. */
+  disposeWatches(): void {
+    this.arrivedMedia.dispose();
+  }
 }
 
 // Singleton instance
 export const compositionRenderer = new CompositionRendererService();
+if (import.meta.hot) import.meta.hot.dispose(() => compositionRenderer.disposeWatches());

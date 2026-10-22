@@ -1,7 +1,7 @@
 {
   "name": "masterselects",
   "private": true,
-  "version": "3.2.5",
+  "version": "3.2.6",
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
@@ -25,6 +25,7 @@
     "build": "tsc -b && node --max-old-space-size=8192 node_modules/vite/bin/vite.js build && npm run docs:build",
     "build:deploy": "node --max-old-space-size=8192 node_modules/vite/bin/vite.js build && npm run docs:build",
     "deploy:retain-assets": "node scripts/retain-deployed-assets.mjs --keep 8",
+    "deploy:pages": "node scripts/deploy-pages.mjs",
     "docs:build": "npm --prefix docs-site install --no-audit --no-fund && npm --prefix docs-site run build",
     "docs:build:head": "npm --prefix docs-site install --no-audit --no-fund && npm --prefix docs-site run build:head",
     "cf:migrate:local": "wrangler d1 migrations apply DB --local",

@@ -1,0 +1,135 @@
+@layer components {
+  .toolbar-save-permanently {
+    display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; height: 24px;
+    padding: 0 10px 0 3px; border: 1.5px solid var(--warning); border-radius: 999px;
+    background: var(--warning-dim); color: var(--text-primary);
+    font-size: var(--font-md, 12px); font-weight: var(--font-bold, 700); line-height: 1; white-space: nowrap; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .toolbar-save-permanently:hover { background: color-mix(in srgb, var(--warning) 32%, transparent); }
+  .toolbar-save-permanently:focus { outline: none; }
+  .toolbar-save-permanently:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .toolbar-save-permanently-badge {
+    padding: 3px 7px; border-radius: 999px; background: var(--warning); color: #1b1300;
+    font-size: var(--font-xs, 10px); font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .toolbar-save-permanently-short { display: none; }
+  /* Phones: keep the badge and a short label rather than pushing the toolbar off screen. */
+  @media (max-width: 600px) {
+    .toolbar-save-permanently { padding-right: 8px; }
+    .toolbar-save-permanently-label { display: none; }
+    .toolbar-save-permanently-short { display: inline; }
+  }
+}
+
+/* Save permanently / Keep safe dialog: one big headline, one why line, one obvious
+   action; everything else behind "More options". Self-contained: the body scrolls,
+   the footer with Close/Done always stays visible. */
+@layer overlays {
+  .project-name-dialog.save-permanently-dialog {
+    display: flex; flex-direction: column; gap: 0; padding: 0;
+    width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: hidden;
+  }
+  .save-permanently-dialog button { -webkit-tap-highlight-color: transparent; }
+  .save-permanently-dialog .save-permanently-accent { flex: none; height: 3px; background: linear-gradient(90deg, transparent, var(--warning), var(--warning-light), transparent); }
+  .save-permanently-dialog[data-variant="safe"] .save-permanently-accent { background: linear-gradient(90deg, transparent, var(--success), var(--success-light), transparent); }
+  .save-permanently-body {
+    display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-height: 0;
+    padding: 22px 26px 18px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  }
+
+  .save-permanently-head { display: flex; align-items: center; gap: 12px; }
+  .save-permanently-head-icon {
+    display: flex; flex: none; width: 34px; height: 34px; align-items: center; justify-content: center;
+    border-radius: 50%; background: var(--warning); color: #1b1300; font-size: 21px; font-weight: 900; line-height: 1;
+  }
+  .save-permanently-dialog[data-variant="safe"] .save-permanently-head-icon { background: var(--success); color: #fff; }
+  .repository-archive-dialog.save-permanently-dialog h2 { margin: 0; color: var(--text-primary); font-size: 25px; font-weight: 750; line-height: 1.2; letter-spacing: -0.015em; }
+  .repository-archive-dialog .save-permanently-why { color: var(--text-primary); font-size: 16px; font-weight: var(--font-semibold, 600); line-height: 1.4; }
+
+  .repository-archive-dialog .save-permanently-name { gap: 10px; color: var(--text-secondary); font-size: 13px; font-weight: var(--font-semibold, 600); }
+  .save-permanently-name input {
+    flex: 1; min-width: 0; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-tertiary);
+    color: var(--text-primary); padding: 7px 10px; font-size: 14px;
+  }
+  .repository-archive-dialog .save-permanently-checking { font-size: 14px; }
+
+  /* The one recommended action. */
+  .repository-archive-dialog .save-permanently-primary {
+    border: 0; border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer;
+    font-size: 17px; font-weight: var(--font-bold, 700); line-height: 1.2;
+  }
+  .repository-archive-dialog .save-permanently-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .repository-archive-dialog .save-permanently-primary:disabled { opacity: 0.6; cursor: default; }
+  .repository-archive-dialog .save-permanently-primary:focus-visible { outline: 3px solid var(--text-primary); outline-offset: 2px; }
+  .repository-archive-dialog .save-permanently-primary-option {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; min-height: 64px; padding: 12px 16px; text-align: center;
+  }
+  .save-permanently-primary-option .save-permanently-option-line { color: rgba(255, 255, 255, 0.86); font-size: 13px; font-weight: 500; }
+
+  /* iPhone/iPad tab: numbered Home Screen steps, step 1 carries the download button. */
+  .save-permanently-fix {
+    display: flex; flex-direction: column; gap: 10px; padding: 14px 16px;
+    border: 2px solid var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  .repository-archive-dialog .save-permanently-fix-title { color: var(--text-primary); font-size: 15px; font-weight: var(--font-bold, 700); }
+  .save-permanently-steps { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .save-permanently-step { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; column-gap: 12px; min-height: 36px; }
+  .save-permanently-step-number {
+    display: flex; width: 30px; height: 30px; align-items: center; justify-content: center; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 16px; font-weight: 800;
+  }
+  .save-permanently-step[data-done="true"] .save-permanently-step-number { background: var(--success); }
+  .save-permanently-step-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .save-permanently-step-text strong { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--text-primary); font-size: 17px; font-weight: var(--font-bold, 700); line-height: 1.25; }
+  .save-permanently-step-text small { color: var(--text-secondary); font-size: 13px; line-height: 1.3; }
+  .save-permanently-glyph {
+    width: 22px; height: 22px; flex: none; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .save-permanently-app-icon { width: 24px; height: 24px; border-radius: 6px; }
+  .repository-archive-dialog .save-permanently-take-along { min-height: 44px; padding: 0 18px; white-space: nowrap; }
+
+  /* Result of the last action: one bold sentence. */
+  .repository-archive-dialog .save-permanently-notice,
+  .repository-archive-dialog .save-permanently-error {
+    padding: 10px 14px; border-radius: 10px; font-size: 15px; font-weight: var(--font-bold, 700); line-height: 1.35;
+  }
+  .repository-archive-dialog .save-permanently-notice { border: 1px solid var(--border-color); color: var(--text-primary); }
+  .repository-archive-dialog .save-permanently-notice[data-tone="success"] { border-color: var(--success); background: color-mix(in srgb, var(--success) 18%, transparent); }
+  .repository-archive-dialog .save-permanently-notice[data-tone="success"] span { color: var(--success-light); }
+  .repository-archive-dialog .save-permanently-notice[data-tone="warning"] { border-color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+  .repository-archive-dialog .save-permanently-error { border: 1px solid var(--error, var(--danger)); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+
+  /* Everything else, collapsed by default. */
+  .save-permanently-more { display: flex; flex-direction: column; gap: 8px; }
+  .repository-archive-dialog .save-permanently-more-toggle {
+    display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; padding: 6px 10px 6px 4px;
+    border: 0; background: transparent; color: var(--text-secondary); font-size: 14px; font-weight: var(--font-semibold, 600); cursor: pointer;
+  }
+  .repository-archive-dialog .save-permanently-more-toggle:hover { color: var(--text-primary); }
+  .save-permanently-more-chevron { display: inline-block; width: 14px; font-size: 18px; line-height: 1; transition: transform var(--transition-fast, 120ms); }
+  .save-permanently-more-toggle[aria-expanded="true"] .save-permanently-more-chevron { transform: rotate(90deg); }
+  .save-permanently-more-list { display: flex; flex-direction: column; gap: 8px; }
+  .repository-archive-dialog .save-permanently-option {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+    padding: 9px 12px; border-radius: 8px; text-align: left; cursor: pointer;
+  }
+  .repository-archive-dialog .save-permanently-option:hover:not(:disabled) { background: var(--bg-hover); }
+  .save-permanently-option .save-permanently-option-title { font-size: 14px; font-weight: var(--font-semibold, 600); }
+  .save-permanently-option .save-permanently-option-line { color: var(--text-secondary); font-size: 12px; }
+  .repository-archive-dialog .save-permanently-more-line { font-size: 12px; }
+
+  .repository-archive-dialog .save-permanently-footer {
+    flex: none; padding: 12px 26px 16px; border-top: 1px solid var(--border-color);
+  }
+  .repository-archive-dialog .save-permanently-footer button { min-width: 88px; min-height: 36px; font-size: 14px; font-weight: var(--font-semibold, 600); }
+
+  @media (max-width: 520px) {
+    .save-permanently-body { padding: 18px 16px 14px; }
+    .repository-archive-dialog.save-permanently-dialog h2 { font-size: 22px; }
+    .save-permanently-step { grid-template-columns: 30px minmax(0, 1fr); row-gap: 8px; }
+    .repository-archive-dialog .save-permanently-take-along { grid-column: 2; justify-self: start; }
+    .repository-archive-dialog .save-permanently-footer { padding: 10px 16px 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .save-permanently-more-chevron { transition: none; } }
+}

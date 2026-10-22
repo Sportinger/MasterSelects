@@ -1,4 +1,4 @@
-import { createRenderablePrimaryMediaObjectUrl } from '../../mediaObjectUrlManager';
+import { createRenderablePrimaryMediaObjectUrl, resolveCurrentPrimaryMediaObjectUrl } from '../../mediaObjectUrlManager';
 import type { ProjectFile } from '../../types/project.types';
 import type { MediaState } from '../../../../stores/mediaStore/types';
 import type { RepositorySession } from '../RepositorySession';
@@ -16,6 +16,7 @@ import { selectDemandedLinkedMedia } from './linkedMediaDemandSelection';
 import { playheadState } from '../../../layerBuilder/PlayheadState';
 import { entityKey } from '../domains/jsonBoundary';
 import { decodeOwnedAggregate, object } from './domainAdapters/aggregatePlan';
+import { isMediaAccessPaused } from '../../folderAccess/folderAccessPause';
 
 type ProjectMedia = ProjectFile['media'][number];
 const log = Logger.create('LinkedMediaConnection');
@@ -50,7 +51,43 @@ export function startScheduledLinkedMediaConnection(): void {
   const job = scheduled; scheduled = null;
   if (!job || getEditorRepositorySession() !== job.session) { notify(); return; }
   stopDemand = observeDemand(job.session);
+  void openEmbeddedOriginals(job.session, job.items);
   notify();
+}
+
+/** Each embedded read verifies its full digest in the storage worker, so only a few run at once. */
+const EMBEDDED_CONCURRENCY = 2;
+/**
+ * Originals stored inside the repository (e.g. a restored self-contained .msproj) need no folder access or
+ * probing, so they open in the background right after activation instead of waiting until a clip uses them.
+ * Media outside the repository stay on demand.
+ */
+async function openEmbeddedOriginals(session: RepositorySession, items: readonly ProjectMedia[]): Promise<void> {
+  const current = () => getEditorRepositorySession() === session;
+  let next = 0, opened = 0, failed = 0;
+  await Promise.all(Array.from({ length: Math.min(EMBEDDED_CONCURRENCY, items.length) }, async () => {
+    while (next < items.length && current()) {
+      const item = items[next++];
+      const reference = embeddedOriginalReference(session, item);
+      if (!reference || !isLinkedMediaDeferred(item.id)) continue;
+      try {
+        if (!await session.client.hasStoredBlob(reference) || !current()) continue;
+        if (await requestLinkedMedia(item.id)) opened++; else failed++;
+      } catch (error) {
+        failed++; log.warn('Embedded original could not be opened; it is opened again when used', { id: item.id, name: item.name, error });
+      }
+    }
+  }));
+  if (opened || failed) log.info('Embedded originals opened after activation', { opened, failed, total: items.length });
+}
+/** The verified byte identity under which the repository may hold this media's original. */
+function embeddedOriginalReference(session: RepositorySession | null, item: ProjectMedia): { hash: string; length: number } | null {
+  const projection = session?.coordinator?.getProjection();
+  const key = entityKey('media', 'project', item.id);
+  const authored = projection?.entities.has(key) ? object(decodeOwnedAggregate(key, projection.entities)) : {};
+  const identity = object(authored.$sourceIdentity ?? projection?.entities.get(`source-identity:${item.id}`)?.value);
+  return identity.identityStatus === 'verified' && typeof identity.contentHash === 'string' && typeof identity.byteLength === 'number'
+    ? { hash: identity.contentHash, length: identity.byteLength } : null;
 }
 
 /** Export consumes the complete active composition, so await its deferred sources first. */
@@ -58,7 +95,11 @@ export async function prepareTimelineLinkedMedia(): Promise<void> {
   const timeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
   if (!timeline) return;
   const ids = selectDemandedLinkedMedia(timeline.clips, timeline.playheadPosition, true);
-  const results = await Promise.all([...ids].filter(isLinkedMediaDeferred).map(requestLinkedMedia));
+  const wanted = [...ids].filter(isLinkedMediaDeferred);
+  const results = await Promise.all(wanted.map(requestLinkedMedia));
+  if (wanted.some(isMediaAccessPaused)) {
+    throw new Error('Folder access was paused by the browser. Click Re-allow in the toolbar, then export again.');
+  }
   if (results.some(result => !result)) {
     throw new Error('A media source required by this composition is unavailable. Relink it before exporting.');
   }
@@ -77,23 +118,29 @@ function createDemandOpener(session: RepositorySession | null, items: readonly P
   return (id: string): Promise<boolean> => {
     const previous = inflight.get(id); if (previous) return previous;
     const item = sources.get(id); if (!session || !item) return Promise.resolve(false);
+    // Waiting for Re-allow: no new probe on every playhead or selection change.
+    if (isMediaAccessPaused(id)) return Promise.resolve(false);
     const current = () => getEditorRepositorySession() === session;
     const run = (async () => {
       if (active >= CONNECTION_CONCURRENCY) await new Promise<void>(resolve => waiters.push(resolve)); else active++;
       try {
         if (!current()) return false;
         const batch: MediaFile[] = [];
-        const connected = await connect(item, current, file => batch.push(file), true);
+        const connected = await connect(session, item, current, file => batch.push(file), true);
         if (!current()) return false;
+        // Access paused by the browser is not a missing file: the media stays unopened until Re-allow.
+        if (!connected && await pauseMediaIfAccessLapsed(item, sessionProjectFolder(session))) return false;
         finishLinkedMediaDemand(id);
         if (connected) await applyConnectedMedia(batch); else markMissingLinkedMedia([id]);
         return connected;
       } catch (error) {
+        if (current() && await pauseMediaIfAccessLapsed(item, sessionProjectFolder(session)).catch(() => false)) return false;
         if (current()) { finishLinkedMediaDemand(id); markMissingLinkedMedia([id]); }
         log.warn('Saved media location unavailable', { id, error }); return false;
       } finally { const resume = waiters.shift(); if (resume) resume(); else active--; }
     })();
-    inflight.set(id, run); return run;
+    // A settled open is not cached: paused media are opened again after Re-allow.
+    inflight.set(id, run); void run.finally(() => { if (inflight.get(id) === run) inflight.delete(id); }); return run;
   };
 }
 function observeDemand(session: RepositorySession): () => void {
@@ -144,11 +191,22 @@ async function checkCompositionSources(session: RepositorySession, timeline: Tim
     await withSourceIdentitiesPaused(() => connectAll(session, items, () => {}, true));
     if (!current()) return;
     const files = (getRepositoryStore('media')?.getState() as MediaState | undefined)?.files ?? [];
-    const missing = items.filter(item => isLinkedMediaDeferred(item.id) && !files.find(file => file.id === item.id)?.file).map(item => item.id);
+    const unopened = items.filter(item => isLinkedMediaDeferred(item.id) && !files.find(file => file.id === item.id)?.file);
+    const missing: string[] = [];
+    for (const item of unopened) if (!await pauseMediaIfAccessLapsed(item, sessionProjectFolder(session))) missing.push(item.id);
+    if (!current()) return;
     for (const id of missing) finishLinkedMediaDemand(id);
     markMissingLinkedMedia(missing);
     if (missing.length) log.info('Composition sources checked', { checked: items.length, missing: missing.length });
   } finally { running--; notify(); }
+}
+function sessionProjectFolder(session: RepositorySession): FileSystemDirectoryHandle | null {
+  const location = session.location as RepositorySession['location'] | undefined;
+  return location?.kind === 'fsa' ? location.handle : null;
+}
+// Loaded on use: the access checks reach the project services, which this hot path must not load eagerly.
+async function pauseMediaIfAccessLapsed(item: ProjectMedia, projectFolder: FileSystemDirectoryHandle | null): Promise<boolean> {
+  return (await import('../../folderAccess/mediaLocationAccess')).pauseMediaIfAccessLapsed(item, projectFolder);
 }
 function markMissingLinkedMedia(ids: readonly string[]): void {
   if (!ids.length) return;
@@ -198,7 +256,7 @@ async function connectAll(session: RepositorySession, items: readonly ProjectMed
     await Promise.all(Array.from({ length: Math.min(CONNECTION_CONCURRENCY, total) }, async () => {
       while (next < total && current()) {
         const item = items[next++];
-        try { if (await connect(item, current, hydrated => pending.push(hydrated), trustSavedLocation)) online++; }
+        try { if (await connect(session, item, current, hydrated => pending.push(hydrated), trustSavedLocation)) online++; }
         catch (error) { log.warn('Could not connect linked media', { id: item.id, name: item.name, error }); }
         done++;
         // Publish the first sources promptly, then avoid hundreds of full media-list renders.
@@ -212,30 +270,68 @@ async function connectAll(session: RepositorySession, items: readonly ProjectMed
   } finally { running--; notify(); }
 }
 
-async function connect(item: ProjectMedia, current: () => boolean, stage: (file: MediaFile) => void, trustSavedLocation = false): Promise<boolean> {
-  const mediaStore = getRepositoryStore('media'); if (!mediaStore) return false;
-  const existing = (mediaStore.getState() as MediaState).files.find(file => file.id === item.id);
-  if (!existing) return false;
-  if (existing.file) return true;
+/**
+ * One open per media at a time: the playhead demand and the composition check both open the same
+ * source on reopen. Two opens created two primary object URLs; the second revoked the first while
+ * the store and the media elements kept it (ERR_FILE_NOT_FOUND on every element load).
+ */
+const openingBySession = new WeakMap<RepositorySession, Map<string, Promise<MediaFile | 'open' | null>>>();
+
+/**
+ * Scoped per repository session: a run returns null once its session is replaced, so a reopened
+ * project joining the old session's open would see existing media as missing.
+ */
+async function connect(session: RepositorySession, item: ProjectMedia, current: () => boolean, stage: (file: MediaFile) => void, trustSavedLocation = false): Promise<boolean> {
+  let opening = openingBySession.get(session);
+  if (!opening) { opening = new Map(); openingBySession.set(session, opening); }
+  let run = opening.get(item.id);
+  if (!run) {
+    const started = openLinkedMedia(item, current, trustSavedLocation);
+    const runs = opening;
+    run = started;
+    runs.set(item.id, started);
+    void started.then(() => undefined, () => undefined).finally(() => { if (runs.get(item.id) === started) runs.delete(item.id); });
+  }
+  const opened = await run;
+  if (opened === 'open') return true;
+  if (!opened || !current()) return false;
+  stage(opened);
+  return true;
+}
+
+function readMediaEntry(id: string): MediaFile | undefined {
+  return (getRepositoryStore('media')?.getState() as MediaState | undefined)?.files.find(file => file.id === id);
+}
+
+async function openLinkedMedia(item: ProjectMedia, current: () => boolean, trustSavedLocation: boolean): Promise<MediaFile | 'open' | null> {
+  const existing = readMediaEntry(item.id);
+  if (!existing) return null;
+  if (existing.file) return 'open';
   // Automatic access trusts the exact saved location; explicit reconnects validate the replacement.
   const session = getEditorRepositorySession();
-  const projection = session?.coordinator?.getProjection();
-  const key = entityKey('media', 'project', item.id);
-  const authored = projection?.entities.has(key) ? object(decodeOwnedAggregate(key, projection.entities)) : {};
-  const identity = object(authored.$sourceIdentity ?? projection?.entities.get(`source-identity:${item.id}`)?.value);
-  if (session && identity.identityStatus === 'verified' && typeof identity.contentHash === 'string' && typeof identity.byteLength === 'number') {
-    const blob = await session.client.readBlob({ hash: identity.contentHash, length: identity.byteLength });
-    if (blob && blob.size === identity.byteLength && current()) {
+  const reference = embeddedOriginalReference(session, item);
+  if (session && reference) {
+    const blob = await session.client.readBlob(reference);
+    if (blob && blob.size === reference.length && current()) {
+      // Another path may have opened it meanwhile; a new primary URL would revoke the one in use.
+      if (readMediaEntry(item.id)?.file) return 'open';
       const file = new File([blob], item.name, { type: blob.type });
       const url = await createRenderablePrimaryMediaObjectUrl(item.id, file);
-      if (!current()) return false;
-      stage({ ...existing, file, url }); return true;
+      if (!current()) return null;
+      noteMediaOpened(item);
+      return { ...existing, file, url };
     }
   }
+  if (readMediaEntry(item.id)?.file) return 'open';
   const [hydrated] = await convertProjectMediaToStore([item], { hydrateFiles: true, deferCacheChecks: true, trustSavedLocation });
-  if (!hydrated?.file || !current()) return false;
-  stage(hydrated);
-  return true;
+  if (!hydrated?.file || !current()) return null;
+  noteMediaOpened(item);
+  return hydrated;
+}
+/** Locations that opened prove folder access; a later lapse on them pauses instead of going offline. */
+function noteMediaOpened(item: ProjectMedia): void {
+  void import('../../folderAccess/mediaLocationAccess').then(access => access.rememberMediaLocationAccess(item))
+    .catch(error => log.debug('Could not remember media access', { id: item.id, error }));
 }
 
 async function applyConnectedMedia(batch: MediaFile[]): Promise<void> {
@@ -245,8 +341,15 @@ async function applyConnectedMedia(batch: MediaFile[]): Promise<void> {
   const connected = new Map(batch.map(file => [file.id, file]));
   withRepositoryHydration(() => mediaStore.setState({ files: (mediaStore.getState() as MediaState).files.map(entry => {
     const hydrated = connected.get(entry.id);
-    return hydrated && !entry.file ? { ...entry, file: hydrated.file, url: hydrated.url,
-      hasFileHandle: hydrated.hasFileHandle, thumbnailUrl: entry.thumbnailUrl ?? hydrated.thumbnailUrl } : entry;
+    if (!hydrated) return entry;
+    if (!entry.file) {
+      return { ...entry, file: hydrated.file, url: hydrated.url,
+        hasFileHandle: hydrated.hasFileHandle, thumbnailUrl: entry.thumbnailUrl ?? hydrated.thumbnailUrl };
+    }
+    // Already open: keep it, unless this open replaced (revoked) the primary URL the entry still holds.
+    const currentUrl = entry.url && resolveCurrentPrimaryMediaObjectUrl(entry.id, entry.url);
+    return entry.url && currentUrl !== entry.url && hydrated.url && currentUrl === hydrated.url
+      ? { ...entry, url: hydrated.url } : entry;
   }) }));
   for (const hydrated of batch) {
     const file = hydrated.file;

@@ -17,6 +17,7 @@ import {
   setTimelineWaveformWarmupPlaybackSuppressed,
 } from './timelineWaveformPlaybackGate';
 import { readTimelineRuntimeState } from './timelineRuntimeCoordinator';
+import { isWaveformWaitingForMedia } from '../../stores/timeline/clip/clipWaveformSourceDeferral';
 
 const DEFAULT_WAVEFORM_GENERATION_DELAY_MS = 300;
 const FAILED_GENERATION_RETRY_DELAY_MS = 60_000;
@@ -233,6 +234,10 @@ export async function warmTimelineSourceWaveformGeneration(
     .then((): TimelineSourceWaveformWarmupResult => {
       const latestClip = deps.getState().clips.find(candidate => candidate.id === clip.id);
       if (!latestClip) return { clipId: clip.id, status: 'skipped' };
+      // Waiting for a reopening project's media is not a failure: the analysis reruns when it arrives.
+      if (!hasTimelineWaveformData(latestClip) && isWaveformWaitingForMedia(clip.id)) {
+        return { clipId: clip.id, status: 'blocked' };
+      }
       if (!hasTimelineWaveformData(latestClip)) return recordFailure();
       failedSourceWaveformGenerations.delete(clip.id);
       return { clipId: clip.id, status: 'generated' };

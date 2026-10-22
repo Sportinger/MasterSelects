@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebGPUContext } from '../../src/engine/core/WebGPUContext';
+import { DeviceLossPolicy, REPEATED_LOSS_LIMIT, whenPageVisible } from '../../src/engine/core/deviceLossPolicy';
+import { describeGPURecoveryFailure } from '../../src/engine/core/gpuInitializationFailure';
+
+const log = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
 
 vi.mock('../../src/services/logger', () => ({
   Logger: {
-    create: vi.fn(() => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    })),
+    create: vi.fn(() => log),
   },
 }));
 
@@ -220,9 +224,15 @@ describe('WebGPUContext', () => {
     requestAdapter.mockResolvedValue(null);
     const failed = vi.fn();
     context.onRecoveryFailed(failed);
+    log.error.mockClear();
     lose({ reason: 'unknown', message: 'driver reset' });
     await vi.advanceTimersByTimeAsync(2_000);
     expect(failed).toHaveBeenCalledExactlyOnceWith('adapter_unavailable');
+    // One incident, one error: refused adapters per attempt are warnings.
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('GPU recovery failed',
+      { attempts: 3, failure: 'adapter_unavailable', lostDevice: 'driver reset' });
+    expect(log.warn).toHaveBeenCalledWith('Failed to get GPU adapter (all attempts); recovery attempt 3', undefined);
+    expect(describeGPURecoveryFailure('adapter_unavailable')).toContain('reload the editor');
     expect(context.recovering).toBe(false);
     expect(context.initialized).toBe(false);
     expect(context.getDevice()).toBeNull();
@@ -424,5 +434,136 @@ describe('WebGPUContext', () => {
     expect(requestAdapter).toHaveBeenNthCalledWith(2, { featureLevel: 'compatibility' });
     expect(requestAdapter).not.toHaveBeenCalledWith({ powerPreference: 'high-performance' });
     expect(requestAdapter).not.toHaveBeenCalledWith({ powerPreference: 'low-power' });
+  });
+
+  function installLosableDevices() {
+    const losers: Array<(info: GPUDeviceLostInfo) => void> = [];
+    const requestAdapter = vi.fn(async () => {
+      const device = createDevice();
+      Object.defineProperty(device, 'lost', { value: new Promise(resolve => { losers.push(resolve); }) });
+      return createAdapter(device);
+    });
+    installGpu(requestAdapter);
+    return { requestAdapter, losers };
+  }
+
+  function setVisibility(state: DocumentVisibilityState): void {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+
+  it('treats a browser-destroyed device of a hidden page as background loss and recovers once visible', async () => {
+    vi.useFakeTimers();
+    const { requestAdapter, losers } = installLosableDevices();
+    const context = new WebGPUContext();
+    await context.initialize();
+    const restored = vi.fn();
+    context.onDeviceRestored(restored);
+    try {
+      setVisibility('hidden');
+      losers[0]({ reason: 'destroyed', message: 'Device was destroyed.' });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(log.error).not.toHaveBeenCalled();
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('hidden'), expect.objectContaining({ kind: 'background' }));
+      expect(requestAdapter).toHaveBeenCalledTimes(1);
+      expect(context.recovering).toBe(true);
+      setVisibility('visible');
+      await vi.advanceTimersByTimeAsync(200);
+      expect(requestAdapter).toHaveBeenCalledTimes(2);
+      expect(restored).toHaveBeenCalledOnce();
+      expect(context.initialized).toBe(true);
+    } finally {
+      setVisibility('visible');
+    }
+  });
+
+  it('reports a real loss once, recovers, and stops after repeated driver resets', async () => {
+    vi.useFakeTimers();
+    const { requestAdapter, losers } = installLosableDevices();
+    const context = new WebGPUContext();
+    await context.initialize();
+    const failed = vi.fn();
+    context.onRecoveryFailed(failed);
+    const vkLoss = { reason: 'unknown', message: 'vkQueueSubmit failed with VK_ERROR_DEVICE_LOST' } as GPUDeviceLostInfo;
+
+    losers[0](vkLoss);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(context.initialized).toBe(true);
+    losers[1](vkLoss);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(context.initialized).toBe(true);
+    expect(log.error).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalledWith('Device lost again', expect.objectContaining({ occurrence: 2 }));
+
+    losers[2](vkLoss);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(failed).toHaveBeenCalledExactlyOnceWith('device_lost_repeatedly');
+    expect(requestAdapter).toHaveBeenCalledTimes(3);
+    expect(context.recovering).toBe(false);
+    // The first loss filed its error after recovering; the stop is a new incident with exactly one clear error.
+    expect(log.error).toHaveBeenCalledTimes(2);
+    expect(log.error).toHaveBeenNthCalledWith(1, 'Device lost', vkLoss.message);
+    expect(log.error).toHaveBeenNthCalledWith(2, 'GPU device lost repeatedly; recovery stopped',
+      expect.objectContaining({ message: vkLoss.message, kind: 'repeated', occurrence: 3, windowMs: 60_000 }));
+    expect(log.error.mock.calls[1][1]).not.toHaveProperty('firstLoss');
+  });
+
+  it('files one error when repeated losses stop recovery before the first loss was reported', async () => {
+    vi.useFakeTimers();
+    const { losers } = installLosableDevices();
+    const context = new WebGPUContext();
+    await context.initialize();
+    const failed = vi.fn();
+    context.onRecoveryFailed(failed);
+    // The page reloaded with two recent losses in the policy window: the next real loss is the third.
+    const policy = (context as unknown as { lossPolicy: DeviceLossPolicy }).lossPolicy;
+    policy.classify(); policy.classify(); policy.holdReport('earlier reset');
+    losers[0]({ reason: 'unknown', message: 'third reset' } as GPUDeviceLostInfo);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(failed).toHaveBeenCalledExactlyOnceWith('device_lost_repeatedly');
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('GPU device lost repeatedly; recovery stopped',
+      expect.objectContaining({ message: 'third reset', firstLoss: 'earlier reset', occurrence: 3 }));
+  });
+
+  it('carries a later incident loss into its recovery-failed error after the first loss was filed', async () => {
+    vi.useFakeTimers();
+    const { requestAdapter, losers } = installLosableDevices();
+    const context = new WebGPUContext();
+    await context.initialize();
+    losers[0]({ reason: 'unknown', message: 'first driver reset' } as GPUDeviceLostInfo);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(context.initialized).toBe(true);
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('Device lost', 'first driver reset');
+    log.error.mockClear();
+    requestAdapter.mockResolvedValue(null);
+    losers[1]({ reason: 'unknown', message: 'GPU process crashed' } as GPUDeviceLostInfo);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('GPU recovery failed',
+      { attempts: 3, failure: 'adapter_unavailable', lostDevice: 'GPU process crashed' });
+  });
+
+  it('keeps hidden, unloading, and frozen pages out of the repeated-loss count until they return', () => {
+    const policy = new DeviceLossPolicy(() => 0);
+    const resumed = vi.fn();
+    try {
+      window.dispatchEvent(new Event('pagehide'));
+      for (let i = 0; i <= REPEATED_LOSS_LIMIT; i++) {
+        expect(policy.classify()).toEqual({ kind: 'background', report: 'warn', recover: 'when-visible' });
+      }
+      window.dispatchEvent(new Event('pageshow'));
+      document.dispatchEvent(new Event('freeze'));
+      whenPageVisible(resumed);
+      setVisibility('hidden');
+      document.dispatchEvent(new Event('resume'));
+      expect(resumed).not.toHaveBeenCalled();
+      expect(policy.classify().kind).toBe('background');
+    } finally {
+      window.dispatchEvent(new Event('pageshow'));
+      document.dispatchEvent(new Event('resume'));
+      setVisibility('visible');
+    }
+    expect(resumed).toHaveBeenCalledOnce();
+    expect(policy.classify()).toEqual({ kind: 'unexpected', report: 'error', recover: 'now', occurrence: 1 });
+    expect(policy.classify()).toMatchObject({ kind: 'unexpected', report: 'warn', occurrence: 2 });
   });
 });

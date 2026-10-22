@@ -18,7 +18,11 @@
     return version;
   }
 
-  // Version check - force reload on version change.
+  // Records the running version and logs a version change. It deliberately neither reloads
+  // nor clears Cache Storage: this page is already the deployed build (HTML is revalidated,
+  // assets are content-hashed), so a reload only doubled every stale-tab recovery reload
+  // (src/runtime/chunkLoadRecovery.ts) and could ping-pong between builds while a deploy
+  // propagates, and Cache Storage holds downloaded AI models, not app files.
   function runVersionCheck() {
     var currentVersion = readAppVersion();
     if (!currentVersion) return;
@@ -32,17 +36,8 @@
 
     if (storedVersion && storedVersion !== currentVersion) {
       console.log('[Version] Update detected:', storedVersion, '->', currentVersion);
-      try { localStorage.setItem('app_version', currentVersion); } catch (e) { /* storage unavailable */ }
-      // Clear caches and reload
-      if ('caches' in window) {
-        caches.keys().then(function (names) {
-          names.forEach(function (name) { caches.delete(name); });
-        });
-      }
-      window.location.reload();
-    } else {
-      try { localStorage.setItem('app_version', currentVersion); } catch (e) { /* storage unavailable */ }
     }
+    try { localStorage.setItem('app_version', currentVersion); } catch (e) { /* storage unavailable */ }
   }
 
   // Every IndexedDB database this origin has ever used (legacy names included).

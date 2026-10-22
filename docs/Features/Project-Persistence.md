@@ -16,7 +16,11 @@ Invalid names and storage failures remain visible in the dialog.
 
 Browser folder pickers open a selected directory. Where those pickers are
 unavailable, the chooser lists projects stored on the device. Recent entries
-reuse their remembered location and may need folder permission again.
+reuse their remembered location and may need folder permission again. The
+chooser and **File > Open Recent** name each entry's location (**Folder**,
+**Native**, **Browser local** or **Temporary**, the IndexedDB fallback; browser
+entries remember their store), and a temporary copy is always listed after a
+permanent project of the same name.
 
 An existing repository is opened from its `project.msrepo.json` descriptor.
 Legacy `project.json` folders and `.msproj` packages are converted in place on
@@ -43,12 +47,26 @@ All three use the same repository format. The browser's IndexedDB databases
 cache handles and derived metadata; they are not the authoritative project
 history. An unavailable index can be reconstructed from committed records.
 
-FSA handles may require permission again after reload. Reopening a recent
-project or restoring the last project's folder access also re-requests read
-access to that project's known media source folders in the same click, before
-the project loads, so linked media reconnect without a separate step. Media
+A deploy does not change stored project or media links: handles, recent
+projects, the workspace id and the repository stay as they are. What lapses is
+the browser's permission. Chrome keeps File System Access grants for the
+browsing session only (unless "Allow on every visit" was chosen): after a
+browser restart, or once every tab of the site was closed, a stored folder
+reports `prompt` again; a same-tab reload (including the version reload after a
+deploy) keeps it. The editor then does not reopen the project silently and does
+not treat it as lost. The **Choose project** dialog shows **Resume “<project>”**
+first (the toolbar shows the same Restore action, also while the startup
+recovery scratch is open): one click re-grants the stored folder handle, and
+Chrome's restore prompt brings back the folders and files allowed on the last
+visit. Reopening a recent project or resuming the last project also re-requests
+read access to that project's known media source folders and to media linked as
+single files (remembered with the recent entry; already granted ones cost no
+prompt, at most 8 further prompts) in the same click, before the project loads,
+so linked media reconnect without a separate step. Access that is still not
+granted is logged and offered by the Reconnect media dialog. Media
 that still lack access are offered in the Reconnect media dialog; choosing
-"Allow on every visit" in the browser prompt avoids the prompt after reloads.
+"Allow on every visit" in the browser prompt (or the installed app, see
+below) avoids the prompt after a browser restart.
 Media imported as single files (picker or drop) keep their exact saved file
 location. The dialog's single "Reconnect media" click re-allows those files
 directly (up to 8 browser prompts) instead of asking for a folder. With more
@@ -69,9 +87,10 @@ own records the known source folder that contains it, so a reopen finds it
 without asking again. When a folder search finds several files for one media
 item and no saved path decides, the file named exactly like the media wins over
 files that only share an older saved file name (size and content are still
-verified). In a read-only tab (another tab writes the project) a chosen folder
-cannot save new media locations: its reconnect dialog says so and offers to reload
-the tab once the writing tab is closed. Opening a composition checks all of its
+verified). In a read-only tab (another tab writes the project, for example an older tab
+still open when a new deploy is checked in a second tab) a chosen folder cannot
+save new media locations: its reconnect dialog says so and offers **Take over
+editing**, which makes the writing tab save and switch to read-only. Opening a composition checks all of its
 sources in the background (nested clips and multicam angles included, the
 playhead first), so missing media surface together and the reconnect dialog
 appears once after the check instead of repeatedly during playback. Allowed
@@ -103,6 +122,124 @@ Persistent-storage permission reduces eviction risk but does not prevent a
 user from deleting site data. OPFS projects do not become independent backups
 merely because the browser remembers their names.
 
+WebKit (every iOS/iPadOS browser) can refuse OPFS with an opaque `UnknownError`
+while its storage process resumes, in Private Browsing, in in-app browsers or on
+a nearly full device. Opening the project root and the scratch recovery retries
+once; if OPFS stays unavailable, browser projects switch to an IndexedDB
+fallback (`ms-browser-project-storage`) that serves the same directory/file
+handle surface, so project creation, saving, scratch recovery and `.msproj`
+export keep working. The choice is made on the first storage access and kept
+for the tab (`sessionStorage`), and the storage worker adopts the editor's
+choice, so one project never spans both stores. While the fallback is active
+the save status reads "Temporary storage", explains that Private Browsing and
+in-app browsers may delete the project when the window closes, and a warning
+styled **Temporary · Save permanently** button sits next to it (only "Save" on
+phone widths). Both open the *This project is only temporary* dialog, which
+offers only the destinations this device supports, best first:
+
+- **Save to a folder** (folder picker or Native Helper): the existing Save As
+  copy of the repository with history, journals and workspace views; the
+  editor switches to the folder. Verification reads the new folder's own
+  session (same project lineage, writable, history holds the last confirmed
+  revision; one re-read on a failed read). When only saving the latest edits
+  into the folder failed after the switch, it saves once more; edits that still
+  wait are named in the result while the verified temporary copy is removed.
+  A copy that opened but does not verify is reported as such ("now opens from
+  the chosen folder … temporary copy was kept"), never as "nothing changed".
+  The removed temporary copy also leaves the recent projects.
+- **Keep in this browser** (when OPFS opens and accepts a write in this tab
+  now): the repository is copied into OPFS as a new repository and opened
+  there and adopted by the project core, so thumbnails, waveforms and caches
+  follow the copy; the tab then uses OPFS, also across reloads. Locations carry an
+  explicit `store` (`opfs`/`indexeddb`) so one tab can address both stores.
+- **Download .msproj archive** named after the project (full history); on
+  iPhone/iPad it lands in the Files app. The open project stays temporary.
+
+Moving between the stores never locks a project read-only: the writer registry
+(`ms-repository-identity-locations`) treats `opfs:<origin>:<path>` and
+`indexeddb:<origin>:<path>` of one repository as the same project changing
+store, and a moved temporary project that gets a new folder name takes over the
+writer registration from its verified source. Copies at any other location still
+open read-only (Copy/Restore). Renaming (also inside Save As and Keep in this
+browser) rewrites only the project root, so media carrying repository-internal
+source-identity proofs no longer abort these moves.
+
+Duplicates (Save As, Save permanently, imports) contain only `project.msrepo.json`
+and `.masterselects/` at the project root; `archive-manifest.json` is written only
+into `.msproj` export staging. Repository directory lookups never hand a reader's
+pending "does this folder exist" lookup to a concurrent writer: on slow disks a
+view-slot or artifact-manifest write into a folder created at that moment
+failed with "A requested file or directory could not be found", which made a
+successful Save to a folder report failure.
+
+A temporary copy is removed only after its permanent copy is open, writable and
+contains the last confirmed revision; on any failure it stays and the dialog
+says so. The scratch browser recovery is never deleted. The dialog also shows
+whether the browser keeps its storage (`navigator.storage.persisted()`) and can
+ask for it (`persist()`, **Ask to keep it**). When a tab itself uses OPFS while projects remain in the fallback
+database (a tab still on the fallback only lists them, because Open Project
+would not find them there), the button reads "Move N temporary projects" and moves them with a
+byte-verified copy (SHA-256 per file) under their repository writer lock; a
+project open in another tab is skipped. Only when IndexedDB refuses as
+well do project dialogs and the save status explain the cause instead of the
+raw browser text. iOS, iPadOS and Android never try the desktop Native Helper.
+To test the fallback on a device whose OPFS works, start the dev server with
+`VITE_MS_FORCE_BROWSER_STORAGE=indexeddb`; production builds ignore it.
+
+### iPhone and iPad: Home Screen first
+
+WebKit offers no folder picker, so on iPhone and iPad a real project folder is
+impossible and browser storage is the only place a project lives. A Safari tab
+(any iOS/iPadOS browser tab) is subject to Safari's eviction of script-writable
+storage after seven days of browsing without a visit; a web app opened from the
+Home Screen is exempt and has its own, separate storage.
+`resolveAppleHomeScreenMode()` (`src/utils/mobileAppleWebKit.ts`) tells the cases
+apart: iOS/iPadOS WebKit (including iPadOS's desktop-mode Mac user agent, via
+`maxTouchPoints`) running as a Home Screen app (`navigator.standalone` or
+`display-mode: standalone`/`fullscreen`), in a browser tab, or `none`
+elsewhere. Desktop and Android behave as described above.
+
+- **In a Safari tab** the dialog leads with numbered Home Screen steps, each
+  one bold line with a short hint: 1 **Download this project** (the step's
+  button downloads the `.msproj`, because the Home Screen app has its own,
+  empty storage; the step turns into a check mark afterwards), 2 **Tap Share**,
+  3 **Tap Add to Home Screen** (under More if it is not listed, Open as Web App
+  on), 4 **Open the new icon**, 5 **Open Project → Import**. Keep in this
+  browser (which says that Safari can still delete it), Download a backup and
+  Ask to keep it sit under the collapsed **More options**.
+- The same tab also marks **browser-local** projects (not only temporary
+  ones, including the browser recovery) with a **Not safe yet · Keep safe**
+  button in the place and style of the Temporary button. It opens the dialog as
+  *This project can get lost* (Home Screen steps; the archive as a backup
+  outside Safari under More options) and stays until the page runs from the Home Screen or
+  `navigator.storage.persisted()` returns true; it is not dismissible. While
+  persistence is still being checked it stays hidden, so it does not flicker.
+- The dialog renders above the workspace bar and fits the visible viewport
+  (dynamic viewport height minus the safe areas, e.g. iPad landscape at
+  1180x734): its content scrolls and the footer with **Close**/**Done** stays
+  visible. A new result or error scrolls into view.
+- **In the Home Screen app** there is no Home Screen step and no hint for
+  browser-local projects: browser storage is the permanent place. A temporary
+  project still gets Keep in this browser first and the `.msproj` download as
+  backup, and More options notes that the seven-day cleanup does not apply.
+
+The dialog is deliberately plain (decision 2026-10-21, user: the first
+iPad version was far too much text). It shows one large headline that names
+the problem (*This project is only temporary*, *This project can get lost*,
+*Some projects are still temporary*, and *Your project is safe* once nothing
+is at risk any more), one "why" sentence, and one obvious action: the Home
+Screen steps in a Safari tab, otherwise one big button for the best destination
+(**Save to a folder**, **Keep in this browser** or **Download project file**).
+All other destinations, Ask to keep it, leftover temporary projects and the
+storage notes are one short line each under the collapsed, keyboard-operable
+**More options** disclosure. Results are one bold sentence (green with a check
+mark on success, amber where the project is still at risk). The body scrolls
+and the Close/Done footer stays visible; the dialog is portaled to the page so
+the phone/iPad workspace bar cannot cover it, Escape and the Tab trap still
+work after a pointer activation blurred the control, and the first focus goes
+to the recommended action rather than the name field (no iPad keyboard pops up).
+Copy lives in `src/components/common/toolbar/savePermanentlyCopy.ts`.
+
 The Native Helper checks granted paths and negotiates repository write support.
 A connected helper with ordinary file commands does not by itself prove that
 it can safely own a repository writer. Native protocol or ownership failures
@@ -111,6 +248,56 @@ are reported rather than silently weakening the commit protocol.
 Only one writer owns a repository. A second session can browse read-only.
 Read-only history navigation does not publish project changes or bypass the
 active writer's ownership.
+
+A read-only tab shows **Take over editing** next to the save status; its
+tooltip names when the writing tab started editing and whether it is in the
+background. The action asks the writing tab to save, reopen itself read-only
+(it then says "Editing moved to another tab") and release the writer lock;
+this tab then reopens the project with write access. If no tab holds the lock
+(the writer was closed, or folder access was missing), the action reads
+**Enable editing** and reopens directly, requesting folder access first.
+
+A read-only tab does not follow the writer's edits live. The writing tab
+announces every saved revision on the handover channel; a read-only tab that
+shows an older revision (including a former writer after a handover) then says
+"This project changed in another tab" and offers **Reload**, which reopens it
+read-only at the latest saved revision. While a handover or reload runs, the
+toolbar buttons stay focusable (`aria-disabled`); when the focused button
+disappears after a keyboard takeover or reload, focus moves to the save status
+instead of falling to the page body.
+
+During a project open or reopen, media entries exist before their runtime
+files are restored. Composition previews log such clips at debug level as "not
+loaded yet" (not as "Media file not found") and rebuild the composition once
+the file arrives; an entry that stays without a file outside a load is reported
+as offline or needing relink.
+
+### Installed app keeps folder access
+
+MasterSelects is installable as an app in Chrome and Edge on Windows and Linux
+(`public/manifest.webmanifest`, linked from `index.html`: start URL `/editor`,
+scope `/`, standalone window, `#0f0f0f` theme and background from
+`--bg-primary`). Chrome keeps File System Access grants of an installed web app
+across browser restarts, so projects opened in the app window do not ask for
+their folders again; a browser tab still loses them when the session ends.
+While the browser offers installation (`beforeinstallprompt`) and the editor is
+not already running as an installed app, the **Resume “<project>”** chooser and
+the **Reconnect media** dialog show a dismissible **Install MasterSelects to keep
+folder access** hint. **Install** opens the browser's install dialog; the
+result is shown (installed, or a pointer to the address-bar install icon when
+the dialog could not open) and logged under `AppInstall`. Hiding the hint is
+remembered on this device. An app installed earlier is not detected from a
+browser tab, so the hint is simply absent there: open MasterSelects from its app
+window. Grants belong to the window they were made in; folders allowed in a tab
+must be allowed once more in the app.
+
+There is no service worker; the manifest only makes the editor installable and
+does not cache the app. The icons in `public/icons/` (`any` and `maskable`,
+192/512 px, plus a 180 px `apple-touch-icon`) are rendered from the 2048 px
+"MS" logo by `node scripts/generate-pwa-icons.mjs` (needs ffmpeg). On iPad, a
+home-screen web app has its own storage, separate from Safari's, so projects
+stored in Safari's browser storage do not appear there; take them along as
+`.msproj` (see *iPhone and iPad: Home Screen first*).
 
 ## Continuous saving
 
@@ -132,11 +319,47 @@ binary artifacts are reused. Saving a keyframe does not rebuild a complete
 Workspace changes such as playhead, zoom, scroll and dock layout use coalesced
 view slots. They do not append content revisions on every playback tick. Each
 view has two slots so an interrupted update can retain its last valid value.
+A workspace that lacks a view (a new tab, browser or machine) takes it from the
+workspace that wrote it most recently. Each slot stores its write time
+(`updatedAt`), because the Native Helper backend reports no file times; slots
+written before that field existed fall back to the file time, and equal times
+pick the lowest workspace id, so every reader chooses the same source.
 
 Pending recovery data is bounded. Storage pressure, lost permissions and I/O
 failures can stop further content edits before the pending budget is exceeded.
 Retry or protect the pending work before changing projects; a failed flush is
 not treated as permission to discard it.
+
+### Folder access paused while a project is open
+
+Chrome can also withdraw a session-only grant while the project is open, for
+example after the tab sat in the background. The editor treats that as a pause,
+not as a failure or a missing file:
+
+- **Detection.** The storage worker reports a refused read or write
+  (`NotAllowedError`/`SecurityError`) with the repository code `access`
+  (`permission` stays reserved for repository policy refusals). Returning to the
+  tab, window focus and a 30-second check also query the project folder and the
+  media locations this session already opened, so the pause shows before a save
+  fails.
+- **One toolbar state.** The toolbar shows "Folder access was paused by the
+  browser" with **Re-allow**; the save status reads **Access paused** (not
+  "Save failed") and re-allows on click, as does Ctrl/Cmd+S.
+- **No data loss.** Edits keep committing in the tab; their writes stay queued
+  in order. Re-allow asks for the project folder first (Chrome's restore prompt
+  can bring back the other folders with it), then the media folders and files of
+  this session, and republishes every queued write before the pause clears. If
+  the browser refuses, the pause and the queue stay.
+- **No relink dialog.** Media whose saved location only waits for the prompt,
+  and whose access worked earlier in this session, stay "not opened yet"
+  instead of offline; export explains the pause. After Re-allow they open from
+  their saved locations. Media that still cannot be read then go to the
+  Reconnect media dialog as before; locations never allowed in this session
+  (e.g. after a browser restart) keep using the Resume and Reconnect flows above.
+- **Interrupted writes.** A write cut off after its file was created leaves an
+  empty file whose removal the browser also refused. Immutable records are
+  never empty, so a later retry finishes that file instead of failing with a
+  conflict.
 
 ## Save status and lifecycle
 
@@ -191,6 +414,19 @@ session-level fallback on browsers without those handles. Project-local or
 imported retained bytes can be read from the repository before requesting an
 external source again.
 
+Linking only survives a reload where the browser can keep the file's handle in
+IndexedDB. The editor measures this with a real handle (an aborted probe write,
+never the user agent): WebKit (Safari on iPhone, iPad and Mac) refuses handles
+with `DataCloneError`, so there - and for every file without a reopenable
+location, such as `<input>` picks - imports and relinks are copied into the
+project's `Raw/` folder by default. This works in named projects and in the
+browser recovery project, in OPFS and in the IndexedDB fallback, and the copies
+move along with **Save permanently**. A notice shows the copied size and the
+browser storage left, reports copies that fail (the media stay usable until the
+next reload) and offers **Link future imports**; **Preferences > Import > Copy
+media that cannot stay linked** holds that per-device choice
+(`ms.media.linkWhenNotDurable`). Chromium keeps linking as before.
+
 The old size-plus-file-prefix fingerprint is a lookup hint. Historical source
 identity requires a full content hash: equal filenames, sizes or the first
 2 MiB do not prove that the original bytes are unchanged. Replacing a source
@@ -235,7 +471,36 @@ require the source repository's IndexedDB index.
 The current `.msproj` archive writer uses classic ZIP. It rejects archives at
 the 4 GiB size boundary or 65,535-entry boundary instead of emitting an invalid
 file; ZIP64 is not supported. Directory-based repository storage and backups do
-not use this ZIP container limit.
+not use this ZIP container limit. The exported file is named after the open
+project (`<Project name>.msproj`); only an unnamed project falls back to
+`MasterSelects Project.msproj`. The archive manifest records the project name
+(`projectName`), so an import can name the project before restoring it.
+
+Restoring an archive streams it entry by entry: entries are stored strictly in
+archive order, so a small entry never waits behind a later entry that still
+needs input (this ordering once hung the import at "Reading selected project
+10%"). If no entry makes progress for two minutes, the restore fails with an
+"Archive extraction stalled" error naming the entry instead of hanging silently.
+Work on an entry that does not read archive bytes (digesting an already staged
+copy of a large file when a restore resumes) reports progress itself, so it
+never trips the watchdog. A repository archive is recognised at its first
+repository entry instead of being buffered in memory as an old package first.
+The restore stages into `repository-archive-staging/<import>`; that copy is
+removed once the project holds it, after a failed in-place import, and after a
+cancel. Only a failed import into a separate folder keeps it, to resume from.
+
+A restored archive is an ordinary repository project afterwards. The import
+records `.masterselects/imports/<import>/target.json` before copying and
+`complete.json` (kind `repository-archive`, the archive file, the restored
+commit) after it, so every later open, reload or browser restart opens the
+repository directly instead of treating the archive beside it as an unconverted
+package. A restore that stopped before its commit is refused with a clear
+message (import the archive again into a new project) instead of opening half
+built. Originals embedded in a self-contained archive live in the repository's
+`.masterselects/artifacts/`; they are opened into runtime files in the
+background right after the project activates (two at a time, each verified
+against its content hash), without a clip having to use them first. Media
+outside the repository still open on demand.
 
 Duplicates receive a new repository identity and retain the content lineage.
 Incremental backups preserve the source's immutable descriptor and commit chain;
@@ -263,9 +528,43 @@ projects as well as cached handles.
 ## Troubleshooting
 
 - **Folder permission is missing:** reconnect the existing project directory or
-  its external source folder.
-- **Project is read-only:** inspect its owner/capability status; another session
-  may own the writer.
+  its external source folder. To stop the prompt after every browser restart,
+  install MasterSelects as an app (see *Installed app keeps folder access*) or
+  choose "Allow on every visit" in the browser prompt.
+- **"Folder access was paused by the browser":** click **Re-allow** and accept
+  the browser prompt; choose "Allow on every visit" or install the app to avoid
+  it. Queued changes are saved afterwards.
+- **Project is read-only:** use **Take over editing** in the toolbar. If the
+  writing tab does not answer within a few seconds while it still holds the
+  lock (a frozen or suspended tab), the toolbar says so: switch to that tab or
+  close it and try again. Deleting media in a read-only tab is refused up front
+  with the read-only notice instead of failing midway.
+- **No project folder picker:** browsers without the File System Access API
+  (Firefox, Safari) open project folders only through a running Native Helper.
+  Without it, File > Open Project lists the projects stored in this browser and
+  offers **Import .msproj archive**: the archive is copied into a new
+  browser-storage project folder and opened there, which restores a repository
+  archive or converts an older `.msproj` package in place. The folder is named
+  after the project recorded in the archive manifest (`Name`, `Name (2)`, …);
+  archives written before the name was recorded use the file name. Once a
+  repository archive is restored, its copy is removed from the folder (an older
+  package stays, because its converted project still reads it); reopening the
+  project later never imports again. Opening a stored project that no longer
+  exists reports that instead of creating an empty folder, and a folder without
+  any project is reported as such instead of being sent to the old-project
+  converter.
+  The archive is streamed from disk into browser storage; the log line
+  `Project archive copied into browser storage` reports setup and copy times.
+  An incomplete copy or an import that does not open is removed again and
+  reported. While the import runs, **Cancel import** (or Escape, or closing the
+  dialog) aborts the copy, the archive restore or the conversion; the partial
+  project folder and its staging are removed and the open project stays as it
+  was, including its save status. The start-up project chooser offers the same
+  import below the stored projects, where **Back** turns into **Cancel import**
+  while it runs. A failed or cancelled open of another project never marks the
+  open project as "Save failed". The stored-project list shows only folders with a project
+  (`project.msrepo.json`, `project.json` or a not yet imported `.msproj`), not
+  model caches or repository staging folders.
 - **Writes are pending or failed:** inspect the storage error, restore access or
   available space, and retry. A pending edit is not yet a confirmed disk save.
 - **The history index is unavailable:** records remain authoritative; allow

@@ -2,12 +2,14 @@ import { Logger } from '../logger';
 import { projectDB } from '../projectDB';
 import type { ProjectFile } from './types';
 import { resolveProjectRootMode } from './core/projectRootAccess';
+import { getBrowserStorageKind, type BrowserStorageKind } from './core/browserStorageRoot';
 
 const log = Logger.create('RecentProjects');
 
 const RECENT_PROJECTS_KEY = 'ms-recent-projects';
 const RECENT_PROJECT_HANDLE_PREFIX = 'recentProject:';
 const MAX_RECENT_PROJECTS = 12;
+const storeField = (store: BrowserStorageKind | undefined) => store ? { store } : {};
 
 export const RECENT_PROJECTS_CHANGED_EVENT = 'masterselects-recent-projects-changed';
 
@@ -23,7 +25,14 @@ export interface RecentProjectEntry {
   path?: string;
   /** Media folders of an FSA project, re-allowed by the click that opens it. */
   mediaSourceRootIds?: string[];
+  /** Media linked as single files (no project copy), re-allowed by the same click. */
+  mediaFileIds?: string[];
+  /** Browser projects: the store it was opened from; `indexeddb` is the temporary fallback. */
+  store?: BrowserStorageKind;
 }
+
+/** One click may prompt for a few files; Chrome's restore prompt usually grants them all at once. */
+const MAX_REMEMBERED_MEDIA_FILES = 200;
 
 function getStorage(): Storage | null {
   if (typeof window === 'undefined') {
@@ -181,6 +190,13 @@ function mediaSourceRootIdsOf(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string' && id.length > 0) : undefined;
 }
 
+/** Linked media outside the project folder: their saved file access lapses with the browser session. */
+function linkedMediaFileIdsOf(projectData: ProjectFile | null): string[] | undefined {
+  if (!Array.isArray(projectData?.media)) return undefined;
+  return projectData.media.filter(media => media && typeof media.id === 'string' && !media.projectPath)
+    .map(media => media.id).slice(0, MAX_REMEMBERED_MEDIA_FILES);
+}
+
 function upsertEntry(entries: RecentProjectEntry[], nextEntry: RecentProjectEntry): RecentProjectEntry[] {
   return [
     nextEntry,
@@ -228,6 +244,7 @@ export async function addRecentFsaProject(
       path: projectName,
       updatedAt: projectData?.updatedAt,
       lastOpenedAt: Date.now(),
+      ...storeField(getBrowserStorageKind() ?? undefined),
     };
     await persistEntries(upsertEntry(entries, nextEntry));
     return;
@@ -254,6 +271,7 @@ export async function addRecentFsaProject(
     lastOpenedAt: Date.now(),
     mediaSourceRootIds: mediaSourceRootIdsOf(projectData?.mediaSourceRoots?.map((root) => root.id))
       ?? mediaSourceRootIdsOf(existing?.mediaSourceRootIds),
+    mediaFileIds: linkedMediaFileIdsOf(projectData) ?? mediaSourceRootIdsOf(existing?.mediaFileIds),
   };
 
   await persistEntries(upsertEntry(entries, nextEntry));
@@ -263,6 +281,12 @@ export async function getRecentFsaProjectMediaSourceRootIds(handle: FileSystemDi
   if (resolveProjectRootMode() !== 'fsa') return [];
   const entry = await findFsaEntry(getRecentProjects(), handle);
   return mediaSourceRootIdsOf(entry?.mediaSourceRootIds) ?? [];
+}
+
+export async function getRecentFsaProjectMediaFileIds(handle: FileSystemDirectoryHandle): Promise<string[]> {
+  if (resolveProjectRootMode() !== 'fsa') return [];
+  const entry = await findFsaEntry(getRecentProjects(), handle);
+  return mediaSourceRootIdsOf(entry?.mediaFileIds) ?? [];
 }
 
 export async function rememberRecentFsaProjectMediaSourceRoots(
@@ -278,11 +302,12 @@ export async function rememberRecentFsaProjectMediaSourceRoots(
     : candidate));
 }
 
-export async function addRecentOpfsProject(path: string, projectData: ProjectFile | null): Promise<void> {
+/** `store` is where the project was opened from (default: this tab's browser storage). */
+export async function addRecentOpfsProject(path: string, projectData: ProjectFile | null, store = getBrowserStorageKind() ?? undefined): Promise<void> {
   const entries = getRecentProjects();
   const existing = entries.find(entry => entry.backend === 'opfs' && entry.path === path);
   await persistEntries(upsertEntry(entries, { id: existing?.id ?? createRecentId(), backend: 'opfs', path,
-    name: projectData?.name ?? getNameFromPath(path), updatedAt: projectData?.updatedAt, lastOpenedAt: Date.now() }));
+    name: projectData?.name ?? getNameFromPath(path), updatedAt: projectData?.updatedAt, lastOpenedAt: Date.now(), ...storeField(store) }));
 }
 
 export async function addRecentNativeProject(

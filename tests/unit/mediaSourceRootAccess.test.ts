@@ -9,9 +9,10 @@ vi.mock('../../src/services/projectDB', () => ({
   },
 }));
 
-import { requestMediaSourceRootAccess } from '../../src/services/project/mediaSourceRootAccess';
+import { requestMediaFileAccess, requestMediaSourceRootAccess } from '../../src/services/project/mediaSourceRootAccess';
 import {
   addRecentFsaProject,
+  getRecentFsaProjectMediaFileIds,
   getRecentFsaProjectMediaSourceRootIds,
   rememberRecentFsaProjectMediaSourceRoots,
 } from '../../src/services/project/recentProjects';
@@ -73,5 +74,31 @@ describe('media folder access on project open', () => {
     await addRecentFsaProject(project, null);
     expect(await getRecentFsaProjectMediaSourceRootIds(project)).toEqual(['source-root:1', 'source-root:2']);
     expect(await getRecentFsaProjectMediaSourceRootIds(folder('Other') as unknown as FileSystemDirectoryHandle)).toEqual([]);
+  });
+
+  it('re-allows linked media files, skipping granted ones and capping prompts', async () => {
+    const file = (name: string, permission: PermissionState = 'prompt') => ({ ...folder(name, permission), kind: 'file' as const });
+    const lapsed = Array.from({ length: 4 }, (_, index) => file(`clip${index}.mov`));
+    const granted = file('granted.mov', 'granted');
+    lapsed.forEach((handle, index) => mocks.handles.set(`media_m${index}`, handle));
+    mocks.handles.set('media_g', granted);
+    mocks.handles.set('media_dir', folder('NotAFile'));
+
+    await requestMediaFileAccess(['g', 'dir', 'm0', 'm1', 'm2', 'm3', 'missing'], 3);
+
+    expect(granted.requestPermission).not.toHaveBeenCalled();
+    expect(lapsed.slice(0, 3).every(handle => handle.requestPermission.mock.calls.length === 1)).toBe(true);
+    expect(lapsed[3]!.requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('remembers linked single-file media, not project copies, with the recent entry', async () => {
+    const project = folder('Linked Project') as unknown as FileSystemDirectoryHandle;
+    await addRecentFsaProject(project, {
+      name: 'Linked Project',
+      media: [{ id: 'linked' }, { id: 'copied', projectPath: 'Raw/copied.mov' }],
+    } as unknown as ProjectFile);
+    expect(await getRecentFsaProjectMediaFileIds(project)).toEqual(['linked']);
+    await addRecentFsaProject(project, null);
+    expect(await getRecentFsaProjectMediaFileIds(project)).toEqual(['linked']);
   });
 });

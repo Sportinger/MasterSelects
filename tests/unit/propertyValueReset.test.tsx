@@ -7,6 +7,8 @@ vi.mock('../../src/services/googleFontsService', () => ({
     loadFont: vi.fn().mockResolvedValue(undefined),
     preloadFont: vi.fn().mockResolvedValue(undefined),
     getAvailableWeights: vi.fn(() => [400, 700]),
+    isFontLoaded: () => true,
+    isManagedFont: () => false,
   },
   POPULAR_FONTS: [
     { family: 'Arial' },

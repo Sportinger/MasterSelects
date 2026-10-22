@@ -11,7 +11,10 @@ const SAM2_ORT_WASM_GZIP_URL = '__SAM2_ORT_WASM_GZIP_URL__';
 let ortWasmBinaryPromise: Promise<void> | null = null;
 
 async function ensureOrtWasmBinary(): Promise<void> {
-  if (ort.env.wasm.wasmBinary) {
+  // The build replaces the placeholder only when it had to gzip an oversized runtime WASM
+  // (tools/buildAssetPlugins.ts). Otherwise (dev server, smaller runtime) onnxruntime loads its
+  // own WASM file, as the roto worker does.
+  if (ort.env.wasm.wasmBinary || SAM2_ORT_WASM_GZIP_URL.startsWith('__')) {
     return;
   }
 

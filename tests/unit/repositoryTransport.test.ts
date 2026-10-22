@@ -76,6 +76,16 @@ describe('repository portable transports', () => {
     expect(manifest.repository.repositoryId).not.toBe(descriptor.repositoryId);
     expect(manifest.repository.lineageId).toBe(descriptor.lineageId);
   });
+  it('keeps the archive manifest in export staging, out of a duplicated project folder', async () => {
+    const source = await fixture(); const copy = memory('copy');
+    // Save As / Save permanently duplicate a project into the folder the person picked.
+    await prepareArchive(source.backend, descriptor, source.pin, copy.backend, owner, { targetRepositoryId: 'copy', history: { kind: 'all' }, journals: 'all', workspace: [], media: 'linked' });
+    expect([...copy.files.keys()].filter(path => !path.startsWith('.masterselects/'))).toEqual(['project.msrepo.json']);
+    const staging = memory('archive');
+    await exportRepositoryArchive(source.backend, descriptor, source.pin, staging.backend, owner,
+      { targetRepositoryId: 'archive', history: { kind: 'all' }, journals: 'all', workspace: [], media: 'linked' }, async () => {});
+    expect(staging.files.has('archive-manifest.json')).toBe(true);
+  });
   it('backs up incrementally with complete receipt last and rejects conflicting immutable bytes', async () => {
     const source = await fixture(); const target = memory('backup');
     await backupRepository(source.backend, descriptor, source.pin, target.backend, owner, { views: [] });

@@ -3,6 +3,7 @@ import { draftNavigationRecords } from '../persistence/navigationPreferences';
 import { draftJournalAggregate } from '../journal/draftJournalAggregate';
 import { ReadonlyWorkspace } from '../persistence/ReadonlyWorkspace';
 import { REPOSITORY_LIMITS, RepositoryError } from '../contracts';
+import { READ_ONLY_PROJECT_MESSAGE } from '../../../editRejection';
 import type { EntityDTO, EntityKey, JsonValue, MetadataPage, RecordReference, RepositoryProjection, RepositoryRecord, RevisionMetadata } from '../contracts';
 import { canonicalBytes } from '../segments/canonical';
 import { StorageWorkerClient } from '../persistence/StorageWorkerClient';
@@ -45,7 +46,7 @@ export class WorkerCoordinatorStorage implements CoordinatorStorage {
   }
   assertOwned(): void {
     if (this.client.error) throw this.client.error;
-    if (!this.owned) throw new RepositoryError('ownership', 'This project is read-only. Close the other writing tab or grant folder access before editing.');
+    if (!this.owned) throw new RepositoryError('ownership', READ_ONLY_PROJECT_MESSAGE);
   }
   private rememberRevision(id: string, reference: RecordReference): void {
     this.revisionReferences.delete(id); this.revisionReferences.set(id, reference);

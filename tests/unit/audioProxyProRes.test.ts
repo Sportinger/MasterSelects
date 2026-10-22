@@ -28,9 +28,11 @@ vi.mock('../../src/services/projectFileService', () => ({
 
 import { ensureAudioProxyForMediaFile } from '../../src/services/audio/AudioProxyService';
 import type { MediaFile } from '../../src/stores/mediaStore/types';
+import { clearSharedSourceAudioDecodeState } from '../../src/services/audio/decode/sharedSourceAudioDecode';
 
 describe('ProRes audio proxy', () => {
   afterEach(() => {
+    clearSharedSourceAudioDecodeState();
     vi.restoreAllMocks();
     mocks.decodeAudioBuffer.mockReset();
     mocks.encodeWav.mockClear();

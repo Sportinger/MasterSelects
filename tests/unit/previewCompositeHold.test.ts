@@ -4,7 +4,7 @@ import type { RenderDeps } from '../../src/engine/render/RenderDispatcher';
 import type { RenderOutputRouter } from '../../src/engine/render/contracts';
 import type { RenderSurfaceFrameContext } from '../../src/services/render/renderHostTypes';
 import { DispatcherTelemetry } from '../../src/engine/render/dispatcher/dispatcherTelemetry';
-import { PreviewCompositeHold } from '../../src/engine/render/dispatcher/previewCompositeHold';
+import { MISSING_RASTER_FOLLOW_UP_FRAMES, PreviewCompositeHold } from '../../src/engine/render/dispatcher/previewCompositeHold';
 
 function context(time = 10, changes: Partial<RenderSurfaceFrameContext> = {}): RenderSurfaceFrameContext {
   return { compositionId: 'comp', timelineTimeSeconds: time,
@@ -17,6 +17,11 @@ function video(changes: Partial<Layer> = {}): Layer {
     ...changes } as Layer;
 }
 
+function text(clipId: string, canvas: HTMLCanvasElement): Layer {
+  return { id: 'comp_layer_0', sourceClipId: clipId, visible: true, opacity: 1,
+    source: { type: 'text', textCanvas: canvas } } as Layer;
+}
+
 function harness(layers = [video()], frameContext: RenderSurfaceFrameContext | undefined = context(), presentedComplete = true) {
   const submit = vi.fn();
   const device = { createCommandEncoder: () => ({ finish: () => ({}) }), queue: { submit } } as unknown as GPUDevice;
@@ -27,15 +32,16 @@ function harness(layers = [video()], frameContext: RenderSurfaceFrameContext | u
   telemetry.lastPreviewDisplayedTimeMs = 10_000;
   const record = vi.fn();
   const clear = vi.fn();
+  const requestRender = vi.fn();
   const deps = { sampler: {}, exportCanvasManager: { shouldSkipPreviewOutput: () => false },
-    performanceStats: { setLayerCount: vi.fn() } } as unknown as RenderDeps;
+    performanceStats: { setLayerCount: vi.fn() }, renderLoop: { requestRender } } as unknown as RenderDeps;
   const hold = new PreviewCompositeHold(deps, router, telemetry, record);
   const view = {} as GPUTextureView;
   hold.recordComposite(view, layers, frameContext, presentedComplete);
   const input = { device, layers, frameContext: context(10.407), frameTimelineTime: 10.407,
     isPlaying: true, isExporting: false, isDragging: false, lastRenderHadContent: true,
     lastPreviewTimelineTimeSeconds: 10, renderEmptyFrame: clear };
-  return { hold, input, view, record, clear, submit, routeCompositeFrame };
+  return { hold, input, view, record, clear, submit, routeCompositeFrame, requestRender };
 }
 
 describe('preview composite ownership during decoder stalls', () => {
@@ -127,5 +133,57 @@ describe('preview composite ownership during decoder stalls', () => {
   ])('keeps complex wrapper sources on the existing short hold', layer => {
     const { hold, input } = harness([layer]);
     expect(hold.renderEmpty(input)).toBe(false);
+  });
+});
+
+describe('paused preview holds never stand in another clip', () => {
+  const paused = { isPlaying: false, frameTimelineTime: 7, lastPreviewTimelineTimeSeconds: 2 };
+
+  it('clears instead of re-presenting the previous text clip when a new clip raster is not ready', () => {
+    const previous = text('clip-a', document.createElement('canvas'));
+    const { hold, input, clear, routeCompositeFrame, record } = harness([previous], context(2));
+    const next = text('clip-b', document.createElement('canvas'));
+    expect(hold.renderEmpty({ ...input, ...paused, layers: [next], frameContext: context(7) })).toBe(false);
+    expect(clear).toHaveBeenCalledOnce();
+    expect(routeCompositeFrame).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith('empty', undefined, expect.objectContaining({ clipId: 'clip-b' }));
+  });
+
+  it('still bridges a not-yet-ready frame of the same clip', () => {
+    const layer = text('clip-a', document.createElement('canvas'));
+    const { hold, input, routeCompositeFrame } = harness([layer], context(2));
+    expect(hold.renderEmpty({ ...input, ...paused, frameTimelineTime: 2.1, layers: [layer], frameContext: context(2.1) })).toBe(true);
+    expect(routeCompositeFrame).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a paused hold across compositions and after the held view was cleared', () => {
+    const layer = text('clip-a', document.createElement('canvas'));
+    const { hold, input } = harness([layer], context(2));
+    expect(hold.showsSameSources([layer], context(2, { compositionId: 'other' }))).toBe(false);
+    hold.clear();
+    expect(hold.renderEmpty({ ...input, ...paused, layers: [layer], frameContext: context(2) })).toBe(false);
+  });
+
+  it('requests bounded follow-up frames for a raster that was not collected, then reports it once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const layer = text('clip-b', document.createElement('canvas'));
+    const { hold, requestRender } = harness();
+    for (let frame = 0; frame < MISSING_RASTER_FOLLOW_UP_FRAMES + 5; frame += 1) {
+      hold.requestFrameForMissingRasters([layer], [], false);
+    }
+    expect(requestRender).toHaveBeenCalledTimes(MISSING_RASTER_FOLLOW_UP_FRAMES);
+    hold.requestFrameForMissingRasters([layer], [{ layer }], false);
+    hold.requestFrameForMissingRasters([layer], [], false);
+    expect(requestRender).toHaveBeenCalledTimes(MISSING_RASTER_FOLLOW_UP_FRAMES + 1);
+    warn.mockRestore();
+  });
+
+  it('adds no wake during playback or for collected and video sources', () => {
+    const layer = text('clip-b', document.createElement('canvas'));
+    const { hold, requestRender } = harness();
+    hold.requestFrameForMissingRasters([layer], [], true);
+    hold.requestFrameForMissingRasters([layer], [{ layer }], false);
+    hold.requestFrameForMissingRasters([video()], [], false);
+    expect(requestRender).not.toHaveBeenCalled();
   });
 });

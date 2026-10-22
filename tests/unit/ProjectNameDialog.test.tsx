@@ -5,6 +5,27 @@ import { ProjectNameDialog } from '../../src/components/common/ProjectNameDialog
 import { validateProjectName } from '../../src/components/common/projectNameValidation';
 
 describe('ProjectNameDialog', () => {
+  it('creates directly in browser storage on an iPad instead of offering a location step', () => {
+    const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (iPad; CPU OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1',
+    );
+    try {
+      render(
+        <ProjectNameDialog
+          mode="new"
+          initialName="New Project"
+          onClose={vi.fn()}
+          onSubmit={vi.fn().mockResolvedValue(null)}
+        />,
+      );
+      expect(screen.getByRole('button', { name: /Create Project/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Choose Location/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/stored in this browser on this device/i)).toBeInTheDocument();
+    } finally {
+      userAgent.mockRestore();
+    }
+  });
+
   it('focuses and selects the default name while explaining that spaces are allowed', () => {
     render(
       <ProjectNameDialog

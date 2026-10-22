@@ -8,7 +8,6 @@ import { activateRepositoryProjection } from '../transaction/editorProjectionAct
 import { startScheduledLinkedMediaConnection } from '../transaction/editorLinkedMediaConnection';
 import { captureEditorProjectDomains, flushEditorRepositoryViews, readEditorRepositoryWorkspace, installEditorRepositorySession, getEditorRepositorySourceVersion, applyEditorRepositoryResult } from '../transaction/editorRepositorySession';
 import { holdEditorContentPublication, publishEditorContentProjection } from '../transaction/editorPublication';
-import { supportsRepositoryWritableStreams } from '../backends/directoryBackend';
 import { createRepositoryDomainPublication } from '../artifacts/createRepositoryDomainPublication';
 import { setRepositoryDomainPublication } from '../artifacts/RepositoryDomainPublication';
 import { createWorkerRepositoryArtifactStore } from '../artifacts/WorkerRepositoryArtifactStore';
@@ -18,6 +17,7 @@ import { PROJECT_FOLDERS } from '../../core/constants';
 import type { ProjectFile } from '../../types/project.types';
 import { directoryForOpfs } from './repositoryLocations';
 import { splitProjectWorkspace, readProjectWorkspace } from './workspaceProjection';
+import { retryTransientStorage } from '../../core/browserStorageFailure';
 
 let installedCleanup = (import.meta.hot?.data?.repositoryInstalledCleanup as (() => void) | undefined) ?? null;
 let projectWorkspace: JsonValue = (import.meta.hot?.data?.repositoryWorkspace as JsonValue | undefined) ?? {};
@@ -88,7 +88,7 @@ const lifecycle = createLifecycle({
     const old = lifecycle.getSession(); setRepositoryDomainPublication(publicationFor(session));
     try { const merged = await readEditorRepositoryWorkspace(session, workspace ?? {});
       await activateRepositoryProjection(session, merged); projectWorkspace = merged;
-      activeDirectory = session.location.kind === 'fsa' ? session.location.handle : session.location.kind === 'opfs' ? await directoryForOpfs(session.location.path) : null;
+      activeDirectory = session.location.kind === 'fsa' ? session.location.handle : session.location.kind === 'opfs' ? await directoryForOpfs(session.location.path, session.location.store) : null;
       if (session.location.kind === 'opfs' && !session.location.path.startsWith('repository-scratch/')) sessionStorage.setItem('ms.repository.last-opfs-path', session.location.path);
       else sessionStorage.removeItem('ms.repository.last-opfs-path');
     }
@@ -127,13 +127,15 @@ export async function reactivateEditorRepository(): Promise<void> {
 export function isScratchRepository(): boolean { const session = getActiveRepositorySession(); return session?.location.kind === 'opfs' && session.location.path.startsWith('repository-scratch/'); }
 export async function ensureEditorScratchRepository(): Promise<void> {
   if (getActiveRepositorySession()) return;
-  await lifecycle.ensureScratch(async () => {
-    if (typeof navigator.storage?.getDirectory !== 'function' || !supportsRepositoryWritableStreams()) {
-      throw new RepositoryError('unsupported', 'Browser recovery is unavailable. Update your browser before creating or editing projects.');
-    }
+  // Open-or-create is idempotent (an existing descriptor reopens), so one retry is safe.
+  await retryTransientStorage(() => lifecycle.ensureScratch(async () => {
+    const unsupported = () => new RepositoryError('unsupported', 'Browser recovery is unavailable. Update your browser before creating or editing projects.');
+    if (typeof navigator.storage?.getDirectory !== 'function') throw unsupported();
     const { backendForLocation, prepareNewRepository, prepareRepositoryOpen } = await import('./repositoryLocations');
     const location = { kind: 'opfs' as const, path: 'repository-scratch/' + repositoryWorkspaceId };
+    // OPFS without writable streams stays read-only; the IndexedDB fallback can always write.
     const backend = await backendForLocation(location);
+    if (!backend.capabilities.immutableWrites) throw unsupported();
     if (await backend.stat('project.msrepo.json')) return prepareRepositoryOpen(location, repositoryWorkspaceId);
     const prepared = await prepareNewRepository(location, repositoryWorkspaceId);
     const { createRepositoryProject } = await import('./defaultProject');
@@ -141,7 +143,7 @@ export async function ensureEditorScratchRepository(): Promise<void> {
     prepared.initialize = { entities: domains.entities, journals: domains.journals,
       workspace: Object.fromEntries(splitProjectWorkspace(domains.workspace).map(part => [part.key, part.value])) };
     return prepared;
-  });
+  }), 'Opening scratch recovery');
 }
 if (import.meta.hot) {
   import.meta.hot.dispose(data => { data.repositoryInstalledCleanup = installedCleanup; data.repositoryWorkspace = projectWorkspace;

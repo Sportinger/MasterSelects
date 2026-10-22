@@ -12,6 +12,7 @@ import { OutputSettings } from './OutputSettings';
 import { AIFeaturesSettings } from './AIFeaturesSettings';
 import { ProductAnalyticsSettings } from './ProductAnalyticsSettings';
 import { ScrubCacheSettings } from './ScrubCacheSettings';
+import { UndurableMediaCopySetting } from './UndurableMediaCopySetting';
 
 export function GeneralSettings() {
   const {
@@ -65,6 +66,7 @@ export function GeneralSettings() {
         <p className="settings-hint">
           When importing clips, copy them to the project's Raw folder for easier relinking.
         </p>
+        <UndurableMediaCopySetting />
       </div>
 
       <div className="settings-group">

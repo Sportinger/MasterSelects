@@ -1,7 +1,7 @@
 import type { CommitReference, RepositoryBackend, RepositoryDescriptor, RepositoryOwner } from '../contracts';
 import { RepositoryError } from '../contracts';
 import { recoverRepository } from '../persistence/recovery';
-import { prepareArchive, readArchiveManifest } from './selectiveArchive';
+import { prepareArchive, readArchiveManifest, writeArchiveManifest } from './selectiveArchive';
 import { extractZip, writeZip, type ArchiveSink } from './streamZip';
 import { readFileChunks, safePath } from './streamIO';
 import { StreamHash } from '../segments/streamHash';
@@ -14,6 +14,7 @@ const exportedPath = (path: string) => path === 'project.msrepo.json' || path ==
 export async function exportRepositoryArchive(source: RepositoryBackend, descriptor: RepositoryDescriptor, pin: CommitReference,
   staging: RepositoryBackend, owner: RepositoryOwner, options: ArchiveOptions, sink: ArchiveSink): Promise<RepositoryArchiveManifest> {
   const manifest = await prepareArchive(source, descriptor, pin, staging, owner, options);
+  await writeArchiveManifest(staging, manifest, options.signal);
   async function* entries() {
     let cursor: string | undefined;
     do {
@@ -29,14 +30,15 @@ export async function exportRepositoryArchive(source: RepositoryBackend, descrip
 export async function restoreRepositoryArchive(chunks: AsyncIterable<Uint8Array>, staging: RepositoryBackend,
   owner: RepositoryOwner, signal?: AbortSignal): Promise<RepositoryArchiveManifest> {
   await owner.assertOwned();
-  await extractZip(chunks, async entry => {
+  await extractZip(chunks, async (entry, reportProgress) => {
     const path = safePath(entry.path);
     if (!exportedPath(path)) throw new RepositoryError('corrupt', `Unexpected repository archive entry: ${path}`);
     const previous = await staging.stat(path);
     if (previous) {
       const hash = new StreamHash(); let length = 0;
       for await (const chunk of entry.chunks) { hash.update(chunk); length += chunk.length; }
-      const existing = await fileDigest(staging, path, signal);
+      // A large staged file is digested after its archive bytes were read: report each chunk to the watchdog.
+      const existing = await fileDigest(staging, path, signal, reportProgress);
       if (existing.hash !== hash.digest() || existing.length !== length) throw new RepositoryError('conflict', 'Resumed archive restore belongs to different source bytes');
     } else await staging.writeNew(path, entry.chunks, signal);
   }, signal);

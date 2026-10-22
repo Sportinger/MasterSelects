@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-22",
+    "type": "fix",
+    "title": "MasterSelects 3.2.6",
+    "description": "Projects keep opening after an update: one click on Resume restores folder and media access instead of relinking, and MasterSelects can be installed as an app so Chrome keeps folder access. On iPad and iPhone, projects no longer fail when Safari refuses storage, and a clear Keep safe button shows how to keep them. Imported .msproj archives open reliably, FFmpeg exports no longer run out of memory on long 1080p videos, more audio formats play and show waveforms, a second tab can take over editing, and many GPU, preview and error-report problems are fixed.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-20",
     "type": "fix",
     "title": "MasterSelects 3.2.5",

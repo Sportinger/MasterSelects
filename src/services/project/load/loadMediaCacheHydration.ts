@@ -187,6 +187,7 @@ export async function refreshMediaMetadata(
                   fileSize: info.fileSize || f.fileSize,
                   hasAudio: info.hasAudio ?? f.hasAudio,
                   fps: info.fps || f.fps,
+                  decodeError: info.decodeError,
                 }
               : f
           ),

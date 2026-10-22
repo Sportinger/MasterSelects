@@ -113,6 +113,7 @@ vi.mock('../src/services/googleFontsService', () => ({
   googleFontsService: {
     loadFont: vi.fn().mockResolvedValue(undefined),
     isFontLoaded: vi.fn(() => true),
+    isManagedFont: vi.fn(() => false),
   },
 }))
 

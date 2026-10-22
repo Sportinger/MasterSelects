@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { MetadataPage, RevisionMetadata, JsonValue } from '../../../services/project/repository/contracts';
 import { getActiveRepositorySession, flushEditorRepository } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import { pickArchiveOutput, exportCurrentProjectArchive } from '../../../services/project/repository/lifecycle/exportProjectArchive';
@@ -9,7 +10,7 @@ import { Logger } from '../../../services/logger';
 
 const log = Logger.create('ProjectArchiveExport');
 
-export function RepositoryArchiveDialog({ onClose }: { onClose(): void }) {
+export function RepositoryArchiveDialog({ onClose, projectName }: { onClose(): void; projectName?: string }) {
   const titleId = useId(); const dialog = useRef<HTMLDivElement>(null); const controller = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const [kind, setKind] = useState<'current' | 'named' | 'branches' | 'all'>('current');
@@ -49,7 +50,7 @@ export function RepositoryArchiveDialog({ onClose }: { onClose(): void }) {
     let output: Awaited<ReturnType<typeof pickArchiveOutput>> = null;
     try {
       // File picker must precede asynchronous revision lookup to retain the user gesture.
-      output = await pickArchiveOutput('MasterSelects Project'); if (!output) { if (mounted.current) setBusy(false); return; }
+      output = await pickArchiveOutput(projectName ?? ''); if (!output) { if (mounted.current) setBusy(false); return; }
       if (getActiveRepositorySession() !== session) throw new Error('Project changed while choosing the destination. Export the selected project again.');
       if (session.opening.writable) await flushEditorRepository();
       let history: HistorySelection;
@@ -72,7 +73,8 @@ export function RepositoryArchiveDialog({ onClose }: { onClose(): void }) {
       if (mounted.current) { setError(cause instanceof Error ? cause.message : String(cause)); setBusy(false); }
     } finally { if (controller.current === abort) controller.current = null; }
   }
-  return <div className="project-name-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+  // Portaled out of the toolbar stacking context so the workspace bar cannot cover it.
+  return createPortal(<div className="project-name-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <div className="project-name-dialog repository-archive-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}
       onKeyDown={event => {
         if (event.key === 'Escape') { event.preventDefault(); if (busy) controller.current?.abort(); else onClose(); }
@@ -104,5 +106,5 @@ export function RepositoryArchiveDialog({ onClose }: { onClose(): void }) {
       <div className="repository-archive-actions"><button onPointerUp={event => event.currentTarget.blur()} onClick={() => busy ? controller.current?.abort() : onClose()}>{busy ? 'Cancel export' : 'Cancel'}</button>
         <button disabled={busy || !session} onPointerUp={event => event.currentTarget.blur()} onClick={() => { void startExport(); }}>{busy ? 'Exporting…' : 'Export .msproj'}</button></div>
     </div>
-  </div>;
+  </div>, document.body);
 }

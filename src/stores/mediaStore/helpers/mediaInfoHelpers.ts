@@ -10,6 +10,7 @@ import {
   type IsobmffMediaMetadata,
 } from '../../../services/mediaMetadata/isobmffMetadata';
 import { getProResCodecLabel } from '../../../services/mediaRuntime/prores/turboResCodecIdentity';
+import { reportImageDecodeFailure } from '../../../services/mediaRuntime/imageDecodeFailure';
 import { getHapCodecLabel } from '../../../services/hap/hapCodecIdentity';
 import { flags } from '../../../engine/featureFlags';
 import {
@@ -31,6 +32,8 @@ export interface MediaInfo extends MediaVideoTrackMetadata {
   fileSize?: number;
   bitrate?: number;
   hasAudio?: boolean;
+  /** Explanation when the browser could not decode the image during import. */
+  decodeError?: string;
 }
 
 /**
@@ -291,8 +294,10 @@ export async function getMediaInfo(
         cleanup(url);
       };
       img.onerror = () => {
-        resolve({ container, fileSize });
         cleanup(url);
+        void reportImageDecodeFailure({ name: file.name, file }).then((decodeError) => {
+          resolve({ container, fileSize, decodeError });
+        });
       };
       img.src = url;
     } else if (type === 'audio') {

@@ -2,7 +2,13 @@ import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Logger } from '../../../services/logger';
 import { failProjectLoadProgress } from '../../../services/project/load/loadProgress';
+import {
+  isExpectedArchiveImportRejection,
+  isProjectBackendUnavailable,
+  ProjectBackendUnavailableError,
+} from '../../../services/project/projectBackendAvailability';
 import { reportProjectSaveFailure } from '../../../services/project/projectSaveStatus';
+import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import {
   projectFileService,
   type RecentProjectEntry,
@@ -11,6 +17,8 @@ import {
   createNewProject,
   loadProjectToStores,
   openExistingProject,
+  openProjectArchive,
+  openStoredProject,
   saveCurrentProject,
   setProjectLoadProgress,
 } from '../../../services/projectSync';
@@ -19,15 +27,16 @@ import type {
   ProjectNameDialogRequest,
 } from '../ProjectNameDialog';
 
-import {
-  markAndroidProjectAutoRestoreReady,
-  prepareAndroidProjectAutoRestore,
-} from '../../../services/project/androidProjectAutoRestore';
+import { resumePendingProject } from '../../../services/project/pendingProjectResume';
+import { getFolderAccessPause, isFolderAccessPaused } from '../../../services/project/folderAccess/folderAccessPause';
+import { resumeFolderAccess } from '../../../services/project/folderAccess/folderAccessResume';
 
 const log = Logger.create('Toolbar');
 
 interface UseToolbarProjectActionsArgs {
   closeMenu: () => void;
+  /** Open Project without a folder picker or Native Helper: browser-stored projects and .msproj import. */
+  openBrowserProjectDialog: () => void;
   openProjectNameDialog: (request: ProjectNameDialogRequest) => void;
   projectName: string;
   resetMediaProject: (name: string) => void;
@@ -42,6 +51,7 @@ interface UseToolbarProjectActionsArgs {
 
 export function useToolbarProjectActions({
   closeMenu,
+  openBrowserProjectDialog,
   openProjectNameDialog,
   projectName,
   setIsLoading,
@@ -63,6 +73,12 @@ export function useToolbarProjectActions({
     }
     setShowSavedToast(false);
     try {
+      // Folder access paused by the browser: this gesture re-allows it and resumes the queued saves.
+      if (isFolderAccessPaused() && !await resumeFolderAccess() && getFolderAccessPause().project) {
+        reportProjectSaveFailure(projectFileService.getProjectHandle());
+        window.alert('Project not saved yet. Allow access to the project folder in the browser prompt; your changes are kept in this tab.');
+        return;
+      }
       // Request access from the Save gesture, before asynchronous serialization.
       const handle = projectFileService.getProjectHandle();
       if (handle?.requestPermission
@@ -108,6 +124,14 @@ export function useToolbarProjectActions({
       blocking: true,
     });
     try {
+      const route = await projectFileService.resolveOpenProjectRoute();
+      if (route === 'browser-storage') {
+        // No folder can be picked here; projects in this browser and .msproj archives still open.
+        setProjectLoadProgress(null);
+        openBrowserProjectDialog();
+        return;
+      }
+      if (route === 'unavailable') throw new ProjectBackendUnavailableError();
       const success = await openExistingProject();
       if (!success) {
         setProjectLoadProgress(null);
@@ -119,14 +143,72 @@ export function useToolbarProjectActions({
         setIsProjectOpen(true);
       }
     } catch (error) {
-      log.error('Failed to open project', error);
+      if (isProjectBackendUnavailable(error)) log.warn('Project folder selection unavailable', { message: error.message });
+      else log.error('Failed to open project', error);
       // Keep the import error visible; clearing progress would discard its detail.
       failProjectLoadProgress(error);
     } finally {
       setIsLoading(false);
       closeMenu();
     }
-  }, [closeMenu, setIsLoading, setIsProjectOpen, setProjectName]);
+  }, [closeMenu, openBrowserProjectDialog, setIsLoading, setIsProjectOpen, setProjectName]);
+
+  /** Shared by the browser-storage open dialog; resolves to the message to show, or null once open. */
+  const openFromBrowserStorage = useCallback(async (
+    action: 'open' | 'import',
+    open: () => Promise<boolean>,
+    signal?: AbortSignal,
+  ): Promise<string | null> => {
+    setIsLoading(true);
+    setProjectLoadProgress({
+      phase: 'opening',
+      percent: 3,
+      message: action === 'import' ? 'Importing project archive' : 'Opening project',
+      blocking: true,
+    });
+    try {
+      if (!await open()) {
+        setProjectLoadProgress(null);
+        return 'The project could not be opened.';
+      }
+      const data = projectFileService.getProjectData();
+      if (data) {
+        setProjectName(data.name);
+        setIsProjectOpen(true);
+        setNeedsPermission(false);
+        setPendingProjectName(null);
+      }
+      setRecentProjects(projectFileService.getRecentProjects());
+      return null;
+    } catch (error) {
+      setProjectLoadProgress(null);
+      if (signal?.aborted) {
+        // The person cancelled; the import already removed its partial copy and staging.
+        log.info(`Browser project ${action} cancelled`);
+        return action === 'import' ? 'The project archive import was cancelled.' : 'Opening the project was cancelled.';
+      }
+      const storageFailure = describeBrowserStorageFailure(error);
+      const fallback = action === 'import' ? 'The project archive could not be imported.' : 'The project could not be opened.';
+      if (storageFailure) {
+        log.warn(`Browser project ${action} blocked: browser storage is unavailable`, error);
+        return `${fallback} ${storageFailure}`;
+      }
+      if (isExpectedArchiveImportRejection(error)) log.warn(`Browser project ${action} rejected`, error);
+      else log.error(`Browser project ${action} failed`, error);
+      const reason = error instanceof Error ? error.message.trim() : '';
+      return reason ? `${fallback} ${reason}` : fallback;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setIsLoading, setIsProjectOpen, setNeedsPermission, setPendingProjectName, setProjectName, setRecentProjects]);
+
+  const handleOpenStoredProject = useCallback((name: string) => (
+    openFromBrowserStorage('open', () => openStoredProject(name))
+  ), [openFromBrowserStorage]);
+
+  const handleImportProjectArchive = useCallback((file: File, signal?: AbortSignal) => (
+    openFromBrowserStorage('import', () => openProjectArchive(file, signal), signal)
+  ), [openFromBrowserStorage]);
 
   const handleOpenRecent = useCallback(async (projectId: string) => {
 
@@ -227,6 +309,11 @@ export function useToolbarProjectActions({
       setNeedsPermission(false);
       return null;
     } catch (error) {
+      const storageFailure = describeBrowserStorageFailure(error);
+      if (storageFailure) {
+        log.warn('Project creation blocked: browser storage is unavailable', error);
+        return `The project could not be created. ${storageFailure}`;
+      }
       log.error('Project creation failed', error);
       return 'The project could not be created. Please check the selected folder and try again.';
     } finally {
@@ -264,62 +351,22 @@ export function useToolbarProjectActions({
 
   const handleRestorePermission = useCallback(async () => {
     setIsLoading(true);
-    setProjectLoadProgress({
-      phase: 'opening',
-      percent: 3,
-      message: 'Restoring project permission',
-      blocking: true,
-    });
-    const success = await projectFileService.requestPendingPermission();
-    if (success) {
-      const sourceHandle = projectFileService.getProjectHandle();
-      if (sourceHandle) {
-        let copiedFileCount = 0;
-        try {
-          setProjectLoadProgress({
-            phase: 'opening',
-            percent: 12,
-            message: 'Preparing automatic Android restore',
-            blocking: true,
-          });
-          const mirrorHandle = await prepareAndroidProjectAutoRestore(sourceHandle, () => {
-            copiedFileCount += 1;
-            if (copiedFileCount === 1 || copiedFileCount % 25 === 0) {
-              setProjectLoadProgress({
-                phase: 'opening',
-                percent: Math.min(85, 12 + copiedFileCount),
-                message: `Preparing automatic Android restore (${copiedFileCount} files)`,
-                blocking: true,
-              });
-            }
-          });
-          if (mirrorHandle) {
-            const alreadyUsingMirror = await sourceHandle.isSameEntry(mirrorHandle);
-            const mirrorLoaded = alreadyUsingMirror
-              || await projectFileService.loadProject(mirrorHandle);
-            if (mirrorLoaded) {
-              markAndroidProjectAutoRestoreReady(mirrorHandle);
-            } else {
-              log.warn('Android project mirror could not be opened; keeping the original project open');
-            }
-          }
-        } catch (error) {
-          log.warn('Could not prepare Android project auto-restore; keeping the original project open', error);
+    try {
+      if (await resumePendingProject()) {
+        const data = projectFileService.getProjectData();
+        if (data) {
+          setProjectName(data.name);
+          setIsProjectOpen(true);
         }
+        setNeedsPermission(false);
+        setPendingProjectName(null);
       }
-
-      await loadProjectToStores();
-      const data = projectFileService.getProjectData();
-      if (data) {
-        setProjectName(data.name);
-        setIsProjectOpen(true);
-      }
-      setNeedsPermission(false);
-      setPendingProjectName(null);
-    } else {
-      setProjectLoadProgress(null);
+    } catch (error) {
+      log.error('Project could not be resumed', error);
+      failProjectLoadProgress(error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [
     setIsLoading,
     setIsProjectOpen,
@@ -330,9 +377,11 @@ export function useToolbarProjectActions({
 
   return {
     handleClearRecentProjects,
+    handleImportProjectArchive,
     handleNew,
     handleOpen,
     handleOpenRecent,
+    handleOpenStoredProject,
     handleProjectNameSubmit,
     handleRename,
     handleRestorePermission,

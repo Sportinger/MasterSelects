@@ -1,0 +1,105 @@
+@layer overlays {
+  .install-app-hint {
+    align-items: center;
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-secondary));
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 8px;
+    color: var(--text-primary);
+    display: flex;
+    gap: 10px;
+    padding: 8px 8px 8px 12px;
+    text-align: left;
+  }
+
+  .install-app-hint .install-app-hint-icon {
+    color: var(--accent);
+    flex: none;
+    height: 20px;
+    width: 20px;
+  }
+
+  .install-app-hint-copy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .install-app-hint-copy strong {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .install-app-hint-copy span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .install-app-hint .install-app-hint-install {
+    background: var(--accent);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    flex: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+  }
+
+  .install-app-hint .install-app-hint-install:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .install-app-hint .install-app-hint-install:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+
+  .install-app-hint .install-app-hint-dismiss {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    flex: none;
+    height: 26px;
+    justify-content: center;
+    padding: 0;
+    width: 26px;
+  }
+
+  .install-app-hint .install-app-hint-dismiss svg {
+    height: 15px;
+    width: 15px;
+  }
+
+  .install-app-hint .install-app-hint-dismiss:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  /* Pointer activation leaves no ring; keyboard focus keeps a product-styled one. */
+  .install-app-hint button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .install-app-hint button:focus:not(:focus-visible) {
+    box-shadow: none;
+    outline: none;
+  }
+
+  .install-app-hint button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .editor-project-install-hint {
+    margin-top: 0.9rem;
+  }
+}

@@ -1,6 +1,10 @@
 import { AudioExportPipeline } from '../../../engine/audio';
 import {
+  FFmpegExportCancelledError,
+  FFmpegExportMemoryError,
   getFFmpegBridge,
+  type FFmpegFrameStream,
+  isAllocationFailure,
   type DnxhrProfile,
   type FFmpegContainer,
   type FFmpegExportSettings,
@@ -90,6 +94,7 @@ export async function runFfmpegDirectExport(
   });
   input.frameRendererRef.current = ffmpegFrameRenderer;
   let renderSession: ReturnType<ExportRenderSessionFactory> | null = null;
+  let frameStream: FFmpegFrameStream | null = null;
 
   try {
     await ffmpegFrameRenderer.initialize();
@@ -121,11 +126,17 @@ export async function runFfmpegDirectExport(
     };
 
     log.info('Rendering frames for FFmpeg...');
-    const frames: Uint8Array[] = [];
     const totalFrames = Math.ceil((input.endTime - input.startTime) * input.fps);
     const frameDuration = 1 / input.fps;
 
     log.info(`Total frames: ${totalFrames}, duration: ${frameDuration.toFixed(4)}s per frame`);
+
+    // Frames stream into FFmpeg in bounded segments: raw memory stays at one
+    // segment however long the range is, and cancel() takes effect at the
+    // next segment instead of after the whole encode.
+    const ffmpeg = getFFmpegBridge();
+    frameStream = await ffmpeg.openFrameStream(settings, totalFrames);
+    const stream = frameStream;
 
     renderSession = input.createRenderSession({
       runId: ffmpegFrameRenderer.getRuntimeRunId() ?? createExportRunId(),
@@ -147,7 +158,7 @@ export async function runFfmpegDirectExport(
           return null;
         }
 
-        if (ffmpegFrameRenderer.shouldFinishEarly() && frames.length > 0) break;
+        if (ffmpegFrameRenderer.shouldFinishEarly() && stream.frameCount > 0) break;
         const time = input.startTime + i * frameDuration;
 
         if (i === 0) log.debug('Frame 0: Building layers...');
@@ -190,10 +201,8 @@ export async function runFfmpegDirectExport(
         }
 
         if (i === 0) log.debug(`Frame 0: Got pixels: ${pixels ? pixels.length : 'null'}`);
-        const frameCopy = new Uint8Array(pixels.length);
-        frameCopy.set(pixels);
-        if (!input.includeAlpha) forceOpaqueAlpha(frameCopy);
-        frames.push(frameCopy);
+        const frameSlot = stream.writeFrame(pixels);
+        if (!input.includeAlpha) forceOpaqueAlpha(frameSlot);
 
         if (i < 3 || i % 30 === 0) {
           const sample = [pixels[0], pixels[1], pixels[2], pixels[3], pixels[1000], pixels[2000]];
@@ -206,7 +215,7 @@ export async function runFfmpegDirectExport(
           log.debug(`Frame ${i + 1}/${totalFrames} at ${time.toFixed(3)}s, ${renderFps.toFixed(1)} fps, ${layers.length} layers`);
         }
 
-        const percent = ((i + 1) / totalFrames) * 30;
+        const percent = ((i + 1) / totalFrames) * 85;
         input.onFfmpegProgress({
           percent,
           frame: i + 1,
@@ -223,10 +232,10 @@ export async function runFfmpegDirectExport(
       renderSession = disposeRenderSession(input.renderSessionRef, renderSession);
     }
 
-    if (frames.length === 0) {
+    if (stream.frameCount === 0) {
       throw new Error('No frames rendered');
     }
-    settings.endTime = Math.min(input.endTime, input.startTime + frames.length / input.fps);
+    settings.endTime = Math.min(input.endTime, input.startTime + stream.frameCount / input.fps);
 
     let audioBuffer: AudioBuffer | null = null;
 
@@ -250,12 +259,12 @@ export async function runFfmpegDirectExport(
 
         audioBuffer = await audioPipeline.exportRawAudio(
           input.startTime,
-          Math.min(input.endTime, input.startTime + frames.length / input.fps),
+          Math.min(input.endTime, input.startTime + stream.frameCount / input.fps),
           (audioProgress) => {
-            const percent = 30 + (audioProgress.percent * 0.1);
+            const percent = 85 + (audioProgress.percent * 0.05);
             input.onFfmpegProgress({
               percent,
-              frame: frames.length,
+              frame: stream.frameCount,
               fps: 0,
               time: input.endTime,
               speed: 0,
@@ -279,11 +288,11 @@ export async function runFfmpegDirectExport(
     }
 
     input.onPhase('encoding');
-    log.info(`Encoding ${frames.length} frames with FFmpeg...`);
+    log.info(`Joining ${stream.frameCount} encoded frames with FFmpeg...`);
 
     input.onFfmpegProgress({
-      percent: 40,
-      frame: frames.length,
+      percent: 90,
+      frame: stream.frameCount,
       fps: 0,
       time: input.endTime,
       speed: 0,
@@ -291,7 +300,7 @@ export async function runFfmpegDirectExport(
       size: 0,
       eta: 0,
     });
-    input.onTimelineProgress(40, input.endTime);
+    input.onTimelineProgress(90, input.endTime);
 
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -300,15 +309,14 @@ export async function runFfmpegDirectExport(
       return null;
     }
 
-    const ffmpeg = getFFmpegBridge();
-    const blob = await ffmpeg.encode(frames, settings, (progress: FFmpegProgress) => {
-      const totalPercent = 40 + (progress.percent / 100) * 60;
+    const blob = await stream.finish(audioBuffer, (progress: FFmpegProgress) => {
+      const totalPercent = 90 + (progress.percent / 100) * 10;
       input.onFfmpegProgress({
         ...progress,
         percent: totalPercent,
       });
       input.onTimelineProgress(totalPercent, input.endTime);
-    }, audioBuffer);
+    });
 
     log.info('FFmpeg export complete');
     return {
@@ -316,13 +324,32 @@ export async function runFfmpegDirectExport(
       filename: `${input.filename}.${exportAsGif ? 'gif' : input.ffmpegContainer}`,
     };
   } catch (error) {
-    if (ffmpegFrameRenderer.isCancelled()) {
+    if (ffmpegFrameRenderer.isCancelled() || error instanceof FFmpegExportCancelledError) {
       log.info('FFmpeg export cancelled');
       return null;
+    }
+    if (error instanceof FFmpegExportMemoryError) {
+      // A memory limit of this machine, not a defect: tell the user what to change.
+      log.warn('FFmpeg export ran out of memory', {
+        stage: error.stage,
+        requiredBytes: error.requiredBytes,
+        frames: frameStream?.frameCount ?? 0,
+        width: input.width,
+        height: input.height,
+      });
+      throw error;
+    }
+    if (isAllocationFailure(error)) {
+      // Not raised by the FFmpeg stream (e.g. frame readback): say so plainly
+      // instead of blaming a raw buffer size that no longer exists.
+      log.warn('Browser ran out of memory during FFmpeg export', error);
+      throw new Error('The browser ran out of memory while rendering frames for the FFmpeg export. '
+        + 'Close other tabs or apps, lower the resolution, or use the WebCodecs encoder.');
     }
     log.error('FFmpeg export error', error);
     throw error;
   } finally {
+    frameStream?.abort();
     disposeRenderSession(input.renderSessionRef, renderSession);
     input.audioPipelineRef.current = null;
     ffmpegFrameRenderer.cleanup();

@@ -7,6 +7,7 @@ import {
   mapSourceWaveformPyramidProgress,
 } from '../../../services/audio/timelineWaveformPyramidCache';
 import { Logger } from '../../../services/logger';
+import { isUndecodableAudioSourceError } from '../../../services/audio/decode/errors';
 import { shouldSkipWaveform } from '../../timeline/helpers/waveformHelpers';
 
 const log = Logger.create('MediaWaveform');
@@ -148,11 +149,13 @@ export function startMediaFileWaveformGeneration(
         waveformStatus: 'error',
         waveformProgress: 0,
       });
-      log.warn('Failed to prepare source waveform', {
-        id: mediaFile.id,
-        name: mediaFile.name,
-        error,
-      });
+      const details = { id: mediaFile.id, name: mediaFile.name, error };
+      // 'Wave error' in the Media panel; the clip waveform analysis explains an undecodable source.
+      if (isUndecodableAudioSourceError(error)) {
+        log.debug('Failed to prepare source waveform', details);
+      } else {
+        log.warn('Failed to prepare source waveform', details);
+      }
     }
   })().finally(() => {
     activeMediaWaveformJobs.delete(jobKey);

@@ -1,4 +1,6 @@
 import { getActiveRepositorySession } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
+import { isBrowserStorageFallbackActive } from '../../../services/project/core/browserStorageRoot';
+import { orderRecentProjectsForChoice, recentProjectLocation } from '../../../services/project/recentProjectLocation';
 import type { RecentProjectEntry } from '../../../services/projectFileService';
 import { clearAllCacheAndReload } from './cacheActions';
 import type { ToolbarMenuController, ToolbarShortcutLabels } from './menuTypes';
@@ -79,7 +81,7 @@ export function FileMenu({
                 <span className="menu-empty">No recent projects</span>
               ) : (
                 <>
-                  {recentProjects.map((project) => {
+                  {orderRecentProjectsForChoice(recentProjects, isBrowserStorageFallbackActive()).map((project) => {
                     const meta = formatRecentProjectDate(project.lastOpenedAt);
                     const title = project.path || project.name;
                     return (
@@ -95,7 +97,7 @@ export function FileMenu({
                           <span className="menu-recent-meta">{meta}</span>
                         </span>
                         <span className="menu-recent-kind">
-                          {project.backend === 'native' ? 'Native' : project.backend === 'opfs' ? 'Browser local' : 'Folder'}
+                          {recentProjectLocation(project, isBrowserStorageFallbackActive())}
                         </span>
                       </button>
                     );

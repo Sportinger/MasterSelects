@@ -71,6 +71,92 @@ export function buildEncodeArgs(
   return args;
 }
 
+/** Container of the per-segment files the streaming export concatenates. */
+export function segmentContainer(settings: FFmpegExportSettings): string {
+  // GIF needs one palette for the whole clip, so its segments are a lossless
+  // intermediate that the final pass turns into the GIF.
+  return isGifOutput(settings) ? 'mkv' : settings.container;
+}
+
+function isGifOutput(settings: FFmpegExportSettings): boolean {
+  return settings.container === 'gif' || settings.codec === 'gif';
+}
+
+/**
+ * Encode one bounded segment of raw RGBA frames (no audio). All export codecs
+ * are intra-only, so segments can later be joined with stream copy.
+ */
+export function buildSegmentEncodeArgs(
+  settings: FFmpegExportSettings,
+  rawPath: string,
+  frameCount: number,
+  outputPath: string,
+): string[] {
+  const videoArgs = isGifOutput(settings)
+    ? ['-c:v', 'utvideo', '-pix_fmt', 'gbrap']
+    : buildVideoArgs(settings);
+  return [
+    '-nostdin', '-y', '-v', 'info',
+    '-f', 'rawvideo', '-pix_fmt', 'rgba',
+    '-s', `${settings.width}x${settings.height}`,
+    '-r', String(settings.fps),
+    '-i', rawPath,
+    ...videoArgs,
+    '-an',
+    '-frames:v', String(frameCount),
+    outputPath,
+  ];
+}
+
+/** ffconcat list naming each segment with its exact duration. */
+export function buildSegmentConcatList(segments: Array<{ path: string; frameCount: number }>, fps: number): string {
+  const lines = ['ffconcat version 1.0'];
+  for (const segment of segments) {
+    lines.push(`file '${segment.path}'`, `duration ${(segment.frameCount / fps).toFixed(6)}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * Join the encoded segments into the final file: video is stream-copied (GIF
+ * runs its palette pass here), audio is encoded once for the whole range.
+ */
+export function buildSegmentAssemblyArgs(
+  settings: FFmpegExportSettings,
+  listPath: string,
+  frameCount: number,
+  audio: { path: string; buffer: AudioBuffer } | null,
+  outputPath: string,
+): string[] {
+  const gif = isGifOutput(settings);
+  const args = [
+    '-nostdin', '-y', '-v', 'info', '-stats',
+    '-f', 'concat', '-safe', '0', '-i', listPath,
+  ];
+  const withAudio = audio && !gif;
+  if (withAudio) {
+    args.push(
+      '-f', 'f32le',
+      '-ar', String(audio.buffer.sampleRate),
+      '-ac', String(audio.buffer.numberOfChannels),
+      '-i', audio.path,
+    );
+  }
+  if (gif) {
+    args.push(...buildVideoArgs(settings), '-an');
+  } else {
+    args.push('-map', '0:v:0', '-c:v', 'copy');
+    if (withAudio) args.push('-map', '1:a:0', ...buildAudioArgs(settings));
+    else args.push('-an');
+  }
+  args.push(
+    '-frames:v', String(frameCount),
+    '-t', (frameCount / settings.fps).toFixed(6),
+    outputPath,
+  );
+  return args;
+}
+
 /**
  * Build audio codec arguments based on container
  * NOTE: ASYNCIFY build only has aac, flac, alac, pcm_s16le, pcm_s24le, pcm_f32le, ac3

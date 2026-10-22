@@ -122,6 +122,7 @@ Nested preview and export account for each composition wrapper's start time and 
 - Uses detached `HTMLVideoElement` instances and browser seeking.
 - Prepares nested video sources for the selected export range and parent trims. Ordinary forward 1x composition branches skip unused descendants; retimed or transition-driven branches keep conservative preparation. Composition wrappers do not consume video decoders.
 - If a required video cannot be admitted within the media budget, preparation reports the failure before rendering.
+- A seek that exceeds its 2-second budget waits briefly for the frame. If the frame then decoded, it is logged at info; if not, the warning says the exported frame repeats the previously decoded frame, and the run's diagnostics (`debugExport` → `exportStats.*.seeks`) count `timeouts` and `previousFrameFallbacks` with sample times and clips. The export finish logs one summary warning when any frame repeated.
 - Waits for ready state and a fresh frame before capture. A temporarily unavailable nested source triggers the export readiness retry; an older preview composition texture is never accepted as the current export frame.
 - Is slower than fast mode, but it is the explicit compatibility choice for difficult files or timing cases.
 - Streamed LOD splats (`*.lod.zip`) choose their chunks while a frame is drawn. Before each frame
@@ -298,9 +299,13 @@ The FFmpeg path is a separate CPU-based export pipeline.
 ### Current Build Characteristics
 
 - Loads the FFmpeg core from the local `/ffmpeg` path on demand.
-- Uses a single synchronous `callMain()` execution model.
-- Blocks the UI while encoding is running.
+- Runs FFmpeg synchronously; the UI is blocked while one segment or the final join is encoding.
 - Reports progress from FFmpeg log output where possible.
+- Streams frames in bounded segments (`src/engine/ffmpeg/bridge/ffmpegFrameStream.ts`): rendered frames fill one reused RGBA buffer of about 256 MB (32 frames at 1080p, 8 at 4K); each full buffer is encoded into a compressed segment file in the FFmpeg memory filesystem, and the end of the export joins all segments with the concat demuxer (stream copy) and encodes the audio once. All FFmpeg export codecs are intra-only, so the copy join is exact. GIF segments are a lossless UT Video intermediate and the join runs the palette pass for the whole clip.
+- Peak raw memory is therefore one segment, independent of the export length. What still grows with the length is the compressed file: the segments, then the joined file and its copy for the download (roughly 2-3x the final file size at the end). Example: 20 s of 1080p30 ProRes 422 HQ is about 550 MB of output instead of 4.6 GB of raw frames; 600 frames of 720p MJPEG peaked at about 480 MB of buffers in a Node run of the real FFmpeg core instead of 2.1 GB raw. The practical limit is the encoded size, so heavy profiles (ProRes 4444 XQ, FFV1, UT Video) reach it first.
+- Out of memory is reported by stage: the segment buffer (halved automatically down to one frame before giving up), the encoded segments, or the finished file. Each message names the size and suggests a more compact codec or profile, a shorter range, or WebCodecs.
+- Cancel takes effect at the next segment boundary, including during encoding; temporary files are removed. A JavaScript exception thrown out of an FFmpeg run makes the bridge reload the core before the next command.
+- Known pre-existing quirk: MXF with PCM audio drops the last video frame in this FFmpeg 5.1 core, with or without segments.
 
 ### Supported Video Codecs
 
@@ -385,9 +390,9 @@ WebCodecs decoder startup submits a bounded search window of up to 32 samples be
 
 1. Render each frame through the GPU engine.
 2. Read pixels from the GPU.
-3. Collect frames in memory.
+3. Write frames into the bounded segment buffer; every full buffer is encoded into a compressed segment.
 4. Extract audio if enabled and the selected output supports audio.
-5. Run FFmpeg encoding.
+5. Join the segments (stream copy, or the GIF palette pass) and mux the audio.
 
 ### Limitation
 

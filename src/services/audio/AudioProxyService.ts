@@ -2,7 +2,8 @@ import type { MediaFile, ProxyStatus } from '../../stores/mediaStore/types';
 import { encodeAudioBufferToWavBlob } from '../../engine/audio/AudioFileEncoder';
 import { projectFileService } from '../projectFileService';
 import { Logger } from '../logger';
-import { AudioDecodeServiceError, getSharedAudioDecodeService } from './AudioDecodeService';
+import { getSharedAudioDecodeService } from './AudioDecodeService';
+import { BROWSER_AUDIO_DECODE_DECODER_ID } from './decode/browserFallbackRuntime';
 import { decideTurboResCodec } from '../mediaRuntime/prores/turboResCodecIdentity';
 import { isHapCodecId } from '../hap/hapCodecIdentity';
 import { MediaAudioRangeReader } from '../../engine/audio/exportPipeline/MediaAudioRangeReader';
@@ -11,6 +12,9 @@ import { isMxfFile } from '../mediaMetadata/mxf/mxfMediaMetadata';
 import { MxfAudioUnavailableError } from '../mediaRuntime/mxf/mxfPcmWav';
 import { buildMxfAudioProxyWav } from '../mediaRuntime/mxf/mxfAudioProxyClient';
 import { readLongPcmWavInfo } from './longPcmWav';
+import { isUndecodableAudioSourceError } from './decode/errors';
+import { decodeSourceAudioShared } from './decode/sharedSourceAudioDecode';
+import { isSourceAudioMissingError } from './decode/sourceAudioDecodeFailures';
 
 const log = Logger.create('AudioProxy');
 
@@ -86,16 +90,6 @@ async function resolveSourceFile(mediaFile: MediaFile): Promise<File | null> {
   }
 
   return null;
-}
-
-function isDecodeMissingAudio(error: unknown): boolean {
-  if (error instanceof DOMException && error.name === 'EncodingError') {
-    return true;
-  }
-
-  return error instanceof AudioDecodeServiceError
-    && error.cause instanceof DOMException
-    && error.cause.name === 'EncodingError';
 }
 
 /**
@@ -208,27 +202,48 @@ export async function ensureAudioProxyForMediaFile(
             reader.dispose();
           }
         } else {
-          audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
-            { kind: 'file', file: sourceFile },
-            {
-              mediaFileId: mediaFile.id,
-              sourceFingerprint: storageKey,
-              metadata: {
-                source: 'audio-proxy',
-                sourceFileName: sourceFile.name,
-                sourceFileSize: sourceFile.size,
-              },
+          // Browser decodeAudioData, then container/WebCodecs, then FFmpeg WASM: sources the
+          // browser cannot decode (WMA, ALAC, AC-3, ...) still get a playable WAV proxy. The chain
+          // is shared with the source waveform job of the same file (one decode per source).
+          const decoded = await decodeSourceAudioShared(sourceFile, {
+            browserAttempt: {
+              id: BROWSER_AUDIO_DECODE_DECODER_ID,
+              decode: () => getSharedAudioDecodeService().decodeAudioBuffer(
+                { kind: 'file', file: sourceFile },
+                {
+                  mediaFileId: mediaFile.id,
+                  sourceFingerprint: storageKey,
+                  metadata: {
+                    source: 'audio-proxy',
+                    sourceFileName: sourceFile.name,
+                    sourceFileSize: sourceFile.size,
+                  },
+                },
+              ),
             },
-          );
+            retryRememberedFailure: callbacks.force,
+          });
+          audioBuffer = decoded.buffer;
+          if (decoded.decoderId !== BROWSER_AUDIO_DECODE_DECODER_ID) {
+            log.info('Audio proxy decoded with a fallback decoder', {
+              mediaId: mediaFile.id, name: mediaFile.name, decoderId: decoded.decoderId,
+            });
+          }
         }
       } catch (error) {
-        if (mediaFile.type === 'video' && isDecodeMissingAudio(error)) {
+        if (mediaFile.type === 'video' && isSourceAudioMissingError(error)) {
           callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
           return;
         }
         const message = error instanceof Error ? error.message : String(error);
         callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
-        log.warn('Audio proxy decode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+        // An undecodable source shows as the proxy error status; the waveform analysis
+        // logs the one explained warning for it.
+        if (isUndecodableAudioSourceError(error)) {
+          log.debug('Audio proxy decode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+        } else {
+          log.warn('Audio proxy decode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+        }
         return;
       }
 

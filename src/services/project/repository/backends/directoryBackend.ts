@@ -1,4 +1,4 @@
-import { RepositoryError, type RepositoryBackend, type RepositoryOwner, type CommitReference } from '../contracts';
+import { RepositoryError, toRepositoryError, type RepositoryBackend, type RepositoryOwner, type CommitReference } from '../contracts';
 import { acquireBrowserOwner } from './browserOwner';
 
 export function supportsRepositoryWritableStreams(): boolean {
@@ -12,13 +12,10 @@ export function repositoryPath(path: string): string[] {
   return parts;
 }
 export function checkAbort(signal?: AbortSignal): void { if (signal?.aborted) throw new RepositoryError('cancelled', 'Repository I/O cancelled'); }
-function translate(error: unknown): never {
-  if (error instanceof RepositoryError) throw error;
-  const name = error instanceof Error ? error.name : '';
-  throw new RepositoryError(name === 'QuotaExceededError' ? 'quota' : name === 'NotAllowedError' || name === 'SecurityError' ? 'permission' : 'io', error instanceof Error ? error.message : String(error), { cause: error });
-}
+function translate(error: unknown): never { throw toRepositoryError(error); }
+const isNotFound = (error: unknown) => error instanceof DOMException && error.name === 'NotFoundError';
 
-export function directoryBackend(root: FileSystemDirectoryHandle, locationId: string, hasWritePermission = true): RepositoryBackend {
+export function directoryBackend(root: FileSystemDirectoryHandle, locationId: string, hasWritePermission = true, writableStreams = supportsRepositoryWritableStreams()): RepositoryBackend {
   let owner: RepositoryOwner | null = null;
   let queue = Promise.resolve();
   // Commit files are immutable once written: each is read and hashed once, not on every publication.
@@ -34,22 +31,30 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
     const listing = listings.get(id);
     if (listing) { listingBytes -= listing.bytes; listings.delete(id); }
   };
-  const writable = hasWritePermission && supportsRepositoryWritableStreams()
+  const writable = hasWritePermission && writableStreams
     && Boolean(navigator.locks) && !locationId.startsWith('fsa-readonly:');
+  function lookup(directory: FileSystemDirectoryHandle, part: string, prefix: string, create: boolean): Promise<FileSystemDirectoryHandle> {
+    const pending = directory.getDirectoryHandle(part, { create });
+    directories.set(prefix, pending);
+    void pending.catch(() => { if (directories.get(prefix) === pending) directories.delete(prefix); });
+    if (directories.size > 256) directories.delete(directories.keys().next().value!);
+    return pending;
+  }
   async function parent(path: string, create = false) {
     const parts = repositoryPath(path); const name = parts.pop()!; let directory = root;
     let prefix = '';
     for (const part of parts) {
       prefix += `${part}/`;
-      let pending = directories.get(prefix);
-      if (!pending) {
-        pending = directory.getDirectoryHandle(part, { create });
-        directories.set(prefix, pending);
-        const key = prefix;
-        void pending.catch(() => { if (directories.get(key) === pending) directories.delete(key); });
-        if (directories.size > 256) directories.delete(directories.keys().next().value!);
+      const pending = directories.get(prefix);
+      if (!pending) { directory = await lookup(directory, part, prefix, create); continue; }
+      try { directory = await pending; }
+      catch (error) {
+        // A reader's in-flight lookup (create: false) of a folder that does not exist yet must not fail a
+        // concurrent writer: on slow disks a view slot or artifact manifest write raced a stat of the same
+        // new folder and reported "A requested file or directory could not be found" for a write.
+        if (!create || !isNotFound(error)) throw error;
+        directory = await lookup(directory, part, prefix, true);
       }
-      directory = await pending;
     }
     return { directory, name };
   }
@@ -95,7 +100,14 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
         if (replace && !/^\.masterselects\/views\/[^/]+\/[^/]+\/[ab]\.json$/.test(path) && !/^\.masterselects\/cache\/startup\/[ab]\.json$/.test(path)) throw new RepositoryError('permission', 'Only inactive view or startup cache slots may be replaced');
         const { directory, name } = await parent(path, true);
         let existing = false;
-        try { await directory.getFileHandle(name); existing = true; } catch (error) { if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error; }
+        try {
+          const found = await directory.getFileHandle(name);
+          // An empty immutable file is the leftover of a write that was interrupted after the file was
+          // created (e.g. the browser paused folder access, so its cleanup failed too). Immutable records
+          // are never empty, and an empty blob rewritten empty is identical: finish that write instead of
+          // failing every retry with a conflict.
+          existing = replace || (await found.getFile()).size > 0;
+        } catch (error) { if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error; }
         if (existing && !replace) throw new RepositoryError('conflict', `Immutable file already exists: ${path}`);
         const file = await directory.getFileHandle(name, { create: true });
         let stream: FileSystemWritableFileStream;

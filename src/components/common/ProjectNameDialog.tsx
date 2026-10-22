@@ -8,6 +8,8 @@ import {
 } from 'react';
 import './ProjectNameDialog.css';
 import { validateProjectName } from './projectNameValidation';
+import { isFsaPickerAvailable } from '../../services/project/core/projectRootAccess';
+import { canHostNativeHelper } from '../../services/project/core/browserStorageFailure';
 
 export type ProjectNameDialogMode = 'new' | 'rename' | 'save' | 'saveAs';
 
@@ -55,6 +57,23 @@ const MODE_COPY: Record<ProjectNameDialogMode, {
   },
 };
 
+// Without a folder picker or Native Helper (iPad, iPhone, Android) projects go
+// straight into browser storage, so the dialog must not promise a location step.
+const BROWSER_STORAGE_COPY: Partial<Record<ProjectNameDialogMode, { action: string; description: string }>> = {
+  new: {
+    action: 'Create Project',
+    description: 'The project is stored in this browser on this device.',
+  },
+  save: {
+    action: 'Save Project',
+    description: 'The project is stored in this browser on this device.',
+  },
+};
+
+function storesProjectsInBrowserOnly(): boolean {
+  return !isFsaPickerAvailable() && !canHostNativeHelper();
+}
+
 export function ProjectNameDialog({
   mode,
   initialName,
@@ -63,7 +82,10 @@ export function ProjectNameDialog({
   onSubmit,
   restoreFocusTo,
 }: ProjectNameDialogProps) {
-  const copy = MODE_COPY[mode];
+  const [copy] = useState(() => {
+    const browserCopy = storesProjectsInBrowserOnly() ? BROWSER_STORAGE_COPY[mode] : undefined;
+    return browserCopy ? { ...MODE_COPY[mode], ...browserCopy } : MODE_COPY[mode];
+  });
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);

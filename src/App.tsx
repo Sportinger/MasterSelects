@@ -14,6 +14,7 @@ import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
 import { ProjectLoadProgressOverlay } from './components/common/ProjectLoadProgressOverlay';
 import { HistoryActionToast } from './components/common/HistoryActionToast';
 import { EditRejectedToast } from './components/common/EditRejectedToast';
+import { ProjectMediaCopyToast } from './components/common/ProjectMediaCopyToast';
 import { CameraSolveJobOverlay } from './components/common/CameraSolveJobOverlay';
 import { ShortcutDisplayOverlay } from './components/common/ShortcutDisplayOverlay';
 import { MuscriptorDialogHost } from './components/common/MuscriptorDialogHost';
@@ -388,11 +389,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
     if (
       isProjectBootPending
       || isProjectPermissionPending
-      || shouldShowEditorProjectSelection(
-        initialExperience,
-        isProjectOpen,
-        isProjectPermissionPending,
-      )
+      || shouldShowEditorProjectSelection(initialExperience, isProjectOpen)
     ) return;
 
     startupTutorialScheduledRef.current = true;
@@ -549,11 +546,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
       <WorkspaceBar />
       <TouchGooLayer />
       {isProjectOpen && !isProjectBootPending && !isStartLayout && <EditorFileDrop />}
-      {!isProjectBootPending && shouldShowEditorProjectSelection(
-        initialExperience,
-        isProjectOpen,
-        isProjectPermissionPending,
-      ) && (
+      {!isProjectBootPending && shouldShowEditorProjectSelection(initialExperience, isProjectOpen) && (
         <EditorProjectSelectionOverlay
           onProjectSelected={() => setIsProjectOpen(true)}
         />
@@ -568,6 +561,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
           <SourceFitDialogHost />
           <HistoryActionToast notice={historyNotice} onDone={clearHistoryNotice} />
           <EditRejectedToast />
+          <ProjectMediaCopyToast />
           {showIndexedDBError && (
             <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
           )}

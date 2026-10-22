@@ -51,6 +51,9 @@ vi.mock('../../src/services/project/projectSave', () => ({
 vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({
   ensureEditorScratchRepository: mocks.ensureEditorScratchRepository,
 }));
+vi.mock('../../src/services/project/repository/lifecycle/editorWriterHandover', () => ({
+  installEditorWriterHandover: () => () => {},
+}));
 
 vi.mock('../../src/services/project/projectLoad', () => ({
   loadProjectToStores: mocks.loadProjectToStores,

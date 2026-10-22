@@ -7,7 +7,9 @@ import {
 } from 'react';
 import {
   IconArrowRight,
+  IconFileImport,
   IconFolderOpen,
+  IconPlayerPlay,
   IconPlus,
 } from '@tabler/icons-react';
 import {
@@ -19,10 +21,17 @@ import {
   createBlankProject,
   loadProjectToStores,
   openExistingProject,
+  openProjectArchive,
   openStoredProject,
 } from '../../services/projectSync';
 import { getProjectWriteSupportError, resolveProjectRootMode } from '../../services/project/core/projectRootAccess';
+import { isBrowserStorageFallbackActive } from '../../services/project/core/browserStorageRoot';
+import { orderRecentProjectsForChoice, recentProjectLocation } from '../../services/project/recentProjectLocation';
+import { describeBrowserStorageFailure } from '../../services/project/core/browserStorageFailure';
+import { isExpectedArchiveImportRejection } from '../../services/project/projectBackendAvailability';
+import { resumePendingProject } from '../../services/project/pendingProjectResume';
 import { validateProjectName } from './projectNameValidation';
+import { InstallAppHint } from './InstallAppHint';
 import { Logger } from '../../services/logger';
 import './EditorProjectSelectionOverlay.css';
 
@@ -31,6 +40,12 @@ const log = Logger.create('ProjectSelection');
 /** A failed project action must say why, and must reach the error log; a bare
  * "could not be opened" left both the person and production diagnostics blind. */
 function reportProjectActionError(action: string, error: unknown, fallback: string): string {
+  // Private Browsing, in-app browsers or low space: explain it instead of reporting a code error.
+  const storageFailure = describeBrowserStorageFailure(error);
+  if (storageFailure) {
+    log.warn(`Project ${action} blocked: browser storage is unavailable`, error);
+    return `${fallback} ${storageFailure}`;
+  }
   log.error(`Project ${action} failed`, error);
   const reason = error instanceof Error ? error.message.trim() : '';
   return reason && reason !== fallback ? `${fallback} ${reason}` : fallback;
@@ -65,8 +80,17 @@ export function EditorProjectSelectionOverlay({
   // WebKit has no folder picker, so "open existing" becomes a list of the
   // projects already stored on this device. null means the list is not shown.
   const [storageMode] = useState(resolveProjectRootMode);
+  // Read on every render: the tab picks its browser store (OPFS or the temporary fallback) during startup.
+  const fallbackActive = isBrowserStorageFallbackActive();
   const [storedProjects, setStoredProjects] = useState<string[] | null>(null);
+  // The last project only needs its folder access again (browser restart): one click resumes it.
+  const [pendingProjectName, setPendingProjectName] = useState(() => (
+    projectFileService.needsPermission() ? projectFileService.getPendingProjectName() : null
+  ));
   const completionTimerRef = useRef<number | null>(null);
+  const archiveInputRef = useRef<HTMLInputElement>(null);
+  const archiveImportAbort = useRef<AbortController | null>(null);
+  const [cancellingArchive, setCancellingArchive] = useState(false);
 
   useEffect(() => {
     const refresh = () => setRecentProjects(projectFileService.getRecentProjects());
@@ -82,6 +106,8 @@ export function EditorProjectSelectionOverlay({
     if (completionTimerRef.current !== null) {
       window.clearTimeout(completionTimerRef.current);
     }
+    // Leaving the selection cancels a running archive import; it removes its partial copy.
+    archiveImportAbort.current?.abort();
   }, []);
 
   const completeSelection = useCallback(() => {
@@ -170,6 +196,56 @@ export function EditorProjectSelectionOverlay({
     }
   };
 
+  // An exported .msproj is copied into browser storage and opened from there.
+  const handleImportArchive = async (file: File) => {
+    if (busyAction || !confirmProjectSwitch()) return;
+    setBusyAction('archive');
+    setError(null);
+    const controller = new AbortController();
+    archiveImportAbort.current = controller;
+    try {
+      if (await openProjectArchive(file, controller.signal)) {
+        completeSelection();
+        return;
+      }
+      setError('The project archive could not be opened.');
+    } catch (error) {
+      if (controller.signal.aborted) {
+        log.info('Project archive import cancelled');
+        return;
+      }
+      if (isExpectedArchiveImportRejection(error)) {
+        log.warn('Project archive import rejected', error);
+        setError(`The project archive could not be imported. ${(error as Error).message}`);
+        return;
+      }
+      setError(reportProjectActionError('archive import', error, 'The project archive could not be imported.'));
+    } finally {
+      if (archiveImportAbort.current === controller) archiveImportAbort.current = null;
+      setCancellingArchive(false);
+      setBusyAction(null);
+    }
+  };
+
+  const handleResumePending = async () => {
+    if (busyAction) return;
+    setBusyAction('resume');
+    setError(null);
+    try {
+      if (await resumePendingProject()) {
+        setPendingProjectName(null);
+        completeSelection();
+        return;
+      }
+      setError('Folder access was not allowed. Click Resume again and allow access in the browser prompt.');
+    } catch (error) {
+      setError(reportProjectActionError('resume', error, 'The project could not be resumed.'));
+    } finally {
+      setPendingProjectName(projectFileService.needsPermission() ? projectFileService.getPendingProjectName() : null);
+      setBusyAction(null);
+    }
+  };
+
   const handleOpenRecent = async (project: RecentProjectEntry) => {
     if (busyAction || !confirmProjectSwitch()) return;
     setBusyAction(project.id);
@@ -239,6 +315,7 @@ export function EditorProjectSelectionOverlay({
                 className="editor-project-cancel"
                 disabled={busyAction !== null}
                 type="button"
+                onPointerUp={(event) => event.currentTarget.blur()}
                 onClick={() => {
                   setIsNamingProject(false);
                   setProjectName('');
@@ -273,19 +350,73 @@ export function EditorProjectSelectionOverlay({
                 <div className="editor-project-empty">No stored projects</div>
               )}
               <button
-                className="editor-project-cancel"
+                className="editor-project-box is-existing"
                 disabled={busyAction !== null}
                 type="button"
+                onPointerUp={(event) => event.currentTarget.blur()}
+                onClick={() => archiveInputRef.current?.click()}
+              >
+                <span className="editor-project-box-icon">
+                  <IconFileImport aria-hidden="true" />
+                </span>
+                <span className="editor-project-box-copy">
+                  <strong>{busyAction === 'archive' ? 'Importing…' : 'Import .msproj'}</strong>
+                  <small>Exported project archive</small>
+                </span>
+                <IconArrowRight aria-hidden="true" />
+              </button>
+              <input
+                accept=".msproj"
+                aria-hidden="true"
+                hidden
+                ref={archiveInputRef}
+                tabIndex={-1}
+                type="file"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = '';
+                  if (file) void handleImportArchive(file);
+                }}
+              />
+              <button
+                className="editor-project-cancel"
+                disabled={(busyAction !== null && busyAction !== 'archive') || cancellingArchive}
+                type="button"
+                onPointerUp={(event) => event.currentTarget.blur()}
                 onClick={() => {
+                  if (busyAction === 'archive') {
+                    setCancellingArchive(true);
+                    archiveImportAbort.current?.abort();
+                    return;
+                  }
                   setStoredProjects(null);
                   setError(null);
                 }}
               >
-                Back
+                {busyAction === 'archive' ? (cancellingArchive ? 'Cancelling import…' : 'Cancel import') : 'Back'}
               </button>
             </div>
           ) : (
             <div className="editor-project-grid">
+              {pendingProjectName !== null && (
+                <button
+                  className="editor-project-box is-resume"
+                  disabled={busyAction !== null}
+                  title={`Allow folder access to “${pendingProjectName}” again`}
+                  type="button"
+                  onPointerUp={(event) => event.currentTarget.blur()}
+                  onClick={() => void handleResumePending()}
+                >
+                  <span className="editor-project-box-icon">
+                    <IconPlayerPlay aria-hidden="true" />
+                  </span>
+                  <span className="editor-project-box-copy">
+                    <strong>{busyAction === 'resume' ? 'Resuming…' : `Resume “${pendingProjectName}”`}</strong>
+                    <small>Allow folder access again; nothing needs relinking</small>
+                  </span>
+                  <IconArrowRight aria-hidden="true" />
+                </button>
+              )}
               <button
                 className="editor-project-box is-new"
                 disabled={busyAction !== null}
@@ -316,25 +447,30 @@ export function EditorProjectSelectionOverlay({
                 </span>
                 <IconArrowRight aria-hidden="true" />
               </button>
-              {recentProjects.map((project, index) => (
-                <button
-                  className="editor-project-box"
-                  disabled={busyAction !== null}
-                  key={project.id}
-                  title={project.path || project.name}
-                  type="button"
-                  onClick={() => void handleOpenRecent(project)}
-                >
-                  <span className="editor-project-box-index">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className="editor-project-box-copy">
-                    <strong>{project.name}</strong>
-                    <small>{busyAction === project.id ? 'Opening…' : formatRecentDate(project.lastOpenedAt)}</small>
-                  </span>
-                  <IconArrowRight aria-hidden="true" />
-                </button>
-              ))}
+              {orderRecentProjectsForChoice(recentProjects, fallbackActive).map((project, index) => {
+                // The same name can exist as a folder project and as a kept temporary copy.
+                const location = recentProjectLocation(project, fallbackActive);
+                return (
+                  <button
+                    className="editor-project-box"
+                    data-location={location}
+                    disabled={busyAction !== null}
+                    key={project.id}
+                    title={`${project.path || project.name} (${location})`}
+                    type="button"
+                    onClick={() => void handleOpenRecent(project)}
+                  >
+                    <span className="editor-project-box-index">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <span className="editor-project-box-copy">
+                      <strong>{project.name}</strong>
+                      <small>{busyAction === project.id ? 'Opening…' : `${location} · ${formatRecentDate(project.lastOpenedAt)}`}</small>
+                    </span>
+                    <IconArrowRight aria-hidden="true" />
+                  </button>
+                );
+              })}
               {recentProjects.length === 0 && (
                 <div className="editor-project-empty">No recent projects</div>
               )}
@@ -342,6 +478,7 @@ export function EditorProjectSelectionOverlay({
           )}
 
           {error && <p className="editor-project-error" role="alert">{error}</p>}
+          {pendingProjectName !== null && <InstallAppHint className="editor-project-install-hint" />}
         </div>
       </section>
     </div>

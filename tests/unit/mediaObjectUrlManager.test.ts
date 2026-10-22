@@ -12,6 +12,9 @@ import {
   getThumbnailMediaObjectUrlKey,
   mediaObjectUrlManager,
   revokeAllMediaObjectUrls,
+  isRevokedPrimaryMediaObjectUrl,
+  REPLACED_PRIMARY_URL_GRACE_MS,
+  resolveCurrentPrimaryMediaObjectUrl,
   revokeMediaFileObjectUrls,
 } from '../../src/services/project/mediaObjectUrlManager';
 
@@ -178,5 +181,30 @@ describe('mediaObjectUrlManager', () => {
       'blob:old-splat-0',
     ]);
     expect(revokeObjectURL).not.toHaveBeenCalledWith('blob:new-model-1');
+  });
+
+  it('answers a replaced (revoked) primary URL with the current one, so consumers never load a revoked URL', () => {
+    vi.useFakeTimers();
+    vi.spyOn(URL, 'createObjectURL')
+      .mockReturnValueOnce('blob:primary-old')
+      .mockReturnValueOnce('blob:primary-new');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' });
+    createPrimaryMediaObjectUrl('media-r', file);
+    createPrimaryMediaObjectUrl('media-r', file);
+    // Elements still streaming from the old URL get a grace period to rebuild before it is released.
+    expect(isRevokedPrimaryMediaObjectUrl('blob:primary-old')).toBe(true);
+    expect(revokeObjectURL).not.toHaveBeenCalledWith('blob:primary-old');
+    vi.advanceTimersByTime(REPLACED_PRIMARY_URL_GRACE_MS);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:primary-old');
+    vi.useRealTimers();
+
+    expect(resolveCurrentPrimaryMediaObjectUrl('media-r', 'blob:primary-old')).toBe('blob:primary-new');
+    expect(resolveCurrentPrimaryMediaObjectUrl('media-r', 'blob:primary-new')).toBe('blob:primary-new');
+    expect(resolveCurrentPrimaryMediaObjectUrl('other-media', 'blob:primary-old')).toBe('blob:primary-old');
+    expect(resolveCurrentPrimaryMediaObjectUrl('media-r', 'blob:unmanaged')).toBe('blob:unmanaged');
+
+    mediaObjectUrlManager.revoke('media-r', getPrimaryMediaObjectUrlKey());
+    expect(resolveCurrentPrimaryMediaObjectUrl('media-r', 'blob:primary-new')).toBeUndefined();
   });
 });

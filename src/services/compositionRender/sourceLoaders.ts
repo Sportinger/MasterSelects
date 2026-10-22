@@ -18,6 +18,7 @@ import {
   getTimelineImageSource,
 } from './sourceSetup';
 import { releaseImageElement, releaseVideoElement, revokeObjectUrls, reportCompositionSource } from './sourceLifecycle';
+import { createImageRetrySource, describeImageLoadFailure } from './imageLoadFailure';
 import type {
   CompositionImageSource,
   CompositionLoadClip,
@@ -333,8 +334,23 @@ export function loadImageSource(
         finish();
       },
       onError: () => {
-        log.error(`Failed to load image: ${imageSource.name}`);
+        const retrySource = isSourcesCurrent(sources) ? createImageRetrySource(imageSource) : null;
+        if (retrySource && !cleanedUp) {
+          // A stored blob URL can be revoked while its File is still readable: retry once from the File.
+          log.warn(`Image URL failed for ${imageSource.name}; retrying from the source file`);
+          cleanedUp = true;
+          handle?.cancel();
+          if (sources.pendingSourceDisposers.get(pendingKey) === cleanupPendingSource) {
+            sources.pendingSourceDisposers.delete(pendingKey);
+          }
+          settled = true;
+          resolve(loadImageSource(sources, clip, retrySource, isSourcesCurrent));
+          return;
+        }
         cleanupPendingSource();
+        void describeImageLoadFailure(imageSource).then((message) => {
+          log.warn(`Failed to load image, the composition renders without it: ${message}`);
+        });
       },
       onStale: (img) => {
         releaseImageElement(img, imageSource.objectUrl);

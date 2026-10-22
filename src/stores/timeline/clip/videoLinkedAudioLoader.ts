@@ -1,5 +1,6 @@
 import type { TimelineClip } from '../../../types';
 import { Logger } from '../../../services/logger';
+import { isUndecodableAudioSourceError } from '../../../services/audio/decode/errors';
 import { useMediaStore } from '../../mediaStore';
 import { shouldSkipWaveform } from '../helpers/waveformHelpers';
 import { updateClipById } from '../helpers/clipStateHelpers';
@@ -117,7 +118,9 @@ export async function loadLinkedAudio(
         });
       });
     } catch (e) {
-      log.warn('Waveform generation failed', e);
+      // The clip waveform analysis logs the one explained warning for an undecodable source.
+      if (isUndecodableAudioSourceError(e)) log.debug('Waveform generation failed', e);
+      else log.warn('Waveform generation failed', e);
       updateDerivedTimelineClips(clips => updateClipById(clips, audioClipId, {
         waveformGenerating: false,
       }));

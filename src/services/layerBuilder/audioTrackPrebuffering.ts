@@ -10,8 +10,8 @@ import {
 const AUDIO_LOOKAHEAD_TIME = 1.0;
 
 type AudioTrackPrebufferManagerOptions = {
-  getAudioProxyElementForClip: (clip: TimelineClip) => HTMLAudioElement | null;
-  getClipAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
+  /** Ready proxy element, else the original; null while a ready proxy is still loading. */
+  getPlayableSourceAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
   stemBufferMixers: AudioTrackStemBufferMixerManager;
   stemPreviewElements: AudioTrackStemPreviewElementManager;
   /** Clips whose element a crossfade positioned at its earlier start this frame. */
@@ -20,15 +20,13 @@ type AudioTrackPrebufferManagerOptions = {
 
 export class AudioTrackPrebufferManager {
   private preBufferedAudio = new WeakSet<HTMLAudioElement>();
-  private getAudioProxyElementForClip: (clip: TimelineClip) => HTMLAudioElement | null;
-  private getClipAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
+  private getPlayableSourceAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
   private stemBufferMixers: AudioTrackStemBufferMixerManager;
   private stemPreviewElements: AudioTrackStemPreviewElementManager;
   private isPreparedElsewhere: (clipId: string) => boolean;
 
   constructor(options: AudioTrackPrebufferManagerOptions) {
-    this.getAudioProxyElementForClip = options.getAudioProxyElementForClip;
-    this.getClipAudioElement = options.getClipAudioElement;
+    this.getPlayableSourceAudioElement = options.getPlayableSourceAudioElement;
     this.stemBufferMixers = options.stemBufferMixers;
     this.stemPreviewElements = options.stemPreviewElements;
     this.isPreparedElsewhere = options.isPreparedElsewhere ?? (() => false);
@@ -60,7 +58,7 @@ export class AudioTrackPrebufferManager {
         ? this.stemPreviewElements.getStemAudioElements(clip)
         : null;
       const sourceAudioElement = usesSourceAudioLayer(stemSeparation)
-        ? this.getAudioProxyElementForClip(clip) ?? this.getClipAudioElement(clip)
+        ? this.getPlayableSourceAudioElement(clip)
         : null;
       const audioElements = [
         ...(sourceAudioElement ? [sourceAudioElement] : []),

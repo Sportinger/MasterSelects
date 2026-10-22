@@ -95,7 +95,7 @@ export function classifyProductAnalyticsFailure(error: unknown): ProductAnalytic
   // prose, which may be generic, localized or mention a different failure.
   if (error instanceof Error && error.name === 'RepositoryError' && 'code' in error) {
     const codes: Record<string, ProductAnalyticsFailureCode> = {
-      permission: 'permission_denied', quota: 'storage_quota', ownership: 'storage_ownership',
+      permission: 'permission_denied', access: 'permission_denied', quota: 'storage_quota', ownership: 'storage_ownership',
       conflict: 'storage_conflict', corrupt: 'storage_corrupt', budget: 'storage_budget',
       unsupported: 'unsupported_format', cancelled: 'cancelled', io: 'storage_unavailable',
     };

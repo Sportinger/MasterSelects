@@ -3,7 +3,8 @@ import type { MediaFileAudioAnalysisRefs } from '../../types/audio';
 import type { TimelineWaveformPyramid } from '../../components/timeline/utils/waveformLod';
 import { Logger } from '../logger';
 import type { AudioArtifactStore } from './AudioArtifactStore';
-import { AudioDecodeService } from './AudioDecodeService';
+import { AudioDecodeService, BROWSER_AUDIO_DECODE_DECODER_ID } from './AudioDecodeService';
+import { decodeSourceAudioShared } from './decode/sharedSourceAudioDecode';
 import { readLongPcmWavInfo, readLongWavFingerprintBytes } from './longPcmWav';
 import { buildPeakDecimatedAudioBuffer } from './longWavPeaksClient';
 
@@ -23,6 +24,15 @@ import {
 import type { WaveformPyramidManifest } from './waveformPyramidManifest';
 import { createCurrentAudioArtifactStore } from './currentAudioArtifactStore';
 import { readTimelineWaveformPyramid, primeTimelineWaveformPyramidCache } from './timelineWaveformPyramidLoading';
+import {
+  createMemoryAudioArtifactStore,
+  currentPyramidStorageMode,
+  isTransientArtifactStorageError,
+  rememberDeferredPyramid,
+  setDeferredPyramidPersister,
+  type PyramidStorageMode,
+} from './waveformPyramid/deferredPyramidPersistence';
+import { noteFolderAccessFailure } from '../project/folderAccess/folderAccessPause';
 export { createCurrentAudioArtifactStore } from './currentAudioArtifactStore';
 export { primeTimelineWaveformPyramidCache, getCachedTimelineWaveformPyramid, evictTimelineWaveformPyramidRefs,
   readTimelineWaveformPyramid, loadTimelineWaveformPyramid, loadTimelineWaveformPyramidArtifact } from './timelineWaveformPyramidLoading';
@@ -32,6 +42,8 @@ export interface TimelineWaveformAnalysisResult {
   waveformChannels?: number[][];
   pyramid?: TimelineWaveformPyramid;
   audioAnalysisRefs?: MediaFileAudioAnalysisRefs;
+  /** 'memory': the pyramid could not be stored yet (read-only tab, folder access paused); it is saved later. */
+  pyramidStorage?: PyramidStorageMode;
 }
 
 export interface GenerateTimelineWaveformAnalysisOptions {
@@ -76,6 +88,24 @@ if (import.meta.hot) {
   import.meta.hot.accept();
 }
 const log = Logger.create('TimelineWaveformPyramid');
+
+setDeferredPyramidPersister(async request => {
+  const stored = await new WaveformPyramidGenerator({ artifactStore: createCurrentAudioArtifactStore() }).storePyramid(request);
+  primeTimelineWaveformPyramidCache([
+    stored.artifact.id,
+    stored.artifact.manifestRef.artifactId,
+    stored.analysisRef.artifactId,
+    stored.manifest.packedPayload?.artifactId,
+  ], stored.pyramid);
+  return stored.artifact.manifestRef.artifactId;
+});
+
+/** Reads that fail only because storage is paused or read-only behave like a cache miss. */
+function treatPausedStorageAsMiss<T>(error: unknown, what: string): T | null {
+  if (!isTransientArtifactStorageError(error)) throw error;
+  log.debug(`${what} unavailable while project storage is paused or read-only`, error);
+  return null;
+}
 
 function describeSourceWaveformChannelLayout(channelCount: number): AudioChannelLayout {
   if (channelCount === 1) {
@@ -268,7 +298,10 @@ export async function generateTimelineWaveformAnalysisForFile(
     .then(result => {
       // A pyramid failure must remain retryable, rather than caching fallback
       // previews as completed analysis forever.
-      if (result.pyramid || options.includePyramid === false) rememberSourceWaveformAnalysis(completedResults, jobKey, result);
+      // A memory-only pyramid is saved later under another id; reusing it would keep stale refs.
+      if ((result.pyramid && result.pyramidStorage !== 'memory') || options.includePyramid === false) {
+        rememberSourceWaveformAnalysis(completedResults, jobKey, result);
+      }
       return result;
     })
     .finally(() => {
@@ -332,7 +365,8 @@ async function generateTimelineWaveformAnalysisForFileUncached(
   assertCurrentAnalysis(options);
   if (options.reusePersisted !== false && options.mediaFileId) {
     const store = createCurrentAudioArtifactStore();
-    const saved = await findSavedSourceWaveform(file, options.mediaFileId, options.clipAudioStateHash, store);
+    const saved = await findSavedSourceWaveform(file, options.mediaFileId, options.clipAudioStateHash, store)
+      .catch(error => treatPausedStorageAsMiss<Awaited<ReturnType<typeof findSavedSourceWaveform>>>(error, 'Saved waveform lookup'));
     assertCurrentAnalysis(options);
     if (saved) {
       try {
@@ -391,42 +425,34 @@ async function decodeTimelineWaveformAnalysisForFile(file: File, options: Genera
     const arrayBuffer = await file.arrayBuffer();
     assertCurrentAnalysis(options);
 
-    let audioBuffer: AudioBuffer;
-    try {
-      audioBuffer = await decodeService.decodeAudioBuffer(
-        {
-          kind: 'array-buffer',
-          arrayBuffer,
-          name: file.name,
-          mimeType: file.type || undefined,
-        },
-        {
-          mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
-          sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
-          clipAudioStateHash: options.clipAudioStateHash,
-          signal: options.signal,
-          metadata: {
-            source: 'timeline-waveform-pyramid',
-            sourceFileName: file.name,
-            sourceFileSize: file.size,
-            sourceLastModified: file.lastModified,
+    // Browser decodeAudioData first, then the container/WebCodecs and FFmpeg paths;
+    // the whole chain is shared with the audio proxy of the same source.
+    const { buffer: audioBuffer } = await decodeSourceAudioShared(file, {
+      browserAttempt: {
+        id: BROWSER_AUDIO_DECODE_DECODER_ID,
+        decode: () => decodeService.decodeAudioBuffer(
+          {
+            kind: 'array-buffer',
+            arrayBuffer,
+            name: file.name,
+            mimeType: file.type || undefined,
           },
-        },
-      );
-    } catch (decodeError) {
-      const { readIsobmffMetadata } = await import('../mediaMetadata/isobmffMetadata');
-      const { MediaAudioRangeReader } = await import('../../engine/audio/exportPipeline/MediaAudioRangeReader');
-      const duration = (await readIsobmffMetadata(file))?.duration;
-      if (!duration || duration <= 0) throw decodeError;
-      const reader = new MediaAudioRangeReader(file);
-      try {
-        audioBuffer = await reader.read(0, duration);
-      } catch {
-        throw decodeError;
-      } finally {
-        reader.dispose();
-      }
-    }
+          {
+            mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
+            sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
+            clipAudioStateHash: options.clipAudioStateHash,
+            signal: options.signal,
+            metadata: {
+              source: 'timeline-waveform-pyramid',
+              sourceFileName: file.name,
+              sourceFileSize: file.size,
+              sourceLastModified: file.lastModified,
+            },
+          },
+        ),
+      },
+      signal: options.signal,
+    });
     assertCurrentAnalysis(options);
     return await generateTimelineWaveformAnalysisFromBuffer(file, arrayBuffer, audioBuffer, options);
   } finally {
@@ -468,7 +494,7 @@ async function generateTimelineWaveformAnalysisFromBuffer(
       sampleRate: audioBuffer.sampleRate,
       channelLayout: describeSourceWaveformChannelLayout(audioBuffer.numberOfChannels),
       duration: audioBuffer.duration,
-    }) : null;
+    }).catch(error => treatPausedStorageAsMiss<Awaited<ReturnType<typeof findReusableSourceWaveformPyramid>>>(error, 'Saved waveform pyramid lookup')) : null;
     assertCurrentAnalysis(options);
     if (reusable) {
       options.onProgress?.(100, preview.waveform);
@@ -479,34 +505,51 @@ async function generateTimelineWaveformAnalysisFromBuffer(
       };
     }
 
-    const generator = new WaveformPyramidGenerator({ artifactStore: store });
-    const pyramidSignal = createPyramidTimeoutSignal(
-      options.signal,
-      options.pyramidTimeoutMs ?? DEFAULT_PYRAMID_TIMEOUT_MS,
-    );
-    const generation = generator.generate({
-      mediaFileId,
-      sourceFingerprint,
-      buffer: audioBuffer,
-      clipAudioStateHash: options.clipAudioStateHash,
-      decoderId: 'browser-audio-context',
-      decoderVersion: '1.0.0',
-      metadata: {
-        sourceFileName: file.name,
-        sourceFileSize: file.size,
-        sourceLastModified: file.lastModified,
-      },
-    }, {
-      signal: pyramidSignal.signal,
-      onProgress: progress => { assertCurrentAnalysis(options); options.onPyramidProgress?.(progress); },
-    });
-    generation.catch(() => undefined);
-    const generated = await Promise.race([
-      generation,
-      abortSignalPromise(pyramidSignal.signal),
-    ]).finally(() => {
-      pyramidSignal.dispose();
-    });
+    const pyramidMetadata = {
+      sourceFileName: file.name,
+      sourceFileSize: file.size,
+      sourceLastModified: file.lastModified,
+    };
+    const generateInto = async (artifactStore: AudioArtifactStore) => {
+      const generator = new WaveformPyramidGenerator({ artifactStore });
+      const pyramidSignal = createPyramidTimeoutSignal(
+        options.signal,
+        options.pyramidTimeoutMs ?? DEFAULT_PYRAMID_TIMEOUT_MS,
+      );
+      const generation = generator.generate({
+        mediaFileId,
+        sourceFingerprint,
+        buffer: audioBuffer,
+        clipAudioStateHash: options.clipAudioStateHash,
+        decoderId: 'browser-audio-context',
+        decoderVersion: '1.0.0',
+        metadata: pyramidMetadata,
+      }, {
+        signal: pyramidSignal.signal,
+        onProgress: progress => { assertCurrentAnalysis(options); options.onPyramidProgress?.(progress); },
+      });
+      generation.catch(() => undefined);
+      return await Promise.race([
+        generation,
+        abortSignalPromise(pyramidSignal.signal),
+      ]).finally(() => {
+        pyramidSignal.dispose();
+      });
+    };
+
+    // Read-only tab or paused folder access: compute in memory now, save when writing resumes.
+    let storage = currentPyramidStorageMode();
+    let generated: Awaited<ReturnType<typeof generateInto>>;
+    try {
+      generated = await generateInto(storage === 'memory' ? createMemoryAudioArtifactStore() : store);
+    } catch (error) {
+      if (storage === 'memory' || !isTransientArtifactStorageError(error)) throw error;
+      assertCurrentAnalysis(options);
+      noteFolderAccessFailure(error);
+      log.info('Waveform pyramid storage is unavailable; keeping the pyramid in memory until it can be saved', { mediaFileId });
+      storage = 'memory';
+      generated = await generateInto(createMemoryAudioArtifactStore());
+    }
 
     const pyramid = generated.pyramid;
     assertCurrentAnalysis(options);
@@ -517,6 +560,20 @@ async function generateTimelineWaveformAnalysisFromBuffer(
       generated.analysisRef.artifactId,
       generated.manifest.packedPayload?.artifactId,
     ], pyramid);
+    if (storage === 'memory') {
+      rememberDeferredPyramid({
+        memoryRef: generated.artifact.manifestRef.artifactId,
+        request: {
+          mediaFileId,
+          sourceFingerprint,
+          pyramid,
+          clipAudioStateHash: options.clipAudioStateHash,
+          decoderId: 'browser-audio-context',
+          decoderVersion: '1.0.0',
+          metadata: pyramidMetadata,
+        },
+      });
+    }
 
     return {
       ...preview,
@@ -524,6 +581,7 @@ async function generateTimelineWaveformAnalysisFromBuffer(
       audioAnalysisRefs: {
         waveformPyramidId: generated.artifact.manifestRef.artifactId,
       },
+      ...(storage === 'memory' ? { pyramidStorage: 'memory' as const } : {}),
     };
   } catch (error) {
     assertCurrentAnalysis(options);

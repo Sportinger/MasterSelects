@@ -374,12 +374,19 @@ export class AudioDecodeService {
         timestamp: this.now(),
         message: serviceError.message,
       });
-      log.warn('Audio decode job failed', {
+      const failureDetails = {
         jobId,
         mediaFileId: request.mediaFileId,
         code: serviceError.code,
         message: serviceError.message,
-      });
+      };
+      // An undecodable source is the caller's to explain (waveform, proxy, analyzer all
+      // receive this error); every other failure code is unexpected here.
+      if (serviceError.code === 'decode-failed') {
+        log.debug('Audio decode job failed', failureDetails);
+      } else {
+        log.warn('Audio decode job failed', failureDetails);
+      }
       throw serviceError;
     }
   }

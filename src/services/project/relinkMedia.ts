@@ -34,6 +34,7 @@ import type { RelinkCandidate, RelinkMatch } from './relink/relinkMatching';
 import { attachLinkedMediaSourceFile } from './linkedMediaSources';
 import { resolveProjectMediaSourceLocation } from './mediaSourceRoots';
 import { getMediaSourceMismatch, readMediaSourceFingerprint } from './mediaSourceValidation';
+import { decideProjectMediaCopy, runProjectMediaCopy } from './mediaCopy/projectMediaCopyPolicy';
 
 export {
   createRelinkCandidateMapFromFiles,
@@ -122,13 +123,14 @@ async function copyCandidateToProject(
   let file = await readCandidateFile(candidate);
   let handle = candidate.handle;
 
-  const shouldCopyToProject = useSettingsStore.getState().copyMediaToProject
-    || projectFileService.requiresProjectLocalMediaCopies();
-  if (!shouldCopyToProject || !projectFileService.isProjectOpen()) {
-    return { file, handle };
-  }
-
-  const copied = await projectFileService.copyToRawFolder(file, targetPath ?? file.name);
+  // Relinked media follow the import rule: copied when the setting asks for it or
+  // when the new link would not survive a reload (e.g. Safari cannot store handles).
+  const decision = await decideProjectMediaCopy({
+    copySetting: useSettingsStore.getState().copyMediaToProject,
+    handle: candidate.handle,
+    absolutePath: candidate.absolutePath,
+  });
+  const copied = await runProjectMediaCopy(file, decision, () => projectFileService.copyToRawFolder(file, targetPath ?? file.name));
   if (!copied) {
     return { file, handle };
   }

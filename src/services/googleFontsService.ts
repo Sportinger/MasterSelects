@@ -182,6 +182,11 @@ class GoogleFontsService {
     return POPULAR_FONTS.filter(f => f.category === category);
   }
 
+  /** Whether this service loads the family from Google Fonts (system families need no load). */
+  isManagedFont(family: string): boolean {
+    return !isCssGenericFontFamily(family) && POPULAR_FONTS.some((font) => font.family === family);
+  }
+
   /**
    * Check if a specific font weight is loaded
    */

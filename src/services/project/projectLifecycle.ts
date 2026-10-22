@@ -1,5 +1,8 @@
 import { beginOperationTrace, type OperationTrace } from '../productAnalytics/operationTrace';
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
+import { installEditorWriterHandover } from './repository/lifecycle/editorWriterHandover';
+import { isBrowserStorageUnavailableError } from './core/browserStorageFailure';
+import { discardStoredProjectArchive, releaseRestoredProjectArchive, storeProjectArchiveInBrowser } from './browserProjectArchive';
 import { isRepositoryHydrating } from './repository/transaction/storeMutationBoundary';
 // Project Lifecycle — create, open, close, auto-sync
 
@@ -336,11 +339,11 @@ export async function openExistingProject(): Promise<boolean> {
  * Open a project by name from browser storage. WebKit offers no folder
  * picker, so the app lists the stored projects and opens the chosen one.
  */
-export async function openStoredProject(name: string): Promise<boolean> {
+export async function openStoredProject(name: string, options: { signal?: AbortSignal } = {}): Promise<boolean> {
   const startedAt = Date.now();
   const trace = beginOperationTrace('project_open', 'load');
   try {
-    const success = await projectFileService.openStoredProject(name);
+    const success = await projectFileService.openStoredProject(name, options);
     if (!success) {
       trackProjectActionFailure('open', startedAt, trace, 'storage_error', 'storage_unavailable', 'load');
       return false;
@@ -370,6 +373,28 @@ export async function openStoredProject(name: string): Promise<boolean> {
 }
 
 /**
+ * Copy an exported .msproj archive into browser storage and open it there.
+ * Browsers without a folder picker or Native Helper restore projects this way;
+ * an import that does not open, fails or is cancelled through `signal` leaves
+ * no half-imported project behind.
+ */
+export async function openProjectArchive(file: File, signal?: AbortSignal): Promise<boolean> {
+  const name = await storeProjectArchiveInBrowser(file, signal);
+  try {
+    if (await openStoredProject(name, { signal })) {
+      // The restored project now stands on its own; reopening it never imports again.
+      await releaseRestoredProjectArchive(name).catch(error => log.warn('Restored archive copy cleanup failed', { name, error }));
+      return true;
+    }
+  } catch (error) {
+    await discardStoredProjectArchive(name);
+    throw error;
+  }
+  await discardStoredProjectArchive(name);
+  return false;
+}
+
+/**
  * Close current project
  */
 export async function closeCurrentProject(): Promise<void> {
@@ -393,7 +418,12 @@ export async function closeCurrentProject(): Promise<void> {
  */
 export function setupAutoSync(): void {
   teardownAutoSync();
-  void ensureEditorScratchRepository().catch(error => log.error('Scratch recovery could not be opened', error));
+  // Unavailable browser storage is the environment (the save status says so), not a code error.
+  void ensureEditorScratchRepository().catch(error => isBrowserStorageUnavailableError(error)
+    ? log.warn('Scratch recovery unavailable: browser storage could not be opened', error)
+    : log.error('Scratch recovery could not be opened', error));
+  // Answer write-access requests from other tabs, and let this tab request them.
+  registerAutoSyncDisposer(installEditorWriterHandover());
   registerAutoSyncDisposer(setupTimelineSelectionReloadRecovery());
   registerAutoSyncDisposer(preserveUnsavedProjectOnChunkFailure(hasUnsavedWorkspace));
   // Source edits force dev full reloads; keep timed-save projects from losing pending work.

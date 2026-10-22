@@ -20,6 +20,7 @@ import { Logger } from '../logger';
 import { proxyFrameCache } from '../proxyFrameCache';
 import { getAudibleStemLayers } from './audioTrackStemSyncModel';
 import type { AudioSyncState, AudioSyncTarget, FrameContext } from './types';
+import type { AudioTrackProxyLookup } from './audioTrackProxyLoads';
 
 const log = Logger.create('AudioCrossfade');
 
@@ -83,7 +84,7 @@ interface SingleVoiceDecision {
 
 export interface AudioTrackCrossfadeTransitionSyncDeps {
   getClipAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
-  getAudioProxyElementForClip: (clip: TimelineClip) => HTMLAudioElement | null;
+  resolveAudioProxyForClip: (clip: TimelineClip) => AudioTrackProxyLookup;
   getClipSourceMediaFileId: (clip: TimelineClip) => string | undefined;
   isAudioSourceClip: (clip: TimelineClip) => boolean;
   /** The element a track played this clip on in the last playing frame (its own, or a cut handoff's). */
@@ -139,8 +140,10 @@ export class AudioTrackCrossfadeTransitionSync {
     this.deps = deps;
   }
 
+  /** The clip's playable element: its proxy, else the original, but none while a ready proxy is still loading. */
   private getElement(clip: TimelineClip): HTMLAudioElement | null {
-    return this.deps.getAudioProxyElementForClip(clip) ?? this.deps.getClipAudioElement(clip);
+    const proxy = this.deps.resolveAudioProxyForClip(clip);
+    return proxy.element ?? (proxy.pending ? null : this.deps.getClipAudioElement(clip));
   }
 
   private planPair(ctx: FrameContext, clip: TimelineClip): AudioCrossfadePair | null {
@@ -359,13 +362,14 @@ export class AudioTrackCrossfadeTransitionSync {
     this.deps.stopStemBufferMixer(clip.id);
     this.deps.pauseStemAudioElements(clip.id);
 
+    // The voice may play on another element (a proxy, or a handoff's), or on none while the clip's
+    // ready proxy is still loading: the clip's own elements stay silent, never the undecodable original.
+    for (const own of [this.deps.resolveAudioProxyForClip(clip).element, this.deps.getClipAudioElement(clip)]) {
+      if (own && own !== sourceAudioElement && !own.paused) own.pause();
+    }
     if (!sourceAudioElement || (!sourceAudioElement.src && sourceAudioElement.readyState === 0)) {
       if (sourceMediaFileId) void proxyFrameCache.warmScrubAudioBuffer(sourceMediaFileId);
       return;
-    }
-    // The voice may play on another element (a proxy, or a handoff's): the clip's own ones stay silent.
-    for (const own of [this.deps.getAudioProxyElementForClip(clip), this.deps.getClipAudioElement(clip)]) {
-      if (own && own !== sourceAudioElement && !own.paused) own.pause();
     }
     if (sourceMediaFileId) {
       void proxyFrameCache.warmScrubAudioBuffer(sourceMediaFileId, sourceAudioElement.currentSrc || sourceAudioElement.src);

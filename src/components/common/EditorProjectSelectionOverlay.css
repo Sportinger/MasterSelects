@@ -109,6 +109,17 @@
   background: #1d1d1d;
 }
 
+.editor-project-box.is-resume {
+  background: #1b1f1b;
+  border-color: #4f6b4f;
+  grid-column: 1 / -1;
+}
+
+.editor-project-box.is-resume .editor-project-box-icon {
+  border-color: #5f805f;
+  color: #cfe8cf;
+}
+
 .editor-project-box:hover:not(:disabled) {
   background: #202020;
   border-color: #5c5c5c;
@@ -121,6 +132,7 @@
 }
 
 .editor-project-box:focus-visible,
+.editor-project-cancel:focus-visible,
 .editor-project-name-form button:focus-visible,
 .editor-project-name-form input:focus-visible {
   outline: 2px solid #999;
@@ -259,6 +271,16 @@
   font-size: 0.67rem;
   margin-top: 0.65rem;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.editor-project-cancel:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.editor-project-cancel:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .editor-project-error {

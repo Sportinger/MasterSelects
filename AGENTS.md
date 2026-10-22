@@ -351,8 +351,22 @@ Permanent architecture rules:
   add a decoder per requested frame. Source history and previous-output feedback
   are different contracts. The current Slit Scan integration is effect-specific:
   adding `image.sample-history` to another effect does not opt it into this path.
-- Product-source ceiling is 700 LOC per file. Splits must reduce real
-  coupling — no `helpers.ts`/`utils.ts` dumping grounds, no blind splits.
+- **File size: aim for ≤ 700 lines per product-source file.** This is a
+  design signal, not a hard limit.
+  - Below 700: fine.
+  - Slightly above (roughly up to 10 %, ~770 lines): fine if the module stays
+    cohesive and a split would only separate code that belongs together.
+  - Clearly above: split along real responsibilities (a separate concept,
+    pipeline stage, or domain), so each part can be understood and tested
+    on its own. No `helpers.ts`/`utils.ts` dumping grounds, no blind splits.
+  - Never game the count: no cramming several statements or a whole action
+    onto one line, no formatting tricks, no numbered files (`foo0.ts`,
+    `foo1.ts`, …) that split one concept. The count refers to normally
+    formatted code.
+  - Generated data is exempt if its generator is in the repository and the
+    file says so in a header comment.
+  - Existing oversized files: split them when you substantially rework them,
+    not just because you touched one line.
 - Runtime handles (File, Blob, object URLs, DOM/media elements,
   AudioContext, VideoFrame, ImageBitmap, GPU objects, decoders, workers,
   service singletons) stay out of durable stores, project data, and pure
@@ -429,10 +443,17 @@ unit suite in six shards) must be green for the exact commit before it goes
 live. Run it on the task branch with `gh workflow run security.yml --ref
 <branch>` and wait for the result (`gh run watch`); targeted local tests are not
 enough, and the full suite must not run locally (it rotates the bridge token).
-Never deploy a commit with red CI. Then bump the version, build from a clean
-checkout (`sourceDirty: false`), run `npm run deploy:retain-assets`, deploy with
-`wrangler pages deploy dist --project-name masterselects --branch main`, and
-check `/build-info.json` on www.masterselects.com.
+Never deploy a commit with red CI. Then bump the version, commit it, and deploy
+from that clean checkout with `npm run deploy:pages` only; never run
+`wrangler pages deploy` by hand. The script refuses to deploy unless Security
+Checks are green for HEAD (or HEAD only bumps the version of a green commit),
+builds with `npm run build:deploy` (`sourceDirty: false`, exact HEAD), retains
+the last eight deployments' assets (`deploy:retain-assets`), verifies that
+`dist/assets` holds the live deployment's entry chunks and
+`projectStorage.worker-*.js`, and only then runs `wrangler pages deploy dist
+--project-name masterselects --branch main`. `npm run deploy:pages -- --dry-run`
+runs every check without deploying. Afterwards check `/build-info.json` on
+www.masterselects.com.
 
 Build warnings about mp4box, chunk sizes, and dynamic imports are
 pre-existing — not errors.

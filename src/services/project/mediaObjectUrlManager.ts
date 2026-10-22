@@ -1,4 +1,7 @@
 import { getRenderableImageBlob } from '../rawImage/rawImageDecode';
+import { Logger } from '../logger';
+
+const log = Logger.create('MediaObjectUrls');
 type ManagedMediaObjectUrlKey = string;
 
 const PRIMARY_MEDIA_OBJECT_URL_KEY = 'primary';
@@ -60,9 +63,31 @@ export function collectMediaFileObjectUrls(file: MediaObjectUrlFile): Set<string
   return urls;
 }
 
+/** Recently replaced primary URLs, so consumers holding one can switch to the current URL. */
+const MAX_REPLACED_PRIMARY_URLS = 256;
+/**
+ * A replaced primary URL is revoked after this grace period instead of at once: elements of a
+ * reopened project may still stream from it until they rebuild from the new URL on their next
+ * frame. Revoking under them made each in-flight range request fail with ERR_FILE_NOT_FOUND.
+ */
+export const REPLACED_PRIMARY_URL_GRACE_MS = 5000;
+
+type RetiredPrimaryUrlListener = (url: string, mediaId: string) => void;
+const retiredPrimaryUrlListeners = new Set<RetiredPrimaryUrlListener>();
+
+/**
+ * Consumers that stream a primary media URL (lazy timeline elements, scrub preloads) rebuild from
+ * the current source when it is retired, instead of failing on the revoked URL.
+ */
+export function onPrimaryMediaObjectUrlRetired(listener: RetiredPrimaryUrlListener): () => void {
+  retiredPrimaryUrlListeners.add(listener);
+  return () => { retiredPrimaryUrlListeners.delete(listener); };
+}
+
 class MediaObjectUrlManager {
   private primaryBlobs = new Map<string, Blob>();
   private urlsByMediaId = new Map<string, Map<ManagedMediaObjectUrlKey, string>>();
+  private replacedPrimaryUrls = new Map<string, string>();
 
   create(
     mediaId: string,
@@ -70,7 +95,9 @@ class MediaObjectUrlManager {
     file: File | Blob,
     options: { revokeExisting?: boolean } = {},
   ): string {
-    if (options.revokeExisting !== false) {
+    if (options.revokeExisting !== false && key === PRIMARY_MEDIA_OBJECT_URL_KEY) {
+      this.retirePrimary(mediaId);
+    } else if (options.revokeExisting !== false) {
       this.revoke(mediaId, key);
     } else {
       this.urlsByMediaId.get(mediaId)?.delete(key);
@@ -103,12 +130,51 @@ class MediaObjectUrlManager {
     }
 
     URL.revokeObjectURL(url);
-    if (key === PRIMARY_MEDIA_OBJECT_URL_KEY) this.primaryBlobs.delete(mediaId);
+    if (key === PRIMARY_MEDIA_OBJECT_URL_KEY) {
+      this.primaryBlobs.delete(mediaId);
+      this.rememberReplacedPrimary(url, mediaId);
+    }
     urls.delete(key);
     if (urls.size === 0) {
       this.urlsByMediaId.delete(mediaId);
     }
     return url;
+  }
+
+  /** Replaces the primary URL: consumers see it as revoked now, the browser releases it after the grace period. */
+  private retirePrimary(mediaId: string): void {
+    const urls = this.urlsByMediaId.get(mediaId);
+    const url = urls?.get(PRIMARY_MEDIA_OBJECT_URL_KEY);
+    if (!urls || !url) return;
+    this.primaryBlobs.delete(mediaId);
+    this.rememberReplacedPrimary(url, mediaId);
+    urls.delete(PRIMARY_MEDIA_OBJECT_URL_KEY);
+    if (urls.size === 0) this.urlsByMediaId.delete(mediaId);
+    setTimeout(() => URL.revokeObjectURL(url), REPLACED_PRIMARY_URL_GRACE_MS);
+  }
+
+  private rememberReplacedPrimary(url: string, mediaId: string): void {
+    this.replacedPrimaryUrls.delete(url);
+    this.replacedPrimaryUrls.set(url, mediaId);
+    if (this.replacedPrimaryUrls.size > MAX_REPLACED_PRIMARY_URLS) {
+      this.replacedPrimaryUrls.delete(this.replacedPrimaryUrls.keys().next().value!);
+    }
+    for (const listener of [...retiredPrimaryUrlListeners]) {
+      try { listener(url, mediaId); } catch (error) { log.warn('A consumer could not release a retired media URL', { mediaId, error }); }
+    }
+  }
+
+  /**
+   * A revoked primary URL of this media is answered with the current one (or undefined when the
+   * media has none): a revoked blob URL only fails with ERR_FILE_NOT_FOUND. Other URLs pass through.
+   */
+  isRevokedPrimary(url: string | undefined): boolean {
+    return url !== undefined && this.replacedPrimaryUrls.has(url);
+  }
+
+  resolveCurrentPrimary(mediaId: string, url: string): string | undefined {
+    if (this.replacedPrimaryUrls.get(url) !== mediaId) return url;
+    return this.get(mediaId, PRIMARY_MEDIA_OBJECT_URL_KEY);
   }
 
   revokeMedia(mediaId: string, options: { keepUrls?: Iterable<string> } = {}): Set<string> {
@@ -124,7 +190,10 @@ class MediaObjectUrlManager {
         continue;
       }
       URL.revokeObjectURL(url);
-      if (key === PRIMARY_MEDIA_OBJECT_URL_KEY) this.primaryBlobs.delete(mediaId);
+      if (key === PRIMARY_MEDIA_OBJECT_URL_KEY) {
+        this.primaryBlobs.delete(mediaId);
+        this.rememberReplacedPrimary(url, mediaId);
+      }
       revoked.add(url);
       urls.delete(key);
     }
@@ -165,6 +234,20 @@ export function createMediaObjectUrl(
   options?: { revokeExisting?: boolean },
 ): string {
   return mediaObjectUrlManager.create(mediaId, key, file, options);
+}
+
+export function getPrimaryMediaObjectUrl(mediaId: string): string | undefined {
+  return mediaObjectUrlManager.get(mediaId, getPrimaryMediaObjectUrlKey());
+}
+
+/** True for a primary media URL this manager revoked: loading it only fails with ERR_FILE_NOT_FOUND. */
+export function isRevokedPrimaryMediaObjectUrl(url: string | undefined): boolean {
+  return mediaObjectUrlManager.isRevokedPrimary(url);
+}
+
+/** See MediaObjectUrlManager.resolveCurrentPrimary. */
+export function resolveCurrentPrimaryMediaObjectUrl(mediaId: string, url: string): string | undefined {
+  return mediaObjectUrlManager.resolveCurrentPrimary(mediaId, url);
 }
 
 export function createPrimaryMediaObjectUrl(

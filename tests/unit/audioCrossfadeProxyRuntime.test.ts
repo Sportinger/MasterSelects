@@ -21,7 +21,7 @@ type ManagerAccess = {
   crossfadeTransitions: AudioTrackCrossfadeTransitionSync;
   audioHandoffs: AudioTrackHandoffManager;
   runtimeElements: { getAudioTrackProxy: (clipId: string) => HTMLAudioElement | undefined };
-  getAudioProxyElementForClip: (clip: TimelineClip) => HTMLAudioElement | null;
+  getPlayableSourceAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
   syncAudioTrackClips: (ctx: FrameContext, state: AudioSyncState, active: Set<string>, frame: AudioCrossfadeFrame) => void;
   pauseInactiveAudio: (ctx: FrameContext, active: Set<string>, frame: AudioCrossfadeFrame) => void;
 };
@@ -69,7 +69,7 @@ function runFrame(manager: ManagerAccess, ctx: FrameContext): AudioCrossfadeFram
     overrides: frame.handoffOverrides,
     blocksHandoff: (previous: string, clip: TimelineClip) => manager.crossfadeTransitions.blocksHandoff(ctx, previous, clip),
   };
-  const element = (clip: TimelineClip) => manager.getAudioProxyElementForClip(clip);
+  const element = (clip: TimelineClip) => manager.getPlayableSourceAudioElement(clip);
   const fileId = (clip: TimelineClip) => clip.mediaFileId;
   if (ctx.isPlaying) manager.audioHandoffs.compute(ctx, element, fileId, crossfades);
   const active = new Set<string>();

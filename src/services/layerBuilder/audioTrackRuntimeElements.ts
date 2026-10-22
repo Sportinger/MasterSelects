@@ -10,6 +10,7 @@ import {
   pauseAudioElement,
 } from './audioTrackElementUtils';
 import { createActiveAudioProxyResource } from './audioTrackRuntimeResources';
+import { AudioTrackProxyLoadTracker, NO_AUDIO_PROXY, type AudioTrackProxyLookup } from './audioTrackProxyLoads';
 
 const log = Logger.create('CutTransition');
 
@@ -28,6 +29,7 @@ export class AudioTrackRuntimeElementManager {
   private activeVideoAudioProxyMediaFileIds = new Map<string, string>();
   private activeAudioTrackProxyMediaFileIds = new Map<string, string>();
   private retainedAudioElementResourceIds = new WeakMap<HTMLAudioElement, string>();
+  private proxyLoads = new AudioTrackProxyLoadTracker();
 
   canRetainResource(resource: RenderResourceDescriptor): TimelineRuntimeAdmissionDecision {
     return timelineRuntimeCoordinator.canRetainResource(resource);
@@ -55,11 +57,15 @@ export class AudioTrackRuntimeElementManager {
     this.retainedAudioElementResourceIds.delete(element);
   }
 
-  getAudioTrackProxyForClip(
+  getAudioTrackProxyForClip(mediaFileId: string | undefined, clipId: string): HTMLAudioElement | null {
+    return this.resolveAudioTrackProxyForClip(mediaFileId, clipId).element;
+  }
+
+  resolveAudioTrackProxyForClip(
     mediaFileId: string | undefined,
     clipId: string,
-  ): HTMLAudioElement | null {
-    if (!mediaFileId) return null;
+  ): AudioTrackProxyLookup {
+    if (!mediaFileId) return NO_AUDIO_PROXY;
     return this.getAudioProxyInstanceForClip(mediaFileId, clipId, {
       elements: this.activeAudioTrackProxies,
       mediaFileIds: this.activeAudioTrackProxyMediaFileIds,
@@ -73,7 +79,7 @@ export class AudioTrackRuntimeElementManager {
     return this.getAudioProxyInstanceForClip(mediaFileId, clipId, {
       elements: this.activeVideoAudioProxies,
       mediaFileIds: this.activeVideoAudioProxyMediaFileIds,
-    });
+    }).element;
   }
 
   getAudioTrackProxy(clipId: string): HTMLAudioElement | undefined {
@@ -137,7 +143,7 @@ export class AudioTrackRuntimeElementManager {
     mediaFileId: string,
     clipId: string,
     activeStore: ActiveProxyStore,
-  ): HTMLAudioElement | null {
+  ): AudioTrackProxyLookup {
     const existingMediaFileId = activeStore.mediaFileIds.get(clipId);
     if (existingMediaFileId && existingMediaFileId !== mediaFileId) {
       this.removeActiveAudioProxy(clipId, activeStore);
@@ -148,27 +154,24 @@ export class AudioTrackRuntimeElementManager {
       if (activeStore.elements.has(clipId)) {
         this.removeActiveAudioProxy(clipId, activeStore);
       }
-      return null;
+      return NO_AUDIO_PROXY;
     }
 
     const existing = activeStore.elements.get(clipId);
     if (existing && activeStore.mediaFileIds.get(clipId) === mediaFileId && (existing.currentSrc || existing.src)) {
-      return existing;
+      return { element: existing, pending: false };
     }
 
     const sharedProxy = proxyFrameCache.getCachedAudioProxy(mediaFileId);
-    if (!sharedProxy) {
-      void proxyFrameCache.preloadAudioProxy(mediaFileId);
-      return null;
+    const src = sharedProxy ? sharedProxy.currentSrc || sharedProxy.src : '';
+    if (!sharedProxy || !src) {
+      return { element: null, pending: this.proxyLoads.request(mediaFileId) };
     }
-
-    const src = sharedProxy.currentSrc || sharedProxy.src;
-    if (!src) return null;
 
     const currentExisting = activeStore.elements.get(clipId);
     if (currentExisting && (currentExisting.currentSrc || currentExisting.src) === src) {
       activeStore.mediaFileIds.set(clipId, mediaFileId);
-      return currentExisting;
+      return { element: currentExisting, pending: false };
     }
 
     const resource = createActiveAudioProxyResource({ clipId, mediaFileId, src });
@@ -181,10 +184,11 @@ export class AudioTrackRuntimeElementManager {
         reason: admission.reason,
         rejectedUnits: admission.rejectedUnits,
       });
+      this.proxyLoads.reportFallback(mediaFileId, 'runtime-budget', { clipId, reason: admission.reason });
       if (currentExisting) {
         this.removeActiveAudioProxy(clipId, activeStore);
       }
-      return null;
+      return NO_AUDIO_PROXY;
     }
 
     pauseAudioElement(currentExisting);
@@ -196,12 +200,12 @@ export class AudioTrackRuntimeElementManager {
     const proxyInstance = createAudioProxyInstance(sharedProxy);
     if (!proxyInstance) {
       this.releaseResource(resource.id);
-      return null;
+      return NO_AUDIO_PROXY;
     }
     this.retainElementResource(proxyInstance, resource);
     activeStore.elements.set(clipId, proxyInstance);
     activeStore.mediaFileIds.set(clipId, mediaFileId);
-    return proxyInstance;
+    return { element: proxyInstance, pending: false };
   }
 
   private removeActiveAudioProxy(

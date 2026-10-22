@@ -110,7 +110,7 @@ class TextRenderer {
         !isCssGenericFontFamily(props.fontFamily) &&
         !googleFontsService.isFontLoaded(props.fontFamily, props.fontWeight)
       ) {
-        // Load font in background - re-render will happen on property change
+        // Load font in background; timeline rasters redraw via text/textFontRefresh.
         googleFontsService.loadFont(props.fontFamily, props.fontWeight);
       }
 

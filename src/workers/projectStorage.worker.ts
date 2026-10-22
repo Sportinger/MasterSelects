@@ -4,9 +4,10 @@ import { readCommit, commitPath } from '../services/project/repository/persisten
 import { CommittedMetadataReader } from '../services/project/repository/index/CommittedMetadataReader';
 import { StreamHash } from '../services/project/repository/segments/streamHash';
 import { RepositoryJournalReader, createJournalIndexCache } from '../services/project/repository/journal/RepositoryJournalReader';
-import { RepositoryError, type RepositoryBackend, type RepositoryDescriptor, type RepositoryOwner } from '../services/project/repository/contracts';
+import { RepositoryError, toRepositoryError, type RepositoryBackend, type RepositoryDescriptor, type RepositoryOwner } from '../services/project/repository/contracts';
 import { createFsaRepositoryBackend } from '../services/project/repository/backends/fsaBackend';
 import { createOpfsRepositoryBackend } from '../services/project/repository/backends/opfsBackend';
+import { adoptBrowserStorageKind } from '../services/project/core/browserStorageRoot';
 import { createNativeRepositoryBackend } from '../services/project/repository/backends/nativeBackend';
 import { RepositoryPersistence } from '../services/project/repository/persistence/RepositoryPersistence';
 import { recoverRepository } from '../services/project/repository/persistence/recovery';
@@ -89,8 +90,9 @@ async function open(request: Extract<StorageRequest, { type: 'open' }>, signal: 
     throw new RepositoryError('unsupported', 'Unsupported repository descriptor');
 
   openProgress({ phase: 'opening' });
+  if (request.browserStorage) adoptBrowserStorageKind(request.browserStorage);
   backend = request.location.kind === 'fsa' ? await createFsaRepositoryBackend(request.location.handle)
-    : request.location.kind === 'opfs' ? await createOpfsRepositoryBackend(request.location.path)
+    : request.location.kind === 'opfs' ? await createOpfsRepositoryBackend(request.location.path, request.location.store)
     : await createNativeRepositoryBackend(request.location.path, { repositoryCommand: nativeCommand, readRepositoryBlob: nativeBlob });
   try {
 
@@ -350,7 +352,8 @@ scope.onmessage = event => {
       const data = await run;
       scope.postMessage({ requestId: envelope.requestId, sessionEpoch: epoch, ok: true, data });
     } catch (error) {
-      const failure = error instanceof RepositoryError ? error : new RepositoryError('io', String(error));
+      // Access withdrawn by the browser must reach the tab as `access`, not as a generic I/O failure.
+      const failure = toRepositoryError(error);
       scope.postMessage({ requestId: envelope.requestId, sessionEpoch: envelope.sessionEpoch, ok: false, error: { code: failure.code, message: failure.message } });
     } finally { requests.delete(envelope.requestId); }
   })();

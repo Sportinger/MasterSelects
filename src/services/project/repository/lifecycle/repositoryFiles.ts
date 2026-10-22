@@ -4,6 +4,7 @@ import { decodeAggregate } from '../domains/jsonBoundary';
 import { captureRepositoryDomainPublication } from '../artifacts/RepositoryDomainPublication';
 import { getActiveRepositorySession } from './editorRepositoryLifecycle';
 import { StreamHash } from '../segments/streamHash';
+import { getBrowserStorageRoot } from '../../core/browserStorageRoot';
 type Folder = keyof typeof PROJECT_FOLDERS;
 
 export function repositoryFileNames(folder: Folder): string[] {
@@ -38,7 +39,7 @@ export async function repositoryFileHandle(folder: Folder, name: string, create 
     async requestPermission(options?: { mode?: 'read' | 'readwrite' }) { return options?.mode === 'readwrite' && !session.opening.writable ? 'denied' : 'granted'; },
     async createWritable(options?: FileSystemCreateWritableOptions) {
       assertCurrent(); if (!session.opening.writable) throw new RepositoryError('ownership', 'Project is read-only');
-      const root = await navigator.storage.getDirectory(); const folderHandle = await root.getDirectoryHandle('repository-file-staging', { create: true });
+      const root = await getBrowserStorageRoot(); const folderHandle = await root.getDirectoryHandle('repository-file-staging', { create: true });
       const temporaryName = crypto.randomUUID(); const temporary = await folderHandle.getFileHandle(temporaryName, { create: true });
       const writer = await temporary.createWritable();
       if (options?.keepExistingData) { const existing = await host.readFile(folder, name); if (existing) await writer.write(existing); }

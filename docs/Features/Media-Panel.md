@@ -137,6 +137,8 @@ The import placeholder reports staged progress instead of presenting an apparent
 
 If a project-local `Raw/` copy is created, that copy becomes the canonical source for the imported asset. The store promotes the copied handle, and reloads and exports use the project copy.
 
+Besides the **Copy media to project folder** setting, a file is copied when its link would not survive a reload: it has no reopenable location (`<input>` picks), or the browser cannot store file handles (WebKit: Safari on iPhone, iPad and Mac). A notice shows the copied size and remaining browser storage, reports failed copies instead of dropping them silently, and offers to keep future imports linked (see [Project Persistence](./Project-Persistence.md)).
+
 Signal imports use the universal import orchestrator. CSV files emit `table`, `metadata`, and `binary` refs; unknown files emit `binary` and `metadata` refs. When a project is open, their binary artifacts are persisted content-addressed under `Cache/artifacts/` and referenced from `project.json`. Without an open File System Access project, the same artifact store persists bytes in IndexedDB so SignalAssets are not metadata-only session objects.
 
 ### File System Access API
@@ -184,6 +186,7 @@ Image and video-capable media items show a cursor-following preview tooltip only
 - Column headers for sorting and drag-to-reorder
 - Resizable name column (120px - 500px range, saved to localStorage)
 - Metadata columns keep a stable header set but show type-specific values. Audio files reuse the visual columns for waveform state, stem label, audio codec, and audio proxy state; still images show still/raster/image labels; Signal assets show signal kinds, provider, artifact count, file type, and diagnostics count.
+- Images the browser cannot decode (damaged, truncated, HEIC on an unsupported browser, revoked file access) are never silent: import, clip placement and the main preview image loader report through `src/services/mediaRuntime/imageDecodeFailure.ts`, which logs one explained `ImageDecode` warning per file (reusing `describeImageLoadFailure`), shows **Cannot decode** in the Resolution column, and marks timeline clips of that media with a red **BROKEN** badge. The flag is transient (not saved) and clears on the next successful decode, for example after relinking.
 
 ### Icons View
 - Thumbnail grid with file names below each item

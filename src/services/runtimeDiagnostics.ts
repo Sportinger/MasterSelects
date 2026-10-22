@@ -1,5 +1,6 @@
 import { redactObject, redactSecrets } from './security/redact';
 import { announceEditRejection, isEditRejection } from './editRejection';
+import { isMediaPlayInterruption } from '../utils/mediaPlayInterruption';
 
 export type RuntimeDiagnosticLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
@@ -39,6 +40,7 @@ interface RuntimeDiagnosticsState {
   originalConsole: Partial<Record<CapturedConsoleMethod, (...args: unknown[]) => void>>;
   attachedDevices: WeakSet<GPUDevice>;
   expectedDeviceDestructions?: WeakSet<GPUDevice>;
+  ownerReportedDeviceLosses?: WeakSet<GPUDevice>;
   gpuInfo: Record<string, unknown> | null;
   sink?: (entry: RuntimeDiagnosticEntry) => void;
 }
@@ -237,8 +239,15 @@ export function getOriginalConsoleMethod(
   return fallback ? fallback.bind(console) : undefined;
 }
 
+// Logger console lines start with a wall-clock time: "17:23:24 [Module] ...".
+const LOGGER_TIME_PREFIX = /^\d{2}:\d{2}:\d{2} (?=\[[^\]\s]+\] )/;
+
 function recordConsole(method: CapturedConsoleMethod, args: unknown[]): void {
   const serializedArgs = args.map((arg) => serializeArg(arg));
+  // The Logger keeps its own structured entry; its console copy drops the
+  // clock prefix so one failure keeps one stable message across sessions.
+  const viaLogger = typeof args[0] === 'string' && LOGGER_TIME_PREFIX.test(args[0]);
+  if (viaLogger) serializedArgs[0] = serializedArgs[0].replace(LOGGER_TIME_PREFIX, '');
   const message = serializedArgs.join(' ');
   const firstError = args.find((arg): arg is Error => arg instanceof Error);
   // TFLite initialization can arrive through the console.error channel.
@@ -251,7 +260,11 @@ function recordConsole(method: CapturedConsoleMethod, args: unknown[]): void {
     message: message || `[console.${method}]`,
     args: serializedArgs,
     stack: firstError?.stack,
-    details: firstError ? { method, errorName: firstError.name } : { method },
+    details: {
+      method,
+      ...(firstError ? { errorName: firstError.name } : {}),
+      ...(viaLogger ? { logger: true } : {}),
+    },
   });
 }
 
@@ -333,6 +346,17 @@ export function installRuntimeDiagnostics(): void {
   window.addEventListener('unhandledrejection', (event) => {
     if (handleEditRejection(event, event.reason, 'unhandledrejection')) return;
     const details = getErrorDetails(event.reason);
+    // A play() superseded by pause()/load() is expected media behaviour: keep a breadcrumb, never an error report.
+    if (isMediaPlayInterruption(event.reason)) {
+      event.preventDefault();
+      recordDiagnostic({
+        source: 'unhandledrejection',
+        level: 'INFO',
+        message: `Media playback start superseded: ${details.message}`,
+        details: { errorName: details.name },
+      });
+      return;
+    }
     recordDiagnostic({
       source: 'unhandledrejection',
       level: 'ERROR',
@@ -372,6 +396,16 @@ export function markExpectedWebGPUDeviceDestruction(device: GPUDevice | null): v
   (state.expectedDeviceDestructions ??= new WeakSet()).add(device);
 }
 
+/**
+ * The device owner logs and reports losses of this device itself (once per
+ * session, with recovery context), so the generic loss record stays a warning.
+ */
+export function markWebGPUDeviceLossOwnerReported(device: GPUDevice | null): void {
+  if (!device) return;
+  const state = getState();
+  (state.ownerReportedDeviceLosses ??= new WeakSet()).add(device);
+}
+
 export function attachWebGPUDeviceDiagnostics(device: GPUDevice | null, label = 'main'): void {
   if (!device) return;
 
@@ -398,9 +432,10 @@ export function attachWebGPUDeviceDiagnostics(device: GPUDevice | null, label = 
 
     void device.lost.then((info) => {
       const expected = info.reason === 'destroyed' && state.expectedDeviceDestructions?.has(device) === true;
+      const ownerReported = state.ownerReportedDeviceLosses?.has(device) === true;
       recordDiagnostic({
         source: 'webgpu-device-lost',
-        level: expected ? 'INFO' : 'ERROR',
+        level: expected ? 'INFO' : ownerReported ? 'WARN' : 'ERROR',
         message: info.message || 'WebGPU device lost',
         details: {
           label,

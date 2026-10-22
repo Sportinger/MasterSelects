@@ -20,6 +20,8 @@ export interface TimelineClipCanvasMediaStatus {
   audioProxyProgress?: number;
   hasProxyAudio?: boolean;
   sceneCutTimestamps?: readonly number[];
+  /** Set when the browser could not decode the clip's image source. */
+  decodeError?: string;
 }
 
 export interface TimelineClipCanvasTranscriptMarkerInput {
@@ -77,6 +79,10 @@ export function getTimelineClipCanvasPassiveDecorationBadges(
     badges.push({ label: 'ERR', fill: 'rgba(239, 68, 68, 0.92)' });
   } else if (clip.isPendingDownload) {
     badges.push({ label: 'DL', fill: 'rgba(59, 130, 246, 0.88)' });
+  }
+
+  if (mediaStatus?.decodeError) {
+    badges.push({ label: 'BROKEN', fill: 'rgba(127, 29, 29, 0.94)', stroke: 'rgba(248, 113, 113, 0.92)' });
   }
 
   if (clip.needsReload) {
@@ -187,6 +193,7 @@ export function hasTimelineClipCanvasPassiveDecorations(
     mediaStatus?.audioProxyStatus === 'ready' ||
     mediaStatus?.audioProxyStatus === 'error' ||
     mediaStatus?.hasProxyAudio ||
+    Boolean(mediaStatus?.decodeError) ||
     (!isTimelineClipCanvasAudioClip(clip) && Boolean(mediaStatus?.sceneCutTimestamps?.length))
   );
 }

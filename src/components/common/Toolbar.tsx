@@ -1,6 +1,8 @@
 import { RepositoryArchiveDialog } from './toolbar/RepositoryArchiveDialog';
+import { BrowserProjectOpenDialog } from './toolbar/BrowserProjectOpenDialog';
 import { LegacyImportTargetHost } from './toolbar/LegacyImportDialog';
 import { MediaReconnectHost } from './toolbar/MediaReconnectOverlay';
+import { ToolbarFolderAccess } from './toolbar/ToolbarFolderAccess';
 // Toolbar component - After Effects style menu bar
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -18,6 +20,10 @@ import { useEngineStore } from '../../stores/engineStore';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
 import { ToolbarSaveStatus } from './toolbar/ToolbarSaveStatus';
+import { ToolbarWriteAccess } from './toolbar/ToolbarWriteAccess';
+import { ToolbarSavePermanently } from './toolbar/ToolbarSavePermanently';
+import { SavePermanentlyDialog } from './toolbar/SavePermanentlyDialog';
+import { usePermanentSaveStatus } from './toolbar/usePermanentSaveStatus';
 import { DevChatDialog } from './DevChatDialog';
 import { LeaveNoteDialog } from './LeaveNoteDialog';
 import { LegalDialog } from './LegalDialog';
@@ -33,6 +39,7 @@ import {
 } from '../../services/projectFileService';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
+  createNewProject,
   loadProjectToStores,
   setProjectLoadProgress,
   setupAutoSync,
@@ -118,6 +125,10 @@ export function Toolbar({
   })));
 
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [showBrowserProjectDialog, setShowBrowserProjectDialog] = useState(false);
+  const [showSavePermanently, setShowSavePermanently] = useState(false);
+  const permanentSave = usePermanentSaveStatus();
+  const openBrowserProjectDialog = useCallback(() => setShowBrowserProjectDialog(true), []);
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [projectName, setProjectName] = useState('Untitled Project');
   const [isProjectOpen, setIsProjectOpen] = useState(false);
@@ -152,10 +163,14 @@ export function Toolbar({
   useEffect(() => {
     const updateProjectState = () => {
       const data = projectFileService.getProjectData();
+      // The startup recovery scratch has project data too; it must not hide the pending
+      // "Restore" action of the real project that is waiting for folder access.
+      const pendingPermission = projectFileService.needsPermission();
+      setNeedsPermission(pendingPermission);
+      if (pendingPermission) setPendingProjectName(projectFileService.getPendingProjectName());
       if (data) {
         setProjectName(data.name);
         setIsProjectOpen(true);
-        setNeedsPermission(false);
       } else {
         setProjectName('No Project Open');
         setIsProjectOpen(false);
@@ -277,6 +292,7 @@ export function Toolbar({
 
   const projectActions = useToolbarProjectActions({
     closeMenu,
+    openBrowserProjectDialog,
     openProjectNameDialog,
     projectName,
     resetMediaProject,
@@ -421,7 +437,10 @@ export function Toolbar({
       <div className="toolbar-spacer" />
 
       <div className="toolbar-section toolbar-right">
-        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} />
+        <ToolbarSavePermanently status={permanentSave} onOpen={() => setShowSavePermanently(true)} />
+        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} onExportArchive={() => setShowSavePermanently(true)} />
+        <ToolbarWriteAccess />
+        <ToolbarFolderAccess />
         {(capturePhase === 'recording' || capturePhase === 'paused' || capturePhase === 'stopping') && (
           <button
             className={`toolbar-capture-rec${capturePhase === 'recording' ? ' recording' : ''}`}
@@ -445,7 +464,28 @@ export function Toolbar({
       </div>
 
       {isSettingsOpen && <SettingsDialog onClose={closeSettings} />}
-      {showArchiveDialog && <RepositoryArchiveDialog onClose={() => setShowArchiveDialog(false)} />}
+      {showArchiveDialog && <RepositoryArchiveDialog projectName={isProjectOpen ? projectName : undefined} onClose={() => setShowArchiveDialog(false)} />}
+      {showSavePermanently && (
+        <SavePermanentlyDialog
+          status={permanentSave}
+          projectName={projectFileService.getProjectData()?.name ?? projectName}
+          onClose={() => setShowSavePermanently(false)}
+          createProject={createNewProject}
+          createBrowserStorageCopy={(path, name) => projectFileService.createProjectInBrowserStorage(path, name)}
+          onProjectChanged={() => {
+            const data = projectFileService.getProjectData();
+            if (data) { setProjectName(data.name); setIsProjectOpen(true); setNeedsPermission(false); }
+            setRecentProjects(projectFileService.getRecentProjects());
+          }}
+        />
+      )}
+      {showBrowserProjectDialog && (
+        <BrowserProjectOpenDialog
+          onClose={() => setShowBrowserProjectDialog(false)}
+          onOpenStored={projectActions.handleOpenStoredProject}
+          onImportArchive={projectActions.handleImportProjectArchive}
+        />
+      )}
       <LegacyImportTargetHost />
       <MediaReconnectHost />
       {projectNameDialog && (

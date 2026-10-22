@@ -5,8 +5,9 @@ import { exportRepositoryArchive } from '../archive/archiveTransport';
 import { captureRuntimeArchiveSources } from '../archive/runtimeSources';
 import { RepositoryError } from '../contracts';
 import { backendForLocation } from './repositoryLocations';
-import { getActiveRepositorySession, flushEditorRepository } from './editorRepositoryLifecycle';
+import { getActiveRepositorySession, flushEditorRepository, readEditorRepositoryProject } from './editorRepositoryLifecycle';
 import { recoverRepository } from '../persistence/recovery';
+import { getBrowserStorageRoot } from '../../core/browserStorageRoot';
 
 const log = Logger.create('ProjectArchiveExport');
 
@@ -29,24 +30,33 @@ function verifiedArchiveOutput(handle: FileSystemFileHandle, writable: FileSyste
     abort: error => writable.abort(error),
   };
 }
+// eslint-disable-next-line no-control-regex -- File names must not contain control characters.
+const UNSAFE_FILE_NAME_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g;
+/** Archive file name from the project name; an unnamed project keeps a generic name. */
+export function archiveFileName(projectName: string): string {
+  const name = projectName.replace(/\.msproj$/i, '').replace(UNSAFE_FILE_NAME_CHARS, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/\.+$/, '').slice(0, 120).trim();
+  return (name || 'MasterSelects Project') + '.msproj';
+}
 /** Opens the output from the click gesture, then streams the confirmed selected repository. */
-export async function pickArchiveOutput(name: string): Promise<ArchiveOutput | null> {
+export async function pickArchiveOutput(projectName: string): Promise<ArchiveOutput | null> {
+  const fileName = archiveFileName(projectName);
   const picker = (window as Window & { showSaveFilePicker?: (options: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
   if (picker) {
     let handle: FileSystemFileHandle;
-    try { handle = await picker({ suggestedName: name + '.msproj', types: [{ description: 'MasterSelects repository archive', accept: { 'application/zip': ['.msproj'] } }] }); }
+    try { handle = await picker({ suggestedName: fileName, types: [{ description: 'MasterSelects repository archive', accept: { 'application/zip': ['.msproj'] } }] }); }
     catch (error) { if (error instanceof DOMException && error.name === 'AbortError') return null; throw error; }
     const writable = await handle.createWritable();
     log.info('Archive destination opened');
     return verifiedArchiveOutput(handle, writable);
   }
-  const root = await navigator.storage.getDirectory(); const folder = await root.getDirectoryHandle('archive-downloads', { create: true });
+  const root = await getBrowserStorageRoot(); const folder = await root.getDirectoryHandle('archive-downloads', { create: true });
   const entryName = crypto.randomUUID() + '.msproj'; const handle = await folder.getFileHandle(entryName, { create: true });
   const writable = await handle.createWritable();
-  log.info('Archive download destination opened');
+  log.info('Archive download destination opened', { fileName });
   return verifiedArchiveOutput(handle, writable, async file => {
     const url = URL.createObjectURL(file);
-    const link = document.createElement('a'); link.href = url; link.download = name + '.msproj'; link.click();
+    const link = document.createElement('a'); link.href = url; link.download = fileName; link.click();
     setTimeout(() => { URL.revokeObjectURL(url); void folder.removeEntry(entryName); }, 60000);
   });
 }
@@ -74,6 +84,7 @@ export async function exportCurrentProjectArchive(selection: ProjectArchiveSelec
       } while (cursor);
       await exportRepositoryArchive(source, session.descriptor, pin, staging, owner, { history: selection.history,
         journals: selection.journals, workspace, media: selection.media, targetRepositoryId: targetId, signal,
+        projectName: readEditorRepositoryProject()?.name,
         resolveSources: captureRuntimeArchiveSources(session) }, chunk => output.write(chunk));
       await output.close();
       log.info('Project archive export completed');

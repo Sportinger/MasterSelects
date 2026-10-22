@@ -1,10 +1,12 @@
 import type { BlobReference, CommitManifest, JsonValue, MetadataPage, RecordReference, RepositoryDescriptor, RepositoryErrorCode, RepositoryProjection, RepositoryRecord, RevisionMetadata } from './contracts';
 import type { PublicationResult, RecoveryResult } from './persistence/RepositoryPersistence';
 import type { RepositoryCommand, OkResponse } from '../../nativeHelper/protocol';
+import type { BrowserStorageKind } from '../core/browserStorageRoot';
 
 export type RepositoryLocation =
   | { kind: 'fsa'; handle: FileSystemDirectoryHandle }
-  | { kind: 'opfs'; path: string }
+  /** Browser-local; `store` pins OPFS or the IndexedDB fallback, otherwise the tab's choice applies. */
+  | { kind: 'opfs'; path: string; store?: BrowserStorageKind }
   | { kind: 'native'; path: string };
 export interface DraftRecord {
   id: string; kind: RepositoryRecord['kind']; schemaVersion: 1;
@@ -16,7 +18,8 @@ export interface DraftPublication {
   heads: Record<string, RecordReference | string>; checkpoints?: (RecordReference | string)[];
 }
 export type StorageRequest =
-  | { type: 'open'; location: RepositoryLocation; descriptor: RepositoryDescriptor; workspaceId: string }
+  /** `browserStorage` carries the editor's OPFS-or-fallback choice so the worker opens the same store. */
+  | { type: 'open'; location: RepositoryLocation; descriptor: RepositoryDescriptor; workspaceId: string; browserStorage?: BrowserStorageKind }
   | { type: 'publish'; batch: DraftPublication }
   | { type: 'projection'; reference: RecordReference; generation: number }
   | { type: 'projection-references'; reference: RecordReference }

@@ -175,7 +175,7 @@ If logs show `WebGPU device lost during export` and `getStats` reports `renderLo
 
 ### Full-App Screenshots And UI Probes
 
-For a visual UI failure, select the intended browser session explicitly and call `captureAppScreenshot` on the `devBridge` surface. The default captures the visible app viewport; `fullPage: true` captures the complete scrolling document. Output scaling is reduced automatically when needed to stay within bridge-safe image dimensions. The result is returned as MCP image content and its base64 payload is omitted from durable traces.
+For a visual UI failure, select the intended browser session explicitly and call `captureAppScreenshot` on the `devBridge` surface. The default captures the visible app viewport; `fullPage: true` captures the complete scrolling document. Output scaling is reduced automatically when needed to stay within bridge-safe image dimensions. Before capturing, the tool re-presents the preview on three consecutive frames, because WebKit can read a WebGPU canvas back from an older swap-chain buffer; on a slow GPU a capture taken right after a seek can still precede the new frame, so prefer `captureFrame` (GPU readback) to judge preview content. The result is returned as MCP image content and its base64 payload is omitted from durable traces.
 
 Use `clickAppControl` to reproduce a visible button, link, disclosure, or other specific control without switching to a separate browser automation stack. Use `probeSameOriginRequest` to inspect a failing local `/api/` call from the authenticated tab; it returns selected headers and a bounded redacted body instead of exposing cookies or unrestricted URLs. All three tools are development-only and must be called with an explicit target session when multiple tabs are present.
 
@@ -442,6 +442,12 @@ Three more paths lead into the same recovery (`src/runtime/chunkLoadRecovery.ts`
   event (`reload_waiting_online`) instead of failing again and spending the cooldown.
   Mobile tabs resumed from the background hit this most.
 - **Failed CSS preloads** ("Unable to preload CSS for …") count as chunk failures.
+- **Project storage worker that fails before answering.** A worker 404 raises no
+  chunk error, only `Project storage worker failed (storage phase: startup …)`.
+  `StorageWorkerClient` reports such a failure (`src/runtime/workerLoadFailure.ts`);
+  the recovery fetches the current page with `no-store` and reloads only when the
+  server now serves another build (app version or module entry differs). A real
+  worker error on the current build stays a visible error without a reload.
 
 When the automatic reload is not possible (cooldown, unsaved project) or waits for
 the connection, a plain-DOM notice (`src/runtime/chunkRecoveryNotice.ts`, outside
@@ -451,15 +457,58 @@ React so it survives an unmounted root) explains why and offers a Reload button.
 
 Cloudflare Pages serves only the files of the active deployment, so a tab opened
 before a deploy fails to lazy-load its old chunk names afterwards (404, unless the
-edge cache still holds them). Before every production deploy run
-`npm run deploy:retain-assets` after `npm run build:deploy`: it lists the last eight
+edge cache still holds them). `npm run deploy:retain-assets` lists the last eight
 production deployments (`wrangler pages deployment list`), crawls each one's entry
 pages and `/assets/` chunks from its own `<id>.masterselects.pages.dev` URL and copies
 missing hashed files into `dist/assets`. Pages deduplicates uploads by hash, so the
 retained files add no upload cost; about 200 files per deployment are added. Old tabs
 then keep working until they reload; the recovery above covers anything older.
 
+Retention only helps when it runs before the upload, so production deploys go through
+`npm run deploy:pages` (`scripts/deploy-pages.mjs`, checks in
+`scripts/deploy-pages-checks.mjs`) instead of a manual `wrangler pages deploy`. It
+stops with `NOT DEPLOYED` and the failed check unless all of these hold: a green
+`Security Checks` run for HEAD (or HEAD only changes the version lines and release
+files of a green commit); a `dist` built by `npm run build:deploy` from exactly HEAD
+with `sourceDirty: false` and the `package.json` version; the new build's own entry
+chunks and `projectStorage.worker-*.js`; and, after retention, the live deployment's
+entry chunks and its storage worker in `dist/assets`. `--dry-run` runs every check and
+the retention into `dist` and prints the deploy command instead of running it;
+`--skip-build` checks an existing `dist`. The checkout must be clean before the build.
+`build:deploy` runs `docs:build`, whose sync rewrites the tracked docs-site pages
+(`docs-site/src/content/docs/features/`, `getting-started/overview.md`,
+`docs-site/public/assets/`) from `docs/Features` at HEAD; such changes do not stop the
+deploy, but the script names them so the sync can be committed afterwards. Any other
+file the build changes stops it. The script also runs when started on Windows, where
+its path is a drive path rather than a `file://` string.
+
+Both deploy scripts start their tools through `scripts/run-command.mjs` without a
+shell: `git` and `gh` run directly, `npx wrangler` runs the project's own
+`node_modules/wrangler/bin/wrangler.js` with node, and only the `npm`/`npx` `.cmd`
+shims on Windows go through `cmd.exe` with every argument quoted and escaped (no
+DEP0190 warning, no unescaped arguments). A missing program is named (`git was not
+found`), and a missing or logged-out GitHub CLI stops the CI check with "GitHub CLI gh
+was not found / is not authenticated; run `gh auth login`". `--dist <dir>` other than
+`dist` requires `--skip-build`, because `build:deploy` always writes `dist`; build
+there with `vite build --outDir <dir>` first. The build plugins in
+`tools/buildAssetPlugins.ts` write the FFmpeg core and the compressed SAM2 runtime into
+the resolved `build.outDir`/`build.assetsDir`, and write nothing when the dev server
+closes. `.gitattributes` keeps `*.mjs`, `*.cjs`, `*.sh` and other shebang scripts LF on
+Windows checkouts, since a CRLF after `#!` breaks shells and vitest imports;
+`tests/unit/scriptLineEndings.test.ts` guards that.
+
+The pre-module bootstrap (`public/app-bootstrap.js`) only records the running version
+and logs `[Version] Update detected`. It no longer reloads or clears Cache Storage:
+the loaded page already is the deployed build, so that reload doubled every recovery
+reload above, could alternate between two builds while a deploy propagates, and
+deleted downloaded AI models (depth, roto, face, audio and landmark caches) on every
+deploy. Worker-failure and chunk reloads share one session cooldown and the
+unsaved-project guard, so a tab that fails again right after its recovery reload shows
+the Reload notice instead of reloading in a loop.
+
 ### Composition video-load failures
+
+`CompositionRenderer` only prepares sources for video, image, vector-animation and generated-canvas clips (text, solid, math scene, transition overlay). Audio, 3D, MIDI and other clip types are owned by other runtimes and are neither loaded nor reported there. When visual clips still end up without any source, it logs one warning, "no sources loaded for N visual clips", with each clip's real `sourceType` and `mediaFileId`; it repeats only when the composition's clip set changes, not on every re-prepare.
 
 `CompositionRenderer` video-load errors include `mediaErrorCode` (1 aborted, 2 network, 3 decode, 4 unsupported source, or null), `readyState`, `networkState`, `fileSize`, and `mimeType`, captured before cleanup resets the media element. These fields distinguish browser-reported failure classes; code 4 alone does not prove an unsupported codec, and a decode failure does not prove a corrupt file. No source URL or raw browser error message is added. Older events without these fields cannot be classified retroactively.
 

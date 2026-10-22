@@ -80,7 +80,7 @@ describe('audio crossfades in export', () => {
     // Preview picks the same pair for the audio track.
     const sync = new AudioTrackCrossfadeTransitionSync({
       isAudioSourceClip: (candidate) => candidate.source?.type === 'audio',
-      getAudioProxyElementForClip: () => null,
+      resolveAudioProxyForClip: () => ({ element: null, pending: false }),
       getClipAudioElement: () => null,
     } as unknown as ConstructorParameters<typeof AudioTrackCrossfadeTransitionSync>[0]);
     const ctx = {
@@ -239,7 +239,7 @@ describe('audio crossfades in export', () => {
       const element = { src: 'blob:audio', readyState: 4, paused: false, pause: vi.fn() } as unknown as HTMLAudioElement;
       const sync = new AudioTrackCrossfadeTransitionSync({
         getClipAudioElement: () => element,
-        getAudioProxyElementForClip: () => null,
+        resolveAudioProxyForClip: () => ({ element: null, pending: false }),
         getClipSourceMediaFileId: () => undefined,
         isAudioSourceClip: (candidate) => candidate.source?.type === 'audio',
         pauseAudioTrackProxy: vi.fn(),
