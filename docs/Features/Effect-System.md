@@ -2883,6 +2883,7 @@ Notes for developers on Pixelate, Blockify and Block Mosaic; each effect page ad
 - **Source.** Time Stack and Slit Scan need a video clip, not a still image or a nested composition. The past comes from the original video's own timestamps (trims, speed changes and reverse clips included), not from earlier playback, through one shared source-frame service.
 - **Loading.** The first load of the frame window takes a moment; the preview shows the plain clip or the last complete picture meanwhile, and the export waits for the exact frames.
 - **Memory.** Each of them keeps its frames in a GPU budget of its own (Time Stack: Frame cache; Slit Scan: History memory).
+- **Motion Trails.** A feedback shader of its own (`src/effects/time/kinetic-trace/`), registered with the tracking family for landmark data. Each frame keeps Length ÷ Amount (at most 1) of its last output, so the visible trail keeps Length per frame; Tint recolours the trail by brightness, not per channel, so a tinted trail cannot feed on itself. Saved instances without Length render with the old fixed 0.9 per frame; the subject glow needs tracking data (it no longer sits at the frame centre without it).
 - **More.** Keyer internals: [Effect system: editable keying and feedback graphs](./Effect-System.md#editable-keying-and-feedback-graphs); Slit Scan notes: [Effect system: Slit Scan](./Effect-System.md#slit-scan); compilation: [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 
 ## Notes

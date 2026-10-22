@@ -457,6 +457,144 @@
       "float": "right",
       "alt": "The dancer with Time Stack while Decay runs from 0 to 1 and back: at 0 she is alone, then fading copies appear behind her and grow into a dense, equally bright crowd of arms and skirts at 1, and fade again; the current value is shown at the bottom left",
       "caption": "Decay from 0 to 1 and back."
+    },
+    {
+      "name": "kinetic-trace",
+      "effect": "kinetic-trace",
+      "params": {},
+      "range": [
+        1.0,
+        5.0
+      ],
+      "layout": "compare",
+      "crop": [
+        440,
+        40,
+        1040,
+        1000
+      ],
+      "width": 960,
+      "float": "left",
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 1000000,
+      "alt": "The dancer turning on a dark stage, original left and with Motion Trails right: her arms, hair and skirt leave pale streaks that fade within about a second as she turns",
+      "caption": "Left: original. Right: Motion Trails at its default settings, the Light Trails preset."
+    },
+    {
+      "name": "kinetic-trace-presets",
+      "kind": "presets",
+      "effect": "kinetic-trace",
+      "range": [
+        1.0,
+        5.0
+      ],
+      "crop": [
+        440,
+        0,
+        1040,
+        1080
+      ],
+      "width": 960,
+      "columns": 3,
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 1400000,
+      "alt": "The dancer five times in a grid, moving in sync, each with one preset: Light Trails with short pale streaks, Long Streaks with longer fading streaks, Neon Trace with cyan trails, Embers with orange trails, Afterimage with a long pale golden haze of earlier poses",
+      "caption": "The five presets on the moving dancer, in sync."
+    },
+    {
+      "name": "kinetic-trace-length",
+      "effect": "kinetic-trace",
+      "params": {},
+      "range": [
+        1.0,
+        5.0
+      ],
+      "layout": "single",
+      "crop": [
+        440,
+        40,
+        1040,
+        1000
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "trail",
+        "label": "Length",
+        "from": 0.5,
+        "to": 0.98,
+        "unit": "",
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with Motion Trails while Length runs from 0.5 to 0.98 and back: at 0.5 only a short smear follows her hands, at 0.98 long pale streaks of arms and skirt hang in the air before they fade; the current value is shown at the bottom left",
+      "caption": "Length from 0.5 to 0.98 and back."
+    },
+    {
+      "name": "kinetic-trace-tint",
+      "effect": "kinetic-trace",
+      "params": {},
+      "range": [
+        1.0,
+        5.0
+      ],
+      "layout": "single",
+      "crop": [
+        440,
+        40,
+        1040,
+        1000
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "tint",
+        "label": "Tint",
+        "from": 0,
+        "to": 1,
+        "unit": "",
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with Motion Trails while Tint runs from 0 to 1 and back: the pale streaks behind her turn green, first at their old ends, then completely, and back to pale; the current value is shown at the bottom left",
+      "caption": "Tint from 0 to 1 and back, with the default green Overlay."
+    },
+    {
+      "name": "kinetic-trace-amount",
+      "effect": "kinetic-trace",
+      "params": {},
+      "range": [
+        1.0,
+        5.0
+      ],
+      "layout": "single",
+      "crop": [
+        440,
+        40,
+        1040,
+        1000
+      ],
+      "width": 720,
+      "sweep": {
+        "param": "amount",
+        "label": "Amount",
+        "from": 0,
+        "to": 1,
+        "unit": "",
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 700000,
+      "float": "right",
+      "alt": "The dancer with Motion Trails while Amount runs from 0 to 1 and back: at 0 she is alone, then faint short streaks appear that grow brighter and longer up to 1, and fade again; the current value is shown at the bottom left",
+      "caption": "Amount from 0 to 1 and back."
     }
   ]
 }

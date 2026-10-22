@@ -108,15 +108,6 @@ fn cctvFragment(input: VertexOutput) -> @location(0) vec4f {
 }
 
 @fragment
-fn kineticTraceFragment(input: VertexOutput) -> @location(0) vec4f {
-  let color = source(input.uv);
-  let previous = textureSample(feedbackTex, texSampler, input.uv - vec2f(params.motionX, params.motionY) * 2.0);
-  let focus = max(landmarkField(input.uv, 0.04), 1.0 - smoothstep(params.spread, params.spread * 2.4, length(centered(input.uv))));
-  let trace = max(color.rgb, previous.rgb * (0.9 - focus * 0.08) + params.color.rgb * focus * 0.08);
-  return vec4f(mix(color.rgb, trace, params.amount), color.a);
-}
-
-@fragment
 fn rainRevealFragment(input: VertexOutput) -> @location(0) vec4f {
   let color = source(input.uv);
   let column = floor(input.uv.x * 110.0);

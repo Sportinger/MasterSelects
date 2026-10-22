@@ -467,7 +467,6 @@ export function labShot(effect, size) {
 export const LAB_STILL_SKIP = {
   'face-cables': 'needs a face-tracking bake of moving footage',
   'hand-particles': 'needs tracked hands in moving footage',
-  'kinetic-trace': 'needs movement to leave trails',
   'splat-exploration': 'needs a Gaussian splat clip',
   subject: 'needs tracked landmarks in moving footage',
   'tracked-scene': 'needs tracked landmarks in moving footage',

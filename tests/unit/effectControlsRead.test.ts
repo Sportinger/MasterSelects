@@ -11,7 +11,7 @@ const READ_BY_RUNTIME: Record<string, string> = {
   'time-stack': 'the frame-history runtime reads the preview size and memory budget',
 };
 /** Uniform fields of the shared catalog and tracking shaders → the parameter that fills them. */
-const UNIFORM_PARAM: Record<string, string> = { scale: 'scale', amount: 'amount', angle: 'angle', speed: 'speed', colorA: 'colorA', colorB: 'colorB', color: 'color' };
+const UNIFORM_PARAM: Record<string, string> = { scale: 'scale', amount: 'amount', angle: 'angle', speed: 'speed', colorA: 'colorA', colorB: 'colorB', color: 'color', trail: 'trail', tint: 'tint' };
 
 /** Uniform fields an entry point reads, through the helper functions it calls. */
 export function uniformFieldsRead(wgsl: string, entryPoint: string): Set<string> {

@@ -130,6 +130,46 @@
           "label": "Blend mode"
         }
       ]
+    },
+    {
+      "name": "kinetic-trace-inspector",
+      "effect": "kinetic-trace",
+      "params": {
+        "trail": 0.93,
+        "tint": 0.5,
+        "color": "#22d3ff"
+      },
+      "image": "../footage/dancer_stage_motion.mp4",
+      "preview": 380,
+      "top": "tabs",
+      "hide": [
+        "Track Landmarks",
+        "Particle Out"
+      ],
+      "alt": "Properties, Effects with a Motion Trails card: Preset menu showing Neon Trace, History Loop Reset, then Length 0.93, Tint 0.50, a cyan Overlay swatch and Amount 1.00, beside a strip of the preview at the edge of a dark stage",
+      "caption": "Motion Trails with the Neon Trace preset. 1 — Preset: pick a starting point. 2 — Length: how long the trail lasts. 3 — Tint: how strongly the trail takes on the Overlay colour. 4 — Overlay: the trail's colour. 5 — Amount: how strongly the effect shows.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Length",
+          "label": "Length"
+        },
+        {
+          "target": "Tint",
+          "label": "Tint"
+        },
+        {
+          "target": "Overlay",
+          "label": "Overlay"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ]
     }
   ]
 }
