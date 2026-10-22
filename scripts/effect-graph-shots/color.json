@@ -19,6 +19,10 @@
     "levels?focus=output-range&cables=avoid&layout=float&marks=output-range:above@levels-output",
     "levels?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@levels-finish",
     "hue-shift?focus=hue-rotate-oklch&marks=hue-lch-split:above,hue-lch-combine:above@hue-shift-rotate",
-    "vibrance?focus=muted-colour-weight&only=weight-muted,weight,weight-boost,weight-amount,weight-saturation&rows=1&layout=full&marks=weight:below@vibrance"
+    "vibrance?focus=muted-colour-weight&only=weight-muted,weight,weight-boost,weight-amount,weight-saturation&rows=1&layout=full&marks=weight:below@vibrance",
+    "saturation?plumbing=hide&marks=organized-saturation-controls:below,input:above,compound-shared-gamut-one:above@saturation",
+    "saturation?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@saturation-parameters",
+    "saturation?focus=saturation-gamut-safe&only=gamut-luma,gamut-luma-rgb,gamut-amount,gamut-mix&name.gamut-limit=Limit&cables=avoid&marks=gamut-luma:above,gamut-amount:below,gamut-mix:above@saturation-mix",
+    "saturation?focus=saturation-gamut-safe&only=gamut-chroma,gamut-chroma-max,gamut-chroma-up,gamut-chroma-min,gamut-chroma-negated,gamut-chroma-down,gamut-headroom,gamut-limit-up,gamut-limit-down,gamut-limit&name.gamut-luma-rgb=Grey RGB&name.gamut-luma=Grey&constants=hide&cables=avoid&marks=gamut-chroma:below,gamut-chroma-max:above,gamut-limit-up:above,gamut-limit-down:below,gamut-limit:above@saturation-limit"
   ]
 }

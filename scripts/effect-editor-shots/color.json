@@ -125,6 +125,31 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "saturation-inspector",
+      "effect": "saturation",
+      "params": {
+        "amount": 1.35
+      },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Saturation card: the Preset menu showing Rich and the Amount row at 1.35, beside a strip of the preview with the richer harbour",
+      "caption": "Saturation with the Rich preset. 1 — Preset: pick a starting point. 2 — Amount: weaker or stronger colour.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }
