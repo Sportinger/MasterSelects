@@ -78,23 +78,28 @@ describe('hosted Deepgram transcription', () => {
     });
   });
 
-  it('enables automatic language detection when no language is requested', async () => {
+  it('uses multilingual recognition for German, English and French switches in Auto mode', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       results: {
-        channels: [{ alternatives: [{ words: [] }] }],
+        channels: [{ alternatives: [{ words: [
+          { word: 'Hallo', start: 0, end: 0.4 },
+          { word: 'hello', start: 0.5, end: 0.9 },
+          { word: 'bonjour', start: 1, end: 1.5 },
+        ] }] }],
       },
     })));
     vi.stubGlobal('fetch', fetchMock);
 
-    await createHostedDeepgramTranscription(
+    const result = await createHostedDeepgramTranscription(
       { DEEPGRAM_API_KEY: 'server-secret' } as Env,
       { ...preparedAudio, language: undefined },
     );
 
     const [requestUrl] = fetchMock.mock.calls[0];
     const url = new URL(String(requestUrl));
-    expect(url.searchParams.get('detect_language')).toBe('true');
-    expect(url.searchParams.has('language')).toBe(false);
+    expect(url.searchParams.has('detect_language')).toBe(false);
+    expect(url.searchParams.get('language')).toBe('multi');
+    expect(result.words.map(word => word.word)).toEqual(['Hallo', 'hello', 'bonjour']);
   });
 
   it('keeps hosted Deepgram speaker labels and confidence in timeline words', () => {

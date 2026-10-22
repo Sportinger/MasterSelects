@@ -63,7 +63,9 @@ export async function createHostedDeepgramTranscription(
   if (input.language) {
     params.set('language', input.language);
   } else {
-    params.set('detect_language', 'true');
+    // Auto must follow language switches within a recording, rather than choose
+    // one dominant language for the entire file (detect_language).
+    params.set('language', 'multi');
   }
 
   const response = await fetch(`https://api.deepgram.com/v1/listen?${params}`, {
