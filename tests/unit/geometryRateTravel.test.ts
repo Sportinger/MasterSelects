@@ -3,7 +3,8 @@ import { getEffect } from '../../src/effects';
 import type { EffectParam } from '../../src/effects/types';
 import { evaluateGeometryProgram } from '../../src/services/operators/geometry/geometryEvaluation';
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
-import { geometryRateTravel } from '../../src/services/operators/geometry/geometryRateTravel';
+import { geometryRateTravel, keyframesBindingsLeave } from '../../src/services/operators/geometry/geometryRateTravel';
+import { createControlNode } from '../../src/services/parameterSources/controlOperators';
 import { buildStrandsLayerSources } from '../../src/services/operators/geometry/strandsLayerSource';
 import { createDefaultWeaveGraph, geometryParameterReader } from '../../src/services/operators/geometry/weaveGraph';
 import type { Effect } from '../../src/types/effects';
@@ -43,21 +44,47 @@ describe('integrated rates in geometry graphs', () => {
     expect(geometryRateTravel({ id: 'blur', type: 'gaussian-blur' }, keys, 1, clocks)).toBeUndefined();
   });
 
-  it('keeps rate × time for a keyed rate a node or the Constant mode drives, and logs it once', async () => {
+  it('leaves out the keyframes a node or the Constant mode replaces, and logs a keyed rate once', async () => {
     const { vi } = await import('vitest');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const keys = [key('grid', 'speed', 0, 0), key('grid', 'speed', 2, 4)];
+      const keys = [key('grid', 'speed', 0, 0), key('grid', 'speed', 2, 4), key('grid', 'offset', 0, 1)];
       const driven = { 'effect.grid.speed': { source: { nodeId: 'lfo', portId: 'value' }, enabled: true } } as never;
-      const travel = geometryRateTravel({ ...grid, name: 'Grid' }, keys, 1, clocks, driven)!;
-      expect(travel('speed', 'clip')).toBeUndefined();
-      expect(travel('speed', 'timeline')).toBeUndefined();
+      const left = keyframesBindingsLeave({ ...grid, name: 'Grid' }, keys, driven);
+      expect(left.map(keyframe => keyframe.property)).toEqual(['effect.grid.offset']);
+      expect(geometryRateTravel(grid, left, 1, clocks)).toBeDefined();
+      expect(geometryRateTravel(grid, left, 1, clocks)!('speed', 'clip')).toBeUndefined();
+      keyframesBindingsLeave({ ...grid, name: 'Grid' }, keys, driven);
       expect(warn.mock.calls.filter(call => call.join(' ').includes('Grid speed is driven by a source')).length).toBe(1);
-      // A disabled source leaves the keyframes in charge (the 0 → 4 ramp travelled 1 by second 1); Constant mode overrides them.
+      // A disabled source leaves the keyframes in charge; the Constant mode replaces them.
       const off = { 'effect.grid.speed': { source: { nodeId: 'lfo', portId: 'value' }, enabled: false } } as never;
-      expect(geometryRateTravel(grid, keys, 1, { clipClockAt: local => local, timelineStart: 0 }, off)!('speed', 'clip')).toBeCloseTo(1, 10);
-      expect(geometryRateTravel(grid, keys, 1, clocks, { 'effect.grid.speed': { localMode: 'constant' } } as never)!('speed', 'clip')).toBeUndefined();
+      expect(keyframesBindingsLeave(grid, keys, off)).toHaveLength(3);
+      expect(keyframesBindingsLeave(grid, keys, { 'effect.grid.speed': { localMode: 'constant' } } as never)).toHaveLength(1);
     } finally { warn.mockRestore(); }
+  });
+
+  it('weaves at the value a node or the Constant mode gives a keyed Weave Speed, not at its keyframes', async () => {
+    const { vi } = await import('vitest');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const definition = getEffect('weave')! as { params: Record<string, EffectParam> };
+    const params = definition.params;
+    definition.params = { ...params, weave_value: { type: 'number', label: 'Weave Speed', default: 1, min: 0, max: 10, step: 0.05, integratedAs: 'weaveTravel' } };
+    try {
+      const graph = flatWeave();
+      // Keys 0 → 0.4 over two seconds read 0.2 at one second; the binding says 0.3.
+      const keys = [key('fx', 'weave_value', 0, 0), key('fx', 'weave_value', 2, 0.4)];
+      const strands = (targets: Record<string, unknown>, nodes: unknown[] = []) => {
+        const effect: Effect = { id: 'fx', type: 'weave', name: 'Weave', enabled: true, operatorGraph: graph, params: { weave_value: 0.3 } };
+        const clip = { id: 'clip', effects: [effect], startTime: 0, nodeGraph: { version: 1 as const, nodes: [], parameterSources: {
+          version: 1 as const, clipTimeOffset: 0, graph: { version: 1 as const, nodes, edges: [], layout: {} }, targets } } };
+        return Array.from(evaluateGeometryProgram(buildStrandsLayerSources(clip as never, 1, keys)[0].source.strands.program).radius!);
+      };
+      expect(strands({ 'effect.fx.weave_value': { localMode: 'constant' } })).toEqual(radiusAt(graph, 1, 0.3));
+      const node = createControlNode('values.number', 'level');
+      node.constants = { value: 0.6 };
+      expect(strands({ 'effect.fx.weave_value': { source: { nodeId: 'level', portId: 'value' } } }, [node])).toEqual(radiusAt(graph, 1, 0.6));
+      expect(radiusAt(graph, 1, 0.3)).not.toEqual(radiusAt(graph, 1, 0.2));
+    } finally { definition.params = params; warn.mockRestore(); }
   });
 
   it('lowers Clip Time × a travelling rate in the Weave In progress to the travelled distance', () => {

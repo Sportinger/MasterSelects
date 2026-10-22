@@ -59,6 +59,16 @@ and source. Other effects and structural settings are not implicitly enabled.
   style switch keeps them. `tests/unit/effectControlsRead.test.ts` fails when a shown control is not
   bound by the effect's default graph, or, for shader effects of the shared catalog and tracking
   uniforms, not read by its entry point (helper functions included).
+- **Styles.** Looks of one engine (`effectCatalogGroups.ts`) are each other's Style menu entries
+  when every key they share has the same parameter type (`effectStyles.ts`). A switch carries a
+  value the user set, with its keyframes, between controls of the same key and role; a value still at
+  the old look's default (no keyframes, no node source) takes the new look's default. A key whose
+  control does something else in one look declares `styleRole` there (Crystal Glass Facets and
+  Refraction, Glass Dispersion Dispersion, Ribbon Scan Ribbons and Displacement, Wave Lines Line
+  Density, CRT Screen Mask Density, Film Prism Fringe, Riso Registration): between different roles
+  the value starts at the new default and its keyframes are removed (one undo step). Labels never
+  decide this. A value kept from an earlier look carries only when every look with that key agrees
+  on the role. `tests/unit/effectStyles.test.ts`.
 - Every visible effect has its own docs page; `tests/unit/effectDocsCatalog.test.ts` fails otherwise
   (see [Effect pages](./Documentation-Site.md#effect-pages)).
 - **Presets.** An effect declares its named starting points in its definition: `presets: [{ id, name,
@@ -570,8 +580,10 @@ or Time with a Value node bound to a keyframed integrating parameter compiles to
 distance travelled on that clock (`geometryRateTravel.ts`, supplied by the strand layer
 source and the node previews), so a keyed Weave Speed or Pulse Rate eases instead of
 jumping. The clip clock runs in source time (speed, reversal, trim), so its travel is
-scaled by that clock's rate. A rate that a node source or the Constant mode drives keeps
-rate × time there too, logged once like the image path.
+scaled by that clock's rate. A geometry graph reads a value that a node source or the
+Constant mode drives, not its keyframes (`keyframesBindingsLeave` leaves those keys out
+for the parameter reader, the travel and the Weave node previews), so a driven rate runs
+at its driven value × time, logged once like the image path.
 
 A parameter added after instances were saved can declare `legacyDefault`: what a saved
 instance without it renders. Renderers, keyframe base values and the inspector
@@ -1910,7 +1922,8 @@ direction by sin(band × 0.71 + timeline time × Speed × 2) × **Drift** × 6 %
 every second band is shaded to 0.64–0.82 of its brightness. Band Size below 2 is clamped by the
 `scale-clamped` node (`renderMin`, reported by `paramRangeNotes`); bands under one output pixel are
 reported by `driftLinesWarnings`. The parameter ids stay the engine's (`scale`, `amount`, `angle`,
-`speed`), so the Style menu keeps values; only the labels differ. Angle is `graphOnly`: a node setup
+`speed`) in the engine's shared roles (no `styleRole`), so the Style menu carries the values the
+user set; only the labels differ. Angle is `graphOnly`: a node setup
 edited before it acted does not read it and the card hides it. The stage folders come from its
 presentation plan (Bands, Drift Wave, Shifted Sample, Line Shading & Alpha). Its four presets live in
 `src/effects/halftone/driftLines.ts`. Tests: `tests/unit/imageMotionHalftoneGraphs.test.ts`, `tests/unit/effectPresets.test.ts`.

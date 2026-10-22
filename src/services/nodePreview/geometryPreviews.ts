@@ -4,7 +4,7 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { getEffectOperator } from '../operators/operatorRegistry';
 import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { compileGeometryGraph } from '../operators/geometry/geometryProgram';
-import { geometryRateTravel, type GeometryRateClocks } from '../operators/geometry/geometryRateTravel';
+import { geometryRateTravel, keyframesBindingsLeave, type GeometryRateClocks } from '../operators/geometry/geometryRateTravel';
 import { evaluateGeometryProgram, type CurveSet } from '../operators/geometry/geometryEvaluation';
 import { RodSimulationDeferred } from '../operators/geometry/rodCurves';
 import { geometryParameterReader } from '../operators/geometry/weaveGraph';
@@ -76,15 +76,19 @@ function curveSourceNode(graph: EffectOperatorGraph, nodeId: string, portId: str
   return undefined;
 }
 
-/** CPU reference evaluation at the playhead; opening a viewer never touches GPU state. */
-export function geometryPreview(request: PreviewRequest, effect: Effect, keys: Keyframe[], time: number, simulationTime = time,
-  clocks?: GeometryRateClocks, bindings?: Parameters<typeof geometryRateTravel>[4]): PreviewFrame {
+/**
+ * CPU reference evaluation at the playhead; opening a viewer never touches GPU state. `effect` carries
+ * the values its parameter sources drive (applyParameterSourcesToEffects); the keyframes of those
+ * properties are left out here, so the preview shows the driven value like the render.
+ */
+export function geometryPreview(request: PreviewRequest, effect: Effect, keyframes: Keyframe[], time: number, simulationTime = time,
+  clocks?: GeometryRateClocks, bindings?: Parameters<typeof keyframesBindingsLeave>[2]): PreviewFrame {
   const base = { key: request.key, revision: request.revision, time: request.time };
   const binding = request.node.binding;
   if (binding?.kind !== 'effect-operator') return { ...base, status: 'missing', label: 'Curve node unavailable' };
   try {
     const graph = effectOperatorGraph(effect);
-    const port = request.port;
+    const port = request.port, keys = keyframesBindingsLeave(effect, keyframes, bindings);
     const reader = geometryParameterReader(effectOperatorParams(effect), effect.id, keys, time);
     const cloth = clothSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
     if (cloth) {
@@ -95,7 +99,7 @@ export function geometryPreview(request: PreviewRequest, effect: Effect, keys: K
     const target = curveSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
     if (!target) return { ...base, status: 'live', label: 'Per-point value', presentation: 'text',
       drawing: { kind: 'text', lines: ['Evaluated once per curve point', 'where a modifier reads it'] } };
-    const rateTravel = clocks ? geometryRateTravel(effect, keys, time, clocks, bindings) : undefined;
+    const rateTravel = clocks ? geometryRateTravel(effect, keys, time, clocks) : undefined;
     const program = compileGeometryGraph(graph, reader, target,
       { time: request.time, simulationTime, ...(rateTravel ? { rateTravel } : {}) });
     let curves: CurveSet, label = `${program.strandCount.toLocaleString('en-US')} curves · ${program.pointCount.toLocaleString('en-US')} points`;
