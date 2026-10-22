@@ -276,7 +276,8 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false) => {
     const value = effect.params[paramName] ?? paramDef.legacyDefault ?? paramDef.default;
     // Decide before creating the element: a rendered-null Resolve row would hide the parameter.
-    if (resolveRows && hasResolveEffectParamRow(paramDef)) return <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef}
+    // Colours have no generic control, so every card shows them in the shared colour row.
+    if ((resolveRows || paramDef.type === 'color') && hasResolveEffectParamRow(paramDef)) return <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef}
       value={value} effect={effect} clipId={clipId} onChange={onChange} onDragStart={onDragStart} onDragEnd={onDragEnd} onParamCommit={onParamCommit} />;
     return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, noMaxLimit, onDragStart, onDragEnd, onParamCommit);
   };

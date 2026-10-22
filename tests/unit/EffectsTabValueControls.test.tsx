@@ -127,6 +127,20 @@ describe('EffectsTab numeric controls', () => {
     expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'holo-colours', expect.objectContaining({ colorA: '#22d3ee' }));
   });
 
+  it('shows colour parameters in cards still on the generic rows (Riso Dark Ink / Warm Ink) and writes them', () => {
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
+    const riso: Effect = { id: 'riso-inks', type: 'riso', name: 'Riso', enabled: true,
+      params: { amount: 0.75, scale: 8, colorA: '#123456', colorB: '#ef476f' } };
+    render(<EffectsTab clipId="clip:effects-controls" effects={[riso]} />);
+    expect(screen.getByLabelText('Dark Ink')).toHaveAttribute('type', 'color');
+    expect(screen.getByLabelText('Warm Ink hex')).toHaveValue('#ef476f');
+    fireEvent.click(screen.getByLabelText('Reset Dark Ink'));
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'riso-inks', expect.objectContaining({ colorA: '#2046b3' }));
+    fireEvent.change(screen.getByLabelText('Warm Ink hex'), { target: { value: '#00ff00' } });
+    fireEvent.keyDown(screen.getByLabelText('Warm Ink hex'), { key: 'Enter' });
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'riso-inks', expect.objectContaining({ colorB: '#00ff00' }));
+  });
+
   it('renders color controls as Resolve rows: Transform-style draggable value, thin slider and reset', () => {
     const brightness: Effect = {
       id: 'effect:brightness:test',
