@@ -391,7 +391,7 @@ fixed text in its Phosphor colour with 1080p scanlines. Both retain the sampled 
 composition timeline clock.
 Capsule Cloud adds signed-distance pill coverage; UI Collage adds cell borders
 and cursor marks. Their character offsets use deterministic spatial hashes.
-Matrix Rain combines hashed column offsets with its animated green head highlight.
+Matrix Rain lets drops with near-white heads and fading tails fall down every column, lit by the cell tone.
 ASCII Ghost combines the current result with explicit previous-frame history using
 component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
@@ -409,7 +409,7 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   the look's dark ground (source × 0.08, Dark × 0.15, or its own paper/black) towards the
   character colour of the cell. Looks with their own palette (Matrix Rain, Retro Matrix, Pixel Code,
   Number Field, Dither Glow) colour the whole cell with their ink at Background strength (Matrix Rain
-  × the cell tone). New instances start at 0.2 (0.3 before the characters filled their cells; Stitch Poster at 0, it has its paper), so cards and
+  × the cell tone × 0.45–1 with its rain). New instances start at 0.2 (0.3 before the characters filled their cells; Stitch Poster at 0, it has its paper), so cards and
   stills keep about 40 % of the picture's brightness instead of about 10 %. `legacyDefault: 0` keeps
   instances saved before it on the dark ground; it is `graphOnly`, so a node setup saved before it
   hides the row; outside 0–1 it renders clamped (`background-clamped`, reported by `paramRangeNotes`).
@@ -434,8 +434,8 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   `1 + ceil(Roll × (ramp − 1))` characters around its own (`index-window`), kept inside the ramp
   (`index-window-start`), starting from its own character; the look's offset (Glyph Matrix: the
   diagonal sweep) moves it through that window. Roll 1 is exactly the earlier full-ramp wrap
-  (`legacyDefault: 1`, and the default of every look but Glyph Matrix, Retro Matrix and Symbol Matrix,
-  which start at 0.2, 0.3 and 0.4), 0 holds
+  (`legacyDefault: 1`, and the default of every look but Glyph Matrix, Retro Matrix, Symbol Matrix and
+  Matrix Rain, which start at 0.2, 0.3, 0.4 and 0.5), 0 holds
   each cell on its tone's character, and any Roll above 0 moves at least two characters. With
   Black Level above 0, a cell at or below it (tone 0) gets a window of 1 (`index-roll-lit`,
   `index-roll-levelled`, `index-roll-dark`, `index-roll-cell`), so the dark stage holds still even at
@@ -470,7 +470,23 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   borders cut characters in half, nothing scrolled, and the 1-pixel lines differed between preview and
   export sizes. A fix for new instances and setups saved without a graph; stored setups keep the old
   look. Its graph leaves out the shared colour nodes it never reads; presets: `RETRO_MATRIX_PRESETS`.
-- **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light;
+- **Matrix Rain drops** (`src/effects/glyph/matrixRain.ts`, the **Rain** folder, `rain-*`). Every column
+  draws three Random (Cell) numbers of (column, seed 1–3): its pace (12 × 0.6–1.4 rows a second × the clock,
+  `rain-rate`, `rain-fallen`), its drop spacing (32 × 0.6–1.4 rows, `rain-spacing`) and its phase.
+  `Behind = fract((fallen − row) / spacing + phase) × spacing` (`rain-behind`) is how far the last head
+  has fallen past the cell; the tail is `max(1 − Behind / max(Trail × spacing, 1), 0)`, squared
+  (`rain-fade`), the head `max(1 − Behind, 0)` (`rain-head`). A character glows at Rain Color, mixed
+  towards white by 0.8 × head, × fade × (0.2 + 1.3 × tone) (`rain-light`, `rain-glyph`); its ground is
+  Background × tone × (0.45 + 0.55 × fade) in Rain Color (`rain-ground`), added under it (`rain-lit`).
+  Characters swap like Symbol Matrix's (`index-cell-random`, `index-tick`), twice a second × Speed.
+  **Rain Color** (`rainColor`, default `#29ff6b`) and **Trail** (`trail`, 0–1, default 0.5, clamped by
+  `trail-clamped`) are its own `graphOnly` controls; Roll starts at 0.5 and the Ramp at Numeric. This
+  replaces a symmetric sine pulse (period 14.6 rows) whose characters slid 8 rows a second, ignored the
+  picture's brightness and, at the saved Roll 1 and Background 0, lost the picture entirely: a fix for
+  new instances and setups saved without a graph; stored setups keep the old look. Its graph leaves out
+  the shared colour nodes; presets: `MATRIX_RAIN_PRESETS` (Digital Rain uses half-width katakana, drawn
+  from the system's fallback font). Test: `tests/unit/matrixRain.test.ts`.
+- **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light (Matrix Rain draws in its Rain Color);
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).
 - **Transparency.** Input and output are straight alpha. Each cell takes the alpha of its centre

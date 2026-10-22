@@ -31,6 +31,8 @@ export const EFFECT_DOC_EXTRAS = {
   levels: { thumb: SPLIT_THUMB },
   // The whole blurred half at card size hides the blur: the houses and boats, closer.
   'gaussian-blur': { thumb: { region: [0.66, 0.2, 0.3, 0.6] } },
+  // Matrix Rain: the dancer's figure in the rain, not the dark stage beside her.
+  matrix: { thumb: { region: [0.53, 0.3, 0.36, 0.7] } },
   // Generators: the still is the effect frame alone.
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },

@@ -1,5 +1,6 @@
 import { createGlyphEffect, type GlyphColorControl } from './glyphEffectFactory';
 import { ASCII_PRESETS, GLYPH_MATRIX_PRESETS, RETRO_MATRIX_PRESETS, SYMBOL_MATRIX_PRESETS } from './glyphPresets';
+import { MATRIX_RAIN_PARAMS, MATRIX_RAIN_PRESETS } from './matrixRain';
 import { RETRO_MATRIX_PARAMS } from './retroMatrix';
 import { SYMBOL_MATRIX_PARAMS } from './symbolMatrix';
 
@@ -13,7 +14,9 @@ export const ascii = createGlyphEffect({ id: 'ascii', name: 'ASCII', entryPoint:
 export const asciiGhost = createGlyphEffect({ id: 'ascii-ghost', name: 'ASCII Ghost', entryPoint: 'asciiGhostFragment', animated: true, feedback: true, motionOnlyByRoll: true });
 export const ditherText = createGlyphEffect({ id: 'dither-text', name: 'Dither Text', entryPoint: 'ditherTextFragment', animated: true, defaultCellSize: 10 });
 export const wordMosaic = createGlyphEffect({ id: 'word-mosaic', name: 'Word Mosaic', entryPoint: 'wordMosaicFragment', defaultCellSize: 22, defaultRamp: 'detailed' });
-export const matrix = createGlyphEffect({ id: 'matrix', name: 'Matrix Rain', entryPoint: 'matrixFragment', animated: true, defaultRamp: 'symbols', ignoresColors: OWN_PALETTE });
+// Matrix Rain lets drops with fading trails fall down every column (Rain Color, Trail: matrixRain.ts); Roll 0.5 keeps
+// each character near the one of its brightness, so the figure also reads in the code.
+export const matrix = createGlyphEffect({ id: 'matrix', name: 'Matrix Rain', entryPoint: 'matrixFragment', animated: true, defaultRamp: 'numeric', defaultRoll: 0.5, ignoresColors: OWN_PALETTE, params: MATRIX_RAIN_PARAMS, presets: MATRIX_RAIN_PRESETS });
 export const pixelCode = createGlyphEffect({ id: 'pixel-code', name: 'Pixel Code', entryPoint: 'pixelCodeFragment', defaultRamp: 'binary', defaultCellSize: 10, ignoresColors: OWN_PALETTE });
 export const numberField = createGlyphEffect({ id: 'number-field', name: 'Number Field', entryPoint: 'numberFieldFragment', defaultRamp: 'numeric', ignoresColors: ['colorMode'] });
 export const gridGlyph = createGlyphEffect({ id: 'grid-glyph', name: 'Grid Glyph', entryPoint: 'gridGlyphFragment' });

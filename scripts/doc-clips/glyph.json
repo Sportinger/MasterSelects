@@ -737,6 +737,261 @@
       },
       "alt": "The dancer with Retro Matrix while Roll runs from 0 to 1 and back: at 0 each digit follows the brightness, from blank on the stage to 9 in her dress, then the text gets more and more random until any digit can stand anywhere and the figure shows only in the brightness, and back; the current value is shown at the bottom left",
       "caption": "Roll from 0 to 1 and back."
+    },
+    {
+      "name": "matrix",
+      "effect": "matrix",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        480,
+        80,
+        800,
+        760
+      ],
+      "width": 1280,
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 1000000,
+      "alt": "The dancer turning on a dark stage, original left and with Matrix Rain right: green digits fall down every column in streaks with bright, almost white heads and fading trails; where she is lit, the digits glow brighter and denser and a soft green glow fills her shape, so she turns in the falling code",
+      "caption": "Left: original. Right: Matrix Rain at its default settings."
+    },
+    {
+      "name": "matrix-presets",
+      "kind": "presets",
+      "effect": "matrix",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "crop": [
+        520,
+        90,
+        760,
+        720
+      ],
+      "width": 900,
+      "loop": 0.35,
+      "poster": 2.2,
+      "maxBytes": 1000000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Digital Rain top left with green katakana and digits falling over the whole frame, Code Portrait top right where only her lit figure is drawn in green digits on an empty black stage, Binary Storm bottom left with fine cyan zeros and ones racing down, Red Alert bottom right with large red digits and short trails",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "effect": "matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "maxBytes": 430000,
+      "float": "right",
+      "poster": 1.2,
+      "name": "matrix-cell-size",
+      "sweep": {
+        "param": "cellSize",
+        "label": "Cell Size",
+        "from": 8,
+        "to": 40,
+        "unit": " px"
+      },
+      "alt": "The dancer with Matrix Rain while Cell Size runs from 8 to 40 px and back: fine falling code grows into a few columns of large digits and shrinks again; the current value is shown at the bottom left",
+      "caption": "Cell Size from 8 to 40 px and back."
+    },
+    {
+      "effect": "matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "maxBytes": 430000,
+      "float": "right",
+      "poster": 1.4,
+      "name": "matrix-amount",
+      "sweep": {
+        "param": "amount",
+        "label": "Amount",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Matrix Rain while Amount runs from 0 to 1 and back: the plain picture fades into falling green code and back; the current value is shown at the bottom left",
+      "caption": "Amount from 0 to 1 and back."
+    },
+    {
+      "effect": "matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "maxBytes": 430000,
+      "float": "right",
+      "poster": 2.0,
+      "name": "matrix-background",
+      "sweep": {
+        "param": "background",
+        "label": "Background",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Matrix Rain while Background runs from 0 to 1 and back: at 0 only the falling digits show on black, then a green glow of her figure rises behind them and brightens where the trails pass, until she glows bright green, and back; the current value is shown at the bottom left",
+      "caption": "Background from 0 to 1 and back."
+    },
+    {
+      "effect": "matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "maxBytes": 430000,
+      "float": "right",
+      "poster": 1.2,
+      "name": "matrix-black-level",
+      "sweep": {
+        "param": "blackLevel",
+        "label": "Black Level",
+        "from": 0,
+        "to": 0.5,
+        "decimals": 2
+      },
+      "alt": "The dancer with Matrix Rain while Black Level runs from 0 to 0.5 and back: the rain on the dark stage goes out first, then on the shadows of her body, until only her bright dress is drawn in falling code, and back; the current value is shown at the bottom left",
+      "caption": "Black Level from 0 to 0.5 and back."
+    },
+    {
+      "effect": "matrix",
+      "params": {},
+      "range": [
+        0.2,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "maxBytes": 430000,
+      "float": "right",
+      "poster": 2.6,
+      "name": "matrix-speed",
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          1,
+          3
+        ]
+      },
+      "alt": "The dancer with Matrix Rain at three speeds, about two seconds each: at Speed 0 the rain hangs still and changes only where she moves, at 1 the drops fall steadily, at 3 they race down and the digits flicker; the speed is shown at the bottom left",
+      "caption": "Speed 0, 1 and 3, about two seconds each."
+    },
+    {
+      "effect": "matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "maxBytes": 430000,
+      "float": "right",
+      "poster": 0.4,
+      "name": "matrix-roll",
+      "sweep": {
+        "param": "roll",
+        "label": "Roll",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Matrix Rain while Roll runs from 0 to 1 and back: at 0 every digit follows the brightness, small digits on the stage and 8s and 9s in her dress, then the digits get more and more random and swap as the rain falls, until any digit can stand anywhere, and back; the current value is shown at the bottom left",
+      "caption": "Roll from 0 to 1 and back."
+    },
+    {
+      "effect": "matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "maxBytes": 430000,
+      "float": "right",
+      "poster": 2.0,
+      "name": "matrix-trail",
+      "sweep": {
+        "param": "trail",
+        "label": "Trail",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Matrix Rain while Trail runs from 0 to 1 and back: at 0 only single bright heads fall like sparks, then each head pulls a longer and longer fading tail, until the tails reach the next drop and the columns fill, and back; the current value is shown at the bottom left",
+      "caption": "Trail from 0 to 1 and back."
     }
   ]
 }

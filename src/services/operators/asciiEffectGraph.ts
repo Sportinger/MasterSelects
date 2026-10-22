@@ -1,6 +1,8 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { GLYPH_ATLAS_TEXEL_INSET, GLYPH_MAX_BLACK_LEVEL, GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
 import { SYMBOL_LEGACY_TWINKLE } from '../../effects/glyph/symbolMatrix';
+import { MATRIX_DEFAULT_TRAIL, MATRIX_DROP_SPACING, MATRIX_FALL_RATE, MATRIX_GAP_MIN, MATRIX_GAP_SPAN, MATRIX_GROUND_FLOOR, MATRIX_HEAD_WHITE, MATRIX_PACE_MIN, MATRIX_PACE_SPAN, MATRIX_RAIN_COLOR,
+  MATRIX_SWAP_RATE, MATRIX_TONE_BASE, MATRIX_TONE_FACTOR } from '../../effects/glyph/matrixRain';
 import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_PERIOD, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
 type Ref = { node: string; port: string };
 class Builder {
@@ -134,7 +136,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     } else {
       const timeSpeed = clock(); animatedTimeSpeed = timeSpeed;
       // Ticks: the clock × the look's own rate (Retro Matrix moves by its scroll instead).
-      const phase = variant === 'retro-matrix' ? zero : g.binary('index-time-phase', 'math.multiply.scalar', timeSpeed, g.number('index-time-scale', variant === 'matrix' ? 8 : variant === 'glyph-matrix' ? 6 : variant === 'ascii-ghost' ? 5 : variant === 'symbol-matrix' ? 4 : variant === 'pixel-dither' ? 1 : 2));
+      const phase = variant === 'retro-matrix' ? zero : g.binary('index-time-phase', 'math.multiply.scalar', timeSpeed, g.number('index-time-scale', variant === 'matrix' ? MATRIX_SWAP_RATE : variant === 'glyph-matrix' ? 6 : variant === 'ascii-ghost' ? 5 : variant === 'symbol-matrix' ? 4 : variant === 'pixel-dither' ? 1 : 2));
       if (variant === 'retro-matrix') {
         // The text: one fixed random character per cell of the scrolled grid (column, line), so it moves with the scroll.
         // The line number repeats every RETRO_SCROLL_PERIOD rows, as the scroll wraps: y − period × floor((y + ½) / period).
@@ -151,7 +153,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
         const yPhase = g.binary('index-y-phase', 'math.multiply.scalar', { node: idSplit.node, port: 'y' }, g.number('index-y-scale', .35));
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-sweep', 'math.add.scalar',
           g.binary('index-sweep-x', 'math.add.scalar', phase, { node: idSplit.node, port: 'x' }), yPhase));
-      } else if (variant === 'symbol-matrix') {
+      } else if (variant === 'symbol-matrix' || variant === 'matrix') {
         // Each cell swaps at its own moment (ticks shifted by a random share of a tick, so the swaps spread over
         // time instead of hitting every cell on one frame) to a random character of its window. The key pairs the
         // cell's own random with its tick: hashing cell + tick slid one random field diagonally across the frame.
@@ -166,12 +168,6 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
         const spatialHash = g.unary('index-spatial-hash', 'noise.hash2d.vec2', spatialCell);
         const spatialOffset = g.binary('index-spatial-offset', 'math.multiply.scalar', spatialHash, safeCount);
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-spatial-phase', 'math.add.scalar', timeSpeed, spatialOffset));
-      } else if (variant === 'matrix') {
-        const idParts = g.node('index-matrix-id', 'vector.split.vec2', 'x'); g.edge(cellId, idParts, 'value');
-        const column = g.node('index-matrix-column', 'vector.combine.vec2'); g.edge({ node: idParts.node, port: 'x' }, column, 'x'); g.edge(zero, column, 'y');
-        const columnHash = g.unary('index-matrix-hash', 'noise.hash2d.vec2', column), columnOffset = g.binary('index-matrix-column-offset', 'math.multiply.scalar', columnHash, safeCount);
-        const rainStart = g.binary('index-matrix-rain-start', 'math.add.scalar', phase, columnOffset);
-        offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-matrix-rain', 'math.subtract.scalar', rainStart, { node: idParts.node, port: 'y' }));
       } else offset = g.unary('index-offset', 'math.floor.scalar', phase);
     }
     if (animated) {
@@ -290,21 +286,55 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
       edges: g.edges.filter(edge => !unused.has(edge.from) && !unused.has(edge.to)), layout: g.layout };
   }
   if (variant === 'matrix') {
-    const idParts = g.node('matrix-id-split', 'vector.split.vec2', 'x'); g.edge(cellId, idParts, 'value');
-    const repeatedX = g.node('matrix-repeated-x', 'vector.combine.vec2'); g.edge({ node: idParts.node, port: 'x' }, repeatedX, 'x'); g.edge({ node: idParts.node, port: 'x' }, repeatedX, 'y');
-    const yPhase = g.binary('matrix-y-phase', 'math.multiply.scalar', { node: idParts.node, port: 'y' }, g.number('matrix-y-factor', .43));
-    const timePhase = g.binary('matrix-time-phase', 'math.multiply.scalar', animatedTimeSpeed!, g.number('matrix-time-factor', 5));
-    const basePhase = g.binary('matrix-base-phase', 'math.subtract.scalar', yPhase, timePhase);
-    const hashPhase = g.binary('matrix-hash-phase', 'math.multiply.scalar', g.unary('matrix-hash', 'noise.hash2d.vec2', repeatedX), g.number('matrix-tau', 6.28318530718));
-    const wave = g.unary('matrix-wave', 'math.sin.scalar', g.binary('matrix-wave-phase', 'math.add.scalar', basePhase, hashPhase));
-    const headBase = g.binary('matrix-head-base', 'math.add.scalar', half, g.binary('matrix-head-wave', 'math.multiply.scalar', half, wave));
-    const head = g.binary('matrix-head', 'math.power.scalar', headBase, g.number('matrix-head-power', 4));
-    const green = g.node('matrix-green-vector', 'vector.combine.vec3'); g.edge(g.number('matrix-green-r', .04), green, 'x'); g.edge(g.binary('matrix-green-g', 'math.add.scalar', g.number('matrix-green-base', .35), g.binary('matrix-green-head', 'math.multiply.scalar', head, g.number('matrix-green-scale', .65))), green, 'y'); g.edge(g.number('matrix-green-b', .13), green, 'z');
-    const greenRgb = g.node('matrix-green-rgb', 'convert.vec3-to-rgb', 'rgb'); g.edge(green, greenRgb, 'value');
-    const matrixGround = g.binary('background-tone', 'math.multiply.scalar', backgroundAmount, tone);
-    const marked = g.node('matrix-marked', 'math.multiply.rgb-scalar'); g.edge(greenRgb, marked, 'a'); g.edge(inkCoverage(glyphAlpha, matrixGround), marked, 'b');
-    const combine = blend(marked); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
-    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+    // Rain: every column has drops that fall at its own pace and spacing (Random (Cell) of the column and a seed).
+    // Behind is how many rows the cell lies above the nearest head below it; the trail fades over Trail × the
+    // spacing, and the head cell (Behind < 1) turns towards white.
+    const rainCell = g.node('rain-cell', 'vector.split.vec2', 'x'); g.edge(cellId, rainCell, 'value');
+    const column = { node: rainCell.node, port: 'x' }, row = { node: rainCell.node, port: 'y' };
+    const columnRandom = (name: string, seed: number) => {
+      const key = g.node(`rain-${name}-key`, 'vector.combine.vec2'); g.edge(column, key, 'x'); g.edge(g.number(`rain-${name}-seed`, seed), key, 'y');
+      return g.unary(`rain-${name}-random`, 'noise.cell-hash.vec2', key);
+    };
+    const between = (name: string, random: Ref, min: number, span: number, scale: number) => g.binary(`rain-${name}`, 'math.multiply.scalar',
+      g.binary(`rain-${name}-share`, 'math.add.scalar', g.number(`rain-${name}-min`, min), g.binary(`rain-${name}-spread`, 'math.multiply.scalar', random, g.number(`rain-${name}-span`, span))),
+      g.number(`rain-${name}-base`, scale));
+    const rate = between('rate', columnRandom('pace', 1), MATRIX_PACE_MIN, MATRIX_PACE_SPAN, MATRIX_FALL_RATE);
+    const spacing = between('spacing', columnRandom('gap', 2), MATRIX_GAP_MIN, MATRIX_GAP_SPAN, MATRIX_DROP_SPACING);
+    const fallen = g.binary('rain-fallen', 'math.multiply.scalar', animatedTimeSpeed!, rate);
+    const drops = g.binary('rain-drops', 'math.add.scalar', g.binary('rain-lag', 'math.divide-ieee.scalar',
+      g.binary('rain-ahead', 'math.subtract.scalar', fallen, row), spacing), columnRandom('phase', 3));
+    const behind = g.binary('rain-behind', 'math.multiply.scalar', g.unary('rain-drop-place', 'math.fract.scalar', drops), spacing);
+    // Trail outside 0..1 renders clamped (renderMin/renderMax; paramRangeNotes reports it through this node's id).
+    const trailValue = g.node('trail', 'values.number', 'value', { value: 'trail' }, { value: MATRIX_DEFAULT_TRAIL });
+    const trail = g.node('trail-clamped', 'math.clamp.scalar'); g.edge(trailValue, trail, 'value'); g.edge(zero, trail, 'min'); g.edge(one, trail, 'max');
+    const trailRows = g.binary('rain-trail-rows', 'math.max.scalar', g.binary('rain-trail-length', 'math.multiply.scalar', trail, spacing), one);
+    // Behind is never negative and Trail Rows at least 1, so both shares stay at or below 1: Maximum with 0 is enough.
+    const tail = g.binary('rain-tail', 'math.max.scalar', g.binary('rain-tail-left', 'math.subtract.scalar', one,
+      g.binary('rain-tail-share', 'math.divide-ieee.scalar', behind, trailRows)), zero);
+    const fade = g.binary('rain-fade', 'math.multiply.scalar', tail, tail);
+    const head = g.binary('rain-head', 'math.max.scalar', g.binary('rain-head-left', 'math.subtract.scalar', one, behind), zero);
+    // Ink: the Rain Color, the head turned towards white, lit by the trail × the picture's brightness, on a ground of
+    // Background × tone in the Rain Color, so the figure glows in the code.
+    const rainColor = g.node('rain-color', 'values.color', 'value', { value: 'rainColor' }, { value: MATRIX_RAIN_COLOR });
+    const rainRgb = g.node('rain-rgb', 'convert.vec4-to-rgb', 'rgb'); g.edge(rainColor, rainRgb, 'value');
+    const white = g.node('rain-white-rgb', 'convert.vec4-to-rgb', 'rgb'); g.edge(g.node('rain-white', 'values.color', 'value', {}, { value: '#ffffff' }), white, 'value');
+    const headColor = g.node('rain-head-color', 'math.mix.rgb'); g.edge(rainRgb, headColor, 'a'); g.edge(white, headColor, 'b');
+    g.edge(g.binary('rain-head-white', 'math.multiply.scalar', head, g.number('head-white', MATRIX_HEAD_WHITE)), headColor, 't');
+    const toneLight = g.binary('rain-tone-light', 'math.add.scalar', g.number('tone-base', MATRIX_TONE_BASE), g.binary('rain-tone-scale', 'math.multiply.scalar', tone, g.number('tone-factor', MATRIX_TONE_FACTOR)));
+    const light = g.binary('rain-light', 'math.multiply.scalar', fade, toneLight);
+    const glyph = g.binary('rain-glyph', 'math.multiply.rgb-scalar', headColor, g.binary('rain-glyph-light', 'math.multiply.scalar', light, glyphAlpha));
+    // The ground glows brighter where a trail passes: Ground Floor of it always, the rest with the trail.
+    const groundRain = g.binary('rain-ground-light', 'math.add.scalar', g.number('ground-floor', MATRIX_GROUND_FLOOR),
+      g.binary('rain-ground-trail', 'math.multiply.scalar', fade, g.number('ground-trail', 1 - MATRIX_GROUND_FLOOR)));
+    const ground = g.binary('rain-ground', 'math.multiply.rgb-scalar', rainRgb, g.binary('rain-ground-tone', 'math.multiply.scalar',
+      g.binary('background-tone', 'math.multiply.scalar', backgroundAmount, tone), groundRain));
+    const lit = g.binary('rain-lit', 'math.add.rgb', ground, glyph);
+    const combine = blend(lit); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    // It draws only in its Rain Color: the shared colour nodes (retired Color Source, Dark, Light) stay out of its setup.
+    const unused = new Set(['color-mode', 'color-a', 'color-b', 'color-a-rgb', 'color-b-rgb']);
+    for (const id of unused) delete g.layout[id];
+    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes.filter(node => !unused.has(node.id)),
+      edges: g.edges.filter(edge => !unused.has(edge.from) && !unused.has(edge.to)), layout: g.layout };
   }
   const duotone = g.node('duotone', 'math.mix.rgb'); g.edge(aRgb, duotone, 'a'); g.edge(bRgb, duotone, 'b'); g.edge(tone, duotone, 't');
   const sourceMode = g.binary('source-mode', 'math.subtract.scalar', one, colorMode), ink = g.node('ink', 'math.mix.rgb'); g.edge(duotone, ink, 'a'); g.edge(sourceRgb, ink, 'b'); g.edge(sourceMode, ink, 't');

@@ -82,6 +82,12 @@ const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-
   'retro-phosphor-rgb': 'Phosphor', 'background-coverage': 'Coverage', 'retro-ink': 'Ink', 'retro-tone-amount': 'Brightness', 'retro-lit': 'Lit Ink', 'retro-scan-ratio': 'Lines per Row',
   'retro-scan-pitch': 'Line Pitch', 'retro-scan-lines': 'Lines', 'retro-scan-dip': 'Line Dip', 'retro-scan-fade': 'Line Fade', 'retro-scan-faded': 'Faded Dip',
   'retro-scan': 'Scanline', 'retro-scanned': 'Glyph Cell' };
+/** Matrix Rain: its falling drops (Rain) and the lit rain ink. */
+const MATRIX_RAIN_PORTS = { 'rain-pace-random': 'Pace Random', 'rain-gap-random': 'Gap Random', 'rain-phase-random': 'Phase Random',
+  'rain-rate': 'Fall Rate', 'rain-spacing': 'Drop Spacing', 'rain-fallen': 'Fallen', 'rain-ahead': 'Ahead', 'rain-drops': 'Drop Phase',
+  'rain-drop-place': 'Drop Place', 'rain-behind': 'Behind', 'rain-trail-rows': 'Trail Rows', 'rain-tail': 'Tail', 'rain-fade': 'Fade', 'rain-head': 'Head',
+  'rain-rgb': 'Rain Color', 'rain-white-rgb': 'White', 'rain-head-color': 'Head Color', 'rain-tone-light': 'Brightness', 'rain-light': 'Light', 'rain-glyph': 'Lit Glyph',
+  'rain-ground-light': 'Ground Light', 'rain-ground': 'Ground', 'rain-lit': 'Glyph Cell' };
 /** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */
 const GRAPH_PORT_LABELS: Record<string, Record<string, string>> = {
   'slit-scan': { 'smooth-or-banded': 'Time Map', 'subject-protected': 'Protection', 'safe-delay': 'Delay (s)',
@@ -320,14 +326,16 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   // brightness pulse has a folder of its own (Pulse).
   if (GLYPH_PRESENTATION_EFFECTS.has(type) && GLYPH_MOVING_EFFECTS.has(type)) {
     const glyph = glyphPresentation();
-    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse', scroll: 'Scroll', scanlines: 'Scanlines' },
+    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse', scroll: 'Scroll', scanlines: 'Scanlines', rain: 'Rain' },
       portLabels: { ...GLYPH_PORTS, 'glyph-index': 'Tone Glyph', 'index-offset': 'Glyph Offset', 'index-time-speed': 'Clock', 'index-time-phase': 'Ticks',
         'index-sweep': 'Sweep', 'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window',
         'index-cell-random': 'Cell Random', 'index-tick': 'Cell Tick', 'index-jitter': 'Draw', 'symbol-pulse': 'Pulse', 'symbol-alpha': 'Pulsed Coverage',
         'index-roll-lit': 'Lit', 'index-roll-levelled': 'Black Level Set', 'index-roll-dark': 'Dark Roll', 'index-roll-cell': 'Cell Roll',
         'symbol-pulse-scale': 'Half Twinkle', 'symbol-pulse-base': 'Pulse Base',
-        ...(type === 'retro-matrix' ? RETRO_PORTS : {}) },
+        ...(type === 'retro-matrix' ? RETRO_PORTS : {}), ...(type === 'matrix' ? MATRIX_RAIN_PORTS : {}) },
       stage: (node) => type === 'retro-matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|scroll-)/.test(node.id) ? 'scroll'
+        // Matrix Rain: the clock and the drops of each column (Rain); the rain's colour and light stay in Ink & Appearance.
+        : type === 'matrix' && /^(index-(time-rate|speed-travel|travel-|time-speed)|trail-clamped$|rain-(cell|pace|gap|phase|rate|spacing|fallen|ahead|lag|drops|drop-place|behind|trail|tail|fade|head$|head-left))/.test(node.id) ? 'rain'
         : type === 'retro-matrix' && /^(scrolled-uv|sample-unscrolled)$/.test(node.id) ? 'grid'
         : /^(scanlines-clamped$|retro-scan(?!ned))/.test(node.id) ? 'scanlines'
         : /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'

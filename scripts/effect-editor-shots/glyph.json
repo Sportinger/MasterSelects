@@ -183,6 +183,54 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "matrix-inspector",
+      "effect": "matrix",
+      "params": {
+        "cellSize": 12,
+        "rampPreset": "numeric",
+        "customRamp": "",
+        "roll": 0.4,
+        "background": 0.3,
+        "blackLevel": 0.2,
+        "trail": 0.8,
+        "speed": 0.7
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1550
+      },
+      "alt": "Properties, Effects with a Matrix Rain card: Style menu, Preset menu showing Code Portrait, Cell Size, Amount, Background, Black Level and Invert Ramp, then Ramp, Custom Ramp, Font and Weight, then Rain Color with a green swatch, then Speed, Roll and Trail, beside a strip of the preview where the dancer is drawn in green digits on a black stage",
+      "caption": "Matrix Rain with the Code Portrait preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Black Level: empties the dark stage. 4 — Rain Color: the colour of the code. 5 — Trail: how long the falling tails are.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Black Level",
+          "label": "Black Level"
+        },
+        {
+          "target": "Rain Color",
+          "label": "Rain Color"
+        },
+        {
+          "target": "Trail",
+          "label": "Trail"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }
