@@ -108,6 +108,18 @@
         1080
       ],
       "cellWidth": 400
+    },
+    {
+      "effect": "mirror",
+      "image": "harbor_town",
+      "width": 1920,
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "cellWidth": 480
     }
   ]
 }

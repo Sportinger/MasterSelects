@@ -3,13 +3,13 @@
     {
       "name": "mirror",
       "out": "docs/Features/assets/effects/mirror.webp",
-      "image": "harbor_town",
+      "image": "dancer_stage",
       "width": 1920,
-      "layout": "stack",
-      "outWidth": 960,
-      "gap": 4,
+      "layout": "compare",
       "left": { "effect": "original" },
-      "right": { "effect": "mirror", "params": { "horizontal": false, "vertical": true } }
+      "right": { "effect": "mirror" },
+      "alt": "The dancer on a dark stage, original left and with Mirror right: her left half is reflected onto the right across the middle of the frame, so she stands perfectly symmetric with both arms raised, and the stage lights on both sides are the same warm glow",
+      "caption": "Left: original. Right: Mirror at its defaults, Left / Right on."
     },
     {
       "name": "rgb-split",

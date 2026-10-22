@@ -34,10 +34,11 @@ export function mirrorPixelPresentationPlan(type: string): EffectPresentationPla
       : /^edge-/.test(id) || /^fold-(low|high)/.test(id) && READ.test(id) ? 'reads'
         : /^space-/.test(id) || id === 'one-vec2' ? 'space' : 'fold',
   };
+  // Mirror's folder ports read 'One' instead of '(1, 1)', as on Kaleidoscope, Twirl and Wave.
   if (type === 'mirror') return {
     labels: { premultiply: 'Premultiplied Source (cached)', space: 'Centre', reflect: 'Mirror Lines', reads: 'Frame Edges & Read', finish: 'Straight Alpha Output' },
     portLabels: { ...COMMON_PORTS, ...SPACE_PORTS, local: 'Turned Offset', 'keep-sign': 'Kept Side', reflected: 'Reflected Offset', moved: 'Turned Back',
-      'mirror-position-uv': 'Read Position' },
+      'mirror-position-uv': 'Read Position', 'one-vec2': 'One' },
     stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : finish(id) ? 'finish'
       : /^edge-/.test(id) || /^mirror-/.test(id) && READ.test(id) ? 'reads' : /^space-/.test(id) || id === 'one-vec2' ? 'space' : 'reflect',
   };

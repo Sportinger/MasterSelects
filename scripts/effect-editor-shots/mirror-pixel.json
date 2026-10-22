@@ -38,6 +38,31 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "mirror-inspector",
+      "effect": "mirror",
+      "params": {
+        "horizontal": false,
+        "vertical": true,
+        "keep": "start",
+        "angle": 0
+      },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Mirror card: the Preset menu showing Still Lake, Left / Right off, Top / Bottom on, Keep Left / Top, Center X and Center Y 0.50, Angle 0° and Frame Edges Mirror, beside a strip of the preview where the harbour town is reflected upside down below the middle of the picture",
+      "caption": "Mirror with the Still Lake preset. 1 — Preset: pick a starting point. 2 — Left / Right: mirror across the upright line. 3 — Top / Bottom: mirror across the level line. 4 — Keep: which side is copied. 5 — Angle: turns the lines.",
+      "marks": [
+        { "target": "Preset", "label": "Preset" },
+        { "target": "Left / Right", "label": "Left / Right" },
+        { "target": "Top / Bottom", "label": "Top / Bottom" },
+        { "target": "Keep", "label": "Keep" },
+        { "target": "Angle", "label": "Angle" }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }
