@@ -70,10 +70,37 @@
   padding: var(--sp-1) var(--sp-2) var(--sp-2);
 }
 
-/* The Preset row's note on controls that kept their keyframes or their node (EffectPresetRow). */
+/* The Preset row's note on controls that kept their keyframes or their node, or that the saved node
+   graph lacks (EffectPresetRow). */
 .effects-tab .effect-preset-notice {
   margin: 2px 0 6px;
   color: var(--text-muted);
   font-size: var(--font-xs);
   line-height: 1.45;
+}
+
+/* "Use current graph": a small bordered text button in the note; pointer clicks blur it, keyboard focus shows the accent ring. */
+.effects-tab .effect-preset-upgrade {
+  margin-left: 2px;
+  padding: 0 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 16px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.effects-tab .effect-preset-upgrade:hover {
+  background: var(--surface-control-hover);
+}
+
+.effects-tab .effect-preset-upgrade:focus {
+  outline: none;
+}
+
+.effects-tab .effect-preset-upgrade:focus-visible {
+  box-shadow: var(--focus-ring) !important;
 }

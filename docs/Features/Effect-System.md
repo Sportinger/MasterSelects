@@ -84,9 +84,15 @@ and source. Other effects and structural settings are not implicitly enabled.
   `params` holds only the values that differ from the defaults, in stored units, and only shown controls.
   Every effect card with presets shows a **Preset** row under **Style** (`EffectPresetRow`). Applying one
   (`applyEffectPreset` in `src/services/effects/effectPresets.ts`) sets each shown control to the
-  preset's value or its default (text controls stay unless named) through the card's own path, in
-  one undo step. A control with keyframes or a driving node keeps its animation, and the row names it
-  ("Heat Haze: Drift kept its keyframes."). The row shows the preset the values match. AI tools do not
+  preset's value or its default through the card's own path, in one undo step. Text controls, quality
+  controls and setup controls marked `presetKeeps` (Chroma Key's Screen and View, Lens Correction's
+  lens profile, Stick Figure's position, Scale and Facing) stay unless the preset names them, and the
+  preset match ignores them. A control with keyframes or a driving node keeps its animation, and the row names it
+  ("Heat Haze: Drift kept its keyframes."). A preset that changes nothing says so, and one that names
+  controls the effect's saved node graph lacks (a setup saved by an earlier version, or an edited graph)
+  names them and never shows as the current preset; when the effect's current graph has them, the note
+  offers **Use current graph**, which swaps that graph in and applies the preset in the same undo
+  step. The row shows the preset the values match. AI tools do not
   list presets yet. Three to five presets per effect; the docs check names them
   ([Effect pages](./Documentation-Site.md#effect-pages)).
 - **Animated looks keep time with the playhead.** A look rendered by its node graph reads `image.timeline-time`,
