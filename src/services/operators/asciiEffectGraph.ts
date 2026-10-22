@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { GLYPH_ATLAS_TEXEL_INSET, GLYPH_MAX_BLACK_LEVEL, GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
+import { GRID_LEGACY_LINE_GLOW, GRID_LINE_WIDTH, GRID_MAX_LINE_WIDTH } from '../../effects/glyph/gridGlyph';
 import { SYMBOL_LEGACY_TWINKLE } from '../../effects/glyph/symbolMatrix';
 import { MATRIX_DEFAULT_TRAIL, MATRIX_DROP_SPACING, MATRIX_FALL_RATE, MATRIX_GAP_MIN, MATRIX_GAP_SPAN, MATRIX_GROUND_FLOOR, MATRIX_HEAD_WHITE, MATRIX_PACE_MIN, MATRIX_PACE_SPAN, MATRIX_RAIN_COLOR,
   MATRIX_SWAP_RATE, MATRIX_TONE_BASE, MATRIX_TONE_FACTOR } from '../../effects/glyph/matrixRain';
@@ -343,16 +344,32 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   let background = g.node('background', 'math.mix.rgb'); g.edge(aDark, background, 'a'); g.edge(sourceDark, background, 'b'); g.edge(sourceMode, background, 't');
   let inkAlpha = glyphAlpha;
   if (variant === 'grid-glyph') {
-    const local = g.node('local-split', 'vector.split.vec2', 'x'); g.edge(localUv, local, 'value');
-    const oneMinusX = g.binary('one-minus-local-x', 'math.subtract.scalar', one, { node: local.node, port: 'x' });
-    const oneMinusY = g.binary('one-minus-local-y', 'math.subtract.scalar', one, { node: local.node, port: 'y' });
-    const edgeX = g.binary('edge-x', 'math.min.scalar', { node: local.node, port: 'x' }, oneMinusX);
-    const edgeY = g.binary('edge-y', 'math.min.scalar', { node: local.node, port: 'y' }, oneMinusY);
-    const edgeDistance = g.binary('edge-distance', 'math.min.scalar', edgeX, edgeY), edge = g.node('grid-edge', 'math.smoothstep.scalar');
-    g.edge(g.number('grid-edge-low', .02), edge, 'edge0'); g.edge(g.number('grid-edge-high', .07), edge, 'edge1'); g.edge(edgeDistance, edge, 'value');
-    const gridLine = g.binary('grid-line', 'math.subtract.scalar', one, edge);
-    const border = g.binary('grid-border', 'math.multiply.scalar', gridLine, g.number('grid-strength', .28));
-    inkAlpha = g.binary('grid-alpha', 'math.max.scalar', glyphAlpha, border);
+    // Ruled lines along the top and left border of every cell (so the right and bottom ones are the next cell's), Line
+    // Width pixels of a 1080p frame wide (× Frame Scale). Each pixel takes the share of it the line covers (a box
+    // filter over its distance to the middle of the nearest line), so a 1 px line fills exactly one pixel row at a
+    // whole Cell Size, and a hairline carries the same light at every preview quality and export size, also where a
+    // cell is not a whole number of pixels. Inside the line the coverage becomes Line Glow: a light line on the
+    // dark ground, a darker joint through a full block. Outside 0..8 px and 0..1 they render clamped (paramRangeNotes).
+    const widthValue = g.node('line-width', 'values.number', 'value', { value: 'lineWidth' }, { value: GRID_LINE_WIDTH });
+    const width = g.node('lineWidth-clamped', 'math.clamp.scalar'); g.edge(widthValue, width, 'value'); g.edge(zero, width, 'min'); g.edge(g.number('line-width-max', GRID_MAX_LINE_WIDTH), width, 'max');
+    const linePixels = g.binary('grid-line-pixels', 'math.multiply.scalar', width, frameScale), halfWidth = g.binary('grid-half-width', 'math.multiply.scalar', linePixels, half);
+    // A pixel at distance d from the middle of a line is covered by clamp(half width + ½ − d, 0, min(width, 1)): fully
+    // inside a line of a pixel or more, by its share at the line's edge, and by the line's width when it is thinner.
+    const reach = g.binary('grid-line-reach', 'math.add.scalar', halfWidth, half), most = g.binary('grid-line-most', 'math.min.scalar', linePixels, one);
+    const local = g.node('grid-local-split', 'vector.split.vec2', 'x'); g.edge(g.binary('grid-local-pixels', 'math.multiply.vec2', localUv, safeCell2), local, 'value');
+    const cover = (axis: 'x' | 'y') => {
+      // Distance to the middle of the nearest line: |x − half width| or, past the cell's middle, to the next cell's line.
+      const fromLine = g.unary(`grid-from-line-${axis}`, 'math.abs.scalar', g.binary(`grid-past-line-${axis}`, 'math.subtract.scalar', { node: local.node, port: axis }, halfWidth));
+      const distance = g.binary(`grid-line-distance-${axis}`, 'math.min.scalar', fromLine, g.binary(`grid-to-next-line-${axis}`, 'math.subtract.scalar', safeCell, fromLine));
+      const covered = g.node(`grid-cover-${axis}`, 'math.clamp.scalar'); g.edge(g.binary(`grid-inside-${axis}`, 'math.subtract.scalar', reach, distance), covered, 'value');
+      g.edge(zero, covered, 'min'); g.edge(most, covered, 'max');
+      return covered;
+    };
+    const line = g.binary('grid-line', 'math.max.scalar', cover('x'), cover('y'));
+    const brightnessValue = g.node('line-glow', 'values.number', 'value', { value: 'lineGlow' }, { value: GRID_LEGACY_LINE_GLOW });
+    const brightness = g.node('lineGlow-clamped', 'math.clamp.scalar'); g.edge(brightnessValue, brightness, 'value'); g.edge(zero, brightness, 'min'); g.edge(one, brightness, 'max');
+    const ruled = g.node('grid-alpha', 'math.mix.scalar'); g.edge(glyphAlpha, ruled, 'a'); g.edge(brightness, ruled, 'b'); g.edge(line, ruled, 't');
+    inkAlpha = ruled;
   } else if (variant === 'word-mosaic') {
     const local = g.node('local-split', 'vector.split.vec2', 'x'); g.edge(localUv, local, 'value'); const localY = { node: local.node, port: 'y' };
     const bandRise = g.node('word-band-rise', 'math.smoothstep.scalar'); g.edge(g.number('word-band-low', .04), bandRise, 'edge0'); g.edge(g.number('word-band-high', .12), bandRise, 'edge1'); g.edge(localY, bandRise, 'value');

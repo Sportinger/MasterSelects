@@ -21,11 +21,46 @@
       },
       "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with ASCII right: the picture is rebuilt from small characters in a grid, dense signs like # and % where the dress is bright, dots and dashes in the shadows, each in the colour of the picture behind it, on dim square cells",
       "caption": "Left: original. Right: ASCII at its default settings."
+    },
+    {
+      "name": "grid-glyph",
+      "out": "docs/Features/assets/effects/grid-glyph.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        760,
+        150,
+        480,
+        360
+      ],
+      "layout": "compare",
+      "outWidth": 1600,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "grid-glyph"
+      },
+      "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with Grid Glyph right: the picture is rebuilt from characters, each in its own square cell ruled by a thin line in the colour of the cell, so her dress becomes a lit table of # and % signs while the lines fade into the dark stage",
+      "caption": "Left: original. Right: Grid Glyph at its default settings."
     }
   ],
   "strips": [
     {
       "effect": "ascii",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        800,
+        170,
+        420,
+        315
+      ],
+      "cellWidth": 600,
+      "columns": 2
+    },
+    {
+      "effect": "grid-glyph",
       "image": "dancer_stage",
       "width": 1920,
       "crop": [

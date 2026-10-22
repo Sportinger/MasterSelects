@@ -378,7 +378,7 @@ All 18 glyph variants store that shared pipeline as editable generic graphs.
 Their atlas nodes keep ramp, custom text,
 font, and weight bound to the existing effect parameters; animated weight
 therefore follows the same preview, export, and saved-project timeline. Number
-Field adds quantized tone ink, Grid Glyph adds cell-border coverage, Pixel Code
+Field adds quantized tone ink, Grid Glyph rules box-filtered lines along the cell borders, Pixel Code
 uses deterministic hashed cell selection, and Word Mosaic adds its connector band.
 Glyph Matrix advances character selection with timeline time and cell position;
 Data Hatching combines its animated character offset with diagonal hatch coverage.
@@ -486,6 +486,19 @@ others: `effectStyles.ts` ignores them and starts them at their defaults when sw
   new instances and setups saved without a graph; stored setups keep the old look. Its graph leaves out
   the shared colour nodes; presets: `MATRIX_RAIN_PRESETS` (Digital Rain uses half-width katakana, drawn
   from the system's fallback font). Test: `tests/unit/matrixRain.test.ts`.
+- **Grid Glyph lines** (`src/effects/glyph/gridGlyph.ts`, the **Grid Lines** folder, `grid-*`). Every cell rules its
+  top and left edge: **Line Width** (`lineWidth`, 0–8 px of a 1080p frame, default 1, clamped by `lineWidth-clamped`)
+  × Frame Scale is the line in output pixels (`grid-line-pixels`); per axis the pixel's distance d to the middle of
+  the nearest line (`grid-line-distance-x/y`, min(|x − w/2|, cell − |x − w/2|)) gives the coverage
+  clamp(w/2 + ½ − d, 0, min(w, 1)) (`grid-cover-x/y`), the exact share of the pixel the line covers (a box filter), so
+  a hairline carries the same light at every preview quality and export size and a 1 px line fills exactly one
+  pixel row at a whole Cell Size. Inside the line the glyph coverage moves to **Line Glow** (`lineGlow`, 0–1,
+  default 0.4, `legacyDefault` 0.28, `lineGlow-clamped`) by `grid-alpha` = mix(glyph, Line Glow, line): lit lines
+  on the ground, dark joints through a full block. Both are `graphOnly`, `lookOwn`; new instances start at Cell
+  Size 18. This replaces 0.28 × (1 − smoothstep(0.02, 0.07, edge share of the cell)) drawn under the glyph
+  (max): at half Preview Quality the line vanished, where a cell was not a whole number of pixels it came and went,
+  and full blocks hid it. A fix for new instances and setups saved without a graph; stored setups keep the old line.
+  Presets: `GRID_GLYPH_PRESETS`. Test: `tests/unit/gridGlyph.test.ts`.
 - **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light (Matrix Rain draws in its Rain Color);
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).

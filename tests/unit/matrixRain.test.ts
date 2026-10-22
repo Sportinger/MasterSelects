@@ -13,10 +13,17 @@ import type { Effect } from '../../src/types/effects';
 type Rgba = [number, number, number, number];
 
 /** One pixel of Matrix Rain on a flat grey picture of the given brightness, every cell drawn full (coverage 1). */
+// One compiled plan per set of values: the sweeps below render ~100 frames each, and compiling per frame timed out on a busy machine.
+const plans = new Map<string, ReturnType<typeof compileImageOperatorGraph>>();
 function render(overrides: Record<string, unknown>, time: number, options: { uv?: [number, number]; grey?: number } = {}) {
-  const params: Record<string, unknown> = { ...getDefaultParams('matrix'), background: 0, amount: 1, ...overrides };
-  const plan = compileImageOperatorGraph(effectOperatorGraph({ type: 'matrix', params: params as Effect['params'] }), params, {
-    parameterSchema: getEffect('matrix')!.params, resolveGlyphAtlas: () => ({ fontFamily: 'monospace', fontWeight: 600, charset: ' .#@', cellSize: 64 }) });
+  const key = JSON.stringify(overrides);
+  let plan = plans.get(key);
+  if (!plan) {
+    const params: Record<string, unknown> = { ...getDefaultParams('matrix'), background: 0, amount: 1, ...overrides };
+    plan = compileImageOperatorGraph(effectOperatorGraph({ type: 'matrix', params: params as Effect['params'] }), params, {
+      parameterSchema: getEffect('matrix')!.params, resolveGlyphAtlas: () => ({ fontFamily: 'monospace', fontWeight: 600, charset: ' .#@', cellSize: 64 }) });
+    plans.set(key, plan);
+  }
   const grey = options.grey ?? .5, source: Rgba = [grey, grey, grey, 1];
   return evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv: options.uv ?? [.31, .47], resolution: [1920, 1080], timelineTimeSeconds: time,
     sampleImage: () => source, sampleResource: () => [0, 0, 0, 1] }) as number[];

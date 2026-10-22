@@ -231,6 +231,57 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "grid-glyph-inspector",
+      "effect": "grid-glyph",
+      "params": {
+        "cellSize": 14,
+        "rampPreset": "binary",
+        "customRamp": "",
+        "background": 0.25,
+        "blackLevel": 0.15,
+        "lineWidth": 1,
+        "lineGlow": 0.6,
+        "fontWeight": 700,
+        "colorMode": "duotone",
+        "colorA": "#06142e",
+        "colorB": "#7fe3ff"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1550
+      },
+      "alt": "Properties, Effects with a Grid Glyph card: Style menu, Preset menu showing Circuit Board, then Cell Size, Line Width and Line Glow, then Amount, Background, Black Level and Invert Ramp, then Ramp set to Binary, Custom Ramp, Font and Weight, then Color Source set to Duotone with a deep blue Dark and a pale cyan Light, beside a strip of the preview where the dancer is drawn in cyan zeros and ones in a fine lit grid",
+      "caption": "Grid Glyph with the Circuit Board preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Line Width: how thick the lines are. 4 — Line Glow: how brightly they shine. 5 — Color Source: here Duotone.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Line Width",
+          "label": "Line Width"
+        },
+        {
+          "target": "Line Glow",
+          "label": "Line Glow"
+        },
+        {
+          "target": "Color Source",
+          "label": "Color Source"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

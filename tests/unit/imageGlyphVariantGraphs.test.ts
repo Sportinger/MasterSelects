@@ -60,18 +60,24 @@ describe('shared glyph graph variants', () => {
     expect(output[3]).toBe(.6);
   });
 
-  it('builds Grid Glyph border coverage through the shared glyph ink path', () => {
-    const graph = createDefaultGridGlyphGraph(), { output, samples } = evaluate('grid-glyph', graph,
-      { cellSize: 10, amount: .8, colorMode: 'source' });
-    const value = cell(), edgeDistance = Math.min(value.local[0], 1 - value.local[0], value.local[1], 1 - value.local[1]);
-    const t = Math.max(0, Math.min(1, (edgeDistance - .02) / (.07 - .02))), smooth = t * t * (3 - 2 * t);
-    const coverage = Math.max(value.alpha, (1 - smooth) * .28);
-    const background = value.source.slice(0, 3).map(channel => channel * .08);
-    const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .8));
-    expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
-    expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
-    expect(output[3]).toBe(.6);
+  it('builds Grid Glyph ruled lines through the shared glyph ink path', () => {
+    // Line Width 1 px of a 1080p frame (here 1 px) along the top and left border of every 10 px cell; each pixel takes
+    // the share of it the line covers, and inside the line the coverage becomes Line Glow (0.28 without a stored value).
+    const lineCover = (pixel: number, halfWidth: number, cellPixels: number) => {
+      const fromLine = Math.abs(pixel - halfWidth), distance = Math.min(fromLine, cellPixels - fromLine);
+      return Math.max(0, Math.min(distance + .5, halfWidth) - Math.max(distance - .5, -halfWidth));
+    };
+    for (const coords of [uv, [(64 + .05) / 216, .7] as [number, number], [.3, (75 + .97) / 108] as [number, number]]) {
+      const graph = createDefaultGridGlyphGraph(), { output, samples } = evaluate('grid-glyph', graph, { cellSize: 10, amount: .8, colorMode: 'source' }, coords);
+      const value = cell(coords), line = Math.max(lineCover(value.local[0] * 10, .5, 10), lineCover(value.local[1] * 10, .5, 10));
+      const coverage = mix(value.alpha, .28, line);
+      const background = value.source.slice(0, 3).map(channel => channel * .08);
+      const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
+      const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .8));
+      expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
+      expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
+      expect(output[3]).toBe(.6);
+    }
   });
 
   it('builds Pixel Code with deterministic cell hash indexing and its legacy code ink', () => {

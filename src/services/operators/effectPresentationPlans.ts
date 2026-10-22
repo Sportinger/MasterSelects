@@ -75,6 +75,10 @@ const GLYPH_PORTS = { 'safe-cell': 'Cell Pixels', 'safe-cell-vec2': 'Cell Pixels
   duotone: 'Duotone', ink: 'Ink', background: 'Dark Ground', 'background-lift': 'Ground', 'glyph-result': 'Glyph Cell', mixed: 'Faded Color',
   'mixed-alpha': 'Faded Alpha', 'original-premultiplied': 'Original Premultiplied', 'look-premultiplied': 'Glyph Premultiplied',
   'mixed-premultiplied': 'Faded Premultiplied', 'mixed-safe-alpha': 'Faded Alpha', 'original-alpha': 'Original Alpha', 'cell-alpha': 'Cell Alpha', 'original-split:rgb': 'Original Color', 'original-split:alpha': 'Original Alpha' };
+/** Grid Glyph: the ruled lines on the cell borders and the coverage they leave for the ink. */
+const GRID_LINE_PORTS = { 'grid-line-pixels': 'Line Pixels', 'grid-half-width': 'Half Line', 'grid-line-reach': 'Line Reach', 'grid-line-most': 'Most Coverage',
+  'grid-local-pixels': 'Pixel in Cell', 'grid-from-line-x': 'From Line', 'grid-from-line-y': 'From Line', 'grid-line-distance-x': 'Distance Across', 'grid-line-distance-y': 'Distance Down', 'grid-cover-x': 'Column Line', 'grid-cover-y': 'Row Line',
+  'grid-line': 'Line Coverage', 'grid-alpha': 'Ruled Coverage' };
 /** Retro Matrix: its scroll, text, Phosphor ink and scanlines. */
 const RETRO_PORTS = { 'scroll-rows': 'Scroll', 'scroll-turns': 'Turns', 'scroll-wrapped': 'Wrapped Scroll', 'scroll-vector': 'Scroll Offset', 'scrolled-uv': 'Scrolled Grid',
   'index-text-turns': 'Text Turns', 'index-text-line': 'Text Line', 'index-text-cell': 'Text Cell', 'index-text-random': 'Text Random',
@@ -135,7 +139,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     portLabels: { 'screen-uv': 'Tube Position', 'screen-tube': 'Tube Coverage', 'screen-vignette': 'Rim Shade', 'scan-linear': 'Beam Light',
       'scan-depth': 'Beam Depth', 'mask-factor:rgb': 'Mask', 'flicker-gain': 'Flicker Gain', 'flat-alpha': 'Coverage', 'zero-rgb': 'Black', 'line0-linear': 'Line Light', 'line1-linear': 'Next Line Light',
       'scan-d0': 'Distance to Line', 'scan-d1': 'Distance to Next Line', 'scan-w0-weight': 'Beam Weight', 'scan-w1-weight': 'Next Beam Weight',
-      'scan-sigma-floor': 'Half-Pixel Floor', 'scan-line-height': 'Line Height', 'scan-w0-brightness': 'Line Brightness',
+      'scan-sigma-floor': 'Half-Pixel Floor', 'scan-line-height': 'Line Height', 'scan-w0-brightness': 'Line Glow',
       'line-box': 'Line Box (cached)', 'line-box-width': 'Box Height', 'scan-line-reach': 'Line Reach',
       'source-cache': 'Linear Light Source', ...clampLabels({ amount: 'Mix', curvature: 'Curvature', 'line-count': 'Line Count', 'scanline-depth': 'Line Depth',
         'mask-strength': 'Mask Strength', 'mask-size': 'Mask Size', flicker: 'Flicker' }) },
@@ -340,6 +344,12 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^(scanlines-clamped$|retro-scan(?!ned))/.test(node.id) ? 'scanlines'
         : /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'
         : /^(index-|cell-id-split$)/.test(node.id) ? 'offset' : /^(symbol-|twinkle-clamped$)/.test(node.id) ? 'pulse' : glyph.stage(node) };
+  }
+  // Grid Glyph: its ruled lines (Line Width, Line Glow) have a folder of their own, Grid Lines.
+  if (type === 'grid-glyph') {
+    const glyph = glyphPresentation();
+    return { ...glyph, labels: { ...glyph.labels, lines: 'Grid Lines' }, portLabels: { ...GLYPH_PORTS, ...GRID_LINE_PORTS },
+      stage: (node) => /^(grid-|lineWidth-clamped$|lineGlow-clamped$)/.test(node.id) ? 'lines' : glyph.stage(node) };
   }
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return glyphPresentation();
   return undefined;
