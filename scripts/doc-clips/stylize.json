@@ -25,6 +25,416 @@
       "float": "right",
       "alt": "The dancer turning on a dark stage while Sheen's Position runs from 0 to 1 and back: a soft white band of light, leaning to the right, slides in from the left edge, crosses her dress, leaves at the right edge and comes back; the current value is shown at the bottom left",
       "caption": "Position from 0 to 1 and back."
+    },
+    {
+      "name": "acuarela",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        420,
+        60,
+        1000,
+        960
+      ],
+      "width": 960,
+      "float": "left",
+      "alt": "The dancer turning on a dark stage, original left and with Acuarela right: her white dress and skin become flat washes of warm colour with darker paint pooled along every fold and edge, the dark stage turns into a soft brown-grey paper with grain and a few stained rings, and the painting follows her as she moves",
+      "caption": "Left: original. Right: Acuarela at its default settings.",
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 1000000
+    },
+    {
+      "name": "acuarela-presets",
+      "kind": "presets",
+      "effect": "acuarela",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "crop": [
+        400,
+        60,
+        1040,
+        900
+      ],
+      "width": 960,
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 1200000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Fine Study top left with crisp lines and readable face and hands, Loose Wash top right with big flat patches of colour and dark rims, Wet in Wet bottom left with colour running over the edges and stained rings drifting slowly over the background, Pale Paper bottom right faded towards white on coarse grained paper",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "acuarela-mix",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "opacity",
+        "label": "Mix",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Mix runs from 0 to 1 and back: the photo fades into the watercolour painting and back; the current value is shown at the bottom left",
+      "caption": "Mix from 0 to 1 and back."
+    },
+    {
+      "name": "acuarela-wash",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "wash",
+        "label": "Wash",
+        "from": 0,
+        "to": 12,
+        "unit": " px",
+        "decimals": 1
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Wash runs from 0 to 12 px and back: the fine folds of her dress and the strands of her hair melt into broader, flatter patches of colour and sharpen again; the current value is shown at the bottom left",
+      "caption": "Wash from 0 to 12 px and back."
+    },
+    {
+      "name": "acuarela-bleed",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "bleed",
+        "label": "Bleed",
+        "from": 0,
+        "to": 30,
+        "unit": " px",
+        "decimals": 1
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Bleed runs from 0 to 30 px and back: her outline starts to wobble and colour runs out over the edges of the dress and arms in wet patches, then settles again; the current value is shown at the bottom left",
+      "caption": "Bleed from 0 to 30 px and back."
+    },
+    {
+      "name": "acuarela-edges",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "edges",
+        "label": "Edges",
+        "from": 0,
+        "to": 2,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Edges runs from 0 to 2 and back: at 0 the painting looks pale and soft, then darker paint gathers along every fold, arm and hair edge, and fades again; the current value is shown at the bottom left",
+      "caption": "Edges from 0 to 2 and back."
+    },
+    {
+      "name": "acuarela-simplify",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "simplify",
+        "label": "Simplify",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Simplify runs from 0 to 1 and back: the soft gradients of her dress and skin step into a few flat tones like layered glazes, then smooth out again; the current value is shown at the bottom left",
+      "caption": "Simplify from 0 to 1 and back."
+    },
+    {
+      "name": "acuarela-blooms",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "blooms",
+        "label": "Blooms",
+        "from": 0,
+        "to": 2,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Blooms runs from 0 to 2 and back: ragged rings with dark rims and lighter centres appear on the flat background and grow stronger, then fade again; the current value is shown at the bottom left",
+      "caption": "Blooms from 0 to 2 and back."
+    },
+    {
+      "name": "acuarela-shadow-pigment",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "shadows",
+        "label": "Shadow Pigment",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Shadow Pigment runs from 0 to 1 and back: the black of the stage lifts to a dark blue-grey indigo paint and sinks back to near black; the current value is shown at the bottom left",
+      "caption": "Shadow Pigment from 0 to 1 and back."
+    },
+    {
+      "name": "acuarela-granulation",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "granulation",
+        "label": "Granulation",
+        "from": 0,
+        "to": 2,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Granulation runs from 0 to 2 and back: fine speckled pigment settles into the grain of the paper, most of all on the dress, then smooths out again; the current value is shown at the bottom left",
+      "caption": "Granulation from 0 to 2 and back."
+    },
+    {
+      "name": "acuarela-paper",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "paper",
+        "label": "Paper",
+        "from": 0,
+        "to": 2,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Paper runs from 0 to 2 and back: the relief of the paper, lit from one side, rises over the light dress and arms and sinks again; the dark stage hides most of it; the current value is shown at the bottom left",
+      "caption": "Paper from 0 to 2 and back."
+    },
+    {
+      "name": "acuarela-grain-size",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "grainSize",
+        "label": "Grain Size",
+        "from": 0.25,
+        "to": 4,
+        "unit": "×",
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Grain Size runs from 0.25 to 4 and back: the paper grain grows from a fine sand into a coarse, cloudy texture and shrinks again; the current value is shown at the bottom left",
+      "caption": "Grain Size from 0.25 to 4× and back."
+    },
+    {
+      "name": "acuarela-lift",
+      "effect": "acuarela",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "crop": [
+        400,
+        40,
+        1120,
+        840
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "lift",
+        "label": "Lift",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.5,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer with Acuarela while Lift runs from 0 to 1 and back: the whole painting fades towards white paper until only a faint wash is left, then the colour comes back; the current value is shown at the bottom left",
+      "caption": "Lift from 0 to 1 and back."
+    },
+    {
+      "name": "acuarela-flow",
+      "effect": "acuarela",
+      "params": {
+        "bleed": 20
+      },
+      "range": [
+        1.2,
+        4.8
+      ],
+      "layout": "single",
+      "crop": [
+        560,
+        60,
+        720,
+        540
+      ],
+      "width": 640,
+      "sweep": {
+        "param": "flow",
+        "label": "Flow",
+        "steps": [
+          0,
+          2
+        ]
+      },
+      "loop": 0.35,
+      "poster": 2.2,
+      "maxBytes": 280000,
+      "float": "right",
+      "alt": "The dancer turning with Acuarela at Bleed 20, close up, at two Flow values for about 1.6 seconds each: at Flow 0 the wobble of her outline and the wet patches hold still on the screen while she moves through them, at Flow 2 the wobbly edges crawl and the wet areas drift on their own; the value is shown at the bottom left",
+      "caption": "Flow 0 and 2 at Bleed 20, close up, about 1.6 seconds each."
     }
   ]
 }

@@ -1,28 +1,6 @@
 {
   "pairs": [
     {
-      "name": "acuarela",
-      "out": "docs/Features/assets/effects/acuarela.webp",
-      "image": "harbor_town",
-      "width": 1920,
-      "layout": "pair",
-      "crop": [
-        960,
-        250,
-        640,
-        400
-      ],
-      "outWidth": 1600,
-      "gap": 6,
-      "left": {
-        "effect": "original"
-      },
-      "right": {
-        "effect": "acuarela",
-        "params": {}
-      }
-    },
-    {
       "name": "rom1",
       "out": "docs/Features/assets/effects/rom1.webp",
       "image": "neon_rain_street",

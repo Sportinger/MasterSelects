@@ -42,7 +42,7 @@
       "hide": [
         "Particle Out"
       ],
-      "caption": "Glow with the Neon Bloom preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how bright. 3 \u2014 Threshold: what glows. 4 \u2014 Softness: how gently light joins in. 5 \u2014 Radius: how far it spreads. 6 \u2014 Color: the tint of the halo."
+      "caption": "Glow with the Neon Bloom preset. 1 — Preset: pick a starting point. 2 — Amount: how bright. 3 — Threshold: what glows. 4 — Softness: how gently light joins in. 5 — Radius: how far it spreads. 6 — Color: the tint of the halo."
     },
     {
       "name": "sheen-inspector",
@@ -86,7 +86,7 @@
       "hide": [
         "Particle Out"
       ],
-      "caption": "Sheen with the Golden Beam preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Position: where the band is. 3 \u2014 Angle: which way it travels. 4 \u2014 Width: how far the light reaches. 5 \u2014 Softness: how gently it fades. 6 \u2014 Intensity: how bright."
+      "caption": "Sheen with the Golden Beam preset. 1 — Preset: pick a starting point. 2 — Position: where the band is. 3 — Angle: which way it travels. 4 — Width: how far the light reaches. 5 — Softness: how gently it fades. 6 — Intensity: how bright."
     },
     {
       "name": "vignette-inspector",
@@ -126,7 +126,7 @@
       "hide": [
         "Particle Out"
       ],
-      "caption": "Vignette with the Spotlight preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how dark the edges get. 3 \u2014 Size: where the darkening begins. 4 \u2014 Softness: how gradually it fades in. 5 \u2014 Roundness: circle or frame shape."
+      "caption": "Vignette with the Spotlight preset. 1 — Preset: pick a starting point. 2 — Amount: how dark the edges get. 3 — Size: where the darkening begins. 4 — Softness: how gradually it fades in. 5 — Roundness: circle or frame shape."
     },
     {
       "name": "edge-detect-inspector",
@@ -166,7 +166,55 @@
       "hide": [
         "Particle Out"
       ],
-      "caption": "Edge Detect with the Neon Outline preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Strength: how bright and how many lines. 3 \u2014 Width: how thick. 4 \u2014 Color: white or the picture's colours. 5 \u2014 Invert: dark lines on white."
+      "caption": "Edge Detect with the Neon Outline preset. 1 — Preset: pick a starting point. 2 — Strength: how bright and how many lines. 3 — Width: how thick. 4 — Color: white or the picture's colours. 5 — Invert: dark lines on white."
+    },
+    {
+      "name": "acuarela-inspector",
+      "effect": "acuarela",
+      "params": {
+        "wash": 10,
+        "bleed": 16,
+        "edges": 1.6,
+        "simplify": 0.85,
+        "blooms": 1.2,
+        "granulation": 0.8,
+        "paper": 0.8
+      },
+      "image": "harbor_town.jpg",
+      "preview": 0,
+      "alt": "Properties, Effects with an Acuarela card: the Preset menu showing Loose Wash, then Mix, the Paint section with Wash, Bleed, Edges, Simplify, Blooms and Shadow Pigment, the Paper section with Granulation, Paper, Grain Size and Lift, and the Motion section with Flow",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Wash",
+          "label": "Wash"
+        },
+        {
+          "target": "Edges",
+          "label": "Edges"
+        },
+        {
+          "target": "Granulation",
+          "label": "Granulation"
+        },
+        {
+          "target": "Flow",
+          "label": "Flow"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "viewport": {
+        "width": 1600,
+        "height": 1200
+      },
+      "caption": "Acuarela with the Loose Wash preset. 1 — Preset: pick a starting point. 2 — Wash: how flat the colour gets. 3 — Edges: the darker paint along every border. 4 — Granulation: pigment in the paper grain. 5 — Flow: lets the wet paint drift.",
+      "layout": "float"
     }
   ]
 }

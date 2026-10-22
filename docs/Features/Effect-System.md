@@ -396,7 +396,10 @@ also on pooled edges, and Mix blends
 premultiplied. Its noise fields use the shared
 **Fractal Noise** node (`noise.fractal2d.vec2`, PCG-hashed gradient noise, 1-8 octaves),
 which stays free of the streaks Random (Hash) shows at large positions. Sizes are pixels
-of a 1080p frame; the recipe has no frame history and Mix 0 is skipped. Acuarela effects
+of a 1080p frame; the recipe has no frame history and Mix 0 is skipped. Untouched saved
+copies of the recipe before 2026-10-22, which also built an unused `density` card and
+constant `three`, still count as the built-in recipe (`createAcuarelaGraphBefore20261022()`
+in `acuarelaIdentity.ts`). Acuarela effects
 saved with the original watery-smoke recipe keep it: a stored graph renders as saved,
 and a graph-less effect with only the smoke parameters resolves to
 `createLegacyAcuarelaGraph()` (generic noise, vector math and blend operators with an

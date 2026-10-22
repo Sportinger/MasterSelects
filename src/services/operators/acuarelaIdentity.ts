@@ -2,19 +2,23 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { EFFECT_GRAPH_PARAM, readEffectGraph } from './effectGraph';
 import { matchesEffectRecipe } from './effectFamilyPresentation';
 import { createLegacyAcuarelaGraph, hasLegacyAcuarelaParams } from './acuarelaEffectGraph';
-import { createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
+import { createAcuarelaGraphBefore20261022, createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
 
-let recipe: EffectOperatorGraph | undefined;
+let recipes: EffectOperatorGraph[] | undefined;
 const recipeCopies = new WeakMap<EffectOperatorGraph, boolean>();
 
-/** True when the instance renders the built-in watercolour recipe (no saved graph, or an untouched saved copy). */
+/**
+ * True when the instance renders the built-in watercolour recipe (no saved graph, or an untouched
+ * saved copy of the current recipe or of the one before 2026-10-22, which drew the same pixels).
+ */
 export function rendersBuiltInAcuarelaRecipe(effect: { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }): boolean {
   if (effect.type !== 'acuarela') return false;
   if (!effect.operatorGraph) return effect.params[EFFECT_GRAPH_PARAM] === undefined && !hasLegacyAcuarelaParams(effect.params);
   let known = recipeCopies.get(effect.operatorGraph);
   if (known === undefined) {
-    recipe ??= createDefaultAcuarelaGraph();
-    known = matchesEffectRecipe(effect.operatorGraph, recipe);
+    recipes ??= [createDefaultAcuarelaGraph(), createAcuarelaGraphBefore20261022()];
+    const graph = effect.operatorGraph;
+    known = recipes.some(recipe => matchesEffectRecipe(graph, recipe));
     recipeCopies.set(effect.operatorGraph, known);
   }
   return known;
