@@ -199,6 +199,19 @@ async function checkSheen(device: GPUDevice): Promise<number> {
       if (out(width / 2, 2, 0) - out(width / 2 + 8, 2, 0) < 1e-3) throw new Error(`sheen softness ${softness}: flat top, no falloff from the centre`);
       comparisons++;
     }
+    // A soft band fades to nothing at Width: no faint step (a seam on skies) where the light ends.
+    // Wide texture so one pixel is a small step of the curve; grey 0.2 keeps the shoulder linear.
+    const wide = sourceTexture(device, 1024, 1, () => [51, 51, 51, 255]);
+    try {
+      for (const softness of [1, 0.7, 0.5]) {
+        const out = await renderSheen(device, wide.texture, 1024, 1, { ...base, intensity: 3, highlights: 0, softness });
+        // The band reaches 154 px from the middle (0.3 of half the width); compare neighbours over its outer 3 %, where the curve itself is already flat.
+        let jump = 0;
+        for (let x = 512 + 149; x < 512 + 160; x++) jump = Math.max(jump, out(x, 0, 0) - out(x + 1, 0, 0));
+        if (jump > 0.01) throw new Error(`sheen softness ${softness}: the light ends in a step of ${jump.toFixed(4)} at the band edge`);
+        comparisons++;
+      }
+    } finally { wide.texture.destroy(); }
     // Highlights: the band adds more light on bright grey than on black.
     const lit = await renderSheen(device, texture, width, height, { ...base, intensity: 0.4, highlights: 1 });
     if (lit(width / 2, 0, 0) - input(0) > 1e-5) throw new Error(`sheen highlights 1: black gained ${lit(width / 2, 0, 0)}`);

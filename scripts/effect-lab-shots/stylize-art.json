@@ -132,27 +132,6 @@
       }
     },
     {
-      "name": "sheen",
-      "out": "docs/Features/assets/effects/sheen.webp",
-      "image": "dancer_stage",
-      "width": 1920,
-      "layout": "pair",
-      "outWidth": 1600,
-      "gap": 6,
-      "left": {
-        "effect": "original"
-      },
-      "right": {
-        "effect": "sheen",
-        "params": {
-          "color": "#ffcc66",
-          "angle": -60,
-          "intensity": 1.2,
-          "width": 0.16
-        }
-      }
-    },
-    {
       "name": "voxel-relief",
       "out": "docs/Features/assets/effects/voxel-relief.webp",
       "image": "dancer_stage",

@@ -46,6 +46,49 @@
       },
       "alt": "The dancer on the dark stage with Glow twice: at Threshold 0.95 left only the spotlight and the brightest folds of her dress glow, at Threshold 0.55 right her whole dress, arms and face shine with a soft white halo",
       "caption": "Left: Threshold 0.95, the default. Right: Threshold 0.55."
+    },
+    {
+      "name": "sheen",
+      "out": "docs/Features/assets/effects/sheen.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "compare",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "sheen",
+        "params": {}
+      },
+      "alt": "The dancer on a dark stage, original left and with Sheen at its default values right: a soft white band of light crosses the picture from the lower left to the upper right, brightest along its middle and fading to both sides, strongest on her light dress while the folds of the fabric stay visible",
+      "caption": "Left: original. Right: Sheen at its default settings."
+    },
+    {
+      "name": "sheen-highlights",
+      "out": "docs/Features/assets/effects/sheen-highlights.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        460,
+        40,
+        760,
+        1000
+      ],
+      "layout": "compare",
+      "left": {
+        "effect": "sheen",
+        "params": {
+          "highlights": 0
+        }
+      },
+      "right": {
+        "effect": "sheen",
+        "params": {
+          "highlights": 1
+        }
+      },
+      "alt": "The dancer with Sheen twice: at Highlights 0 left the band lights the dark stage behind her as a grey haze as much as her dress, at Highlights 1 right the dark stage stays dark and only her light dress, arms and face catch the band",
+      "caption": "Left: Highlights 0, the same light everywhere. Right: Highlights 1, only bright surfaces catch it."
     }
   ]
 }

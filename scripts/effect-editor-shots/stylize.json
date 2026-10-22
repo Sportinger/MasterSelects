@@ -43,6 +43,50 @@
         "Particle Out"
       ],
       "caption": "Glow with the Neon Bloom preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how bright. 3 \u2014 Threshold: what glows. 4 \u2014 Softness: how gently light joins in. 5 \u2014 Radius: how far it spreads. 6 \u2014 Color: the tint of the halo."
+    },
+    {
+      "name": "sheen-inspector",
+      "effect": "sheen",
+      "params": {
+        "color": "#ffcc66",
+        "angle": -60,
+        "width": 0.16,
+        "intensity": 1.2
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "alt": "Properties, Effects with a Sheen card: the Preset menu showing Golden Beam, Position 0.5, Angle -60 degrees, Width 0.16, Softness 0.7, Intensity 1.2, Highlights 0.6 and a golden Color swatch, beside a strip of the preview where a warm beam crosses the dancer",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Position",
+          "label": "Position"
+        },
+        {
+          "target": "Angle",
+          "label": "Angle"
+        },
+        {
+          "target": "Width",
+          "label": "Width"
+        },
+        {
+          "target": "Softness",
+          "label": "Softness"
+        },
+        {
+          "target": "Intensity",
+          "label": "Intensity"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "caption": "Sheen with the Golden Beam preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Position: where the band is. 3 \u2014 Angle: which way it travels. 4 \u2014 Width: how far the light reaches. 5 \u2014 Softness: how gently it fades. 6 \u2014 Intensity: how bright."
     }
   ]
 }

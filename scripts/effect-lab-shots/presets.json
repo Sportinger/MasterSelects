@@ -80,6 +80,18 @@
         1080
       ],
       "cellWidth": 420
+    },
+    {
+      "effect": "sheen",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        380,
+        0,
+        1080,
+        1080
+      ],
+      "cellWidth": 420
     }
   ]
 }

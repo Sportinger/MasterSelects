@@ -1,0 +1,30 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "dancer_stage_motion.mp4",
+  "clips": [
+    {
+      "name": "sheen-position",
+      "effect": "sheen",
+      "params": {},
+      "range": [
+        0.5,
+        4.5
+      ],
+      "layout": "single",
+      "width": 768,
+      "sweep": {
+        "param": "position",
+        "label": "Position",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 0.65,
+      "maxBytes": 600000,
+      "float": "right",
+      "alt": "The dancer turning on a dark stage while Sheen's Position runs from 0 to 1 and back: a soft white band of light, leaning to the right, slides in from the left edge, crosses her dress, leaves at the right edge and comes back; the current value is shown at the bottom left",
+      "caption": "Position from 0 to 1 and back."
+    }
+  ]
+}

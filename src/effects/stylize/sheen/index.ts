@@ -1,7 +1,7 @@
 // Sheen Effect - specular light sweep limited to the layer alpha (logos, text, shapes)
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition, EffectParam } from '../../types';
+import type { EffectDefinition, EffectParam, EffectPreset } from '../../types';
 import { colorToRgba } from '../../_shared/catalogColor';
 import { finiteUniform as finite } from '../../_shared/effectUniformParams';
 import { sheenParamWarnings } from './warnings';
@@ -27,6 +27,17 @@ export const SHEEN_PARAMS = {
   },
 } satisfies Record<string, EffectParam>;
 
+export const SHEEN_PRESETS: readonly EffectPreset[] = [
+  // A thin, bright streak: the classic glint over a logo or a title when Position is keyframed.
+  { id: 'glint', name: 'Glint', params: { width: 0.05, softness: 0.8, intensity: 1.8, highlights: 0.4 } },
+  // A warm, wide beam falling diagonally from the top left, like low sun through a window.
+  { id: 'golden-beam', name: 'Golden Beam', params: { color: '#ffcc66', angle: -60, width: 0.16, intensity: 1.2 } },
+  // A hard-edged band, like the reflection on a pane of glass or polished metal.
+  { id: 'glass-streak', name: 'Glass Streak', params: { angle: 35, width: 0.07, softness: 0.15, intensity: 1.2, highlights: 0.5 } },
+  // A broad, cool light across the middle that falls mainly on bright surfaces, like moonlight.
+  { id: 'moon-wash', name: 'Moon Wash', params: { color: '#9cc4ff', angle: 90, width: 0.5, softness: 1, intensity: 1.5, highlights: 0.8 } },
+];
+
 export const sheen: EffectDefinition = {
   id: 'sheen',
   name: 'Sheen',
@@ -37,6 +48,7 @@ export const sheen: EffectDefinition = {
   uniformSize: 64,
 
   params: SHEEN_PARAMS,
+  presets: SHEEN_PRESETS,
   paramWarnings: sheenParamWarnings,
 
   packUniforms: (params, width, height) => {
