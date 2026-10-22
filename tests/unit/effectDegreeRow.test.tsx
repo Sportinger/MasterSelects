@@ -7,6 +7,9 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import type { Effect } from '../../src/types/effects';
+import type { Keyframe } from '../../src/types/keyframes';
+import { KeyframeChannelEditor } from '../../src/components/panels/nodes/keyframes/KeyframeNodeInspector';
+import { keyframeNodeParameters } from '../../src/services/nodeGraph/keyframeNodeParameters';
 
 vi.mock('../../src/components/panels/properties/LabeledValue', () => ({
   LabeledValue: ({ value, suffix, ariaLabel, min, max, onChange }: { value: number; suffix?: string; ariaLabel: string; min?: number; max?: number; onChange: (value: number) => void }) =>
@@ -79,6 +82,35 @@ describe('effect rows with a degree display unit', () => {
     expect(Number(sourced.getAttribute('aria-valuenow'))).toBeCloseTo(45, 6);
     fireEvent.keyDown(sourced, { key: 'ArrowLeft' });
     expect(setPropertyValue).toHaveBeenLastCalledWith('clip-1', 'effect.hue-1.shift', expect.closeTo(764 / 360, 9));
+  });
+
+  it('keeps Hue Shift keys past one turn in a Keyframe node (At playhead and Value rows)', () => {
+    const effect = { id: 'hue-1', name: 'Hue Shift', type: 'hue-shift', enabled: true, params: { shift: 0.75 } } as Effect;
+    const clip = createMockClip({ id: 'clip-1', trackId: 'track-1', startTime: 0, effects: [effect] });
+    const property = 'effect.hue-1.shift' as Keyframe['property'];
+    const key: Keyframe = { id: 'key-1', clipId: 'clip-1', time: 0, property, value: 0.75, easing: 'linear' };
+    const addKeyframe = vi.fn(), updateKeyframe = vi.fn();
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 'track-1' })], clipKeyframes: new Map([['clip-1', [key]]]),
+      playheadPosition: 0, addKeyframe, updateKeyframe });
+    const parameters = keyframeNodeParameters(clip);
+    const shift = parameters.find(item => item.property === property)!;
+    expect(shift).toMatchObject({ min: -0.5, max: 0.5, wraps: true });
+    const node = { id: 'kf-1', label: 'Shift keys', layout: { x: 0, y: 0 }, channels: [{ id: 'ch-1', property, targets: [] }] };
+    render(<KeyframeChannelEditor clip={clip} node={node as never} channelId="ch-1" keys={[key]} parameters={parameters} available={[]}
+      locked={false} safely={(_label, action) => action()} embedded />);
+    const atPlayhead = screen.getByRole('textbox', { name: 'Shift at playhead' }) as HTMLInputElement;
+    expect([atPlayhead.dataset.min, atPlayhead.dataset.max]).toEqual(['undefined', 'undefined']);
+    fireEvent.change(atPlayhead, { target: { value: '1' } });
+    expect(addKeyframe).toHaveBeenLastCalledWith('clip-1', property, 1, 0);
+    const value = screen.getByRole('textbox', { name: 'Keyframe value' }) as HTMLInputElement;
+    expect(Number(value.value)).toBe(0.75);
+    fireEvent.change(value, { target: { value: '2.125' } });
+    expect(updateKeyframe).toHaveBeenLastCalledWith('key-1', { value: 2.125 });
+    // The slider shows 0.75 turn at its place on one turn (-0.25) instead of pinned at the right end.
+    expect(Number(screen.getByRole('slider', { name: 'Keyframe value slider' }).getAttribute('aria-valuenow'))).toBeCloseTo(-0.25, 9);
+    // Only cyclic params get this row; Temperature keeps the plain one.
+    const warm = { id: 'warm-1', name: 'Temperature', type: 'temperature', enabled: true, params: { temperature: 0, tint: 0 } } as Effect;
+    expect(keyframeNodeParameters(createMockClip({ effects: [warm] })).find(item => item.property === 'effect.warm-1.temperature')?.wraps).toBeUndefined();
   });
 
   it('keeps degrees when Twist can take a node source', () => {

@@ -124,7 +124,7 @@ Temperature works in three stages ([Color & Tone](../Effects-Color.md#the-shared
 <figcaption>Inside Parameters (the limits of the Clamps left out). 1 — Clamp: keeps Temperature between −4 and 4; the Clamp below it does the same for Tint.</figcaption>
 </figure>
 
-**Clamp** – there are two, one per control. Each keeps its value between −4 and 4, the values in **Temperature Render Min** and **Temperature Render Max** (and the same pair for Tint). At ±4 red and blue are almost five stops apart, and every light colour has reached full orange or full blue. A keyframe, a node or the AI agent may send more; the picture then uses the limit, and the card and the tool result say so.
+**Clamp** – there are two, one per control. Each keeps its value between −4 and 4, the values in **Temperature Render Min** and **Temperature Render Max** (and the same pair for Tint). At ±4 red and blue are almost five stops apart, and every light colour has reached full orange or full blue. A driving node (LFO, Math) or the AI agent's effect update may send more; the picture then uses the limit, and the card and the tool result say so.
 
 <div class="docs-float-end"></div>
 
@@ -224,6 +224,6 @@ The block has two parts: it turns the two controls into one gain per colour chan
 ## Technical details
 
 - **Formula.** In linear light each channel is multiplied by `g / L(g)`, with the gains `g = (2^(0.6·T + 0.25·Tint), 2^(−0.5·Tint), 2^(0.25·Tint − 0.6·T))` and `L` the Rec.709 luminance. Temperature 1 puts red and blue 1.2 stops apart; Tint 1 puts green 0.75 stops below red and blue. Grey keeps its luminance, black stays black; the result is limited to 0–1. There is no Kelvin scale.
-- **Range.** The sliders cover −1 to 1; typed values, keyframes and nodes render up to ±4. Beyond that the picture uses the limit, and the inspector and the tool result say so.
+- **Range.** The sliders cover −1 to 1; typed values (also keyed in the inspector) and driving nodes render up to ±4. Beyond that the picture uses the limit, and the inspector and the tool result say so.
 - **Transparency.** Only the colour is changed; the transparency passes through untouched.
 - What all colour effects share (8-bit range, saved projects, adjustment layers): [Color & Tone](../Effect-System.md#color--tone-notes). Formulas: [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks: [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).

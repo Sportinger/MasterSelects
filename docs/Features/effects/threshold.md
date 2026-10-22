@@ -67,7 +67,7 @@ Pick one in the **Preset** row of the effect card. It sets both controls in one 
 <figcaption>Level from 0.15 to 0.7 and back (Softness 0).</figcaption>
 </figure>
 
-**Level** – the brightness where black turns into white, measured like the eye sees it (green counts most, blue least). Low values make almost everything white and leave only the darkest shadows black; around 0.5 (the default) a figure in a spotlight becomes a clean white silhouette; from about 0.7 only the brightest lights are left. At 1 everything is black, since nothing is brighter than white. Animate it for a silhouette that grows out of the dark or burns away. 0 to 1, default 0.5. A keyframe, a node or the AI agent may send a value outside: below 0 everything turns white, above 1 everything black.
+**Level** – the brightness where black turns into white, measured like the eye sees it (green counts most, blue least). Low values make almost everything white and leave only the darkest shadows black; around 0.5 (the default) a figure in a spotlight becomes a clean white silhouette; from about 0.7 only the brightest lights are left. At 1 everything is black, since nothing is brighter than white. Animate it for a silhouette that grows out of the dark or burns away. 0 to 1, default 0.5. A driving node (LFO, Math) or the AI agent's effect update may send a value outside: below 0 everything turns white, above 1 everything black.
 
 <div class="docs-float-end"></div>
 
@@ -78,7 +78,7 @@ Pick one in the **Preset** row of the effect card. It sets both controls in one 
 <figcaption>Left: Softness 0. Right: Softness 0.4. Both Level 0.4.</figcaption>
 </figure>
 
-**Softness** – turns the hard cut into a smooth grey ramp, centred on Level. At 0 (the default) every pixel is pure black or pure white, and where the picture is noisy the edge breaks into grainy, flickering borders. 0.05–0.1 only smooths that edge; 0.2–0.35 keeps grey shading in faces and fabric, like a drawing; at 0.5 the ramp spans half the brightness range and the picture comes close to a high-contrast black-and-white photo. Because the ramp is centred, a wide Softness with Level near 0 or 1 turns even pure black (or pure white) grey. 0 to 0.5, default 0. A value below 0 is used as 0, and the card says so. A keyframe, a node or the AI agent may send more than 0.5, which widens the ramp further.
+**Softness** – turns the hard cut into a smooth grey ramp, centred on Level. At 0 (the default) every pixel is pure black or pure white, and where the picture is noisy the edge breaks into grainy, flickering borders. 0.05–0.1 only smooths that edge; 0.2–0.35 keeps grey shading in faces and fabric, like a drawing; at 0.5 the ramp spans half the brightness range and the picture comes close to a high-contrast black-and-white photo. Because the ramp is centred, a wide Softness with Level near 0 or 1 turns even pure black (or pure white) grey. 0 to 0.5, default 0. A value below 0 is used as 0, and the card says so. A driving node (LFO, Math) or the AI agent's effect update may send more than 0.5, which widens the ramp further.
 
 ## Node setup
 

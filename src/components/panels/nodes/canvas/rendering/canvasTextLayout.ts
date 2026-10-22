@@ -21,6 +21,22 @@ export function fitCanvasLabel(ctx: TextContext, value: string, width: number): 
   return label;
 }
 
+/** A port label's default room: about half a card, so labels on both sides of a row never meet. */
+export const PORT_LABEL_WIDTH = 65;
+type PortText = { y: number; input: boolean; label: string; type: string };
+/** Room for a port's label or type line on a card. Half a card by default; when the port on the
+ * other side of the row is short (or missing), the long one takes what it leaves free, so a name
+ * such as "Brightness Only" is not cut while the card has room. Two long names keep half each. */
+export function portTextRoom(ctx: TextContext, font: string, cardWidth: number, ports: readonly PortText[], port: PortText, field: 'label' | 'type'): number {
+  ctx.font = font;
+  if (ctx.measureText(port[field]).width <= PORT_LABEL_WIDTH) return PORT_LABEL_WIDTH;
+  const opposite = ports.find(other => other.input !== port.input && Math.abs(other.y - port.y) < 4 && other[field]);
+  const used = opposite ? ctx.measureText(opposite[field]).width : 0;
+  if (used > PORT_LABEL_WIDTH) return PORT_LABEL_WIDTH;
+  // Both labels sit 9 px inside their dot at the card edges; keep a gap of 10 between them.
+  return Math.max(PORT_LABEL_WIDTH, cardWidth - 18 - 10 - used);
+}
+
 const wraps = new WeakMap<TextContext, Map<string, string[] | null>>();
 
 /** Greedy word wrap at separators (space, dash, underscore). Returns undefined

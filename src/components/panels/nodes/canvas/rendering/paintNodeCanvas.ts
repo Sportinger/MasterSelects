@@ -2,7 +2,7 @@ import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation
 import { cableArcLengths, canvasCableRoute, signalPosition } from './cableGeometry';
 import { cableRoutePoint, traceCableRoute } from '../cableRoute';
 import { branchMetrics } from '../cableBranches';
-import { fitCanvasLabel, wrapCanvasLabel } from './canvasTextLayout';
+import { fitCanvasLabel, portTextRoom, wrapCanvasLabel } from './canvasTextLayout';
 import type { CanvasBranch, CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 import { CARD_SPRITE_PAD } from './nodeCardSprites';
 import { nodePopFrame } from './nodePopMotion';
@@ -27,6 +27,7 @@ function begin(ctx: DrawContext, view: CanvasView) {
 function box(ctx: DrawContext, x: number, y: number, width: number, height: number, radius = 4) {
   ctx.beginPath(); ctx.roundRect(x, y, width, height, radius);
 }
+const PORT_LABEL_FONT = '500 9px system-ui, sans-serif', PORT_TYPE_FONT = '400 8px system-ui, sans-serif';
 function text(ctx: DrawContext, value: string, x: number, y: number, max: number, color: string, size = 10, weight = 400, align: CanvasTextAlign = 'left') {
   ctx.font = `${weight} ${size}px system-ui, sans-serif`; ctx.textAlign = align; ctx.fillStyle = color;
   ctx.fillText(fitCanvasLabel(ctx, value, max), x, y);
@@ -262,8 +263,8 @@ export function drawNodeCard(ctx: DrawContext, node: CanvasNode, theme: CanvasTh
       ctx.fillStyle = port.color; ctx.beginPath(); ctx.arc(port.x, port.y, 3.5, 0, Math.PI * 2); ctx.fill();
       if (port.highlighted) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(port.x, port.y, 5, 0, Math.PI * 2); ctx.stroke(); }
       const x = port.x + (port.input ? 9 : -9), align = port.input ? 'left' : 'right';
-      text(ctx, port.label, x, port.y + 1, 65, theme.text, 9, 500, align);
-      text(ctx, port.type, x, port.y + 12, 65, port.color, 8, 400, align);
+      text(ctx, port.label, x, port.y + 1, portTextRoom(ctx, PORT_LABEL_FONT, node.width, node.ports, port, 'label'), theme.text, 9, 500, align);
+      text(ctx, port.type, x, port.y + 12, portTextRoom(ctx, PORT_TYPE_FONT, node.width, node.ports, port, 'type'), port.color, 8, 400, align);
     }
 }
 

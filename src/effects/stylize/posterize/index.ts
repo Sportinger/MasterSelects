@@ -5,8 +5,9 @@ import type { EffectDefinition, EffectPreset } from '../../types';
 import { POSTERIZE_PARAMS } from '../pointwiseParams';
 import { posterizeParamNotes } from '../pointwiseModel';
 
-/** From two tones to fine bands. Every preset names Brightness Only: its stored default is off
- * (what saved Posterize effects mean), while a new Posterize starts with it on. */
+/** From two tones to fine bands. Every preset names Brightness Only: its declared default is on,
+ * its legacy default off (what saved Posterize effects without the key mean), so a preset applied
+ * to an old save sets the switch too. */
 export const POSTERIZE_PRESETS: readonly EffectPreset[] = [
   // Two tones: light parts keep their colour at full strength, everything darker drops to black.
   { id: 'stencil', name: 'Stencil', params: { levels: 2, softness: 0.1, brightnessOnly: true } },

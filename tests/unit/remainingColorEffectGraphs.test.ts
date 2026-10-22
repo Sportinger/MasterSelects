@@ -8,6 +8,7 @@ import { setAnimatedOperatorParameter, setOperatorParameter } from '../../src/se
 import { propertyRegistry } from '../../src/services/properties';
 import { validatePropertyAuthoringValue } from '../../src/services/properties/propertyAuthoring';
 import { handleListEffects } from '../../src/services/aiTools/handlers/effects';
+import { keyframeNodeParameters } from '../../src/services/nodeGraph/keyframeNodeParameters';
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -108,12 +109,16 @@ describe('remaining editable color effect graphs', () => {
     for (const turns of [1, 0.75, -0.6, 2.125]) expect(validatePropertyAuthoringValue(descriptor, turns)).toBe(turns);
     const temperature = propertyRegistry.getAllDescriptors(createMockClip({ effects: [effect('temperature')] }))
       .find(item => item.path === 'effect.temperature-fx.temperature')!;
-    expect(() => validatePropertyAuthoringValue(temperature, 1.1)).toThrow('must be at most 1');
+    // A non-wrapping param keeps a limit (past its render range of ±4, which holds after the slider/render split lands).
+    expect(temperature.ui?.wraps).toBeUndefined();
+    expect(() => validatePropertyAuthoringValue(temperature, 5)).toThrow('must be at most');
     // The Nodes-tab card value and the operator-graph tool.
     for (const turns of [0.75, 2.125, -0.6]) {
       setAnimatedOperatorParameter(clip.id, canonical.id, 'shift', 'value', turns);
       expect(useTimelineStore.getState().clips[0].effects[0].params.shift).toBe(turns);
     }
+    // The Keyframe node keeps such keys too (render case in effectDegreeRow.test.tsx).
+    expect(keyframeNodeParameters(clip).find(item => item.property === `effect.${canonical.id}.shift`)).toMatchObject({ wraps: true });
     // listEffects tells the agent that Shift goes round instead of stopping at its slider ends.
     const listed = await handleListEffects();
     const categories = (listed.data as { categories: Array<{ effects: Array<{ id: string; params: Array<{ name: string; wraps?: boolean }> }> }> }).categories;
