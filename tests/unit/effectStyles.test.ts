@@ -1,9 +1,23 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { changeEffectStyle, effectStyleGroups, effectStyleOptions, hideOtherStyleLanes } from '../../src/services/effects/effectStyles';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { getEffect } from '../../src/effects';
+import { effectEngineMembers } from '../../src/effects/effectCatalogGroups';
+import { changeEffectStyle, effectStyleGroups, effectStyleOptions, forgetEffectStyleOrigins, hideOtherStyleLanes } from '../../src/services/effects/effectStyles';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { getHistoryStateView, initHistoryStoreRefs, setHistoryCallbacks } from '../../src/stores/historyStore';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
-afterEach(() => useTimelineStore.setState({ clips: [], tracks: [], isExporting: false, clipKeyframes: new Map() }));
+beforeEach(() => {
+  setHistoryCallbacks({ flushPendingCapture: () => undefined, suppressCaptures: () => undefined });
+  initHistoryStoreRefs({ timeline: { getState: useTimelineStore.getState, setState: useTimelineStore.setState },
+    media: { getState: () => ({ files: [], compositions: [], folders: [], selectedIds: [], expandedFolderIds: [], textItems: [], solidItems: [], mathSceneItems: [], motionShapeItems: [], signalAssets: [], signalArtifacts: [], signalGraphs: [], signalOperators: [] }), setState: () => undefined },
+    dock: { getState: () => ({ layout: null }), setState: () => undefined } });
+  getHistoryStateView().clearHistory();
+});
+afterEach(() => {
+  getHistoryStateView().clearHistory();
+  forgetEffectStyleOrigins();
+  useTimelineStore.setState({ clips: [], tracks: [], isExporting: false, clipKeyframes: new Map() });
+});
 
 const key = (id: string, param: string, time: number, value: number) => ({ id, clipId: 'style-clip', time, property: `effect.fx.${param}` as const, value, easing: 'linear' as const });
 function setupLook(type: string, params: Record<string, unknown>, keyframes: ReturnType<typeof key>[] = []) {
@@ -88,6 +102,76 @@ describe('effect styles', () => {
     expect(fx().params).toMatchObject({ scale: 3, amount: 1, angle: 0, colorA: '#111827' });
     expect(keysOf()).toEqual([]);
     expect(notes[0]).toBe('CRT Screen has no Scale: Mask Density starts at its default (Undo brings back Scale and its keyframes).');
+    // The note's promise holds: one undo step brings back the look, Scale 60 and both keyframes.
+    getHistoryStateView().undo();
+    expect(fx()).toMatchObject({ type: 'halftone', params: { scale: 60 } });
+    expect(keysOf().map(keyframe => [keyframe.id, keyframe.value])).toEqual([['k1', 20], ['k2', 70]]);
+  });
+
+  it('says nothing about controls the user never touched (Halftone at its defaults -> Crystal Glass, CRT Screen and back)', () => {
+    setupLook('halftone', { scale: 14, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc' });
+    expect(changeEffectStyle('style-clip', 'fx', 'crystal')).toEqual([]);
+    expect(fx().params).toMatchObject({ scale: 14, amount: 0.3 });
+    setupLook('halftone', { scale: 14, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc' });
+    expect(changeEffectStyle('style-clip', 'fx', 'crt-screen')).toEqual([]);
+    expect(changeEffectStyle('style-clip', 'fx', 'halftone')).toEqual([]);
+    expect(fx().params).toMatchObject({ scale: 14, amount: 0.75 });
+  });
+
+  it('names node graph edits it resets', () => {
+    setup();
+    expect(changeEffectStyle('style-clip', 'fx', 'riso')).toContain('Your node graph edits were reset (Undo brings them back).');
+    expect(changeEffectStyle('style-clip', 'fx', 'halftone')).not.toContain('Your node graph edits were reset (Undo brings them back).');
+  });
+
+  it('gives Riso Glow the Registration of Riso, and Contour Map a band count instead of a cell size', () => {
+    setupLook('riso', { scale: 20, amount: 0.75, colorA: '#2046b3', colorB: '#ef476f' }, [key('k1', 'scale', 0, 10), key('k2', 'scale', 1, 30)]);
+    expect(changeEffectStyle('style-clip', 'fx', 'riso-glow')).toEqual([]);
+    expect(fx().params.scale).toBe(20);
+    expect(keysOf().map(keyframe => keyframe.id)).toEqual(['k1', 'k2']);
+    for (const look of ['riso-glow', 'contour-map']) {
+      setupLook('halftone', { scale: 60, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc' });
+      const notes = changeEffectStyle('style-clip', 'fx', look);
+      expect(fx().params.scale).toBe(14);
+      expect(notes[0]).toMatch(/has no Scale: (Registration|Band Density) starts at its default/u);
+    }
+  });
+
+  it('never gives two looks the same label for a key that means something else (the note would read "has no Scale: Scale")', () => {
+    for (const engine of ['two-tone-pattern', 'glyph-mosaic', 'tracking-overlay']) {
+      const members = effectEngineMembers(engine);
+      for (const a of members) for (const b of members) for (const [key, param] of Object.entries(getEffect(a)?.params ?? {})) {
+        const other = getEffect(b)?.params[key];
+        if (other && other.styleRole !== param.styleRole) expect(`${b} ${key}: ${other.label}`).not.toBe(`${b} ${key}: ${param.label}`);
+      }
+    }
+  });
+
+  it('opens a value kept through looks without the control at the default of the look it comes to (Pattern Halftone -> Riso -> Tone Geometry)', () => {
+    setupLook('pattern-halftone', { scale: 14, amount: 0.75, angle: 0, colorA: '#111827', colorB: '#f8fafc', shape: 'circle' });
+    changeEffectStyle('style-clip', 'fx', 'riso');
+    changeEffectStyle('style-clip', 'fx', 'tone-geometry');
+    expect(fx().params.shape).toBe('square');
+    // A Shape the user picked (circle is not Tone Geometry's default) comes back.
+    useTimelineStore.getState().updateClipEffect('style-clip', 'fx', { shape: 'circle' });
+    changeEffectStyle('style-clip', 'fx', 'riso');
+    changeEffectStyle('style-clip', 'fx', 'tone-geometry');
+    expect(fx().params.shape).toBe('circle');
+    // Also through a look whose default it happens to be.
+    changeEffectStyle('style-clip', 'fx', 'pattern-halftone');
+    changeEffectStyle('style-clip', 'fx', 'tone-geometry');
+    expect(fx().params.shape).toBe('circle');
+  });
+
+  it('keeps a value the user set on a round trip through a look whose default it equals', () => {
+    setupLook('halftone', { scale: 14, amount: 0.3, angle: 0, colorA: '#111827', colorB: '#f8fafc' });
+    changeEffectStyle('style-clip', 'fx', 'wave-lines');
+    changeEffectStyle('style-clip', 'fx', 'halftone');
+    expect(fx().params.amount).toBe(0.3);
+    setupLook('ascii', { cellSize: 22, rampPreset: 'standard' });
+    changeEffectStyle('style-clip', 'fx', 'word-mosaic');
+    changeEffectStyle('style-clip', 'fx', 'ascii');
+    expect(fx().params.cellSize).toBe(22);
   });
 
   it('opens an untouched control at the new look default and carries a changed one', () => {
@@ -112,13 +196,20 @@ describe('effect styles', () => {
     expect(keysOf()).toHaveLength(1);
   });
 
-  it('carries Drift Lines Band Size and Drift with their keyframes into another look', () => {
+  it('carries Drift Lines Band Size with its keyframes into another look, but not Drift, which is a distance there and a mix elsewhere', () => {
     setupLook('drift-lines', { scale: 30, amount: 0.4, angle: 0, colorA: '#111827', colorB: '#f8fafc', speed: 1 },
       [key('k1', 'scale', 0, 20), key('k2', 'amount', 1, 0.6)]);
     const notes = changeEffectStyle('style-clip', 'fx', 'glitch-grid');
-    expect(fx().params).toMatchObject({ scale: 30, amount: 0.4 });
-    expect(keysOf().map(keyframe => keyframe.id)).toEqual(['k1', 'k2']);
-    expect(notes).toEqual([]);
+    expect(fx().params).toMatchObject({ scale: 30, amount: 0.75 });
+    expect(keysOf().map(keyframe => keyframe.id)).toEqual(['k1']);
+    expect(notes).toEqual(['Glitch Grid has no Drift: Amount starts at its default (Undo brings back Drift and its keyframes).']);
+  });
+
+  it('opens Halftone at its own Amount after the Heat Haze preset of Drift Lines and names it', () => {
+    setupLook('drift-lines', { scale: 3, amount: 0.05, angle: 0, colorA: '#111827', colorB: '#f8fafc', speed: 0.6 });
+    const notes = changeEffectStyle('style-clip', 'fx', 'halftone');
+    expect(fx().params).toMatchObject({ scale: 3, amount: 0.75 });
+    expect(notes).toContain('Halftone has no Drift: Amount starts at its default (Undo brings back Drift).');
   });
 
   it('judges a value kept from an earlier look by its role: Drift Lines -> Halftone -> Crystal is Drift Lines -> Crystal', () => {

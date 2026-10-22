@@ -65,10 +65,18 @@ and source. Other effects and structural settings are not implicitly enabled.
   the old look's default (no keyframes, no node source) takes the new look's default. A key whose
   control does something else in one look declares `styleRole` there (Crystal Glass Facets and
   Refraction, Glass Dispersion Dispersion, Ribbon Scan Ribbons and Displacement, Wave Lines Line
-  Density, CRT Screen Mask Density, Film Prism Fringe, Riso Registration): between different roles
-  the value starts at the new default and its keyframes are removed (one undo step). Labels never
-  decide this. A value kept from an earlier look carries only when every look with that key agrees
-  on the role. `tests/unit/effectStyles.test.ts`.
+  Density, CRT Screen Mask Density, Film Prism Fringe, Riso and Riso Glow Registration, Contour Map
+  Band Density, Drift Lines Drift): between different roles the value starts at the new default and
+  its keyframes are removed (one undo step). Labels never decide this, but two looks that give one key
+  different roles must label it differently (else the note reads "has no Scale: Scale"). For the
+  session, a switch remembers which look a carried or kept value was set in, with that value
+  (`styleOrigins`): later switches judge it against that look's role and default, so a value set by
+  the user survives a round trip through a look whose default it equals, and a kept value nobody
+  touched opens at the next look's default. Projects do not store this; after a reload a kept value
+  carries only when every look with that key agrees on the role, and counts as untouched only when it
+  is the default of all of them. The row notes a reset control only when the user had changed or
+  keyed it, and names reset node graph edits (a stored graph that is not the look's default).
+  `tests/unit/effectStyles.test.ts`.
 - Every visible effect has its own docs page; `tests/unit/effectDocsCatalog.test.ts` fails otherwise
   (see [Effect pages](./Documentation-Site.md#effect-pages)).
 - **Presets.** An effect declares its named starting points in its definition: `presets: [{ id, name,
@@ -1922,8 +1930,9 @@ direction by sin(band × 0.71 + timeline time × Speed × 2) × **Drift** × 6 %
 every second band is shaded to 0.64–0.82 of its brightness. Band Size below 2 is clamped by the
 `scale-clamped` node (`renderMin`, reported by `paramRangeNotes`); bands under one output pixel are
 reported by `driftLinesWarnings`. The parameter ids stay the engine's (`scale`, `amount`, `angle`,
-`speed`) in the engine's shared roles (no `styleRole`), so the Style menu carries the values the
-user set; only the labels differ. Angle is `graphOnly`: a node setup
+`speed`); Band Size, Angle and Speed keep the engine's shared roles (no `styleRole`), so the Style
+menu carries the values the user set. Drift (`amount`) is a distance, not a mix (`styleRole: 'drift'`):
+it starts at the new look's default in every other look, and the row says so. Angle is `graphOnly`: a node setup
 edited before it acted does not read it and the card hides it. The stage folders come from its
 presentation plan (Bands, Drift Wave, Shifted Sample, Line Shading & Alpha). Its four presets live in
 `src/effects/halftone/driftLines.ts`. Tests: `tests/unit/imageMotionHalftoneGraphs.test.ts`, `tests/unit/effectPresets.test.ts`.

@@ -59,7 +59,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Drift Lines with the Rain Curtain preset. 1 — Preset: pick a starting point. 2 — Band Size. 3 — Angle: 90° stands the bands upright. 4 — Drift.</figcaption>
 </figure>
 
-**Style** – switches to another look of the same engine; **Band Size**, **Drift**, **Angle**, **Speed** and the inks keep the values and keyframes you set, for example [Glitch Grid](./glitch-grid.md), [Scatter Mosaic](./scatter-mosaic.md) or [Wave Lines](./wave-lines.md).
+**Style** – switches to another look of the same engine. **Band Size**, **Angle** and **Speed** keep the values and keyframes you set in looks that have the same control, for example [Halftone](./halftone.md), [Glitch Grid](./glitch-grid.md) or [Scatter Mosaic](./scatter-mosaic.md). A control that means something else in the new look starts at that look's default, and the row under the menu says so: **Drift** everywhere, since no other look slides its bands (Halftone's **Amount** is a mix), and **Band Size** in [Wave Lines](./wave-lines.md) (**Line Density**), [Crystal Glass](./crystal.md) (**Facets**) or [Ribbon Scan](./ribbon-scan.md) (**Ribbons**). **Undo** brings the old value back.
 
 ### Pattern
 

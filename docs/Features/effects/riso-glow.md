@@ -1,8 +1,8 @@
 # Riso Glow
 
-<!-- effect-docs: basic page sha=5df209aa6041, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=3036915b7479, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
-Two-ink risograph print look with a pulsing glow added to the inks; Shadow and Glow Ink set the colors, Speed the pulse rate.
+Two-ink risograph print look with a pulsing glow added to the inks; Registration sets how far the two inks sit apart, Shadow and Glow Ink the colors, Speed the pulse rate.
 
 Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effects.md#add-an-effect)
 
@@ -21,7 +21,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 | Control | Range | Default |
 |---|---|---|
 | **Pattern** | | |
-| Scale | 2 to 80 | 14 |
+| Registration | 2 to 80 | 14 |
 | **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |

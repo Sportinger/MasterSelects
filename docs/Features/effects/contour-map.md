@@ -1,8 +1,8 @@
 # Contour Map
 
-<!-- effect-docs: basic page sha=1f0dd1d9022d, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=708debc06cf8, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
-Turns brightness into banded elevation zones between Ink and Paper with lines at each band, like a topographic map; Scale sets band count.
+Turns brightness into banded elevation zones between Ink and Paper with lines at each band, like a topographic map; Band Density sets how many bands.
 
 Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Effects.md#add-an-effect)
 
@@ -21,7 +21,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 | Control | Range | Default |
 |---|---|---|
 | **Pattern** | | |
-| Scale | 2 to 80 | 14 |
+| Band Density | 2 to 80 | 14 |
 | **Mix** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |
