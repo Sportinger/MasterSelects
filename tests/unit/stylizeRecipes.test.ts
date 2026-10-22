@@ -8,6 +8,7 @@ import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/
 import { createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
 import { createStylizeRecipeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_EFFECT_TYPES } from '../../src/services/operators/stylizeRecipes';
 import { unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
+import { createSpreadWindowSharpenGraph } from '../../src/services/operators/sharpenEffectGraph';
 import { applyWorkerSoftwareImageGraphs, canApplyWorkerSoftwareImageGraphPlan } from '../../src/services/render/workerSoftwareImageGraphs';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
@@ -50,6 +51,17 @@ describe('stylize recipes: ownership and saved projects', () => {
     expect(validateEffectGraph(graph)).toEqual([]);
     expect(canApplyWorkerSoftwareImageGraphPlan(plan(type))).toBe(true);
     expect(isEarlierStylizeGraph(type, graph)).toBe(false);
+  });
+
+  it('moves an untouched Sharpen of 3.2.7 (spread halo window) to the current recipe and keeps an edited one', () => {
+    const released = createSpreadWindowSharpenGraph(), current = createStylizeRecipeGraph('sharpen')!;
+    expect(matchesEffectRecipe(released, current)).toBe(false);
+    const resolve = (operatorGraph: ReturnType<typeof createSpreadWindowSharpenGraph>) =>
+      effectOperatorGraph({ type: 'sharpen', params: getDefaultParams('sharpen') as Effect['params'], operatorGraph }, { inspectionOnly: true });
+    expect(matchesEffectRecipe(resolve(released), current)).toBe(true);
+    const edited = createSpreadWindowSharpenGraph();
+    edited.nodes = edited.nodes.map(node => (node.id === 'overshoot' ? { ...node, constants: { value: 0.5 } } : node));
+    expect(matchesEffectRecipe(resolve(edited), current)).toBe(false);
   });
 
   it('gives new stylize effects their current recipe graph', () => {
@@ -383,6 +395,24 @@ describe('Sharpen', () => {
     const energy = (values: number[]) => values.reduce((sum, value) => sum + value * value, 0);
     const kept = energy(highPass(sharpenRow(texture, 3, 2))) / energy(highPass(plainUnsharp(texture, 3, 2)));
     expect(kept).toBeGreaterThan(0.8);
+  });
+
+  it('changes smoothly when Radius is animated across a step of the halo window (no flicker)', () => {
+    // The halo window grows by one tap per side whenever 2 sigma passes a whole pixel. A tap enters
+    // with its covered share, so a 0.02 px sigma step there changes the picture no more than the
+    // same step between two window sizes (before, it jumped by about three times that).
+    const size = 40, pixel = (x: number, y: number): Pixel => {
+      const v = (x > 19 ? 0.65 : 0.3) + 0.15 * Math.sin(1.3 * x + 0.4 * y) * Math.cos(1.1 * y); return [v, v, v, 1];
+    };
+    const frame = (sigma: number) => render('sharpen', { amount: 5, radius: sigma * 1080 / size }, size, size, pixel);
+    const change = (sigma: number) => {
+      const [before, after] = [frame(sigma - 0.01), frame(sigma + 0.01)];
+      let largest = 0;
+      for (let index = 0; index < before.length; index++) largest = Math.max(largest, Math.abs(after[index] - before[index]));
+      return largest;
+    };
+    const steady = Math.max(change(1.25), change(1.3));
+    for (const edge of [1, 1.5]) expect(change(edge)).toBeLessThanOrEqual(steady + 1 / 255);
   });
 
   it('does not read the timeline time', () => {

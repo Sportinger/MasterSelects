@@ -24,30 +24,6 @@
           "radius": 80
         }
       }
-    },
-    {
-      "name": "sharpen",
-      "out": "docs/Features/assets/effects/sharpen.webp",
-      "image": "harbor_town",
-      "width": 1920,
-      "crop": [
-        1180,
-        470,
-        180,
-        200
-      ],
-      "zoom": 4,
-      "gap": 8,
-      "left": {
-        "effect": "original"
-      },
-      "right": {
-        "effect": "sharpen",
-        "params": {
-          "amount": 3,
-          "radius": 1
-        }
-      }
     }
   ]
 }

@@ -845,7 +845,10 @@ Gaussian Blur passes (σ = Radius pixels of a 1080p frame, at least 0.25 px) and
 colour fringes. A halo limit removes most of the bright and dark outlines of a
 classic unsharp mask. It takes a smooth darkest and brightest brightness of the
 neighbourhood within ±2σ (at least ±1 px), densely, one pixel apart (up to 24 taps
-per side, wider steps beyond): first along each row in the horizontal blur pass,
+per side, wider steps beyond). The outermost tap counts with the share of it the
+window covers: its brightness moves towards the pixel's own and its weight shrinks by
+that share, so the window grows continuously and an animated Radius does not flicker
+when the window gains a tap. The extremes are taken first along each row in the horizontal blur pass,
 whose cache then holds blurred brightness, blurred alpha, row brightest and row
 darkest; then down a column of those rows in the final pass (means weighted by
 `exp(±64 × Δluma)`; transparent taps weigh nothing, rows without an opaque tap are
@@ -857,7 +860,10 @@ halo stays at about 18 % of the step at Amount 1 and about 26 % at Amount 5 (a
 plain unsharp mask overshoots by 40 % or more). At Amount 3–5 on strong texture the
 peaks are compressed, and two neighbours at a peak can round to the same level.
 Nothing depends on the timeline time. Negative Amount softens; alpha is kept. Three
-passes. Sharpens saved
+passes. An untouched Sharpen saved with the 3.2.7 recipe (taps spread evenly over a
+fractional window, which jumped when an animated Radius added a tap) loads with the
+current one; both render the same wherever 2σ is a whole number of pixels (Radius 0.5,
+1, 1.5 … at 1080p). Sharpens saved
 earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
 **Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,

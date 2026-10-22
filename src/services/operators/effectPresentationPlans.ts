@@ -190,8 +190,10 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^(frame|uv|resolution|index|one-vec2|texel-size|offset|radius-vec2|scaled-offset|sample)/.test(id) ? 'sampling' : 'finish',
   };
   if (type === 'sharpen') return {
-    labels: { size: 'Radius & Window Size', premultiply: 'Premultiplied Source (cached)', horizontal: 'Horizontal Blur Pass', rows: 'Row: Darkest & Brightest',
-      vertical: 'Vertical Blur Pass', window: 'Window: Darkest & Brightest', detail: 'Unsharp Mask (brightness)', halo: 'Halo Limit', finish: 'Apply to Color & Alpha' },
+    // The source brightness feeds the rows, the window, the mask and the limit: its own folder, so
+    // the Unsharp Mask folder (after the vertical pass) does not close a loop and fall apart.
+    labels: { size: 'Radius & Window Size', source: 'Source Brightness', premultiply: 'Premultiplied Source (cached)', horizontal: 'Horizontal Blur Pass', rows: 'Row Darkest & Brightest',
+      vertical: 'Vertical Blur Pass', window: 'Window Darkest & Brightest', detail: 'Unsharp Mask (brightness)', halo: 'Halo Limit', finish: 'Apply to Color & Alpha' },
     portLabels: { ...SEPARABLE_PORTS, 'sharpened-luma': 'Sharpened Brightness', 'window-darkest': 'Darkest Nearby', 'window-brightest': 'Brightest Nearby',
       detail: 'Detail', 'row-max': 'Row Brightest', 'row-min': 'Row Darkest', 'row-cache': 'Rows (blur, darkest, brightest)', 'row-tap-luma': 'Tap Brightness',
       'window-range': 'Range', 'halo-margin-raw': 'Range × Overshoot', 'halo-margin': 'Margin', 'halo-ceiling-raw': 'Brightest + Margin', 'halo-ceiling': 'Ceiling',
@@ -199,12 +201,18 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       'excess-below': 'Excess Below', 'inside-range': 'Within Floor…Ceiling', 'roll-off-above-share': 'Excess / Scale', 'roll-off-above-ratio': '1 + Excess / Scale',
       'roll-off-above-log': 'ln(1 + Excess / Scale)', 'roll-off-above': 'Rolled-off Excess', 'roll-off-below': 'Rolled-off Excess Below',
       'limited-luma-up': 'Within + Rolled-off Excess', 'limited-luma': 'Limited Brightness', 'limited-change': 'Limited Change',
-      overshoot: 'Overshoot', 'margin-floor': 'Margin Floor', 'roll-off': 'Roll Off' },
+      overshoot: 'Overshoot', 'margin-floor': 'Margin Floor', 'roll-off': 'Roll Off', 'window-reach-steps': 'Reach in Taps',
+      'window-x-coverage': 'Row Tap Share', 'window-y-coverage': 'Column Tap Share', 'row-tap-covered': 'Covered Tap Brightness', 'row-tap-weight': 'Tap Weight',
+      'column-tap-brightest': 'Covered Row Brightest', 'column-tap-darkest': 'Covered Row Darkest', 'window-count': 'Window Taps',
+      'window-x-px': 'Row Offset (px)', 'window-y-px': 'Column Offset (px)', 'source-split:rgb': 'Source RGB', 'source-split:alpha': 'Source Alpha',
+      'source-luma': 'Source Brightness', 'horizontal-split:rgb': 'Row-Blurred RGB', 'horizontal-split:alpha': 'Row-Blurred Alpha',
+      'vertical-split:x': 'Blurred Brightness', 'vertical-split:y': 'Blurred Alpha' },
     stage: ({ id }) => /^(source-premultiplied|source-cache)/.test(id) ? 'premultiply' : /^horizontal-/.test(id) ? 'horizontal'
       : /^(row-|empty-row-)/.test(id) ? 'rows' : /^vertical-/.test(id) ? 'vertical'
         : /^(column-|window-(brightest|darkest|bright-total|dark-total))/.test(id) ? 'window'
           : /^(window-range|halo-|overshoot|margin-floor|roll-off|excess-|inside-range|limited-luma)/.test(id) ? 'halo'
-            : /^(source-split|source-luma|blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
+            : /^(source-split|source-luma)$/.test(id) ? 'source'
+              : /^(blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
               : /^(limited-change|luma-change|result-|combine)/.test(id) ? 'finish' : 'size',
   };
   // Drift Lines (createDriftLinesGraph): band index across the turned bands, the wave that shifts each band, the line shading.

@@ -16,6 +16,8 @@ import { executeAITool } from '../../src/services/aiTools';
 import { motionBlur } from '../../src/effects/blur/motion';
 import { radialBlur } from '../../src/effects/blur/radial';
 import { zoomBlur } from '../../src/effects/blur/zoom';
+import { sharpen } from '../../src/effects/stylize/sharpen';
+import { sharpenParamNotes } from '../../src/effects/stylize/sharpen/sharpenModel';
 import { resolveEffectPreset } from '../../src/services/effects/effectPresets';
 import { effectParamDisplay } from '../../src/effects/paramDisplay';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
@@ -148,6 +150,30 @@ describe('Zoom Blur presets', () => {
       expect(blurBudgetNotes('zoom-blur', { amount }, 1920, 1080)).toEqual([]);
       expect(resolveEffectPreset({ type: 'zoom-blur', params: { centerX: 0.2 } }, preset)).toMatchObject({ amount, centerX: 0.5, centerY: 0.5 });
     }
+  });
+});
+
+describe('Sharpen presets', () => {
+  it('set Amount and Radius within the card range, from fine detail to large shapes, without limit notes', () => {
+    expect(sharpen.presets?.map(preset => preset.name)).toEqual(['Fine Detail', 'Crisp', 'Gritty', 'Punch']);
+    const radii = (sharpen.presets ?? []).map(preset => (preset.params as { radius: number }).radius);
+    expect(radii).toEqual(radii.toSorted((a, b) => a - b));
+    for (const preset of sharpen.presets ?? []) {
+      const { amount, radius } = preset.params as { amount: number; radius: number };
+      expect(amount).toBeGreaterThan(0);
+      expect(amount).toBeLessThanOrEqual(sharpen.params.amount.max ?? 5);
+      expect(radius).toBeGreaterThanOrEqual(sharpen.params.radius.min ?? 0.5);
+      expect(radius).toBeLessThanOrEqual(sharpen.params.radius.max ?? 5);
+      expect(sharpenParamNotes({ amount, radius }, 1920, 1080)).toEqual([]);
+      expect(resolveEffectPreset({ type: 'sharpen', params: { amount: 3, radius: 2 } }, preset)).toMatchObject({ amount, radius });
+    }
+  });
+
+  it('says when the halo window spreads its taps instead of thinning it silently', () => {
+    expect(sharpenParamNotes({ amount: 1, radius: 5 }, 3840, 2160)).toEqual([]);
+    const [note] = sharpenParamNotes({ amount: 1, radius: 5 }, 7680, 4320);
+    expect(note).toContain('halo window reach 40 px at 7680x4320');
+    expect(note).toContain('1.7 px apart');
   });
 });
 

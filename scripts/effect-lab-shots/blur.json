@@ -123,6 +123,33 @@
       },
       "alt": "The rainy night street, original left and with Zoom Blur at Amount 0.3 right: the neon signs, shop fronts and wet reflections streak outward from the walker in the middle, as if the camera rushed down the street while the shutter was open",
       "caption": "Left: original. Right: Amount 0.3."
+    },
+    {
+      "name": "sharpen",
+      "out": "docs/Features/assets/effects/sharpen.webp",
+      "image": "harbor_town",
+      "width": 1920,
+      "crop": [
+        1150,
+        450,
+        320,
+        180
+      ],
+      "layout": "compare",
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "sharpen",
+        "params": {
+          "amount": 3
+        }
+      },
+      "alt": "Houses, shutters and a café terrace in the harbour town, enlarged, original left and with Sharpen at Amount 3 right: shutters, windows, umbrellas and the people on the terrace are crisper and the walls show more texture, without thick bright or dark outlines along the edges",
+      "caption": "Houses on the harbour front, enlarged. Left: original. Right: Amount 3.",
+      "outWidth": 1280,
+      "zoom": 2,
+      "maxBytes": 110000
     }
   ]
 }

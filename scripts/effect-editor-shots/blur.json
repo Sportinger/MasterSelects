@@ -178,6 +178,36 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "sharpen-inspector",
+      "effect": "sharpen",
+      "params": {
+        "amount": 2,
+        "radius": 1
+      },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Sharpen card: the Preset menu showing Crisp, the Amount row at 2 and the Radius row at 1 px, beside a strip of the preview with the crisper harbour town",
+      "caption": "Sharpen with the Crisp preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how much crisper. 3 \u2014 Radius: the size of the detail it works on.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Radius",
+          "label": "Radius"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

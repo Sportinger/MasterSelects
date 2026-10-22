@@ -54,6 +54,19 @@
         1920,
         1080
       ]
+    },
+    {
+      "effect": "sharpen",
+      "image": "harbor_town",
+      "width": 1920,
+      "crop": [
+        1100,
+        440,
+        320,
+        180
+      ],
+      "cellWidth": 480,
+      "maxBytes": 120000
     }
   ]
 }

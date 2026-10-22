@@ -9,7 +9,7 @@ import { createRingGlowGraph } from './glowEffectGraph';
 import { isRingGlowGraph } from './glowGraphUpgrade';
 import { createDefaultGrainGraph } from './grainEffectGraph';
 import { createDefaultScanlinesGraph } from './scanlinesEffectGraph';
-import { createDefaultSharpenGraph } from './sharpenEffectGraph';
+import { createDefaultSharpenGraph, createSpreadWindowSharpenGraph } from './sharpenEffectGraph';
 import { createDefaultVignetteGraph } from './vignetteEffectGraph';
 import { createDefaultPointwiseEffectGraph, createEarlierPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
 import { GLOW_DEFAULTS } from '../../effects/stylize/glow/glowBloom';
@@ -94,6 +94,16 @@ export function isEarlierStylizeGraph(type: string, graph: EffectOperatorGraph |
 /** Presentation of a stylize graph: an untouched earlier recipe keeps its own folder plan (`<type>-earlier`). */
 export function stylizePresentation(type: string, graph: EffectOperatorGraph): { key: string; createDefault: () => EffectOperatorGraph } | undefined {
   return isRecipeType(type) && isEarlierStylizeGraph(type, graph) ? { key: `${type}-earlier`, createDefault: EARLIER[type] } : undefined;
+}
+
+const isSpreadWindowSharpenGraph = recognizer(createSpreadWindowSharpenGraph);
+/**
+ * An untouched Sharpen saved with the 3.2.7 recipe (2026-10-21) gets the current one: its halo
+ * window jumped whenever an animated Radius made it one tap wider, a flicker. Both render the same
+ * wherever twice the blur sigma is a whole number of pixels (Radius 0.5, 1, 1.5 … at 1080p).
+ */
+export function upgradeSharpenGraph(graph: EffectOperatorGraph): EffectOperatorGraph {
+  return graph.groups?.some(group => group.bypassed) || !isSpreadWindowSharpenGraph(graph) ? graph : createDefaultSharpenGraph();
 }
 
 /** Untouched earlier Threshold/Posterize graphs read as the current recipe (identical at Softness 0). */
