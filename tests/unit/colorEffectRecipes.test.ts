@@ -266,6 +266,25 @@ describe('rebuilt color effect recipes', () => {
     expect(tinted[0]).toBeCloseTo(tinted[2], 6);
   });
 
+  it('Temperature presets lean the way their names say on a neutral grey, and keep its luminance', () => {
+    const presets = getEffect('temperature')?.presets ?? [];
+    expect(presets.map(preset => preset.id)).toEqual(['golden-hour', 'candlelight', 'moonlight', 'fluorescent']);
+    const lean = (id: string) => {
+      const params = presets.find(preset => preset.id === id)!.params as Record<string, number>;
+      const [r, g, b] = render('temperature', params, [0.5, 0.5, 0.5, 1]).slice(0, 3).map(srgbToLinear);
+      expect(luma709([r, g, b])).toBeCloseTo(srgbToLinear(0.5), 5);
+      return { warm: r / b, green: g / ((r + b) / 2) };
+    };
+    const golden = lean('golden-hour'), candle = lean('candlelight'), moon = lean('moonlight'), tube = lean('fluorescent');
+    expect(golden.warm).toBeGreaterThan(1.4);
+    expect(candle.warm).toBeGreaterThan(golden.warm * 1.4);
+    expect(moon.warm).toBeLessThan(0.6);
+    // Moonlight stays blue rather than cyan; Fluorescent is the only green one.
+    expect(moon.green).toBeLessThan(1);
+    expect(tube.green).toBeGreaterThan(1.15);
+    for (const warmLook of [golden, candle]) expect(warmLook.green).toBeLessThan(1);
+  });
+
   it('Hue Shift turns hue in OkLCh and keeps lightness, chroma and neutral greys', () => {
     // Published Oklab of sRGB red (Ottosson 2020): L 0.62796, a 0.22486, b 0.12585.
     const redLch = [0.62796, Math.hypot(0.22486, 0.12585), Math.atan2(0.12585, 0.22486) / (2 * Math.PI)];

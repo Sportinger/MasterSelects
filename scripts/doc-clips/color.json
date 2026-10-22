@@ -25,6 +25,10 @@
     { "name": "vibrance-amount", "effect": "vibrance", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
       "sweep": { "param": "amount", "label": "Amount", "from": -1, "to": 2, "decimals": 1 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
       "alt": "The dancer turning on a dark stage with Vibrance while Amount runs from −1 to 2 and back: at −1 the haze and the blue backlight turn almost grey; toward 2 the backlight turns a deep blue, the haze brown-orange and her backlit hair glows orange, and her skin and the pale dress warm a little too, because on a warm-lit stage Vibrance spares the warm haze like skin and acts much like a mild Saturation; the current value is shown at the bottom left",
-      "caption": "Amount from −1 to 2 and back." }
+      "caption": "Amount from −1 to 2 and back." },
+    { "name": "temperature-temperature", "effect": "temperature", "params": {}, "range": [0.5, 5.5], "layout": "single", "crop": [340, 40, 1240, 930], "width": 720,
+      "sweep": { "param": "temperature", "label": "Temperature", "from": -1, "to": 1, "decimals": 2 }, "loop": 0.35, "poster": 2.5, "maxBytes": 600000, "float": "right",
+      "alt": "The dancer turning on a dark stage with Temperature while it runs from −1 to 1 and back: at −1 her dress turns a cold white and the backlight a deep blue, then the dress, her skin and the haze grow warmer until at 1 the whole stage glows orange like firelight, while the brightness stays the same; the current value is shown at the bottom left",
+      "caption": "Temperature from −1 to 1 and back." }
   ]
 }

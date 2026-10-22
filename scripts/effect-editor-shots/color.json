@@ -152,6 +152,36 @@
       ]
     },
     {
+      "name": "temperature-inspector",
+      "effect": "temperature",
+      "params": {
+        "temperature": 0.5,
+        "tint": 0.08
+      },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Temperature card: the Preset menu showing Golden Hour, Temperature at 0.50 and Tint at 0.08, beside a strip of the preview with the warm, golden harbour town",
+      "caption": "Temperature with the Golden Hour preset. 1 — Preset: pick a starting point. 2 — Temperature: warmer or cooler light. 3 — Tint: towards magenta or green.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Temperature",
+          "label": "Temperature"
+        },
+        {
+          "target": "Tint",
+          "label": "Tint"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
       "name": "vibrance-inspector",
       "effect": "vibrance",
       "params": {

@@ -28,6 +28,11 @@
     "saturation?plumbing=hide&marks=organized-saturation-controls:below,compound-shared-gamut-one:above@saturation",
     "saturation?focus=parameters&only=amount,amount-clamped&cables=avoid&layout=float&marks=amount-clamped:below@saturation-parameters",
     "saturation?focus=saturation-gamut-safe&only=gamut-luma,gamut-luma-rgb,gamut-amount,gamut-mix&name.gamut-limit=Limit&cables=avoid&marks=gamut-luma:above,gamut-amount:below,gamut-mix:above@saturation-mix",
-    "saturation?focus=saturation-gamut-safe&only=gamut-chroma,gamut-chroma-max,gamut-chroma-up,gamut-chroma-min,gamut-chroma-negated,gamut-chroma-down,gamut-headroom,gamut-limit-up,gamut-limit-down,gamut-limit&name.gamut-luma-rgb=Grey RGB&name.gamut-luma=Grey&constants=hide&cables=avoid&marks=gamut-chroma:below,gamut-chroma-max:above,gamut-limit-up:above,gamut-limit:above@saturation-limit"
+    "saturation?focus=saturation-gamut-safe&only=gamut-chroma,gamut-chroma-max,gamut-chroma-up,gamut-chroma-min,gamut-chroma-negated,gamut-chroma-down,gamut-headroom,gamut-limit-up,gamut-limit-down,gamut-limit&name.gamut-luma-rgb=Grey RGB&name.gamut-luma=Grey&constants=hide&cables=avoid&marks=gamut-chroma:below,gamut-chroma-max:above,gamut-limit-up:above,gamut-limit:above@saturation-limit",
+    "temperature?plumbing=hide&marks=organized-temperature-controls:above,compound-shared-gain-temperature-stops:above,organized-temperature-finish:below@temperature",
+    "temperature?focus=parameters&only=temperature,temperature-clamped,tint,tint-clamped&constants=hide&cables=avoid&layout=float&marks=temperature-clamped:above@temperature-parameters",
+    "temperature?focus=white-balance&only=gain-temperature-stops,gain-warmth,gain-tint-half-stops,gain-magenta,gain-tint-stops,gain-green-stops,gain-red-stops,gain-red,gain-green,gain-blue-stops,gain-blue,gain-vector,gain-rgb,gain-luma,gain-balanced&cables=avoid&marks=gain-warmth:above,gain-blue:above,gain-luma:below,gain-balanced:above@temperature-gains",
+    "temperature?focus=white-balance&only=light-linear,light-balanced,light-encoded&cables=avoid&layout=float&marks=light-linear:above,light-balanced:above,light-encoded:above@temperature-light",
+    "temperature?focus=clamp-and-alpha&only=clamp,combine&cables=avoid&layout=float&marks=clamp:above@temperature-finish"
   ]
 }
