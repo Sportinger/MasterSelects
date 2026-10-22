@@ -137,7 +137,7 @@ describe('web app manifest', () => {
   };
 
   it('is installable as a standalone editor app', () => {
-    expect(manifest).toMatchObject({ start_url: '/editor', scope: '/', display: 'standalone' });
+    expect(manifest).toMatchObject({ start_url: '/editor', scope: '/editor', display: 'standalone' });
     for (const purpose of ['any', 'maskable']) {
       for (const size of ['192x192', '512x512']) {
         expect(manifest.icons.some(icon => icon.purpose === purpose && icon.sizes === size)).toBe(true);
