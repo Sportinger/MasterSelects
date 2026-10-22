@@ -14,7 +14,9 @@ const compileContext = {
 
 function reference(params: { amount: number; cellSize: number; invert: boolean; colorMode: 'source' | 'duotone' }, uv: [number, number],
   resolution: [number, number], colorA: number[], colorB: number[]) {
-  const grid: [number, number] = [resolution[0] / Math.max(params.cellSize, 2), resolution[1] / Math.max(params.cellSize, 2)];
+  // Cell Size counts pixels of a 1080p frame (shorter side), at least 2 output pixels.
+  const cell = Math.max(Math.max(params.cellSize, 2) * (Math.min(...resolution) / 1080), 2);
+  const grid: [number, number] = [resolution[0] / cell, resolution[1] / cell];
   const id: [number, number] = [Math.floor(uv[0] * grid[0]), Math.floor(uv[1] * grid[1])];
   const local: [number, number] = [uv[0] * grid[0] - id[0], uv[1] * grid[1] - id[1]];
   const sourceUv: [number, number] = [(id[0] + .5) / grid[0], (id[1] + .5) / grid[1]];
@@ -27,7 +29,9 @@ function reference(params: { amount: number; cellSize: number; invert: boolean; 
   const ink = params.colorMode === 'source' ? source.slice(0, 3) : duotone;
   const background = params.colorMode === 'source' ? source.slice(0, 3).map(value => value * .08) : colorA.map(value => value * .15);
   const glyph = ink.map((value, channel) => mix(background[channel], value, alpha));
-  return { atlasUv, output: [...source.slice(0, 3).map((value, channel) => mix(value, glyph[channel], params.amount)), source[3]] as Rgba };
+  // Amount fades from the untouched pixel, not from the cell's colour.
+  const pixel = sourceSample(uv);
+  return { atlasUv, output: [...pixel.slice(0, 3).map((value, channel) => mix(value, glyph[channel], params.amount)), source[3]] as Rgba };
 }
 
 describe('ASCII image graph', () => {
@@ -45,7 +49,7 @@ describe('ASCII image graph', () => {
   it.each([{ colorMode: 'source' as const, invert: false }, { colorMode: 'duotone' as const, invert: true }])('matches legacy cell, ramp, atlas alpha and $colorMode ink with invert=$invert', scenario => {
     const params = { amount: .75, cellSize: 10, ...scenario, colorA: '#204060', colorB: '#e0c080',
       rampPreset: 'standard', customRamp: '', fontFamily: 'monospace', fontWeight: 600 };
-    const uv: [number, number] = [.3, .7], resolution: [number, number] = [40, 20], colorA = [0x20 / 255, 0x40 / 255, 0x60 / 255], colorB = [0xe0 / 255, 0xc0 / 255, 0x80 / 255];
+    const uv: [number, number] = [.3, .7], resolution: [number, number] = [3840, 2160], colorA = [0x20 / 255, 0x40 / 255, 0x60 / 255], colorB = [0xe0 / 255, 0xc0 / 255, 0x80 / 255];
     const expected = reference(params, uv, resolution, colorA, colorB), atlasCalls: Array<[string, number, number]> = [];
     const plan = compileImageOperatorGraph(createDefaultAsciiGraph(), params, compileContext);
     const actual = evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv, resolution, sampleImage: sourceSample,

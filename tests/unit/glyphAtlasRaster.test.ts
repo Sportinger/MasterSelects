@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { blockElementRects } from '../../src/effects/_shared/blockElementGlyphs';
 import { rasterizeGlyphAtlas } from '../../src/effects/_shared/glyphAtlasRaster';
 
 const context = () => ({
   clearRect: vi.fn(), measureText: vi.fn(() => ({ width: 10 })), save: vi.fn(), translate: vi.fn(), scale: vi.fn(), fillText: vi.fn(), restore: vi.fn(),
+  fillRect: vi.fn(),
   fillStyle: '', font: '', textAlign: '', textBaseline: '',
 });
 
@@ -43,4 +45,67 @@ describe('glyph atlas raster portability', () => {
     vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => null }) });
     expect(() => rasterizeGlyphAtlas({ fontFamily: 'mono', charset: '#', cellSize: 20 })).toThrow(/2D canvas is unavailable/);
   });
+
+  it('draws Block Elements as shapes that fill the whole tile, every other character from the font', () => {
+    const drawing = context(), canvas = { width: 0, height: 0, getContext: vi.fn(() => drawing) };
+    vi.stubGlobal('document', { createElement: vi.fn(() => canvas) });
+    // Two columns of 16 px tiles: ' ' and '█' in the first row, '▄' and '░' in the second.
+    rasterizeGlyphAtlas({ fontFamily: 'mono', charset: ' █▄░', cellSize: 16 });
+    expect(drawing.fillText).toHaveBeenCalledTimes(1);
+    expect(drawing.fillRect).toHaveBeenCalledWith(16, 0, 16, 16);
+    expect(drawing.fillRect).toHaveBeenCalledWith(0, 24, 16, 8);
+    const shadeRects = drawing.fillRect.mock.calls.filter(([x, y]) => x >= 16 && y >= 16);
+    expect(shadeRects).toHaveLength(4);
+    for (const [, , width, height] of shadeRects) expect([width, height]).toEqual([4, 4]);
+  });
+});
+
+describe('block element shapes', () => {
+  const coverage = (glyph: string) => (blockElementRects(glyph) ?? []).reduce((sum, [x0, y0, x1, y1]) => sum + (x1 - x0) * (y1 - y0), 0);
+
+  it('covers every character of the Unicode Block Elements range and nothing else', () => {
+    for (let code = 0x2580; code <= 0x259f; code += 1) expect(blockElementRects(String.fromCodePoint(code)), code.toString(16)).toBeDefined();
+    for (const glyph of ['A', '#', ' ', '●', '■']) expect(blockElementRects(glyph)).toBeUndefined();
+  });
+
+  it('fills the share of the tile its name says: shades a quarter, half and three quarters, eighth bars in eighths', () => {
+    expect([coverage('░'), coverage('▒'), coverage('▓'), coverage('█')]).toEqual([0.25, 0.5, 0.75, 1]);
+    expect(['▁', '▂', '▃', '▄', '▅', '▆', '▇'].map(coverage)).toEqual([1, 2, 3, 4, 5, 6, 7].map(eighths => eighths / 8));
+    expect(blockElementRects('▄')).toEqual([[0, 0.5, 1, 1]]);
+    expect(coverage('▚')).toBe(0.5);
+    for (let code = 0x2580; code <= 0x259f; code += 1) {
+      for (const [x0, y0, x1, y1] of blockElementRects(String.fromCodePoint(code))!) {
+        expect(x0).toBeGreaterThanOrEqual(0); expect(y0).toBeGreaterThanOrEqual(0); expect(x1).toBeLessThanOrEqual(1); expect(y1).toBeLessThanOrEqual(1);
+        expect(x1).toBeGreaterThan(x0); expect(y1).toBeGreaterThan(y0);
+      }
+    }
+  });
+
+  it('a fill atlas sizes one font for the whole ramp so its tallest character spans 88 % of the tile; saved graphs keep the small type', () => {
+    // At the 100 px probe, '#' reaches 70 px above the baseline and 'g' 20 px below it.
+    const bounds: Record<string, [number, number]> = { '.': [10, 0], '#': [70, 0], g: [40, 20] };
+    const drawing = { ...context(), measureText: vi.fn((glyph: string) => ({ width: 10, actualBoundingBoxAscent: bounds[glyph]?.[0] ?? 0, actualBoundingBoxDescent: bounds[glyph]?.[1] ?? 0 })) };
+    const canvas = { width: 0, height: 0, getContext: vi.fn(() => drawing) };
+    vi.stubGlobal('document', { createElement: vi.fn(() => canvas) });
+    rasterizeGlyphAtlas({ fontFamily: 'mono', charset: ' .#g', cellSize: 64, fill: true });
+    // Ink 90 px at 100 px → font 64 × 0.88 / 0.9 = 62.58 px; the ink box is centred, the baseline 4.48 + 70 × 0.6258 below the tile top.
+    expect(drawing.font).toBe(`600 ${100 * 64 * .88 / 90}px mono`);
+    expect(drawing.textBaseline).toBe('alphabetic');
+    expect(drawing.translate.mock.calls[0][1]).toBeCloseTo((64 - 90 * .6258) / 2 + 70 * .6258, 2);
+    // Without fill (graphs saved before it): 0.76 × the tile, centred on the middle line.
+    const legacy = context();
+    vi.stubGlobal('document', { createElement: vi.fn(() => ({ width: 0, height: 0, getContext: vi.fn(() => legacy) })) });
+    rasterizeGlyphAtlas({ fontFamily: 'mono', charset: ' .#g', cellSize: 64 });
+    expect(legacy.font).toBe('600 48px mono');
+    expect(legacy.textBaseline).toBe('middle');
+  });
+
+  it('the glyph graph asks for a fill atlas; the cache keeps fill and saved atlases apart', async () => {
+    const { createDefaultAsciiGraph } = await import('../../src/services/operators/asciiEffectGraph');
+    const { glyphAtlasCacheKey } = await import('../../src/effects/_shared/glyphAtlasPlan');
+    expect(createDefaultAsciiGraph().nodes.find(node => node.id === 'atlas')?.constants).toEqual({ fill: true });
+    const options = { fontFamily: 'mono', charset: ' .#', cellSize: 64 };
+    expect(glyphAtlasCacheKey({ ...options, fill: true })).not.toBe(glyphAtlasCacheKey(options));
+  });
+  // The atlas cache itself (LRU, limits, disposal) is covered by glyphAtlasCache.test.ts.
 });

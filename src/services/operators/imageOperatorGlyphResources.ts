@@ -30,7 +30,9 @@ export function resolveImageOperatorGlyphAtlas(node: BoundOperatorNode, params: 
     || (options.fontWeight !== undefined && (typeof options.fontWeight !== 'number' || !Number.isFinite(options.fontWeight)))) {
     throw new Error(`Glyph atlas ${node.id} resolver returned invalid options.`);
   }
-  return { descriptor: { id: `glyph-atlas:${node.id}`, kind: 'glyph-atlas', options: { ...options } }, plan: planGlyphAtlas(options) };
+  // Glyph graphs built since 2026-10-22 mark their atlas `fill` (the characters fill the cell); saved ones keep the smaller type.
+  const filled = node.constants?.fill === true ? { ...options, fill: true } : { ...options };
+  return { descriptor: { id: `glyph-atlas:${node.id}`, kind: 'glyph-atlas', options: filled }, plan: planGlyphAtlas(filled) };
 }
 
 export const TEXT_ATLAS_DEFAULT_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

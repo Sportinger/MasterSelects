@@ -1,0 +1,41 @@
+{
+  "pairs": [
+    {
+      "name": "ascii",
+      "out": "docs/Features/assets/effects/ascii.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        760,
+        150,
+        480,
+        360
+      ],
+      "layout": "compare",
+      "outWidth": 1600,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "ascii"
+      },
+      "alt": "The dancer's upper body and swirling dress on a dark stage, original left and with ASCII right: the picture is rebuilt from small characters in a grid, dense signs like # and % where the dress is bright, dots and dashes in the shadows, each in the colour of the picture behind it, on dim square cells",
+      "caption": "Left: original. Right: ASCII at its default settings."
+    }
+  ],
+  "strips": [
+    {
+      "effect": "ascii",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        800,
+        170,
+        420,
+        315
+      ],
+      "cellWidth": 600,
+      "columns": 2
+    }
+  ]
+}

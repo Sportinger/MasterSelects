@@ -3,6 +3,11 @@ import { effectEngine } from '../../../effects/effectCatalogGroups';
 // The stylize effects rebuilt on 2026-10-21 (their Color and Invert rows included).
 const STYLIZE_RESOLVE_ROW_EFFECTS = ['glow', 'grain', 'sharpen', 'vignette', 'scanlines', 'edge-detect', 'posterize', 'threshold'];
 
+// The looks of the glyph engine share one card (Cell Size, Background, Ramp, Custom Ramp, Font, colours).
+const GLYPH_RESOLVE_ROW_EFFECTS = ['ascii', 'ascii-ghost', 'dither-text', 'word-mosaic', 'matrix', 'pixel-code', 'number-field', 'grid-glyph',
+  'capsule-cloud', 'inscribe', 'data-hatch', 'glyph-matrix', 'symbol-matrix', 'retro-matrix', 'pixel-dither', 'brand-generator', 'ui-collage',
+  'stitch-poster', 'contour-type'];
+
 /**
  * Effects whose generic parameter rows use the shared Resolve inspector design (AGENTS.md
  * section 9) instead of the older generic rows. Add an effect here when its inspector is revised.
@@ -15,7 +20,7 @@ export const RESOLVE_ROW_EFFECTS: ReadonlySet<string> = new Set(['gaussian-blur'
   'acuarela', 'rom1', 'sheen', 'pixel-particle-disintegrate',
   'color-wheel', 'perspective-grid', 'stick-figure',
   // The pilot of the effect standard (presets, docs paragraphs): Documentation-Site.md "Effect pages".
-  'drift-lines']);
+  'drift-lines', ...GLYPH_RESOLVE_ROW_EFFECTS]);
 
 /**
  * Whether a card shows its parameters in Resolve rows. Besides the listed effects, every look of a

@@ -73,6 +73,11 @@ class GlyphAtlasRuntime {
    * rasterising and an upload each). The device's count limit doubles instead, up to maxAtlases; past
    * that, or when the byte budget is what evicts, it says once that atlases are being rebuilt.
    */
+  /** Atlases cached for a device now. */
+  size(device: GPUDevice): number {
+    return this.devices.get(device)?.atlases.size ?? 0;
+  }
+
   private noteThrash(state: DeviceAtlases, key: string): void {
     const evictedAt = state.evicted.get(key);
     if (evictedAt === undefined || Date.now() - evictedAt > THRASH_WINDOW_MS) return;
@@ -119,6 +124,11 @@ const runtime = hotData?.runtime ?? new GlyphAtlasRuntime();
 
 export function getGlyphAtlas(device: GPUDevice, options: GlyphAtlasOptions): GlyphAtlasTexture {
   return runtime.get(device, options);
+}
+
+/** Atlases the cache holds for a device (tests and diagnostics). */
+export function cachedGlyphAtlasCount(device: GPUDevice): number {
+  return runtime.size(device);
 }
 
 export function releaseGlyphAtlasesForDevice(device: GPUDevice | null): void {

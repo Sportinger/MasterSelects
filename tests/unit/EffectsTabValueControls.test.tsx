@@ -84,6 +84,40 @@ describe('EffectsTab numeric controls', () => {
     expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'ascii-ramp', expect.objectContaining({ customRamp: '' }));
   });
 
+  it('renders typed text in a Resolve-row effect as a text field with a reset (the ASCII Custom Ramp)', () => {
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
+    const params = getEffect('gaussian-blur')!.params as Record<string, EffectParam>;
+    params.previewNote = { type: 'text', label: 'Preview Note', default: 'a' };
+    try {
+      const effect: Effect = { id: 'gaussian-text', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewNote: 'b' } };
+      const ascii: Effect = { id: 'ascii-text', type: 'ascii', name: 'ASCII', enabled: true, params: { customRamp: ' .:#' } };
+      render(<EffectsTab clipId="clip:effects-controls" effects={[effect, ascii]} />);
+      expect(screen.getByRole('textbox', { name: 'Preview Note' })).toHaveClass('resolve-inspector-text-input');
+      expect(screen.getByLabelText('Radius slider')).toBeInTheDocument();
+      const ramp = screen.getByRole('textbox', { name: 'Custom Ramp' });
+      expect(ramp).toHaveClass('resolve-inspector-text-input');
+      expect(ramp).toHaveValue(' .:#');
+      fireEvent.click(screen.getByRole('button', { name: 'Reset Custom Ramp' }));
+      expect(JSON.stringify(patch.mock.calls)).toContain('"customRamp":""');
+      expect(screen.getByLabelText('Cell Size slider')).toBeInTheDocument();
+      expect(hasResolveEffectParamRow({ type: 'text' })).toBe(true);
+      expect(hasResolveEffectParamRow({ type: 'select' })).toBe(true);
+    } finally {
+      delete params.previewNote;
+    }
+  });
+
+  it('dims the glyph rows that rest: Dark and Light with Color Source Source, Ramp while a Custom Ramp is typed', () => {
+    const typed: Effect = { id: 'ascii-rest', type: 'ascii', name: 'ASCII', enabled: true, params: { colorMode: 'source', customRamp: ' .:#' } };
+    const view = render(<EffectsTab clipId="clip:effects-controls" effects={[typed]} />);
+    expect(screen.getAllByText('Used with Color Source Duotone.', { selector: '.resolve-effect-row-note' })).toHaveLength(2);
+    expect(screen.getByText('Used while Custom Ramp is empty.', { selector: '.resolve-effect-row-note' })).toBeInTheDocument();
+    const duotone: Effect = { ...typed, params: { colorMode: 'duotone', customRamp: '' } };
+    view.rerender(<EffectsTab clipId="clip:effects-controls" effects={[duotone]} />);
+    expect(screen.queryByText('Used with Color Source Duotone.', { selector: '.resolve-effect-row-note' })).toBeNull();
+    expect(screen.queryByText('Used while Custom Ramp is empty.', { selector: '.resolve-effect-row-note' })).toBeNull();
+  });
+
   it('renders switches and colours as Resolve rows: Mirror axes as checkboxes, the Block Mosaic grout as a colour well', () => {
     expect(hasResolveEffectParamRow({ type: 'boolean' })).toBe(true);
     expect(hasResolveEffectParamRow({ type: 'color' })).toBe(true);

@@ -33,6 +33,10 @@ export interface EffectParam {
   // Read only through the effect's operator graph: hidden (and reported by tools) when an
   // edited graph no longer binds it.
   graphOnly?: boolean;
+  // A control only this look of a shared engine has (Retro Matrix's Phosphor and Scanlines). The Style
+  // menu matches looks without it; switching to the look starts it at its default, switching away
+  // keeps the value (unread), so switching back restores it (effectStyles.ts).
+  lookOwn?: boolean;
   // Stored in radians (project data, keyframes, tools); the effect inspector shows and edits whole
   // degrees (the preset of displayScale 180/π with unit "°" and one-degree steps).
   displayUnit?: 'degrees';
