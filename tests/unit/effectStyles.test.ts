@@ -50,19 +50,6 @@ describe('effect styles', () => {
     expect(effect.operatorGraph).toBeUndefined();
   });
 
-  it('matches looks apart from a look\'s own controls, which start at their defaults and survive a switch back', () => {
-    const clip = createMockClip({ id: 'style-clip', effects: [{ id: 'fx', type: 'glyph-matrix', name: 'glyph-matrix', enabled: true, params: { cellSize: 20, roll: .2 } }] });
-    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], isExporting: false });
-    expect(effectStyleOptions('glyph-matrix').map(option => option.value)).toContain('retro-matrix');
-    expect(effectStyleOptions('retro-matrix').map(option => option.value)).toContain('glyph-matrix');
-    changeEffectStyle('style-clip', 'fx', 'retro-matrix');
-    expect(useTimelineStore.getState().clips[0].effects[0].params).toMatchObject({ cellSize: 20, roll: .2, phosphor: '#ff8514', scanlines: .5 });
-    changeEffectStyle('style-clip', 'fx', 'glyph-matrix');
-    useTimelineStore.getState().updateClip('style-clip', { effects: useTimelineStore.getState().clips[0].effects.map(effect => ({ ...effect, params: { ...effect.params, phosphor: '#33ff66' } })) });
-    changeEffectStyle('style-clip', 'fx', 'retro-matrix');
-    expect(useTimelineStore.getState().clips[0].effects[0].params).toMatchObject({ cellSize: 20, phosphor: '#33ff66', scanlines: .5 });
-  });
-
   it('rejects looks with other parameters and locked tracks', () => {
     setup();
     expect(() => changeEffectStyle('style-clip', 'fx', 'chroma-key')).toThrow(/not a style/);

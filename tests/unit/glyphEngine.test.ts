@@ -226,10 +226,11 @@ describe('glyph engine', () => {
     const graph = structuredClone(effectOperatorGraph({ type: 'glyph-matrix', params: getDefaultParams('glyph-matrix') }));
     graph.nodes.find(node => node.id === 'roll')!.bindings = {};
     expect(effectParamDefinitions({ type: 'glyph-matrix', params: getDefaultParams('glyph-matrix'), operatorGraph: graph }).roll.hidden).toBe(true);
-    // The Style menu still offers the other moving looks: they share the same parameters.
+    // The Style menu offers the other moving looks.
     expect(effectStyleOptions('glyph-matrix').map(option => option.value)).toEqual(expect.arrayContaining(['matrix', 'symbol-matrix', 'retro-matrix', 'data-hatch']));
     expect(effectStyleOptions('ascii').map(option => option.value)).toEqual(expect.arrayContaining(['word-mosaic', 'pixel-code', 'number-field']));
-    expect(effectStyleOptions('ascii').map(option => option.value)).not.toContain('glyph-matrix');
+    // Every look of the engine is a style (S1's rule): ASCII also offers the moving looks.
+    expect(effectStyleOptions('ascii').map(option => option.value)).toContain('glyph-matrix');
   });
 
   it('Symbol Matrix swaps every cell at its own moment to an unrelated random character', () => {
