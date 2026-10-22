@@ -262,6 +262,14 @@ describe('docs site page conversion', () => {
     expect(warnings).toEqual([expect.stringContaining('#gone, which Effects.md does not have')]);
   });
 
+  it('reports a raw <img> in a figure, which would get no lightbox and no size, but not one in code', () => {
+    const { warnings } = convert('guides/x.md', '# X\n\n<figure class="docs-shot">\n  <img src="../assets/clips/still.webp" alt="Still" />\n</figure>\n\nA plain `<img>` element.\n');
+    expect(warnings).toEqual([expect.stringContaining('the picture ../assets/clips/still.webp is a raw <img>; write it as ![alt]')]);
+    const markdown = convert('guides/x.md', '# X\n\n<figure class="docs-shot">\n\n![Still](../assets/clips/still.webp)\n\n</figure>\n');
+    expect(markdown.warnings).toEqual([]);
+    expect(markdown.text).toContain('<a class="docs-shot-zoom"');
+  });
+
   it('turns a clip into a muted video with its webm source and reports the missing poster', () => {
     const { text, warnings } = convert('guides/x.md', '# X\n\n![Dragging a clip](../assets/clips/drag.mp4)\n');
     expect(text).toContain('<video class="docs-clip-video" muted loop playsinline controls preload="none" data-docs-autoplay aria-label="Dragging a clip"><source src="/docs/assets/clips/drag.webm" type="video/webm"><source src="/docs/assets/clips/drag.mp4" type="video/mp4"></video>');
