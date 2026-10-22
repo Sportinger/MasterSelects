@@ -43,18 +43,18 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![The Weave card in Properties, Effects, with the Nest preset: Preset menu showing Nest, Form Woven Cloth, a brown Color swatch, then the sections Weave In (Weave Speed 2), Reveal by Shape (Reveal 0.32), Handmade (Irregularity 2.5) and Wind Cloth (Wind 0.2), each with an on-off switch, and at the end the closed section Qualle controls](../assets/effects/editor/weave-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 876" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 790" aria-hidden="true" focusable="false">
 <defs><marker id="weave-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M125 102 L209 102" marker-end="url(#weave-inspector-arrow)" />
-<circle class="docs-shot-number" cx="125" cy="102" r="18" /><text x="125" y="102" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M125 101 L209 101" marker-end="url(#weave-inspector-arrow)" />
+<circle class="docs-shot-number" cx="125" cy="101" r="18" /><text x="125" y="101" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M135 166 L219 166" marker-end="url(#weave-inspector-arrow)" />
 <circle class="docs-shot-number" cx="135" cy="166" r="18" /><text x="135" y="166" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M158 463 L242 463" marker-end="url(#weave-inspector-arrow)" />
-<circle class="docs-shot-number" cx="158" cy="463" r="18" /><text x="158" y="463" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M173 760 L257 760" marker-end="url(#weave-inspector-arrow)" />
-<circle class="docs-shot-number" cx="173" cy="760" r="18" /><text x="173" y="760" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M88 817 L172 817" marker-end="url(#weave-inspector-arrow)" />
-<circle class="docs-shot-number" cx="88" cy="817" r="18" /><text x="88" y="817" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M158 434 L242 434" marker-end="url(#weave-inspector-arrow)" />
+<circle class="docs-shot-number" cx="158" cy="434" r="18" /><text x="158" y="434" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M173 674 L257 674" marker-end="url(#weave-inspector-arrow)" />
+<circle class="docs-shot-number" cx="173" cy="674" r="18" /><text x="173" y="674" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M88 732 L172 732" marker-end="url(#weave-inspector-arrow)" />
+<circle class="docs-shot-number" cx="88" cy="732" r="18" /><text x="88" y="732" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
