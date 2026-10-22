@@ -21,7 +21,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 ## Presets
 
-<figure class="docs-shot docs-shot--detail">
+<figure class="docs-shot">
 
 ![The dancer's upper body four times, once per preset: Eight Colours as a light figure in fine dots of pure red, yellow and white on black, Poster in a coarse checker of few colours over the stage and the figure, Game Screen in chunky pixels of a few colours, and Big Pixels as a coarse mosaic in which face and arms still read](../assets/effects/presets/dither.webp)
 

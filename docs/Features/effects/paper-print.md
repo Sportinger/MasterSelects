@@ -24,7 +24,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 ## Presets
 
-<figure class="docs-shot docs-shot--detail">
+<figure class="docs-shot">
 
 ![The dancer's upper body four times, once per preset: Photogravure as a fine cream grain out of an even dark brown, Mezzotint as a coarser cream grain out of black with light specks on the stage, Blueprint as a coarse white grain on deep blue, and Red Poster as a cream figure in a medium grain on signal red](../assets/effects/presets/paper-print.webp)
 

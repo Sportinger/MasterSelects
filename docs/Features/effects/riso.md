@@ -21,7 +21,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 
 ## Presets
 
-<figure class="docs-shot docs-shot--detail">
+<figure class="docs-shot">
 
 ![The dancer's upper body five times, once per preset: Zine in blue and pink dots with pink fringes on a violet stage, Postcard in teal and red on a dark teal stage, Art Print in fine green and pink dots on a dark aubergine stage, Gig Poster in bold black and red dots, and Off Register in large burgundy dots with aqua fringes beside every edge on navy](../assets/effects/presets/riso.webp)
 
