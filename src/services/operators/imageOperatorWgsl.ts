@@ -4,7 +4,16 @@ import hashPcg2d from '../../effects/_shared/hashPcg2d.wgsl?raw';
 import gaussian from '../../effects/_shared/gaussian.wgsl?raw';
 import coordinateRotation from '../../effects/_shared/coordinateRotation.wgsl?raw';
 import radialProjection from '../../effects/_shared/radialProjection.wgsl?raw';
-export const imageF32 = (value: number) => Number.isInteger(value) ? `${value}.0` : String(value);
+const F32_MAX = 3.4028234663852886e38;
+/**
+ * A WGSL f32 literal. JavaScript prints large and tiny numbers with an exponent ('-1e+30'), which is
+ * already a float literal: appending '.0' there would be invalid WGSL and fail only the GPU pass.
+ */
+export const imageF32 = (value: number) => {
+  if (!Number.isFinite(value) || Math.abs(value) > F32_MAX) throw new Error(`The image graph constant ${value} has no 32-bit float value (largest ±3.4e38).`);
+  const text = String(Object.is(value, -0) ? 0 : value);
+  return /[.e]/.test(text) ? text : `${text}.0`;
+};
 export const imageParameterExpression = (slot: number) => `imageParameters.values[${Math.floor(slot / 4)}].${'xyzw'[slot % 4]}`;
 export const IMAGE_PARAMETER_WGSL = `struct ImageOperatorParameters { values: array<vec4f, ${IMAGE_OPERATOR_PARAMETER_VEC4_COUNT}>, };`;
 export const IMAGE_HASH2D_WGSL = hash2d.replace('fn hash(', 'fn imageGraphHash2d(');
