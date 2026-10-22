@@ -12,10 +12,10 @@
       ],
       "layout": "compare",
       "crop": [
-        420,
-        60,
-        1000,
-        960
+        300,
+        40,
+        1320,
+        990
       ],
       "width": 960,
       "float": "left",
@@ -267,7 +267,7 @@
       ],
       "width": 960,
       "float": "left",
-      "loop": 0.35,
+      "loop": 0.2,
       "poster": 1.2,
       "maxBytes": 900000,
       "alt": "The dancer turning on a dark stage, original left and with Kaleidoscope right: her white dress is folded into a six-pointed flower in the middle of the frame that opens, closes and changes shape as she moves",

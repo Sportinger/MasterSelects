@@ -5,7 +5,7 @@ Ripples the picture with smooth, travelling waves, from a faint heat shimmer to 
 Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot docs-clip docs-compare docs-shot--float-left">
-<video src="../assets/effects/clips/wave.mp4" poster="../assets/effects/clips/wave.webp" width="960" height="460" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Wave right: her arms, her dress and the edge of the stage floor ripple in small waves that travel slowly through the picture"></video>
+<video src="../assets/effects/clips/wave.mp4" poster="../assets/effects/clips/wave.webp" width="960" height="360" autoplay muted loop playsinline preload="none" aria-label="The dancer turning on a dark stage, original left and with Wave right: her arms, her dress and the edge of the stage floor ripple in small waves that travel slowly through the picture"></video>
 <figcaption>Left: original. Right: Wave at its default settings.</figcaption>
 </figure>
 
