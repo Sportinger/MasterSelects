@@ -2,6 +2,7 @@
 // (?test=effect-graph) in hardware-GPU Chrome and writes a WebP for the docs.
 //
 //   node scripts/effect-graph-shot.mjs --manifest scripts/effect-graph-shots/blur.json   # a docs page's shots
+//       [--only <name>[,<name>...]]                                                  # ...only these of them
 //   node scripts/effect-graph-shot.mjs gaussian-blur box-blur
 //   node scripts/effect-graph-shot.mjs 'gaussian-blur?focus=horizontal-pass-premultiplied@gaussian-blur-horizontal-pass'
 //       [--url http://localhost:5176] [--out docs/Features/assets/effects/graphs]
@@ -46,23 +47,32 @@
 // The page is laid out `--width` CSS pixels wide (smaller for tall graphs) and captured at
 // `--scale` device pixels per CSS pixel, so a full-width docs column shows the canvas at about
 // its overview size: card titles use the canvas' enlarged overview lettering and stay legible.
+// A --manifest run records its shots in scripts/docs-media-manifest.json (scripts/docs-media.mjs runs every
+// recipe and passes a manifest's shots by name with --only).
 // Needs a running Vite of this checkout (`npx vite --port 5176 --strictPort`).
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeDocShotWebp } from './docShotWebp.mjs';
 import { calloutOverlay, cropWithCallouts, docsFigure } from './docShotFigure.mjs';
+import { docLogicalPath, docOutput } from './docShotSettings.mjs';
+import { parseGraphShot, recordShotList } from './docsMediaRecipes.mjs';
 
 const args = process.argv.slice(2);
-const valueOptions = new Set(['--url', '--out', '--width', '--max-height', '--scale', '--max-bytes', '--manifest']);
+const valueOptions = new Set(['--url', '--out', '--width', '--max-height', '--scale', '--max-bytes', '--manifest', '--only']);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
 // A manifest keeps a page's shots reproducible: `{ "shots": ["<effect>?<query>@<name>", ...] }`.
 const manifest = option('--manifest');
-const shots = [...manifest ? JSON.parse(fs.readFileSync(manifest, 'utf8')).shots : [],
-  ...args.filter((arg, index) => !arg.startsWith('--') && !valueOptions.has(args[index - 1]))];
+// `--only a,b` with --manifest: just the manifest's shots with these names (the part after `@`, else the effect).
+const only = option('--only')?.split(',').map(name => name.trim()).filter(Boolean);
+const manifestShots = (manifest ? JSON.parse(fs.readFileSync(manifest, 'utf8')).shots : [])
+  .filter(spec => !only || only.includes(parseGraphShot(spec).name));
+const unknownShots = (only ?? []).filter(name => !manifestShots.some(spec => parseGraphShot(spec).name === name));
+if (unknownShots.length) throw new Error(`No shot named ${unknownShots.join(', ')} in ${manifest}`);
+const shots = [...manifestShots, ...args.filter((arg, index) => !arg.startsWith('--') && !valueOptions.has(args[index - 1]))];
 if (!shots.length) throw new Error('Name at least one shot, e.g. gaussian-blur or "gaussian-blur?focus=vertical-pass@gaussian-vertical".');
 const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
-const out = path.resolve(option('--out', 'docs/Features/assets/effects/graphs'));
+const out = docOutput(option('--out', 'docs/Features/assets/effects/graphs'));
 const cssWidth = Number(option('--width', '800'));
 const maxCssHeight = Number(option('--max-height', '900'));
 const scale = Number(option('--scale', '2'));
@@ -202,9 +212,10 @@ try {
     fs.mkdirSync(out, { recursive: true });
     const file = path.join(out, `${shot.name}.webp`);
     fs.writeFileSync(file, encoded.buffer);
+    if (manifest && manifestShots.includes(spec) && !option('--out')) recordShotList('graph', manifest, [shot.name]);
     const crop = clip ? { left: clip.x, top: clip.y, right: clip.x + clip.width, bottom: clip.y + clip.height }
       : { left: 0, top: 0, right: viewport.width, bottom: viewport.height };
-    const figure = docsFigure({ file, alt: state.title, caption: shot.marks.map((mark, index) => `${index + 1} — ${mark.id}.`).join(' ') || state.title,
+    const figure = docsFigure({ file: docLogicalPath(file), alt: state.title, caption: shot.marks.map((mark, index) => `${index + 1} — ${mark.id}.`).join(' ') || state.title,
       svg: shot.marks.length ? calloutOverlay({ name: shot.name, layout: shot.layout, crop, boxes, marks: shot.marks }) : '',
       classes: 'docs-shot--graph' });
     results.push({ shot: spec, file: path.relative(process.cwd(), file), nodes: state.nodes, zoom: Math.round(zoom * 100) / 100, titlePx,

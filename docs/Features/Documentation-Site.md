@@ -35,7 +35,7 @@ Video wherever something changes, stills where nothing does.
 
 - **No GIFs.** Motion is an MP4 (H.264, muted, no audio) with a WebP poster: it looks like a GIF at a fraction of the size. The site loads a clip only when the reader scrolls to it, plays it only while it is on screen and shows the poster under reduced motion.
 - **Video where something changes:** a moving effect, all presets of a moving effect, every control of a moving effect, editor operations. **Stills where nothing changes:** node graphs and the pictures of their stage folders, inspector excerpts, the presets and controls of a static effect.
-- **Loops** last 3–6 s and run seamlessly (the end fades into the start). They use the shared moving footage `dancer_stage_motion.mp4`, which is not in the repository (`--media <folder>`).
+- **Loops** last 3–6 s and run seamlessly (the end fades into the start). They use the shared moving footage `dancer_stage_motion.mp4` (720p in `tests/browser/effect-lab/footage/`, the tools' default).
 - **Control loops** sweep one control on the footage from a low to a high value and back while the others stay at their defaults, with the current value small in a corner ("Band Size 22 px"). They stand beside their paragraph (`docs-shot--float-right`, ≤ 8 s, 640–800 px wide); put `<div class="docs-float-end"></div>` before the next one, so each loop starts beside its own text. A sweep beats a recorded slider drag: the picture is large and the value readable, and the inspector picture already shows where the control sits. A control whose sweep would mislead (keyframing Drift Lines' Speed makes its wave jump) shows a few fixed values in turn (`"steps"`).
 - **Stills** use the shared Effect Lab images in `tests/browser/effect-lab/images/` (`dancer_stage`, `harbor_town`, `neon_rain_street`, `greenscreen_dancer`). Pick the one on which the effect reads best.
 - **Operation clips** are recorded in the real editor: the drawn pointer moves in eased arcs and ripples on every click. They are cropped to the panels that matter. Keep the real mouse off the recording window.
@@ -160,7 +160,7 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 - **A basic page edited by hand.** The marker line carries a hash of the page as the script wrote it. When the page no longer matches it, the script leaves the page alone and reports `effects/<id>.md was edited by hand: delete its marker line to keep the edits (it becomes a hand-written page), or restore the file`; the drift test fails with the same text. The marker counts only as the first line under the `#` title.
 - To write a page by hand, start from its basic page and delete the marker line, or write the file before running the script. `node scripts/effect-docs.mjs --controls <id>` prints the controls table, one paragraph skeleton per control under its `###` section with the limits sentence filled in ("2 to 80 px, default 14 px."), and the presets with their values: the source for the paragraphs.
 - **The paragraph check.** When a hand-written page replaces its generated table with paragraphs (it deletes the block with both markers), `node scripts/effect-docs.mjs` and the drift test check its `## Controls`: one paragraph per card control, starting with the card label in bold, in card order, under the `###` of its card section, and stating its limits sentence exactly as `--controls` prints it. A paragraph for a control the card no longer shows fails too; **Style** and **Preset** paragraphs are allowed. For an effect with presets, every hand-written page needs `## Presets` with a bold paragraph per preset (and none for a preset that is gone) and the preset strip `../assets/effects/presets/<id>.webp`. A changed limit, label or preset therefore fails the test until the page says so (`scripts/effectDocsPageCheck.mjs`).
-- `--basic` writes basic pages for every visible effect without a page (`--basic halftone,print` for chosen effect or group ids); it never touches an existing page. `--thumbs` makes the missing gallery thumbnails (`assets/effects/thumbs/<id>.webp`, 400 × 250 or smaller, ≤ 30 KB) from the effect half of each still; `--thumbs --force` remakes them all, `--thumbs --force text,riso` only those effect or group ids. An effect's `thumb` in `effectDocsExtras.mjs` picks another region of the still (`region`, fractions of it) or names the Effect Lab file that renders the thumbnail (`shot`, such as `scripts/effect-lab-shots/color-thumbs.json`: the dancer split down the middle for the subtle tonal effects). `--lab-manifest <file>` writes an Effect Lab `--pairs` manifest for basic pages without a still, `--reshoot <ids or groups>` adds basic pages that have one. Basic stills are a whole-frame split, except the Text & Glyph looks (an enlarged detail of the dancer, original and effect side by side, so the characters can be read) and the tracking overlays (both whole frames side by side, so the seam never cuts the target box).
+- `--basic` writes basic pages for every visible effect without a page (`--basic halftone,print` for chosen effect or group ids); it never touches an existing page. `--thumbs` makes the missing gallery thumbnails (`assets/effects/thumbs/<id>.webp`, 400 × 250 or smaller, ≤ 30 KB) from the effect half of each still; `--thumbs --force` remakes them all, `--thumbs --force text,riso` only those effect or group ids. An effect's `thumb` in `effectDocsExtras.mjs` picks another region of the still (`region`, fractions of it) or names the Effect Lab file that renders the thumbnail (`shot`, such as `scripts/effect-lab-shots/color-thumbs.json`: the dancer split down the middle for the subtle tonal effects). `--lab-manifest <file>` writes an Effect Lab `--pairs` manifest for basic pages without a still, `--reshoot <ids or groups>` adds basic pages that have one (`node scripts/docs-media.mjs` renders them too). A new basic still is a compare pair of the whole frame, shown as a [compare slider](#compare-sliders); an older still split down the middle keeps that layout on a reshoot until its page is rewritten. The exceptions are the Text & Glyph looks (an enlarged detail of the dancer, original and effect side by side, so the characters can be read) and the tracking overlays (both whole frames side by side, so the seam never cuts the target box).
 - **The generated controls table** lists the card's rows in card order with their range and default. Ranges and defaults show as many decimals as they need. Resource references stored as text (`…Id` parameters) are left out. `effectDocsExtras.mjs` adds what the registry cannot say: `rows` of an effect's own card (hidden parameters it renders, buttons, pickers), the card's `sections` order and `sectionLabels`, `omit`/`omitSections`, a `note` for cards without fixed rows, and `open`: only those sections stay in the table, every other one folds into its own `<details>` (Slit Scan). It also gives basic pages `deeper` links ("Go deeper:" under Technical details).
 - The card text is the first sentence of a hand-written page (a basic page uses the first clause of the in-app description), so write that sentence to stand alone, in under about 110 characters.
 - `catalog.json` has one line per effect. On a merge conflict, take either side and run the script again.
@@ -294,7 +294,7 @@ A loop is the clip figure with `docs-compare` added (`doc-clip.mjs` prints it):
 **Making the pair.** Both tools take `"layout": "compare"` and print the figure:
 
 - Stills: an Effect Lab entry in `scripts/effect-lab-shots/<group>.json` with `"left": { "effect": "original" }` and the effect on the right. Both sides get the same crop (default: the whole frame) at the same size; `outWidth` (default and at most 1600) is the width of the whole pair, always even, within 200 KB. `alt` and `caption` go into the printed figure. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json --only gaussian-blur --url http://localhost:<vite port>`.
-- Loops: a `doc-clip.mjs` entry in `scripts/doc-clips/<group>.json`; `width` is the whole pair (default 960), within 1.5 MB and 12 s. Set `poster` to a moment where the effect shows: it is what readers who prefer reduced motion compare. `node scripts/doc-clip.mjs scripts/doc-clips/analog.json --only glitch --media <folder> --url http://localhost:<vite port>`.
+- Loops: a `doc-clip.mjs` entry in `scripts/doc-clips/<group>.json`; `width` is the whole pair (default 960), within 1.5 MB and 12 s. Set `poster` to a moment where the effect shows: it is what readers who prefer reduced motion compare. `node scripts/doc-clip.mjs scripts/doc-clips/analog.json --only glitch --url http://localhost:<vite port>`, or `node scripts/docs-media.mjs glitch`.
 
 **How the site shows it.** The sync (`docs-site/scripts/lib/compare.mjs`) builds a box of one half's size from the asset's own size, so the page never shifts; until `docs-site/src/scripts/docsCompare.js` runs, it reads as a split picture. A loop loads one file: both halves are drawn from its single video, frame by frame, so original and effect stay in sync. It plays only while it is on screen; under reduced motion the poster's halves stay, the line still moves and a small play button starts the loop. The sync reports a pair with an odd width, halves wider than 2.5:1 or narrower than 1:2 (likely a single frame, not a pair), and a poster of another size than its clip. It cannot see a gap or a split frame inside a pair, so look at every new pair yourself.
 
@@ -302,7 +302,18 @@ A loop is the clip figure with `docs-compare` added (`doc-clip.mjs` prints it):
 
 The scripts that make the pictures and clips. Each prints the figure HTML to paste; [Effect pages](#effect-pages) says which picture an effect page needs.
 
-Each effect group keeps its shot lists under the group's name: `scripts/effect-lab-shots/<group>.json` (stills), `scripts/effect-graph-shots/<group>.json` (graphs), `scripts/effect-editor-shots/<group>.json` (inspector excerpts, `tracking.json` for Face Cables) and `scripts/doc-clips/<group>.json` (loops). `scripts/effect-lab-shots/color-thumbs.json` renders the Brightness still and the split thumbnails of the subtle tonal effects. The basic-page stills come from `node scripts/effect-docs.mjs --lab-manifest <file>`.
+Each effect group keeps its shot lists under the group's name: `scripts/effect-lab-shots/<group>.json` (stills), `scripts/effect-graph-shots/<group>.json` (graphs), `scripts/effect-editor-shots/<group>.json` (inspector excerpts, `tracking.json` for Face Cables) and `scripts/doc-clips/<group>.json` (loops). `scripts/effect-lab-shots/color-thumbs.json` renders the Brightness still and the split thumbnails of the subtle tonal effects. The basic-page stills come from `node scripts/effect-docs.mjs --lab-manifest <file>`. Every entry of a shot list is a **recipe**: everything needed to make that picture again.
+
+### All of them with one command
+
+`node scripts/docs-media.mjs` makes every docs picture and clip again from its recipe: Effect Lab stills, compare pairs and preset strips, graph and editor pictures, loops (compare, presets grid, control sweeps) and gallery thumbnails. It starts a Vite of the checkout (or reuses `--url`), runs the scripts below, prints a summary and writes one contact sheet of everything it made. Look at the sheet.
+
+- `node scripts/docs-media.mjs drift-lines blur` – only these effect ids, picker groups or shot lists; `--kinds clip,graph` only these kinds.
+- `--stale` – only what changed since it was made: its recipe, its effect's code or its footage. `--check` lists stale pictures as warnings, `--list` shows every recipe with its state.
+- `--out <folder>` writes into a scratch folder instead of `docs/Features/assets`, to compare before replacing.
+- **A recipe for every picture.** `npx vitest run tests/unit/docsMediaRecipes.test.ts` fails when a picture has no recipe or a recipe points to a missing file or effect. Pictures made by hand are named with a reason in `HAND_MADE` (`scripts/docsMediaRecipes.mjs`); older custom pairs wait in `RECIPE_PENDING` until their page is rewritten.
+- **Fingerprints.** Each render writes the picture's fingerprint to `scripts/docs-media-manifest.json`, one line per picture; the scripts below do it too. It covers the recipe, the effect's own code (its definition, shader and operator-graph files and what they import, not the shared engine) and the footage or test image. A change to shared engine code marks nothing stale: remake the effects it touches by name. `--adopt` records pictures made before fingerprints existed, `--adopt <ids>` those a branch made with older tools; after a merge conflict in the manifest, take either side and run `--adopt`.
+- **Footage and theme** are one setting each, in `scripts/docShotSettings.mjs`: the moving footage (`tests/browser/effect-lab/footage/dancer_stage_motion.mp4`, 720p, 6 s; `--media <folder>` for one run), the test images, the editor theme (dark; `--theme light` for one run) and the frame the effect clips render in (1920 × 1080, so clip crops stay in 1080p pixels whatever the footage).
 
 ### Effect Lab (review and doc stills)
 
@@ -332,7 +343,8 @@ transparent pixels. `--presets scripts/effect-lab-shots/presets.json [--only <id
 preset strip of an effect page: every preset its definition declares, rendered on one image
 (`image`, `crop`, `times` for a moving effect), in rows of `columns` (two for four presets) with the
 preset name under each cell, as `docs/Features/assets/effects/presets/<id>.webp`. One entry per
-effect in `presets.json`; names and values always come from the registry.
+effect in `presets.json`; names and values always come from the registry. With `--pairs` and
+`--presets`, `--only a,b` makes just these entries.
 
 ### Effect graph pictures
 
@@ -378,7 +390,7 @@ clickable for exploring. The page is part of dev builds only.
 Chrome as WebP (at most 1600 px wide and 200 KB) into
 `docs/Features/assets/effects/graphs/`, for example
 `node scripts/effect-graph-shot.mjs --manifest scripts/effect-graph-shots/blur.json`
-(one manifest per docs page keeps its pictures reproducible) or
+(one manifest per docs page keeps its pictures reproducible; `--only <name>,…` picks shots of it) or
 `node scripts/effect-graph-shot.mjs 'gaussian-blur?plumbing=hide'`,
 with a Vite of the checkout running (`npx vite --port 5176 --strictPort`). A shot
 is `<effect>[?query][@file name]`; `--list` prints the folders and node ids of each
@@ -428,7 +440,8 @@ text. `top: "tabs"` crops below the dock tab row (from the Properties sub-tabs),
 sets its arrow length (the crop grows to keep it), a parameter callout points at the
 label text, and `hide` leaves named buttons that
 the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
-`--only <name>` recaptures one shot. A control the script cannot find stops it
+`--only <name>[,<name>]` recaptures these shots. The editor theme is the setting in
+`scripts/docShotSettings.mjs` (dark). A control the script cannot find stops it
 with the card's text, so a renamed parameter does not silently drop a callout.
 `viewport: { width, height }` sets the editor window (default 1600 × 900). Keep the
 default width so the picture shows the inspector as most users see it; a taller window
@@ -480,12 +493,15 @@ prints the figure:
 ```
 
 Run `npx vite --port 5192 --strictPort` in the checkout, then
-`node scripts/doc-clip.mjs scripts/doc-clips/analog.json --media <folder>`; `--only
-<name>` remakes one clip, `--keep <folder>` keeps the exports and screencast frames,
+`node scripts/doc-clip.mjs scripts/doc-clips/analog.json`; `--only
+<name>[,<name>]` remakes these clips, `--keep <folder>` keeps the exports and screencast frames,
 and `--reencode` then encodes the clips again from them without a browser (for
-layout, crop, loop, poster or size changes). The analog page's source video
-(`dancer_stage_motion.mp4`, 6 s, 1080p) is not in the repository: `--media` or
-`DOC_CLIP_MEDIA` names its folder. Keep the real mouse away from the recording
+layout, crop, loop, poster or size changes). The source video
+`dancer_stage_motion.mp4` (6 s) is found in the footage folder of
+`scripts/docShotSettings.mjs`, a 720p copy in the repository; `--media <folder>` or
+`DOC_CLIP_MEDIA` picks another folder for one run, such as the 1080p original. Effect
+clips render in a 1920 × 1080 frame whatever the footage size, so `crop` and `detail` are
+1080p pixels. Keep the real mouse away from the recording
 window: the drawn pointer ignores foreign pointer events and the script warns about
 them, but the editor's hover effects still react. The script also prints the
 screencast frame gaps and how long the page took each pointer move; while the editor

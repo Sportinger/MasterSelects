@@ -21,7 +21,7 @@ For developers and agents who build a new effect or rework an existing one. A re
    - one paragraph per control with its limits, and for a moving effect a short loop beside it that sweeps the control;
    - the inspector picture and the node setup with yellow callouts: the overview, then one section per stage folder with a picture of its inside and a paragraph per marked node.
 
-   Then run `node scripts/effect-docs.mjs`.
+   Every picture and clip is a recipe in your group's shot lists ([Shot and clip tooling](./Documentation-Site.md#shot-and-clip-tooling)). Make them all with `node scripts/docs-media.mjs <effect-id>` and look at the contact sheet it writes; after a change to the effect, `node scripts/docs-media.mjs --stale` remakes what it touched. Then run `node scripts/effect-docs.mjs`.
 7. **Review rounds.** See below.
 8. **Finish.**
    - Run the targeted tests by name (never the full suite) and `npm run build` once.
@@ -57,6 +57,7 @@ In Claude Code the reviewers are subagents or a workflow; with Codex they are se
 |---|---|
 | Effect definitions and engines | `src/effects/` |
 | Reusable nodes | [Node Catalog](./Node-Catalog.md), `src/services/operators/` |
+| All docs pictures and clips from their recipes | `scripts/docs-media.mjs` (footage and theme: `scripts/docShotSettings.mjs`) |
 | Renders for comparison and stills | `scripts/effect-lab.mjs` |
 | Loops and pointer clips | `scripts/doc-clip.mjs` |
 | Editor pictures with callouts | `scripts/effect-editor-shot.mjs`, `scripts/effect-graph-shot.mjs` |

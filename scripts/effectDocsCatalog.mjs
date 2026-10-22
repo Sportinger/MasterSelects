@@ -434,7 +434,19 @@ const LAB_SHOT_BY_GROUP = {
 const LAB_SHOT_BY_ENGINE = {
   'tracking-overlay': { layout: 'pair', outWidth: 1200, gap: 6 },
 };
-const labShot = (effect) => LAB_SHOT_BY_GROUP[effect.group] ?? LAB_SHOT_BY_ENGINE[effect.engine] ?? { layout: 'split', outWidth: 1200 };
+/** Every other basic still is the pair of a compare slider: the whole frame, original | effect, without a gap. */
+const COMPARE_SHOT = { layout: 'compare', outWidth: 1600 };
+/** Basic stills made before the compare slider: one frame split down the middle. They stay until their page is rewritten. */
+const SPLIT_SHOT = { layout: 'split', outWidth: 1200 };
+/**
+ * How an effect's basic still is shot. `size` is the existing still's pixel size: a still one frame wide is an
+ * older split, two frames side by side a compare pair; without a still, a new one is a compare pair.
+ */
+export function labShot(effect, size) {
+  const shot = LAB_SHOT_BY_GROUP[effect.group] ?? LAB_SHOT_BY_ENGINE[effect.engine];
+  if (shot) return shot;
+  return size && size.width / size.height < 2.5 ? SPLIT_SHOT : COMPARE_SHOT;
+}
 /** Effects a still test image cannot show; they wait for a clip on suitable footage. */
 export const LAB_STILL_SKIP = {
   'face-cables': 'needs a face-tracking bake of moving footage',
@@ -464,9 +476,12 @@ export function stillCaption(effect) {
   return `Left: the original. Right: ${effect.name} at its default settings${effect.moving ? ', one frame of its movement' : ''}.${detail}`;
 }
 
-/** An Effect Lab --pairs entry for an effect's basic still: the original and the effect at its defaults. */
-export function labPair(effect) {
-  const { detail, ...shot } = labShot(effect);
+/**
+ * An Effect Lab --pairs entry for an effect's basic still: the original and the effect at its defaults.
+ * `size`: the existing still's pixel size, so a reshoot keeps its layout (see labShot).
+ */
+export function labPair(effect, size) {
+  const { detail, ...shot } = labShot(effect, size);
   void detail;
   return {
     name: effect.id,
@@ -490,7 +505,7 @@ const ENGINE_LABELS = {
 /**
  * A basic page for an effect without a hand-written page. ctx: { groupLabel (the sidebar label, joined
  * groups as "Keying & Time"), overview (file relative to docs/Features or undefined), still (its Effect Lab
- * still, asset path, or undefined), names (id → name), hasPage(id) (whether effects/<id>.md exists, for
+ * still, asset path, or undefined), stillSize (its pixel size: a compare pair gets a compare slider), names (id → name), hasPage(id) (whether effects/<id>.md exists, for
  * links to the other styles) }. The marker under the title carries the hash of the rest of the page.
  */
 export function basicPage(effect, ctx) {
@@ -501,7 +516,8 @@ export function basicPage(effect, ctx) {
     `Group: [${ctx.groupLabel}](${groupLink}) · [How to add an effect](../Effects.md#add-an-effect)`,
   ];
   if (ctx.still) {
-    parts.push(`<figure class="docs-shot">\n\n![${stillAlt(effect)}](../${ctx.still})\n\n<figcaption>${stillCaption(effect)}</figcaption>\n</figure>`);
+    const compare = labShot(effect, ctx.stillSize).layout === 'compare' ? ' docs-compare' : '';
+    parts.push(`<figure class="docs-shot${compare}">\n\n![${stillAlt(effect)}](../${ctx.still})\n\n<figcaption>${stillCaption(effect)}</figcaption>\n</figure>`);
   }
   if (effect.experimental) parts.push(`**Experimental:** ${effect.experimental.trim()}`);
   parts.push('*A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*');
@@ -532,8 +548,8 @@ export function basicPage(effect, ctx) {
 // The whole plan, shared by the script and the drift test
 
 /**
- * What the effect docs should look like. files: { read(file) → text | undefined, exists(file),
- * pages: ids of the existing effects/<id>.md pages }. `basic`: ids to write new basic pages for.
+ * What the effect docs should look like. files: { read(file) → text | undefined, exists(file), size(file) →
+ * { width, height } of a picture (basic stills keep their layout), pages: ids of the existing effects/<id>.md pages }. `basic`: ids to write new basic pages for.
  * Returns { texts: Map<file, text> (every file the script owns, with its current text), catalog,
  * uncovered: visible effects without a page, unknownPages: page ids the registry lacks,
  * problems: [{ file, text }] pages left alone (a basic page edited under its marker, broken markers) }.
@@ -552,6 +568,7 @@ export function planEffectDocs(snapshot, files, { basic = [] } = {}) {
     groupLabel: (overviews.get(effect.group)?.joined ?? [effect.group]).map((id) => labels.get(id) ?? id).join(' & '),
     overview: overviews.get(effect.group)?.overview,
     still: files.exists(effectAssets(effect.id).still) ? effectAssets(effect.id).still : undefined,
+    stillSize: files.exists(effectAssets(effect.id).still) ? files.size(effectAssets(effect.id).still) : undefined,
     names,
     hasPage: (id) => pageIds.has(id),
   });
