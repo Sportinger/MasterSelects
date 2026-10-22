@@ -1,11 +1,18 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as historyStore from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 
 import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
 import { hasResolveEffectParamRow } from '../../src/components/panels/properties/resolveEffectRows';
 import type { Effect } from '../../src/types/effects';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
+
+// Watched to check that a text row is one undo step from focus to blur.
+vi.mock('../../src/stores/historyStore', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/stores/historyStore')>();
+  return { ...actual, startBatch: vi.fn(actual.startBatch), endBatch: vi.fn(actual.endBatch) };
+});
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -62,9 +69,16 @@ describe('EffectsTab numeric controls', () => {
     expect(field).toHaveAttribute('type', 'text');
     expect(field).toHaveClass('resolve-inspector-text-input');
     expect(field.closest('.resolve-inspector-row')).not.toBeNull();
+    const start = vi.mocked(historyStore.startBatch), end = vi.mocked(historyStore.endBatch);
+    start.mockClear(); end.mockClear();
     fireEvent.focus(field);
+    expect(start).toHaveBeenCalledTimes(1);
+    fireEvent.change(field, { target: { value: ' .' } });
     fireEvent.change(field, { target: { value: ' .#' } });
+    expect(end).not.toHaveBeenCalled();
     fireEvent.blur(field);
+    expect(end).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
     expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'ascii-ramp', expect.objectContaining({ customRamp: ' .#' }));
     fireEvent.click(screen.getByLabelText('Reset Custom Ramp'));
     expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'ascii-ramp', expect.objectContaining({ customRamp: '' }));
