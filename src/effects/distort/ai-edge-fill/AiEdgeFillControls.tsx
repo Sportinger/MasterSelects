@@ -23,12 +23,14 @@ export default function AiEdgeFillControls({ params, onChange, clipId = '', effe
   const composition = useMediaStore(state => state.compositions.find(item => item.id === state.activeCompositionId));
   const job = useSyncExternalStore(subscribeEdgeFillJobs, () => edgeFillJob(clipId, effectInstanceId));
   useSyncExternalStore(edgeFillArtifacts.subscribe, edgeFillArtifacts.getRevision);
-  let sourceError = '', outdated = false;
+  let sourceError = '', outdated = false, updated = false;
   try {
     if (!clip?.file || clip.source?.type !== 'image') throw new Error('Still images only, including CR2.');
     if (!composition) throw new Error('Open the still-image composition first.');
     const source = edgeFillSource(clip.file, clip.effects, effectInstanceId, edgeFillFraming(clip.transform, composition));
     outdated = !!params.artifactId && params.sourceSignature !== source.signature;
+    // Made before an update that redraws this correction (a bug fix): the user changed nothing.
+    updated = outdated && source.legacySignature !== source.signature && params.sourceSignature === source.legacySignature;
   } catch (error) { sourceError = error instanceof Error ? error.message : String(error); }
   const artifactId = String(params.artifactId || '');
   const artifactError = edgeFillArtifacts.error(artifactId);
@@ -37,7 +39,9 @@ export default function AiEdgeFillControls({ params, onChange, clipId = '', effe
   const sceneChoice = EDGE_FILL_SCENES.find(item => item.scene === scene.trim())?.id ?? 'own';
   const customPrompt = customEdgeFillPrompt(params);
   const locked = job.busy || pending;
-  const status = sourceError || job.error || artifactError || (outdated ? 'Correction changed. Regenerate the fill to match it.' : job.message);
+  const status = sourceError || job.error || artifactError || (updated
+    ? 'Lens Correction draws this setting slightly differently since an update (a bug fix). Regenerate the fill to match it.'
+    : outdated ? 'Correction changed. Regenerate the fill to match it.' : job.message);
   const keyframes = (paramName: string, value: number) => clipId && effectInstanceId
     ? <EffectKeyframeToggle clipId={clipId} effectId={effectInstanceId} paramName={paramName} value={value} /> : undefined;
   // The shared effect-section layout (as Lens Correction): rows keep label, control and value on one line in the card.

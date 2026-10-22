@@ -47,7 +47,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Lens Correction card: the Preset menu showing Action Cam, the Lens menu on Manual, the Geometry section with Framing on Original size, Distortion −28, Fine Distortion 0, Scale 120 and Center X and Y 0.5, the folded Chromatic aberration section and the Vignette section with its switch, Amount and Midpoint, beside a strip of the preview with the straightened night street](../assets/effects/editor/lens-correction-inspector.webp)
+![Properties, Effects with a Lens Correction card: the Preset menu showing Action Cam, the Lens menu on Manual, the Geometry section with Framing on Original size, Distortion −28, Fine Distortion 0, Scale 120 and Center X and Y 0.5, the folded Chromatic aberration section and the Vignette section with its switch, Amount and Midpoint, beside the right edge of the preview, where the shop fronts and a vending machine of the corrected night street stand upright](../assets/effects/editor/lens-correction-inspector.webp)
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 921" aria-hidden="true" focusable="false">
 <defs><marker id="lens-correction-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
@@ -57,8 +57,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <circle class="docs-shot-number" cx="568" cy="376" r="18" /><text x="568" y="376" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M569 480 L646 480" marker-end="url(#lens-correction-inspector-arrow)" />
 <circle class="docs-shot-number" cx="569" cy="480" r="18" /><text x="569" y="480" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M601 517 L636 517" marker-end="url(#lens-correction-inspector-arrow)" />
-<circle class="docs-shot-number" cx="601" cy="517" r="18" /><text x="601" y="517" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M568 517 L636 517" marker-end="url(#lens-correction-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="517" r="18" /><text x="568" y="517" class="docs-shot-number-text">4</text>
 <path class="docs-shot-arrow" d="M568 593 L666 593" marker-end="url(#lens-correction-inspector-arrow)" />
 <circle class="docs-shot-number" cx="568" cy="593" r="18" /><text x="568" y="593" class="docs-shot-number-text">5</text>
 </svg>
@@ -79,15 +79,15 @@ The next four rows appear only with a measured lens.
 
 **Focal Length** – the zoom setting the picture was taken at. The profile's distortion changes a lot along the zoom: barrel at 24 mm, almost none around 40 mm, a slight inward bow at 105 mm. 24 to 105 mm, default 24 mm.
 
-**Aperture** – the f-number the picture was taken at. It changes only the dark corners: they are darkest wide open at f/4 and get lighter as the lens is stopped down. f/4 to f/22, default f/4.
+**Aperture** – the f-number the picture was taken at. It changes only the dark corners: they are darkest wide open at f/4 and get lighter as the lens is stopped down. With the Vignette switch off it has nothing to change, so the row is dimmed and a note says so. f/4 to f/22, default f/4.
 
-**Focus Distance** – how far away the camera was focused, in metres. It also changes only the dark corners, and only a little; leave it at 1000 m (as good as infinity) when you do not know it. 0.45 to 1000 m, default 1000 m.
+**Focus Distance** – how far away the camera was focused, in metres. It also changes only the dark corners, and only a little, so it is dimmed with Aperture while the Vignette switch is off; leave it at 1000 m (as good as infinity) when you do not know it. 0.45 to 1000 m, default 1000 m.
 
 **Sensor Crop** – how much smaller the camera's sensor is than full frame: 1 for a full-frame camera, 1.6 for a Canon APS-C body. A smaller sensor sees only the middle of the lens, so the correction is weaker. 1× to 2×, default 1×.
 
 ### Geometry
 
-**Framing** – what happens to the edges. **Original size** keeps the frame as it is and crops a little of the edge. **Fit entire photo** shrinks the corrected picture until all of the original is visible and leaves the free edges transparent. While Fit is on, the Scale row is hidden and the fit sets the size. Original size or Fit entire photo, default Original size.
+**Framing** – what happens to the edges. **Original size** keeps the frame as it is and crops a little of the edge. **Fit entire photo** shrinks the corrected picture until all of the original is visible and leaves the free edges transparent. While Fit is on, the fit sets the size: choosing it puts Scale back to 100 and hides its row. A Scale other than 100 that arrives anyway (from a preset or an older project) keeps its row and a note until you click its reset arrow. Original size or Fit entire photo, default Original size.
 
 **Distortion** – straightens lines that bow. Below 0 pulls the outer picture inward: lines that bulge outward like a barrel (wide lenses, action cameras) become straight. Above 0 pushes it outward: lines that pinch inward (long lenses) become straight, and empty edges appear that Scale can crop. −5 to −15 fixes a typical wide lens, −25 to −30 an action camera. Stronger values keep the photo in one piece: where the correction would stretch the outer picture more than four times, it stretches it evenly instead of folding it back. Lines in that outer part stay bent, and the card says from where on this happens. −100 to 100, default 0.
 
@@ -124,6 +124,6 @@ Lens Correction is one fixed shader with its own card: it has no node graph to o
 - **Empty edges.** Areas the corrected picture no longer covers are transparent.
 - **Strong barrel removal.** The radius polynomial r(1 + k r² + f r⁴) flattens and would turn back (fold the picture) for strong negative values. From the radius where it reads less than a quarter of a source pixel per output pixel, the mapping takes the larger of a straight line at that slope and the polynomial. It always moves outward, every source radius is reached, and where the polynomial recovers (negative Distortion with positive Fine Distortion) it takes over again, so dragging a control never makes the picture jump. Where the line starts depends on the frame: in a centred frame at Scale 100 from about Distortion −25, with Fit from about −14, at Scale 50 already from about −6. The card names the stretched part whenever there is one.
 - **Edges.** The fringe channels repeat the border pixel, so no coloured line runs along the frame. Cut-outs in the source keep their transparency.
-- **Saved projects.** Projects keep their values. Two bug fixes change how some of them look: with Fit entire photo the fit alone sets the size (a Scale below the fitted size, whose row is hidden, used to shrink the picture further), and corrections strong enough to fold (the card then names the stretched part) now show their outer ring stretched instead of leaving it transparent beyond a fold. An [AI Edge Fill](./ai-edge-fill.md) made on such a setting is marked as out of date: generate it again.
+- **Saved projects.** Projects keep their values. Two bug fixes change how some of them look. With Fit entire photo the fit alone sets the size (a Scale below the fitted size, whose row was hidden, used to shrink the picture further). And strong barrel removal no longer folds: where the lens model would turn back, the picture continues in a straight, even stretch. For a centred frame at Scale 100 this starts at about Distortion −25, a little before the old fold at about −33, so between about −29 and −33 the outer ring is now stretched evenly by up to about 2 % of the radius (about 25 px in a 1080p corner) instead of being straightened; beyond the old fold the ring is now filled instead of transparent. The card names the stretched part from half a percent on. An [AI Edge Fill](./ai-edge-fill.md) made on a setting that changed that much is marked as made before the update: generate it again. A fill task that was already running finishes as it started.
 - Corrections are saved with the effect and applied in the export.
 - **More:** [Effect system: Lens Correction](../Effect-System.md#lens-correction) · [Guided Perspective](./guided-perspective.md) · [AI Edge Fill](./ai-edge-fill.md).

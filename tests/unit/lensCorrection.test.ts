@@ -100,6 +100,13 @@ describe('Lens Correction', () => {
     expect(lensGeometryChangedSince327({ distortion: -25 }, 1500, 1000)).toBe(false);
     expect(lensGeometryChangedSince327({ distortion: -14, fitFullImage: true }, 1500, 1000)).toBe(false);
     expect(lensGeometryChangedSince327({ distortion: -40 }, 1500, 1000)).toBe(true);
+    // Only a visible change marks a saved fill: the same half-percent threshold as the card's stretch note.
+    for (const distortion of [-26, -28]) {
+      expect(lensGeometryChangedSince327({ distortion }, 1920, 1080)).toBe(false);
+      expect(lensCorrectionWarnings({ distortion }, 1920, 1080).join(' ')).not.toContain('stretched evenly');
+    }
+    expect(lensGeometryChangedSince327({ distortion: -33 }, 1920, 1080)).toBe(true);
+    expect(lensCorrectionWarnings({ distortion: -33 }, 1920, 1080).join(' ')).toContain('stretched evenly');
     expect(lensGeometryChangedSince327({ distortion: -10, scale: 60, fitFullImage: true }, 1500, 1000)).toBe(true);
     for (const [distortion, fine] of [[-.6, 0], [-1, 0], [0, -.5], [-1, -.5]]) {
       const geometry = manual(distortion, fine), knee = lensKnee(geometry);

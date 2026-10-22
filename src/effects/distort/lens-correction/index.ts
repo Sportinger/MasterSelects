@@ -45,7 +45,7 @@ function lensGeometry(params: LensParams, width: number, height: number) {
   const aspect = p.sourceAspect || Math.max(1,width)/Math.max(1,height);
   const geometry = { aspect, centerX: p.centerX, centerY: p.centerY, cropFactor: p.cropFactor,
     distortion: p.distortion / 100, fineDistortion: p.fineDistortion / 100, profile };
-  // Fit picks the scale itself (the card hides Scale meanwhile, and a warning names a Scale it ignores).
+  // Fit picks the scale itself (the card shows Scale only while it holds a value Fit ignores, which a warning names).
   const fit = params.fitFullImage === true ? lensFullImageScale(geometry) : undefined;
   const scale = fit ?? p.scale/100;
   // Largest output radius in the frame: the farthest corner from the optical centre, divided by scale.
@@ -61,9 +61,10 @@ function lensGeometry(params: LensParams, width: number, height: number) {
  * results made on such a setting are marked for regeneration (edgeFillSource).
  */
 export function lensGeometryChangedSince327(params: LensParams, width = 1920, height = 1080): boolean {
-  const { p, fit, corner, knee } = lensGeometry(params, width, height);
-  // A knee at the very corner (Distortion -25, centred) moves nothing visible.
-  return knee.radius < corner - 1e-4 || (fit !== undefined && p.scale / 100 < fit);
+  const { p, fit, corner, geometry } = lensGeometry(params, width, height);
+  // Only a visible change counts: the knee's line moves the picture by half a percent or more inside the
+  // frame (the same threshold as the card's stretch note, so a marked fill always has a note that explains it).
+  return lensStretchRange(geometry, corner) !== undefined || (fit !== undefined && p.scale / 100 < fit);
 }
 
 /** Clamped values and ignored controls, for tool results and the inspector (never silent). */
@@ -79,7 +80,7 @@ export function lensCorrectionWarnings(params: LensParams, width = 1920, height 
   }
   const { p, fit, corner, geometry } = lensGeometry(params, width, height);
   if (fit !== undefined && Math.abs(p.scale - 100) > 1e-6) {
-    warnings.push(`Scale ${Number(p.scale.toFixed(1))}% is ignored while Fit Entire Photo is on: Fit sets the scale itself. Turn Fit Entire Photo off to use Scale.`);
+    warnings.push(`Scale ${Number(p.scale.toFixed(1))}% is ignored while Fit Entire Photo is on: Fit sets the scale itself. Reset Scale to 100 % to clear this note, or turn Fit Entire Photo off to use Scale.`);
   }
   // Beyond the knee a straight line draws the picture instead of the lens model: say where, never silently.
   const stretch = lensStretchRange(geometry, corner);

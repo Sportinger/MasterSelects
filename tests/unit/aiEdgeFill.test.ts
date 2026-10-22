@@ -111,6 +111,28 @@ describe('AI edge fill lifecycle', () => {
     expect(mild).not.toContain('lens-geometry-2');
     effects[0].params = { distortion: -60, scale: 100 };
     expect(edgeFillSource(file, effects, 'fill').signature).toContain('lens-geometry-2');
+    expect(edgeFillSource(file, effects, 'fill').legacySignature).not.toContain('lens-geometry-2');
+    // Distortion -26 moves the corner by well under half a percent: no marker the card could not explain.
+    effects[0].params = { distortion: -26, scale: 100 };
+    expect(edgeFillSource(file, effects, 'fill').signature).not.toContain('lens-geometry-2');
+  });
+  it('resumes a paid task saved before an update redrew its correction, and keeps that older signature on the fill', async () => {
+    state.clips[0].effects[0].params = { distortion: -60, scale: 100 };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    await generateEdgeFill(state.clips[0].id, 'fill');
+    const params = state.clips[0].effects[1].params, current = String(params.taskSignature);
+    expect(current).toContain('lens-geometry-2');
+    const legacy = current.replace(',"lens-geometry-2"', '');
+    params.taskSignature = legacy;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['fill']) }));
+    await generateEdgeFill(state.clips[0].id, 'fill');
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.save.mock.lastCall?.[2]).toBe(legacy);
+    expect(state.clips[0].effects[1].params.sourceSignature).toBe(legacy);
+    // A task for really different corrections still refuses to resume.
+    Object.assign(state.clips[0].effects[1].params, { taskId: 'task-2', taskSignature: legacy.replace('-60', '-50') });
+    await generateEdgeFill(state.clips[0].id, 'fill');
+    expect(edgeFillJob(state.clips[0].id, 'fill').error).toContain('Pending task uses different corrections');
   });
   it('sends the scene text in the fixed request, word for word the old default for Room, and a saved full prompt unchanged', async () => {
     const oldDefault = 'Image 1 is a photograph with missing pixels marked bright magenta. Image 2 is an edit mask: white marks ALL missing pixels, black marks the original photograph. Replace EVERY magenta area, including all four outer borders and corners, with a seamless natural continuation of this room, walls, ceiling and floor. Extend existing lines, perspective, lighting, colors and textures exactly across the edges. Preserve the original black-mask photograph, its framing and placement. Output only the completed full-frame photograph at the same aspect ratio. No border, no letterbox, no black bars, no magenta, no mask, no crop, no zoom, no repositioning.';

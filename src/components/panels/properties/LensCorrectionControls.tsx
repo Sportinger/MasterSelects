@@ -39,9 +39,15 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
       } : value === CANON_24_105_PROFILE ? { sourceAspect: 0 } : {}),
     });
   };
+  const vignetteOff = params.vignetteEnabled === false;
+  // Fit sets the scale itself: Scale only reappears while it holds a value Fit ignores, so its reset arrow can clear it.
+  const fitHidesScale = params.fitFullImage === true && p.scale === 100;
+  // Aperture and Focus Distance only shape the profile's vignette: with the Vignette switch off they do nothing.
+  const vignetteOnly = (key: string) => vignetteOff && (key === 'aperture' || key === 'focusDistance');
   const rows = (group: string) => Object.entries(LENS_CORRECTION_PARAMS)
-    .filter(([key, def]) => def.type === 'number' && !def.hidden && def.group === group && !(key === 'scale' && params.fitFullImage === true))
+    .filter(([key, def]) => def.type === 'number' && !def.hidden && def.group === group && !(key === 'scale' && fitHidesScale))
     .map(([key, def]) => <ResolveInspectorNumberRow key={key} label={def.label}
+      disabled={vignetteOnly(key)} title={vignetteOnly(key) ? 'Acts on the vignette, which is switched off' : undefined}
       value={p[key]} defaultValue={def.default as number} min={def.min!} max={def.max!}
       hardMin={def.min!} hardMax={def.max!} step={def.step!} sensitivity={(def.max! - def.min!) / 100}
       decimals={def.step! >= 0.1 ? 1 : 3} suffix={key === 'focalLength' ? 'mm' : key === 'focusDistance' ? 'm' : undefined}
@@ -60,7 +66,8 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
         options={LENS_PROFILE_OPTIONS} onChange={selectProfile} /></ResolveInspectorRow>
       {metadata && <p className="effect-info">{metadata.lens} · {metadata.focalLength} mm · f/{metadata.aperture}</p>}
       {metadataError && <p className="effect-info" role="status">Camera metadata unavailable. Set focal length and aperture below.</p>}
-      {profile !== 'manual' && <>{rows('profile')}<p className="effect-info">
+      {profile !== 'manual' && <>{rows('profile')}{vignetteOff && <p className="effect-info" role="status">
+        Aperture and Focus Distance act on the vignette, which is switched off.</p>}<p className="effect-info">
         Lensfun full-frame calibration. Set Sensor Crop for APS-C; 1000 m approximates infinity when focus distance is unknown.
       </p></>}
     </ResolveInspectorSection>
@@ -72,7 +79,9 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
     >{group === 'geometry' && <ResolveInspectorRow label="Framing"><InspectorSelect ariaLabel="Lens correction framing"
       value={params.fitFullImage === true ? 'fit' : 'original'}
       options={[{value:'original',label:'Original size'},{value:'fit',label:'Fit entire photo'}]}
-      onChange={value=>change('fitFullImage',value==='fit')} /></ResolveInspectorRow>}
+      onChange={value=>value==='fit'
+        ? onChange({ ...params, ...(metadata ? { sourceAspect: metadata.width / metadata.height } : {}), fitFullImage: true, scale: 100 })
+        : change('fitFullImage', false)} /></ResolveInspectorRow>}
       {rows(group)}</ResolveInspectorSection>)}
   </div>;
 }

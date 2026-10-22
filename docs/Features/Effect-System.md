@@ -2494,11 +2494,15 @@ Under **Geometry → Framing**, **Fit entire photo** automatically fits the corr
 source perimeter into the image texture instead of cropping it. Free areas remain
 transparent (black against an opaque viewer/export background), and the composition
 dimensions stay unchanged. The manual Scale setting is kept for **Original size**;
-**Fit entire photo** sets the scale itself and hides the Scale row, so a Scale kept from
-**Original size** never shrinks the fitted picture; a Scale other than 100 under Fit
-(kept, keyframed or set by a tool) is named as ignored in the inspector and tool results.
+choosing **Fit entire photo** in the card sets Scale back to 100 and hides its row, since the
+fit sets the scale itself. A Scale other than 100 under Fit (from a preset, a keyframe, a tool
+or an older project) is named as ignored in the inspector and tool results, and the card shows
+its row with the reset arrow until it is cleared.
 Fit works at every strength, since the mapping never folds. AI Edge Fill marks a fill
-made on a Lens Correction whose look changed with these fixes as out of date.
+made on a Lens Correction whose look changed visibly with these fixes (the same half-percent
+threshold as the card's stretch note) as made before the update; a task already running resumes.
+Aperture and Focus Distance only shape the profile vignette: with Vignette Correction off the
+card dims them and says so.
 The fit follows distortion, focal length, sensor crop and optical center adjustments.
 
 ### Guided Perspective
