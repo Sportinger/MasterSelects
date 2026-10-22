@@ -96,7 +96,7 @@ describe('Vector Engraving lines', () => {
       if (!ramping && start >= 0) { widest = Math.max(widest, (index - start) / 20); start = -1; }
     });
     expect(widest).toBeLessThan(1.6);
-  });
+  }, 60_000); // 2400 CPU samples at 60 px spacing: near the default 15 s on a slow CI runner
 
   it('clamps Line Weight outside 0–1 and says so', () => {
     const over = render(grey(.3), { ...BW, weight: 3 }), one = render(grey(.3), { ...BW, weight: 1 });

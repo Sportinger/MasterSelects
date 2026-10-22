@@ -128,7 +128,7 @@ describe('halftone image graph factories', () => {
       expect(soft).toBeGreaterThan(0);
       expect(soft).toBeLessThanOrEqual(2.5); // two edges of one pixel each, sampled at quarter pixels
     }
-  });
+  }, 60_000); // about 350 CPU graph evaluations: near the default 15 s on a slow CI runner
 
   it('reads the cell tone from opaque points only, so a cut-out edge does not darken its dots', () => {
     // Left of x = 940 transparent (black RGB), right of it white: the cell from 920 to 960 px lies across the cut.
