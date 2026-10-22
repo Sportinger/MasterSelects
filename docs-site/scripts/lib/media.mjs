@@ -1,8 +1,12 @@
 // Size probes and byte budgets for the pictures and clips of the docs.
-// Budgets (docs plan §7): WebP/PNG/JPEG ≤ 200 KB and ≤ 1600 px wide (scripts/docShotWebp.mjs),
-// gallery thumbnails ≤ 30 KB, clips ≤ 1.5 MB and ≤ 12 s (the default of scripts/doc-clip.mjs).
+// Budgets (Style guide in docs/Features/Documentation-Site.md): WebP/PNG/JPEG ≤ 200 KB and
+// ≤ 1600 px wide (scripts/docShotWebp.mjs), gallery thumbnails ≤ 30 KB, clips ≤ 1.5 MB and ≤ 12 s
+// (the default of scripts/doc-clip.mjs; a control clip keeps to 700 KB and 8 s there). A whole page:
+// its pictures and posters together about 1 MB, its clips together about 5 MB. Clips load only
+// when the reader scrolls to them (preload none, played while on screen), so they get the larger share.
 
 export const BUDGETS = { imageBytes: 200_000, imageWidth: 1600, thumbBytes: 30_000, clipBytes: 1_500_000, clipSeconds: 12 };
+export const PAGE_BUDGETS = { pictureBytes: 1_000_000, clipBytes: 5_000_000 };
 export const IMAGE_EXTENSIONS = /\.(?:webp|png|jpe?g|gif|avif|svg)$/iu;
 export const VIDEO_EXTENSIONS = /\.(?:mp4|webm)$/iu;
 
@@ -62,6 +66,28 @@ export function mp4Info(bytes) {
 }
 
 const kb = (bytes) => `${Math.round(bytes / 1000)} KB`;
+
+const mb = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
+
+/**
+ * Budget problems of a whole page, from the assets it uses (`Map` or entries of file → byte count).
+ * A clip's .webm and .mp4 are alternatives: only the larger one counts.
+ */
+export function pageBudgetIssues(assets) {
+  const clips = new Map();
+  let pictures = 0;
+  for (const [file, bytes] of assets) {
+    if (VIDEO_EXTENSIONS.test(file)) {
+      const stem = file.replace(VIDEO_EXTENSIONS, '');
+      clips.set(stem, Math.max(clips.get(stem) ?? 0, bytes));
+    } else if (IMAGE_EXTENSIONS.test(file)) pictures += bytes;
+  }
+  const clipBytes = [...clips.values()].reduce((sum, bytes) => sum + bytes, 0);
+  const issues = [];
+  if (pictures > PAGE_BUDGETS.pictureBytes) issues.push(`its pictures and posters add up to ${mb(pictures)} (page budget ${mb(PAGE_BUDGETS.pictureBytes)})`);
+  if (clipBytes > PAGE_BUDGETS.clipBytes) issues.push(`its ${clips.size} clips add up to ${mb(clipBytes)} (page budget ${mb(PAGE_BUDGETS.clipBytes)})`);
+  return issues;
+}
 
 /** Budget problems of one asset (path relative to docs/Features), as short sentences. */
 export function assetBudgetIssues(file, bytes, { thumb = false } = {}) {

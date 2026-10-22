@@ -171,8 +171,12 @@
   }
   .sl-markdown-content .docs-shot--float-right { float: right; margin-left: 1.5rem; }
   .sl-markdown-content .docs-shot--float-left { float: left; margin-right: 1.5rem; }
+  /* Starlight sets headings inline inside .sl-heading-wrapper, where clear does nothing: the
+     wrapper clears, so a heading never stands beside the float of the section before it. */
   .sl-markdown-content h2,
   .sl-markdown-content h3,
+  .sl-markdown-content .sl-heading-wrapper.level-h2,
+  .sl-markdown-content .sl-heading-wrapper.level-h3,
   .sl-markdown-content .docs-float-end { clear: both; }
   /* Lists and paragraphs beside a floating shot stay in one column: bullets keep clear of the
      picture, and a tip does not jump to full width under it mid-sentence. */

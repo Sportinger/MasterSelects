@@ -35,6 +35,7 @@ export const effectAssets = (id) => ({
   clip: `assets/effects/clips/${id}.mp4`,
   thumb: `assets/effects/thumbs/${id}.webp`,
   presets: `assets/effects/presets/${id}.webp`,
+  presetsClip: `assets/effects/clips/${id}-presets.mp4`,
 });
 export const pageFile = (id) => `effects/${id}.md`;
 
@@ -399,6 +400,7 @@ export function buildCatalog(snapshot, files) {
     if (files.exists(assets.thumb)) entry.thumb = assets.thumb;
     if (effect.presets?.length) entry.presets = effect.presets.map((preset) => preset.name);
     if (effect.presets?.length && files.exists(assets.presets)) entry.presetStrip = assets.presets;
+    if (effect.presets?.length && files.exists(assets.presetsClip)) entry.presetsClip = assets.presetsClip;
     if (effect.engine) entry.engine = effect.engine;
     if (effect.moving) entry.moving = true;
     if (effect.experimental) entry.experimental = true;

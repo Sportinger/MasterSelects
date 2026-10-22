@@ -23,10 +23,22 @@
 //   crop             [x, y, w, h] px of the exported frame; width (output px, default 960), gap (6)
 //   fps, exportFps (both default to the source's), maxBytes (default 1.5 MB), crf (start value,
 //   default 20), poster (seconds into the clip)
+//   sweep            a control clip: { param, label, from, to, unit, decimals } keys the parameter
+//                    from → to → from over the range (a cosine, so it eases at both ends) and burns
+//                    the current value in, small ("Band Size 22 px"); { param, label, steps: [values] }
+//                    holds each value for an equal share instead (for Speed: keyframing a speed makes
+//                    the timeline-clock wave jump, so steps show each speed as it is); a control clip
+//                    stays within 8 s and, by default, 700 KB
+// Presets clip ("kind": "presets") – every preset the effect declares (read from the registry, in
+//   card order) exported over the same `range` and laid out as a labelled grid, in sync:
+//   effect, range, crop, width (whole grid, default 960), columns (default 2 for four), gap, loop,
+//   maxBytes, crf, poster
 // Operation clip ("kind": "operation") – a screen recording of the editor with a visible pointer:
 //   playhead, effects [{ effect, params }] already on the clip, viewport { width, height }, scale
 //   (device pixels per CSS px, default 2), dock { "<split id>": ratio } (DockLayout split ratios),
 //   panels  dock groups shown ("preview-group", "right-group"), pad (CSS px around them)
+//   frame   instead of panels: the union of these boxes, e.g. ["row:Band Size", "preview:0,0.2,1,0.8"]
+//           (a card row by its label; the preview canvas, or the part x0,y0,x1,y1 of it, 0–1)
 //   start   where the pointer rests first ("preview:0.8,0.8" or another step target)
 //   steps   { "move": target } | { "click": target } | { "type": "glitch" } | { "pause": ms }
 //           | { "drag": "<row label>", "to": value or [values] }; "ms" sets a move's duration.
@@ -42,7 +54,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { humanMouse } from './docClipPointer.mjs';
-import { ORIGINAL_LAYOUTS, encodeEffectClip, encodeRecording, probeVideo } from './docClipVideo.mjs';
+import { ORIGINAL_LAYOUTS, encodeEffectClip, encodePresetGrid, encodeRecording, probeVideo, sweepValue } from './docClipVideo.mjs';
 
 const args = process.argv.slice(2);
 const valued = ['--only', '--url', '--media', '--out', '--keep'];
@@ -116,9 +128,45 @@ async function effectClip(page, clip, work) {
     ? await exportRange(page, range, path.join(work, `${clip.name}.original.mp4`)) : undefined;
   const added = await tool('addEffect', { clipId, effectType: clip.effect, params: clip.params ?? {} });
   for (const note of [added?.warnings, added?.notes, added?.paramWarnings].flat().filter(Boolean)) console.log(`${clip.name}: ${JSON.stringify(note)}`);
+  if (clip.sweep) await tool('addKeyframe', { clipId, effectId: added.effectId, keys: { [clip.sweep.param]: sweepKeys(clip.sweep, start, end) } });
   await pause(1000);
   const effect = await exportRange(page, range, path.join(work, `${clip.name}.effect.mp4`));
   return encodeEffectClip(clip, { effect, original, output: path.join(out, `${clip.name}.mp4`), poster: path.join(out, `${clip.name}.webp`) });
+}
+
+/**
+ * Keyframes of a control clip over [start, end] (clip time = timeline time, the clip starts at 0):
+ * the cosine sweep every 0.1 s, linear in between, or one held value per step.
+ */
+function sweepKeys(sweep, start, end) {
+  const duration = end - start;
+  if (sweep.steps) return sweep.steps.map((value, index) => [start + index * duration / sweep.steps.length, value, 'hold']);
+  const { at } = sweepValue(sweep, duration), count = Math.ceil(duration / 0.1);
+  return Array.from({ length: count + 1 }, (_, index) => {
+    const t = Math.min(duration, index * 0.1);
+    return [start + t, Math.round(at(t) * 1e4) / 1e4, 'linear'];
+  });
+}
+
+/** Every preset of the effect over the same range, one export each, then the labelled grid. */
+async function presetsClip(page, clip, work) {
+  const { tool, item, clipId, duration } = await openProject(page, mediaPath(clip.source ?? shotList.source));
+  const [start, end] = clip.range ?? [0, duration];
+  const range = { start, end, item, fps: clip.exportFps ?? item.fps ?? 30 };
+  const presets = await page.evaluate(async id => (await import('/src/effects/index.ts')).getEffect(id)?.presets
+    ?.map(preset => ({ name: preset.name, params: preset.params })), clip.effect);
+  if (!presets?.length) throw new Error(`${clip.name}: ${clip.effect} declares no presets`);
+  const exports = [];
+  for (const [index, preset] of presets.entries()) {
+    // A fresh effect per preset: the preset's values on top of the defaults, as the Preset row sets them.
+    const added = await tool('addEffect', { clipId, effectType: clip.effect, params: preset.params });
+    await pause(1000);
+    exports.push({ file: await exportRange(page, range, path.join(work, `${clip.name}.preset-${index}.mp4`)), label: preset.name });
+    await tool('removeEffect', { clipId, effectId: added.effectId });
+  }
+  fs.writeFileSync(path.join(work, `${clip.name}.presets.json`), JSON.stringify(exports));
+  console.log(`${clip.name}: presets ${presets.map(preset => preset.name).join(', ')}`);
+  return encodePresetGrid(clip, { exports, output: path.join(out, `${clip.name}.mp4`), poster: path.join(out, `${clip.name}.webp`) });
 }
 
 async function operationClip(page, clip, work, viewport) {
@@ -134,13 +182,31 @@ async function operationClip(page, clip, work, viewport) {
   await page.locator('button').filter({ hasText: /^Effects/ }).first().click();
   await page.mouse.move(viewport.width / 2, viewport.height - 4);
   await pause(2500);
-  const crop = await page.evaluate(({ panels, pad }) => {
-    const boxes = panels.map(id => document.querySelector(`.dock-tab-pane[data-group-id="${id}"]`)?.getBoundingClientRect());
-    if (boxes.some(box => !box)) return { missing: panels.filter((_, index) => !boxes[index]) };
+  const crop = await page.evaluate(({ panels, frame, pad }) => {
+    // A card row: the nearest ancestor of its label that holds the row's slider or select.
+    const row = label => {
+      const words = [...document.querySelectorAll('.properties-panel *, [data-group-id="right-group"] *')].filter(element => element.textContent.trim() === label
+        && ![...element.children].some(child => child.textContent.trim() === label));
+      for (let element of words) {
+        while (element && !element.querySelector('.handle-only-range, select, [role="combobox"]')) element = element.parentElement;
+        if (element) return element.getBoundingClientRect();
+      }
+      return undefined;
+    };
+    const preview = part => {
+      const canvas = [...document.querySelectorAll('[data-group-id="preview-group"] canvas')]
+        .toSorted((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
+      if (!canvas) return undefined;
+      const rect = canvas.getBoundingClientRect(), [x0, y0, x1, y1] = part ? part.split(',').map(Number) : [0, 0, 1, 1];
+      return { left: rect.left + x0 * rect.width, top: rect.top + y0 * rect.height, right: rect.left + x1 * rect.width, bottom: rect.top + y1 * rect.height };
+    };
+    const boxes = frame ? frame.map(target => target.startsWith('row:') ? row(target.slice(4)) : target.startsWith('preview') ? preview(target.split(':')[1]) : undefined)
+      : panels.map(id => document.querySelector(`.dock-tab-pane[data-group-id="${id}"]`)?.getBoundingClientRect());
+    if (boxes.some(box => !box)) return { missing: (frame ?? panels).filter((_, index) => !boxes[index]) };
     return { left: Math.max(0, Math.min(...boxes.map(box => box.left)) - pad), top: Math.max(0, Math.min(...boxes.map(box => box.top)) - pad),
       right: Math.min(innerWidth, Math.max(...boxes.map(box => box.right)) + pad), bottom: Math.min(innerHeight, Math.max(...boxes.map(box => box.bottom)) + pad) };
-  }, { panels: clip.panels ?? ['preview-group', 'right-group'], pad: clip.pad ?? 0 });
-  if (crop.missing) throw new Error(`${clip.name}: no dock group ${crop.missing.join(', ')}`);
+  }, { panels: clip.panels ?? ['preview-group', 'right-group'], frame: clip.frame, pad: clip.pad ?? 0 });
+  if (crop.missing) throw new Error(`${clip.name}: nothing visible for ${crop.missing.join(', ')}`);
 
   const start = await page.evaluate(() => ({ x: innerWidth / 2, y: innerHeight / 2 }));
   const mouse = await humanMouse(page, start);
@@ -161,12 +227,19 @@ async function operationClip(page, clip, work, viewport) {
   await cdp.send('Page.startScreencast', { format: 'jpeg', quality: clip.jpegQuality ?? 88, everyNthFrame: 1 });
   await pause(400);
   for (const step of clip.steps ?? []) {
-    if (step.pause) await pause(step.pause);
-    else if (step.move) await mouse.move(step.move, step);
-    else if (step.click) await mouse.click(step.click, step);
-    else if (step.type) await page.keyboard.type(step.type, { delay: step.delay ?? 120 });
-    else if (step.drag) await mouse.drag(step.drag, step.to, step);
-    else throw new Error(`${clip.name}: unknown step ${JSON.stringify(step)}`);
+    try {
+      if (step.pause) await pause(step.pause);
+      else if (step.move) await mouse.move(step.move, step);
+      else if (step.click) await mouse.click(step.click, step);
+      else if (step.type) await page.keyboard.type(step.type, { delay: step.delay ?? 120 });
+      else if (step.drag) await mouse.drag(step.drag, step.to, step);
+      else throw new Error(`unknown step ${JSON.stringify(step)}`);
+    } catch (error) {
+      // The page as the step found it, so a missing target can be seen instead of guessed.
+      const shot = path.join(work, `${clip.name}.failed.png`);
+      await page.screenshot({ path: shot }).catch(() => {});
+      throw new Error(`${clip.name}: ${error.message} (the page at that moment: ${shot})`);
+    }
   }
   const end = Date.now() / 1000;
   await cdp.send('Page.stopScreencast');
@@ -217,7 +290,12 @@ try {
       report(clip, encodeRecording(clip, { ...JSON.parse(fs.readFileSync(recording, 'utf8')), workDir: work, ...files }), []);
       continue;
     }
-    if (reencode && clip.kind !== 'operation' && fs.existsSync(kept('effect'))) {
+    const presetList = path.join(work, `${clip.name}.presets.json`);
+    if (reencode && clip.kind === 'presets' && fs.existsSync(presetList)) {
+      report(clip, encodePresetGrid(clip, { exports: JSON.parse(fs.readFileSync(presetList, 'utf8')), ...files }), []);
+      continue;
+    }
+    if (reencode && !['operation', 'presets'].includes(clip.kind) && fs.existsSync(kept('effect'))) {
       report(clip, encodeEffectClip(clip, { effect: kept('effect'), original: fs.existsSync(kept('original')) ? kept('original') : undefined, ...files }), []);
       continue;
     }
@@ -234,7 +312,8 @@ try {
       const page = await context.newPage();
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
-      const result = clip.kind === 'operation' ? await operationClip(page, clip, work, viewport) : await effectClip(page, clip, work);
+      const result = clip.kind === 'operation' ? await operationClip(page, clip, work, viewport)
+        : clip.kind === 'presets' ? await presetsClip(page, clip, work) : await effectClip(page, clip, work);
       report(clip, result, errors);
     } finally {
       await browser.close();

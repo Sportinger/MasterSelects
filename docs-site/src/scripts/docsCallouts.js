@@ -74,15 +74,23 @@ function captionRefs(caption, numbers) {
   return refs;
 }
 
-/** The elements of the page section (between two h2) that holds `figure`. */
+/**
+ * The elements of the page section that holds `figure`: its h3 subsection when the figure stands
+ * under an h3 (one picture per stage folder, each with its own node names), else its whole h2
+ * section, h3 subsections included (a card picture above the sections of its controls).
+ */
 function sectionOf(figure, content) {
   let top = figure;
   while (top.parentElement && top.parentElement !== content) top = top.parentElement;
   if (top.parentElement !== content) return [content];
   const isH2 = (el) => el.matches('h2, .sl-heading-wrapper.level-h2');
+  const isH3 = (el) => el.matches('h3, .sl-heading-wrapper.level-h3');
+  let heading = top.previousElementSibling;
+  while (heading && !isH2(heading) && !isH3(heading)) heading = heading.previousElementSibling;
+  const ends = heading && isH3(heading) ? (el) => isH2(el) || isH3(el) : isH2;
   const section = [top];
-  for (let el = top.previousElementSibling; el && !isH2(el); el = el.previousElementSibling) section.unshift(el);
-  for (let el = top.nextElementSibling; el && !isH2(el); el = el.nextElementSibling) section.push(el);
+  for (let el = top.previousElementSibling; el && !ends(el); el = el.previousElementSibling) section.unshift(el);
+  for (let el = top.nextElementSibling; el && !ends(el); el = el.nextElementSibling) section.push(el);
   return section;
 }
 

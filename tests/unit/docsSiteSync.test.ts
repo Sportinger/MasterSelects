@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { convertPage, galleryHtml, preparePage, stripBackLinks } from '../../docs-site/scripts/lib/convertPage.mjs';
 import { loadEffectCatalog, parseEffectGroups } from '../../docs-site/scripts/lib/effectCatalog.mjs';
 import { buildSidebar, effectGroupIndex, readIndexSections } from '../../docs-site/scripts/lib/featureIndex.mjs';
+import { PAGE_BUDGETS, pageBudgetIssues } from '../../docs-site/scripts/lib/media.mjs';
 import { buildAnchorRedirects, buildRedirects } from '../../docs-site/scripts/lib/redirects.mjs';
 import { pageSlug } from '../../docs-site/scripts/lib/routes.mjs';
 
@@ -379,5 +380,20 @@ describe('docs site anchor redirects', () => {
     expect(texts).toContain('/docs/features/missing/, which is no published page');
     expect(texts).toContain('#nope');
     expect(texts).toContain('/docs/features/missing/ is no published page');
+  });
+});
+
+describe('docs site page budget', () => {
+  it('adds up the pictures and posters and the clips of a page, counting a clip once', () => {
+    const page = new Map([
+      ['assets/effects/clips/drift-lines.mp4', 900_000], ['assets/effects/clips/drift-lines.webm', 700_000],
+      ['assets/effects/clips/drift-lines.webp', 30_000], ['assets/effects/graphs/drift-lines.webp', 60_000],
+      ...[1, 2, 3, 4].map((index): [string, number] => [`assets/effects/clips/control-${index}.mp4`, 500_000]),
+    ]);
+    expect(pageBudgetIssues(page)).toEqual([]);
+    page.set('assets/effects/clips/presets.mp4', PAGE_BUDGETS.clipBytes - 2_900_000 + 1);
+    expect(pageBudgetIssues(page)).toEqual(['its 6 clips add up to 5.0 MB (page budget 5.0 MB)']);
+    const pictures = new Map(Array.from({ length: 6 }, (_, index): [string, number] => [`assets/guides/step-${index}.webp`, 190_000]));
+    expect(pageBudgetIssues(pictures)).toEqual(['its pictures and posters add up to 1.1 MB (page budget 1.0 MB)']);
   });
 });
