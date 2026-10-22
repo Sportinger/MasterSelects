@@ -48,7 +48,9 @@ try {
       }
       const button = [...panel.querySelectorAll('.export-inspector-disclosure')].find((element) => element.textContent.trim() === target);
       const label = button && [...button.querySelectorAll('*'), button].find((element) => element.children.length === 0 && element.textContent.trim() === target);
-      return label ? textBox(label) : null;
+      if (!label) return null;
+      // The arrow ends at the header's left edge, before its chevron and on/off switch.
+      return { ...textBox(label), left: button.getBoundingClientRect().left };
     });
     const area = { left: panelBox.left - gutter, top: panelBox.top + 1, right: panelBox.right, bottom: panelBox.bottom };
     let background = 'transparent';
@@ -67,8 +69,9 @@ try {
   fs.writeFileSync(out, webp.buffer);
   console.log(`${path.relative(repoRoot, out)} ${webp.width}x${webp.height} ${webp.size} bytes\n`);
   const marks = TARGETS.map(() => ({ from: 'left' }));
-  console.log(docsFigure({ file: out, alt: 'ALT', caption: 'CAPTION', classes: 'docs-shot--float-right',
-    svg: calloutOverlay({ name: 'export-panel', layout: 'float', crop, boxes, marks }) }));
+  // A tall, narrow panel: as a float it would squeeze the list beside it, so it stands alone at detail width.
+  console.log(docsFigure({ file: out, alt: 'ALT', caption: 'CAPTION', classes: 'docs-shot--detail',
+    svg: calloutOverlay({ name: 'export-panel', layout: 'detail', crop, boxes, marks }) }));
 } finally {
   await browser.close();
 }

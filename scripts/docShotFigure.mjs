@@ -3,7 +3,7 @@
 import path from 'node:path';
 
 // Callouts match the existing docs pictures: a 1017-unit overlay per 720 px docs column.
-const DISPLAY_WIDTH = { full: 720, float: 418 };
+const DISPLAY_WIDTH = { full: 720, float: 418, detail: 432 }; // detail: docs-shot--detail, at most 27rem
 const UNITS_PER_PX = 1017 / 720, RADIUS = 18, REACH = 84;
 
 const STEP = { left: [-1, 0], right: [1, 0], above: [0, -1], below: [0, 1] };
