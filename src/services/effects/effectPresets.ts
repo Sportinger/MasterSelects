@@ -79,20 +79,44 @@ function presetControlLabel(effect: EffectParamOwner, key: string): string | und
 const currentValue = (effect: EffectParamOwner, key: string, definition: EffectParam | undefined) =>
   effect.params[key] ?? definition?.legacyDefault ?? definition?.default ?? defaultGraphValues(effect.type).find(value => value.key === key)?.value;
 
-/** matchingEffectPreset runs on every card render (also during slider drags): one answer per params object. */
-const matchCache = new WeakMap<object, { type: string; graph: unknown; presets: readonly EffectPreset[]; match: EffectPreset | undefined }>();
+/**
+ * resolveEffectPreset overwrites every non-text control with a default or the preset's value, so its
+ * answer depends only on the rest of the params (text controls, a stored graph, graph values, retired
+ * params) and the instance's graph. A slider drag makes a new params object per frame but leaves that
+ * rest alone, so the card keeps one answer per rest (a few per effect type) instead of rebuilding the
+ * control list for every preset on every frame.
+ */
+type ResolvedPresets = { graph: unknown; rest: Array<[string, unknown]>; values: Array<Record<string, Primitive>> };
+const resolvedCache = new WeakMap<readonly EffectPreset[], ResolvedPresets[]>();
+const RESOLVED_PER_TYPE = 8;
+function overwrittenKeys(type: string): Set<string> {
+  const definitions = getEffect(type)?.params ?? {};
+  return new Set(Object.entries(definitions).filter(([, definition]) => definition.type !== 'text' && !definition.deprecated).map(([key]) => key));
+}
+const overwrittenCache = new Map<string, Set<string>>();
+function resolvedPresetValues(effect: EffectParamOwner, presets: readonly EffectPreset[]): Array<Record<string, Primitive>> {
+  let overwritten = overwrittenCache.get(effect.type);
+  if (!overwritten) overwrittenCache.set(effect.type, overwritten = overwrittenKeys(effect.type));
+  const rest = Object.entries(effect.params).filter(([key]) => !overwritten.has(key));
+  let entries = resolvedCache.get(presets);
+  if (!entries) resolvedCache.set(presets, entries = []);
+  const hit = entries.find(entry => entry.graph === effect.operatorGraph && entry.rest.length === rest.length
+    && entry.rest.every(([key, value], index) => key === rest[index][0] && Object.is(value, rest[index][1])));
+  if (hit) return hit.values;
+  const values = presets.map(preset => resolveEffectPreset(effect, preset));
+  entries.unshift({ graph: effect.operatorGraph, rest, values });
+  entries.length = Math.min(entries.length, RESOLVED_PER_TYPE);
+  return values;
+}
 
 /** The preset whose values the instance shows right now, if any (the card names it in its Preset row). */
 export function matchingEffectPreset(effect: EffectParamOwner): EffectPreset | undefined {
   const presets = effectPresets(effect.type);
   if (!presets.length) return undefined;
-  const cached = matchCache.get(effect.params);
-  if (cached && cached.type === effect.type && cached.graph === effect.operatorGraph && cached.presets === presets) return cached.match;
   const definitions = getEffect(effect.type)?.params ?? {};
-  const match = presets.find(preset => Object.entries(resolveEffectPreset(effect, preset))
+  const resolved = resolvedPresetValues(effect, presets);
+  return presets.find((_, index) => Object.entries(resolved[index])
     .every(([key, value]) => Object.is(currentValue(effect, key, definitions[key]), value)));
-  matchCache.set(effect.params, { type: effect.type, graph: effect.operatorGraph, presets, match });
-  return match;
 }
 
 export interface EffectPresetResult {
@@ -135,7 +159,8 @@ export function applyEffectPreset(clipId: string, effectId: string, presetId: st
   const definitions = getEffect(effect.type)?.params ?? {};
   const result: EffectPresetResult = { preset, changed: [], kept: [], graphEdited: hasEditedGraph(effect) };
   const numbers: Array<[string, number]> = [], others: Record<string, Primitive> = {};
-  for (const [key, value] of Object.entries(resolveEffectPreset(effect, preset))) {
+  const resolved = resolvedPresetValues(effect, effectPresets(effect.type))[effectPresets(effect.type).indexOf(preset)];
+  for (const [key, value] of Object.entries(resolved)) {
     const property = `effect.${effect.id}.${key}` as AnimatableProperty, label = presetControlLabel(effect, key);
     if (label === undefined) {
       // A graph value this preset leaves out (reset for order independence) that an edited graph dropped: nothing to set.
