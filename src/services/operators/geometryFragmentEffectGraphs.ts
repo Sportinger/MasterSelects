@@ -62,22 +62,46 @@ function contourMap(g: GraphBuilder, c: ReturnType<typeof common>) {
   const styled = g.node('styled', 'math.multiply.rgb-scalar', 14); g.edge(band, styled, 'a'); g.edge(brightness, styled, 'b'); finish(g, c.sourceColor, styled, c.amount);
 }
 
+/** Crosshatch's three line layers (shader twin: crosshatchFragment). Widths and edges are shares of the line spacing:
+ * a line is darker than `toneLimit` only, its fixed half width is (low + high) / 2 with a soft edge of (high − low) / 2. */
+interface HatchLayer { toneLimit: number; low: number; high: number; heavy: number }
+export const HATCH_LAYERS: readonly HatchLayer[] = [
+  { toneLimit: .82, low: .06, high: .15, heavy: .36 },
+  { toneLimit: .58, low: .06, high: .15, heavy: .36 },
+  { toneLimit: .32, low: .05, high: .13, heavy: .3 },
+];
+/** Half width a heavy line starts at, at its layer's tone limit. */
+export const HATCH_HAIRLINE = .03;
+
 function crosshatch(g: GraphBuilder, c: ReturnType<typeof common>) {
   const scale = g.node('scale', 'values.number', 0, { value: 'scale' }), safeScale = g.binary('safe-scale', 'math.max.scalar', scale, g.literal('minimum-scale', 2), 5);
   const pixel = (() => { const out = g.node('pattern-pixel', 'math.divide-ieee.vec2-scalar', 7); g.edge(g.binary('pixel', 'math.multiply.vec2', c.uv, c.resolution, 6), out, 'a'); g.edge(safeScale, out, 'b'); return out; })();
   const split = g.unary('pixel-components', 'vector.split.vec2', pixel, 8), x = { node: split.node, port: 'x' }, y = { node: split.node, port: 'y' };
-  const line = (id: string, coordinate: Ref, low: number, high: number) => {
+  // Line Weight 0 keeps the fixed half width (low + high) / 2 of saved projects; at 1 a line starts as a hairline at its
+  // layer's tone limit and swells to HATCH_HEAVY of the spacing towards black, so shadows reach near-solid ink.
+  const weight = g.node('weight-clamped', 'math.clamp.scalar', 5);
+  g.edge(g.node('weight', 'values.number', 0, { value: 'weight' }), weight, 'value'); g.edge(c.zero, weight, 'min'); g.edge(c.one, weight, 'max');
+  const line = (id: string, coordinate: Ref, layer: HatchLayer) => {
     const centered = g.binary(`${id}-centered`, 'math.subtract.scalar', g.unary(`${id}-fraction`, 'math.fract.scalar', coordinate, 9), g.literal(`${id}-half`, .5), 10);
-    const smooth = g.node(`${id}-smooth`, 'math.smoothstep.scalar', 12); g.edge(g.literal(`${id}-low`, low), smooth, 'edge0');
-    g.edge(g.literal(`${id}-high`, high), smooth, 'edge1'); g.edge(g.unary(`${id}-distance`, 'math.abs.scalar', centered, 11), smooth, 'value');
-    return g.binary(id, 'math.subtract.scalar', c.one, smooth, 13);
+    const limit = g.literal(`${id}-gated-tone-limit`, layer.toneLimit);
+    const heavy = g.node(`${id}-heavy`, 'math.clamp.scalar', 11);
+    g.edge(g.binary(`${id}-darkness`, 'math.multiply.scalar', g.binary(`${id}-below-limit`, 'math.subtract.scalar', limit, c.tone!, 10),
+      g.literal(`${id}-swell`, layer.heavy / layer.toneLimit), 10), heavy, 'value');
+    g.edge(g.literal(`${id}-hairline`, HATCH_HAIRLINE), heavy, 'min'); g.edge(g.literal(`${id}-heavy-max`, layer.heavy), heavy, 'max');
+    const width = g.node(`${id}-width`, 'math.mix.scalar', 11);
+    g.edge(g.literal(`${id}-fixed-width`, (layer.low + layer.high) / 2), width, 'a'); g.edge(heavy, width, 'b'); g.edge(weight, width, 't');
+    const soft = g.literal(`${id}-soft`, (layer.high - layer.low) / 2);
+    const smooth = g.node(`${id}-smooth`, 'math.smoothstep.scalar', 12);
+    g.edge(g.binary(`${id}-low`, 'math.subtract.scalar', width, soft, 11), smooth, 'edge0');
+    g.edge(g.binary(`${id}-high`, 'math.add.scalar', width, soft, 11), smooth, 'edge1'); g.edge(g.unary(`${id}-distance`, 'math.abs.scalar', centered, 11), smooth, 'value');
+    return { line: g.binary(id, 'math.subtract.scalar', c.one, smooth, 13), limit };
   };
-  const first = line('first', g.binary('first-coordinate', 'math.add.scalar', x, y, 9), .06, .15);
-  const second = line('second', g.binary('second-coordinate', 'math.subtract.scalar', x, y, 9), .06, .15);
-  const third = line('third', g.binary('third-coordinate', 'math.multiply.scalar', x, g.literal('third-half-scale', .5), 9), .05, .13);
-  const gated = (id: string, value: Ref, threshold: number) => { const gate = g.node(`${id}-gate`, 'math.step.scalar', 12); g.edge(c.tone!, gate, 'edge'); g.edge(g.literal(`${id}-tone-limit`, threshold), gate, 'value'); return g.binary(id, 'math.multiply.scalar', value, gate, 14); };
-  const hatch = g.binary('hatch', 'math.max.scalar', gated('first-gated', first, .82),
-    g.binary('dark-hatch', 'math.max.scalar', gated('second-gated', second, .58), gated('third-gated', third, .32), 15), 15);
+  const first = line('first', g.binary('first-coordinate', 'math.add.scalar', x, y, 9), HATCH_LAYERS[0]);
+  const second = line('second', g.binary('second-coordinate', 'math.subtract.scalar', x, y, 9), HATCH_LAYERS[1]);
+  const third = line('third', g.binary('third-coordinate', 'math.multiply.scalar', x, g.literal('third-half-scale', .5), 9), HATCH_LAYERS[2]);
+  const gated = (id: string, layer: { line: Ref; limit: Ref }) => { const gate = g.node(`${id}-gate`, 'math.step.scalar', 12); g.edge(c.tone!, gate, 'edge'); g.edge(layer.limit, gate, 'value'); return g.binary(id, 'math.multiply.scalar', layer.line, gate, 14); };
+  const hatch = g.binary('hatch', 'math.max.scalar', gated('first-gated', first),
+    g.binary('dark-hatch', 'math.max.scalar', gated('second-gated', second), gated('third-gated', third), 15), 15);
   const styled = g.node('styled', 'math.mix.rgb', 15); g.edge(c.colorB!, styled, 'a'); g.edge(c.colorA!, styled, 'b'); g.edge(hatch, styled, 't'); finish(g, c.sourceColor, styled, c.amount);
 }
 

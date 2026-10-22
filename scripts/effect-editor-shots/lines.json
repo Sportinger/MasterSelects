@@ -13,7 +13,7 @@
       "preview": 380,
       "top": "tabs",
       "alt": "Properties, Effects with a Drift Lines card: Style menu, Preset menu showing Rain Curtain, then Band Size, Angle, Drift and Speed, beside a strip of the preview with thin vertical bands",
-      "caption": "Drift Lines with the Rain Curtain preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Band Size. 3 \u2014 Angle: 90\u00b0 stands the bands upright. 4 \u2014 Drift.",
+      "caption": "Drift Lines with the Rain Curtain preset. 1 — Preset: pick a starting point. 2 — Band Size. 3 — Angle: 90° stands the bands upright. 4 — Drift.",
       "marks": [
         {
           "target": "Preset",
@@ -30,6 +30,47 @@
         {
           "target": "Drift",
           "label": "Drift"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "crosshatch-inspector",
+      "effect": "crosshatch",
+      "params": {
+        "scale": 6,
+        "weight": 1,
+        "amount": 1,
+        "colorA": "#2b1b12",
+        "colorB": "#efe2c4"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Crosshatch card: Style menu, Preset menu showing Etching, then Line Spacing, Line Weight, Amount, Ink and Paper, beside a strip of the preview drawn in fine brown lines on cream",
+      "caption": "Crosshatch with the Etching preset. 1 — Preset: pick a starting point. 2 — Line Spacing. 3 — Line Weight: how heavy the lines get in the shadows. 4 — Amount. 5 — Ink.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Line Spacing",
+          "label": "Line Spacing"
+        },
+        {
+          "target": "Line Weight",
+          "label": "Line Weight"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Ink",
+          "label": "Ink"
         }
       ],
       "hide": [

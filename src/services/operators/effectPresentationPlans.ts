@@ -3,6 +3,7 @@ import { mirrorPixelPresentationPlan } from './mirrorPixelPresentation';
 import { FILM_PRISM_SPECTRUM } from '../../effects/analog/filmPrismLimits';
 import { createLegacyCrtScreenGraph } from './legacyCrtScreenGraph';
 import { acuarelaPresentationPlan } from './acuarelaPresentation';
+import { linesLookPresentationPlan } from './linesLookPresentation';
 
 export interface EffectPresentationPlan {
   labels: Record<string, string>;
@@ -335,6 +336,8 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
               : /^(limited-change|luma-change|result-|combine)/.test(id) ? 'finish' : 'size',
   };
   // Drift Lines (createDriftLinesGraph): band index across the turned bands, the wave that shifts each band, the line shading.
+  const linesLook = linesLookPresentationPlan(type);
+  if (linesLook) return linesLook;
   if (type === 'drift-lines') return {
     labels: { bands: 'Bands (Band Size, Angle)', drift: 'Drift Wave (Drift, Speed)', sampling: 'Shifted Sample', lines: 'Line Shading & Alpha' },
     portLabels: { 'row-height': 'Band Height (px)', across: 'Across the Bands (px)', row: 'Band Index', shift: 'Shift (px)', radians: 'Angle (rad)',

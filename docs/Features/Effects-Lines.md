@@ -10,7 +10,7 @@ Add one in **Properties → Effects → + Add Effect → Lines & Engraving**
 
 | Look | Use |
 |---|---|
-| pen hatching, more directions where it is darker | [Crosshatch](./effects/crosshatch.md) |
+| pen hatching, more and heavier lines where it is darker | [Crosshatch](./effects/crosshatch.md) |
 | rows of engraved wavy lines, like a banknote | [Vector Engraving](./effects/vector-tiling.md) |
 | clean lines where the brightness crosses one level | [Contour](./effects/contour.md) |
 | banded zones with a line at each band, like a map | [Contour Map](./effects/contour-map.md) |
@@ -29,7 +29,7 @@ They all read the brightness of the picture and turn it into lines, in one of th
 - **Lines along edges**: Outline draws where the brightness changes quickly.
 
 **Ink** and **Paper** (Contour: **Line** and **Paper**) are the two colours of the drawing, **Scale**
-sets the line spacing (Contour Map: **Band Density**, more bands as it grows) and **Amount** mixes back
+sets the line spacing (Crosshatch: **Line Spacing**; Contour Map: **Band Density**, more bands as it grows) and **Amount** mixes back
 towards the original. Drift Lines, Outline and Wave
 Lines move over time.
 

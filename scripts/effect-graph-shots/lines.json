@@ -4,6 +4,12 @@
     "drift-lines?focus=bands-band-size-angle&only=scale-clamped,short-side,frame-scale,row-pixels,row-height,pixel,center,radians,turned,relative,turned-split,center-split,across,row-base,row&cables=avoid&marks=short-side:left,row-height:below,turned:above,row:above@drift-lines-bands",
     "drift-lines?focus=drift-wave-drift-speed&only=time-speed,time-phase,row-phase,shift-phase,shift-sine,shift-amount,shift,resolution-split,shift-reach,along,offset,back-radians,offset-uv,sample-uv&cables=avoid&marks=row-rate:below,shift-sine:below:60,shift-scale:below,offset:above@drift-lines-drift-wave",
     "drift-lines?focus=shifted-sample&only=min-uv,max-uv,compound-shared-clamped-uv&cables=avoid&layout=float&marks=compound-shared-clamped-uv:below,almost-one:left,tiny:left@drift-lines-shifted-sample",
-    "drift-lines?focus=line-shading-and-alpha&only=line-pi,line-phase,line-sine,line-wave,line,sample-split,darkened,combine&cables=avoid&marks=line-sine:above,line:above,darkened:below,combine:below@drift-lines-line-shading"
+    "drift-lines?focus=line-shading-and-alpha&only=line-pi,line-phase,line-sine,line-wave,line,sample-split,darkened,combine&cables=avoid&marks=line-sine:above,line:above,darkened:below,combine:below@drift-lines-line-shading",
+    "crosshatch?plumbing=hide&omit=output,frame&marks=organized-crosshatch-grid:below,organized-crosshatch-source:below,organized-crosshatch-width:above,organized-crosshatch-layers:above,organized-crosshatch-finish:above",
+    "crosshatch?focus=line-grid-line-spacing&only=safe-scale-pixels,pixel,pattern-pixel,pixel-components,first-coordinate,second-coordinate,third-coordinate,first-fraction,first-centered,first-distance&cables=avoid&marks=safe-scale-pixels:below,pattern-pixel:above,second-coordinate:below,first-distance:above@crosshatch-line-grid",
+    "crosshatch?focus=picture-and-tone&only=clamp-min-vec2,clamp-max-vec2,compound-shared-clamped-uv,source-color,source-tone&cables=avoid&layout=float&marks=compound-shared-clamped-uv:below,source-color:above,source-tone:below@crosshatch-picture-tone",
+    "crosshatch?focus=line-width-line-weight&only=weight-clamped,first-below-limit,first-darkness,first-heavy,first-width,first-low,first-high,first-smooth,first&cables=avoid&marks=first-darkness:below,first-heavy:above,first-width:below,first-smooth:above@crosshatch-line-width",
+    "crosshatch?focus=tone-layers&only=first-gated-gate,first-gated,hatch&cables=avoid&layout=float&marks=first-gated-gate:below,first-gated:above,hatch:below@crosshatch-tone-layers",
+    "crosshatch?focus=ink-and-paper-amount&only=color-a-rgb,color-b-rgb,styled,mixed,combined&cables=avoid&marks=styled:below,combined:below@crosshatch-ink-paper"
   ]
 }

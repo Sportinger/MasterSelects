@@ -1,0 +1,42 @@
+{
+ "pairs": [
+  {
+   "name": "crosshatch",
+   "out": "docs/Features/assets/effects/crosshatch.webp",
+   "image": "dancer_stage",
+   "width": 1920,
+   "crop": [
+    500,
+    60,
+    900,
+    960
+   ],
+   "layout": "compare",
+   "outWidth": 1600,
+   "left": {
+    "effect": "original"
+   },
+   "right": {
+    "effect": "crosshatch",
+    "params": {}
+   },
+   "alt": "The dancer on a dark stage, original left and with Crosshatch right: the dark stage becomes a dense net of crossing ink lines, her arms and dress stay pale paper with a few diagonal strokes, and the folds of the dress are drawn with more line directions where they are darker",
+   "caption": "Left: original. Right: Crosshatch at its default settings."
+  }
+ ],
+ "strips": [
+  {
+   "effect": "crosshatch",
+   "image": "dancer_stage",
+   "width": 1920,
+   "crop": [
+    440,
+    30,
+    1040,
+    1040
+   ],
+   "cellWidth": 520,
+   "columns": 3
+  }
+ ]
+}

@@ -2,6 +2,7 @@ import shader from './shader.wgsl?raw';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { createGlyphEffect } from '../glyph/glyphEffectFactory';
 import { createComputeEffect } from './computeEffectFactory';
+import { CROSSHATCH_PARAMS, CROSSHATCH_PRESETS } from './crosshatch';
 import type { ComputeEffectDefinition } from '../types';
 
 export const voronoi = createComputeEffect({
@@ -60,7 +61,8 @@ export const contourMap = createCatalogEffect({ id: 'contour-map', name: 'Contou
   retired: ignoredBaseParams('Contour Map', ['angle']) });
 export const contourType = createGlyphEffect({ id: 'contour-type', name: 'Contour Type', category: 'geometry', entryPoint: 'contourTypeFragment', defaultRamp: 'numeric', defaultCellSize: 20 });
 export const vectorTiling = createCatalogEffect({ id: 'vector-tiling', name: 'Vector Engraving', category: 'geometry', shader, entryPoint: 'vectorTilingFragment', scaleFloor: 3 });
-export const crosshatch = createCatalogEffect({ id: 'crosshatch', name: 'Crosshatch', category: 'geometry', shader, entryPoint: 'crosshatchFragment', scaleFloor: 2, retired: ignoredBaseParams('Crosshatch', ['angle']) });
+export const crosshatch = createCatalogEffect({ id: 'crosshatch', name: 'Crosshatch', category: 'geometry', shader, entryPoint: 'crosshatchFragment', scaleFloor: 2,
+  params: { scale: catalogBaseParam('scale', { label: 'Line Spacing', unit: ' px' }), ...CROSSHATCH_PARAMS }, variantParam: 'weight', presets: CROSSHATCH_PRESETS, retired: ignoredBaseParams('Crosshatch', ['angle']) });
 export const embroidery = createCatalogEffect({ id: 'embroidery', name: 'Embroidery', category: 'geometry', shader, entryPoint: 'embroideryFragment', scaleFloor: 3, animated: true, retired: ignoredBaseParams('Embroidery', ['angle', 'colorB']) });
 export const kilim = createCatalogEffect({ id: 'kilim', name: 'Kilim Carpet', category: 'geometry', shader, entryPoint: 'kilimFragment', scaleFloor: 4, retired: ignoredBaseParams('Kilim Carpet', ['angle']) });
 export const outline = createCatalogEffect({ id: 'outline', name: 'Outline', category: 'geometry', shader, entryPoint: 'outlineFragment', animated: true, retired: ignoredBaseParams('Outline', ['scale', 'angle']) });
