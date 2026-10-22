@@ -96,6 +96,18 @@
         1080
       ],
       "cellWidth": 480
+    },
+    {
+      "effect": "kaleidoscope",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        420,
+        0,
+        1080,
+        1080
+      ],
+      "cellWidth": 400
     }
   ]
 }

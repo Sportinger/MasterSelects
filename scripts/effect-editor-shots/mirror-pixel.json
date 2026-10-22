@@ -4,30 +4,40 @@
       "name": "kaleidoscope-inspector",
       "effect": "kaleidoscope",
       "params": {
-        "segments": 8
+        "segments": 3,
+        "zoom": 1.5,
+        "sourceAngle": 1.0471975511965976
       },
       "image": "dancer_stage.jpg",
-      "preview": 0,
-      "alt": "The Kaleidoscope effect card in Properties → Effects: Segments 8, Rotation 0°, Source Angle 0°, Zoom 1.00, Center X and Center Y 0.50, Shape Circle and Frame Edges Mirror",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Kaleidoscope card: the Preset menu showing Crystal, Segments 3, Rotation 0°, Source Angle 60°, Zoom 1.50, Center X and Center Y 0.50, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the dancer's dress and legs folded into large mirrored facets",
+      "caption": "Kaleidoscope with the Crystal preset. 1 — Preset: pick a starting point. 2 — Segments: how many mirrored pairs. 3 — Rotation: spins the pattern. 4 — Source Angle: which slice the mirrors show. 5 — Zoom: how close the slice is.",
       "marks": [
         {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
           "target": "Segments",
-          "label": "Segments",
-          "reach": 60
+          "label": "Segments"
+        },
+        {
+          "target": "Rotation",
+          "label": "Rotation"
         },
         {
           "target": "Source Angle",
-          "label": "Source Angle, which part of the picture the mirrors show",
-          "reach": 60
+          "label": "Source Angle"
         },
         {
-          "target": "Frame Edges",
-          "label": "Frame Edges, what fills reads past the picture",
-          "reach": 60
+          "target": "Zoom",
+          "label": "Zoom"
         }
       ],
-      "top": "card",
-      "layout": "float"
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

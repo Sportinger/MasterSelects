@@ -1,17 +1,6 @@
 {
   "pairs": [
     {
-      "name": "kaleidoscope",
-      "out": "docs/Features/assets/effects/kaleidoscope.webp",
-      "image": "dancer_stage",
-      "width": 1920,
-      "layout": "stack",
-      "outWidth": 960,
-      "gap": 4,
-      "left": { "effect": "original" },
-      "right": { "effect": "kaleidoscope", "params": { "segments": 8 } }
-    },
-    {
       "name": "mirror",
       "out": "docs/Features/assets/effects/mirror.webp",
       "image": "harbor_town",

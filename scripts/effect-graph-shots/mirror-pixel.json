@@ -1,8 +1,13 @@
 {
   "shots": [
     "pixelate?plumbing=hide&omit=output&cables=avoid",
+    "kaleidoscope?plumbing=hide&omit=output&cables=avoid&marks=organized-kaleidoscope-space:above,organized-kaleidoscope-fold:above,organized-kaleidoscope-premultiply:below,organized-kaleidoscope-reads:above,organized-kaleidoscope-finish:above@kaleidoscope",
+    "kaleidoscope?focus=centre-and-shape&only=space-short-side,space-circle-scale,space-stretched,space-scale,space-delta,space-p&cables=avoid&marks=space-circle-scale:above,space-scale:above,space-delta:below,space-p:above@kaleidoscope-centre-shape",
+    "kaleidoscope?focus=wedge-fold&only=base-angle,angle,fold-low-wedge,compound-shared-fold-low-progress,fold-low-turned,fold-low-direction,fold-low-moved&cables=avoid&marks=base-angle:above,fold-low-wedge:below,compound-shared-fold-low-progress:above,fold-low-turned:above,fold-low-moved:above@kaleidoscope-wedge-fold",
+    "kaleidoscope?focus=premultiplied-source-cached&only=source-premultiplied-split,source-premultiplied-alpha,source-premultiplied-rgb,source-premultiplied,source-cache&cables=avoid&marks=source-premultiplied-rgb:below,source-cache:above@kaleidoscope-premultiplied-source",
+    "kaleidoscope?focus=frame-edges-and-reads&only=fold-low-mirrored-uv,fold-low-clamped-uv,fold-low-edge-uv,fold-low-sample,fold-low-weight,fold-low-read&cables=avoid&name.fold-low-coverage=Edge Coverage&name.edge-transparent=Is Transparent&name.edge-zero-vec2=Zero&name.edge-not-mirror=Not Mirror&marks=fold-low-mirrored-uv:above,fold-low-clamped-uv:below,fold-low-edge-uv:above,fold-low-sample:above,fold-low-read:above@kaleidoscope-frame-edges",
+    "kaleidoscope?focus=crossfade-and-straight-alpha&only=fold-mix,fold-image,result-split,result-alpha,result-safe-alpha,result-rgb,result&cables=avoid&name.fold-low-vec4=Pattern A&name.fold-high-vec4=Pattern B&marks=fold-mix:above,result-safe-alpha:above,result-rgb:below,result:above@kaleidoscope-crossfade",
     "block-mosaic?focus=large-tiles&only=large-index,group-hash,group-key,shuffle-scaled,shuffle-seed,hash-input,hash,is-large,tile-size&cables=avoid@block-mosaic-large-tiles",
-    "kaleidoscope?focus=wedge-fold&only=base-angle,angle,fold-low-wedge,compound-shared-fold-low-progress,fold-low-turned,fold-low-direction,fold-low-moved&cables=avoid@kaleidoscope-wedge-fold",
     "rgb-split?focus=channel-merge-and-straight-alpha&only=red-split,green-split,blue-split,combined&layout=float@rgb-split-channel-merge",
     "mirror?focus=mirror-lines&only=local,local-split,x-magnitude,x-kept,x-mirrored,reflected,moved&cables=avoid&name.negative-angle=−Angle&name.y-mirrored=Y (Top / Bottom)&marks=x-magnitude:above:64,x-kept:below:64@mirror-lines"
   ]

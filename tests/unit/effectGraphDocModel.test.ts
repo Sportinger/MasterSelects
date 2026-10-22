@@ -98,11 +98,16 @@ describe('effect graph doc shots: graph selection', () => {
     expect(twirl.outputs.map(port => port.label)).toEqual(expect.arrayContaining(['Centre', 'Shape Scale', 'Offset', 'Radius Share']));
     const stubs = doc('?effect=twirl&focus=twirl-angle').graph.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label);
     expect(stubs).toEqual(expect.arrayContaining(['Radius Share', 'Twist', 'Offset', 'Shape Scale', 'Centre']));
-    for (const effect of ['twirl', 'wave']) {
+    for (const effect of ['twirl', 'wave', 'kaleidoscope']) {
       const labels = doc(`?effect=${effect}`).graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
       expect(labels).not.toContain('(1, 1)');
       expect(labels).not.toContain('Distance / Radius');
     }
+    // Kaleidoscope's two crossfaded patterns are told apart on every folder port.
+    const kaleidoscope = doc('?effect=kaleidoscope').graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
+    expect(kaleidoscope).toEqual(expect.arrayContaining(['Read Position A', 'Read Position B', 'Pattern A', 'Pattern B', 'One']));
+    const counts = doc('?effect=kaleidoscope&focus=wedge-fold').graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
+    expect(counts).toEqual(expect.arrayContaining(['Count A', 'Count B']));
   });
 
   it('hides the plumbing folders on request, so the stages read as one path', () => {

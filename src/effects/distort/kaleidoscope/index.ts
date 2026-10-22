@@ -2,7 +2,7 @@
 // The editable graph is the runtime (services/operators/mirrorRecipes.ts); shader.wgsl is its WGSL reference.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { EDGES_PARAM, SHAPE_PARAM, UV_DISTORT_COMMON_WGSL, choiceWarnings, distortNumber, edgeIndex, shapeIndex } from '../uvDistortParams';
 import { KALEIDOSCOPE_MAX_SEGMENTS, KALEIDOSCOPE_MIN_SEGMENTS, KALEIDOSCOPE_MIN_ZOOM } from '../../../services/operators/mirrorRecipes';
 
@@ -20,6 +20,23 @@ export function kaleidoscopeWarnings(params: Params): string[] {
   }
   return [...warnings, ...choiceWarnings(params)];
 }
+
+const degrees = (value: number) => value * Math.PI / 180;
+
+/**
+ * Presets name Segments, Zoom and Source Angle. Source Angle centres the read slice straight below the
+ * centre (90° − 90° / Segments), where a figure standing in the middle of the frame is.
+ */
+export const KALEIDOSCOPE_PRESETS: readonly EffectPreset[] = [
+  // Two mirror pairs, slightly enlarged: a symmetric blot like a folded ink print.
+  { id: 'ink-blot', name: 'Ink Blot', params: { segments: 2, zoom: 1.2, sourceAngle: degrees(45) } },
+  // Three pairs, close up: big crystal facets, as in a toy kaleidoscope with three mirrors.
+  { id: 'crystal', name: 'Crystal', params: { segments: 3, zoom: 1.5, sourceAngle: degrees(60) } },
+  // Twelve pairs at full size: a dense, round mandala of thin petals.
+  { id: 'mandala', name: 'Mandala', params: { segments: 12, zoom: 1, sourceAngle: degrees(82.5) } },
+  // Four pairs, zoomed out: the picture repeats in a mirrored grid of tiles.
+  { id: 'tiles', name: 'Tiles', params: { segments: 4, zoom: 0.6, sourceAngle: degrees(67.5) } },
+];
 
 export const kaleidoscope: EffectDefinition = {
   id: 'kaleidoscope',
@@ -97,6 +114,8 @@ export const kaleidoscope: EffectDefinition = {
     shape: SHAPE_PARAM,
     edges: EDGES_PARAM,
   },
+
+  presets: KALEIDOSCOPE_PRESETS,
 
   paramWarnings: kaleidoscopeWarnings,
   packUniforms: (params, width, height) => new Float32Array([

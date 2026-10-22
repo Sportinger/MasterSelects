@@ -20,13 +20,16 @@ const CELL_PORTS = { 'pixel-scale': 'Pixel Scale', 'cell-px': 'Cell (px)', 'tile
 
 export function mirrorPixelPresentationPlan(type: string): EffectPresentationPlan | undefined {
   const finish = (id: string) => /^(result|coverage-floor)/.test(id);
+  // Kaleidoscope's folder ports read 'One' instead of '(1, 1)', as on Twirl and Wave, and the two
+  // patterns it crossfades (A: the whole Segments count below, B: the next one) carry their letter.
   if (type === 'kaleidoscope') return {
     labels: { premultiply: 'Premultiplied Source (cached)', space: 'Centre & Shape', fold: 'Wedge Fold', reads: 'Frame Edges & Reads', finish: 'Crossfade & Straight Alpha' },
     portLabels: { ...COMMON_PORTS, ...SPACE_PORTS, 'base-angle': 'Angle', angle: 'Turned Angle', 'source-angle': 'Source Angle', radius: 'Radius',
-      'read-radius': 'Read Radius', 'segment-count': 'Segments', 'segments-low': 'Fewer Segments', 'segments-high': 'More Segments', 'segments-blend': 'Crossfade',
-      'fold-low-folded': 'Folded Angle', 'fold-high-folded': 'Folded Angle', 'fold-low-position-uv': 'Read Position', 'fold-high-position-uv': 'Read Position',
+      'read-radius': 'Read Radius', 'segment-count': 'Segments', 'segments-low': 'Count A', 'segments-high': 'Count B', 'segments-blend': 'Crossfade',
+      'fold-low-folded': 'Folded Angle', 'fold-high-folded': 'Folded Angle', 'fold-low-position-uv': 'Read Position A', 'fold-high-position-uv': 'Read Position B',
+      'fold-low-read': 'Pattern A', 'fold-high-read': 'Pattern B',
       'fold-mix': 'Crossfaded', 'fold-low-wedge': 'Wedge', 'fold-high-wedge': 'Wedge', 'fold-low-turned': 'Read Angle', 'fold-high-turned': 'Read Angle',
-      'fold-low-moved': 'Read Offset', 'fold-high-moved': 'Read Offset' },
+      'fold-low-moved': 'Read Offset', 'fold-high-moved': 'Read Offset', 'one-vec2': 'One' },
     stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : finish(id) || /^fold-(mix|image|low-vec4|high-vec4)$/.test(id) ? 'finish'
       : /^edge-/.test(id) || /^fold-(low|high)/.test(id) && READ.test(id) ? 'reads'
         : /^space-/.test(id) || id === 'one-vec2' ? 'space' : 'fold',

@@ -248,6 +248,157 @@
       },
       "alt": "The dancer with Wave at Speed 0 while Phase runs from 0° to 360° and back: the waves slide along by one whole wave and back again; the current angle is shown at the bottom left",
       "caption": "Phase from 0° to 360° and back, at Speed 0."
+    },
+    {
+      "name": "kaleidoscope",
+      "effect": "kaleidoscope",
+      "params": {
+        "sourceAngle": 1.309
+      },
+      "range": [
+        0.4,
+        3.0
+      ],
+      "layout": "compare",
+      "crop": [
+        600,
+        180,
+        720,
+        720
+      ],
+      "width": 960,
+      "float": "left",
+      "loop": 0.35,
+      "poster": 1.2,
+      "maxBytes": 900000,
+      "alt": "The dancer turning on a dark stage, original left and with Kaleidoscope right: her white dress is folded into a six-pointed flower in the middle of the frame that opens, closes and changes shape as she moves",
+      "caption": "Left: original. Right: Kaleidoscope at its default settings, six mirrored pairs."
+    },
+    {
+      "name": "kaleidoscope-segments",
+      "effect": "kaleidoscope",
+      "range": [
+        0.3,
+        3.4
+      ],
+      "layout": "single",
+      "crop": [
+        600,
+        180,
+        720,
+        720
+      ],
+      "width": 600,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 1.5,
+      "params": {
+        "sourceAngle": 1.309
+      },
+      "sweep": {
+        "param": "segments",
+        "label": "Segments",
+        "from": 2,
+        "to": 12,
+        "decimals": 1
+      },
+      "alt": "The dancer with Kaleidoscope while Segments runs from 2 to 12 and back: a broad four-part shape gains more and more petals until it is a dense flower, each new count fading in over the last, and loses them again; the current value is shown at the bottom left",
+      "caption": "Segments from 2 to 12 and back."
+    },
+    {
+      "name": "kaleidoscope-source-angle",
+      "effect": "kaleidoscope",
+      "range": [
+        0.3,
+        3.4
+      ],
+      "layout": "single",
+      "crop": [
+        600,
+        180,
+        720,
+        720
+      ],
+      "width": 600,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 1.5,
+      "params": {},
+      "sweep": {
+        "param": "sourceAngle",
+        "label": "Source Angle",
+        "from": 0.5236,
+        "to": 2.618,
+        "fontSize": 0.001
+      },
+      "alt": "The dancer with Kaleidoscope while Source Angle turns from 30° to 150° and back: the flower stays in place while its petals flow outwards and change, as if the tube of a kaleidoscope were turned",
+      "caption": "Source Angle from 30° to 150° and back."
+    },
+    {
+      "name": "kaleidoscope-zoom",
+      "effect": "kaleidoscope",
+      "range": [
+        0.3,
+        3.4
+      ],
+      "layout": "single",
+      "crop": [
+        600,
+        180,
+        720,
+        720
+      ],
+      "width": 600,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 1.5,
+      "params": {
+        "sourceAngle": 1.309
+      },
+      "sweep": {
+        "param": "zoom",
+        "label": "Zoom",
+        "from": 0.5,
+        "to": 2.5,
+        "decimals": 2
+      },
+      "alt": "The dancer with Kaleidoscope while Zoom runs from 0.5 to 2.5 and back: a small flower ringed by mirrored copies of the stage grows until only a few large folds of the dress fill the frame, and shrinks again; the current value is shown at the bottom left",
+      "caption": "Zoom from 0.5 to 2.5 and back."
+    },
+    {
+      "name": "kaleidoscope-center",
+      "effect": "kaleidoscope",
+      "range": [
+        0.3,
+        3.4
+      ],
+      "layout": "single",
+      "crop": [
+        240,
+        60,
+        1440,
+        960
+      ],
+      "width": 720,
+      "loop": 0.35,
+      "maxBytes": 500000,
+      "float": "right",
+      "poster": 1.5,
+      "params": {
+        "sourceAngle": 1.309
+      },
+      "sweep": {
+        "param": "centerX",
+        "label": "Center X",
+        "from": 0.4,
+        "to": 0.6,
+        "decimals": 2
+      },
+      "alt": "The dancer with Kaleidoscope while Center X runs from 0.4 to 0.6 and back: the flower slides left and right with its centre and its petals change, because the mirrors now fold another part of the picture; the current value is shown at the bottom left",
+      "caption": "Center X from 0.4 to 0.6 and back."
     }
   ]
 }
