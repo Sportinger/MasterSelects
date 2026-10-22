@@ -35,7 +35,7 @@ describe('presets keep setup controls', () => {
   it('marks the shot setup of Chroma Key, Lens Correction and Stick Figure, and every quality control', () => {
     expect(keptKeys('chroma-key')).toEqual(['keyColor', 'screenColor', 'view']);
     expect(keptKeys('lens-correction')).toEqual(['profile', 'focalLength', 'aperture', 'focusDistance', 'cropFactor']);
-    expect(keptKeys('stick-figure')).toEqual(['rootX', 'rootY', 'scale', 'facing']);
+    expect(keptKeys('stick-figure')).toEqual(['rootX', 'rootY', 'scale', 'groundMode', 'groundY', 'facing']);
     expect(keptKeys('fisheye')).toEqual(['samples']);
   });
 

@@ -27,7 +27,7 @@ Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.m
 <figcaption>The four presets alone on black.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets the whole figure at once, pose, proportions, line and colour, in one undo step, and the row then shows its name until you change something. Every other control returns to its default too, so a preset also makes the figure fully opaque and plants it on the ground. Where the figure stands, its Scale and its Facing stay as you set them, so you can place the figure first and then try presets. The action lane stays as it is, and a joint with keyframes keeps them; the card says so.
+Pick one in the **Preset** row of the effect card. It sets the whole figure at once, pose, proportions, line and colour, in one undo step, and the row then shows its name until you change something. Every other control returns to its default too, so a preset also makes the figure fully opaque. Where the figure stands (Pelvis X and Y, **Ground** and **Ground Y**), its Scale and its Facing stay as you set them, so you can place the figure on its floor first and then try presets: the new pose stands on the same floor. The action lane stays as it is, and a joint with keyframes keeps them; the card says so.
 
 **Arabesque** – a dancer on one straight leg, the other stretched far behind, one arm stretched forward at head height and the other out behind, drawn in thin white lines with a ring head. A clean starting point for dance sketches.
 

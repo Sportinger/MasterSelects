@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDefaultParams } from '../../src/effects';
 import { stickFigure } from '../../src/effects/generate/stickFigure';
-import { stickFigureWarnings } from '../../src/effects/generate/stickFigure/layout';
+import { stickFigureLayout, stickFigureWarnings } from '../../src/effects/generate/stickFigure/layout';
 import { STICK_FIGURE_PARAMS } from '../../src/effects/generate/stickFigure/params';
 import { STICK_FIGURE_PRESETS } from '../../src/effects/generate/stickFigure/presets';
 import {
@@ -132,12 +132,36 @@ describe('stick figure notes and presets', () => {
 });
 
 describe('stick figure presets and placement', () => {
-  it('keeps where the figure stands, its Scale and Facing (presetKeeps), and resets the rest it does not name', () => {
-    // Pinned with the Presets paragraph of stick-figure.md: placement stays, look and ground return to their defaults.
+  it('keeps where the figure stands, its ground, Scale and Facing (presetKeeps), and resets the rest it does not name', () => {
+    // Pinned with the Presets paragraph of stick-figure.md: placement and floor stay, look returns to its defaults.
     const placed = { type: 'stick-figure', params: { ...getDefaultParams('stick-figure') as Record<string, number | string>, rootX: 600, rootY: -40, groundY: 430, scale: 1.6, facing: 'left', opacity: 0.5, groundMode: 'off' } };
     const values = resolveEffectPreset(placed, STICK_FIGURE_PRESETS[1]);
-    expect(values).toMatchObject({ groundY: 144, opacity: 1, groundMode: 'plant' });
-    for (const key of ['rootX', 'rootY', 'scale', 'facing']) expect(values).not.toHaveProperty(key);
+    expect(values).toMatchObject({ opacity: 1 });
+    for (const key of ['rootX', 'rootY', 'groundY', 'groundMode', 'scale', 'facing']) expect(values).not.toHaveProperty(key);
+  });
+
+  it('a preset leaves the figure standing where it stood, on a raised ground or with Ground off', () => {
+    const lowest = ({ joints, limbRadius, headRadius }: ReturnType<typeof stickFigureLayout>) =>
+      Math.max(joints[3].y + headRadius, ...joints.filter((_, index) => index !== 3).map(joint => joint.y + limbRadius));
+    const after = (params: Record<string, unknown>, preset: (typeof STICK_FIGURE_PRESETS)[number]) =>
+      stickFigureLayout({ ...params, ...resolveEffectPreset({ type: 'stick-figure', params }, preset) }, 1920, 1080);
+    const base = getDefaultParams('stick-figure') as Record<string, unknown>;
+    // Planted on a platform at Ground Y 430: the lowest point stays on that floor and X stays.
+    const planted = { ...base, rootX: 300, groundY: 430, groundMode: 'plant' };
+    const before = stickFigureLayout(planted, 1920, 1080);
+    expect(lowest(before)).toBeCloseTo(540 + 430, 3);
+    for (const preset of STICK_FIGURE_PRESETS) {
+      const layout = after(planted, preset);
+      expect(lowest(layout), preset.id).toBeCloseTo(lowest(before), 3);
+      expect(layout.joints[0].x, preset.id).toBeCloseTo(before.joints[0].x, 3);
+    }
+    // Ground Off: Pelvis Y places the figure, and stays.
+    const free = { ...base, rootY: 250, groundMode: 'off' };
+    const pelvis = stickFigureLayout(free, 1920, 1080).joints[0];
+    for (const preset of STICK_FIGURE_PRESETS) {
+      expect(after(free, preset).joints[0].y, preset.id).toBeCloseTo(pelvis.y, 3);
+      expect(stickFigureWarnings({ ...free, ...resolveEffectPreset({ type: 'stick-figure', params: free }, preset) }), preset.id).toEqual([]);
+    }
   });
 });
 

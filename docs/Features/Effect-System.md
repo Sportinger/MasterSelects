@@ -86,7 +86,7 @@ and source. Other effects and structural settings are not implicitly enabled.
   (`applyEffectPreset` in `src/services/effects/effectPresets.ts`) sets each shown control to the
   preset's value or its default through the card's own path, in one undo step. Text controls, quality
   controls and setup controls marked `presetKeeps` (Chroma Key's Screen and View, Lens Correction's
-  lens profile, Stick Figure's position, Scale and Facing) stay unless the preset names them, and the
+  lens profile, Stick Figure's position, Ground, Ground Y, Scale and Facing) stay unless the preset names them, and the
   preset match ignores them. A control with keyframes or a driving node keeps its animation, and the row names it
   ("Heat Haze: Drift kept its keyframes."). A preset that changes nothing says so, and one that names
   controls the effect's saved node graph lacks (a setup saved by an earlier version, or an edited graph)

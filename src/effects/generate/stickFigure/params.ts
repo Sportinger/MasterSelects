@@ -45,14 +45,15 @@ export const STICK_FIGURE_PARAMS = {
   // At or below 0 the figure has no size (reported by stickFigureWarnings).
   scale: { type: 'number', label: 'Scale', default: 1, min: 0.05, max: 5, step: 0.01, animatable: true, group: 'Proportions', presetKeeps: true },
   groundMode: {
-    type: 'select', label: 'Ground', default: DEFAULTS.groundMode, group: 'Ground',
+    // Ground and Ground Y are the stage floor of the shot: presets keep them, like the figure's position.
+    type: 'select', label: 'Ground', default: DEFAULTS.groundMode, group: 'Ground', presetKeeps: true,
     options: [
       { value: 'plant', label: 'Plant lowest point' },
       { value: 'floor', label: 'Keep above ground' },
       { value: 'off', label: 'Off' },
     ],
   },
-  groundY: position('groundY', 'Ground'),
+  groundY: { ...position('groundY', 'Ground'), presetKeeps: true },
   facing: {
     type: 'select', label: 'Facing', default: 'right', group: 'Style', presetKeeps: true,
     options: [{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }],
