@@ -82,29 +82,34 @@ const currentValue = (effect: EffectParamOwner, key: string, definition: EffectP
 /**
  * resolveEffectPreset overwrites every non-text control with a default or the preset's value, so its
  * answer depends only on the rest of the params (text controls, a stored graph, graph values, retired
- * params) and the instance's graph. A slider drag makes a new params object per frame but leaves that
+ * params) and the instance's graph. Graph values a preset names are overwritten too. A slider drag makes a new params object per frame but leaves that
  * rest alone, so the card keeps one answer per rest (a few per effect type) instead of rebuilding the
  * control list for every preset on every frame.
  */
-type ResolvedPresets = { graph: unknown; rest: Array<[string, unknown]>; values: Array<Record<string, Primitive>> };
+type ResolvedPresets = { type: string; graph: unknown; rest: Array<[string, unknown]>; values: Array<Record<string, Primitive>> };
 const resolvedCache = new WeakMap<readonly EffectPreset[], ResolvedPresets[]>();
 const RESOLVED_PER_TYPE = 8;
+/** Keys resolveEffectPreset always sets: every non-text control and every graph value a preset of the type names. */
 function overwrittenKeys(type: string): Set<string> {
   const definitions = getEffect(type)?.params ?? {};
-  return new Set(Object.entries(definitions).filter(([, definition]) => definition.type !== 'text' && !definition.deprecated).map(([key]) => key));
+  const graphValues = effectPresets(type).flatMap(preset => Object.keys(preset.params)).filter(key => !definitions[key]);
+  return new Set([...Object.entries(definitions).filter(([, definition]) => definition.type !== 'text' && !definition.deprecated).map(([key]) => key), ...graphValues]);
 }
-const overwrittenCache = new Map<string, Set<string>>();
+const overwrittenCache = new WeakMap<readonly EffectPreset[], Map<string, Set<string>>>();
 function resolvedPresetValues(effect: EffectParamOwner, presets: readonly EffectPreset[]): Array<Record<string, Primitive>> {
-  let overwritten = overwrittenCache.get(effect.type);
-  if (!overwritten) overwrittenCache.set(effect.type, overwritten = overwrittenKeys(effect.type));
+  let byType = overwrittenCache.get(presets);
+  if (!byType) overwrittenCache.set(presets, byType = new Map());
+  let overwritten = byType.get(effect.type);
+  if (!overwritten) byType.set(effect.type, overwritten = overwrittenKeys(effect.type));
   const rest = Object.entries(effect.params).filter(([key]) => !overwritten.has(key));
   let entries = resolvedCache.get(presets);
   if (!entries) resolvedCache.set(presets, entries = []);
-  const hit = entries.find(entry => entry.graph === effect.operatorGraph && entry.rest.length === rest.length
+  // Two looks may share one presets array (a factory option): an entry answers only for its own type.
+  const hit = entries.find(entry => entry.type === effect.type && entry.graph === effect.operatorGraph && entry.rest.length === rest.length
     && entry.rest.every(([key, value], index) => key === rest[index][0] && Object.is(value, rest[index][1])));
   if (hit) return hit.values;
   const values = presets.map(preset => resolveEffectPreset(effect, preset));
-  entries.unshift({ graph: effect.operatorGraph, rest, values });
+  entries.unshift({ type: effect.type, graph: effect.operatorGraph, rest, values });
   entries.length = Math.min(entries.length, RESOLVED_PER_TYPE);
   return values;
 }

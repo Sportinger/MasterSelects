@@ -123,4 +123,34 @@ describe('Drift Lines definition', () => {
     const values = resolveEffectPreset(base, presets[1]);
     expect(matchingEffectPreset({ type: 'drift-lines', params: { ...values } })?.id).toBe(presets[1].id);
   });
+
+  it('matches a drag of a graph value a preset names without resolving the presets again', () => {
+    const weave = getEffect('weave')! as { presets?: readonly import('../../src/effects/types').EffectPreset[] };
+    const original = weave.presets;
+    weave.presets = [{ id: 'nest', name: 'Nest', params: { weave_value: 2, reveal_value: 0.32 } }, { id: 'calm', name: 'Calm', params: { weave_value: 0.5 } }];
+    try {
+      const definitions = vi.mocked(paramVisibility.effectParamDefinitions);
+      const base = { type: 'weave', params: { weave_value: 1, reveal_value: 1 } as Record<string, number> };
+      matchingEffectPreset(base);
+      definitions.mockClear();
+      for (let frame = 0; frame < 20; frame++) matchingEffectPreset({ ...base, params: { ...base.params, weave_value: frame / 10 } });
+      expect(definitions.mock.calls.length).toBe(0);
+      expect(matchingEffectPreset({ type: 'weave', params: { ...resolveEffectPreset(base, weave.presets[0]) } })?.id).toBe('nest');
+    } finally { weave.presets = original; }
+  });
+
+  it('keeps the resolved presets of two looks that share one presets array apart', () => {
+    const halftone = getEffect('halftone')! as { presets?: readonly import('../../src/effects/types').EffectPreset[] };
+    const riso = getEffect('riso')! as { presets?: readonly import('../../src/effects/types').EffectPreset[] };
+    const originals = [halftone.presets, riso.presets];
+    const shared = [{ id: 'fine', name: 'Fine', params: { scale: 6 } }];
+    halftone.presets = shared; riso.presets = shared;
+    try {
+      // Riso's controls are not Halftone's (no Angle, its own inks): each look must resolve its own.
+      expect(matchingEffectPreset({ type: 'halftone', params: { ...resolveEffectPreset({ type: 'halftone', params: {} }, shared[0]) } })?.id).toBe('fine');
+      const risoValues = resolveEffectPreset({ type: 'riso', params: {} }, shared[0]);
+      expect(matchingEffectPreset({ type: 'riso', params: { ...risoValues } })?.id).toBe('fine');
+      expect(matchingEffectPreset({ type: 'riso', params: { ...risoValues, amount: 0.2 } })).toBeUndefined();
+    } finally { [halftone.presets, riso.presets] = originals; }
+  });
 });
