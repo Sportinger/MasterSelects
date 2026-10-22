@@ -7,7 +7,7 @@ import { CRT_LINE_COUNT_RANGE, CRT_MASK_OPTIONS, CRT_MASK_SIZE_RANGE, CRT_MIN_LI
 const unit = [0, 1] as const;
 const params: Record<string, EffectParam> = {
   // Original CRT (saved before the 2026-10 rebuild) only: stripe width in output pixels.
-  scale: { type: 'number', label: 'Mask Density', default: 3, min: 1, max: 12, step: 1, animatable: true, group: 'Phosphor Mask' },
+  scale: { type: 'number', label: 'Mask Density', default: 3, min: 1, max: 12, step: 1, animatable: true, group: 'Phosphor Mask', styleRole: 'mask-stripe' },
   amount: { type: 'number', label: 'Mix', default: 1, min: 0, max: 1, step: 0.01, animatable: true },
   curvature: { type: 'number', label: 'Curvature', default: 0.35, min: 0, max: 1, step: 0.01, animatable: true, group: 'Screen', graphOnly: true },
   lineCount: { type: 'number', label: 'Line Count', default: 240, min: CRT_LINE_COUNT_RANGE[0], max: CRT_LINE_COUNT_RANGE[1], step: 1, animatable: true, group: 'Scanlines', graphOnly: true },

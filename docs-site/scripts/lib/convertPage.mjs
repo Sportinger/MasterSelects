@@ -291,6 +291,14 @@ export function convertPage({ body, title }, ctx) {
     nextPicture: () => pictures++, warn: ctx.warn,
   };
   const text = mapProse(body, (prose) => {
+    // A hand-written <img> in a docs-shot figure skips the picture pass: no lightbox link, no
+    // width/height, no lazy loading. (Gallery cards bring their own sized <img>.)
+    for (const [figure] of prose.matchAll(/<figure\b[^>]*\bdocs-shot\b[^>]*>[\s\S]*?<\/figure>/giu)) {
+      for (const [tag] of figure.matchAll(/<img\b[^>]*>/giu)) {
+        const src = tag.match(/\ssrc="([^"]*)"/u)?.[1] ?? '?';
+        ctx.warn(`${ctx.file}: the picture ${src} is a raw <img>; write it as ![alt](${src}) so it gets the lightbox and its size.`);
+      }
+    }
     // Compare figures become slider stages (lib/compare.mjs); the rest goes through the link pass.
     // Both in page order, so only the page's first picture loads eagerly.
     let out = splitCompareFigures(prose).map((part) => (typeof part === 'string' ? linkPass(part)

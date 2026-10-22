@@ -10,14 +10,15 @@ import { effectParamDisplay } from '../../src/effects/paramDisplay';
 import { catalogText } from '../../src/services/nodeGraph/catalogText';
 import {
   CATALOG_FILE, CONTROLS_END, CONTROLS_START, PICTURE_PENDING, THUMB_MAX_BYTES, basicPage, cardText, controlsTable, firstSentence,
-  generatedBlockProblem, isBasicPage, pageLead, planEffectDocs, refreshGeneratedBlocks, snapshotRegistry,
+  generatedBlockProblem, isBasicPage, labPair, pageLead, planEffectDocs, refreshGeneratedBlocks, snapshotRegistry,
 } from '../../scripts/effectDocsCatalog.mjs';
-import { BUDGETS } from '../../docs-site/scripts/lib/media.mjs';
+import { BUDGETS, imageSize } from '../../docs-site/scripts/lib/media.mjs';
 import { controlParagraphSkeletons, handWrittenPageProblems } from '../../scripts/effectDocsPageCheck.mjs';
 
 const featuresDir = path.resolve(__dirname, '../../docs/Features');
 const read = (file: string) => (fs.existsSync(path.join(featuresDir, file)) ? fs.readFileSync(path.join(featuresDir, file), 'utf8') : undefined);
 const exists = (file: string) => fs.existsSync(path.join(featuresDir, file));
+const size = (file: string) => imageSize(fs.readFileSync(path.join(featuresDir, file)));
 const pages = fs.readdirSync(path.join(featuresDir, 'effects'))
   .filter((name) => name.endsWith('.md') && name !== 'index.md').map((name) => name.slice(0, -3)).toSorted();
 
@@ -25,7 +26,7 @@ const snapshot = snapshotRegistry({
   effects: getAllEffects(), groups: EFFECT_GROUPS, hidden: EFFECTS_HIDDEN_FROM_CATALOG, engineOf: effectEngine,
   engineMembers: effectEngineMembers, text: catalogText, display: effectParamDisplay, experimental: effectExperimentalNote,
 });
-const plan = planEffectDocs(snapshot, { read, exists, pages });
+const plan = planEffectDocs(snapshot, { read, exists, size, pages });
 const rerun = 'out of date: run node scripts/effect-docs.mjs';
 
 describe('effect docs match the registry', () => {
@@ -148,6 +149,19 @@ describe('effect docs helpers', () => {
     expect(page).toContain('(../Effects.md#add-an-effect)');
     expect(page).toContain('## Controls');
     expect(page).toContain('## Technical details');
+  });
+
+  it('shoots new basic stills as compare pairs and keeps the layout of an existing still', () => {
+    const page = (stillSize?: { width: number; height: number }) => basicPage(effect, { groupLabel: 'Blur & Sharpen', overview: undefined,
+      still: 'assets/effects/demo.webp', stillSize, names: new Map() });
+    // A new still: original | effect without a gap, shown as a compare slider.
+    expect(labPair(effect)).toMatchObject({ layout: 'compare', outWidth: 1600, left: { effect: 'original' }, right: { effect: 'demo', params: {} } });
+    expect(page({ width: 1600, height: 450 })).toContain('<figure class="docs-shot docs-compare">');
+    // An older still, one frame split down the middle, keeps its layout and its plain figure.
+    expect(labPair(effect, { width: 1200, height: 675 })).toMatchObject({ layout: 'split', outWidth: 1200 });
+    expect(page({ width: 1200, height: 675 })).toContain('<figure class="docs-shot">');
+    // Groups with their own shot (enlarged glyph details) are never a compare.
+    expect(labPair({ ...effect, group: 'text' }).layout).toBe('pair');
   });
 
   it('shortens catalog text and reads a page lead for gallery cards', () => {

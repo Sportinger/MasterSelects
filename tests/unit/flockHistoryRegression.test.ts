@@ -99,16 +99,16 @@ describe('Flock history regression', () => {
     const originalKeys = structuredClone(timeline.clipKeyframes);
     history.captureSnapshot('Three flocks');
     const edited = structuredClone(originalClips[0].flock!);
-    edited.nodes.find(node => node.operator === 'flock.emitter')!.params.shape = 'box';
+    edited.nodes.find(node => node.operator === 'flock.emitter')!.params.shape = 'shell';
     timeline = { ...timeline, clips: [{ ...originalClips[0], flock: edited }, ...originalClips.slice(1)] };
-    history.captureSnapshot('Emitter shape: box');
+    history.captureSnapshot('Emitter shape: shell');
 
     for (let cycle = 0; cycle < 2; cycle += 1) {
       expect(history.undo()).not.toBeNull();
       expect(timeline.clips.map(clip => clip.flock)).toEqual(originalClips.map(clip => clip.flock));
       expect(timeline.clips.every(clip => clip.source?.type === 'flock' && clip.needsReload === false)).toBe(true);
       expect(timeline.clipKeyframes).toEqual(originalKeys);
-      expect(emitterShape(timeline.clips[0])).toBe('sphere');
+      expect(emitterShape(timeline.clips[0])).toBe('box');
 
       expect(history.redo()).not.toBeNull();
       expect(timeline.clips[0].flock).toEqual(edited);

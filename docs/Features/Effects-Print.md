@@ -30,10 +30,12 @@ grow where it is dark, dither patterns decide pixel by pixel between a few tones
   **Registration** sets how far their two inks slip apart.
 - **Amount** mixes back towards the original: 1 is the full print.
 
-Halftone, Dithering, Riso and Paper Print share one pattern engine with most
-[Lines](./Effects-Lines.md) and [Textile](./Effects-Textile.md) looks. The **Style** menu in a card
-switches between the looks that have the same controls (Halftone, Pixel Poster and most Lines and
-Textile looks) and keeps the values and keyframes.
+Halftone, Dithering, Riso, Riso Glow and Paper Print share one pattern engine with most
+[Lines](./Effects-Lines.md) and [Textile](./Effects-Textile.md) looks: the **Style** menu in their card
+switches between these looks. A control you changed keeps its value and keyframes when the new look
+has the same control; the others open at the new look's defaults. Riso's and Riso Glow's
+**Registration** is a slip, not a mark size, so it carries only between the two (details in
+[Effects](./Effects.md#styles-and-presets)).
 
 ## Technical details
 

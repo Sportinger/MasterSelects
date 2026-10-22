@@ -1,33 +1,8 @@
 # Keyframes
 
-[<- Back to Index](./README.md)
+Keyframes animate a clip's properties over time. Click the diamond beside a value in Properties to set a key at the playhead, move the playhead and change the value, and the property moves between the keys; shape the motion in **Graph** mode: the **Graph** button at the right of the timeline toolbar, or `G`, switches the timeline to it. Where the clips sit: [Timeline](./Timeline.md).
 
-The keyframe system animates clip properties over time using per-clip keyframe maps, Graph mode, and Bezier handles. It supports transform properties, speed, numeric effect parameters, color, masks, text bounds, camera and light settings, custom-node parameters, vector-animation state/input properties, and numeric motion-shape properties.
-
-The [Node Workspace](./Node-Workspace.md#keyframe-nodes) shows independent curves
-in a compact **Animation** area on their parameter's owning node. Existing
-projects appear this way automatically, including previously saved independent
-keyframe nodes. The area shows a curve count, mini curve, current value and time
-cursor; value changes briefly highlight it. Click it to choose and edit a curve
-in the inspector, or **Extract as keyframe node** to share it with other parameters.
-
-Explicitly extracted and shared **Keyframe Nodes** remain separate. Their cables
-appear when selecting the animation node or a receiving node. Compatible
-parameters can share values, with explicit scale/offset mapping where needed.
-Removing a separate node preserves its animation and shows it at the owning
-parameter again. Opening the graph changes neither project data nor keyframes.
-Timeline, node-inspector and AI edits still update the same curves; the AI's
-`getKeyframes` result includes their bindings.
-
-Bypassed face/lip stabilization and 3D Clip Transform keys appear gray in timeline rows, clip markers
-and curve editors; bypassed curve segments are dashed. Selection remains visible
-and the keys stay editable. This reflects the clip's stabilization or transform bypass without
-changing or deleting the keys. Manual transform and effect animation retain their
-normal colors; a grouped clip marker stays active if it also contains active keys.
-
-`Keyframe.hold` keeps a value until the next key. The node inspector uses this for
-discrete boolean channels and offers Hold for continuous channels. Timeline curve
-paths, speed integration, project save/load and keyframe clipboard preserve it.
+Keyframes work on transform values, speed, numeric effect parameters, color, masks, text bounds, camera and light settings, custom-node parameters, vector-animation state and inputs, and numeric motion-shape properties.
 
 ---
 
@@ -215,9 +190,14 @@ When recording is enabled:
 
 ### Curve Editor
 
-![Bezier curve editor with selected keyframe handles](./assets/keyframes/bezier-curve-editor.png)
+<figure class="docs-shot">
 
-- Double-click a property row or keyframe diamond to open Graph mode.
+![The timeline in Graph mode below a solid clip: the Graph list on the left holds Position X (active) and Position Y; on the right the orange Position X curve runs through four keys, and the selected key at the playhead shows its two cyan Bezier handles. The grey Position Y curve runs behind it.](./assets/keyframes/graph-mode.webp)
+
+  <figcaption>Graph mode: the <strong>Graph list</strong> picks the property, the orange <strong>curve</strong> shows its values over time, the <strong>selected key</strong> (red) shows its cyan <strong>Bezier handles</strong>, and inactive properties stay grey behind it. The tracks above shrink to a thin band; the square in the clip is the solid's type icon.</figcaption>
+</figure>
+
+- The **Graph** button at the right of the timeline toolbar, or `G`, switches the timeline to Graph mode; double-clicking a property row or keyframe diamond opens it too.
 - Graph mode shows the selected clip's animated numeric properties as selectable curve series; only one property is expanded in the track header at a time.
 - The active curve renders a value axis that auto-scales to its current keyframes.
 - Selected keyframes expose Bezier handles.
@@ -225,12 +205,6 @@ When recording is enabled:
 - `Shift+drag` on a keyframe constrains movement to one axis in the curve editor.
 - Vector animation state keyframes show state labels on the value axis and draw stepped segments instead of Bezier curves.
 - Mask path rows expose timing and easing in the timeline; their value is a whole shape snapshot rather than a numeric scalar.
-
-Regenerate the documentation image with:
-
-```powershell
-npm run docs:screenshots -- --id=keyframes-bezier-curve-editor
-```
 
 ### Delete and Copy/Paste
 
@@ -328,6 +302,33 @@ value.
 The row-height constant is 18 px.
 
 ---
+
+## Nodes, bypass and hold
+
+The [Node Workspace](./Node-Workspace.md#keyframe-nodes) shows independent curves
+in a compact **Animation** area on their parameter's owning node. Existing
+projects appear this way automatically, including previously saved independent
+keyframe nodes. The area shows a curve count, mini curve, current value and time
+cursor; value changes briefly highlight it. Click it to choose and edit a curve
+in the inspector, or **Extract as keyframe node** to share it with other parameters.
+
+Explicitly extracted and shared **Keyframe Nodes** remain separate. Their cables
+appear when selecting the animation node or a receiving node. Compatible
+parameters can share values, with explicit scale/offset mapping where needed.
+Removing a separate node preserves its animation and shows it at the owning
+parameter again. Opening the graph changes neither project data nor keyframes.
+Timeline, node-inspector and AI edits still update the same curves; the AI's
+`getKeyframes` result includes their bindings.
+
+Bypassed face/lip stabilization and 3D Clip Transform keys appear gray in timeline rows, clip markers
+and curve editors; bypassed curve segments are dashed. Selection remains visible
+and the keys stay editable. This reflects the clip's stabilization or transform bypass without
+changing or deleting the keys. Manual transform and effect animation retain their
+normal colors; a grouped clip marker stays active if it also contains active keys.
+
+`Keyframe.hold` keeps a value until the next key. The node inspector uses this for
+discrete boolean channels and offers Hold for continuous channels. Timeline curve
+paths, speed integration, project save/load and keyframe clipboard preserve it.
 
 ## Related Docs
 

@@ -1,3 +1,89 @@
 {
-  "strips": []
+  "strips": [
+    {
+      "effect": "box-blur",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        880,
+        0,
+        480,
+        270
+      ],
+      "cellWidth": 480
+    },
+    {
+      "effect": "gaussian-blur",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        320,
+        0,
+        960,
+        540
+      ]
+    },
+    {
+      "effect": "motion-blur",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [
+        160,
+        0,
+        1600,
+        900
+      ]
+    },
+    {
+      "effect": "radial-blur",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ]
+    },
+    {
+      "effect": "zoom-blur",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [
+        0,
+        0,
+        1920,
+        1080
+      ]
+    },
+    {
+      "effect": "sharpen",
+      "image": "harbor_town",
+      "width": 1920,
+      "crop": [
+        1170,
+        480,
+        200,
+        112
+      ],
+      "cellWidth": 480,
+      "maxBytes": 120000
+    },
+    {
+      "effect": "stick-figure",
+      "image": "dancer_stage",
+      "width": 1920,
+      "inset": 0.001,
+      "backdrop": "#000000",
+      "crop": [
+        645,
+        255,
+        640,
+        480
+      ],
+      "cellWidth": 400,
+      "columns": 2,
+      "note": "A generator alone on black: --presets does not read inset yet (ledger, GEN1), so the strip was composed from `node scripts/effect-lab.mjs --effect stick-figure --variants-file <the presets> --inset 0.001 --width 1920` renders (the image shrinks to a 2 x 1 px speck under the pelvis) over black, this crop, 400 px cells, names under them. The page still assets/effects/stick-figure.webp is the default figure of the same render, crop [504, 252, 960, 540]."
+    }
+  ]
 }

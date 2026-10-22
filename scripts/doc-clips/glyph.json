@@ -1,0 +1,742 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "dancer_stage_motion.mp4",
+  "clips": [
+    {
+      "name": "glyph-matrix",
+      "effect": "glyph-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        480,
+        80,
+        800,
+        760
+      ],
+      "width": 1280,
+      "loop": 0.35,
+      "poster": 1.2,
+      "maxBytes": 1000000,
+      "alt": "The dancer turning on a dark stage, original left and with Glyph Matrix right: she is rebuilt from small letters and signs in a grid, dense ones in her bright dress and faint dots and strokes on the dark stage, and every character keeps ticking on to its neighbours in the ramp, so the picture shimmers in diagonal waves",
+      "caption": "Left: original. Right: Glyph Matrix at its default settings."
+    },
+    {
+      "name": "glyph-matrix-presets",
+      "kind": "presets",
+      "effect": "glyph-matrix",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "crop": [
+        520,
+        90,
+        760,
+        720
+      ],
+      "width": 1000,
+      "loop": 0.35,
+      "poster": 1.2,
+      "maxBytes": 950000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Data Wave top left with diagonal staircases of bars sweeping across her, Shade Shimmer top right with fine dotted shading blocks, Ice Code bottom left with white letters on a deep blue field, Split-Flap bottom right with large letters running through the alphabet",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "glyph-matrix-cell-size",
+      "effect": "glyph-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "cellSize",
+        "label": "Cell Size",
+        "from": 8,
+        "to": 40,
+        "unit": " px"
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Glyph Matrix while Cell Size runs from 8 to 40 px and back: fine rolling print grows into a few large letters and shrinks again; the current value is shown at the bottom left",
+      "caption": "Cell Size from 8 to 40 px and back."
+    },
+    {
+      "name": "glyph-matrix-amount",
+      "effect": "glyph-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "amount",
+        "label": "Amount",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Glyph Matrix while Amount runs from 0 to 1 and back: the plain picture fades into rolling characters and back; the current value is shown at the bottom left",
+      "caption": "Amount from 0 to 1 and back."
+    },
+    {
+      "name": "glyph-matrix-background",
+      "effect": "glyph-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "background",
+        "label": "Background",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Glyph Matrix while Background runs from 0 to 1 and back: the characters stand on black, then the picture's colour fills the cells until the letters vanish into a coloured mosaic, and back; the current value is shown at the bottom left",
+      "caption": "Background from 0 to 1 and back."
+    },
+    {
+      "name": "glyph-matrix-black-level",
+      "effect": "glyph-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "blackLevel",
+        "label": "Black Level",
+        "from": 0,
+        "to": 0.5,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Glyph Matrix while Black Level runs from 0 to 0.5 and back: the faint characters on the dark stage go out first, then the shadows on her, until only her bright dress is drawn, and back; the current value is shown at the bottom left",
+      "caption": "Black Level from 0 to 0.5 and back."
+    },
+    {
+      "name": "glyph-matrix-roll",
+      "effect": "glyph-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "roll",
+        "label": "Roll",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Glyph Matrix while Roll runs from 0 to 1 and back: at 0 each cell holds the character of its brightness, then the characters roll through more and more of the ramp until diagonal waves of letters sweep across her, and settle again; the current value is shown at the bottom left",
+      "caption": "Roll from 0 to 1 and back."
+    },
+    {
+      "name": "glyph-matrix-speed",
+      "effect": "glyph-matrix",
+      "params": {},
+      "range": [
+        0.2,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          1,
+          3
+        ]
+      },
+      "loop": 0.35,
+      "poster": 2.6,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Glyph Matrix at three speeds, about two seconds each: at Speed 0 the characters change only where she moves, at 1 they tick on steadily, at 3 they flicker; the speed is shown at the bottom left",
+      "caption": "Speed 0, 1 and 3, about two seconds each."
+    },
+    {
+      "name": "symbol-matrix",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        480,
+        80,
+        800,
+        760
+      ],
+      "width": 1280,
+      "loop": 0.35,
+      "poster": 1.2,
+      "maxBytes": 1000000,
+      "alt": "The dancer turning on a dark stage, original left and with Symbol Matrix right: she is rebuilt from small signs in a grid, dense @ and # in her bright dress and faint dots and crosses on the dark stage, and every cell keeps swapping its sign for a neighbouring one at its own moment while its brightness slowly breathes, so the picture twinkles",
+      "caption": "Left: original. Right: Symbol Matrix at its default settings."
+    },
+    {
+      "name": "symbol-matrix-presets",
+      "kind": "presets",
+      "effect": "symbol-matrix",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "crop": [
+        520,
+        90,
+        760,
+        720
+      ],
+      "width": 1000,
+      "loop": 0.35,
+      "poster": 1.2,
+      "maxBytes": 950000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Night Sky top left with her figure as a constellation of warm white stars on a night-blue ground of faint dots, Shape Shift top right with large circles, diamonds, triangles and squares in her colours, Number Storm bottom left with digits that change quickly on her figure over an empty stage, Embers bottom right with glowing yellow-orange signs on her figure, on dark red",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "name": "symbol-matrix-cell-size",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "cellSize",
+        "label": "Cell Size",
+        "from": 8,
+        "to": 40,
+        "unit": " px"
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Symbol Matrix while Cell Size runs from 8 to 40 px and back: fine twinkling print grows into a few large signs and shrinks again; the current value is shown at the bottom left",
+      "caption": "Cell Size from 8 to 40 px and back."
+    },
+    {
+      "name": "symbol-matrix-amount",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "amount",
+        "label": "Amount",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Symbol Matrix while Amount runs from 0 to 1 and back: the plain picture fades into twinkling signs and back; the current value is shown at the bottom left",
+      "caption": "Amount from 0 to 1 and back."
+    },
+    {
+      "name": "symbol-matrix-background",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "background",
+        "label": "Background",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Symbol Matrix while Background runs from 0 to 1 and back: the signs stand on black, then the picture's colour fills the cells until the signs vanish into a coloured mosaic, and back; the current value is shown at the bottom left",
+      "caption": "Background from 0 to 1 and back."
+    },
+    {
+      "name": "symbol-matrix-black-level",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "blackLevel",
+        "label": "Black Level",
+        "from": 0,
+        "to": 0.5,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Symbol Matrix while Black Level runs from 0 to 0.5 and back: the faint characters on the dark stage go out first, then the shadows on her, until only her bright dress is drawn, and back; the current value is shown at the bottom left",
+      "caption": "Black Level from 0 to 0.5 and back."
+    },
+    {
+      "name": "symbol-matrix-roll",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "roll",
+        "label": "Roll",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Symbol Matrix while Roll runs from 0 to 1 and back: at 0 each cell keeps the sign of its brightness and only breathes, then the signs swap among more and more of the ramp until any sign can appear anywhere and the figure shows only in the colours, and back; the current value is shown at the bottom left",
+      "caption": "Roll from 0 to 1 and back."
+    },
+    {
+      "name": "symbol-matrix-twinkle",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "twinkle",
+        "label": "Twinkle",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Symbol Matrix while Twinkle runs from 0 to 1 and back: at 0 every sign shines steadily, then each one breathes darker on its own beat until the signs flicker in and out like stars, and back; the current value is shown at the bottom left",
+      "caption": "Twinkle from 0 to 1 and back."
+    },
+    {
+      "name": "symbol-matrix-speed",
+      "effect": "symbol-matrix",
+      "params": {},
+      "range": [
+        0.2,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        420,
+        100,
+        720,
+        700
+      ],
+      "width": 540,
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          1,
+          3
+        ]
+      },
+      "loop": 0.35,
+      "poster": 2.6,
+      "maxBytes": 430000,
+      "float": "right",
+      "alt": "The dancer with Symbol Matrix at three speeds, about two seconds each: at Speed 0 the signs stand still and change only where she moves, at 1 each cell swaps a few times a second and slowly breathes, at 3 they flicker; the speed is shown at the bottom left",
+      "caption": "Speed 0, 1 and 3, about two seconds each."
+    },
+    {
+      "name": "retro-matrix",
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "compare",
+      "crop": [
+        480,
+        80,
+        800,
+        760
+      ],
+      "width": 1280,
+      "loop": 0.35,
+      "poster": 1.2,
+      "maxBytes": 1000000,
+      "alt": "The dancer turning on a dark stage, original left and with Retro Matrix right: she is rebuilt from glowing amber digits on a dark screen with fine scanlines, bright digits 5 to 9 in her dress and dim 1, 2 and 3 on the stage, and the whole text scrolls slowly upwards while the picture stays in place",
+      "caption": "Left: original. Right: Retro Matrix at its default settings."
+    },
+    {
+      "name": "retro-matrix-presets",
+      "kind": "presets",
+      "effect": "retro-matrix",
+      "range": [
+        0.5,
+        5.5
+      ],
+      "crop": [
+        520,
+        90,
+        760,
+        720
+      ],
+      "width": 900,
+      "loop": 0.35,
+      "poster": 2.2,
+      "maxBytes": 800000,
+      "alt": "The dancer four times in a grid, moving in sync, each with one preset: Green Screen top left with fine green text, Paper White top right with crisp white text without scanlines, Teletype bottom left with large amber digits that crawl up slowly, Binary Stream bottom right with zeros and ones in cold cyan racing upwards",
+      "caption": "The four presets on the moving dancer, in sync."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "name": "retro-matrix-cell-size",
+      "sweep": {
+        "param": "cellSize",
+        "label": "Cell Size",
+        "from": 8,
+        "to": 40,
+        "unit": " px"
+      },
+      "alt": "The dancer with Retro Matrix while Cell Size runs from 8 to 40 px and back: fine scrolling text grows into a few large digits and shrinks again; the current value is shown at the bottom left",
+      "caption": "Cell Size from 8 to 40 px and back."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "poster": 1.4,
+      "maxBytes": 430000,
+      "float": "right",
+      "name": "retro-matrix-amount",
+      "sweep": {
+        "param": "amount",
+        "label": "Amount",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Retro Matrix while Amount runs from 0 to 1 and back: the plain picture fades into glowing amber text and back; the current value is shown at the bottom left",
+      "caption": "Amount from 0 to 1 and back."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "name": "retro-matrix-background",
+      "sweep": {
+        "param": "background",
+        "label": "Background",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Retro Matrix while Background runs from 0 to 1 and back: the digits glow on black, then amber fills the cells until the figure is a bright amber mosaic, and back; the current value is shown at the bottom left",
+      "caption": "Background from 0 to 1 and back."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "poster": 2.0,
+      "maxBytes": 430000,
+      "float": "right",
+      "name": "retro-matrix-black-level",
+      "sweep": {
+        "param": "blackLevel",
+        "label": "Black Level",
+        "from": 0,
+        "to": 0.5,
+        "decimals": 2
+      },
+      "alt": "The dancer with Retro Matrix while Black Level runs from 0 to 0.5 and back: the faint characters on the dark stage go out first, then the shadows on her, until only her bright dress is drawn, and back; the current value is shown at the bottom left",
+      "caption": "Black Level from 0 to 0.5 and back."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        560,
+        260,
+        480,
+        480
+      ],
+      "width": 600,
+      "loop": 0.35,
+      "poster": 2.6,
+      "maxBytes": 600000,
+      "float": "right",
+      "name": "retro-matrix-scanlines",
+      "sweep": {
+        "param": "scanlines",
+        "label": "Scanlines",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "A close-up of Retro Matrix at one and a quarter times the size while Scanlines runs from 0 to 1 and back: at 0 the amber characters on her dress are solid, then dark lines three pixels apart cut through every row until each character is drawn in separate strokes, and back; the current value is shown at the bottom left",
+      "caption": "Scanlines from 0 to 1 and back, in a close-up at one and a quarter times the size.",
+      "crf": 14
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.2,
+        6.0
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "poster": 2.6,
+      "maxBytes": 430000,
+      "float": "right",
+      "name": "retro-matrix-speed",
+      "sweep": {
+        "param": "speed",
+        "label": "Speed",
+        "steps": [
+          0,
+          1,
+          3
+        ]
+      },
+      "alt": "The dancer with Retro Matrix at three speeds, about two seconds each: at Speed 0 the text stands still and changes only where she moves, at 1 it scrolls up three rows a second, at 3 it races upwards; the speed is shown at the bottom left",
+      "caption": "Speed 0, 1 and 3, about two seconds each."
+    },
+    {
+      "effect": "retro-matrix",
+      "params": {},
+      "range": [
+        0.3,
+        5.8
+      ],
+      "layout": "single",
+      "crop": [
+        620,
+        120,
+        640,
+        640
+      ],
+      "width": 540,
+      "loop": 0.35,
+      "poster": 0.4,
+      "maxBytes": 430000,
+      "float": "right",
+      "name": "retro-matrix-roll",
+      "sweep": {
+        "param": "roll",
+        "label": "Roll",
+        "from": 0,
+        "to": 1,
+        "decimals": 2
+      },
+      "alt": "The dancer with Retro Matrix while Roll runs from 0 to 1 and back: at 0 each digit follows the brightness, from blank on the stage to 9 in her dress, then the text gets more and more random until any digit can stand anywhere and the figure shows only in the brightness, and back; the current value is shown at the bottom left",
+      "caption": "Roll from 0 to 1 and back."
+    }
+  ]
+}

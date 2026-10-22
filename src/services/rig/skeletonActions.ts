@@ -124,6 +124,12 @@ export interface SkeletonActionInstance {
   target?: { figure: string; joint: SkeletonJoint };
   /** Forward travel in figure pixels; overrides the action's own distance (e.g. a short run). */
   distance?: number;
+  /**
+   * Travel and jump height grow with the figure's leg length and Scale, like its steps do. Every
+   * action added since 2026-10-22 has it; older lanes keep their authored pixels, so saved
+   * choreographies keep their positions (a large figure's feet then slide, a small one jumps high).
+   */
+  bodyScaled?: boolean;
 }
 
 export const isSkeletonActionId = (value: unknown): value is SkeletonActionId =>
@@ -144,6 +150,7 @@ export function parseSkeletonActions(raw: unknown): SkeletonActionInstance[] {
         id: item.id, action: item.action, start: Number(item.start), duration: Number(item.duration),
         ...(Number.isFinite(item.strength) ? { strength: Number(item.strength) } : {}),
         ...(Number.isFinite(item.distance) ? { distance: Number(item.distance) } : {}),
+        ...(item.bodyScaled === true ? { bodyScaled: true } : {}),
         ...(item.target && typeof item.target.figure === 'string' && typeof item.target.joint === 'string'
           ? { target: { figure: item.target.figure, joint: item.target.joint } } : {}),
       }];
@@ -237,20 +244,38 @@ export function skeletonActionAimWeight(instance: SkeletonActionInstance, time: 
 export interface ActionPoseResult { pose: Pose; lift: number; advance: number }
 
 /**
- * Apply every action to a base pose at a clip time: active actions blend over it in start order
- * (overlaps cross-fade), and each action's forward travel accumulates as it plays.
+ * Forward travel of a whole action in figure pixels. A body-scaled action (every action added
+ * since 2026-10-22) travels with `body`, the figure's leg length times Scale relative to the
+ * default figure, so its feet cover the same share of a step at any size. An explicit distance is
+ * a screen travel and stays as given.
  */
-export function applySkeletonActions(base: Pose, baseLift: number, actions: readonly SkeletonActionInstance[], time: number): ActionPoseResult {
+export function skeletonActionTravel(instance: SkeletonActionInstance, body = 1): number {
+  if (instance.distance !== undefined) return instance.distance;
+  const advance = SKELETON_ACTIONS[instance.action].advance;
+  return instance.bodyScaled ? advance * body : advance;
+}
+
+/**
+ * Apply every action to a base pose at a clip time: active actions blend over it in start order
+ * (overlaps cross-fade), and each action's forward travel accumulates as it plays. `body` is the
+ * figure's leg length times Scale relative to the default figure (body-scaled actions travel and
+ * jump with it).
+ */
+export function applySkeletonActions(base: Pose, baseLift: number, actions: readonly SkeletonActionInstance[], time: number,
+  bodyOf: number | ((instance: SkeletonActionInstance) => number) = 1): ActionPoseResult {
   let pose = { ...base }, lift = baseLift, advance = 0;
   for (const instance of actions) {
     const definition = SKELETON_ACTIONS[instance.action];
+    // A body scale per action (its figure size where it starts), so a later Scale keyframe does not
+    // move a figure whose walk has already finished.
+    const body = typeof bodyOf === 'function' ? bodyOf(instance) : bodyOf;
     const progress = Math.max(0, Math.min(1, (time - instance.start) / instance.duration));
-    advance += (instance.distance ?? definition.advance) * (definition.gait ? progress : smooth(progress));
+    advance += skeletonActionTravel(instance, body) * (definition.gait ? progress : smooth(progress));
     const weight = skeletonActionWeight(instance, time);
     if (weight <= 0) continue;
     const sample = sampleSkeletonAction(instance, time - instance.start);
     pose = Object.fromEntries(SKELETON_ANGLE_KEYS.map(key => [key, pose[key] + turn(pose[key], sample.pose[key]) * weight])) as Pose;
-    lift += (sample.lift - lift) * weight;
+    lift += ((instance.bodyScaled ? sample.lift * body : sample.lift) - lift) * weight;
   }
   return { pose, lift, advance };
 }

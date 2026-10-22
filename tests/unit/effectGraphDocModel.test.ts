@@ -84,8 +84,8 @@ describe('effect graph doc shots: graph selection', () => {
     const glow = doc('?effect=glow').graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
     expect(glow).toEqual(expect.arrayContaining(['Tap Weight', 'Up Read Position', 'Level Weight', 'Bright Light', 'Source Alpha']));
     expect(glow.some(label => /^(Multiply|Add|Smoothstep): Value$/.test(label))).toBe(false);
-    const step = doc('?effect=threshold&focus=color-processing&only=hard,value').graph.nodes.map(node => node.label);
-    expect(step).toEqual(expect.arrayContaining(['Above Level', 'Soft Ramp', 'Softness On']));
+    const step = doc('?effect=threshold&focus=black-and-white&only=value').graph.nodes.map(node => node.label);
+    expect(step).toEqual(expect.arrayContaining(['Hard Step', 'Soft Ramp', 'Softness On']));
   });
 
   it('names the folder ports of Twirl, Bulge & Pinch and Wave by what they carry', () => {
@@ -215,6 +215,17 @@ describe('effect graph doc shots: graph selection', () => {
     const second = graph.nodes.find(node => node.id.endsWith('/horizontal-sample'))!.layout.y;
     const firstRowBottom = Math.max(...graph.nodes.filter(node => node.layout.y < second).map(node => node.layout.y + getNodeHeight(node)));
     expect(second - firstRowBottom).toBeLessThanOrEqual(120);
+  });
+
+  it('keeps a card fed by nothing that feeds two later columns in the row (Vignette Parameters)', () => {
+    const { graph } = doc('?effect=vignette&plumbing=hide');
+    const ids = new Set(graph.nodes.map(node => node.id));
+    const fed = new Set(graph.edges.filter(edge => ids.has(edge.fromNodeId) && ids.has(edge.toNodeId)).map(edge => edge.toNodeId));
+    const rowBottom = Math.max(...graph.nodes.filter(node => fed.has(node.id)).map(node => node.layout.y + getNodeHeight(node)));
+    const parameters = graph.nodes.find(node => node.label === 'Parameters')!;
+    // It used to sit below the whole row, its cables running up across the picture.
+    expect(parameters.layout.y + getNodeHeight(parameters)).toBeLessThanOrEqual(rowBottom);
+    expect(cableCrossings(graph.nodes, graph.edges)).toEqual([]);
   });
 
   it('routes every cable of a wrapped focus around the cards with cables=avoid, as the Distort page pictures need', () => {

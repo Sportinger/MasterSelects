@@ -2,7 +2,7 @@
 // adds an effect, opens Properties → Effects and captures the inspector (with a strip of the
 // preview) in hardware-GPU Chrome as WebP. Prints the docs `<figure>` with numbered callouts.
 //
-//   node scripts/effect-editor-shot.mjs scripts/effect-editor-shots/blur.json [--only <name>]
+//   node scripts/effect-editor-shot.mjs scripts/effect-editor-shots/blur.json [--only <name>[,<name>...]]
 //       [--url http://localhost:5176] [--out docs/Features/assets/effects/editor]
 //
 // The shot file is `{ "shots": [shot, ...] }`; a shot:
@@ -43,6 +43,8 @@
 //   then     tool calls after addEffect, `"$clip"` standing for the clip id
 //            (e.g. [{ "tool": "applyFlockPreset", "args": { "clipId": "$clip", "presetId": "violet-filaments" } }])
 //   settle   ms to wait once "Preparing 3D scene" has gone (default 3000); outWidth (default 960)
+// The editor theme comes from scripts/docShotSettings.mjs (dark; DOCS_THEME for one run). Each shot is
+// recorded in scripts/docs-media-manifest.json (scripts/docs-media.mjs runs every recipe).
 // Needs a Vite of this checkout (`npx vite --port 5176 --strictPort`); each shot's project lives in
 // a throwaway browser context.
 import fs from 'node:fs';
@@ -50,17 +52,22 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeDocShotWebp } from './docShotWebp.mjs';
 import { calloutOverlay, cropWithCallouts, docsFigure } from './docShotFigure.mjs';
+import { applyEditorTheme, docLogicalPath, docOutput, docShotSettings } from './docShotSettings.mjs';
+import { recordShotList } from './docsMediaRecipes.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
 const shotFile = args.find((arg, index) => !arg.startsWith('--') && !['--only', '--url', '--out'].includes(args[index - 1]));
 if (!shotFile) throw new Error('Name a shot file, e.g. scripts/effect-editor-shots/blur.json');
-const only = option('--only');
-const shots = JSON.parse(fs.readFileSync(shotFile, 'utf8')).shots.filter(shot => !only || shot.name === only);
-if (!shots.length) throw new Error(`No shot named ${only} in ${shotFile}`);
+const only = option('--only')?.split(',').map(name => name.trim()).filter(Boolean);
+const shotList = JSON.parse(fs.readFileSync(shotFile, 'utf8'));
+const shots = shotList.shots.filter(shot => !only || only.includes(shot.name));
+const unknown = (only ?? []).filter(name => !shots.some(shot => shot.name === name));
+if (unknown.length || !shots.length) throw new Error(`No shot named ${unknown.join(', ') || only} in ${shotFile}`);
 const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
-const out = path.resolve(option('--out', 'docs/Features/assets/effects/editor'));
-const imageDir = path.resolve('tests/browser/effect-lab/images');
+const out = docOutput(option('--out', shotList.out ?? 'docs/Features/assets/effects/editor'));
+const settings = docShotSettings();
+const imageDir = path.resolve(settings.imageDir);
 const defaultViewport = { width: 1600, height: 900 };
 /** The current shot's browser window (set per shot below; the helpers read it). */
 let viewport = defaultViewport;
@@ -95,6 +102,7 @@ async function createImageClip(page, shot) {
   await page.locator('form input').first().fill('Effect editor shot');
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'End walkthrough' }).click({ timeout: 10000 }).catch(() => {});
+  await applyEditorTheme(page, settings.theme);
   await page.setInputFiles('#media-panel-import-input', path.join(imageDir, shot.image ?? 'harbor_town.jpg'));
   let imported;
   for (let attempt = 0; attempt < 120 && !imported; attempt += 1) {
@@ -309,9 +317,10 @@ for (const shot of shots) {
     page.on('pageerror', error => errors.push(error.message));
     if (shot.view === 'preview') {
       const encoded = await encodeDocShotWebp(page, await capturePreviewPair(page, shot), { maxBytes: 200000, maxPixelWidth: 1600 });
-      const file = path.resolve(shot.file ?? path.join(out, `${shot.name}.webp`));
+      const file = shot.file ? docOutput(shot.file) : path.join(out, `${shot.name}.webp`);
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, encoded.buffer);
+      recordShotList('editor', shotFile, [shot.name], { written: file });
       const pageErrors = [...new Set(errors)];
       console.log(`\n${path.relative(process.cwd(), file)}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes`
         + `${pageErrors.length ? `, page errors: ${pageErrors.join(' | ')}` : ''}\n`);
@@ -334,10 +343,11 @@ for (const shot of shots) {
     fs.mkdirSync(out, { recursive: true });
     const file = path.join(out, `${shot.name}.webp`);
     fs.writeFileSync(file, encoded.buffer);
+    recordShotList('editor', shotFile, [shot.name], { written: file });
     const pageErrors = [...new Set(errors)];
     console.log(`\n${path.relative(process.cwd(), file)}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes`
       + `${pageErrors.length ? `, page errors: ${pageErrors.join(' | ')}` : ''}\n`);
-    console.log(figure(shot, file, crop, marks));
+    console.log(figure(shot, docLogicalPath(file), crop, marks));
   } finally {
     await browser.close();
   }

@@ -14,6 +14,20 @@ import { separablePass } from './blurEffectGraphs';
  * nothing depends on the timeline time.
  */
 export function createDefaultSharpenGraph(): EffectOperatorGraph {
+  return createSharpenGraph('covered');
+}
+
+/**
+ * The Sharpen recipe released with 3.2.7: its window spread the taps of a fractional reach evenly,
+ * so the extremes jumped whenever Radius made the window one tap wider. Kept to recognize untouched
+ * saved 3.2.7 graphs, which keep their look (isPreviousStylizeGraph; the inspector offers Use the
+ * new Sharpen).
+ */
+export function createSpreadWindowSharpenGraph(): EffectOperatorGraph {
+  return createSharpenGraph('spread');
+}
+
+function createSharpenGraph(windowKind: 'covered' | 'spread'): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
   g.number('zero', 0); g.number('one', 1); g.number('two', 2); g.number('half', .5); g.number('weight-floor', 1e-20); g.number('alpha-floor', 1e-6);
@@ -39,12 +53,23 @@ export function createDefaultSharpenGraph(): EffectOperatorGraph {
   // ±SHARPEN_WINDOW_SIGMAS sigma, so the extremes follow the picture smoothly from pixel to pixel.
   g.number('window-sigmas', SHARPEN_WINDOW_SIGMAS); g.number('window-taps-limit', SHARPEN_WINDOW_MAX_TAPS_PER_SIDE);
   const windowReach = g.binary('window-reach', 'math.max.scalar', g.binary('window-reach-raw', 'math.multiply.scalar', sigma, 'window-sigmas'), 'one');
-  const windowSide = g.binary('window-side', 'math.min.scalar', g.unary('window-side-needed', 'math.ceil.scalar', windowReach), 'window-taps-limit');
-  const windowStep = g.binary('window-step', 'math.divide-ieee.scalar', windowReach, windowSide);
+  // Covered window: taps one pixel apart (Window Reach / taps limit apart beyond the limit); the
+  // outermost tap counts with the share of it the reach covers, so the window grows continuously.
+  const windowStep = windowKind === 'covered'
+    ? g.binary('window-step', 'math.max.scalar', g.binary('window-step-raw', 'math.divide-ieee.scalar', windowReach, 'window-taps-limit'), 'one') : '';
+  const windowReachSteps = windowKind === 'covered' ? g.binary('window-reach-steps', 'math.divide-ieee.scalar', windowReach, windowStep) : windowReach;
+  const windowSide = g.binary('window-side', 'math.min.scalar', g.unary('window-side-needed', 'math.ceil.scalar', windowReachSteps), 'window-taps-limit');
+  const step = windowKind === 'covered' ? windowStep : g.binary('window-step', 'math.divide-ieee.scalar', windowReach, windowSide);
   const windowCount = g.binary('window-count', 'math.add.scalar', g.binary('window-side-double', 'math.multiply.scalar', windowSide, 'two'), 'one');
   const windowIndex = g.add('window-index', 'vector.split.vec2', { value: g.add('window-kernel', 'image.kernel-index') });
-  const windowOffsetPx = (axis: 'x' | 'y') => g.binary(`window-${axis}-px`, 'math.multiply.scalar',
-    g.binary(`window-${axis}`, 'math.subtract.scalar', [windowIndex, axis], windowSide), windowStep);
+  const windowOffset = (axis: 'x' | 'y') => g.binary(`window-${axis}`, 'math.subtract.scalar', [windowIndex, axis], windowSide);
+  const windowOffsetPx = (axis: 'x' | 'y') => g.binary(`window-${axis}-px`, 'math.multiply.scalar', windowOffset(axis), step);
+  /** Share of this tap inside the reach: 1 within it, the covered part for the outermost tap. */
+  const windowCoverage = (axis: 'x' | 'y') => g.add(`window-${axis}-coverage`, 'math.clamp.scalar', { value: g.binary(`window-${axis}-coverage-raw`, 'math.add.scalar',
+    g.binary(`window-${axis}-inside`, 'math.subtract.scalar', windowReachSteps, g.unary(`window-${axis}-distance`, 'math.abs.scalar', `window-${axis}`)), 'one'), min: 'zero', max: 'one' });
+  /** A partly covered tap moves its value towards this pixel's brightness and weighs only its share. */
+  const covered = (id: string, value: GraphPort, coverage: string) => g.binary(id, 'math.add.scalar', luma,
+    g.binary(`${id}-shift`, 'math.multiply.scalar', g.binary(`${id}-offset`, 'math.subtract.scalar', value, luma), coverage));
   // Smooth extremes: exponentially weighted means relative to this pixel's brightness, limited so the sums stay finite.
   g.number('window-sharpness', SHARPEN_WINDOW_SHARPNESS); g.number('exponent-limit', SHARPEN_EXPONENT_LIMIT); g.number('exponent-floor', -SHARPEN_EXPONENT_LIMIT);
   const extremeWeight = (id: string, value: GraphPort, direction: 'bright' | 'dark') => {
@@ -72,8 +97,11 @@ export function createDefaultSharpenGraph(): EffectOperatorGraph {
   const rowTapAlpha = g.add('row-tap-alpha', 'convert.alpha-to-scalar', { alpha: [rowTap, 'alpha'] });
   const rowTapLuma = g.binary('row-tap-luma', 'math.divide-ieee.scalar', g.add('row-tap-luma-premultiplied', 'color.luminance-rec709.rgb', { rgb: [rowTap, 'rgb'] }),
     g.binary('row-tap-alpha-safe', 'math.max.scalar', rowTapAlpha, 'alpha-floor'));
+  const rowCoverage = windowKind === 'covered' ? windowCoverage('x') : '';
+  const rowValue = windowKind === 'covered' ? covered('row-tap-covered', rowTapLuma, rowCoverage) : rowTapLuma;
+  const rowWeight = windowKind === 'covered' ? g.binary('row-tap-weight', 'math.multiply.scalar', rowTapAlpha, rowCoverage) : rowTapAlpha;
   const rowReduce = g.add('row-reduce', 'image.kernel-rect-reduce',
-    { sample: [momentsImage('row', rowTapLuma, rowTapLuma), 'image'], weight: rowTapAlpha, width: windowCount, height: 'one' });
+    { sample: [momentsImage('row', rowValue, rowValue), 'image'], weight: rowWeight, width: windowCount, height: 'one' });
   const rowSums = g.add('row-sums', 'vector.split.vec4', { value: [rowReduce, 'sum'] });
   const [rowBrightest, rowDarkest] = extremes('row', rowSums);
   // A row without any opaque tap marks itself out of range, so the column ignores it.
@@ -95,8 +123,12 @@ export function createDefaultSharpenGraph(): EffectOperatorGraph {
   const columnUv = g.binary('column-uv', 'math.add.vec2', ['uv', 'uv'], g.binary('column-offset-uv', 'math.divide-ieee.vec2',
     g.add('column-offset-px', 'vector.combine.vec2', { x: 'zero', y: windowOffsetPx('y') }), 'resolution'));
   const columnTap = g.add('column-tap', 'vector.split.vec4', { value: [g.add('column-tap-vec4', 'convert.image-to-vec4', { image: [g.add('column-sample', 'image.sample', { image: [rows, 'image'], uv: columnUv }), 'image'] }), 'value'] });
+  const columnCoverage = windowKind === 'covered' ? windowCoverage('y') : 'one';
+  const [columnBright, columnDark]: [GraphPort, GraphPort] = windowKind === 'covered'
+    ? [covered('column-tap-brightest', [columnTap, 'z'], columnCoverage), covered('column-tap-darkest', [columnTap, 'w'], columnCoverage)]
+    : [[columnTap, 'z'], [columnTap, 'w']];
   const columnSums = g.add('column-sums', 'vector.split.vec4', { value: [g.add('column-reduce', 'image.kernel-rect-reduce',
-    { sample: [momentsImage('column', [columnTap, 'z'], [columnTap, 'w']), 'image'], weight: 'one', width: 'one', height: windowCount }), 'sum'] });
+    { sample: [momentsImage('column', columnBright, columnDark), 'image'], weight: columnCoverage, width: 'one', height: windowCount }), 'sum'] });
   const [brightest, darkest] = extremes('window', columnSums);
 
   // Halo limit: the result may pass the window's range by a margin (Overshoot of the range, at

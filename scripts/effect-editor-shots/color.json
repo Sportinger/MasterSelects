@@ -1,36 +1,320 @@
 {
   "shots": [
     {
+      "name": "brightness-inspector",
+      "effect": "brightness",
+      "params": {
+        "amount": 0.7
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 760,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Brightness card: the Preset menu showing Full Light and the Amount row at 0.70, beside a strip of the preview with the lifted stage",
+      "caption": "Brightness with the Full Light preset. 1 — Preset: pick a starting point. 2 — Amount: lighter or darker.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "contrast-inspector",
+      "effect": "contrast",
+      "params": {
+        "amount": 1.5
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 760,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Contrast card: the Preset menu showing Bold and the Amount row at 1.50, beside a strip of the preview with the deep black stage",
+      "caption": "Contrast with the Bold preset. 1 — Preset: pick a starting point. 2 — Amount: flatter or punchier.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
       "name": "exposure-inspector",
       "effect": "exposure",
       "params": {
-        "exposure": 1
+        "offset": 0.06,
+        "gamma": 1.25
       },
       "image": "dancer_stage.jpg",
-      "preview": 0,
-      "alt": "Properties, Effects with the Exposure card: Exposure at 1.0 EV, Offset 0 and Gamma 1, with keyframe and reset buttons beside each row",
+      "preview": 760,
+      "top": "tabs",
+      "alt": "Properties, Effects with an Exposure card: the Preset menu showing Milky Haze, Exposure at 0.0 EV, Offset at 0.06 and Gamma at 1.25, beside a strip of the preview with the hazy, lifted stage",
+      "caption": "Exposure with the Milky Haze preset. 1 — Preset: pick a starting point. 2 — Exposure: the light, in camera stops. 3 — Offset: lifts or lowers everything. 4 — Gamma: the mid-tones.",
       "marks": [
         {
-          "target": "tab:Effects",
-          "from": "below",
-          "label": "Properties → Effects lists the selected clip's effects"
+          "target": "Preset",
+          "label": "Preset"
         },
         {
           "target": "Exposure",
-          "label": "Exposure in camera stops; the unit EV is shown in the field"
+          "label": "Exposure"
+        },
+        {
+          "target": "Offset",
+          "label": "Offset"
         },
         {
           "target": "Gamma",
-          "label": "Gamma, for the mid-tones"
-        },
-        {
-          "target": "bypass",
-          "from": "above",
-          "label": "Bypass, to compare with the original"
+          "label": "Gamma"
         }
       ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "levels-inspector",
+      "effect": "levels",
+      "params": {
+        "outputBlack": 0.12,
+        "outputWhite": 0.9
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 760,
       "top": "tabs",
-      "layout": "float",
+      "alt": "Properties, Effects with a Levels card: the Preset menu showing Matte Film, Input Black at 0, Input White at 1, Gamma at 1, Output Black at 0.12 and Output White at 0.90, beside a strip of the preview with the grey, matte stage",
+      "caption": "Levels with the Matte Film preset. 1 — Preset: pick a starting point. 2 — Input Black: what becomes black. 3 — Input White: what becomes white. 4 — Gamma: the mid-tones. 5 — Output Black: how dark black is. 6 — Output White: how bright white is.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Input Black",
+          "label": "Input Black"
+        },
+        {
+          "target": "Input White",
+          "label": "Input White"
+        },
+        {
+          "target": "Gamma",
+          "label": "Gamma"
+        },
+        {
+          "target": "Output Black",
+          "label": "Output Black"
+        },
+        {
+          "target": "Output White",
+          "label": "Output White"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "saturation-inspector",
+      "effect": "saturation",
+      "params": {
+        "amount": 1.35
+      },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Saturation card: the Preset menu showing Rich and the Amount row at 1.35, beside a strip of the preview with the richer harbour",
+      "caption": "Saturation with the Rich preset. 1 — Preset: pick a starting point. 2 — Amount: weaker or stronger colour.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "hue-shift-inspector",
+      "effect": "hue-shift",
+      "params": {
+        "shift": 0.3333333333333333
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Hue Shift card: the Preset menu showing Third Turn and Shift at 120°, beside a strip of the preview with the night street, its pink sign turned yellow and its orange sign green",
+      "caption": "Hue Shift with the Third Turn preset. 1 — Preset: pick a starting point. 2 — Shift: how far round the colour wheel.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Shift",
+          "label": "Shift"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "temperature-inspector",
+      "effect": "temperature",
+      "params": {
+        "temperature": 1,
+        "tint": 0.12
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 480,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Temperature card: the Preset menu showing Candlelight, Temperature at 1.00 and Tint at 0.12, beside a strip of the preview with the dancer glowing orange like firelight",
+      "caption": "Temperature with the Candlelight preset. 1 — Preset: pick a starting point. 2 — Temperature: warmer or cooler light. 3 — Tint: towards magenta or green.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Temperature",
+          "label": "Temperature"
+        },
+        {
+          "target": "Tint",
+          "label": "Tint"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "vibrance-inspector",
+      "effect": "vibrance",
+      "params": {
+        "amount": 2
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Vibrance card: the Preset menu showing Strong and the Amount row at 2.00, beside a strip of the preview with the dancer's arm and dress against a deep blue side light, her skin natural",
+      "caption": "Vibrance with the Strong preset. 1 — Preset: pick a starting point. 2 — Amount: muted or livelier colour.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "invert-inspector",
+      "effect": "invert",
+      "params": {},
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with an Invert card that has no rows, only its title bar with the switch to turn it off and on, beside a strip of the preview with the harbour town as a negative, its sky orange and its houses pale blue",
+      "caption": "Invert has no controls. 1 — Switch: turns Invert off and on, to compare with the original.",
+      "marks": [
+        {
+          "target": "bypass",
+          "label": "Switch"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "posterize-inspector",
+      "effect": "posterize",
+      "params": {
+        "levels": 4,
+        "softness": 0.35,
+        "brightnessOnly": true
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 660,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Posterize card: the Preset menu showing Screen Print, Levels at 4, Softness at 0.35 and Brightness Only switched on, beside a strip of the preview with the posterized dancer",
+      "caption": "Posterize with the Screen Print preset. 1 — Preset: pick a starting point. 2 — Levels: how many tones. 3 — Softness: rounds the steps. 4 — Brightness Only: keeps the colours.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Levels",
+          "label": "Levels"
+        },
+        {
+          "target": "Softness",
+          "label": "Softness"
+        },
+        {
+          "target": "Brightness Only",
+          "label": "Brightness Only"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ],
+      "viewport": {
+        "width": 2000,
+        "height": 900
+      }
+    },
+    {
+      "name": "threshold-inspector",
+      "effect": "threshold",
+      "params": {
+        "level": 0.45,
+        "softness": 0.35
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 480,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Threshold card: the Preset menu showing Charcoal, Level at 0.45 and Softness at 0.35, beside a strip of the preview with the dancer in soft black and white",
+      "caption": "Threshold with the Charcoal preset. 1 — Preset: pick a starting point. 2 — Level: where black turns white. 3 — Softness: a grey edge instead of a hard cut.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Level",
+          "label": "Level"
+        },
+        {
+          "target": "Softness",
+          "label": "Softness"
+        }
+      ],
       "hide": [
         "Particle Out"
       ]

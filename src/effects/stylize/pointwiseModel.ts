@@ -7,12 +7,16 @@
  *   Level + Softness / 2. Softness 0 is the earlier strict comparison.
  * - Posterize: each channel snaps to Levels even steps, floor(v * L) / (L - 1) limited to 0-1
  *   (L at least MIN_POSTERIZE_LEVELS). Softness (share of a step) rounds every step edge into a
- *   smooth ramp of that width centred on the edge. Softness 0 is the earlier staircase.
+ *   smooth ramp of that width centred on the edge. Softness 0 is the earlier staircase; above
+ *   MAX_POSTERIZE_SOFTNESS (one whole step) neighbouring ramps would overlap and draw new hard
+ *   edges mid-step, so the ramp stays one step wide and the note says so.
  * Alpha is always kept.
  */
 export const MIN_POSTERIZE_LEVELS = 2;
 /** Ramp widths below this are treated as this, only to keep the division finite. */
 export const SOFTNESS_FLOOR = 1e-4;
+/** Posterize ramps are at most one step wide (wider ones overlap and jump mid-step). */
+export const MAX_POSTERIZE_SOFTNESS = 1;
 
 const finite = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 const smooth = (t: number) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
@@ -29,7 +33,8 @@ export function posterizeValue(value: number, levels: number, softness: number):
   let steps = Math.floor(v);
   if (softness > 0) {
     const shifted = v - 0.5, base = Math.floor(shifted);
-    steps = base + smooth((shifted - base - 0.5) / Math.max(softness, SOFTNESS_FLOOR) + 0.5);
+    const width = Math.min(MAX_POSTERIZE_SOFTNESS, Math.max(softness, SOFTNESS_FLOOR));
+    steps = base + smooth((shifted - base - 0.5) / width + 0.5);
   }
   return Math.min(1, Math.max(0, steps / (l - 1)));
 }
@@ -45,5 +50,6 @@ export function posterizeParamNotes(params: Record<string, unknown>): string[] {
   if (levels < MIN_POSTERIZE_LEVELS) notes.push(`Levels ${levels} is below ${MIN_POSTERIZE_LEVELS}; it is used as ${MIN_POSTERIZE_LEVELS}.`);
   else if (!Number.isInteger(levels)) notes.push(`Levels ${levels} is not a whole number; the top step is narrower than the others.`);
   if (softness < 0) notes.push(`Softness ${softness} is below 0; it is used as 0 (hard steps).`);
+  else if (softness > MAX_POSTERIZE_SOFTNESS) notes.push(`Softness ${softness} is above ${MAX_POSTERIZE_SOFTNESS}; it is used as ${MAX_POSTERIZE_SOFTNESS} (each ramp spans one whole step).`);
   return notes;
 }

@@ -155,7 +155,7 @@ Further reusable processing recipes are available in the same menu:
 | Sampling | Bounded Sample Count | Explicit count, minimum and maximum; integer truncation remains with the reducer. |
 | Sampling | Pair Tap Offsets; Merge Pair Weights | Sequence index, pairs per side and texel stride give the near/far texel offsets, a centre gate and the side; two kernel weights then merge into one linear-filtered tap (exact for any weights). Used by Box and Gaussian Blur. |
 | Coordinates | Scale From Center | Direction, scalar scale and center; no hidden UV or resolution source. |
-| Color | Brightness Curve; Contrast Curve | 0–1 RGB and the amount; black and white stay fixed (odds curve with gain `2^(2.5·Brightness)`, S-curve with slope Contrast at mid-grey). Used by Brightness and Contrast. |
+| Color | Brightness Curve; Contrast Curve | 0–1 RGB and the amount (odds curve with gain `2^(2.5·Brightness)`, black and white stay fixed; Contrast from 1 up an S-curve with slope Contrast at mid-grey that keeps black and white, below 1 an even fade toward mid-grey, `0.5 + (x − 0.5)·Contrast`, plain grey at 0 and below). Used by Brightness and Contrast. |
 | Color | Exposure (Stops); White Balance | RGB and stops, or Temperature and Tint (per unit red up and blue down 0.6 stops each; Tint green down 0.5, red and blue up 0.25); the light math runs between sRGB to Linear and Linear to sRGB, not clamped. Used by Exposure and Temperature. |
 | Color | Saturation (Gamut-Safe); Hue Rotate (OkLCh) | 0–1 RGB and amount (≥ 0) mixed with Rec.709 luma up to the gamut edge; or RGB and a shift in turns rotated in OkLCh, not clamped. Used by Saturation, Vibrance and Hue Shift. |
 | Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. Kept for colour effects saved before 2026-10. |
@@ -308,9 +308,11 @@ Effects are grouped by look in `src/effects/effectCatalogGroups.ts` (Color & Ton
 Blur & Sharpen, Light & Stylize, Lens & Distort, Pixel & Mosaic, Print & Halftone,
 Lines & Engraving, Textile & Craft, Text & Glyph, Analog & Glitch, Keying, Time,
 Tracking & Overlays, 3D & Particles); the registry `category` stays internal.
-Looks of one engine with identical parameters are styles: the Effects tab shows a
-**Style** selector that switches in place and keeps the effect ID, values and
-keyframes (a customized node graph restarts from the new look's default). Rom1, the
+Looks of one engine are styles of each other: the Effects tab shows a **Style**
+selector that switches in place and keeps the effect ID and the values and keyframes
+of the controls both looks have. A control only the new look has starts at its
+default; one only the old look has keeps its value for a switch back (a customized
+node graph restarts from the new look's default). Rom1, the
 watery-smoke look, is its own effect again since Acuarela became a watercolour.
 Audio effects use six groups: Level & Channels, EQ & Filter, Dynamics, Repair,
 Time & Space, Character & Advanced.
@@ -461,7 +463,7 @@ node is one node in every graph rather than a per-domain copy.
 | Clip Time | Seconds of the host clip's source time (0 at its start, continuing across splits); the clock cloth runs on |
 | Yarn Profile | Curves (+ optional per-point Radius Scale) → curves drawn as plies and fibers twisted along curve length |
 | Flyaways | Curves → curves whose Yarn Profile lets single fibers stray: loops arc off and return, free ends stick out (Density, Length, Lift, Free Ends, Seed) |
-| Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll) |
+| Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll, Turn: the finished sheet turned about its upright axis, motion unchanged) |
 | Surface Bind | Curves + Cloth → curves placed on the cloth: X/Y of the flat rest sheet find the spot, Z becomes height along its normal |
 | Extend | Curves → every curve continued straight beyond both ends along its end tangent (Length, Points per End) |
 | Rod Simulation | Curves (+ per-point Pin, Pull Start and Form Time) + Forces + Drag → the curves simulated as elastic rods with thickness, self- and mutual contact with friction and an optional floor; optionally starting as straight threads that are formed into the curves (Radius, Segment Length, Stretch/Bend Stiffness, Friction, Damping, Substeps, Pre-roll, Pin, Pull, Pull Time, Floor, Floor Height, Start, Form Ease) |
@@ -548,6 +550,9 @@ instead of chattering. Forces are the shared Wind, Gravity, Turbulence and Drag
 nodes that cables and particles use. Wind acts as air speed across the sheet with
 strong air drag, so the cloth follows gusts smoothly. The cloth reads the parameter
 values of these nodes; wiring into their inputs is rejected rather than ignored.
+**Turn** (degrees) turns the finished grid about its upright axis after the simulation, so the
+motion is the same at every angle; Weave's Woven Cloth uses 32° so wind blowing at the camera
+shows as a sideways bow. Graphs saved before Turn existed read 0 and stay head-on.
 The clock is the **source time of the host clip**, as with Flock: split and trimmed
 clips continue the motion instead of restarting it. Speed keyframes are not followed
 yet. Time runs at 60 fixed steps per second, and **Pre-roll** starts the simulation

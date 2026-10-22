@@ -46,8 +46,8 @@ export function sweepValue({ from, to }, duration) {
   return { at, expression: `(${from}+(${to - from})*(0.5-0.5*cos(2*PI*t/${duration})))` };
 }
 
-/** drawtext filters that burn the swept value in, small, at the bottom left ("Band Size 22 px"). */
-function sweepLabel(clip, { width, duration }) {
+/** drawtext filters that burn the swept value in, small, at the bottom left ("Band Size 22 px", "Gain -0.73"). */
+export function sweepLabel(clip, { width, duration }) {
   const sweep = clip.sweep;
   const size = Math.round(width * (sweep.fontSize ?? 0.034)), margin = Math.round(size * 0.7);
   const style = `fontfile='${fontFile()}':fontsize=${size}:fontcolor=white:x=${margin}:y=h-th-${margin}:box=1:boxcolor=black@0.55:boxborderw=${Math.round(size * 0.35)}`;
@@ -59,9 +59,13 @@ function sweepLabel(clip, { width, duration }) {
       + `:enable='between(t\\,${(index * share).toFixed(4)}\\,${((index + 1) * share).toFixed(4)})'`).join(',');
   }
   const decimals = sweep.decimals ?? 0, value = sweepValue(sweep, duration).expression;
-  const number = decimals ? `%{eif\\:trunc(round(${value}*${10 ** decimals})/${10 ** decimals})\\:d}.%{eif\\:mod(round(${value}*${10 ** decimals})\\,${10 ** decimals})\\:d\\:${decimals}}`
-    : `%{eif\\:round(${value})\\:d}`;
-  return `drawtext=${style}:text='${name} ${number}${unit}'`;
+  if (!decimals) return `drawtext=${style}:text='${name} %{eif\\:round(${value})\\:d}${unit}'`;
+  // Whole and fractional part of the rounded magnitude; the sign is drawn on its own while the value is
+  // below zero ("-", the label font lacks U+2212), since trunc and mod of a negative value lose it.
+  const scale = 10 ** decimals, scaled = `round(abs(${value})*${scale})`, negative = `lt(round(${value}*${scale})\\,0)`;
+  const number = `%{eif\\:trunc(${scaled}/${scale})\\:d}.%{eif\\:mod(${scaled}\\,${scale})\\:d\\:${decimals}}`;
+  return [`drawtext=${style}:text='${name} ${number}${unit}':enable='not(${negative})'`,
+    `drawtext=${style}:text='${name} -${number}${unit}':enable='${negative}'`].join(',');
 }
 // Browser exports are full-range BT.709; docs clips are limited range, tagged BT.709.
 const toLimited = 'scale=in_range=full:out_range=limited:in_color_matrix=bt709:out_color_matrix=bt709,format=yuv420p';

@@ -47,8 +47,9 @@ const BASE_PARAMS: Record<string, EffectParam> = {
     animatable: true, group: 'Pattern',
   },
   amount: {
+    // 'Mix', not 'Style': the card's Style menu switches the look itself.
     type: 'number', label: 'Amount', default: 0.75, min: 0, max: 1, step: 0.01,
-    animatable: true, group: 'Style',
+    animatable: true, group: 'Mix',
   },
   angle: {
     type: 'number', label: 'Angle', default: 0, min: -180, max: 180, step: 1,

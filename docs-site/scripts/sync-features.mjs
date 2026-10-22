@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { convertPage, preparePage, titleOf } from './lib/convertPage.mjs';
 import { loadEffectCatalog } from './lib/effectCatalog.mjs';
 import { buildSidebar, countSidebarPages, effectGroupIndex, readIndexSections } from './lib/featureIndex.mjs';
-import { assetBudgetIssues, pageBudgetIssues } from './lib/media.mjs';
+import { assetBudgetIssues, devServerServesAsset, pageBudgetIssues } from './lib/media.mjs';
 import { buildAnchorRedirects, buildRedirects } from './lib/redirects.mjs';
 import { PAGE_FOLDERS, contentFile, pageSlug } from './lib/routes.mjs';
 
@@ -36,7 +36,6 @@ const repoRoot = path.resolve(siteDir, '..');
 const featuresDir = path.join(repoRoot, 'docs', 'Features');
 const contentDir = path.join(siteDir, 'src', 'content', 'docs');
 const generatedDir = path.join(siteDir, 'src', 'generated');
-const assetsOut = path.join(siteDir, 'public', 'assets');
 const astroCacheDir = path.join(siteDir, '.astro');
 const featurePath = 'docs/Features';
 const groupsPath = 'src/effects/effectCatalogGroups.ts';
@@ -96,10 +95,14 @@ const report = ({ level, text }) => (level === 'info' ? infos : warnings).push(t
 // from this cache and restarts with an empty content collection when its
 // settings vanish: keep the cache only while an astro dev server of this very
 // site runs. A stale record whose PID now belongs to another process does not
-// count, and builds (--build) always start from a clean cache.
+// count. Builds (--build) start from a clean cache, except while such a server
+// runs: removing the cache under it left it answering 500 until restarted, so
+// the build then reuses the cache the server keeps current.
+let devServerUrl;
 async function devServerRunning() {
   let pid, url;
   try { ({ pid, url } = JSON.parse(fs.readFileSync(path.join(astroCacheDir, 'dev.json'), 'utf8'))); } catch { return false; }
+  devServerUrl = typeof url === 'string' ? url : undefined;
   if (!Number.isInteger(pid) || pid <= 0) return false;
   if (fs.existsSync('/proc')) {
     try {
@@ -113,16 +116,18 @@ async function devServerRunning() {
   if (typeof url !== 'string') return false;
   try { await fetch(url, { signal: AbortSignal.timeout(1500) }); return true; } catch { return false; }
 }
-const devServer = !forBuild && await devServerRunning();
+const devServer = await devServerRunning();
 if (!devServer) fs.rmSync(astroCacheDir, { recursive: true, force: true });
+else if (forBuild) report({ level: 'info', text: 'The running astro dev of this site keeps its .astro cache; the build reuses it.' });
 
 // Pages are updated in place: a running `astro dev` watches these files, and
 // removing the whole folder would end those watches (the site then keeps
 // serving the previous text). Unchanged files are not rewritten.
 function writeIfChanged(file, content) {
-  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === content) return;
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === content) return false;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
+  return true;
 }
 
 // Hand-written site pages (Welcome, the home page) can be listed in the index too.
@@ -238,21 +243,34 @@ for (const folder of generatedContent) {
 }
 
 // The dev server restarts for the new sidebar at the same moment and misses the deletions.
-if (devServer && removedPages) report({ level: 'warn', text: `${removedPages} page(s) were removed: restart the running astro dev, which keeps serving them until then.` });
+if (devServer && removedPages) report({ level: 'warn', text: `${removedPages} page(s) were removed: the running astro dev keeps serving them until it is restarted.` });
 
-// Shared assets (pictures, clips, posters, captions) move into the site's public/ folder.
-const assetFiles = sourceRef ? gitFiles.filter((name) => name.startsWith('assets/')) : [];
-const hasAssets = sourceRef ? assetFiles.length > 0 : fs.existsSync(path.join(featuresDir, 'assets'));
-if (hasAssets) {
-  fs.rmSync(assetsOut, { recursive: true, force: true });
-  if (sourceRef) {
-    for (const relativePath of assetFiles) {
-      const destination = path.join(siteDir, 'public', relativePath);
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, readAsset(relativePath));
-    }
-  } else {
-    fs.cpSync(path.join(featuresDir, 'assets'), assetsOut, { recursive: true });
+// Shared assets (pictures, clips, posters, captions) move into the site's public/ folder, in place like the
+// pages: a running `astro dev` (Vite) watches public/, and a removed and recreated folder drops out of that
+// watch, so the server answered 404 for every asset until it was restarted. Unchanged files stay untouched.
+/** Files under `base`/assets, as assets/… paths. */
+const listAssets = (base) => (fs.existsSync(path.join(base, 'assets')) ? fs.readdirSync(path.join(base, 'assets'), { recursive: true, withFileTypes: true })
+  .filter((entry) => entry.isFile())
+  .map((entry) => path.relative(base, path.join(entry.parentPath ?? entry.path, entry.name)).split(path.sep).join('/')) : []);
+const assetFiles = sourceRef ? gitFiles.filter((name) => name.startsWith('assets/')) : listAssets(featuresDir);
+let assetsWritten = 0;
+let assetsRemoved = 0;
+const newAssets = [];
+if (assetFiles.length) {
+  const wanted = new Set(assetFiles);
+  for (const relativePath of assetFiles) {
+    const destination = path.join(siteDir, 'public', relativePath);
+    const content = sourceRef ? readAsset(relativePath) : fs.readFileSync(path.join(featuresDir, relativePath));
+    const existed = fs.existsSync(destination);
+    if (existed && fs.statSync(destination).size === content.length && fs.readFileSync(destination).equals(content)) continue;
+    if (!existed) newAssets.push(relativePath);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, content);
+    assetsWritten += 1;
+  }
+  for (const stale of listAssets(path.join(siteDir, 'public')).filter((file) => !wanted.has(file))) {
+    fs.rmSync(path.join(siteDir, 'public', stale), { force: true });
+    assetsRemoved += 1;
   }
 }
 
@@ -271,9 +289,26 @@ const anchorRedirects = buildAnchorRedirects(anchorEntries, routes, (slug) => an
 anchorRedirects.notes.forEach(report);
 
 // Rewrite generated JSON only on change: a running `astro dev` restarts when these files change.
-writeIfChanged(path.join(generatedDir, 'sidebar.json'), `${JSON.stringify(sidebar, null, 2)}\n`);
-writeIfChanged(path.join(generatedDir, 'redirects.json'), `${JSON.stringify(redirects.redirects, null, 2)}\n`);
-writeIfChanged(path.join(generatedDir, 'anchor-redirects.json'), `${JSON.stringify(anchorRedirects.anchors, null, 2)}\n`);
+const configChanged = [
+  writeIfChanged(path.join(generatedDir, 'sidebar.json'), `${JSON.stringify(sidebar, null, 2)}\n`),
+  writeIfChanged(path.join(generatedDir, 'redirects.json'), `${JSON.stringify(redirects.redirects, null, 2)}\n`),
+  writeIfChanged(path.join(generatedDir, 'anchor-redirects.json'), `${JSON.stringify(anchorRedirects.anchors, null, 2)}\n`),
+].some(Boolean);
+// astro.config.mjs reads these files: a running astro dev restarts for them, and after that restart it no longer
+// reloads edited pages (it keeps serving their old text, sometimes a 500) until it is started again.
+if (devServer && configChanged) report({ level: 'warn', text: 'The sidebar or redirects changed: the running astro dev restarted itself and from now on no longer reloads edited pages (an Astro dev-server limit).' });
+
+/** The command that starts this site's dev server again on the address it runs on now. */
+function restartCommand(url) {
+  let address;
+  try { address = url ? new URL(url) : undefined; } catch { address = undefined; }
+  const flags = address ? ` --port ${address.port || 4321}${address.hostname && address.hostname !== 'localhost' ? ` --host ${address.hostname}` : ''}` : '';
+  return `cd ${siteDir} && npx astro dev stop && npx astro dev${flags}`;
+}
+// A new asset the running dev server does not serve (devServerServesAsset) needs a restart too.
+const newAssetMissing = devServer && newAssets.length > 0 && !(await devServerServesAsset(devServerUrl, newAssets.at(-1)));
+if (newAssetMissing) report({ level: 'warn', text: `The running astro dev answers 404 for the new ${newAssets.at(-1)} (its file watcher missed the new files, often for lack of inotify watches).` });
+const restartNeeded = devServer && (removedPages > 0 || configChanged || newAssetMissing);
 
 // A figure that stays as written is checked again by the general pass: report each problem once.
 const uniqueWarnings = [...new Set(warnings)];
@@ -281,4 +316,6 @@ for (const text of uniqueWarnings) console.warn(text);
 for (const text of infos) console.log(text);
 const sourceLabel = sourceRef ? `Git ref ${sourceRef}` : 'working tree';
 console.log(`Sidebar: ${sidebar.length} groups, ${countSidebarPages(sidebar)} entries; ${unpublished.size} pages unpublished. Effect groups from ${catalog.source}.`);
-console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects, ${anchorRedirects.count} anchor redirects; assets ${hasAssets ? 'copied' : 'not found'}; ${uniqueWarnings.length} warnings.`);
+console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects, ${anchorRedirects.count} anchor redirects; assets ${assetFiles.length ? `${assetFiles.length} (${assetsWritten} written, ${assetsRemoved} removed)` : 'not found'}; ${uniqueWarnings.length} warnings.`);
+// Last, so it is not lost among the warnings: the one action the running dev server needs.
+if (restartNeeded) console.warn(`RESTART the docs dev server before checking pages: ${restartCommand(devServerUrl)}`);

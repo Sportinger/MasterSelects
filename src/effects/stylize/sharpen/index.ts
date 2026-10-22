@@ -4,8 +4,19 @@
 // (blurEffectGraphs.ts); shader.wgsl only prewarms the generic effect layout.
 
 import shader from './shader.wgsl?raw';
-import type { EffectDefinition } from '../../types';
+import type { EffectDefinition, EffectPreset } from '../../types';
 import { sharpenParamNotes } from './sharpenModel';
+
+export const SHARPEN_PRESETS: readonly EffectPreset[] = [
+  // Hair, fabric and fine texture a touch crisper, without looking processed.
+  { id: 'fine-detail', name: 'Fine Detail', params: { amount: 1, radius: 0.7 } },
+  // Slightly soft camera footage made clearly crisp.
+  { id: 'crisp', name: 'Crisp', params: { amount: 2, radius: 1 } },
+  // Every grain and texture pulled out: a rough, high-contrast look.
+  { id: 'gritty', name: 'Gritty', params: { amount: 5, radius: 1.5 } },
+  // Larger shapes stand out against each other: more depth and local contrast.
+  { id: 'punch', name: 'Punch', params: { amount: 1.5, radius: 4 } },
+];
 
 export const sharpen: EffectDefinition = {
   id: 'sharpen',
@@ -35,9 +46,12 @@ export const sharpen: EffectDefinition = {
       min: 0.5,
       max: 5,
       step: 0.1,
+      unit: ' px',
       animatable: true,
     },
   },
+
+  presets: SHARPEN_PRESETS,
 
   paramWarnings: (params, width, height) => sharpenParamNotes(params, width, height),
 

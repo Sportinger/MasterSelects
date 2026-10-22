@@ -25,7 +25,7 @@ export type TransitionMappedAnimationClip = Pick<
 > & Partial<SurfaceClip & ParameterSourceClip>;
 
 function addSurfaces(effects: Effect[], clip: TransitionMappedAnimationClip, time: number, keys?: readonly Keyframe[]): Effect[] {
-  effects = applyStickFigureActions(clip, effects, time);
+  effects = applyStickFigureActions(clip, effects, time, keys);
   if (clip.nodeGraph?.parameterSources && typeof clip.startTime === 'number') {
     effects = applyParameterSourcesToEffects({ ...clip, startTime: clip.startTime }, keys ?? [], time, effects);
   }

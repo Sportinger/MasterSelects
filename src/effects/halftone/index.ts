@@ -51,8 +51,8 @@ const select = (label: string, values: string[], defaultValue = values[0]) => ({
 });
 export const dither = createCatalogEffect({
   id: 'dither', name: 'Dithering', category: 'halftone', shader, entryPoint: 'ditherFragment', scaleFloor: 1,
-  // Same parameter ids as the other looks of the engine; Levels is its own, so the Style menu of the other looks
-  // (styles share every parameter, effectStyles.ts) does not offer Dithering.
+  // Same parameter ids as the other looks of the engine (the Style menu offers every look, effectStyles.ts); Levels is
+  // its own, so a switch away keeps it for a switch back.
   params: {
     scale: { type: 'number', label: 'Pixel Size', default: 3, min: 1, max: 24, step: 1, unit: ' px', group: 'Pattern' },
     // Steps per colour channel (equal sRGB steps): 4 gives 64 colours, 2 the eight pure colours. A saved graph from before
@@ -91,12 +91,13 @@ export const patternHalftone = createCatalogEffect({
 });
 export const riso = createCatalogEffect({
   id: 'riso', name: 'Riso', category: 'halftone', shader, entryPoint: 'risoFragment',
-  // Same parameter ids as the other looks of the engine; Dot Size is its own. Card: Dot Size and Registration under
-  // Pattern, then the two inks and Amount under Color.
+  // Same parameter ids as the other looks of the engine; Dot Size is its own. Registration is the inks' slip, not a cell
+  // size, so it carries only to Riso Glow's Registration (styleRole). Card: Dot Size and Registration under Pattern,
+  // then the two inks and Amount under Color.
   params: {
     // How far the two inks slip apart, in 1080p pixels (0: in register). Effects saved without a value had 8.
     // Below 0 renders 0 (the graph's max), and the card says so (renderMin).
-    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 32, step: 0.5, unit: ' px', renderMin: 0, group: 'Pattern', legacyDefault: 8 },
+    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 32, step: 0.5, unit: ' px', renderMin: 0, group: 'Pattern', legacyDefault: 8, styleRole: 'registration' },
     // The cells of both dot screens, in 1080p pixels. A graph saved before Dot Size does not read it (graphOnly).
     dotSize: { type: 'number', label: 'Dot Size', default: 6, min: 2, max: 40, step: 1, unit: ' px', renderMin: 2, graphOnly: true, group: 'Pattern' },
     colorA: { type: 'color', label: 'Dark Ink', default: '#2046b3', group: 'Color' },
@@ -117,7 +118,7 @@ export const risoGlow = createCatalogEffect({
   params: {
     // How far the two inks slip apart, in 1080p pixels (0: in register). Effects saved without a value had 14; the range
     // up to 80 is kept for saved projects (the earlier Riso Glow allowed 80), so a saved slip stays in the card and tools.
-    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 80, step: 0.5, unit: ' px', renderMin: 0, group: 'Pattern', legacyDefault: 14 },
+    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 80, step: 0.5, unit: ' px', renderMin: 0, group: 'Pattern', legacyDefault: 14, styleRole: 'registration' },
     // The cells of both dot screens, in 1080p pixels. A graph saved before Dot Size does not read it (graphOnly).
     dotSize: { type: 'number', label: 'Dot Size', default: 6, min: 2, max: 40, step: 1, unit: ' px', renderMin: 2, graphOnly: true, group: 'Pattern' },
     // How brightly the Glow Ink shines at the top of its pulse (0: a plain two-ink print). Reaches the twin through the Angle slot.
@@ -139,9 +140,8 @@ export const risoGlow = createCatalogEffect({
 });
 export const paperPrint = createCatalogEffect({
   id: 'paper-print', name: 'Paper Print', category: 'halftone', shader, entryPoint: 'paperPrintFragment', scaleFloor: 1,
-  // Same parameter ids as the other looks of the engine; Texture is its own, so the Style menu of the other looks
-  // (styles share every parameter, effectStyles.ts) does not offer Paper Print. Card: Grain Size and Texture under
-  // Pattern, then Ink, Paper and Amount under Color.
+  // Same parameter ids as the other looks of the engine (the Style menu offers every look, effectStyles.ts); Texture is
+  // its own. Card: Grain Size and Texture under Pattern, then Ink, Paper and Amount under Color.
   params: {
     // The size of one grain, in 1080p pixels. Effects saved without a value had 18. Below 1 renders 1 (renderMin).
     scale: { type: 'number', label: 'Grain Size', default: 2, min: 1, max: 80, step: 0.5, unit: ' px', renderMin: 1, group: 'Pattern', legacyDefault: 18 },
@@ -187,7 +187,8 @@ export const driftLines = createCatalogEffect({
   // Same parameter ids as the other looks of the engine (the Style menu keeps values); labels of its own.
   params: {
     scale: catalogBaseParam('scale', { label: 'Band Size', unit: ' px', renderMin: 2 }),
-    amount: catalogBaseParam('amount', { label: 'Drift', group: 'Motion' }),
+    // How far the bands slide, not a mix: it carries only to looks whose Amount is a drift too.
+    amount: catalogBaseParam('amount', { label: 'Drift', group: 'Motion', styleRole: 'drift' }),
     // An edited graph saved before Angle acted does not read it: the card hides it then (graphOnly).
     angle: catalogBaseParam('angle', { unit: '°', graphOnly: true }),
   },

@@ -1,0 +1,14 @@
+{
+  "shots": [
+    "weave?plumbing=hide&omit=output&marks=weave-in:above,handmade:above,yarn:below,wind-cloth:above,reveal-by-shape:below",
+    "weave?focus=weave-in&only=weave-clock,weave,weave-rate,weave-scaled,weave-progress-raw,weave-one,weave-progress,thread&cables=avoid&name.hand-set:curves=Handmade&marks=weave-scaled:above,weave-progress:below,thread:above@weave-weave-in",
+    "weave?focus=reveal-by-shape&only=reveal,reach,reveal-radius,reveal-shape,reveal-noise,reveal-edge,reveal-ramp&cables=avoid&marks=reveal-radius:below,reveal-shape:above,reveal-noise:below,reveal-ramp:above@weave-reveal-by-shape",
+    "weave?focus=handmade&only=hand-amount,hand-amount-squared,hand-wobble-scale,hand-wobble-amplitude,hand-wobble-x,hand-offset,hand-set&cables=avoid&name.pattern:curves=Weave Pattern&name.hand-meander-vector:value=Place on the Thread&name.hand-wobble-y:value=Wobble Up and Down&name.hand-crimp:value=Crimp&marks=hand-amount-squared:above,hand-wobble-x:above,hand-offset:below,hand-set:above@weave-handmade",
+    "weave?focus=yarn&only=yarn,yarn-radius,flyaways,fiber&cables=avoid&name.thread:curves=Weave In&name.reveal-ramp:value=Reveal by Shape&name.hand-swell:value=Slubs&marks=yarn-radius:below,yarn:above,flyaways:below,fiber:above@weave-yarn",
+    "weave?focus=wind-cloth&only=wind,swirl,cloth,bind&cables=avoid&name.fiber:curves=Yarn&layout=float&marks=wind:above,swirl:below,cloth:below,bind:above@weave-wind-cloth",
+    "weave?params={\"form\":\"qualle\"}&focus=jellyfish-pulse&only=pulse-clock,pulse-rate,pulse-cycles,pulse-turn,pulse-phase,pulse-local-phase,pulse-cos,pulse-positive,pulse-normalized,pulse-beat,pulse-weighted,pulse-strength,pulse-amount&constants=hide&cables=avoid&name.pulse-head-weight=Near the Bell&name.pulse-delay=Delay down the Body&marks=pulse-turn:above,pulse-cos:below,pulse-beat:above,pulse-amount:below@weave-jellyfish-pulse",
+    "weave?params={\"form\":\"qualle\"}&focus=return-curls&only=curl-longitudinal,curl-mask,curl-strength,curl-amplitude,curl-outgoing-strength,curl-incoming-strength&constants=hide&cables=avoid&name.return-split:z=Place along the Body&name.curl-side=Outgoing Side&name.curl-incoming-mask=Incoming Side&marks=curl-longitudinal:below,curl-mask:below,curl-strength:left,curl-amplitude:above@weave-return-curls",
+    "weave?params={\"form\":\"qualle\"}&focus=upright-pose&cables=avoid&marks=pose-split:below,pose-height:above,pose-turned:below,pose:above@weave-upright-pose"
+  ],
+  "note": "The weave?params=... shots (Qualle form) need the test page to read a params query (effect params on top of the defaults); scripts/effect-graph-shot.mjs passes it through, src/test/effectGraphDoc/effectGraphDocModel.ts does not read it yet (ledger, GEN1): they were made with that one line patched locally."
+}

@@ -1,7 +1,9 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/effects', () => ({ getEffect: () => ({ requiresContinuousRender: true }) }));
+// 'timeline-clock' stands for a look on the timeline clock (Drift Lines, the glyph looks), 'still' for a still one.
+vi.mock('../../src/effects', () => ({ getEffect: (id: string) => id === 'timeline-clock' ? { timelineAnimated: true }
+  : id === 'still' ? {} : { requiresContinuousRender: true } }));
 
 vi.mock('../../src/effects/looks/lookPreviewScheduler', () => ({
   lookPreviewScheduler: {
@@ -104,6 +106,28 @@ describe('LookTile bitmap lifetime', () => {
     await act(async () => { complete(bitmap); await Promise.resolve(); });
     expect(drawImage).not.toHaveBeenCalled();
     expect(bitmap.close).toHaveBeenCalledOnce();
+  });
+
+  it('plays a timeline-clock look on hover with a running time, a still look not at all', () => {
+    const timelineLook = { ...look, stack: [{ effectId: 'timeline-clock', enabled: true, params: {} }] };
+    const { container, unmount } = render(<LookTile look={timelineLook} sourceFrameId="a" onApply={() => {}} />);
+    frames.length = 0;
+    const start = performance.now();
+    fireEvent.pointerEnter(container.querySelector('article')!);
+    act(() => frames.shift()!(start + 100));
+    act(() => frames.shift()!(start + 600));
+    const times = vi.mocked(lookThumbnailRuntime.renderLook).mock.calls.map(call => call[4] as number);
+    expect(times).toHaveLength(2);
+    expect(times[1]).toBeGreaterThan(times[0]);
+    expect(times[1]).toBeGreaterThan(0.4);
+    unmount();
+    vi.mocked(lookThumbnailRuntime.renderLook).mockClear();
+    const stillLook = { ...look, stack: [{ effectId: 'still', enabled: true, params: {} }] };
+    const still = render(<LookTile look={stillLook} sourceFrameId="a" onApply={() => {}} />);
+    frames.length = 0;
+    fireEvent.pointerEnter(still.container.querySelector('article')!);
+    expect(frames).toHaveLength(0);
+    expect(lookThumbnailRuntime.renderLook).not.toHaveBeenCalled();
   });
 
   it('bounds unavailable-frame retries', async () => {

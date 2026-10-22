@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as paramVisibility from '../../src/services/operators/effectParamVisibility';
+
+// Counted to check that the card's preset match does not rebuild the control list per drag frame.
+vi.mock('../../src/services/operators/effectParamVisibility', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/services/operators/effectParamVisibility')>();
+  return { ...actual, effectParamDefinitions: vi.fn(actual.effectParamDefinitions) };
+});
 import { getAllEffects, getEffect } from '../../src/effects';
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { driftLinesWarnings } from '../../src/effects/halftone/driftLines';
@@ -102,5 +109,48 @@ describe('Drift Lines definition', () => {
     expect(paramRangeNotes(definition.params, { scale: 0 })[0]).toMatchObject({ label: 'Band Size', rendered: 2 });
     expect(driftLinesWarnings({ scale: 2 }, 256, 144)[0]).toMatch(/thinner than one pixel on this 256×144 frame/u);
     expect(driftLinesWarnings({ scale: 2 }, 1920, 1080)).toEqual([]);
+  });
+
+  it('matches a slider drag (a new params object per frame) without resolving the presets again', () => {
+    const definitions = vi.mocked(paramVisibility.effectParamDefinitions);
+    const presets = getEffect('drift-lines')!.presets!;
+    const base = { type: 'drift-lines', params: { scale: 14, amount: 0.75, speed: 1, colorA: '#111827' } };
+    matchingEffectPreset(base);
+    definitions.mockClear();
+    for (let frame = 0; frame < 20; frame++) matchingEffectPreset({ ...base, params: { ...base.params, amount: frame / 20 } });
+    expect(definitions.mock.calls.length).toBeLessThanOrEqual(presets.length);
+    // Still the right answer: the values of a preset match it on a fresh params object.
+    const values = resolveEffectPreset(base, presets[1]);
+    expect(matchingEffectPreset({ type: 'drift-lines', params: { ...values } })?.id).toBe(presets[1].id);
+  });
+
+  it('matches a drag of a graph value a preset names without resolving the presets again', () => {
+    const weave = getEffect('weave')! as { presets?: readonly import('../../src/effects/types').EffectPreset[] };
+    const original = weave.presets;
+    weave.presets = [{ id: 'nest', name: 'Nest', params: { weave_value: 2, reveal_value: 0.32 } }, { id: 'calm', name: 'Calm', params: { weave_value: 0.5 } }];
+    try {
+      const definitions = vi.mocked(paramVisibility.effectParamDefinitions);
+      const base = { type: 'weave', params: { weave_value: 1, reveal_value: 1 } as Record<string, number> };
+      matchingEffectPreset(base);
+      definitions.mockClear();
+      for (let frame = 0; frame < 20; frame++) matchingEffectPreset({ ...base, params: { ...base.params, weave_value: frame / 10 } });
+      expect(definitions.mock.calls.length).toBe(0);
+      expect(matchingEffectPreset({ type: 'weave', params: { ...resolveEffectPreset(base, weave.presets[0]) } })?.id).toBe('nest');
+    } finally { weave.presets = original; }
+  });
+
+  it('keeps the resolved presets of two looks that share one presets array apart', () => {
+    const halftone = getEffect('halftone')! as { presets?: readonly import('../../src/effects/types').EffectPreset[] };
+    const riso = getEffect('riso')! as { presets?: readonly import('../../src/effects/types').EffectPreset[] };
+    const originals = [halftone.presets, riso.presets];
+    const shared = [{ id: 'fine', name: 'Fine', params: { scale: 6 } }];
+    halftone.presets = shared; riso.presets = shared;
+    try {
+      // Riso's controls are not Halftone's (no Angle, its own inks): each look must resolve its own.
+      expect(matchingEffectPreset({ type: 'halftone', params: { ...resolveEffectPreset({ type: 'halftone', params: {} }, shared[0]) } })?.id).toBe('fine');
+      const risoValues = resolveEffectPreset({ type: 'riso', params: {} }, shared[0]);
+      expect(matchingEffectPreset({ type: 'riso', params: { ...risoValues } })?.id).toBe('fine');
+      expect(matchingEffectPreset({ type: 'riso', params: { ...risoValues, amount: 0.2 } })).toBeUndefined();
+    } finally { [halftone.presets, riso.presets] = originals; }
   });
 });

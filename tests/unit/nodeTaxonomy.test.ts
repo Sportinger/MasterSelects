@@ -62,16 +62,13 @@ describe('node catalog taxonomy', () => {
     expect([...entries.values()].some(entry => entry.context.includes('Face Cables'))).toBe(false);
   });
 
-  it('offers styles only between looks that share every parameter', () => {
-    // Acuarela (watercolour) and Rom1 (watery smoke) no longer share their parameters.
+  it('offers styles only between looks of one engine', () => {
+    // Acuarela (watercolour) and Rom1 (watery smoke) are no longer looks of one engine.
     expect(effectStyleOptions('acuarela')).toEqual([]);
-    expect(effectStyleOptions('halftone').map(option => option.value)).toEqual(expect.arrayContaining(['pixel-poster', 'crosshatch']));
-    // Dithering (Levels), Riso (Dot Size) and Paper Print (Texture) have a control of their own, so they are not styles of the other looks.
-    expect(effectStyleOptions('halftone').map(option => option.value)).not.toContain('dither');
-    expect(effectStyleOptions('halftone').map(option => option.value)).not.toContain('riso');
-    expect(effectStyleOptions('halftone').map(option => option.value)).not.toContain('paper-print');
-    expect(effectStyleOptions('paper-print').map(option => option.value)).toEqual(['paper-print']);
-    expect(effectStyleOptions('halftone').map(option => option.value)).not.toContain('glitch');
+    expect(effectStyleOptions('halftone').map(option => option.value)).toEqual(expect.arrayContaining(['riso', 'dither', 'paper-print', 'pixel-poster', 'crosshatch']));
+    // Looks with a control of their own (Dithering's Levels, Riso's Dot Size, Paper Print's Texture) are styles too.
+    expect(effectStyleOptions('paper-print').map(option => option.value)).toEqual(expect.arrayContaining(['halftone', 'riso', 'dither']));
+    expect(effectStyleOptions('halftone').map(option => option.value)).not.toContain('ascii');
     expect(effectStyleOptions('chroma-key')).toEqual([]);
   });
 

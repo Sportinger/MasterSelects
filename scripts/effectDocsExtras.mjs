@@ -12,8 +12,10 @@
 //   sectionLabels  card titles for registry parameter groups ({ 'Time map': 'Time field source' }).
 //   note      the controls text when the card shows no fixed rows.
 //   deeper    [[text, link relative to docs/Features/effects]] for a basic page's Technical details.
-//   thumb     the gallery thumbnail: { region: [left, top, width, height] } as fractions of the still
-//             (default: its effect half), or { shot: <Effect Lab --pairs file> } that renders it.
+//   thumb     the gallery thumbnail: { region: [left, top, width, height] } as fractions of the source
+//             (default: its effect half), { source: <asset path relative to docs/Features> } to cut it from
+//             another picture (default: the clip poster when the page plays the effect's loop, else the
+//             still), or { shot: <Effect Lab --pairs file> } that renders it.
 
 const LANDMARK_EFFECTS = ['Effect system: landmark tracking effects', '../Effect-System.md#landmark-tracking-effects'];
 
@@ -27,12 +29,39 @@ export const EFFECT_DOC_EXTRAS = {
   contrast: { thumb: SPLIT_THUMB },
   exposure: { thumb: SPLIT_THUMB },
   levels: { thumb: SPLIT_THUMB },
-  // The still has three panels (original, Saturation, Vibrance): the card shows the last.
-  vibrance: { thumb: { region: [0.67, 0, 0.33, 1] } },
+  // The whole blurred half at card size hides the blur: the houses and boats, closer.
+  'gaussian-blur': { thumb: { region: [0.66, 0.2, 0.3, 0.6] } },
   // Generators: the still is the effect frame alone.
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
-  'stick-figure': { thumb: { region: [0, 0, 1, 1] } },
+  // Stick Figure: the thumbnail is cut from the still, the default figure walking alone on black (the
+  // loop's poster catches it mid-jump at the right edge); below its parameters the card has the
+  // Pose library, Motion and Actions sections of its own (StickFigureControls, StickFigureActionLane).
+  'stick-figure': {
+    thumb: { source: 'assets/effects/stick-figure.webp', region: [0.2, 0.14, 0.6, 0.72] },
+    sections: ['Pose', 'Proportions', 'Ground', 'Style', 'Pose library', 'Motion', 'Actions'],
+    rows: [
+      cableRow('Pose library', 'Pose', '13 built-in poses and the poses you saved', 'Stand'),
+      cableRow('Pose library', 'Use', 'Apply or Key pose', 'none'),
+      cableRow('Pose library', 'Key easing', 'Ease in-out, Linear, Ease in, Ease out', 'Ease in-out'),
+      cableRow('Pose library', 'Save', 'A name and Save pose', 'empty'),
+      cableRow('Motion', 'Gait', 'Walk, Run or Idle', 'none'),
+      cableRow('Actions', 'Action lane', 'One block per action along the clip', 'empty'),
+      cableRow('Actions', 'Add', 'Idle, Walk, Run, Jump, Punch, Kick, Duck, Hit React, Throw, Grab, Land or Fall, then At playhead', 'Punch'),
+      cableRow('Actions', 'Start', '0 s to the clip length', 'the playhead'),
+      cableRow('Actions', 'Duration', '0.05 to 10 s', 'the action’s own length'),
+      cableRow('Actions', 'Strength', '0 to 2', '1'),
+      cableRow('Actions', 'Aim at', 'A joint of another Stick Figure, or No target', 'No target'),
+      cableRow('Actions', 'Contacts', 'Markers', 'none'),
+      cableRow('Actions', 'Sound', 'One of the SFX sounds, then Sounds', 'Hit'),
+      cableRow('Actions', 'Check', 'Check choreography', 'none'),
+    ],
+  },
+  // Weave: the loop's poster is the finished net alone on black; Form and Color sit above the card's sections.
+  weave: { thumb: { region: [0, 0, 1, 1] }, sectionLabels: { '': 'Form and color' } },
+  // A current Sharpen's card has only these rows: its own control (a note with Use the new Sharpen)
+  // shows on Sharpens saved with 3.2.7 alone, and the page's Saved projects note describes it.
+  sharpen: { rows: ['amount', 'radius'] },
   // The still is a detail at twice the size: the card shows the dithered face and raised arm.
   dither: { thumb: { region: [0.6, 0.06, 0.34, 0.38] } },
   'ai-edge-fill': {
@@ -70,8 +99,25 @@ export const EFFECT_DOC_EXTRAS = {
         .map((key) => ({ key, section: 'Light & face shadows' })),
     ],
   },
+  // The card of the default swarm (Free Swarm): its rows come from the swarm graph (clip.flock), not
+  // from effect parameters, and other presets expose other rows (FLOCKING_CARD_PRESET_IDS).
   flocking: {
-    note: 'The card shows a **Preset** menu and the values that preset exposes, grouped as Population, Behavior, Guidance, Appearance and Lines; they change with the preset. **Open Nodes** shows the whole swarm graph.',
+    thumb: { region: [0, 0, 1, 1] },
+    sections: ['Population', 'Behavior', 'Appearance', 'More controls', 'Time & Quality'],
+    rows: [
+      cableRow('Population', 'Population', '1 to 4 194 304', '4000'),
+      cableRow('Behavior', 'Cohesion', '0 to 10', '1'),
+      cableRow('Behavior', 'Separation', '0 to 10', '1.6'),
+      cableRow('Behavior', 'Alignment', '0 to 10', '1.2'),
+      cableRow('Behavior', 'Speed', '0 to 4', '1'),
+      cableRow('Behavior', 'Turbulence', '0 and up', '18'),
+      cableRow('Appearance', 'Size', '0 to 200 px', '6 px'),
+      cableRow('Appearance', 'Color', 'a colour', '`#b4e2ff`'),
+      cableRow('More controls', 'Add', 'any value of the swarm graph', 'none'),
+      cableRow('Time & Quality', 'Step rate', '30, 60 or 120 Hz', '60 Hz'),
+      cableRow('Time & Quality', 'Warm-up', '0 to 30 s', '0 s'),
+      cableRow('Time & Quality', 'Loop', 'Continuous, Reset each loop', 'Continuous'),
+    ],
   },
   'slit-scan': {
     sections: ['Time', 'Wave', 'Sampling', 'Motion compensation', 'Preview quality', '3D geometry', 'Space-time slice', 'Stabilization',

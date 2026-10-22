@@ -139,8 +139,20 @@ export function InspectorSelect<T extends string>({
         setOpen(false);
       }
     };
+    // A menu opened by pointer has no focused trigger (pointer-focus hygiene clears it), so its
+    // Escape reaches the document: close the menu there too, before timeline shortcuts see it.
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || rootRef.current?.contains(document.activeElement)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+    };
     document.addEventListener('pointerdown', closeOutside, true);
-    return () => document.removeEventListener('pointerdown', closeOutside, true);
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside, true);
+      document.removeEventListener('keydown', closeOnEscape, true);
+    };
   }, [listboxId, open]);
 
   useEffect(() => {

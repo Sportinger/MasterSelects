@@ -1,14 +1,8 @@
 # Timeline
 
-[<- Back to Index](./README.md)
+The Timeline is where you arrange your clips over time: video, audio, images, text and other clips sit on tracks, and you drag them in from the Media panel, move, trim and split them, and play them back. Keys for every tool: [Keyboard Shortcuts](./Keyboard-Shortcuts.md); animation: [Keyframes](./Keyframes.md).
 
-The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
-
-Right-button scrubbing scrolls the viewport at either edge and follows its current scroll offset. Moving clips to another track preserves their original start times even with snapping disabled; occupied destinations do not silently shift or trim the selection. Reversed, trimmed clip thumbnails use the visible source interval in both software and worker rendering paths.
-
-Holding or releasing Shift during an edge trim changes only snapping. Selected clips and linked audio/video retain the same trim scope in the live preview and committed edit.
-
-Section resize observations update only the element that changed, so an audio or video child resize does not re-sample a transient parent split height during track-property edits.
+It holds video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting and Slot Grid playback.
 
 ---
 
@@ -24,7 +18,7 @@ The main-thread waveform painter also reuses unchanged waveform rasters during s
 
 Cached waveforms appear immediately; missing source analysis loads progressively. A canvas that has already painted on the main thread retains that backend as more waveforms arrive, preserving the visible image instead of replacing it for a worker startup. Canvases eligible for worker rendering on mount still use the worker.
 
-Dense keyframe rows share an immutable per-clip segment index: drawing rotation-path badges no longer filters and sorts the full solve for every diamond. Selection, outgoing rotation modes and the last keyframe's incoming easing target keep their existing behavior. Individual keyframe elements still have a mount/paint cost when all are visible.
+Dense keyframe rows share an immutable per-clip segment index: drawing rotation-path badges does not filter and sort the full solve for every diamond. Selection, outgoing rotation modes and the last keyframe's incoming easing target keep their existing behavior. Individual keyframe elements still have a mount/paint cost when all are visible.
 
 Generated graphics without audio do not allocate silent composition mixdowns or media decoders. Generated-canvas, motion and mask resources have explicit cleanup and bounded reuse. These changes reduce idle work and memory pressure; decoding and compositing many simultaneously visible layers still have a real cost.
 
@@ -199,9 +193,9 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 | Blade all tracks | Available in the Cut flyout as a mode; splits every unlocked visible clip crossing the click time. |
 | Trim start/end to playhead | Available in the Cut flyout; trims selected clips through the operation kernel and keeps linked audio aligned. |
 | Ripple delete | Available in the Cut flyout and clip context menu; deletes selected clips and closes the affected track gap through the operation kernel. |
-| Delete gap | Available in the Cut flyout, clip context menu, and empty timeline right-click menu; closes an empty gap through the operation kernel. |
-| Delete all gaps in this layer | Available from the empty timeline right-click menu; closes gaps on the clicked layer from the clicked empty space onward as one undoable operation. |
-| Delete all gaps | Available from the empty timeline right-click menu; closes all gaps on unlocked visible tracks as one undoable operation. |
+| Delete Gap | **Delete Gap** in the Cut flyout, **Delete Gap at Clip Start** in the clip context menu, and **Erase Space Between Clips** when you right-click the empty space itself; closes that one gap through the operation kernel. |
+| Erase Space Between All Clips in This Layer | Right-click empty timeline space; closes the gaps on the clicked layer from the clicked point onward as one undoable operation. |
+| Erase Space Between All Clips | Right-click empty timeline space; closes all gaps on unlocked visible tracks as one undoable operation. |
 | Fit comp to window | Available from the zoom controls and empty timeline right-click menu. |
 | Right-drag empty space or clips | Scrubs the playhead without opening the timeline context menu; context menus open only for a single right-click. |
 | Edge playhead drag | Left-drag or touch-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; persistent snapping plus the `Shift` temporary-enable and `Alt` bypass modifiers remain active. Snapping to a clip end lands on its last visible composition frame instead of the exclusive time immediately after it. |
@@ -337,7 +331,7 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 ### Transitions
 User guide with pictures: [Dissolve Transitions](./Transitions-Dissolve.md).
 - Transitions operate between adjacent clips on the same track.
-- The first-pass suite includes Crossfade, Dip to Black, Dip to White, Wipe Left, and Wipe Right.
+- The [Transitions panel](./UI-Panels.md#transitions-panel) offers 2D families (dissolve and dip, wipe and iris, push and slide, rotate, zoom, stylize, glitch, light, motion blur and pattern) and 3D variants such as flip, card spin, tumble, roll, cube, door and fold. A family card holds its variants; pick the variant, direction or color in the transition's Properties tab.
 - Dragging a transition from the Transitions panel targets a clip junction. Hover preview shows the transition body, real source-handle coverage, and red hold-frame fallback coverage when the requested duration extends past available source material.
 - The default placement is virtual `center`: the transition body is centered on the cut without moving either clip. Preview and export sample the incoming left handle before the clip start and the outgoing right handle after the clip end; when either side lacks real source material, the nearest first/last frame is held and shown as red fallback coverage.
 - Existing transition bodies render on the timeline, can be selected, moved left/right by dragging the body, resized by dragging either edge, and expose duration plus handle/hold details in the transition-scoped Properties tab. Move snaps to the centered cut position and to available source-handle edges; resize snaps to the same source edges. Move and resize previews show the same source-handle and red hold-frame feedback. Transition durations are not capped by clip length; missing material is represented with hold-frame fallback.
@@ -422,7 +416,7 @@ The toolbar and wheel gestures drive playback and navigation:
 - The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted). See [Timeline Rulers](./Timeline-Rulers.md).
 - The timeline **body** lane grid (behind clips, distinct from the ruler) still uses the active composition frame rate at deep zoom: the base time grid crossfades out while frame-accurate grid lines fade in with zoom.
 - Unselected clips keep persistent white edge brackets: each vertical edge has short top and bottom caps that fade inward, so adjacent clips form a visible `][` cut marker without obscuring thumbnails or waveforms. Selected clips retain the complete white outline.
-- `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. While zooming in near either lane edge, a magnetic 48 px edge zone preserves the corresponding visible time boundary so the nearby beginning or end is not pushed offscreen. Timeline zoom remains contained behind the dedicated navigator instead of exposing a second native panel scrollbar. Faster wheel gestures use larger zoom steps.
+- `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; **Settings → General → Timeline → Zoom Anchor** can switch the anchor to the playhead. While zooming in near either lane edge, a magnetic 48 px edge zone preserves the corresponding visible time boundary so the nearby beginning or end is not pushed offscreen. Timeline zoom remains contained behind the dedicated navigator instead of exposing a second native panel scrollbar. Faster wheel gestures use larger zoom steps.
 - `Shift+Scroll` pans horizontally.
 - Vertical scroll snaps to track boundaries. The timeline frame and section viewports cannot acquire a second native browser scroll offset through focus or `scrollIntoView`; only the editor’s section scrolling and navigator move the tracks. This keeps track headers, clip hit testing and the ruler aligned after panel/layout changes.
 - `Ctrl+Shift+Scroll` or `Cmd+Shift+Scroll` toggles slot-grid view.
@@ -434,6 +428,14 @@ The toolbar and wheel gestures drive playback and navigation:
 The timeline navigator below the tracks provides the same scroll and zoom control in a dedicated bar. Releasing its scroll thumb or zoom handles never falls through to the track's click-to-jump action.
 
 ---
+
+## Editing details
+
+Right-button scrubbing scrolls the viewport at either edge and follows its current scroll offset. Moving clips to another track preserves their original start times even with snapping disabled; occupied destinations do not silently shift or trim the selection. Reversed, trimmed clip thumbnails use the visible source interval in both software and worker rendering paths.
+
+Holding or releasing Shift during an edge trim changes only snapping. Selected clips and linked audio/video retain the same trim scope in the live preview and committed edit.
+
+Section resize observations update only the element that changed, so an audio or video child resize does not re-sample a transient parent split height during track-property edits.
 
 ## Performance Features
 
@@ -612,8 +614,8 @@ playback keeps its existing drift thresholds.
 
 | Contract | Warp behavior |
 |---|---|
-| Priority | Transition source map ? finite override ? transition hold ? Warp ? ordinary speed. |
-| Points | 2?256 finite pairs; local times are nonnegative and strictly increasing. Source values can change direction, remain flat, or form steep slopes, but there are no vertical jumps. Invalid edits are rejected; malformed persisted Warp arrays fall back safely to ordinary sampling. |
+| Priority | Transition source map → finite override → transition hold → Warp → ordinary speed. |
+| Points | 2–256 finite pairs; local times are nonnegative and strictly increasing. Source values can change direction, remain flat, or form steep slopes, but there are no vertical jumps. Invalid edits are rejected; malformed persisted Warp arrays fall back safely to ordinary sampling. |
 | Source clock | Piecewise-linear interpolation; outside the first/last times hold the endpoint. Clamp the interpolated source to `[0, naturalDuration ?? outPoint]`. Clamped/flat/exterior samples have zero rate; other samples use the signed segment slope. Interior knots use the following segment. |
 | Speed / Reverse | Retained but ignored while warped, including speed-section bypass. Removing Warp restores their ordinary behavior and retains the authored duration. |
 | Output interval | Duration is independent of in/out, with a one-frame minimum. Right trim beyond the final point holds; left trim inserts the interpolated start, drops earlier points and rebases the remaining times. Future points beyond the clip end are retained on trim. |
@@ -637,7 +639,7 @@ Properties and the timeline context menu use that same mutation entry point.
 Adding a point samples the raw current Warp curve and preserves its shape,
 including out-of-domain portions whose clamped source image is held.
 
-Export acquisition now evaluates the contract source window over the **whole
+Export acquisition evaluates the contract source window over the **whole
 clip output interval**, since the mixer crops the export range after clip
 rendering. PCM proxies, direct media ranges and nested mixdowns forward their
 sample-aligned absolute origin (`sourceBufferStart`) through the export effect

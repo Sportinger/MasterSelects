@@ -85,7 +85,7 @@ export default function StickFigureControls({ params, clipId = '', effectInstanc
           <InspectorSelect ariaLabel="Pose key easing" value={easing} options={[...EASINGS]} onChange={setEasing} />
         </ResolveInspectorRow>
         <ResolveInspectorRow label="Save">
-          <input aria-label="Pose name" placeholder="Pose name" value={poseName}
+          <input type="text" className="resolve-inspector-text-input" aria-label="Pose name" placeholder="Pose name" value={poseName}
             onKeyDown={event => event.stopPropagation()} onChange={event => setPoseName(event.target.value)} />
           <button type="button" className="perspective-action" disabled={!poseName.trim() || !ready}
             title="Save the pose shown at the playhead"

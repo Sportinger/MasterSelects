@@ -1,5 +1,5 @@
 import shader from './shader.wgsl?raw';
-import { createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
+import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { createGlyphEffect } from '../glyph/glyphEffectFactory';
 import { createComputeEffect } from './computeEffectFactory';
 import type { ComputeEffectDefinition } from '../types';
@@ -54,7 +54,10 @@ export const contour = createComputeEffect({
     threshold: { type: 'number', label: 'Iso Level', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Structure' },
   },
 });
-export const contourMap = createCatalogEffect({ id: 'contour-map', name: 'Contour Map', category: 'geometry', shader, entryPoint: 'contourMapFragment', retired: ignoredBaseParams('Contour Map', ['angle']) });
+// Scale counts the bands (contourMapFragment: levels = scale x 0.35), the reverse of a cell size: its own role.
+export const contourMap = createCatalogEffect({ id: 'contour-map', name: 'Contour Map', category: 'geometry', shader, entryPoint: 'contourMapFragment',
+  params: { scale: catalogBaseParam('scale', { label: 'Band Density', styleRole: 'band-count' }) },
+  retired: ignoredBaseParams('Contour Map', ['angle']) });
 export const contourType = createGlyphEffect({ id: 'contour-type', name: 'Contour Type', category: 'geometry', entryPoint: 'contourTypeFragment', defaultRamp: 'numeric', defaultCellSize: 20 });
 export const vectorTiling = createCatalogEffect({ id: 'vector-tiling', name: 'Vector Engraving', category: 'geometry', shader, entryPoint: 'vectorTilingFragment', scaleFloor: 3 });
 export const crosshatch = createCatalogEffect({ id: 'crosshatch', name: 'Crosshatch', category: 'geometry', shader, entryPoint: 'crosshatchFragment', scaleFloor: 2, retired: ignoredBaseParams('Crosshatch', ['angle']) });

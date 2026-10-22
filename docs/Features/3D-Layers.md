@@ -34,7 +34,7 @@ source coordinates, clip transform and active scene camera:
   Disconnected forces contribute nothing; bypassing them also removes their contribution.
 - Mesh: Splats to Mesh → Mesh, with a separately connected Wireframe Material.
 
-**Reusable Nodes ? Space** offers versioned Splat Cleanup, Splat Rays, Particle System
+**Reusable Nodes → Space** offers versioned Splat Cleanup, Splat Rays, Particle System
 and Mesh Overlay compositions. Each has typed public ports and an expandable body.
 Instances share definitions; editing an interior detaches only that instance into a
 local group. Existing bound flat recipes are organized without changing their controls.
@@ -416,7 +416,7 @@ which can omit the visible surface of an ordered scan. Remapped branches use GPU
 depth sorting only when positions move or precise output is requested. Static sampled
 and cropped branches retain independent worker ordering for their actual output IDs.
 Changing color, radius or rotation does not force per-frame GPU depth sorting.
-Lower **Original Splats ? Gaussian Surface ? Splat budget** to reduce full-scan work;
+Lower **Original Splats → Gaussian Surface → Splat budget** to reduce full-scan work;
 0 retains every source splat. This is an effect setting and also affects export.
 
 

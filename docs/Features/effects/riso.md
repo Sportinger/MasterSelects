@@ -68,6 +68,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Riso with the Postcard preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Registration: how far the inks slip apart. 4 — Dark Ink. 5 — Warm Ink. 6 — Amount.</figcaption>
 </figure>
 
+**Style** – switches to another look of the same engine, for example [Riso Glow](./riso-glow.md), [Halftone](./halftone.md) or [Paper Print](./paper-print.md). A control you changed keeps its value and keyframes when the new look has the same control, also under another name (Dark Ink is Halftone's Ink); the others start at the new look's defaults. Riso Glow keeps Dot Size and Registration; in the other looks Registration is no mark size, so their Scale opens at its default, and Dot Size stays for a switch back.
+
 ### Pattern
 
 **Dot Size** – how large the dots of both inks are. 3 to 5 px gives a fine print that still reads as a photo, 6 to 10 px the classic risograph grain, 20 and more turns a figure into a graphic pattern of big dots. Each ink has its own grid of dots, turned against the other, so where both print they form small rosettes. It counts pixels of a 1080p picture, so a 4K export shows the same dots as the preview; on a frame too small for one pixel the card says what renders. 2 to 40 px, default 6 px.

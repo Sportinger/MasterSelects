@@ -16,8 +16,8 @@
 //                       # outer 8 px (an effect that should fill the layer, e.g. Voxel Relief at its defaults)
 //   node scripts/effect-lab.mjs --compile-probe --effect voxel-relief [--width 1920]
 //       # first frame (waits for the driver to build the pipelines) vs steady frame, in a fresh page
-//   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>]
-//   node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json [--only <effect id>]
+//   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>[,<name>...]]
+//   node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json [--only <effect id>[,<effect id>...]]
 //       # the preset strip of an effect page: one still per preset of the registry, named under it
 //
 // Each variant renders on each image; "original" (effect bypassed) is always the first column.
@@ -40,23 +40,31 @@
 // `"layout": "compare"` makes the pair of a docs compare slider: the same crop (default: the whole
 // frame) of both sides at the same size, side by side without a gap, `outWidth` (default 1600) wide
 // in all, always even; `alt` and `caption` go into the printed <figure class="docs-shot docs-compare">.
+// `"layout": "single"` shows the right side alone (its crop, default the whole frame, `outWidth` wide, at
+// most 1600): a generator on the black test image, where an original to compare with would show nothing.
 // `--presets` reads `{ "strips": [{ "effect", "image", "width": 1920, "crop": [x, y, w, h], "times": [1.2],
 //   "cellWidth": 400, "columns": 2, "backdrop", "maxBytes" }] }` and renders every preset the effect declares
 // (EffectPreset in src/effects/types.ts, read from the live registry, so names and values never drift)
 // on that image, crops each, and lays them out in rows of `columns` (default: 2 for four presets, else up
 // to 3) with the preset name under each cell, as docs/Features/assets/effects/presets/<effect>.webp.
+// --pairs and --presets record what they made in scripts/docs-media-manifest.json (scripts/docs-media.mjs runs
+// them for every recipe; DOCS_MEDIA_OUT_ROOT writes the files under a scratch folder instead).
 // Needs a running Vite of this checkout (`npx vite --port 5175 --strictPort`).
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeDocShotWebp } from './docShotWebp.mjs';
+import { docOutput } from './docShotSettings.mjs';
+import { recordShotList } from './docsMediaRecipes.mjs';
 
 /** Renders both sides of a pair entry, crops them and composes them side by side (PNG buffer). */
 async function composePair(page, entry) {
   const side = spec => page.evaluate(job => window.__effectLab.render(job), {
     effectId: spec.effect === 'original' ? 'gaussian-blur' : spec.effect, image: `${entry.image}.jpg`, width: entry.width ?? 1920,
     params: spec.params ?? {}, bypass: spec.effect === 'original', times: spec.times });
-  const [left, right] = [await side(entry.left), await side(entry.right)];
+  const single = entry.layout === 'single';
+  const right = await side(entry.right);
+  const left = single ? right : await side(entry.left);
   for (const [label, cell] of [['left', left], ['right', right]]) if (cell.gpuFailure) throw new Error(`${entry.name} ${label}: ${cell.gpuFailure}`);
   // Each side may set its own crop, zoom and smooth (e.g. a whole frame beside a magnified detail);
   // split and stack show both sides through the left side's crop.
@@ -80,7 +88,12 @@ async function composePair(page, entry) {
       }
       else if (typeof backdrop === 'string' && backdrop.startsWith('#')) { context.fillStyle = backdrop; context.fillRect(left, top, w, h); }
     };
-    if (layout === 'compare') {
+    if (layout === 'single') {
+      const [x, y, w, h] = crops[1];
+      const cw = Math.round(Math.min(outWidth ?? 1600, 1600, w * cells[1].zoom) / 2) * 2, ch = Math.round(cw * h / w);
+      start(cw, ch); smoothing(cells[1].smooth); paintBackdrop(0, 0, cw, ch);
+      context.drawImage(bitmaps[1], x, y, w, h, 0, 0, cw, ch);
+    } else if (layout === 'compare') {
       // Two halves of exactly the same size, no gap: the docs slider stacks them and clips one.
       const [x, y, w, h] = crops[0];
       const half = Math.floor(Math.min(outWidth ?? 1600, 1600, 2 * w * cells[0].zoom) / 2);
@@ -177,6 +190,14 @@ async function composePresetStrip(page, entry) {
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
 const url = option('--url', 'http://localhost:5175');
+/** `--only a,b`: the entries of a shot list with these names (all without --only); fails on a name it lacks. */
+function onlyEntries(entries, key, file) {
+  const only = option('--only')?.split(',').map(item => item.trim()).filter(Boolean);
+  if (!only) return entries;
+  const missing = only.filter(name => !entries.some(entry => entry[key] === name));
+  if (missing.length) throw new Error(`No entry ${missing.join(', ')} in ${file}`);
+  return entries.filter(entry => only.includes(entry[key]));
+}
 const launchArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan',
   '--ignore-gpu-blocklist', '--window-position=0,0', '--window-size=480,320'];
 
@@ -196,25 +217,27 @@ try {
   } else if (args.includes('--list')) {
     console.log(JSON.stringify(await page.evaluate(() => window.__effectLab.describe()), null, 1));
   } else if (option('--presets')) {
-    const entries = JSON.parse(fs.readFileSync(option('--presets'), 'utf8')).strips.filter(entry => !option('--only') || entry.effect === option('--only'));
-    if (!entries.length) throw new Error(`No preset strip ${option('--only')} in ${option('--presets')}`);
+    const entries = onlyEntries(JSON.parse(fs.readFileSync(option('--presets'), 'utf8')).strips, 'effect', option('--presets'));
+    if (!entries.length) throw new Error(`No preset strip in ${option('--presets')}`);
     for (const entry of entries) {
       const strip = await composePresetStrip(page, entry);
       const out = entry.out ?? `docs/Features/assets/effects/presets/${entry.effect}.webp`;
       const encoded = await encodeDocShotWebp(page, strip.png, { maxBytes: entry.maxBytes ?? 200000, maxPixelWidth: 1600 });
-      fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
-      fs.writeFileSync(path.resolve(out), encoded.buffer);
+      fs.mkdirSync(path.dirname(docOutput(out)), { recursive: true });
+      fs.writeFileSync(docOutput(out), encoded.buffer);
+      recordShotList('lab', option('--presets'), [entry.effect], { recipeKind: 'strip' });
       console.log(`${out}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes, quality ${encoded.quality}; presets ${strip.names.join(', ')}`);
     }
     if (errors.length) console.log(`page errors: ${[...new Set(errors)].join(' | ')}`);
   } else if (option('--pairs')) {
-    const entries = JSON.parse(fs.readFileSync(option('--pairs'), 'utf8')).pairs.filter(entry => !option('--only') || entry.name === option('--only'));
-    if (!entries.length) throw new Error(`No pair ${option('--only')} in ${option('--pairs')}`);
+    const entries = onlyEntries(JSON.parse(fs.readFileSync(option('--pairs'), 'utf8')).pairs, 'name', option('--pairs'));
+    if (!entries.length) throw new Error(`No pair in ${option('--pairs')}`);
     for (const entry of entries) {
       const compare = entry.layout === 'compare';
       const encoded = await encodeDocShotWebp(page, await composePair(page, entry), { maxBytes: entry.maxBytes ?? 200000, maxPixelWidth: 1600, pair: compare });
-      fs.mkdirSync(path.dirname(path.resolve(entry.out)), { recursive: true });
-      fs.writeFileSync(path.resolve(entry.out), encoded.buffer);
+      fs.mkdirSync(path.dirname(docOutput(entry.out)), { recursive: true });
+      fs.writeFileSync(docOutput(entry.out), encoded.buffer);
+      recordShotList('lab', option('--pairs'), [entry.name], { recipeKind: 'still' });
       console.log(`${entry.out}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes, quality ${encoded.quality}`);
       if (compare) console.log(compareFigure(entry));
     }

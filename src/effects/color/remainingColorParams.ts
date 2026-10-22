@@ -15,9 +15,13 @@ export const LEVELS_PARAMS = {
   gamma: { ...number('Gamma', 1, 0.1, 3, 0.01, [0.1, 10]), renderMinLook: 'almost black' },
   outputBlack: number('Output Black', 0, 0, 1), outputWhite: number('Output White', 1, 0, 1),
 } satisfies Record<string, EffectParam>;
-// Stored in turns (0.5 = 180°) since the first release; inspectors show degrees.
-export const HUE_SHIFT_PARAMS = { shift: { ...number('Shift', 0, 0, 1, 1 / 360), displayScale: 360, unit: '°' } } satisfies Record<string, EffectParam>;
+// Stored in turns (0.5 = 180°) since the first release; inspectors show degrees. The slider runs
+// -180° to 180° (2026-10-22, before 0° to 360°) so a small shift either way is a small value and a
+// keyframe from -20° to 20° passes through 0°; Shift wraps, so typed values have no limit.
+export const HUE_SHIFT_PARAMS = { shift: { ...number('Shift', 0, -0.5, 0.5, 1 / 360), displayScale: 360, unit: '°', wraps: true } } satisfies Record<string, EffectParam>;
 export const TEMPERATURE_PARAMS = {
   temperature: number('Temperature', 0, -1, 1, 0.01, [-4, 4]), tint: number('Tint', 0, -1, 1, 0.01, [-4, 4]),
 } satisfies Record<string, EffectParam>;
-export const VIBRANCE_PARAMS = { amount: number('Amount', 0, -1, 1, 0.01, [-1, 4]) } satisfies Record<string, EffectParam>;
+// The slider reaches 2 (2026-10-22): on colourful footage 1 is only a mild push, and 2 is where pale colours
+// visibly bloom while strong ones stay; typed values, keyframes and nodes still render up to 4.
+export const VIBRANCE_PARAMS = { amount: number('Amount', 0, -1, 2, 0.01, [-1, 4]) } satisfies Record<string, EffectParam>;

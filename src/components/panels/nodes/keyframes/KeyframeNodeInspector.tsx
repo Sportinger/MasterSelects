@@ -12,6 +12,7 @@ import { clipLocalToKeyframeTime, getKeyframeTimeBasis, keyframeTimeToClipLocal 
 import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveInspectorSection } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 import { ResolveInspectorNumberRow } from '../../properties/resolveInspector/ResolveInspectorNumberRow';
+import { ResolveWrappingNumberRow } from '../../properties/ResolveWrappingNumberRow';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import { KeyframeCurve } from './KeyframeNodeCurve';
 
@@ -75,6 +76,9 @@ export function KeyframeChannelEditor({ clip, node, channelId, keys, parameters,
   const selected = curve.find(k => k.id === selectedId) ?? curve.find(k => Math.abs(k.time - time) < 0.001) ?? curve[0];
   const value = interpolateKeyframes(keys, channel.property, time, parameter?.value ?? 0);
   const range = { min: parameter?.min ?? Math.min(-1, value * 2), max: parameter?.max ?? Math.max(1, value * 2), step: parameter?.step ?? 0.01 };
+  // A cyclic parameter (Hue Shift) keeps keys past one turn: its slider is one turn, its field has no limit.
+  const ValueRow = parameter?.wraps ? ResolveWrappingNumberRow : ResolveInspectorNumberRow;
+  const limits = parameter?.wraps ? {} : { hardMin: parameter?.min, hardMax: parameter?.max };
   const selectedLocal = selected ? keyframeTimeToClipLocal(clip, selected, state.getSourceTimeForClip) : null;
   const isCable = [channel.property, ...channel.targets.map(t => t.property)].some(p => clip.effects.some(e => e.type === 'face-cables' && p.startsWith(`effect.${e.id}.`)));
   const addKey = (newValue: number) => safely('Set animation keyframe', () => {
@@ -95,8 +99,8 @@ export function KeyframeChannelEditor({ clip, node, channelId, keys, parameters,
   }>
     {!parameter && <p className="keyframe-node-hint" role="status">The source parameter is missing. Disconnect this channel to keep the remaining animation.</p>}
     <KeyframeCurve clip={clip} property={channel.property} value={parameter?.value} />
-    <ResolveInspectorNumberRow label="At playhead" ariaLabel={`${parameter?.label} at playhead`} value={value} defaultValue={parameter?.defaultValue ?? 0}
-      {...range} hardMin={parameter?.min} hardMax={parameter?.max} disabled={locked || !parameter} onChange={addKey}
+    <ValueRow label="At playhead" ariaLabel={`${parameter?.label} at playhead`} value={value} defaultValue={parameter?.defaultValue ?? 0}
+      {...range} {...limits} disabled={locked || !parameter} onChange={addKey}
       keyframeToggle={<ResolveInspectorIconButton ariaLabel="Add keyframe at playhead" disabled={locked || !parameter} onClick={() => addKey(value)}>◇</ResolveInspectorIconButton>} />
     <p className="keyframe-node-hint">{getKeyframeTimeBasis(channel.property) === 'source' ? 'Source time' : 'Clip time'}: {time.toFixed(3)} s{isCable ? ' · Bake cables after editing for playback and export.' : ''}</p>
     <ResolveInspectorRow label="Keyframe"><InspectorSelect ariaLabel="Select animation keyframe" value={selected?.id ?? ''}
@@ -104,8 +108,8 @@ export function KeyframeChannelEditor({ clip, node, channelId, keys, parameters,
     {selected && <>
       <ResolveInspectorNumberRow label="Time" ariaLabel="Keyframe clip time" value={selectedLocal ?? 0} defaultValue={0} min={0} max={clip.duration} hardMin={0} hardMax={clip.duration} step={0.001}
         disabled={locked || selectedLocal === null} onChange={next => safely('Move animation keyframe', () => state.moveKeyframe(selected.id, next))} />
-      <ResolveInspectorNumberRow label="Value" ariaLabel="Keyframe value" value={selected.value} defaultValue={parameter?.defaultValue ?? 0} {...range}
-        hardMin={parameter?.min} hardMax={parameter?.max} disabled={locked} onChange={next => safely('Edit animation keyframe', () => state.updateKeyframe(selected.id, { value: parameter?.discrete ? Number(next >= 0.5) : next }))} />
+      <ValueRow label="Value" ariaLabel="Keyframe value" value={selected.value} defaultValue={parameter?.defaultValue ?? 0} {...range}
+        {...limits} disabled={locked} onChange={next => safely('Edit animation keyframe', () => state.updateKeyframe(selected.id, { value: parameter?.discrete ? Number(next >= 0.5) : next }))} />
       <ResolveInspectorRow label="Transition"><InspectorSelect ariaLabel="Keyframe transition" disabled={locked || parameter?.discrete}
         value={selected.hold ? 'hold' : selected.easing} options={EASINGS}
         onChange={easing => safely('Edit keyframe transition', () => state.updateKeyframe(selected.id, {

@@ -67,6 +67,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Paper Print with the Photogravure preset. 1 — Preset: pick a starting point. 2 — Grain Size. 3 — Texture: the paper's bumps. 4 — Ink. 5 — Paper.</figcaption>
 </figure>
 
+**Style** – switches to another look of the same engine, for example [Halftone](./halftone.md), [Dithering](./dither.md) or [Riso](./riso.md). A control you changed keeps its value and keyframes when the new look has the same control, also under another name (Grain Size is Halftone's Dot Size); the others start at the new look's defaults. Texture is Paper Print's own: it stays for a switch back.
+
 ### Pattern
 
 **Grain Size** – how large one grain is. 1–2 px gives a fine grain that reads as a photo from a few metres away, 4–6 px a clearly visible grain like a mezzotint, 10 px and more coarse specks for a poster; the coarser the grain, the less detail survives. It counts pixels of a 1080p picture, so a 4K export shows the same grain, only sharper. A grain is never smaller than one pixel of the frame, and the card says when it renders larger. 1 to 80 px, default 2 px.

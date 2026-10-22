@@ -16,3 +16,6 @@ Derived from `neon_rain_street.jpg` with Pillow (2026-10-21) to show corrections
   Remove Distortion −28 with Scale 120 straightens it exactly.
 - `neon_rain_street_tilted.jpg` – simulated upward camera tilt: the frame's top corners spread
   18 % outward (verticals lean in towards the top), cropped to 72 %.
+
+- `black.jpg` – plain black 1920×1080 (Pillow, 2026-10-22): the background of a generator's basic
+  still, which shows the effect alone.

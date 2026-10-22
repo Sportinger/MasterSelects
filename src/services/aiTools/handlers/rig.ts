@@ -1,5 +1,6 @@
 import type { ToolResult } from '../types';
-import { isSkeletonActionId, parseSkeletonActions, SKELETON_ACTIONS, skeletonActionContact } from '../../rig/skeletonActions';
+import { isSkeletonActionId, parseSkeletonActions, SKELETON_ACTIONS, skeletonActionContact, skeletonActionTravel } from '../../rig/skeletonActions';
+import { stickFigureBodyScale } from '../../rig/stickFigureActionRuntime';
 import { SKELETON_JOINTS, type SkeletonJoint } from '../../rig/skeletonRig';
 import { addStickFigureAction, createStickFigureRig, resolveStickFigure, updateStickFigureAction } from '../../rig/stickFigureActions';
 import { validateChoreography } from '../../rig/choreographyValidation';
@@ -76,6 +77,8 @@ export async function handleListRigs(): Promise<ToolResult> {
       facing: effect.params.facing ?? 'right',
       actions: parseSkeletonActions(effect.params.actions).map(action => ({
         ...action, label: SKELETON_ACTIONS[action.action].label,
+        // Forward travel in figure pixels as the figure renders it (body-scaled actions follow its legs and Scale).
+        travel: Math.round(skeletonActionTravel(action, stickFigureBodyScale(effect.params)) * 10) / 10,
         contactTimelineTime: (() => { const contact = skeletonActionContact(action); return contact === undefined ? null : clip.startTime + contact; })(),
       })),
     })));

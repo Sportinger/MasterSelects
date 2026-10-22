@@ -7,25 +7,20 @@
         "radius": 10
       },
       "image": "harbor_town.jpg",
-      "preview": 200,
-      "alt": "Properties, Effects with + Add Effect and a Gaussian Blur card at Radius 10, beside a strip of the blurred preview",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Gaussian Blur card: the Preset menu showing Out of Focus and the Radius row at 10 px, beside a strip of the preview where the harbour town has gone soft",
+      "caption": "Gaussian Blur at its default, which is also the Out of Focus preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Radius: how soft the picture gets.",
       "marks": [
         {
-          "target": "add",
-          "from": "right",
-          "label": "+ Add Effect lists every effect"
+          "target": "Preset",
+          "label": "Preset"
         },
         {
           "target": "Radius",
           "label": "Radius"
-        },
-        {
-          "target": "bypass",
-          "from": "below",
-          "label": "Bypass, to compare with the original"
         }
       ],
-      "top": "tabs",
       "hide": [
         "Particle Out"
       ]
@@ -56,6 +51,162 @@
           "from": "above",
           "label": "the \u203a opens the effect"
         }
+      ]
+    },
+    {
+      "name": "box-blur-inspector",
+      "effect": "box-blur",
+      "params": {
+        "radius": 20
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Box Blur card: the Preset menu showing Square Lights and the Radius row at 20 px, beside a strip of the preview where the neon lights have turned into soft squares",
+      "caption": "Box Blur with the Square Lights preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Radius: how far the softening reaches.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Radius",
+          "label": "Radius"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "motion-blur-inspector",
+      "effect": "motion-blur",
+      "params": {
+        "amount": 0.04,
+        "angle": 1.5707963267948966
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Motion Blur card: the Preset menu showing Falling, the Length row at 4% and the Angle row at 90\u00b0, beside a strip of the preview where the lights of the night street run down in vertical streaks",
+      "caption": "Motion Blur with the Falling preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Length: how far the streak reaches. 3 \u2014 Angle: which way it points.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Length",
+          "label": "Length"
+        },
+        {
+          "target": "Angle",
+          "label": "Angle"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "radial-blur-inspector",
+      "effect": "radial-blur",
+      "params": {
+        "mode": "spin",
+        "amount": 1.5
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Radial Blur card: the Preset menu showing Whirlpool, Type on Spin, Amount at 1.5 and Center X and Center Y at 0.5, beside a strip of the preview where the night street turns into rings of light around the walker",
+      "caption": "Radial Blur with the Whirlpool preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Type: streaks towards the centre or circles around it. 3 \u2014 Amount: how strong. 4 \u2014 Center X: where the sharp middle sits across. 5 \u2014 Center Y: where the middle sits up or down.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Type",
+          "label": "Type"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Center X",
+          "label": "Center X"
+        },
+        {
+          "target": "Center Y",
+          "label": "Center Y"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "zoom-blur-inspector",
+      "effect": "zoom-blur",
+      "params": {
+        "amount": 0.45
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Zoom Blur card: the Preset menu showing Rush, Amount at 0.45 and Center X and Center Y at 0.5, beside a strip of the preview where the shop fronts and neon lights on the left of the night street stretch into long rays pointing away from the middle of the frame",
+      "caption": "Zoom Blur with the Rush preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how long the streaks are. 3 \u2014 Center X: where the burst starts across. 4 \u2014 Center Y: where the burst starts up or down.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Center X",
+          "label": "Center X"
+        },
+        {
+          "target": "Center Y",
+          "label": "Center Y"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "sharpen-inspector",
+      "effect": "sharpen",
+      "params": {
+        "amount": 2,
+        "radius": 1
+      },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Sharpen card: the Preset menu showing Crisp, the Amount row at 2 and the Radius row at 1 px, beside a strip of the preview with the crisper harbour town",
+      "caption": "Sharpen with the Crisp preset. 1 \u2014 Preset: pick a starting point. 2 \u2014 Amount: how much crisper. 3 \u2014 Radius: the size of the detail it works on.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Amount",
+          "label": "Amount"
+        },
+        {
+          "target": "Radius",
+          "label": "Radius"
+        }
+      ],
+      "hide": [
+        "Particle Out"
       ]
     }
   ]

@@ -49,6 +49,8 @@ export interface PropertyAuthoringDescriptorView {
     max?: number;
     step?: number;
     minMagnitude?: number;
+    /** Cyclic value (Hue Shift): min/max are one turn of the slider, any value is accepted. */
+    wraps?: boolean;
   };
   unit?: string;
   storageUnit?: string;
@@ -78,6 +80,8 @@ export interface PropertyDescriptor<T = PropertyValue> {
     max?: number;
     /** Smallest allowed absolute value; values closer to zero are rejected. */
     minMagnitude?: number;
+    /** Cyclic value: min/max describe one turn for sliders and are not a limit. */
+    wraps?: boolean;
     step?: number;
     unit?: string;
     aliases?: string[];

@@ -4,11 +4,12 @@ import { useTimelineStore } from '../../stores/timeline';
 import { endBatch, startBatch } from '../../stores/historyStore';
 import type { AnimatableProperty } from '../../types/animationProperties';
 import { editEffectGraph } from '../../services/operators/effectGraphEditing';
-import { createStylizeRecipeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_UPDATES } from '../../services/operators/stylizeRecipes';
+import { createStylizeRecipeGraph, isEarlierStylizeGraph, stylizeRecipeUpdate } from '../../services/operators/stylizeRecipes';
 import { glowQualityNote, resolveGlowSampling } from './glow/glowSampling';
 
 /**
- * Inspector note for a stylize effect saved with its earlier recipe (see stylizeRecipes.ts): it
+ * Inspector note for a stylize effect saved with its earlier recipe or a previous release of the
+ * current one (see stylizeRecipes.ts): it
  * keeps that look until the user asks for the current recipe with the button. A Glow saved with
  * the ring version also reports its quality limits (never silent). Values the current recipes
  * limit are reported by the effect's `paramWarnings` (EffectBudgetNotice). The update resets the
@@ -22,9 +23,10 @@ export default function StylizeRecipeNote({ clipId, effectInstanceId, effectId, 
   const clipKeyframes = useTimelineStore(store => clipId ? store.clipKeyframes.get(clipId) : undefined);
   const disablePropertyKeyframes = useTimelineStore(store => store.disablePropertyKeyframes);
   const [error, setError] = useState<string | null>(null);
-  const update = STYLIZE_RECIPE_UPDATES[effectId as keyof typeof STYLIZE_RECIPE_UPDATES];
-  const earlier = !!update && !!clipId && !!effectInstanceId && isEarlierStylizeGraph(effectId, graph);
-  const ringNote = earlier && effectId === 'glow' ? glowQualityNote(resolveGlowSampling(params)) : undefined;
+  // An earlier recipe (before 2026-10-21) or a previous release of the current one (Sharpen 3.2.7).
+  const update = stylizeRecipeUpdate(effectId, graph);
+  const earlier = !!update && !!clipId && !!effectInstanceId;
+  const ringNote = earlier && effectId === 'glow' && isEarlierStylizeGraph(effectId, graph) ? glowQualityNote(resolveGlowSampling(params)) : undefined;
   if (!earlier && !error) return null;
   const apply = () => {
     const next = createStylizeRecipeGraph(effectId);

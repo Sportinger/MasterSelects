@@ -10,13 +10,21 @@ import type { SourceOffsetResolver } from '../../../../services/flock/time/flock
 import type { FlockParamDescriptor } from '../../../../services/flock/operators/flockOperatorTypes';
 import { hexColorToRgb, normalizeHexColor, rgbColorToHex } from '../../../../utils/colorParam';
 import { DraggableNumber, KeyframeToggle, MultiKeyframeToggle } from '../shared';
+import { InspectorSelect } from '../../../inspector/InspectorSelect';
+import { ResolveInspectorNumberRow } from '../resolveInspector/ResolveInspectorNumberRow';
+import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveInspectorSection, ResolveResetIcon } from '../resolveInspector/ResolveInspectorPrimitives';
+// The swatch and bordered hex field of the shared colour row (its row component has no slot for the keyframe toggle and ×).
+import '../resolveInspector/ResolveInspectorColorRow.css';
+import { FlockPopulationRow } from './FlockPopulationRow';
 import {
-  FLOCK_POPULATION_HINT,
   clampFlockNumber,
+  flockNumberDecimals,
+  flockSliderRange,
   getFlockInvalidationHint,
-  getFlockNodeLabel,
   getFlockNumberDecimals,
   getFlockNumberSensitivity,
+  isPresetFlockControl,
+  presetFlockValue,
   isStructuralFlockParam,
 } from './flockControlUtils';
 
@@ -47,8 +55,14 @@ function withBatch(label: string, action: () => void) {
   }
 }
 
+/** × of a control added through Add (or in the Nodes tab); the preset's own controls have none. */
 function RemoveControlButton({ clipId, exposed }: { clipId: string; exposed: FlockExposedParam }) {
   const unexposeFlockGraphParam = useTimelineStore((state) => state.unexposeFlockGraphParam);
+  const own = useTimelineStore((state) => {
+    const flock = state.clips.find((clip) => clip.id === clipId)?.flock;
+    return !!flock && isPresetFlockControl(flock, exposed);
+  });
+  if (own) return null;
   return (
     <button
       type="button"
@@ -68,28 +82,34 @@ function FlockNumberControl({ ctx, exposed, descriptor }: ControlProps) {
   const property = createFlockProperty(exposed.nodeId, exposed.param);
   const fallback = typeof descriptor.default === 'number' ? descriptor.default : 0;
   const value = readAnimated(ctx, property) ?? fallback;
-  const min = exposed.min ?? descriptor.min;
-  const max = exposed.max ?? descriptor.max;
+  const range = flockSliderRange(exposed, descriptor, value);
+  // Reset returns to the preset's value (the look the page and the Preset row describe).
+  const preset = presetFlockValue(ctx.clip.flock!, exposed);
+  const resetValue = typeof preset === 'number' && Number.isFinite(preset) ? preset : fallback;
 
   return (
-    <div className="labeled-value with-keyframe-toggle flock-control-row" data-flock-control={exposed.id}>
-      <KeyframeToggle clipId={ctx.clip.id} property={property} value={value} />
-      <span className="labeled-value-label" title={descriptor.description}>{exposed.label}</span>
-      <DraggableNumber
-        value={value}
-        onChange={(nextValue) => setPropertyValue(ctx.clip.id, property, clampFlockNumber(nextValue, min, max))}
-        defaultValue={fallback}
-        min={min}
-        max={max}
-        decimals={getFlockNumberDecimals(descriptor.step)}
-        sensitivity={getFlockNumberSensitivity(descriptor, min, max)}
-        suffix={descriptor.unit ? ` ${descriptor.unit}` : ''}
+    <div data-flock-control={exposed.id}>
+      <ResolveInspectorNumberRow
+        label={exposed.label}
         ariaLabel={exposed.label}
+        title={descriptor.description}
+        value={value}
+        defaultValue={resetValue}
+        min={range.min}
+        max={range.max}
+        step={range.step}
+        numberMin={range.hardMin}
+        numberMax={range.hardMax}
+        hardMin={range.hardMin}
+        hardMax={range.hardMax}
+        decimals={flockNumberDecimals(descriptor, range.step, value)}
+        sensitivity={getFlockNumberSensitivity(descriptor, range.min, range.max)}
+        suffix={descriptor.unit ? ` ${descriptor.unit}` : ''}
         persistenceKey={`flock.${ctx.clip.id}.${exposed.id}`}
-        onDragStart={() => startBatch(`Adjust ${exposed.label}`)}
-        onDragEnd={() => endBatch()}
+        keyframeToggle={<KeyframeToggle clipId={ctx.clip.id} property={property} value={value} />}
+        actions={<RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />}
+        onChange={(nextValue) => setPropertyValue(ctx.clip.id, property, nextValue)}
       />
-      <RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />
     </div>
   );
 }
@@ -148,6 +168,13 @@ function FlockColorControl({ ctx, exposed, descriptor }: ControlProps) {
   const colorValue = rgbColorToHex({ r: entries[0].value, g: entries[1].value, b: entries[2].value });
   const isKeyed = entries.some(({ property }) => isRecording(ctx.clip.id, property) || hasKeyframes(ctx.clip.id, property));
 
+  // Reset returns to the preset's colour, like the number rows.
+  const preset = presetFlockValue(ctx.clip.flock!, exposed);
+  const resetColor = normalizeHexColor(typeof preset === 'string' ? preset : fallback, fallback);
+  // The hex field shows the value, or what is being typed until Enter or blur commits it (Escape drops it).
+  const [draft, setDraft] = useState<string | null>(null);
+  const pointerChange = useRef(false);
+
   const updateColor = (nextColor: string) => {
     const normalized = normalizeHexColor(nextColor, colorValue);
     const rgb = hexColorToRgb(normalized, colorValue);
@@ -161,26 +188,62 @@ function FlockColorControl({ ctx, exposed, descriptor }: ControlProps) {
       }
     });
   };
+  const commitDraft = () => {
+    const typed = draft?.trim();
+    if (typed && /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(typed)) {
+      const next = normalizeHexColor(typed.startsWith('#') ? typed : `#${typed}`, colorValue);
+      if (next !== colorValue) updateColor(next);
+    }
+    setDraft(null);
+  };
 
   return (
-    <div className="labeled-value with-keyframe-toggle flock-control-row flock-control-color" data-flock-control={exposed.id}>
-      <MultiKeyframeToggle
-        clipId={ctx.clip.id}
-        entries={entries}
-        dragId={`${ctx.clip.id}:flock:${exposed.nodeId}:${exposed.param}:color`}
-        title="Add color keyframes"
-      />
-      <span className="labeled-value-label" title={descriptor.description}>{exposed.label}</span>
-      <span className="flock-color-value">
-        <input
-          type="color"
-          aria-label={exposed.label}
-          value={colorValue}
-          onChange={(event) => updateColor(event.target.value)}
-        />
-        <span>{colorValue}</span>
-      </span>
-      <RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />
+    <div data-flock-control={exposed.id}>
+      <ResolveInspectorRow
+        label={exposed.label}
+        title={descriptor.description}
+        className="resolve-inspector-row--extra-action"
+        actions={<>
+          <RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />
+          <MultiKeyframeToggle
+            clipId={ctx.clip.id}
+            entries={entries}
+            dragId={`${ctx.clip.id}:flock:${exposed.nodeId}:${exposed.param}:color`}
+            title="Add color keyframes"
+          />
+          <ResolveInspectorIconButton ariaLabel={`Reset ${exposed.label}`} className="resolve-inspector-reset-button"
+            onClick={(event) => { if (event.detail > 0) event.currentTarget.blur(); updateColor(resetColor); }}>
+            <ResolveResetIcon />
+          </ResolveInspectorIconButton>
+        </>}
+      >
+        <span className="resolve-inspector-color">
+          <input
+            type="color"
+            aria-label={exposed.label}
+            value={colorValue}
+            onPointerDown={() => { pointerChange.current = true; }}
+            onKeyDown={() => { pointerChange.current = false; }}
+            onChange={(event) => {
+              updateColor(event.target.value);
+              if (pointerChange.current) event.currentTarget.blur();
+              pointerChange.current = false;
+            }}
+          />
+          <input
+            type="text"
+            aria-label={`${exposed.label} hex`}
+            value={draft ?? colorValue}
+            spellCheck={false}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); commitDraft(); }
+              if (event.key === 'Escape') { event.preventDefault(); setDraft(null); }
+            }}
+          />
+        </span>
+      </ResolveInspectorRow>
     </div>
   );
 }
@@ -247,14 +310,27 @@ function FlockStructuralControl({ ctx, exposed, descriptor }: ControlProps) {
     withBatch(`Set ${exposed.label}`, () => setFlockGraphParam(ctx.clip.id, exposed.nodeId, exposed.param, next));
   };
   const isPopulation = exposed.param === 'count' || exposed.param.endsWith('__count');
+  if (isPopulation && typeof rawValue === 'number') {
+    const preset = presetFlockValue(ctx.clip.flock!, exposed);
+    const resetValue = typeof preset === 'number' && Number.isFinite(preset) ? preset : typeof descriptor.default === 'number' ? descriptor.default : 4000;
+    return <div data-flock-control={exposed.id}>
+      <FlockPopulationRow label={exposed.label} value={rawValue} defaultValue={resetValue}
+        min={exposed.min ?? descriptor.min ?? 1} max={exposed.max ?? descriptor.max ?? 100_000} onCommit={commit}
+        actions={<RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />} />
+    </div>;
+  }
+  // How a change takes effect (it restarts or rebuilds the swarm) is said on hover, not as a line under the row.
   const hint = getFlockInvalidationHint(descriptor);
   let control: React.ReactNode;
   switch (descriptor.type) {
     case 'enum':
       control = (
-        <select aria-label={exposed.label} value={String(rawValue)} onChange={(event) => commit(event.target.value)}>
-          {descriptor.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
+        <InspectorSelect
+          ariaLabel={exposed.label}
+          value={String(rawValue)}
+          options={(descriptor.options ?? []).map((option) => ({ value: option.value, label: option.label }))}
+          onChange={(next) => commit(next)}
+        />
       );
       break;
     case 'boolean':
@@ -278,14 +354,15 @@ function FlockStructuralControl({ ctx, exposed, descriptor }: ControlProps) {
       );
   }
   return (
-    <div className="labeled-value flock-control-row flock-control-structural" data-flock-control={exposed.id}>
-      <span className="flock-control-static-marker" aria-hidden="true" title="Not keyframeable" />
-      <span className="labeled-value-label" title={isPopulation ? FLOCK_POPULATION_HINT : descriptor.description}>
-        {exposed.label}
-        <span className="flock-control-hint">{hint}</span>
-      </span>
-      {control}
-      <RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />
+    <div data-flock-control={exposed.id} className="flock-control-structural">
+      <ResolveInspectorRow
+        label={exposed.label}
+        title={`${descriptor.description ?? exposed.label} ${hint}.`}
+        className="resolve-inspector-row--extra-action"
+        actions={<RemoveControlButton clipId={ctx.clip.id} exposed={exposed} />}
+      >
+        {control}
+      </ResolveInspectorRow>
     </div>
   );
 }
@@ -329,14 +406,17 @@ export function FlockExposedControls({ ctx }: { ctx: FlockControlContext }) {
   return (
     <>
       {[...groups.entries()].map(([group, controls]) => (
-        <div key={group} className="properties-section flock-control-group" data-flock-group={group}>
-          <h4>{group}</h4>
-          {controls.map((exposed) => (
-            <FlockExposedControl key={exposed.id} ctx={ctx} exposed={exposed} />
-          ))}
-          <span className="flock-control-group-nodes" aria-hidden="true">
-            {[...new Set(controls.map((exposed) => getFlockNodeLabel(definition, exposed.nodeId)))].join(' · ')}
-          </span>
+        <div key={group} className="flock-control-group" data-flock-group={group}>
+          {/* A group holding one control of the same name (Population) is a plain row, not a section of one. */}
+          {controls.length === 1 && controls[0].label === group
+            ? <div className="inspector-section resolve-inspector-section flock-control-single">
+              <div className="inspector-section-content"><FlockExposedControl ctx={ctx} exposed={controls[0]} /></div>
+            </div>
+            : <ResolveInspectorSection title={group}>
+              {controls.map((exposed) => (
+                <FlockExposedControl key={exposed.id} ctx={ctx} exposed={exposed} />
+              ))}
+            </ResolveInspectorSection>}
         </div>
       ))}
     </>

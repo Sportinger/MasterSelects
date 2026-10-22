@@ -61,6 +61,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Riso Glow with the Neon Sign preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Glow: how brightly the glow ink shines. 4 — Speed: how fast the glow breathes. 5 — Glow Ink: the colour that glows.</figcaption>
 </figure>
 
+**Style** – switches to another look of the same engine, for example [Riso](./riso.md), [Halftone](./halftone.md) or [Paper Print](./paper-print.md). A control you changed keeps its value and keyframes when the new look has the same control, also under another name (Shadow Ink is Halftone's Ink); the others start at the new look's defaults. Riso keeps Dot Size and Registration, brought into its 0 to 32 px; in the other looks Registration is no mark size, so their Scale opens at its default. Glow stays for a switch back.
+
 ### Pattern
 
 <figure class="docs-shot docs-clip docs-shot--float-right">

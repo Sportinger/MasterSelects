@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { getDefaultParams } from '../../src/effects';
+import { getDefaultParams, getEffect } from '../../src/effects';
 import StylizeRecipeNote from '../../src/effects/stylize/StylizeRecipeNote';
 import { applyLookToClip, stackFromClipEffects } from '../../src/effects/looks/applyLook';
 import { migratePersistedLooks } from '../../src/effects/looks/lookStore';
@@ -8,7 +8,8 @@ import type { LookDefinition } from '../../src/effects/looks/types';
 import { handleUpdateEffect } from '../../src/services/aiTools/handlers/effects';
 import { migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { effectDefinitionNotes } from '../../src/services/operators/effectParamVisibility';
-import { createStylizeRecipeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_UPDATES } from '../../src/services/operators/stylizeRecipes';
+import { createStylizeRecipeGraph, isCurrentStylizeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_UPDATES } from '../../src/services/operators/stylizeRecipes';
+import { createSpreadWindowSharpenGraph } from '../../src/services/operators/sharpenEffectGraph';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
 import type { Keyframe } from '../../src/types/keyframes';
@@ -91,8 +92,9 @@ describe('Custom Looks keep the recipe their stylize effects were saved with', (
     const clipId = withClip([]);
     useTimelineStore.getState().addClipEffect(clipId, 'posterize');
     expect(useTimelineStore.getState().clips[0].effects[0].params.brightnessOnly).toBe(true);
-    // The parameter default stays what saved effects without the value mean.
-    expect(getDefaultParams('posterize').brightnessOnly).toBe(false);
+    // The declared default is what a new effect starts with (docs, listEffects); a stored effect without the key renders its legacy value.
+    expect(getDefaultParams('posterize').brightnessOnly).toBe(true);
+    expect(getEffect('posterize')!.params.brightnessOnly.legacyDefault).toBe(false);
     const look: LookDefinition = { id: 'custom-poster', name: 'Poster', category: 'custom', thumbnail: { kind: 'generated' }, tags: [], builtIn: false,
       stack: [{ effectId: 'posterize', params: { levels: 4 }, enabled: true }, { effectId: 'posterize', params: { levels: 4, brightnessOnly: true }, enabled: true }] };
     applyLookToClip(look, clipId);
@@ -113,6 +115,19 @@ describe('Use the new … (StylizeRecipeNote)', () => {
     expect(isEarlierStylizeGraph('glow', updated.operatorGraph)).toBe(false);
     expect(updated.params).toMatchObject(STYLIZE_RECIPE_UPDATES.glow!.resetParams!);
     expect((state.clipKeyframes.get(clipId) ?? []).filter(item => item.property.endsWith('.radius'))).toEqual([]);
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('names a Sharpen saved with 3.2.7, keeps its look and its value notes, and switches it on request', () => {
+    const sharpen: Effect = { ...current('sharpen', { amount: 2, radius: 1.2 }), operatorGraph: createSpreadWindowSharpenGraph() };
+    const clipId = withClip([sharpen]);
+    expect(effectDefinitionNotes({ ...sharpen, params: { ...sharpen.params, amount: -1 } }, 1920, 1080).join(' ')).not.toMatch(/edited graph/);
+    render(<StylizeRecipeNote clipId={clipId} effectInstanceId={sharpen.id} effectId="sharpen" params={sharpen.params as Record<string, number | boolean | string>} onChange={() => {}} />);
+    expect(screen.getByRole('status').textContent).toMatch(/3\.2\.7/);
+    fireEvent.click(screen.getByRole('button', { name: 'Use the new Sharpen' }));
+    const updated = useTimelineStore.getState().clips[0].effects[0];
+    expect(isCurrentStylizeGraph('sharpen', updated.operatorGraph)).toBe(true);
+    expect(updated.params).toMatchObject({ amount: 2, radius: 1.2 });
     expect(screen.queryByRole('button')).toBeNull();
   });
 });

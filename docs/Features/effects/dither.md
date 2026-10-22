@@ -63,6 +63,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Dithering with the Game Screen preset. 1 — Preset: pick a starting point. 2 — Pixel Size. 3 — Levels: steps per colour channel. 4 — Amount.</figcaption>
 </figure>
 
+**Style** – switches to another look of the same engine, for example [Dither Studio](./dither-studio.md), [Halftone](./halftone.md) or [Pixel Poster](./pixel-poster.md). A control you changed keeps its value and keyframes when the new look has the same control, also under another name (Pixel Size is Halftone's Dot Size); the others start at the new look's defaults. Levels is Dithering's own: it stays for a switch back.
+
 ### Pattern
 
 **Pixel Size** – how large the pixels are. Each pixel shows one colour of the picture, and its neighbours form the checked pattern, so the pattern grows with it. 1 px gives a fine grain that blends into a photo from a few metres away, 3 to 6 px a clear retro screen, 12 and more turns a figure into a mosaic. It counts pixels of a 1080p picture, so a 4K export shows the same pattern as the preview, and it always draws whole pixels: where a size does not fit the frame, the card says what renders. Below 1 px (from keyframes or a tool) it renders 1 px, and the card says so. 1 to 24 px, default 3 px.

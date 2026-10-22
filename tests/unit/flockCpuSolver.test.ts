@@ -12,6 +12,7 @@ import {
   type FlockProgram,
 } from '../../src/services/flock/compiler/flockProgramTypes';
 import { FlockCpuSolver } from '../../src/engine/flock/cpu/flockCpuSolver';
+import { flockPace } from '../../src/engine/flock/cpu/flockCpuStepParams';
 
 const context = { keyframesByProperty: indexFlockKeyframes([]) };
 
@@ -149,6 +150,28 @@ describe('FlockCpuSolver flocking rules', () => {
     expect(Number.isFinite(speed)).toBe(true);
     expect(speed).toBeLessThanOrEqual(20.0001);
     expect(speed).toBeGreaterThanOrEqual(4.999);
+  });
+});
+
+describe('FlockCpuSolver pace', () => {
+  it('moves the swarm Pace times as far per step without changing its clock, and refuses Pace above 4', () => {
+    const travel = (pace?: number) => {
+      const solver = new FlockCpuSolver(buildProgram({ rules: null, emitter: { count: 1, initialSpeed: 0 },
+        simulation: { maxSpeed: 1000, minSpeed: 0, ...(pace === undefined ? {} : { pace }) } }));
+      solver.advanceTo(1, context);
+      setParticle(solver, 0, [0, 0, 0], [30, 0, 0]);
+      solver.advanceTo(31, context);
+      return positionOf(solver, 0)[0];
+    };
+    const normal = travel();
+    expect(normal).toBeGreaterThan(10);
+    expect(travel(1)).toBeCloseTo(normal, 9);
+    expect(travel(2)).toBeCloseTo(normal * 2, 6);
+    expect(travel(0)).toBeCloseTo(0, 9);
+    // Above the limit the compiler names the problem instead of clamping silently.
+    expect(() => travel(9)).toThrow(/Pace must be <= 4/);
+    expect(flockPace(Number.NaN)).toBe(1);
+    expect(flockPace(9)).toBe(4);
   });
 });
 

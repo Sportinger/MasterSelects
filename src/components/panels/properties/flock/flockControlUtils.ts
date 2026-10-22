@@ -5,6 +5,7 @@ import {
   getFlockOperator,
 } from '../../../../services/flock/operators/flockOperatorRegistry';
 import type { FlockParamDescriptor } from '../../../../services/flock/operators/flockOperatorTypes';
+import { getFlockPreset } from '../../../../services/flock/presets/flockPresets';
 
 export interface FlockParamEntry {
   /** Param id, or `${innerNodeId}__${paramId}` on group instances. */
@@ -50,13 +51,13 @@ export function isStructuralFlockParam(descriptor: FlockParamDescriptor): boolea
 export function getFlockInvalidationHint(descriptor: FlockParamDescriptor): string {
   switch (descriptor.invalidation) {
     case 'topology':
-      return 'Resimulates from start';
+      return 'A change restarts the swarm from the clip start';
     case 'behavior':
-      return 'Resimulates from the change';
+      return 'A change lets the swarm react from that moment on';
     case 'derived':
-      return 'Rebuilds lines';
+      return 'A change redraws the lines';
     default:
-      return 'Redraw only';
+      return 'A change only redraws';
   }
 }
 
@@ -68,11 +69,101 @@ export function getFlockNumberDecimals(step?: number): number {
   return 3;
 }
 
+/**
+ * Decimals of a promoted number: from its declared step, else from its slider step (Speed 45 and
+ * Turbulence 18 read as whole numbers), keeping one decimal for a value that has one (Size 4.2).
+ */
+export function flockNumberDecimals(descriptor: FlockParamDescriptor, sliderStep: number, value: number): number {
+  if (descriptor.step !== undefined) return getFlockNumberDecimals(descriptor.step);
+  if (sliderStep >= 1) return Number.isInteger(Math.round(value * 1e6) / 1e6) ? 0 : 1;
+  return getFlockNumberDecimals(sliderStep);
+}
+
+const presetSignatures = new Map<string, ReadonlySet<string>>();
+const controlSignature = (definition: FlockDefinition, exposed: { nodeId: string; param: string }) =>
+  `${definition.nodes.find((node) => node.id === exposed.nodeId)?.operator ?? '?'}:${exposed.param}`;
+const PACE = 'flock.simulation:pace', MAX_SPEED = 'flock.simulation:maxSpeed';
+/**
+ * Swarms made before Speed became the simulation's Pace show Max Speed as their Speed. That holds
+ * only for a swarm that exposes no Pace: on a newer swarm a Max Speed row came through Add.
+ */
+const isLegacySpeedRow = (definition: FlockDefinition, signature: string, preset: ReadonlySet<string>) =>
+  signature === MAX_SPEED && preset.has(PACE)
+  && !definition.exposed.some((item) => controlSignature(definition, item) === PACE);
+/**
+ * Whether a control is one the swarm's preset shows by itself (Population, Cohesion, …), not one
+ * added later through Add or the Nodes tab. Preset node ids are generated, so controls compare by
+ * node operator and parameter.
+ */
+export function isPresetFlockControl(definition: FlockDefinition, exposed: { nodeId: string; param: string }): boolean {
+  const presetId = definition.presetId;
+  const preset = presetId ? getFlockPreset(presetId) : undefined;
+  if (!presetId || !preset) return false;
+  let signatures = presetSignatures.get(presetId);
+  if (!signatures) {
+    const built = preset.create();
+    signatures = new Set(built.exposed.map((item) => controlSignature(built, item)));
+    presetSignatures.set(presetId, signatures);
+  }
+  const signature = controlSignature(definition, exposed);
+  return signatures.has(signature) || isLegacySpeedRow(definition, signature, signatures);
+}
+
+const presetValues = new Map<string, ReadonlyMap<string, unknown>>();
+/**
+ * The value the swarm's preset gives a control (Free Swarm's Turbulence 18, Technical Network's
+ * Population 1800), so its reset arrow returns to the preset's look; undefined for a control the
+ * preset does not show (added through Add) or a swarm without a preset. An older swarm's Max Speed
+ * row resets to the preset's own Max Speed.
+ */
+export function presetFlockValue(definition: FlockDefinition, exposed: { nodeId: string; param: string }): unknown {
+  const presetId = definition.presetId;
+  const preset = presetId ? getFlockPreset(presetId) : undefined;
+  if (!presetId || !preset) return undefined;
+  let values = presetValues.get(presetId);
+  if (!values) {
+    const built = preset.create();
+    const map = new Map(built.exposed.map((item) => [controlSignature(built, item),
+      built.nodes.find((node) => node.id === item.nodeId)?.params[item.param]]));
+    const simulation = built.nodes.find((node) => node.operator === 'flock.simulation');
+    if (map.has(PACE) && simulation?.params.maxSpeed !== undefined) map.set(`legacy:${MAX_SPEED}`, simulation.params.maxSpeed);
+    values = map;
+    presetValues.set(presetId, values);
+  }
+  const signature = controlSignature(definition, exposed);
+  if (values.has(signature)) return values.get(signature);
+  return isLegacySpeedRow(definition, signature, new Set(values.keys())) ? values.get(`legacy:${MAX_SPEED}`) : undefined;
+}
+
 export function getFlockNumberSensitivity(descriptor: FlockParamDescriptor, min?: number, max?: number): number {
   if (min !== undefined && max !== undefined && Number.isFinite(max - min) && max > min) {
     return Math.max(0.001, (max - min) / 200);
   }
   return descriptor.step ?? 0.5;
+}
+
+/**
+ * Slider and typed-value limits of a promoted number: the slider spans the declared range unless it
+ * is open or far wider than the value's scale (Size 0–200 at 6), then about four times the default;
+ * typing reaches the declared limits. The slider always includes the current value.
+ */
+export function flockSliderRange(
+  exposed: { min?: number; max?: number },
+  descriptor: FlockParamDescriptor,
+  value: number,
+): { min: number; max: number; step: number; hardMin: number; hardMax: number } {
+  const fallback = typeof descriptor.default === 'number' ? descriptor.default : 0;
+  const hardMin = exposed.min ?? descriptor.min ?? Number.NEGATIVE_INFINITY;
+  const hardMax = exposed.max ?? descriptor.max ?? Number.POSITIVE_INFINITY;
+  // Earlier Add pickers copied the descriptor's limits onto the control: only a narrower max is its own.
+  const ownMax = exposed.max !== undefined && exposed.max !== descriptor.max ? exposed.max : undefined;
+  const scale = Math.max(1, Math.abs(fallback) * 4);
+  // An open lower limit starts the slider at 0 for a positive default (Turbulence), typing goes below.
+  const low = Number.isFinite(hardMin) ? hardMin : fallback >= 0 ? 0 : -scale;
+  const declared = ownMax ?? (descriptor.max !== undefined && descriptor.max - low <= Math.max(1, Math.abs(fallback) * 20) ? descriptor.max : undefined);
+  const high = declared ?? Math.min(hardMax, Math.max(low + scale, scale));
+  const step = descriptor.step ?? (high - low <= 2 ? 0.01 : high - low <= 20 ? 0.1 : 1);
+  return { min: Math.min(low, value), max: Math.max(high, value), step, hardMin, hardMax };
 }
 
 export function clampFlockNumber(value: number, min?: number, max?: number): number {
@@ -88,3 +179,20 @@ export function formatFlockBytes(bytes: number): string {
 
 export const FLOCK_POPULATION_HINT =
   'Population is structural and cannot be keyframed. Animate the emitter Active Fraction or Lifetime instead.';
+
+/** The slider spans 100 to 100 000 points on a logarithmic scale; typing reaches the node's own limits. */
+export const FLOCK_POPULATION_SLIDER = { min: 100, max: 100_000 } as const;
+
+/** A slider position (log10 of the count) as a count with two significant digits: 4000, 12 000, 350. */
+export function populationFromSlider(position: number): number {
+  const count = 10 ** position, unit = 10 ** Math.max(0, Math.floor(Math.log10(count)) - 1);
+  return Math.round(count / unit) * unit;
+}
+
+/** The next count on the slider's two-significant-digit grid in `direction` (+1 up, −1 down): 1000 → 1100, 1000 → 990. */
+export function populationStep(count: number, direction: number): number {
+  if (!direction) return count;
+  const below = direction < 0 ? count - 1e-9 : count;
+  const unit = 10 ** Math.max(0, Math.floor(Math.log10(Math.max(1, below))) - 1);
+  return Math.max(1, Math.round(count / unit) * unit + Math.sign(direction) * unit);
+}

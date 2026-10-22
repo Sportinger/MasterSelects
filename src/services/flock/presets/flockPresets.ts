@@ -18,7 +18,9 @@ function exposeCore(builder: FlockGraphBuilder, ids: { emitter: string; rules: s
     .expose(ids.rules, 'cohesion', 'Behavior')
     .expose(ids.rules, 'separation', 'Behavior')
     .expose(ids.rules, 'alignment', 'Behavior')
-    .expose(ids.sim, 'maxSpeed', 'Behavior', 'Speed');
+    // Speed is the simulation's Pace (the swarm flies faster or slower as a whole); a Max Speed cap
+    // the steering forces never reach would leave most of its range without effect.
+    .expose(ids.sim, 'pace', 'Behavior', 'Speed');
   if (ids.turbulence) builder.expose(ids.turbulence, 'strength', 'Behavior', 'Turbulence');
 }
 
@@ -27,10 +29,12 @@ function freeSwarm(): FlockDefinition {
   const emitter = b.add('flock.emitter', { count: 4000, shape: 'sphere', size: [70, 70, 70] }, [COL.pop, 0]);
   const rules = b.add('flock.rules', {}, [COL.beh, -160]);
   const turbulence = b.add('flock.turbulence', { strength: 18 }, [COL.beh, 0]);
-  const boundary = b.add('flock.boundary', { shape: 'sphere', size: [120, 120, 120], mode: 'contain' }, [COL.beh, 200]);
+  // Sphere boundaries take their radius from size[0]: 72 keeps the swarm inside the default frame.
+  const boundary = b.add('flock.boundary', { shape: 'sphere', size: [72, 72, 72], mode: 'contain' }, [COL.beh, 200]);
   const compose = b.add('flock.compose', {}, [COL.beh + 160, -80]);
   const sim = b.add('flock.simulation', {}, [COL.sim, 0]);
-  const points = b.add('flock.render-points', { size: 5, color: '#9fd8ff', opacity: 0.95 }, [COL.ren, 0]);
+  // Half-strength points: where the swarm crowds they add up to a bright pale blue, not clipped white.
+  const points = b.add('flock.render-points', { size: 6, color: '#b4e2ff', opacity: 0.5 }, [COL.ren, 0]);
   const output = b.add('flock.output', {}, [COL.out, 0]);
   b.connect(emitter, 'spawn', sim, 'spawn')
     .connect(rules, 'behavior', compose, 'behavior')
@@ -103,8 +107,8 @@ function followPath(): FlockDefinition {
   const b = new FlockGraphBuilder();
   const emitter = b.add('flock.emitter', { count: 3000, shape: 'sphere', size: [40, 40, 40], center: [0, 0, 0] }, [COL.pop, 0]);
   const rules = b.add('flock.rules', { cohesion: 0.9, alignment: 1.6 }, [COL.beh, -180]);
-  const path = b.add('flock.path', { shape: 'figure8', radius: 110, height: 40, rotation: [90, 0, 0] }, [COL.beh - 200, 60]);
-  const follow = b.add('flock.follow-path', { strength: 28, tubeRadius: 16 }, [COL.beh, 40]);
+  const path = b.add('flock.path', { shape: 'figure8', radius: 58, height: 20, rotation: [90, 0, 0] }, [COL.beh - 200, 60]);
+  const follow = b.add('flock.follow-path', { strength: 28, tubeRadius: 9 }, [COL.beh, 40]);
   const compose = b.add('flock.compose', {}, [COL.beh + 180, 0]);
   const sim = b.add('flock.simulation', { maxSpeed: 55 }, [COL.sim, 0]);
   const trails = b.add('flock.trails', { sampleFraction: 0.12, samples: 32, interval: 2 }, [COL.ren - 100, 140]);
@@ -130,16 +134,18 @@ function followPath(): FlockDefinition {
 
 function technicalNetwork(): FlockDefinition {
   const b = new FlockGraphBuilder();
-  const emitter = b.add('flock.emitter', { count: 2500, shape: 'sphere', size: [90, 60, 90] }, [COL.pop, 0]);
+  const emitter = b.add('flock.emitter', { count: 1800, shape: 'box', size: [150, 80, 50] }, [COL.pop, 0]);
   const rules = b.add('flock.rules', { cohesion: 0.7, separation: 2, neighborRadius: 16, separationRadius: 7 }, [COL.beh, -160]);
-  const turbulence = b.add('flock.turbulence', { strength: 14 }, [COL.beh, 0]);
+  const turbulence = b.add('flock.turbulence', { strength: 12 }, [COL.beh, 0]);
   const compose = b.add('flock.compose', {}, [COL.beh + 180, -60]);
-  const boundary = b.add('flock.boundary', { shape: 'box', size: [260, 180, 220], mode: 'reflect' }, [COL.beh, 180]);
-  const sim = b.add('flock.simulation', { maxSpeed: 30 }, [COL.sim, 0]);
+  // A flat box (190 × 100 × 70) that holds the points firmly: a deeper or reflecting box let them
+  // reach the camera and spread past every frame edge after a few seconds.
+  const boundary = b.add('flock.boundary', { shape: 'box', size: [190, 100, 70], mode: 'contain', softness: 15, strength: 70 }, [COL.beh, 180]);
+  const sim = b.add('flock.simulation', { maxSpeed: 26 }, [COL.sim, 0]);
   const points = b.add('flock.render-points', { shape: 'dot', size: 3.5, color: '#e6f4ff', opacity: 1 }, [COL.ren, -200]);
-  const links = b.add('flock.render-links', { radius: 15, perParticle: 3, sampleFraction: 0.5, opacity: 0.6, width: 1.2, color: '#6fd3ff' }, [COL.ren, -40]);
+  const links = b.add('flock.render-links', { radius: 16, perParticle: 3, sampleFraction: 0.6, opacity: 0.95, width: 2.4, color: '#4fb4ff' }, [COL.ren, -40]);
   const trails = b.add('flock.trails', { sampleFraction: 0.04, samples: 16, interval: 4 }, [COL.ren - 120, 140]);
-  const glyphs = b.add('flock.render-glyphs', { glyph: 'square', anchor: 'trail-head', size: 7, sampleFraction: 0.5 }, [COL.ren + 60, 140]);
+  const glyphs = b.add('flock.render-glyphs', { glyph: 'square', anchor: 'trail-head', size: 9, sampleFraction: 0.5 }, [COL.ren + 60, 140]);
   const output = b.add('flock.output', {}, [COL.out, 0]);
   b.connect(emitter, 'spawn', sim, 'spawn')
     .connect(rules, 'behavior', compose, 'behavior')
@@ -205,19 +211,21 @@ function shrimpPullback(): FlockDefinition {
 /** Showcase B: dense violet clusters, long curved filaments and sparse geometric markers. */
 function violetFilaments(): FlockDefinition {
   const b = new FlockGraphBuilder();
-  const emitter = b.add('flock.emitter', { count: 20000, shape: 'sphere', size: [150, 120, 150], seed: 5 }, [COL.pop, 0]);
+  // Dim points in deep violets, so the cloud stays violet instead of adding up to white, in a sphere
+  // that fills about half the frame; longer, wider filaments read at docs size.
+  const emitter = b.add('flock.emitter', { count: 9000, shape: 'sphere', size: [100, 86, 100], seed: 5 }, [COL.pop, 0]);
   const rules = b.add('flock.rules', { cohesion: 0.5, separation: 1.2, alignment: 0.9, neighborRadius: 8, separationRadius: 2.5 }, [COL.beh, -240]);
-  const cluster = b.add('flock.cluster', { clusters: 12, spread: 110, wander: 0.12, strength: 10, radius: 45 }, [COL.beh, -80]);
-  const turbulence = b.add('flock.turbulence', { strength: 16, frequency: 0.03, evolution: 0.2 }, [COL.beh, 80]);
+  const cluster = b.add('flock.cluster', { clusters: 9, spread: 85, wander: 0.12, strength: 10, radius: 32 }, [COL.beh, -80]);
+  const turbulence = b.add('flock.turbulence', { strength: 14, frequency: 0.03, evolution: 0.2 }, [COL.beh, 80]);
   const compose = b.add('flock.compose', {}, [COL.beh + 180, 0]);
-  const boundary = b.add('flock.boundary', { shape: 'sphere', size: [230, 230, 230], mode: 'contain' }, [COL.beh, 240]);
+  const boundary = b.add('flock.boundary', { shape: 'sphere', size: [104, 104, 104], mode: 'contain' }, [COL.beh, 240]);
   const sim = b.add('flock.simulation', { maxSpeed: 26, minSpeed: 5 }, [COL.sim, 0]);
-  const palette = b.add('flock.palette', { mode: 'position', frequency: 0.012 }, [COL.sim + 120, -260]);
-  const points = b.add('flock.render-points', { size: 3.4, colorMode: 'palette', opacity: 0.8, distanceFade: 0.6 }, [COL.ren, -260]);
-  const trails = b.add('flock.trails', { sampleFraction: 0.03, maxTrails: 700, samples: 56, interval: 2, salt: 13 }, [COL.ren - 150, -40]);
-  const curves = b.add('flock.render-curves', { colorMode: 'palette', width: 1.1, taper: 0.05, opacity: 0.7 }, [COL.ren + 60, -60]);
-  const glyphs = b.add('flock.render-glyphs', { glyph: 'cube', anchor: 'trail-head', size: 4, sizeMode: 'world', sampleFraction: 0.18, color: '#f3d9ff', opacity: 0.85 }, [COL.ren + 60, 100]);
-  const tails = b.add('flock.render-glyphs', { glyph: 'dot', anchor: 'trail-tail', size: 3, sampleFraction: 0.35, color: '#c890ff', opacity: 0.6 }, [COL.ren + 60, 240]);
+  const palette = b.add('flock.palette', { mode: 'position', frequency: 0.012, color1: '#4a12a8', color2: '#9a4dff', color3: '#c98bff', color4: '#2c0b66' }, [COL.sim + 120, -260]);
+  const points = b.add('flock.render-points', { size: 3.6, colorMode: 'palette', opacity: 0.45, distanceFade: 0.3 }, [COL.ren, -260]);
+  const trails = b.add('flock.trails', { sampleFraction: 0.06, maxTrails: 900, samples: 60, interval: 2, salt: 13 }, [COL.ren - 150, -40]);
+  const curves = b.add('flock.render-curves', { colorMode: 'palette', width: 2.6, taper: 0.3, opacity: 0.75 }, [COL.ren + 60, -60]);
+  const glyphs = b.add('flock.render-glyphs', { glyph: 'cube', anchor: 'trail-head', size: 4, sizeMode: 'world', sampleFraction: 0.18, color: '#e4c4ff', opacity: 0.85 }, [COL.ren + 60, 100]);
+  const tails = b.add('flock.render-glyphs', { glyph: 'dot', anchor: 'trail-tail', size: 3, sampleFraction: 0.35, color: '#b070ff', opacity: 0.6 }, [COL.ren + 60, 240]);
   const output = b.add('flock.output', {}, [COL.out, 0]);
   b.connect(emitter, 'spawn', sim, 'spawn');
   for (const behavior of [rules, cluster, turbulence]) b.connect(behavior, 'behavior', compose, 'behavior');
@@ -242,16 +250,24 @@ function violetFilaments(): FlockDefinition {
 export const FLOCK_PRESETS: readonly FlockPresetDescriptor[] = [
   { id: 'sculpture-terracotta', label: 'Terracotta Sculpture', description: 'Gently settling APIC sheet with slow folds, cream and orange pigment, and a lit gallery box. Calm start without pre-roll.', showcase: true, create: () => createSculpturePreset('terracotta') },
   { id: 'sculpture-lilac', label: 'Lilac Sculpture', description: 'Gently settling APIC sheet with slow folds, lilac pigment, and a lit gallery box. Calm start without pre-roll.', showcase: true, create: () => createSculpturePreset('lilac') },
-  { id: 'free-swarm', label: 'Free Swarm', description: 'Boids with turbulence inside a soft sphere.', create: freeSwarm },
-  { id: 'krill-cloud', label: 'Krill Cloud', description: 'Aligned krill bodies in drifting clusters with faint neighbor links.', create: krillCloud },
+  { id: 'free-swarm', label: 'Free Swarm', description: 'Fine pale points that flock together and drift apart, like starlings or dust in a beam of light.', create: freeSwarm },
+  { id: 'krill-cloud', label: 'Krill Cloud', description: 'Thousands of small orange krill that swim in step and gather in drifting clusters.', create: krillCloud },
   { id: 'vortex', label: 'Vortex', description: 'A swirling shell of particles with velocity strokes.', create: vortex },
-  { id: 'follow-path', label: 'Follow Path', description: 'A school following a figure-eight with trails.', create: followPath },
-  { id: 'technical-network', label: 'Technical Network', description: 'Points, neighbor links and square markers.', create: technicalNetwork },
-  { id: 'shrimp-pullback', label: 'Shrimp Pullback (Showcase)', description: 'Hero animal inside an immense structured swarm with technical lines.', showcase: true, create: shrimpPullback },
-  { id: 'violet-filaments', label: 'Violet Filaments (Showcase)', description: 'Clustered violet mass with curved filaments and geometric endpoints.', showcase: true, create: violetFilaments },
+  { id: 'follow-path', label: 'Follow Path', description: 'A school that swims a figure eight and draws its path as fine trails.', create: followPath },
+  { id: 'technical-network', label: 'Technical Network', description: 'Points joined to their neighbours by thin lines, with small square markers: a data sculpture.', create: technicalNetwork },
+  { id: 'shrimp-pullback', label: 'Shrimp Pullback', description: 'Hero animal inside an immense structured swarm with technical lines.', showcase: true, create: shrimpPullback },
+  { id: 'violet-filaments', label: 'Violet Filaments', description: 'A dense violet cloud in clusters, with long curved filaments and small wire cubes at their tips.', showcase: true, create: violetFilaments },
 ];
 
 export const DEFAULT_FLOCK_PRESET_ID = 'free-swarm';
+
+/**
+ * The Flocking effect's presets: the starting swarms its card's Preset row offers first, in this
+ * order (docs/Features/effects/flocking.md). The other entries of FLOCK_PRESETS (showcase scenes and
+ * sculptures) follow under "More swarms"; tools and the Nodes tab accept every id. A flock preset
+ * replaces the whole graph on `clip.flock`, so it is no EffectPreset of the effect definition.
+ */
+export const FLOCKING_CARD_PRESET_IDS: readonly string[] = ['free-swarm', 'krill-cloud', 'follow-path', 'technical-network', 'violet-filaments'];
 
 export function getFlockPreset(presetId: string): FlockPresetDescriptor | undefined {
   return FLOCK_PRESETS.find((preset) => preset.id === presetId);

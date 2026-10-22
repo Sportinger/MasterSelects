@@ -8,6 +8,7 @@ import {
   sortTimelineTrackPropertyRows,
   type TimelineTrackPropertyClip,
 } from '../utils/timelineTrackPropertyRows';
+import { hideOtherStyleLanes } from '../../../services/effects/effectStyles';
 
 export type TrackPropertyTracksProps = {
   trackId: string;
@@ -45,6 +46,7 @@ export function TrackPropertyTracks({
     const props = new Set<string>();
     const keyframes = clipKeyframes.get(clipId) || [];
     keyframes.forEach((kf) => props.add(kf.property));
+    hideOtherStyleLanes(props, selectedClip?.effects);
     if (shouldHideTimelineTrack3DOnlyProperties(selectedClip)) {
       props.delete('rotation.x');
       props.delete('rotation.y');

@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { getEffect } from '../../src/effects';
 import { createDefaultBrandGeneratorGraph, createDefaultCapsuleCloudGraph, createDefaultDataHatchGraph, createDefaultDitherTextGraph, createDefaultGlyphMatrixGraph, createDefaultGridGlyphGraph, createDefaultMatrixGraph, createDefaultNumberFieldGraph, createDefaultPixelCodeGraph, createDefaultPixelDitherGraph, createDefaultRetroMatrixGraph, createDefaultStitchPosterGraph, createDefaultSymbolMatrixGraph, createDefaultUiCollageGraph, createDefaultWordMosaicGraph } from '../../src/services/operators/asciiEffectGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { imageCellHash } from '../../src/services/operators/imageOperatorEvaluation';
+import { imageHashPcg2d } from '../../src/services/operators/imageHashPcg';
 
 type Rgba = [number, number, number, number];
-const uv: [number, number] = [.3, .7], resolution: [number, number] = [40, 20];
+// Cell Size counts pixels of a 1080p frame: at 2160 × 1080 a Cell Size of 10 is a 10-pixel cell (grid 216 × 108).
+const uv: [number, number] = [.3, .7], resolution: [number, number] = [2160, 1080];
 const sourceAt = ([u, v]: [number, number]): Rgba => [u, v, .25, .6];
 const atlasAt = (_id: string, [u, v]: [number, number]): Rgba => [0, 0, 0, u * .4 + v * .3];
 const mix = (a: number, b: number, t: number) => a * (1 - t) + b * t;
@@ -15,7 +18,8 @@ function params(effect: GlyphEffect, overrides: Record<string, unknown> = {}) {
   const definition = getEffect(effect)!;
   return {
     definition,
-    values: { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.default])), ...overrides },
+    // The recipe as instances saved before Background existed render it (Background 0, the dark ground).
+    values: { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.legacyDefault ?? spec.default])), ...overrides },
   };
 }
 
@@ -32,13 +36,14 @@ function evaluate(effect: GlyphEffect, graph: ReturnType<typeof createDefaultNum
 }
 
 function cell(coords = uv, offset = 0) {
-  const grid: [number, number] = [4, 2], id: [number, number] = [Math.floor(coords[0] * 4), Math.floor(coords[1] * 2)];
+  const grid: [number, number] = [resolution[0] / 10, resolution[1] / 10], id: [number, number] = [Math.floor(coords[0] * grid[0]), Math.floor(coords[1] * grid[1])];
   const local: [number, number] = [coords[0] * grid[0] - id[0], coords[1] * grid[1] - id[1]];
   const sourceUv: [number, number] = [(id[0] + .5) / grid[0], (id[1] + .5) / grid[1]];
   const source = sourceAt(sourceUv), tone = source[0] * .2126 + source[1] * .7152 + source[2] * .0722;
-  const baseIndex = Math.floor(Math.max(0, Math.min(.99999, tone)) * 4), index = (baseIndex + offset) % 4;
+  const baseIndex = Math.floor(Math.max(0, Math.min(.99999, tone)) * 4), index = ((baseIndex + offset) % 4 + 4) % 4;
   const atlasUv: [number, number] = [(index % 2 + local[0]) / 2, (Math.floor(index / 2) + local[1]) / 2];
-  return { source, tone, local, id, atlasUv, alpha: atlasAt('', atlasUv)[3] };
+  // Amount fades from the untouched pixel at coords, not from the cell's colour.
+  return { source, pixel: sourceAt(coords), tone, local, id, atlasUv, alpha: atlasAt('', atlasUv)[3] };
 }
 
 describe('shared glyph graph variants', () => {
@@ -49,7 +54,7 @@ describe('shared glyph graph variants', () => {
     const { output, samples } = evaluate('number-field', graph, { cellSize: 10, amount: .65, colorA: '#204060', colorB: '#e0c080' });
     const value = cell(), a = [0x20 / 255, 0x40 / 255, 0x60 / 255], b = [0xe0 / 255, 0xc0 / 255, 0x80 / 255];
     const level = Math.floor(value.tone * 5) / 4;
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, mix(a[index], b[index], level) * value.alpha, .65));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, mix(a[index], b[index], level) * value.alpha, .65));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -63,7 +68,7 @@ describe('shared glyph graph variants', () => {
     const coverage = Math.max(value.alpha, (1 - smooth) * .28);
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .8));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .8));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -75,7 +80,7 @@ describe('shared glyph graph variants', () => {
     const { output, samples } = evaluate('pixel-code', graph, { cellSize: 10, amount: .7 });
     const dark = [.08, .3, .48], light = [.28, .95, .72];
     const code = dark.map((channel, index) => mix(channel, light[index], value.tone) * value.alpha);
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, code[index], .7));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, code[index], .7));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -89,7 +94,7 @@ describe('shared glyph graph variants', () => {
     const connector = (Math.abs(value.local[1] - .5) <= .08 ? 1 : 0) * (value.tone >= .25 ? 1 : 0);
     const coverage = Math.max(value.alpha, connector * band * .45), background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .75));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .75));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -102,7 +107,7 @@ describe('shared glyph graph variants', () => {
       { cellSize: 10, amount: .7, speed, colorMode: 'source' }, coords, time);
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, value.alpha));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .7));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .7));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -122,7 +127,7 @@ describe('shared glyph graph variants', () => {
     const coverage = Math.max(value.alpha, hatch * (1 - value.tone) * .55);
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .85));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .85));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -137,7 +142,7 @@ describe('shared glyph graph variants', () => {
     const t = Math.max(0, Math.min(1, (edge - .02) / .03)), frame = 1 - t * t * (3 - 2 * t), coverage = Math.max(value.alpha, frame);
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .72));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .72));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -152,7 +157,7 @@ describe('shared glyph graph variants', () => {
     const coverage = Math.max(value.alpha, stitch * (.35 + .65 * (1 - value.tone)));
     const dark = value.source.slice(0, 3).map(channel => channel * .08), background = colorB.map((channel, index) => mix(channel, dark[index], .25));
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .68));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .68));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -166,21 +171,24 @@ describe('shared glyph graph variants', () => {
     const threshold = mix(.28, .72, checker), visible = value.tone + hash2d([value.id[0] + time, value.id[1] + time]) * .18 >= threshold ? 1 : 0;
     const coverage = value.alpha * visible, background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .74));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .74));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
   });
 
-  it('builds Symbol Matrix with hashed time jitter and pulsed glyph coverage', () => {
-    const coords: [number, number] = [.8, .7], time = .57, speed = 1.35, base = cell(coords), phase = Math.floor(time * speed * 4);
-    const value = cell(coords, Math.floor(hash2d([base.id[0] + phase, base.id[1] + phase]) * 4));
+  it('builds Symbol Matrix with a staggered per-cell random swap and pulsed glyph coverage', () => {
+    // Each cell ticks at its own moment (four ticks a second × Speed, shifted by its Random (Cell)) and draws its
+    // character from Random (Integer Hash) of (its random, its tick).
+    const coords: [number, number] = [.8, .7], time = .57, speed = 1.35, base = cell(coords), cellRandom = imageCellHash(base.id);
+    const tick = Math.floor(time * speed * 4 + cellRandom);
+    const value = cell(coords, Math.floor(imageHashPcg2d([cellRandom, tick]) * 4));
     const { output, samples } = evaluate('symbol-matrix', createDefaultSymbolMatrixGraph(),
       { cellSize: 10, amount: .81, speed, colorMode: 'source' }, coords, time);
     const pulse = .65 + .35 * Math.sin(time * speed * 2 + hash2d(base.id) * 6.28318530718), coverage = value.alpha * pulse;
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .81));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .81));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -194,22 +202,28 @@ describe('shared glyph graph variants', () => {
     const radius = Math.hypot(value.local[0] - .5, value.local[1] - .5), glowInput = value.alpha + (1 - radius) * .18;
     const t = Math.max(0, Math.min(1, (glowInput - .05) / .6)), glow = t * t * (3 - 2 * t);
     const neon = colorA.map((channel, index) => mix(channel, colorB[index], value.tone) * glow * 1.25);
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, neon[index], .73));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, neon[index], .73));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
   });
 
-  it('builds Retro Matrix with negative row phase, amber tone and scanline resolve', () => {
-    const coords: [number, number] = [.8, .7], time = .41, speed = 1.2;
-    const value = cell(coords, Math.floor(time * speed * 3 - coords[1] * 4)), amount = .79;
-    const { output, samples } = evaluate('retro-matrix', createDefaultRetroMatrixGraph(),
-      { cellSize: 10, amount, speed }, coords, time);
-    const amberBase = [1, .52, .08], amber = amberBase.map(channel => channel * value.alpha * (.55 + value.tone * .7));
-    const scan = .82 + .18 * Math.sin(coords[1] * resolution[1] * 3.14159265359), scanned = amber.map(channel => channel * scan);
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, scanned[index], amount));
-    expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
-    expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
+  it('builds Retro Matrix with its upward scroll, fixed text, Phosphor ink and 1080p scanlines', () => {
+    // The grid moves up by time × Speed × 3 rows; each cell of the scrolled grid keeps Random (Cell) of (column, line)
+    // as its text and reads the picture at its current centre. Saved-before values: Roll 1, Background 0, Scanlines .36.
+    const coords: [number, number] = [.8, .7], time = .41, speed = 1.2, amount = .79, scroll = time * speed * 3;
+    const grid: [number, number] = [resolution[0] / 10, resolution[1] / 10], scrolled: [number, number] = [coords[0] * grid[0], coords[1] * grid[1] + scroll];
+    const id: [number, number] = [Math.floor(scrolled[0]), Math.floor(scrolled[1])], local = [scrolled[0] - id[0], scrolled[1] - id[1]];
+    const source = sourceAt([(id[0] + .5) / grid[0], (id[1] + .5 - scroll) / grid[1]]), tone = source[0] * .2126 + source[1] * .7152 + source[2] * .0722;
+    const index = (Math.floor(Math.min(.99999, tone) * 4) + Math.floor(imageCellHash(id) * 4)) % 4;
+    const atlasUv: [number, number] = [(index % 2 + local[0]) / 2, (Math.floor(index / 2) + local[1]) / 2], alpha = atlasAt('', atlasUv)[3];
+    const { output, samples } = evaluate('retro-matrix', createDefaultRetroMatrixGraph(), { cellSize: 10, amount, speed }, coords, time);
+    const phosphor = [1, 0x85 / 255, 0x14 / 255], lit = phosphor.map(channel => channel * alpha * (.15 + tone * 1.6));
+    const scan = 1 - .36 * (.5 - .5 * Math.cos(scrolled[1] * 10 / 3 * 6.28318530718));
+    const expected = sourceAt(coords).slice(0, 3).map((channel, channelIndex) => mix(channel, lit[channelIndex] * scan, amount));
+    expect(samples).toHaveLength(1);
+    samples[0].slice(1).forEach((value, axis) => expect(value).toBeCloseTo(atlasUv[axis], 9));
+    expected.forEach((channel, channelIndex) => expect(output[channelIndex]).toBeCloseTo(channel, 9));
     expect(output[3]).toBe(.6);
   });
 
@@ -224,7 +238,7 @@ describe('shared glyph graph variants', () => {
     const t = Math.max(0, Math.min(1, (distance + .02) / .05)), pill = 1 - t * t * (3 - 2 * t);
     const coverage = Math.max(value.alpha, pill * .18), background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -241,7 +255,7 @@ describe('shared glyph graph variants', () => {
     const cursor = Math.hypot(value.local[0] - .72, value.local[1] - .28) <= .07 ? 1 : 0;
     const coverage = Math.max(value.alpha, border * .42, cursor), background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -256,7 +270,7 @@ describe('shared glyph graph variants', () => {
     const phase = base.id[1] * .43 - time * speed * 5 + hash2d([base.id[0], base.id[0]]) * 6.28318530718;
     const head = Math.pow(.5 + .5 * Math.sin(phase), 4), green = [.04, .35 + head * .65, .13];
     const marked = green.map(channel => channel * value.alpha);
-    const expected = base.source.slice(0, 3).map((channel, index) => mix(channel, marked[index], amount));
+    const expected = base.pixel.slice(0, 3).map((channel, index) => mix(channel, marked[index], amount));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);

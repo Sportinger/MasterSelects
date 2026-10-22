@@ -66,8 +66,28 @@ See [Node Workspace](Node-Workspace.md) for graph editing and shared controls.
 
 ### Presets
 
+The **Preset** row of the Flocking card offers the effect's five presets first (Free Swarm,
+Krill Cloud, Follow Path, Technical Network, Violet Filaments; `FLOCKING_CARD_PRESET_IDS`) and the
+other swarms under **More swarms**. Picking one replaces the graph in one undo step; when the clip
+has `flock.node.*` keyframes, the card asks first because they are removed. The row always names
+the graph's `presetId`, so it follows tools, the Nodes tab and undo. A flock preset replaces the
+whole graph, so it is not an `EffectPreset` of the effect definition. Pictures and descriptions:
+[Flocking](./effects/flocking.md#presets).
+
 | Preset | Content |
 |---|---|
+| Free Swarm | Boids + turbulence inside a soft sphere sized to the default frame, soft points |
+| Krill Cloud | Aligned krill instances in drifting clusters, faint neighbor links |
+| Follow Path | School following a figure-eight that fits the frame, with tapered trails |
+| Technical Network | Points, neighbor links and square trail-head markers inside a reflecting box |
+| Violet Filaments | 20 000 clustered particles with a positional violet palette, long curved filaments, wire-cube heads and dot tails |
+| Vortex (more) | Swirling shell, speed-colored points, velocity strokes |
+| Shrimp Pullback (more) | One large hero animal inside a 24 000-animal structured swarm with links, trails and ring markers |
+| Terracotta / Lilac Sculpture (more) | A settling APIC sheet with pigment in a lit gallery box |
+
+Saved clips store their whole graph, so retuned presets change only swarms built afterwards.
+
+---|---|
 | Free Swarm | Boids + turbulence inside a soft sphere, soft points |
 | Krill Cloud | Aligned krill instances in drifting clusters, faint neighbor links |
 | Vortex | Swirling shell, speed-colored points, velocity strokes |
@@ -98,7 +118,7 @@ params, invalidation class, bypass contract, instance limits) and map to
 | Guidance | Path (circle, figure-8, helix, line, 4-point spline), Follow Path, Obstacle (box/sphere/capsule/plane), Boundary (contain/wrap/reflect/kill) |
 | Selection | Group, ID Fraction, Region, Speed, Age, Combine (and/or/xor) |
 | Values | Value, Math, Remap, Oscillator, Source Time, Audio Level (existing loudness analysis), Palette |
-| Simulation | Simulation (step rate, speed/acceleration limits, turn smoothing, neighbor limit, cell candidate budget, planar mode, warm-up) |
+| Simulation | Simulation (step rate, pace (how far each step carries the swarm: the presets' card Speed, 0 to 4), speed/acceleration limits, turn smoothing, neighbor limit, cell candidate budget, planar mode, warm-up) |
 | Render | Points, Instances (krill/fish/arrow/tetra/cube/sphere or an imported model), Neighbor Links, Trails, Curves, Endpoint Glyphs (dot/ring/square/cube/cross/diamond), Velocity Vectors |
 | Output | Scene Output |
 

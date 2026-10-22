@@ -14,4 +14,6 @@ export const flocking: EffectDefinition = {
   params: {},
   extraControls: () => import('../../../components/panels/properties/flock/FlockEffectControls'),
   packUniforms: () => null,
+  // The swarm is simulated along the timeline: it moves with the playhead and holds still while paused.
+  timelineAnimated: true,
 };

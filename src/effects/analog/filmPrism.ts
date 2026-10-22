@@ -5,7 +5,7 @@ import { clampedValueNotes } from './analogParamWarnings';
 import { FILM_PRISM_GRAIN_SIZE_RANGE, FILM_PRISM_MODE_OPTIONS } from './filmPrismLimits';
 
 const params: Record<string, EffectParam> = {
-  amount: { type: 'number', label: 'Fringe', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+  amount: { type: 'number', label: 'Fringe', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true, styleRole: 'fringe' },
   mode: { type: 'select', label: 'Shape', default: 'lens', options: FILM_PRISM_MODE_OPTIONS, group: 'Fringe', graphOnly: true },
   angle: { type: 'number', label: 'Prism Angle', default: 0, min: -180, max: 180, step: 1, animatable: true, group: 'Fringe', graphOnly: true },
   grain: { type: 'number', label: 'Grain', default: 0.3, min: 0, max: 1, step: 0.01, animatable: true, group: 'Grain', graphOnly: true },

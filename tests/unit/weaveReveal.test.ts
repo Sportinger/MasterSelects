@@ -46,6 +46,8 @@ describe('Weave reveal fields', () => {
     expect(Math.min(...full)).toBe(1);
     const hidden = radiusAt(0).radius!;
     expect(hidden.filter(value => value > 0).length / hidden.length).toBeLessThan(0.02);
+    // Every part of the range grows the net: at 0.65 its corners are still missing.
+    expect(radiusAt(0.65).radius!.some(value => value === 0)).toBe(true);
     const growing = radiusAt(0.4).radius!;
     expect(growing.some(value => value === 0)).toBe(true);
     expect(growing.some(value => value === 1)).toBe(true);
@@ -70,7 +72,8 @@ describe('Weave reveal fields', () => {
       // Time x reach folds into one constant: the sphere size.
       return shape && 'radius' in shape ? shape.radius!.instructions.find(item => item.nodeId === 'reveal-radius')?.value : undefined;
     };
-    expect(radius(0.25)).toBeCloseTo(0.25 * 1.7, 9);
-    expect(radius(0.5)).toBeCloseTo(0.5 * 1.7, 9);
+    // Reach 1.15: Reveal 1 just covers the sheet's corners.
+    expect(radius(0.25)).toBeCloseTo(0.25 * 1.15, 9);
+    expect(radius(0.5)).toBeCloseTo(0.5 * 1.15, 9);
   });
 });

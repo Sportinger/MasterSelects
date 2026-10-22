@@ -59,7 +59,8 @@ fn directionalRange(uv: vec2f) -> vec4f {
 }
 
 fn directionalStep(range: vec4f) -> f32 {
-  let coarseCount = clamp(ceil(sqrt(range.w * 2.0)), 1.0, 64.0);
+  // Not rounded: the box length follows the amount; stage B weights its partial last box.
+  let coarseCount = clamp(sqrt(range.w * 2.0), 1.0, 64.0);
   return max(range.z / coarseCount, 1e-9);
 }
 
@@ -81,18 +82,31 @@ fn directionalTransform(base: vec2f, u: f32) -> vec2f {
 }
 
 // Stage A at `uv`: average over the box u in [-step/2, step/2] of the premultiplied input
-// (`premultiply`: of the straight input, premultiplied after filtering).
+// (`premultiply`: of the straight input, premultiplied after filtering). One-pixel cells from the
+// centre out (wider beyond 256 taps), a pair per ring; the outermost pair is weighted by the share
+// of its cell the box covers and sits at the centre of that share.
 fn directionalFine(uv: vec2f, step: f32, premultiply: bool) -> vec4f {
   let pixel = uv * resolution();
   let speed = select(length(pixel - blurCenter()), 1.0, isMotion());
-  let count = i32(clamp(ceil(step * speed), 1.0, 256.0));
+  let reach = step * speed;
+  let cell = max(reach / 256.0, 1.0);
+  let halfCells = reach * 0.5 / cell;
+  let pairs = clamp(ceil(halfCells), 1.0, 128.0);
+  let unitsPerCell = step * 0.5 / max(halfCells, 1e-9);
   var sum = vec4f(0.0);
-  for (var i = 0; i < count; i++) {
-    let u = ((f32(i) + 0.5) / f32(count) - 0.5) * step;
+  var weightSum = 0.0;
+  for (var i = 0; i < i32(pairs * 2.0); i++) {
+    let slot = f32(i) + 0.5 - pairs;
+    let distance = abs(slot);
+    let ring = distance - 0.5;
+    let covered = clamp(halfCells - ring, 0.0, 1.0);
+    let u = slot * ((ring + covered * 0.5) / distance) * unitsPerCell;
+    let weight = max(covered, 0.000001);
     let color = textureSampleLevel(inputTex, texSampler, directionalTransform(pixel, u), 0.0);
-    sum += select(color, vec4f(color.rgb * color.a, color.a), premultiply);
+    sum += select(color, vec4f(color.rgb * color.a, color.a), premultiply) * weight;
+    weightSum += weight;
   }
-  return sum / vec4f(f32(count));
+  return sum / vec4f(weightSum);
 }
 
 struct CoarseTap { uv: vec2f, weight: f32 };

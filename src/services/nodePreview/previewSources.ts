@@ -12,6 +12,7 @@ import { clipLocalToKeyframeTime } from '../flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { sourcePreview } from './sourcePreview';
 import { createParameterSourceEvaluator } from '../parameterSources/parameterSourceEvaluation';
+import { applyParameterSourcesToEffects } from '../parameterSources/parameterSourceRendering';
 import { TEXT_NODE_STAGES } from '../text/textNodeStages';
 import { sampleTextProperties } from '../text/textAnimation';
 import { createCaptionFrameModel } from '../captions/captionRuntime';
@@ -26,7 +27,7 @@ import { flockPreview } from './flockPreviews';
 import { voxelPreview } from './voxelPreviews';
 import { geometryPreview } from './geometryPreviews';
 import { WEAVE_EFFECT_TYPE } from '../operators/geometry/weaveGraph';
-import { weaveSimulationTime } from '../operators/geometry/strandsLayerSource';
+import { weaveSimulationClock } from '../operators/geometry/strandsLayerSource';
 import { imageOperatorKnownValues, imageOperatorValuePreview } from './imageOperatorPreviews';
 import { imageOperatorPreviewStage, isImageOperatorTextureSignal } from './imageOperatorPreviewStages';
 import { analogSignalNodePreview, analogSignalPreviewProducerNode } from './analogSignalPreviews';
@@ -47,8 +48,12 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
       const evaluator = createParameterSourceEvaluator(clip, state.clipKeyframes.get(clip.id) ?? [], localTime);
       const property = request.port?.metadata?.controlProperty;
       const nodeId = binding?.kind === 'parameter-source' ? binding.nodeId : '';
+      // A node viewer without a chosen port shows the node's own preview port, else its first output:
+      // multi-output controls (Gait Cycle, Limb IK) have no 'value' output.
+      const output = request.port?.direction === 'output' ? request.port.id
+        : request.node.preview?.portId ?? request.node.outputs[0]?.id ?? 'value';
       const value = property ? evaluator.resolve(property).value : request.port?.direction === 'input'
-        ? evaluator.evaluateInput(nodeId, request.port.id) : evaluator.evaluateNode({ nodeId, portId: 'value' });
+        ? evaluator.evaluateInput(nodeId, request.port.id) : evaluator.evaluateNode({ nodeId, portId: output });
       return { ...base, status: 'live', label: String(value), presentation: 'text', drawing: { kind: 'number', value: String(value), caption: 'Parameter source' } };
     } catch (error) { return { ...base, status: 'error', label: error instanceof Error ? error.message : String(error) }; }
   }
@@ -72,7 +77,13 @@ export function produceNodePreview(request: PreviewRequest, artifacts?: PreviewA
     const effect = findClipOperatorEffect(clip, binding.effectId);
     if (effect?.type === 'audio-math') return audioOperatorPreview({ ...request, clipId: clip.id }, effect);
     if (effect?.type === 'voxel-relief') return voxelPreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
-    if (effect?.type === WEAVE_EFFECT_TYPE) return geometryPreview(request, effect, state.clipKeyframes.get(clip.id) ?? [], localTime, weaveSimulationTime(clip, localTime));
+    if (effect?.type === WEAVE_EFFECT_TYPE) {
+      // Driven values (a node source, the Constant mode) as the render reads them (buildStrandsLayerSources).
+      const keys = state.clipKeyframes.get(clip.id) ?? [];
+      const [driven] = applyParameterSourcesToEffects(clip, keys, localTime, [effect]);
+      return geometryPreview(request, driven, keys, localTime, weaveSimulationClock(clip),
+        { timelineStart: clip.startTime, bindings: clip.nodeGraph?.parameterSources?.targets });
+    }
     if (effect && isComputeImageEffectType(effect.type)) {
       const preview = computeImageOperatorValuePreview(request, clip, effect, state.clipKeyframes.get(clip.id) ?? [], localTime);
       if (preview) return preview;

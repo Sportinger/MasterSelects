@@ -69,7 +69,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Halftone with the Newsprint preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Angle: 45° turns the screen like a newspaper's. 4 — Ink: the colour of the dots. 5 — Paper: the colour between them. 6 — Amount.</figcaption>
 </figure>
 
-**Style** – switches to another look of the same engine and keeps your values and keyframes, for example [Pixel Poster](./pixel-poster.md), [Cross Stitch](./cross-stitch.md) or [Crosshatch](./crosshatch.md).
+**Style** – switches to another look of the same engine, for example [Riso](./riso.md), [Dithering](./dither.md), [Pixel Poster](./pixel-poster.md) or [Crosshatch](./crosshatch.md). A control you changed keeps its value and keyframes when the new look has the same control, also under another name (Dot Size is Pixel Poster's Block Size); the others start at the new look's defaults. Riso's Registration is not a dot size, so it opens at its own default.
 
 ### Pattern
 

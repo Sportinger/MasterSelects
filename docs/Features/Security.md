@@ -1,20 +1,6 @@
 # Security
 
-[Back to Index](../../README.md)
-
 Security model, credential handling, and trust boundaries for MasterSelects.
-
----
-
-## Table of Contents
-
-- [Trust Model](#trust-model)
-- [Secret Handling](#secret-handling)
-- [Log Redaction](#log-redaction)
-- [Bridge Security](#bridge-security)
-- [Hosted AI Chat Logging](#hosted-ai-chat-logging)
-- [Known Limitations](#known-limitations)
-- [Reporting Issues](#reporting-issues)
 
 ---
 

@@ -40,8 +40,8 @@ describe('blur effect operator graph ownership', () => {
   ] as const)('owns a valid %s graph with only stable effect bindings', (type, factory, bindings) => {
     const graph = factory();
     expect(validateEffectGraph(graph)).toEqual([]);
-    // Sharpen also carries its dense row and column halo window.
-    expect(graph.nodes.length).toBeLessThanOrEqual(type === 'sharpen' ? 230 : 100);
+    // Sharpen also carries its dense row and column halo window, whose outermost taps count by their covered share.
+    expect(graph.nodes.length).toBeLessThanOrEqual(type === 'sharpen' ? 240 : 100);
     expect(graph.nodes.flatMap(node => Object.values(node.bindings)).toSorted()).toEqual([...bindings].toSorted());
     expect(isImageGraphEffectType(type)).toBe(true);
     // Composition recognition may reorder nodes and duplicate captured literals; the computation is the recipe.

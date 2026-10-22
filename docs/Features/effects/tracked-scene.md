@@ -1,6 +1,6 @@
 # Tracked Scene
 
-<!-- effect-docs: basic page sha=2f43a643bad6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=f1d52e1dec35, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Draws tracked face landmarks as dots connected by lines in the Overlay color, like a motion-capture mesh.
 
@@ -13,12 +13,13 @@ Group: [Tracking & Overlays](../Effects-Tracking.md) · [How to add an effect](.
 <!-- generated:controls start -->
 | Control | Range | Default |
 |---|---|---|
-| **Style** | | |
+| **Mix** | | |
 | Amount | 0 to 1 | 0.8 |
+| **Color** | | |
 | Overlay | a colour | `#36f59a` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [CCTV](./cctv.md), [HUD Tracker](./hud-tracker.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine. Controls you changed keep their values and keyframes when the new look has the same control, also under another name; the others start at the new look's defaults. Looks of Tracking & Overlays: [CCTV](./cctv.md), [HUD Tracker](./hud-tracker.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md).
 
 ## Technical details
 

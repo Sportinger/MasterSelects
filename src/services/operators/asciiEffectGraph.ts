@@ -1,4 +1,7 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { GLYPH_ATLAS_TEXEL_INSET, GLYPH_MAX_BLACK_LEVEL, GLYPH_MIN_CELL_PIXELS, GLYPH_NO_TRAVEL, GLYPH_REFERENCE_HEIGHT, GLYPH_SPEED_TRAVEL } from '../../effects/glyph/glyphGrid';
+import { SYMBOL_LEGACY_TWINKLE } from '../../effects/glyph/symbolMatrix';
+import { RETRO_LEGACY_SCANLINES, RETRO_LINE_SPACING, RETRO_PHOSPHOR, RETRO_SCROLL_PERIOD, RETRO_SCROLL_RATE, RETRO_TONE_BASE, RETRO_TONE_FACTOR } from '../../effects/glyph/retroMatrix';
 type Ref = { node: string; port: string };
 class Builder {
   nodes: BoundOperatorNode[] = []; edges: OperatorEdge[] = []; layout: EffectOperatorGraph['layout'] = {};
@@ -11,7 +14,18 @@ class Builder {
 
 type GlyphGraphVariant = 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' | 'word-mosaic' | 'glyph-matrix' | 'data-hatch' | 'brand-generator' | 'stitch-poster' | 'dither-text' | 'symbol-matrix' | 'pixel-dither' | 'retro-matrix' | 'capsule-cloud' | 'ui-collage' | 'matrix' | 'ascii-ghost' | 'inscribe' | 'contour-type';
 
-/** Shared granular expansion of the legacy glyph cell, ramp, and atlas path. */
+/**
+ * Shared granular expansion of the glyph cell, ramp, and atlas path (every look of the glyph engine).
+ * - Cells: Cell Size (at least 2) counts pixels of a 1080p frame (shorter side), at least 2 output
+ *   pixels, so preview qualities, thumbnails and exports show the same characters (glyphGrid.ts).
+ * - Clock: moving looks advance by timeline time × Speed, or by the distance a keyframed Speed has
+ *   travelled (`speedTravel`, written while rendering), so a Speed ramp never jumps.
+ * - Roll (moving looks): each cell runs through a window of 1 + ceil(Roll × (ramp − 1)) characters around
+ *   its own one; Roll 1 is the whole ramp (instances saved before Roll existed), 0 holds the cells still.
+ *   With Black Level above 0, cells at or below it (tone 0) hold their character, so the dark stage drops out.
+ * - Background: the cell ground is mixed from the look's dark ground towards the character colour
+ *   (Background 0 = the original dark ground, which instances saved before it existed keep).
+ */
 function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGraph {
   const g = new Builder(), frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv'), resolution = g.node('resolution', 'image.resolution');
   const cellSize = g.node('cell-size', 'values.number', 'value', { value: 'cellSize' }), amount = g.node('amount', 'values.number', 'value', { value: 'amount' });
@@ -20,18 +34,78 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   const time = animated ? g.node('time', 'image.timeline-time') : undefined;
   const invert = g.node('invert', 'values.boolean', 'value', { value: 'invert' }), colorMode = g.node('color-mode', 'values.choice', 'value', { value: 'colorMode' });
   const colorA = g.node('color-a', 'values.color', 'value', { value: 'colorA' }), colorB = g.node('color-b', 'values.color', 'value', { value: 'colorB' });
-  const atlas = g.node('atlas', 'glyph.atlas', 'image', { rampPreset: 'rampPreset', customRamp: 'customRamp', fontFamily: 'fontFamily', fontWeight: 'fontWeight' });
+  // Without a stored value (an instance saved before Background existed) the ground stays dark (0).
+  const backgroundValue = g.node('background-value', 'values.number', 'value', { value: 'background' }, { value: 0 });
+  // fill: the characters fill their cell (graphs saved before it keep the smaller type, glyphAtlasRaster.ts).
+  const atlas = g.node('atlas', 'glyph.atlas', 'image', { rampPreset: 'rampPreset', customRamp: 'customRamp', fontFamily: 'fontFamily', fontWeight: 'fontWeight' }, { fill: true });
   const glyphCount = { node: atlas.node, port: 'glyphCount' }, columns = { node: atlas.node, port: 'columns' }, rows = { node: atlas.node, port: 'rows' };
   const zero = g.number('zero', 0), one = g.number('one', 1), two = g.number('two', 2), half = g.number('half', .5), almost = g.number('almost', .999), indexMax = g.number('index-max', .99999);
-  const safeCell = g.binary('safe-cell', 'math.max.scalar', cellSize, two), safeCell2 = g.unary('safe-cell-vec2', 'convert.scalar-to-vec2', safeCell);
+  // Cell Size below 2 renders as 2 (renderMin; paramRangeNotes reports it through this node's id).
+  const cellClamped = g.binary('cellSize-clamped', 'math.max.scalar', cellSize, two);
+  const shortSide = g.unary('safe-cell-short-side', 'vector.reduce-min.vec2', resolution);
+  const frameScale = g.binary('safe-cell-frame-scale', 'math.divide-ieee.scalar', shortSide, g.number('safe-cell-reference-height', GLYPH_REFERENCE_HEIGHT));
+  const cellPixels = g.binary('safe-cell-pixels', 'math.multiply.scalar', cellClamped, frameScale);
+  const safeCell = g.binary('safe-cell', 'math.max.scalar', cellPixels, g.number('safe-cell-minimum', GLYPH_MIN_CELL_PIXELS)), safeCell2 = g.unary('safe-cell-vec2', 'convert.scalar-to-vec2', safeCell);
   const grid = g.binary('grid', 'math.divide-ieee.vec2', resolution, safeCell2), scaledUv = g.binary('scaled-uv', 'math.multiply.vec2', uv, grid);
-  const cellId = g.unary('cell-id', 'math.floor.vec2', scaledUv), localUv = g.unary('local-uv', 'math.fract.vec2', scaledUv);
-  const half2 = g.unary('half-vec2', 'convert.scalar-to-vec2', half), samplePixel = g.binary('sample-pixel', 'math.add.vec2', cellId, half2), sampleUv = g.binary('sample-uv', 'math.divide-ieee.vec2', samplePixel, grid);
+  // Timeline time × Speed, or the distance a keyframed Speed has travelled (absent: GLYPH_NO_TRAVEL). Built where a
+  // look first needs it: Retro Matrix's scroll moves the cell grid itself, the other moving looks pick characters with it.
+  let motionClock: Ref | undefined;
+  const clock = () => motionClock ??= (() => {
+    const timeRate = g.binary('index-time-rate', 'math.multiply.scalar', time!, speed!);
+    const travel = g.node('index-speed-travel', 'values.number', 'value', { value: GLYPH_SPEED_TRAVEL }, { value: GLYPH_NO_TRAVEL });
+    const keyed = g.node('index-travel-keyed', 'compare.greater.scalar', 'condition'); g.edge(travel, keyed, 'a'); g.edge(g.number('index-travel-floor', GLYPH_NO_TRAVEL / 2), keyed, 'b');
+    const timeSpeed = g.node('index-time-speed', 'select.scalar'); g.edge(timeRate, timeSpeed, 'falseValue'); g.edge(travel, timeSpeed, 'trueValue'); g.edge(keyed, timeSpeed, 'condition');
+    return timeSpeed;
+  })();
+  // Retro Matrix scrolls its text up like a terminal: the rows move on by the clock × Scroll Rate (3 rows a second at
+  // Speed 1), so a character stays whole while it moves, and every cell reads the picture where it is now.
+  let scroll: Ref | undefined, scrollRows: Ref | undefined;
+  if (variant === 'retro-matrix') {
+    const rows = g.binary('scroll-rows', 'math.multiply.scalar', clock(), g.number('scroll-rate', RETRO_SCROLL_RATE));
+    // The rows wrap every RETRO_SCROLL_PERIOD rows (the text repeats with the same period, below), so the per-pixel
+    // grid stays small in f32 hours into a show: unwrapped, a 3 h timeline at Speed 5 sheared the characters.
+    const period = g.number('scroll-period', RETRO_SCROLL_PERIOD);
+    const turns = g.unary('scroll-turns', 'math.floor.scalar', g.binary('scroll-cycles', 'math.divide-ieee.scalar', rows, period));
+    const wrapped = g.binary('scroll-wrapped', 'math.subtract.scalar', rows, g.binary('scroll-turn-rows', 'math.multiply.scalar', turns, period));
+    scrollRows = wrapped;
+    scroll = g.node('scroll-vector', 'vector.combine.vec2'); g.edge(zero, scroll, 'x'); g.edge(wrapped, scroll, 'y');
+  }
+  const gridUv = scroll ? g.binary('scrolled-uv', 'math.add.vec2', scaledUv, scroll) : scaledUv;
+  const cellId = g.unary('cell-id', 'math.floor.vec2', gridUv), localUv = g.unary('local-uv', 'math.fract.vec2', gridUv);
+  const half2 = g.unary('half-vec2', 'convert.scalar-to-vec2', half), samplePixel = g.binary('sample-pixel', 'math.add.vec2', cellId, half2);
+  const sampleUv = g.binary('sample-uv', 'math.divide-ieee.vec2', scroll ? g.binary('sample-unscrolled', 'math.subtract.vec2', samplePixel, scroll) : samplePixel, grid);
   const tiny = g.number('tiny', .001), tiny2 = g.unary('tiny-vec2', 'convert.scalar-to-vec2', tiny), almost2 = g.unary('almost-vec2', 'convert.scalar-to-vec2', almost), clampedSourceUv = g.node('clamped-source-uv', 'math.clamp.vec2');
   g.edge(sampleUv, clampedSourceUv, 'value'); g.edge(tiny2, clampedSourceUv, 'min'); g.edge(almost2, clampedSourceUv, 'max');
   const source = g.node('source-sample', 'image.sample', 'image'); g.edge(frame, source, 'image'); g.edge(clampedSourceUv, source, 'uv');
   const sourceSplit = g.node('source-split', 'vector.split.rgba', 'rgb'); g.edge(source, sourceSplit, 'image'); const sourceRgb = { node: sourceSplit.node, port: 'rgb' };
-  const tone = g.node('tone', 'color.luminance-rec709.rgb'); g.edge(sourceRgb, tone, 'rgb'); const inverseTone = g.binary('inverse-tone', 'math.subtract.scalar', one, tone);
+  // Amount fades from the untouched picture (each pixel, not the cell's colour) to the look, transparency included.
+  const original = g.node('original-sample', 'image.sample', 'image'); g.edge(frame, original, 'image'); g.edge(uv, original, 'uv');
+  const originalSplit = g.node('original-split', 'vector.split.rgba', 'rgb'); g.edge(original, originalSplit, 'image');
+  // Mixed premultiplied (colour × its alpha), then divided by the mixed alpha, so the hidden colour of a
+  // transparent pixel never leaks into the fade around a cut-out figure; fully transparent stays black.
+  const blend = (look: Ref) => {
+    const originalAlpha = g.node('original-alpha', 'convert.alpha-to-scalar'); g.edge({ node: originalSplit.node, port: 'alpha' }, originalAlpha, 'alpha');
+    const cellAlpha = g.node('cell-alpha', 'convert.alpha-to-scalar'); g.edge({ node: sourceSplit.node, port: 'alpha' }, cellAlpha, 'alpha');
+    const originalPremultiplied = g.binary('original-premultiplied', 'math.multiply.rgb-scalar', { node: originalSplit.node, port: 'rgb' }, originalAlpha);
+    const lookPremultiplied = g.binary('look-premultiplied', 'math.multiply.rgb-scalar', look, cellAlpha);
+    const mixedPremultiplied = g.node('mixed-premultiplied', 'math.mix.rgb'); g.edge(originalPremultiplied, mixedPremultiplied, 'a'); g.edge(lookPremultiplied, mixedPremultiplied, 'b'); g.edge(amount, mixedPremultiplied, 't');
+    const mixedAlpha = g.node('mixed-alpha', 'math.mix.scalar'); g.edge(originalAlpha, mixedAlpha, 'a'); g.edge(cellAlpha, mixedAlpha, 'b'); g.edge(amount, mixedAlpha, 't');
+    const safeAlpha = g.binary('mixed-safe-alpha', 'math.max.scalar', mixedAlpha, g.number('mixed-alpha-floor', 1e-6));
+    const mixed = g.binary('mixed', 'math.divide-ieee.rgb-scalar', mixedPremultiplied, safeAlpha);
+    const alphaChannel = g.node('mixed-alpha-channel', 'convert.scalar-to-alpha', 'alpha'); g.edge(mixedAlpha, alphaChannel, 'value');
+    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge(alphaChannel, combine, 'alpha');
+    return combine;
+  };
+  const luminance = g.node('luminance', 'color.luminance-rec709.rgb'); g.edge(sourceRgb, luminance, 'rgb');
+  // Black Level: tones at or below it become the darkest character, the rest spread over the whole ramp
+  // ((tone − level) / (1 − level)). Without a stored value (saved before it existed) it is 0: the tone as before.
+  // Outside 0..0.9 it renders clamped (renderMin/renderMax; paramRangeNotes reports it through this node's id).
+  const blackValue = g.node('black-level', 'values.number', 'value', { value: 'blackLevel' }, { value: 0 });
+  const blackLevel = g.node('blackLevel-clamped', 'math.clamp.scalar'); g.edge(blackValue, blackLevel, 'value'); g.edge(zero, blackLevel, 'min'); g.edge(g.number('black-level-max', GLYPH_MAX_BLACK_LEVEL), blackLevel, 'max');
+  const lowered = g.binary('black-lowered', 'math.subtract.scalar', luminance, blackLevel);
+  const stretched = g.binary('black-stretched', 'math.divide-ieee.scalar', lowered, g.binary('black-span', 'math.subtract.scalar', one, blackLevel));
+  const tone = g.node('tone', 'math.clamp.scalar'); g.edge(stretched, tone, 'value'); g.edge(zero, tone, 'min'); g.edge(one, tone, 'max');
+  const inverseTone = g.binary('inverse-tone', 'math.subtract.scalar', one, tone);
   const mapped = g.node('mapped-tone', 'select.scalar'); g.edge(tone, mapped, 'falseValue'); g.edge(inverseTone, mapped, 'trueValue'); g.edge(invert, mapped, 'condition');
   const clampedTone = g.node('clamped-tone', 'math.clamp.scalar'); g.edge(mapped, clampedTone, 'value'); g.edge(zero, clampedTone, 'min'); g.edge(indexMax, clampedTone, 'max');
   const safeCount = g.binary('safe-count', 'math.max.scalar', glyphCount, one), glyphScaled = g.binary('glyph-scaled', 'math.multiply.scalar', clampedTone, safeCount);
@@ -58,21 +132,34 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
       const radius = g.unary('brand-radius', 'vector.length.vec2', centered);
       offset = g.unary('index-offset', 'math.floor.scalar', g.binary('brand-index-scaled', 'math.multiply.scalar', radius, safeCount));
     } else {
-      const timeSpeed = g.binary('index-time-speed', 'math.multiply.scalar', time!, speed!); animatedTimeSpeed = timeSpeed;
-      const phase = g.binary('index-time-phase', 'math.multiply.scalar', timeSpeed, g.number('index-time-scale', variant === 'matrix' ? 8 : variant === 'glyph-matrix' ? 6 : variant === 'ascii-ghost' ? 5 : variant === 'symbol-matrix' ? 4 : variant === 'retro-matrix' ? 3 : variant === 'pixel-dither' ? 1 : 2));
-      if (variant === 'glyph-matrix') {
+      const timeSpeed = clock(); animatedTimeSpeed = timeSpeed;
+      // Ticks: the clock × the look's own rate (Retro Matrix moves by its scroll instead).
+      const phase = variant === 'retro-matrix' ? zero : g.binary('index-time-phase', 'math.multiply.scalar', timeSpeed, g.number('index-time-scale', variant === 'matrix' ? 8 : variant === 'glyph-matrix' ? 6 : variant === 'ascii-ghost' ? 5 : variant === 'symbol-matrix' ? 4 : variant === 'pixel-dither' ? 1 : 2));
+      if (variant === 'retro-matrix') {
+        // The text: one fixed random character per cell of the scrolled grid (column, line), so it moves with the scroll.
+        // The line number repeats every RETRO_SCROLL_PERIOD rows, as the scroll wraps: y − period × floor((y + ½) / period).
+        const textId = g.node('index-text-id', 'vector.split.vec2', 'x'); g.edge(cellId, textId, 'value');
+        const textY = { node: textId.node, port: 'y' }, textPeriod = g.number('text-period', RETRO_SCROLL_PERIOD);
+        const textTurns = g.unary('index-text-turns', 'math.floor.scalar', g.binary('index-text-cycles', 'math.divide-ieee.scalar',
+          g.binary('index-text-centred', 'math.add.scalar', textY, half), textPeriod));
+        const textLine = g.binary('index-text-line', 'math.subtract.scalar', textY, g.binary('index-text-turn-rows', 'math.multiply.scalar', textTurns, textPeriod));
+        const textCell = g.node('index-text-cell', 'vector.combine.vec2'); g.edge({ node: textId.node, port: 'x' }, textCell, 'x'); g.edge(textLine, textCell, 'y');
+        const textRandom = g.unary('index-text-random', 'noise.cell-hash.vec2', textCell);
+        offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-text-scaled', 'math.multiply.scalar', textRandom, safeCount));
+      } else if (variant === 'glyph-matrix') {
         const idSplit = g.node('cell-id-split', 'vector.split.vec2', 'x'); g.edge(cellId, idSplit, 'value');
         const yPhase = g.binary('index-y-phase', 'math.multiply.scalar', { node: idSplit.node, port: 'y' }, g.number('index-y-scale', .35));
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-sweep', 'math.add.scalar',
           g.binary('index-sweep-x', 'math.add.scalar', phase, { node: idSplit.node, port: 'x' }), yPhase));
       } else if (variant === 'symbol-matrix') {
-        const phaseFloor = g.unary('index-time-floor', 'math.floor.scalar', phase), phaseVector = g.unary('index-time-vector', 'convert.scalar-to-vec2', phaseFloor);
-        const jitterPoint = g.binary('index-jitter-point', 'math.add.vec2', cellId, phaseVector), jitter = g.unary('index-jitter', 'noise.hash2d.vec2', jitterPoint);
+        // Each cell swaps at its own moment (ticks shifted by a random share of a tick, so the swaps spread over
+        // time instead of hitting every cell on one frame) to a random character of its window. The key pairs the
+        // cell's own random with its tick: hashing cell + tick slid one random field diagonally across the frame.
+        const cellRandom = g.unary('index-cell-random', 'noise.cell-hash.vec2', cellId);
+        const tick = g.unary('index-tick', 'math.floor.scalar', g.binary('index-tick-staggered', 'math.add.scalar', phase, cellRandom));
+        const jitterKey = g.node('index-jitter-key', 'vector.combine.vec2'); g.edge(cellRandom, jitterKey, 'x'); g.edge(tick, jitterKey, 'y');
+        const jitter = g.unary('index-jitter', 'noise.hash2d-pcg.vec2', jitterKey);
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-jitter-scaled', 'math.multiply.scalar', jitter, safeCount));
-      } else if (variant === 'retro-matrix') {
-        const uvParts = g.node('index-uv-split', 'vector.split.vec2', 'y'); g.edge(uv, uvParts, 'value');
-        const rowOffset = g.binary('index-row-offset', 'math.multiply.scalar', { node: uvParts.node, port: 'y' }, safeCount);
-        offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-retro-phase', 'math.subtract.scalar', phase, rowOffset));
       } else if (variant === 'capsule-cloud' || variant === 'ui-collage') {
         const spatialScale = g.unary('index-spatial-scale', 'convert.scalar-to-vec2', g.number('index-spatial-frequency', variant === 'capsule-cloud' ? 12 : 7));
         const spatialCell = g.unary('index-spatial-cell', 'math.floor.vec2', g.binary('index-spatial-uv', 'math.multiply.vec2', uv, spatialScale));
@@ -87,28 +174,63 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-matrix-rain', 'math.subtract.scalar', rainStart, { node: idParts.node, port: 'y' }));
       } else offset = g.unary('index-offset', 'math.floor.scalar', phase);
     }
-    const shifted = g.binary('shifted-index', 'math.add.scalar', baseGlyphIndex, offset);
-    const cycles = g.unary('index-cycles', 'math.floor.scalar', g.binary('index-ratio', 'math.divide-ieee.scalar', shifted, safeCount));
-    glyphIndex = g.binary('wrapped-index', 'math.subtract.scalar', shifted, g.binary('index-wrap', 'math.multiply.scalar', cycles, safeCount));
+    if (animated) {
+      // Roll: the moving looks run each cell through a window of 1 + ceil(Roll × (ramp − 1)) characters around
+      // its own one (2 or more as soon as Roll > 0), kept inside the ramp, from its own character on. Roll 1
+      // is the whole ramp (the earlier look); 0 holds every cell on the character of its brightness.
+      const rollValue = g.node('roll', 'values.number', 'value', { value: 'roll' }, { value: 1 });
+      // Roll outside 0..1 renders clamped (renderMin/renderMax; paramRangeNotes reports it through this node's id).
+      const roll = g.node('roll-clamped', 'math.clamp.scalar'); g.edge(rollValue, roll, 'value'); g.edge(zero, roll, 'min'); g.edge(one, roll, 'max');
+      // With a Black Level above 0, a cell at or below it (tone 0) holds its character (window 1): the dark stage
+      // drops out and only the lit picture rolls. At Black Level 0 every cell rolls, as before.
+      const lit = g.node('index-roll-lit', 'compare.greater.scalar', 'condition'); g.edge(tone, lit, 'a'); g.edge(zero, lit, 'b');
+      const levelled = g.node('index-roll-levelled', 'compare.greater.scalar', 'condition'); g.edge(blackLevel, levelled, 'a'); g.edge(zero, levelled, 'b');
+      const darkRoll = g.node('index-roll-dark', 'select.scalar'); g.edge(roll, darkRoll, 'falseValue'); g.edge(zero, darkRoll, 'trueValue'); g.edge(levelled, darkRoll, 'condition');
+      const cellRoll = g.node('index-roll-cell', 'select.scalar'); g.edge(darkRoll, cellRoll, 'falseValue'); g.edge(roll, cellRoll, 'trueValue'); g.edge(lit, cellRoll, 'condition');
+      const steps = g.binary('index-roll-scaled', 'math.multiply.scalar', cellRoll, g.binary('index-roll-steps', 'math.subtract.scalar', safeCount, one));
+      const window = g.binary('index-window', 'math.add.scalar', g.unary('index-roll-chars', 'math.ceil.scalar', steps), one);
+      const halfWindow = g.unary('index-window-half', 'math.floor.scalar', g.binary('index-window-halved', 'math.multiply.scalar', window, half));
+      const start = g.node('index-window-start', 'math.clamp.scalar'); g.edge(g.binary('index-window-centered', 'math.subtract.scalar', baseGlyphIndex, halfWindow), start, 'value');
+      g.edge(zero, start, 'min'); g.edge(g.binary('index-window-last-start', 'math.subtract.scalar', safeCount, window), start, 'max');
+      const shifted = g.binary('shifted-index', 'math.add.scalar', g.binary('index-in-window', 'math.subtract.scalar', baseGlyphIndex, start), offset);
+      // + ½ keeps the quotient off whole numbers, so GPU division never drops a cycle.
+      const cycles = g.unary('index-cycles', 'math.floor.scalar', g.binary('index-ratio', 'math.divide-ieee.scalar', g.binary('index-ratio-centered', 'math.add.scalar', shifted, half), window));
+      const wrapped = g.binary('index-window-wrapped', 'math.subtract.scalar', shifted, g.binary('index-wrap', 'math.multiply.scalar', cycles, window));
+      glyphIndex = g.binary('rolled-index', 'math.add.scalar', start, wrapped);
+    } else {
+      const shifted = g.binary('shifted-index', 'math.add.scalar', baseGlyphIndex, offset);
+      const cycles = g.unary('index-cycles', 'math.floor.scalar', g.binary('index-ratio', 'math.divide-ieee.scalar', shifted, safeCount));
+      glyphIndex = g.binary('wrapped-index', 'math.subtract.scalar', shifted, g.binary('index-wrap', 'math.multiply.scalar', cycles, safeCount));
+    }
   }
   const safeColumns = g.binary('safe-columns', 'math.max.scalar', columns, one), safeRows = g.binary('safe-rows', 'math.max.scalar', rows, one);
   const columnRatio = g.binary('column-ratio', 'math.divide-ieee.scalar', glyphIndex, safeColumns), atlasRow = g.unary('atlas-row', 'math.floor.scalar', columnRatio);
   const rowWidth = g.binary('row-width', 'math.multiply.scalar', atlasRow, safeColumns), atlasColumn = g.binary('atlas-column', 'math.subtract.scalar', glyphIndex, rowWidth);
   const tile = g.node('atlas-tile', 'vector.combine.vec2'); g.edge(atlasColumn, tile, 'x'); g.edge(atlasRow, tile, 'y');
-  const clampedLocal = g.node('clamped-local-uv', 'math.clamp.vec2'); g.edge(localUv, clampedLocal, 'value'); g.edge(tiny2, clampedLocal, 'min'); g.edge(almost2, clampedLocal, 'max');
+  // Half an atlas texel inside the tile: linear filtering never mixes in the neighbouring character, so blocks
+  // that fill their tile join without seams at any cell size (graphs saved before it keep .001–.999).
+  const inset = g.number('atlas-texel-inset', GLYPH_ATLAS_TEXEL_INSET), insetEnd = g.number('atlas-texel-inset-end', 1 - GLYPH_ATLAS_TEXEL_INSET);
+  const clampedLocal = g.node('clamped-local-uv', 'math.clamp.vec2'); g.edge(localUv, clampedLocal, 'value');
+  g.edge(g.unary('atlas-inset-vec2', 'convert.scalar-to-vec2', inset), clampedLocal, 'min'); g.edge(g.unary('atlas-inset-end-vec2', 'convert.scalar-to-vec2', insetEnd), clampedLocal, 'max');
   const atlasPixel = g.binary('atlas-pixel', 'math.add.vec2', tile, clampedLocal), atlasSize = g.node('atlas-size', 'vector.combine.vec2'); g.edge(safeColumns, atlasSize, 'x'); g.edge(safeRows, atlasSize, 'y');
   const atlasUv = g.binary('atlas-uv', 'math.divide-ieee.vec2', atlasPixel, atlasSize), atlasSample = g.node('atlas-sample', 'image.sample', 'image'); g.edge(atlas, atlasSample, 'image'); g.edge(atlasUv, atlasSample, 'uv');
   const atlasVec4 = g.node('atlas-vec4', 'convert.image-to-vec4'); g.edge(atlasSample, atlasVec4, 'image');
   const atlasSplit = g.node('atlas-split', 'vector.split.vec4', 'w'); g.edge(atlasVec4, atlasSplit, 'value'); const glyphAlpha = { node: atlasSplit.node, port: 'w' };
   const aRgb = g.node('color-a-rgb', 'convert.vec4-to-rgb', 'rgb'), bRgb = g.node('color-b-rgb', 'convert.vec4-to-rgb', 'rgb'); g.edge(colorA, aRgb, 'value'); g.edge(colorB, bRgb, 'value');
+  // Background outside 0..1 renders clamped (renderMin/renderMax; paramRangeNotes reports it through this node's id).
+  const backgroundAmount = g.node('background-clamped', 'math.clamp.scalar'); g.edge(backgroundValue, backgroundAmount, 'value'); g.edge(zero, backgroundAmount, 'min'); g.edge(one, backgroundAmount, 'max');
+  /** Looks that colour every cell in their own palette: the ink shows at full strength under the character and at Background (× `ground`) around it. */
+  const inkCoverage = (coverage: Ref, ground: Ref = backgroundAmount) => {
+    const lifted = g.node('background-coverage', 'math.mix.scalar'); g.edge(ground, lifted, 'a'); g.edge(one, lifted, 'b'); g.edge(coverage, lifted, 't');
+    return lifted;
+  };
   if (variant === 'number-field') {
     const five = g.number('tone-levels', 5), four = g.number('tone-divisor', 4);
     const scaled = g.binary('quantized-tone-scaled', 'math.multiply.scalar', tone, five), floored = g.unary('quantized-tone-floor', 'math.floor.scalar', scaled);
     const quantized = g.binary('quantized-tone', 'math.divide-ieee.scalar', floored, four), numberInk = g.node('number-ink', 'math.mix.rgb');
     g.edge(aRgb, numberInk, 'a'); g.edge(bRgb, numberInk, 'b'); g.edge(quantized, numberInk, 't');
-    const marked = g.node('number-mark', 'math.multiply.rgb-scalar'); g.edge(numberInk, marked, 'a'); g.edge(glyphAlpha, marked, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(marked, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const marked = g.node('number-mark', 'math.multiply.rgb-scalar'); g.edge(numberInk, marked, 'a'); g.edge(inkCoverage(glyphAlpha), marked, 'b');
+    const combine = blend(marked); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   if (variant === 'pixel-code') {
@@ -116,9 +238,8 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const light = g.node('code-light', 'vector.combine.vec3'); g.edge(g.number('code-light-r', .28), light, 'x'); g.edge(g.number('code-light-g', .95), light, 'y'); g.edge(g.number('code-light-b', .72), light, 'z');
     const darkRgb = g.node('code-dark-rgb', 'convert.vec3-to-rgb', 'rgb'), lightRgb = g.node('code-light-rgb', 'convert.vec3-to-rgb', 'rgb'); g.edge(dark, darkRgb, 'value'); g.edge(light, lightRgb, 'value');
     const codeColor = g.node('code-color', 'math.mix.rgb'); g.edge(darkRgb, codeColor, 'a'); g.edge(lightRgb, codeColor, 'b'); g.edge(tone, codeColor, 't');
-    const mark = g.node('code-mark', 'math.multiply.rgb-scalar'); g.edge(codeColor, mark, 'a'); g.edge(glyphAlpha, mark, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(mark, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const mark = g.node('code-mark', 'math.multiply.rgb-scalar'); g.edge(codeColor, mark, 'a'); g.edge(inkCoverage(glyphAlpha), mark, 'b');
+    const combine = blend(mark); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   if (variant === 'pixel-dither') {
@@ -126,26 +247,47 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const radial = g.binary('pixel-dither-radial', 'math.subtract.scalar', one, radius), glowLift = g.binary('pixel-dither-glow-lift', 'math.multiply.scalar', radial, g.number('pixel-dither-glow-factor', .18));
     const glow = g.node('pixel-dither-glow', 'math.smoothstep.scalar'); g.edge(g.number('pixel-dither-glow-low', .05), glow, 'edge0'); g.edge(g.number('pixel-dither-glow-high', .65), glow, 'edge1'); g.edge(g.binary('pixel-dither-glow-input', 'math.add.scalar', glyphAlpha, glowLift), glow, 'value');
     const neonBase = g.node('pixel-dither-neon-base', 'math.mix.rgb'); g.edge(aRgb, neonBase, 'a'); g.edge(bRgb, neonBase, 'b'); g.edge(tone, neonBase, 't');
-    const neonGlow = g.node('pixel-dither-neon-glow', 'math.multiply.rgb-scalar'); g.edge(neonBase, neonGlow, 'a'); g.edge(glow, neonGlow, 'b');
+    const neonGlow = g.node('pixel-dither-neon-glow', 'math.multiply.rgb-scalar'); g.edge(neonBase, neonGlow, 'a'); g.edge(inkCoverage(glow), neonGlow, 'b');
     const neon = g.node('pixel-dither-neon', 'math.multiply.rgb-scalar'); g.edge(neonGlow, neon, 'a'); g.edge(g.number('pixel-dither-neon-scale', 1.25), neon, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(neon, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const combine = blend(neon); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   if (variant === 'retro-matrix') {
-    const amberVector = g.node('retro-amber-vector', 'vector.combine.vec3'); g.edge(one, amberVector, 'x'); g.edge(g.number('retro-amber-green', .52), amberVector, 'y'); g.edge(g.number('retro-amber-blue', .08), amberVector, 'z');
-    const amberRgb = g.node('retro-amber-rgb', 'convert.vec3-to-rgb', 'rgb'); g.edge(amberVector, amberRgb, 'value');
-    const amberAlpha = g.node('retro-amber-alpha', 'math.multiply.rgb-scalar'); g.edge(amberRgb, amberAlpha, 'a'); g.edge(glyphAlpha, amberAlpha, 'b');
-    const toneScale = g.binary('retro-tone-scale', 'math.multiply.scalar', tone, g.number('retro-tone-factor', .7)), toneAmount = g.binary('retro-tone-amount', 'math.add.scalar', g.number('retro-tone-base', .55), toneScale);
-    const amber = g.node('retro-amber', 'math.multiply.rgb-scalar'); g.edge(amberAlpha, amber, 'a'); g.edge(toneAmount, amber, 'b');
-    const uvParts = g.node('retro-uv-split', 'vector.split.vec2', 'y'); g.edge(uv, uvParts, 'value'); const resolutionParts = g.node('retro-resolution-split', 'vector.split.vec2', 'y'); g.edge(resolution, resolutionParts, 'value');
-    const scanPixel = g.binary('retro-scan-pixel', 'math.multiply.scalar', { node: uvParts.node, port: 'y' }, { node: resolutionParts.node, port: 'y' });
-    const scanPhase = g.binary('retro-scan-phase', 'math.multiply.scalar', scanPixel, g.number('retro-pi', 3.14159265359)), scanWave = g.unary('retro-scan-wave', 'math.sin.scalar', scanPhase);
-    const scan = g.binary('retro-scan', 'math.add.scalar', g.number('retro-scan-base', .82), g.binary('retro-scan-modulation', 'math.multiply.scalar', g.number('retro-scan-scale', .18), scanWave));
-    const scanned = g.node('retro-scanned', 'math.multiply.rgb-scalar'); g.edge(amber, scanned, 'a'); g.edge(scan, scanned, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(scanned, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
-    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
+    // Phosphor: the colour the characters glow in (amber, as instances saved before it existed render it).
+    const phosphor = g.node('retro-phosphor', 'values.color', 'value', { value: 'phosphor' }, { value: RETRO_PHOSPHOR });
+    const phosphorRgb = g.node('retro-phosphor-rgb', 'convert.vec4-to-rgb', 'rgb'); g.edge(phosphor, phosphorRgb, 'value');
+    const ink = g.node('retro-ink', 'math.multiply.rgb-scalar'); g.edge(phosphorRgb, ink, 'a'); g.edge(inkCoverage(glyphAlpha), ink, 'b');
+    // Brightness: dim characters in the dark, full glow (and a little overdrive) in the light, so the picture reads.
+    const toneScale = g.binary('retro-tone-scale', 'math.multiply.scalar', tone, g.number('tone-factor', RETRO_TONE_FACTOR));
+    const brightness = g.binary('retro-tone-amount', 'math.add.scalar', g.number('tone-base', RETRO_TONE_BASE), toneScale);
+    const lit = g.node('retro-lit', 'math.multiply.rgb-scalar'); g.edge(ink, lit, 'a'); g.edge(brightness, lit, 'b');
+    // Scanlines: one line every Line Spacing pixels of a 1080p frame, moving with the text (the scrolled row coordinate),
+    // so preview, thumbnails and a 4K export show the same lines; lines closer than 3 output pixels fade into an even
+    // dimming instead of a moiré. Scanlines outside 0..1 render clamped (scanlines-clamped, paramRangeNotes).
+    const strengthValue = g.node('scanlines', 'values.number', 'value', { value: 'scanlines' }, { value: RETRO_LEGACY_SCANLINES });
+    const strength = g.node('scanlines-clamped', 'math.clamp.scalar'); g.edge(strengthValue, strength, 'value'); g.edge(zero, strength, 'min'); g.edge(one, strength, 'max');
+    // The line phase is built from small parts: the lines down the screen plus the fraction of a line the (wrapped)
+    // scroll has moved, then only its fraction feeds sin, so it stays exact far into a long timeline.
+    const rowParts = g.node('retro-scan-row', 'vector.split.vec2', 'y'); g.edge(scaledUv, rowParts, 'value');
+    const pitch = g.binary('retro-scan-pitch', 'math.multiply.scalar', frameScale, g.number('line-spacing', RETRO_LINE_SPACING));
+    const linesPerRow = g.binary('retro-scan-ratio', 'math.divide-ieee.scalar', safeCell, pitch);
+    const lines = g.binary('retro-scan-lines', 'math.multiply.scalar', { node: rowParts.node, port: 'y' }, linesPerRow);
+    const scrollLines = g.binary('retro-scan-scroll', 'math.multiply.scalar', scrollRows!, linesPerRow);
+    const scrollPhase = g.unary('retro-scan-scroll-phase', 'math.fract.scalar', scrollLines);
+    const phase = g.unary('retro-scan-phase', 'math.fract.scalar', g.binary('retro-scan-sum', 'math.add.scalar', lines, scrollPhase));
+    // sin² (π × lines): 0 on a line, 1 between two lines.
+    const sine = g.unary('retro-scan-sine', 'math.sin.scalar', g.binary('retro-scan-angle', 'math.multiply.scalar', phase, g.number('pi', Math.PI)));
+    const dip = g.binary('retro-scan-dip', 'math.power.scalar', sine, two);
+    const fade = g.node('retro-scan-fade', 'math.smoothstep.scalar'); g.edge(g.number('fade-from', 1.5), fade, 'edge0'); g.edge(g.number('fade-to', 3), fade, 'edge1'); g.edge(pitch, fade, 'value');
+    const fadedDip = g.node('retro-scan-faded', 'math.mix.scalar'); g.edge(half, fadedDip, 'a'); g.edge(dip, fadedDip, 'b'); g.edge(fade, fadedDip, 't');
+    const scan = g.binary('retro-scan', 'math.subtract.scalar', one, g.binary('retro-scan-depth', 'math.multiply.scalar', strength, fadedDip));
+    const scanned = g.node('retro-scanned', 'math.multiply.rgb-scalar'); g.edge(lit, scanned, 'a'); g.edge(scan, scanned, 'b');
+    const combine = blend(scanned); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    // It draws only in its Phosphor colour: the shared colour nodes (retired Color Source, Dark, Light) stay out of its setup.
+    const unused = new Set(['color-mode', 'color-a', 'color-b', 'color-a-rgb', 'color-b-rgb']);
+    for (const id of unused) delete g.layout[id];
+    return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes.filter(node => !unused.has(node.id)),
+      edges: g.edges.filter(edge => !unused.has(edge.from) && !unused.has(edge.to)), layout: g.layout };
   }
   if (variant === 'matrix') {
     const idParts = g.node('matrix-id-split', 'vector.split.vec2', 'x'); g.edge(cellId, idParts, 'value');
@@ -159,9 +301,9 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const head = g.binary('matrix-head', 'math.power.scalar', headBase, g.number('matrix-head-power', 4));
     const green = g.node('matrix-green-vector', 'vector.combine.vec3'); g.edge(g.number('matrix-green-r', .04), green, 'x'); g.edge(g.binary('matrix-green-g', 'math.add.scalar', g.number('matrix-green-base', .35), g.binary('matrix-green-head', 'math.multiply.scalar', head, g.number('matrix-green-scale', .65))), green, 'y'); g.edge(g.number('matrix-green-b', .13), green, 'z');
     const greenRgb = g.node('matrix-green-rgb', 'convert.vec3-to-rgb', 'rgb'); g.edge(green, greenRgb, 'value');
-    const marked = g.node('matrix-marked', 'math.multiply.rgb-scalar'); g.edge(greenRgb, marked, 'a'); g.edge(glyphAlpha, marked, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(marked, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const matrixGround = g.binary('background-tone', 'math.multiply.scalar', backgroundAmount, tone);
+    const marked = g.node('matrix-marked', 'math.multiply.rgb-scalar'); g.edge(greenRgb, marked, 'a'); g.edge(inkCoverage(glyphAlpha, matrixGround), marked, 'b');
+    const combine = blend(marked); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   const duotone = g.node('duotone', 'math.mix.rgb'); g.edge(aRgb, duotone, 'a'); g.edge(bRgb, duotone, 'b'); g.edge(tone, duotone, 't');
@@ -239,7 +381,13 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const pulseTime = g.binary('symbol-pulse-time', 'math.multiply.scalar', animatedTimeSpeed!, g.number('symbol-pulse-time-scale', 2));
     const hashPhase = g.binary('symbol-hash-phase', 'math.multiply.scalar', baseHash, g.number('symbol-tau', 6.28318530718));
     const wave = g.unary('symbol-wave', 'math.sin.scalar', g.binary('symbol-wave-phase', 'math.add.scalar', pulseTime, hashPhase));
-    const pulse = g.binary('symbol-pulse', 'math.add.scalar', g.number('symbol-pulse-base', .65), g.binary('symbol-pulse-wave', 'math.multiply.scalar', g.number('symbol-pulse-scale', .35), wave));
+    // Twinkle d: the sign breathes between 1 − d and 1 (pulse = (1 − d/2) + d/2 × sin). Without a stored value (saved
+    // before it existed) d = 0.7, the earlier 0.65 + 0.35 × sin. Outside 0..1 it renders clamped (twinkle-clamped, paramRangeNotes).
+    const twinkleValue = g.node('symbol-twinkle', 'values.number', 'value', { value: 'twinkle' }, { value: SYMBOL_LEGACY_TWINKLE });
+    const twinkle = g.node('twinkle-clamped', 'math.clamp.scalar'); g.edge(twinkleValue, twinkle, 'value'); g.edge(zero, twinkle, 'min'); g.edge(one, twinkle, 'max');
+    const pulseScale = g.binary('symbol-pulse-scale', 'math.multiply.scalar', twinkle, half);
+    const pulseBase = g.binary('symbol-pulse-base', 'math.subtract.scalar', one, pulseScale);
+    const pulse = g.binary('symbol-pulse', 'math.add.scalar', pulseBase, g.binary('symbol-pulse-wave', 'math.multiply.scalar', pulseScale, wave));
     inkAlpha = g.binary('symbol-alpha', 'math.multiply.scalar', glyphAlpha, pulse);
   } else if (variant === 'capsule-cloud') {
     const local = g.node('capsule-local-split', 'vector.split.vec2', 'x'); g.edge(localUv, local, 'value');
@@ -266,7 +414,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   } else if (variant === 'contour-type') {
     const derivative = g.node('contour-derivative', 'image.derivative.auto.scalar', 'gradient'); g.edge(tone, derivative, 'value');
     const edgeLength = g.unary('contour-edge-length', 'vector.length.vec2', derivative);
-    const scaledEdge = g.binary('contour-edge-cell-scale', 'math.multiply.scalar', edgeLength, cellSize);
+    const scaledEdge = g.binary('contour-edge-cell-scale', 'math.multiply.scalar', edgeLength, safeCell);
     const edge = g.binary('contour-edge', 'math.multiply.scalar', scaledEdge, g.number('contour-edge-factor', 3)), edgeVisible = g.node('contour-edge-visible', 'math.smoothstep.scalar');
     g.edge(g.number('contour-edge-low', .05), edgeVisible, 'edge0'); g.edge(g.number('contour-edge-high', .4), edgeVisible, 'edge1'); g.edge(edge, edgeVisible, 'value');
     const toneBands = g.binary('contour-tone-bands', 'math.multiply.scalar', tone, g.number('contour-band-count', 8));
@@ -278,16 +426,16 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   } else if (variant === 'inscribe') {
     const derivative = g.node('inscribe-derivative', 'image.derivative.auto.scalar', 'gradient'); g.edge(tone, derivative, 'value');
     const edgeLength = g.unary('inscribe-edge-length', 'vector.length.vec2', derivative);
-    const scaledCell = g.binary('inscribe-cell-scale', 'math.multiply.scalar', cellSize, g.number('inscribe-edge-factor', 2.5));
+    const scaledCell = g.binary('inscribe-cell-scale', 'math.multiply.scalar', safeCell, g.number('inscribe-edge-factor', 2.5));
     const edge = g.binary('inscribe-edge', 'math.multiply.scalar', edgeLength, scaledCell), visible = g.node('inscribe-visible', 'math.smoothstep.scalar');
     g.edge(g.number('inscribe-edge-low', .02), visible, 'edge0'); g.edge(g.number('inscribe-edge-high', .35), visible, 'edge1'); g.edge(edge, visible, 'value');
     inkAlpha = g.binary('inscribe-alpha', 'math.multiply.scalar', glyphAlpha, visible);
     const inscribeBackground = g.node('inscribe-background', 'math.multiply.rgb-scalar'); g.edge(sourceRgb, inscribeBackground, 'a'); g.edge(g.number('inscribe-background-scale', .18), inscribeBackground, 'b'); background = inscribeBackground;
   }
+  const lifted = g.node('background-lift', 'math.mix.rgb'); g.edge(background, lifted, 'a'); g.edge(ink, lifted, 'b'); g.edge(backgroundAmount, lifted, 't'); background = lifted;
   const alpha = g.node('glyph-alpha', 'math.clamp.scalar'); g.edge(inkAlpha, alpha, 'value'); g.edge(zero, alpha, 'min'); g.edge(one, alpha, 'max');
   const result = g.node('glyph-result', 'math.mix.rgb'); g.edge(background, result, 'a'); g.edge(ink, result, 'b'); g.edge(alpha, result, 't');
-  const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(result, mixed, 'b'); g.edge(amount, mixed, 't');
-  const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha');
+  const combine = blend(result);
   if (variant === 'ascii-ghost') {
     const current = g.node('ghost-current', 'convert.image-to-vec4'); g.edge(combine, current, 'image');
     const history = g.node('history', 'image.frame-history', 'image'), historyValue = g.node('ghost-history-value', 'convert.image-to-vec4'); g.edge(history, historyValue, 'image');

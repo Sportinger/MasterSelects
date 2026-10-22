@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { InspectorSelect } from '../../../components/inspector/InspectorSelect';
 import { ResolveInspectorRow, ResolveInspectorSection } from '../../../components/panels/properties/resolveInspector/ResolveInspectorPrimitives';
 import { ResolveInspectorNumberRow } from '../../../components/panels/properties/resolveInspector/ResolveInspectorNumberRow';
@@ -12,6 +12,7 @@ import {
   SKELETON_ACTIONS,
   skeletonActionContact,
   type SkeletonActionId,
+  type SkeletonActionInstance,
 } from '../../../services/rig/skeletonActions';
 import { addStickFigureAction, removeStickFigureAction, updateStickFigureAction } from '../../../services/rig/stickFigureActions';
 import { addStickFigureContactSfx, syncStickFigureContactMarkers } from '../../../services/rig/stickFigureContacts';
@@ -52,16 +53,16 @@ export function StickFigureActionLane({ clipId, effectId, actionsParam }: { clip
       value: `${stickFigureRef(item.id, effect.id)}#${joint}`, label: `${item.name} / ${SKELETON_JOINT_LABELS[joint]}`,
     }))))];
 
-  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>, id: string) => {
+  const onPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, id: string) => {
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     setSelectedId(id);
     setDrag({ id, offset: 0 });
-    (event.currentTarget as HTMLDivElement).dataset.startX = String(event.clientX);
+    event.currentTarget.dataset.startX = String(event.clientX);
   };
-  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!drag) return;
-    const startX = Number((event.currentTarget as HTMLDivElement).dataset.startX ?? event.clientX);
+    const startX = Number(event.currentTarget.dataset.startX ?? event.clientX);
     setDrag({ ...drag, offset: (event.clientX - startX) * secondsPerPixel() });
   };
   const onPointerUp = () => {
@@ -73,6 +74,19 @@ export function StickFigureActionLane({ clipId, effectId, actionsParam }: { clip
     setDrag(null);
   };
 
+  /** Keyboard: the arrow keys move the focused action by 0.05 s (Shift: 0.5 s), as a drag does. */
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, action: SkeletonActionInstance) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedId(action.id);
+    const step = (event.key === 'ArrowLeft' ? -1 : 1) * (event.shiftKey ? 0.5 : 0.05);
+    // Held keys repeat faster than the card re-renders: start from the stored lane, not this render's copy.
+    const stored = parseSkeletonActions(useTimelineStore.getState().clips.find(item => item.id === clipId)
+      ?.effects.find(item => item.id === effectId)?.params.actions).find(item => item.id === action.id) ?? action;
+    run('Move action', () => updateStickFigureAction(clipId, effectId, action.id, { start: Math.max(0, Math.round((stored.start + step) * 100) / 100) }));
+  };
+
   return (
     <ResolveInspectorSection title="Actions" indicator="none">
       <div className="stick-figure-lane" ref={laneRef} aria-label="Action lane" onPointerDown={() => setSelectedId('')}>
@@ -80,18 +94,22 @@ export function StickFigureActionLane({ clipId, effectId, actionsParam }: { clip
           const start = action.start + (drag?.id === action.id ? drag.offset : 0);
           const contact = skeletonActionContact(action);
           return (
-            <div
+            <button
+              type="button"
               key={action.id}
               className={`stick-figure-lane-block${action.id === selectedId ? ' is-selected' : ''}`}
               style={{ left: `${start / duration * 100}%`, width: `${action.duration / duration * 100}%` }}
-              title={`${SKELETON_ACTIONS[action.action].label} · ${action.start.toFixed(2)} s`}
+              title={`${SKELETON_ACTIONS[action.action].label} · ${action.start.toFixed(2)} s (arrow keys move it)`}
+              aria-pressed={action.id === selectedId}
               onPointerDown={event => onPointerDown(event, action.id)}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
+              onClick={() => setSelectedId(action.id)}
+              onKeyDown={event => onKeyDown(event, action)}
             >
               <span>{SKELETON_ACTIONS[action.action].label}</span>
               {contact !== undefined && <i className="stick-figure-lane-contact" style={{ left: `${(contact - action.start) / action.duration * 100}%` }} />}
-            </div>
+            </button>
           );
         })}
         <i className="stick-figure-lane-playhead" style={{ left: `${clipTime / duration * 100}%` }} />
@@ -134,6 +152,9 @@ export function StickFigureActionLane({ clipId, effectId, actionsParam }: { clip
           onClick={() => run('Contact markers', () => { const ids = syncStickFigureContactMarkers(clipId, effectId); setMessage(`${ids.length} contact markers.`); })}>
           Markers
         </button>
+      </ResolveInspectorRow>
+      {/* Its own row, so the sound menu never reads as part of the Add row when the buttons wrap. */}
+      <ResolveInspectorRow label="Sound">
         <InspectorSelect ariaLabel="Contact sound" value={sfxPreset}
           options={SFX_PRESETS.map(preset => ({ value: preset.id, label: preset.name.replace('SFX ', '') }))} onChange={setSfxPreset} />
         <button type="button" className="perspective-action" title="A MIDI track with one sound per contact"

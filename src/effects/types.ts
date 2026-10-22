@@ -33,6 +33,10 @@ export interface EffectParam {
   // Read only through the effect's operator graph: hidden (and reported by tools) when an
   // edited graph no longer binds it.
   graphOnly?: boolean;
+  // A control only this look of a shared engine has (Retro Matrix's Phosphor and Scanlines). The Style
+  // menu matches looks without it; switching to the look starts it at its default, switching away
+  // keeps the value (unread), so switching back restores it (effectStyles.ts).
+  lookOwn?: boolean;
   // Stored in radians (project data, keyframes, tools); the effect inspector shows and edits whole
   // degrees (the preset of displayScale 180/π with unit "°" and one-degree steps).
   displayUnit?: 'degrees';
@@ -51,6 +55,9 @@ export interface EffectParam {
   // parameter's own unit.
   displayScale?: number;
   unit?: string;
+  // Cyclic: values past min/max go round again (Hue Shift: 1.25 turns = 0.25), so nothing clamps
+  // them. min/max are only the slider; typed values, keyframes and nodes may go beyond on both sides.
+  wraps?: boolean;
   // Value an instance saved before this parameter existed renders with (its params lack the key).
   // New effects store `default` explicitly (getDefaultParams), so only old saves and presets get this.
   legacyDefault?: number | boolean | string;
@@ -60,21 +67,33 @@ export interface EffectParam {
   // named here, and packers use that travel instead of value × time, so a ramp moves smoothly. Never
   // stored: loading strips it (withoutRuntimeTravelParams).
   integratedAs?: string;
+  // Looks of one style engine (the card's Style menu) share parameter keys. A key whose control does
+  // something else in this look than in the engine's other looks (Crystal Glass's Facets count the
+  // facets across the frame where Scale is a cell size in pixels) names that here: a Style switch
+  // carries a value and its keyframes only between looks whose control has the same role (none = the
+  // engine's shared meaning), and starts any other at the new look's default.
+  styleRole?: string;
 }
 
 /**
  * A named starting point of an effect, picked in its card ("Preset"). Applying it sets every visible
  * control to the preset's value, or to its default when the preset leaves it out (text controls stay
- * unless named), in one undo step. Controls with keyframes or a node driving them keep their animation
- * and are named in the card instead (src/services/effects/effectPresets.ts). The docs page lists each
- * preset under "## Presets" (tests/unit/effectDocsCatalog.test.ts checks the names).
+ * unless named), in one undo step. Visibility is judged once on the target (every control at its
+ * default, the preset's values in place), so a preset that switches a mode resets that mode's controls,
+ * and the result never depends on the preset picked before. Controls with keyframes or a node driving them keep
+ * their animation and are named in the card instead (src/services/effects/effectPresets.ts). The docs
+ * page lists each preset under "## Presets" (tests/unit/effectDocsCatalog.test.ts checks the names).
  */
 export interface EffectPreset {
   /** Stable id (kebab-case); never shown. */
   id: string;
   /** Name in the card and the docs, a short noun phrase ("Venetian Blinds"). */
   name: string;
-  /** Values that differ from the defaults, in stored units. */
+  /**
+   * Values that differ from the defaults, in stored units: the effect's parameters, and for a graph
+   * effect also the exposed graph values of its default graph (`<node>_value`; one that another preset
+   * of the effect names returns to the default graph's value when this preset leaves it out).
+   */
   params: Readonly<Record<string, number | boolean | string>>;
 }
 

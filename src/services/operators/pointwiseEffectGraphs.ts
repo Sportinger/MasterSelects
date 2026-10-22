@@ -1,5 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
-import { MIN_POSTERIZE_LEVELS, SOFTNESS_FLOOR } from '../../effects/stylize/pointwiseModel';
+import { MAX_POSTERIZE_SOFTNESS, MIN_POSTERIZE_LEVELS, SOFTNESS_FLOOR } from '../../effects/stylize/pointwiseModel';
 import { BlurGraphBuilder, type GraphPort } from './blurGraphBuilder';
 
 export type EditablePointwiseEffectType = 'threshold' | 'posterize';
@@ -104,7 +104,9 @@ export function createDefaultPosterizeGraph(): EffectOperatorGraph {
   const shifted = g.binary('shifted', 'math.subtract.rgb', scaled, half);
   const base = g.unary('base', 'math.floor.rgb', shifted);
   const within = g.binary('within', 'math.subtract.rgb', shifted, base);
-  const width = g.binary('ramp-width', 'math.max.scalar', softness, g.number('ramp-floor', SOFTNESS_FLOOR));
+  // At most one step wide: wider ramps overlap their neighbours and jump mid-step (posterizeParamNotes says so).
+  const width = g.add('ramp-width', 'math.clamp.scalar', { value: softness, min: g.number('ramp-floor', SOFTNESS_FLOOR),
+    max: g.number('ramp-ceiling', MAX_POSTERIZE_SOFTNESS) });
   const position = g.binary('ramp-position', 'math.add.rgb', g.add('ramp-offset', 'math.divide-ieee.rgb-scalar', {
     a: g.binary('ramp-distance', 'math.subtract.rgb', within, half), b: width }), half);
   const ramp = smoothRamp(g, 'ramp', g.add('ramp-clamped', 'math.clamp.rgb-scalar', { value: position, min: 'zero', max: 'one' }), true);
@@ -122,6 +124,29 @@ export function createDefaultPosterizeGraph(): EffectOperatorGraph {
   const output = g.add('combine', 'vector.combine.rgba', { rgb: result, alpha: [source, 'alpha'] });
   g.add('output', 'image.output', { image: [output, 'image'] });
   return g.graph();
+}
+
+/**
+ * Posterize graphs saved between 2026-10-21 and 2026-10-22 widened the ramp without limit
+ * (`ramp-width` = max(Softness, floor)), so Softness above 1 drew hard edges mid-step. This caps that
+ * node at one step in place (same cards and positions; Softness 0 to 1 renders exactly as before).
+ * Other graphs are returned unchanged.
+ */
+export function capPosterizeRampWidth(graph: EffectOperatorGraph): EffectOperatorGraph {
+  const width = graph.nodes.find(item => item.id === 'ramp-width');
+  if (!width || width.operator !== 'math.max.scalar' || graph.nodes.some(item => item.id === 'ramp-ceiling')) return graph;
+  const into = graph.edges.filter(item => item.to === 'ramp-width');
+  const a = into.find(item => item.input === 'a'), b = into.find(item => item.input === 'b');
+  if (into.length !== 2 || a?.from !== 'softness' || b?.from !== 'ramp-floor') return graph;
+  const at = graph.layout?.['ramp-floor'];
+  const ceiling = literal('ramp-ceiling', MAX_POSTERIZE_SOFTNESS);
+  return { ...graph,
+    nodes: [...graph.nodes.map(item => item.id === 'ramp-width' ? { ...item, operator: 'math.clamp.scalar' } : item), ceiling],
+    edges: [...graph.edges.filter(item => item !== a && item !== b), edge('softness', a.output, 'ramp-width', 'value'),
+      edge('ramp-floor', b.output, 'ramp-width', 'min'), edge('ramp-ceiling', 'value', 'ramp-width', 'max')],
+    layout: { ...graph.layout, 'ramp-ceiling': at ? { x: at.x, y: at.y + 120 } : { x: 0, y: 0 } },
+    // The new constant joins the folder of the floor beside it.
+    ...(graph.groups ? { groups: graph.groups.map(group => group.nodeIds.includes('ramp-floor') ? { ...group, nodeIds: [...group.nodeIds, 'ramp-ceiling'] } : group) } : {}) };
 }
 
 export function createDefaultPointwiseEffectGraph(type: EditablePointwiseEffectType): EffectOperatorGraph {

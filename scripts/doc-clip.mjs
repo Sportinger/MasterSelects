@@ -1,16 +1,20 @@
 // Docs clips: short muted MP4 loops (with a WebP poster) for the feature docs, made in the real
 // editor of this checkout, in a throwaway project per clip (hardware-GPU Chrome, own profile).
 //
-//   node scripts/doc-clip.mjs scripts/doc-clips/analog.json [--only <name>] [--url http://localhost:5192]
+//   node scripts/doc-clip.mjs scripts/doc-clips/analog.json [--only <name>[,<name>...]] [--url http://localhost:5192]
 //       [--media <folder>] [--out <folder>] [--keep <folder> [--reencode]]
 //
 // --keep keeps the editor exports and screencast frames there; with --reencode a clip whose exports
 // or recording are already kept is only encoded again (layout, crop, loop, poster or size changes
-// need no browser).
+// need no browser). The kept <name>.sources.json names the effect code and footage of the export, and
+// that is what the manifest records for the new encode, so an effect fixed since then stays stale.
 // Prints the docs <figure> of every clip. The shot file is { "out", "source", "clips": [clip, ...] };
 // "out" (default docs/Features/assets/clips) holds <name>.mp4 and <name>.webp (the poster). Media
-// ("source", per clip or for all) is a file name looked up in --media, $DOC_CLIP_MEDIA and
-// tests/browser/effect-lab/images, or a path.
+// ("source", per clip or for all) is a file name looked up in --media, $DOC_CLIP_MEDIA, the footage folder of
+// scripts/docShotSettings.mjs (tests/browser/effect-lab/footage: dancer_stage_motion.mp4) and the test images,
+// or a path. Effect clips render in the docs frame of the settings (1920 × 1080) whatever the footage size,
+// so `crop` is in its pixels. Each clip is recorded in scripts/docs-media-manifest.json (scripts/docs-media.mjs),
+// unless --out sends it somewhere else.
 //
 // Effect clip – the clip on the timeline with an effect, exported by the editor (debugExport →
 // FrameExporter, the export panel's own path) and made into a loop:
@@ -54,6 +58,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { humanMouse } from './docClipPointer.mjs';
+import { applyEditorTheme, appModuleUrl, docLogicalPath, docOutput, docShotSettings, findMedia, mediaDirs } from './docShotSettings.mjs';
+import { recordShotList, shotListParts } from './docsMediaRecipes.mjs';
 import { ORIGINAL_LAYOUTS, encodeEffectClip, encodePresetGrid, encodeRecording, probeVideo, sweepValue } from './docClipVideo.mjs';
 
 const args = process.argv.slice(2);
@@ -62,24 +68,25 @@ const option = (name, fallback) => { const index = args.indexOf(name); return in
 const shotFile = args.find((arg, index) => !arg.startsWith('--') && !valued.includes(args[index - 1]));
 if (!shotFile) throw new Error('Name a shot file, e.g. scripts/doc-clips/analog.json');
 const shotList = JSON.parse(fs.readFileSync(shotFile, 'utf8'));
-const only = option('--only');
-const clips = shotList.clips.filter(clip => !only || clip.name === only);
-if (!clips.length) throw new Error(`No clip named ${only} in ${shotFile}`);
+const only = option('--only')?.split(',').map(name => name.trim()).filter(Boolean);
+const clips = shotList.clips.filter(clip => !only || only.includes(clip.name));
+const unknown = (only ?? []).filter(name => !clips.some(clip => clip.name === name));
+if (unknown.length || !clips.length) throw new Error(`No clip named ${unknown.join(', ') || only} in ${shotFile}`);
 const url = option('--url', 'http://localhost:5192').replace(/\/$/, '');
-const out = path.resolve(option('--out', shotList.out ?? 'docs/Features/assets/clips'));
+const out = docOutput(option('--out', shotList.out ?? 'docs/Features/assets/clips'));
+const settings = docShotSettings();
 const keep = option('--keep');
 const reencode = args.includes('--reencode');
 if (reencode && !keep) throw new Error('--reencode needs --keep <folder> with earlier exports');
-const mediaDirs = [option('--media'), process.env.DOC_CLIP_MEDIA, 'tests/browser/effect-lab/images'].filter(Boolean);
 const launchArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan',
   '--ignore-gpu-blocklist', '--window-position=0,0', '--autoplay-policy=no-user-gesture-required'];
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function mediaPath(name) {
   if (!name) throw new Error('No "source" media named for the clip or the shot file');
-  const found = [name, ...mediaDirs.map(dir => path.join(dir, name))].find(file => fs.existsSync(file));
-  if (!found) throw new Error(`Media ${name} not found; pass --media <folder> (searched ${mediaDirs.join(', ')})`);
-  return path.resolve(found);
+  const found = findMedia(name, { media: option('--media') });
+  if (!found) throw new Error(`Media ${name} not found; pass --media <folder> (searched ${mediaDirs({ media: option('--media') }).join(', ')})`);
+  return found;
 }
 
 /** A fresh project with the media on the timeline; returns the editor tool caller and the clip. */
@@ -94,6 +101,7 @@ async function openProject(page, media) {
   await page.locator('form input').first().fill('Docs clip');
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'End walkthrough' }).click({ timeout: 10000 }).catch(() => {});
+  await applyEditorTheme(page, settings.theme);
   await page.setInputFiles('#media-panel-import-input', media);
   let item;
   for (let attempt = 0; attempt < 240 && !item; attempt += 1) {
@@ -102,15 +110,17 @@ async function openProject(page, media) {
   }
   if (!item) throw new Error(`${path.basename(media)} was not imported`);
   const duration = item.duration ?? 5;
-  const added = await tool('addClipSegment', { mediaFileId: item.id, trackId: null, startTime: 0, inPoint: 0, outPoint: duration });
+  // The footage fills the docs frame whatever its size (other footage than the 1080p dancer scales to it),
+  // so a recipe's crop and an effect's pixel sizes read the same on any footage.
+  const added = await tool('addClipSegment', { mediaFileId: item.id, trackId: null, startTime: 0, inPoint: 0, outPoint: duration, visualScaleMode: 'fill' });
   return { tool, item, clipId: added.clips[0].id, duration };
 }
 
-/** Exports [start, end] through the editor's FrameExporter and saves the download. */
-async function exportRange(page, { start, end, item, fps }, file) {
+/** Exports [start, end] through the editor's FrameExporter in the docs frame and saves the download. */
+async function exportRange(page, { start, end, fps }, file) {
   const download = page.waitForEvent('download', { timeout: 300000 });
   const result = await page.evaluate(input => window.aiTools.execute('debugExport', input), {
-    startTime: start, endTime: end, width: item.width ?? 1920, height: item.height ?? 1080, fps, includeAudio: false,
+    startTime: start, endTime: end, width: settings.frame.width, height: settings.frame.height, fps, includeAudio: false,
     codec: 'h264', container: 'mp4', bitrate: 40_000_000, download: true, maxRuntimeMs: 280000 });
   if (!result?.success) throw new Error(`Export failed: ${result?.error} ${JSON.stringify(result?.data?.errors ?? []).slice(0, 400)}`);
   await (await download).saveAs(file);
@@ -174,10 +184,11 @@ async function operationClip(page, clip, work, viewport) {
   for (const extra of clip.effects ?? []) await tool('addEffect', { clipId, effectType: extra.effect, params: extra.params ?? {} });
   await tool('selectClips', { clipIds: [clipId] });
   await tool('setPlayhead', { time: clip.playhead ?? 1 });
-  await page.evaluate(async ratios => {
-    const { useDockStore } = await import('/src/stores/dockStore/index.ts');
+  const dockStoreUrl = await appModuleUrl(page, '/src/stores/dockStore/index.ts', '/src/App.tsx');
+  await page.evaluate(async ({ url, ratios }) => {
+    const { useDockStore } = await import(url);
     for (const [id, ratio] of Object.entries(ratios)) useDockStore.getState().setSplitRatio(id, ratio);
-  }, clip.dock ?? {});
+  }, { url: dockStoreUrl, ratios: clip.dock ?? {} });
   await page.getByRole('tab', { name: 'Properties' }).first().click();
   await page.locator('button').filter({ hasText: /^Effects/ }).first().click();
   await page.mouse.move(viewport.width / 2, viewport.height - 4);
@@ -261,7 +272,7 @@ async function operationClip(page, clip, work, viewport) {
 }
 
 function figure(clip, size) {
-  const src = path.relative(path.resolve('docs/Features'), path.join(out, `${clip.name}.mp4`));
+  const src = path.relative(path.resolve('docs/Features'), docLogicalPath(path.join(out, `${clip.name}.mp4`)));
   const float = clip.float ? ` docs-shot--float-${clip.float}` : '';
   const compare = clip.layout === 'compare' ? ' docs-compare' : '';
   const label = (clip.alt ?? clip.name).replace(/"/g, '&quot;');
@@ -269,7 +280,19 @@ function figure(clip, size) {
     + `autoplay muted loop playsinline preload="none" aria-label="${label}"></video>\n<figcaption>${clip.caption ?? ''}</figcaption>\n</figure>`;
 }
 
-function report(clip, result, errors) {
+/** The code and media a kept export was made from, saved next to it so --reencode records that, not today's. */
+const sourcesFile = name => path.join(work, `${name}.sources.json`);
+
+function report(clip, result, errors, { reencoded = false } = {}) {
+  const written = path.join(out, `${clip.name}.mp4`);
+  if (!reencoded) {
+    if (keep) fs.writeFileSync(sourcesFile(clip.name), JSON.stringify(shotListParts('clip', shotFile, clip.name, { media: option('--media') }) ?? null));
+    recordShotList('clip', shotFile, [clip.name], { media: option('--media'), written });
+  } else {
+    const parts = fs.existsSync(sourcesFile(clip.name)) ? JSON.parse(fs.readFileSync(sourcesFile(clip.name), 'utf8')) : null;
+    if (parts) recordShotList('clip', shotFile, [clip.name], { media: option('--media'), written, parts });
+    else console.warn(`${clip.name}: encoded again from exports kept without ${path.basename(sourcesFile(clip.name))}; no fingerprint recorded (node scripts/docs-media.mjs --stale remakes it from the current code).`);
+  }
   const pageErrors = [...new Set(errors)];
   console.log(`\n${path.relative(process.cwd(), path.join(out, `${clip.name}.mp4`))}: ${result.width}x${result.height}, `
     + `${result.duration.toFixed(2)} s at ${Math.round(result.fps)} fps, ${result.size} bytes (CRF ${result.crf}); poster ${result.posterBytes} bytes`
@@ -287,16 +310,16 @@ try {
     const files = { output: path.join(out, `${clip.name}.mp4`), poster: path.join(out, `${clip.name}.webp`) };
     const recording = path.join(work, `${clip.name}.recording.json`);
     if (reencode && clip.kind === 'operation' && fs.existsSync(recording)) {
-      report(clip, encodeRecording(clip, { ...JSON.parse(fs.readFileSync(recording, 'utf8')), workDir: work, ...files }), []);
+      report(clip, encodeRecording(clip, { ...JSON.parse(fs.readFileSync(recording, 'utf8')), workDir: work, ...files }), [], { reencoded: true });
       continue;
     }
     const presetList = path.join(work, `${clip.name}.presets.json`);
     if (reencode && clip.kind === 'presets' && fs.existsSync(presetList)) {
-      report(clip, encodePresetGrid(clip, { exports: JSON.parse(fs.readFileSync(presetList, 'utf8')), ...files }), []);
+      report(clip, encodePresetGrid(clip, { exports: JSON.parse(fs.readFileSync(presetList, 'utf8')), ...files }), [], { reencoded: true });
       continue;
     }
     if (reencode && !['operation', 'presets'].includes(clip.kind) && fs.existsSync(kept('effect'))) {
-      report(clip, encodeEffectClip(clip, { effect: kept('effect'), original: fs.existsSync(kept('original')) ? kept('original') : undefined, ...files }), []);
+      report(clip, encodeEffectClip(clip, { effect: kept('effect'), original: fs.existsSync(kept('original')) ? kept('original') : undefined, ...files }), [], { reencoded: true });
       continue;
     }
     const viewport = clip.viewport ?? { width: 1600, height: 900 };

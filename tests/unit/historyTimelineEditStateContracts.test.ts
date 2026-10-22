@@ -473,6 +473,13 @@ describe('HistoryTimelineEditState contracts', () => {
     );
   });
 
+  it('accepts a parameter source binding (source: node endpoint) while still rejecting nested runtime handles', () => {
+    const state = { nodeGraph: { parameterSources: { targets: { 'effect.fx.amount': { source: { nodeId: 'lfo', portId: 'value' } } } } } };
+    expect(findHistoryStateBoundaryViolations(state)).toEqual([]);
+    const invalid = { nodeGraph: { parameterSources: { targets: { 'effect.fx.amount': { source: { nodeId: 'lfo', videoElement: {} } } } } } };
+    expect(findHistoryStateBoundaryViolations(invalid)).not.toEqual([]);
+  });
+
   it('rejects manual history state objects with runtime payload keys', () => {
     const invalidState = {
       kind: 'history-timeline-edit-state',

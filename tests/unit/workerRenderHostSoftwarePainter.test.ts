@@ -4,7 +4,7 @@ import type { WorkerRenderSoftwareFrame } from '../../src/services/render/worker
 import { drawWorkerSoftwareLayer } from '../../src/services/render/workerRenderHostSoftwarePainter';
 import { createWorkerSoftwareFeedbackStore } from '../../src/services/render/workerSoftwareFeedbackEffects';
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from '../../src/services/render/workerSoftwareGlow';
-import { directionalBlurPlan, mirrorRepeat, transformDirectionalPixel, type DirectionalBlurType } from '../../src/effects/blur/blurSampling';
+import { coveredCellTaps, directionalBlurPlan, mirrorRepeat, transformDirectionalPixel, type DirectionalBlurType } from '../../src/effects/blur/blurSampling';
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
 import type { Layer } from '../../src/types/layers';
 
@@ -784,18 +784,23 @@ describe('worker software painter', () => {
 
   // Directional blurs follow the shared contract (effects/blur/blurSampling.ts) in one stage of
   // evenly spaced, taper-weighted taps along each pixel's range, averaged with premultiplied alpha.
+  // The contract read on the CPU: covered one-pixel cells along each pixel's range, premultiplied bilinear reads.
   const contractRow = (type: DirectionalBlurType, params: Record<string, unknown>, row: Array<[number, number]>) => {
     const width = row.length, plan = directionalBlurPlan(type, params, width, 1);
-    const nearest = (u: number) => row[Math.max(0, Math.min(width - 1, Math.round(u * (width - 1))))];
+    const texel = (index: number) => row[Math.max(0, Math.min(width - 1, index))];
     return row.flatMap((_pixel, x) => {
-      const pixel: [number, number] = [x + 0.5, 0.5], { start, length } = plan.range(pixel);
-      const count = Math.max(2, Math.min(64, Math.ceil(Math.abs(length) * plan.speed(pixel)) + 1));
+      const pixel: [number, number] = [x + 0.5, 0.5], { start, length } = plan.range(pixel), span = Math.abs(length);
+      const reachPx = span * plan.speed(pixel), sign = length < 0 ? -1 : 1;
+      const taps = reachPx > 1e-6 ? coveredCellTaps(span, reachPx, 64) : [{ offset: 0, weight: 1 }];
       let red = 0, alpha = 0, total = 0;
-      for (let index = 0; index < count; index++) {
-        const t = (index + 0.5) / count, weight = plan.taper(t), [px] = transformDirectionalPixel(plan, pixel, start + length * t);
-        const u = type === 'motion-blur' ? mirrorRepeat(px / width) : Math.max(0, Math.min(1, px / width));
-        const [value, opacity] = nearest(u);
-        red += value * opacity * weight; alpha += opacity * weight; total += weight;
+      for (const tap of taps) {
+        const weight = tap.weight * plan.taper(span > 0 ? 0.5 + tap.offset / span : 0.5);
+        const [px] = transformDirectionalPixel(plan, pixel, start + length / 2 + sign * tap.offset);
+        const at = (type === 'motion-blur' ? mirrorRepeat(px / width) * width : px) - 0.5, left = Math.floor(at), share = at - left;
+        for (const [[value, opacity], part] of [[texel(left), 1 - share], [texel(left + 1), share]] as const) {
+          red += value * opacity * part * weight; alpha += opacity * part * weight;
+        }
+        total += weight;
       }
       return [Math.round(red / Math.max(alpha, 1e-6)), 0, 0, Math.round(alpha / total)];
     });

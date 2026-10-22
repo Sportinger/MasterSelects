@@ -20,8 +20,14 @@ import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 type Rgba = [number, number, number, number];
 type Params = Record<string, number | boolean | string>;
 const LOOKS = effectEngineMembers('two-tone-pattern');
-/** Looks whose pattern edges are one output pixel soft at every size (sharper on larger frames). */
-const SOFT_EDGE_IN_OUTPUT_PIXELS = new Set(['halftone', 'riso', 'riso-glow', 'paper-print']);
+/** Looks whose pattern edges are one output pixel soft at every size (sharper on larger frames). Pattern Halftone
+ * draws its marks with Halftone's half-pixel edge. */
+const SOFT_EDGE_IN_OUTPUT_PIXELS = new Set(['halftone', 'pattern-halftone', 'riso', 'riso-glow', 'paper-print']);
+/** Engine looks whose pattern still counts output pixels, with the reason. The 1080p test checks that they still
+ * differ between sizes, so the look that gets a 1080p recipe has to leave this list. */
+const OUTPUT_PIXEL_LOOKS = new Map([
+  ['dither-studio', 'its 2 × 2 Bayer and Checker kernels step per output pixel and the Checker reads Scale directly; a 1080p Dither Studio needs a recipe of its own'],
+]);
 /** A picture with soft gradients and hard edges, sampled by position (the same at every resolution). */
 const picture = ([u, v]: [number, number]): Rgba => {
   const x = Math.min(Math.max(u, 0), 1), y = Math.min(Math.max(v, 0), 1), disc = Math.hypot(x - .45, y - .55) < .28 ? 1 : 0;
@@ -88,7 +94,8 @@ describe('two-tone-pattern engine', () => {
       const tolerance = SOFT_EDGE_IN_OUTPUT_PIXELS.has(type) ? .5 : .03;
       if (agreement(hd, uhd, tolerance) < .98 || agreement(hd, preview, tolerance) < .98) differing.push(`${type} (4K ${agreement(hd, uhd).toFixed(2)}, half ${agreement(hd, preview).toFixed(2)})`);
     }
-    expect(differing).toEqual([]);
+    expect(differing.filter(entry => !OUTPUT_PIXEL_LOOKS.has(entry.split(' ')[0]))).toEqual([]);
+    expect(differing.map(entry => entry.split(' ')[0]), 'a look on OUTPUT_PIXEL_LOOKS now measures in 1080p pixels').toEqual([...OUTPUT_PIXEL_LOOKS.keys()]);
   // 25 looks at three sizes; the cell-filtered looks evaluate their two filter passes per read.
   }, 120_000);
 
