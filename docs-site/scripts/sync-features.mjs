@@ -95,10 +95,14 @@ const report = ({ level, text }) => (level === 'info' ? infos : warnings).push(t
 // from this cache and restarts with an empty content collection when its
 // settings vanish: keep the cache only while an astro dev server of this very
 // site runs. A stale record whose PID now belongs to another process does not
-// count, and builds (--build) always start from a clean cache.
+// count. Builds (--build) start from a clean cache, except while such a server
+// runs: removing the cache under it left it answering 500 until restarted, so
+// the build then reuses the cache the server keeps current.
+let devServerUrl;
 async function devServerRunning() {
   let pid, url;
   try { ({ pid, url } = JSON.parse(fs.readFileSync(path.join(astroCacheDir, 'dev.json'), 'utf8'))); } catch { return false; }
+  devServerUrl = typeof url === 'string' ? url : undefined;
   if (!Number.isInteger(pid) || pid <= 0) return false;
   if (fs.existsSync('/proc')) {
     try {
@@ -112,8 +116,9 @@ async function devServerRunning() {
   if (typeof url !== 'string') return false;
   try { await fetch(url, { signal: AbortSignal.timeout(1500) }); return true; } catch { return false; }
 }
-const devServer = !forBuild && await devServerRunning();
+const devServer = await devServerRunning();
 if (!devServer) fs.rmSync(astroCacheDir, { recursive: true, force: true });
+else if (forBuild) report({ level: 'info', text: 'The running astro dev of this site keeps its .astro cache; the build reuses it.' });
 
 // Pages are updated in place: a running `astro dev` watches these files, and
 // removing the whole folder would end those watches (the site then keeps
@@ -238,7 +243,7 @@ for (const folder of generatedContent) {
 }
 
 // The dev server restarts for the new sidebar at the same moment and misses the deletions.
-if (devServer && removedPages) report({ level: 'warn', text: `${removedPages} page(s) were removed: restart the running astro dev, which keeps serving them until then.` });
+if (devServer && removedPages) report({ level: 'warn', text: `${removedPages} page(s) were removed: the running astro dev keeps serving them until it is restarted.` });
 
 // Shared assets (pictures, clips, posters, captions) move into the site's public/ folder, in place like the
 // pages: a running `astro dev` (Vite) watches public/, and a removed and recreated folder drops out of that
@@ -288,7 +293,16 @@ const configChanged = [
 ].some(Boolean);
 // astro.config.mjs reads these files: a running astro dev restarts for them, and after that restart it no longer
 // reloads edited pages (it keeps serving their old text, sometimes a 500) until it is started again.
-if (devServer && configChanged) report({ level: 'warn', text: 'The sidebar or redirects changed: restart the running astro dev (npx astro dev stop, then start it), which no longer reloads edited pages after its own config restart.' });
+if (devServer && configChanged) report({ level: 'warn', text: 'The sidebar or redirects changed: the running astro dev restarted itself and from now on no longer reloads edited pages (an Astro dev-server limit).' });
+
+/** The command that starts this site's dev server again on the address it runs on now. */
+function restartCommand(url) {
+  let address;
+  try { address = url ? new URL(url) : undefined; } catch { address = undefined; }
+  const flags = address ? ` --port ${address.port || 4321}${address.hostname && address.hostname !== 'localhost' ? ` --host ${address.hostname}` : ''}` : '';
+  return `cd ${siteDir} && npx astro dev stop && npx astro dev${flags}`;
+}
+const restartNeeded = devServer && (removedPages > 0 || configChanged);
 
 // A figure that stays as written is checked again by the general pass: report each problem once.
 const uniqueWarnings = [...new Set(warnings)];
@@ -297,3 +311,5 @@ for (const text of infos) console.log(text);
 const sourceLabel = sourceRef ? `Git ref ${sourceRef}` : 'working tree';
 console.log(`Sidebar: ${sidebar.length} groups, ${countSidebarPages(sidebar)} entries; ${unpublished.size} pages unpublished. Effect groups from ${catalog.source}.`);
 console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects, ${anchorRedirects.count} anchor redirects; assets ${assetFiles.length ? `${assetFiles.length} (${assetsWritten} written, ${assetsRemoved} removed)` : 'not found'}; ${uniqueWarnings.length} warnings.`);
+// Last, so it is not lost among the warnings: the one action the running dev server needs.
+if (restartNeeded) console.warn(`RESTART the docs dev server before checking pages: ${restartCommand(devServerUrl)}`);
