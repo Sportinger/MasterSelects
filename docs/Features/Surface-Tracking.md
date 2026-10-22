@@ -1,5 +1,3 @@
-[Back to Features](./README.md)
-
 # Surface Tracking
 
 Surface Tracking attaches a colored marker to a textured, approximately flat

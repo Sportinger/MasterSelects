@@ -1,10 +1,10 @@
 # Export
 
-Export renders your timeline, or a range of it, to a video, an animated GIF, a still or image sequence, an audio file or an FCPXML timeline for other editors. Open the **Export** tab (in the Video layout it sits beside Properties on the right), pick a container, and press the green **Export** button at the bottom; related: [Project Persistence](./Project-Persistence.md) for saving and archiving the project itself.
+Export renders your timeline, or a range of it, to a video, an animated GIF, a still or image sequence, an audio file or an FCPXML timeline for other editors. Open the **Export** tab (in the Video layout it is the open tab of the right-hand group), pick a container, and press the green **Export** button at the bottom. Saving and archiving the project itself: [Project Persistence](./Project-Persistence.md).
 
 ---
 
-## Overview
+## Export methods
 
 The Export panel offers four video methods:
 
@@ -19,7 +19,7 @@ FCPXML is a container choice of its own, under **Timeline**.
 
 From top to bottom:
 
-1. **Presets**: the **Preset** list holds the project's saved export settings; choosing one loads it. **Save** stores the current settings under a name, **Update** overwrites the selected preset.
+1. **Presets**: the **Preset** list holds the project's saved export settings; choosing one loads it. **Save** stores the current settings under a name, **Update** overwrites the selected preset. When the range holds storyboard scenes, a **Storyboard output** row follows: **Normal video** (blocked while a scene has no accepted media) or **Animatic (slates + stills)**, which renders empty scenes as labelled slates.
 2. **Output**: **Same as composition** keeps resolution and frame rate in step with the active composition. **Name** is the file name, **Container** chooses the deliverable, grouped as Video, Image, Audio and Timeline (`.fcpxml`), and **Method** chooses how a video is encoded.
 3. **Video** (or **Image** for a still or image sequence): codec, resolution, frame rate, rate control and bitrate, and under **Alpha** the **Alpha Channel** and **Stacked Alpha** options. Animated GIF shows its palette controls here.
 4. **Audio**: codec, sample rate, bitrate for compressed audio and **Normalize** under Processing.

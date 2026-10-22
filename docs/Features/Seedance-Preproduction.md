@@ -1,6 +1,6 @@
 # Story Workflow
 
-Story turns a prompt and your project's sources into a production package you can review (a direction, a treatment with a scene map, master looks and keyframes) before any video is generated. Start it from the **Chat** workspace or the Media panel's chat by switching the prompt path to **Story**; the run then shows in the dockable **Story** panel (View → Panels → AI → Story). Related: [AI Studio](./AI-Studio.md) and [FlashBoard](./FlashBoard.md).
+Story turns a prompt and your project's sources into a production package you can review (a direction, a treatment with a scene map, master looks and keyframes) before any video is generated. Start it from the **Chat** workspace or the Media panel's chat by switching the prompt path to **Story**. From the Media panel's or AI Studio's chat, the run opens in the dockable **Story** panel (View → Panels → AI → Story); in the Chat workspace it runs inside the chat page. Related: [AI Studio](./AI-Studio.md) and [FlashBoard](./FlashBoard.md).
 
 The private kernel owns story and prompt planning; the editor owns source retrieval, review state, image generation calls and saving. Internal `seedance*` source, store, route and persistence names are compatibility identifiers; Seedance 2.5 is named only where it is the actual video generator.
 

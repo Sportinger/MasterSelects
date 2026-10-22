@@ -615,7 +615,7 @@ playback keeps its existing drift thresholds.
 | Contract | Warp behavior |
 |---|---|
 | Priority | Transition source map → finite override → transition hold → Warp → ordinary speed. |
-| Points | 2?256 finite pairs; local times are nonnegative and strictly increasing. Source values can change direction, remain flat, or form steep slopes, but there are no vertical jumps. Invalid edits are rejected; malformed persisted Warp arrays fall back safely to ordinary sampling. |
+| Points | 2–256 finite pairs; local times are nonnegative and strictly increasing. Source values can change direction, remain flat, or form steep slopes, but there are no vertical jumps. Invalid edits are rejected; malformed persisted Warp arrays fall back safely to ordinary sampling. |
 | Source clock | Piecewise-linear interpolation; outside the first/last times hold the endpoint. Clamp the interpolated source to `[0, naturalDuration ?? outPoint]`. Clamped/flat/exterior samples have zero rate; other samples use the signed segment slope. Interior knots use the following segment. |
 | Speed / Reverse | Retained but ignored while warped, including speed-section bypass. Removing Warp restores their ordinary behavior and retains the authored duration. |
 | Output interval | Duration is independent of in/out, with a one-frame minimum. Right trim beyond the final point holds; left trim inserts the interpolated start, drops earlier points and rebases the remaining times. Future points beyond the clip end are retained on trim. |
