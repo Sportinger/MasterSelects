@@ -31,6 +31,21 @@ export function emitImageQuadtreeWgsl(options: {
   return ((a - mean) * (a - mean) + (b - mean) * (b - mean)
     + (c - mean) * (c - mean) + (d - mean) * (d - mean) + (e - mean) * (e - mean)) / 5.0;
 }`,
+      // A second, finer test (4 x 4 grid inside the block) catches a figure that lies between the corners and the
+      // centre; a block splits when either test finds detail, so it only ever refines the legacy partition.
+      `fn imageQuadtreeGridVariance${descriptor.id}(origin: vec2i, size: i32, inputResolution: vec2f${suffix}) -> f32 {
+  var tones: array<f32, 16>;
+  var sum = 0.0;
+  for (var index = 0; index < 16; index += 1) {
+    let cell = vec2i(index % 4, index / 4);
+    tones[index] = imageQuadtreeTone${descriptor.id}(origin + ((cell * 2 + vec2i(1)) * size) / 8, inputResolution${callSuffix});
+    sum += tones[index];
+  }
+  let mean = sum / 16.0;
+  var squares = 0.0;
+  for (var index = 0; index < 16; index += 1) { squares += (tones[index] - mean) * (tones[index] - mean); }
+  return squares / 16.0;
+}`,
       `fn imageQuadtreePartition${descriptor.id}(scale: f32, threshold: f32, time: f32, speed: f32,
     inputUv: vec2f, inputResolution: vec2f${suffix}) -> vec3f {
   let pixel = imageGraphPixelCoordinate(inputUv * inputResolution, inputResolution);
@@ -39,7 +54,8 @@ export function emitImageQuadtreeWgsl(options: {
   var blockSize = minimumSize * 32;
   for (var level = 0; level < 6; level += 1) {
     let origin = (pixel / blockSize) * blockSize;
-    if (blockSize <= minimumSize || imageQuadtreeVariance${descriptor.id}(origin, blockSize, inputResolution${callSuffix}) <= threshold * pulse) { break; }
+    if (blockSize <= minimumSize || (imageQuadtreeVariance${descriptor.id}(origin, blockSize, inputResolution${callSuffix}) <= threshold * pulse
+      && imageQuadtreeGridVariance${descriptor.id}(origin, blockSize, inputResolution${callSuffix}) <= threshold * pulse)) { break; }
     blockSize = max(minimumSize, blockSize / 2);
   }
   let origin = (pixel / blockSize) * blockSize;

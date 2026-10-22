@@ -243,6 +243,8 @@ export interface ComputeEffectDefinition {
   /** Why the effect is still experimental (see FullscreenEffectDefinition.experimental). */
   experimental?: string;
   requiresContinuousRender?: boolean;
+  /** See FullscreenEffectDefinition.timelineAnimated: moves with timeline time, holds still while paused. */
+  timelineAnimated?: boolean;
   presets?: readonly EffectPreset[];
   customControls?: ComponentType<EffectControlProps>;
 }

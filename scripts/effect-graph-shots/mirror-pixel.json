@@ -10,6 +10,11 @@
     "blockify?focus=centred-cell-grid&only=grid-cell,grid-position,grid-index,grid-offset,grid-start,grid-end,grid-low,grid-high&cables=avoid&name.zero-vec2=(0, 0)&marks=grid-position:above,grid-index:below,grid-low:above@blockify-cell-grid",
     "blockify?focus=row-average-cached&only=row-count,row-half-count,row-pairs,row-taps,row-sample-uv,row-sample,row-reduce,row-cache&cables=avoid&name.row-position-uv=Read Position&marks=row-count:above,row-sample:below,row-reduce:above@blockify-row-average",
     "blockify?focus=posterize&only=poster-steps,poster-scaled,bayer,bayer-centred,dither-offset,dither-rgb,dither-shadow-guard,dither-guarded,poster-half-rgb,poster-centred,poster-shifted,poster-floor,poster&cables=avoid&name.dither-shadow-ramp=Shadow Ramp&marks=bayer:above,dither-shadow-guard:below,poster-floor:above,poster:below@blockify-posterize",
-    "blockify?focus=mix-with-original&only=effect-rgb,effect-alpha,effect-image,effect-vec4,original,original-vec4,mix-amount,mixed,mixed-image&cables=avoid&name.cell-alpha=Cell Alpha&marks=effect-image:above,mix-amount:below,mixed:above@blockify-mix"
+    "blockify?focus=mix-with-original&only=effect-rgb,effect-alpha,effect-image,effect-vec4,original,original-vec4,mix-amount,mixed,mixed-image&cables=avoid&name.cell-alpha=Cell Alpha&marks=effect-image:above,mix-amount:below,mixed:above@blockify-mix",
+    "quadtree-zoom?plumbing=hide&omit=output,frame&marks=organized-quadtree-zoom-split:above,organized-quadtree-zoom-colour:above,organized-quadtree-zoom-shade:below,organized-quadtree-zoom-mix:above",
+    "quadtree-zoom?focus=cell-size-and-split&only=short-side,pixel-scale,minimum-px,pixel-unfloored,pixel,partition&cables=avoid&marks=pixel-scale:below,minimum-px:above:30,partition:above@quadtree-zoom-split",
+    "quadtree-zoom?focus=cell-colour&only=half-size-product,half-size,half-vector,center,center-sample,sampled-color,center-alpha,original-sample,original-color,cell-color&rows=2&cables=avoid&marks=center:below,center-sample:below,center-alpha:above,cell-color:below@quadtree-zoom-colour",
+    "quadtree-zoom?focus=tile-edges&only=local,edge-distance,border,inverse-border,border-gain,style,styled&cables=avoid&marks=edge-distance:below,border:below,style:below,styled:below@quadtree-zoom-edges",
+    "quadtree-zoom?focus=mix-with-original&only=amount-clamped,mixed,combined&layout=float&cables=avoid&marks=amount-clamped:below,mixed:above,combined:below@quadtree-zoom-mix"
   ]
 }

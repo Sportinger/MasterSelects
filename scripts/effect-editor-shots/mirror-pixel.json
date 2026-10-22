@@ -46,6 +46,24 @@
         { "target": "Amount", "label": "Amount" }
       ],
       "hide": ["Particle Out"]
+    },
+    {
+      "name": "quadtree-zoom-inspector",
+      "effect": "quadtree-zoom",
+      "params": { "scale": 4, "threshold": 0.012, "amount": 1, "speed": 0 },
+      "image": "harbor_town.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Quadtree Zoom card: Preset menu showing Fine Print, then Minimum Cell 4 px, Detail Threshold 0.012, Amount 1 and Speed 0, beside a strip of the preview with the harbour split into tiles, large over the sky and small over the houses",
+      "caption": "Quadtree Zoom with the Fine Print preset. 1 — Preset: pick a starting point. 2 — Minimum Cell. 3 — Detail Threshold. 4 — Amount. 5 — Speed.",
+      "marks": [
+        { "target": "Preset", "label": "Preset" },
+        { "target": "Minimum Cell", "label": "Minimum Cell" },
+        { "target": "Detail Threshold", "label": "Detail Threshold" },
+        { "target": "Amount", "label": "Amount" },
+        { "target": "Speed", "label": "Speed" }
+      ],
+      "hide": ["Particle Out"]
     }
   ]
 }

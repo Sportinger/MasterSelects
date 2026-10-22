@@ -10,7 +10,11 @@ const effect = (operatorGraph = createDefaultQuadtreeGraph()): Effect => ({ id: 
 describe('Quadtree Zoom compute graph ownership', () => {
   it('uses its canonical graph and authoritative catalog schema', () => {
     expect(hasEffectOperatorGraph('quadtree-zoom')).toBe(true);
-    expect(effectOperatorGraph({ type: 'quadtree-zoom', params: {} })).toEqual(createDefaultQuadtreeGraph());
+    // The untouched recipe opens in its stage folders; the nodes and cables stay the canonical recipe.
+    const opened = effectOperatorGraph({ type: 'quadtree-zoom', params: {} }), canonical = createDefaultQuadtreeGraph();
+    expect(opened.nodes).toEqual(canonical.nodes); expect(opened.edges).toEqual(canonical.edges);
+    expect(opened.groups?.map(group => group.label)).toEqual(expect.arrayContaining(['Cell Size & Split', 'Cell Colour', 'Tile Edges', 'Mix with Original']));
+    expect(opened.groups?.find(group => group.label === 'Cell Size & Split')?.nodeIds).toEqual(expect.arrayContaining(['minimum-px', 'partition']));
     expect(getEffect('quadtree-zoom')?.params).toMatchObject({ scale: { default: 8, min: 2, max: 32 },
       threshold: { default: .025, min: .001, max: .2 }, amount: { default: .8 }, speed: { default: .5 } });
     expect(effectOperatorParams({ type: 'quadtree-zoom', params: {} }))

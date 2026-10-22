@@ -46,6 +46,21 @@ fn blockVariance(origin: vec2i, size: i32) -> f32 {
     + (e - mean) * (e - mean)) / 5.0;
 }
 
+// The 4 x 4 grid test of the partition graph (imageOperatorQuadtreeWgsl.ts), kept in parity.
+fn blockGridVariance(origin: vec2i, size: i32) -> f32 {
+  var tones: array<f32, 16>;
+  var sum = 0.0;
+  for (var index = 0; index < 16; index += 1) {
+    let cell = vec2i(index % 4, index / 4);
+    tones[index] = tonePixel(origin + ((cell * 2 + vec2i(1)) * size) / 8);
+    sum += tones[index];
+  }
+  let mean = sum / 16.0;
+  var squares = 0.0;
+  for (var index = 0; index < 16; index += 1) { squares += (tones[index] - mean) * (tones[index] - mean); }
+  return squares / 16.0;
+}
+
 @compute @workgroup_size(8, 8)
 fn quadtreeZoomCompute(@builtin(global_invocation_id) invocation: vec3u) {
   if (invocation.x >= u32(params.resolution.x) || invocation.y >= u32(params.resolution.y)) { return; }
@@ -55,7 +70,8 @@ fn quadtreeZoomCompute(@builtin(global_invocation_id) invocation: vec3u) {
   var blockSize = minimumSize * 32;
   for (var level = 0; level < 6; level += 1) {
     let origin = (pixel / blockSize) * blockSize;
-    if (blockSize <= minimumSize || blockVariance(origin, blockSize) <= params.threshold * pulse) { break; }
+    if (blockSize <= minimumSize || (blockVariance(origin, blockSize) <= params.threshold * pulse
+      && blockGridVariance(origin, blockSize) <= params.threshold * pulse)) { break; }
     blockSize = max(minimumSize, blockSize / 2);
   }
   let origin = (pixel / blockSize) * blockSize;

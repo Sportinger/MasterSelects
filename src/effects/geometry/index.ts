@@ -2,7 +2,8 @@ import shader from './shader.wgsl?raw';
 import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
 import { createGlyphEffect } from '../glyph/glyphEffectFactory';
 import { createComputeEffect } from './computeEffectFactory';
-import type { ComputeEffectDefinition } from '../types';
+import type { ComputeEffectDefinition, EffectPreset } from '../types';
+import { amountWarnings, cellSizeWarnings } from '../pixel/cellGridParams';
 
 export const voronoi = createComputeEffect({
   id: 'voronoi',
@@ -34,16 +35,41 @@ export const pixelSort: ComputeEffectDefinition = {
   ],
 };
 
-export const quadtreeZoom = createComputeEffect({
-  id: 'quadtree-zoom',
-  name: 'Quadtree Zoom',
-  entryPoint: 'quadtreeZoomCompute',
-  animated: true,
-  params: {
-    scale: { type: 'number', label: 'Minimum Cell', default: 8, min: 2, max: 32, step: 1, group: 'Structure' },
-    threshold: { type: 'number', label: 'Detail Threshold', default: 0.025, min: 0.001, max: 0.2, step: 0.001, group: 'Structure' },
-  },
-});
+/** Quadtree Zoom's named starting points (the Preset row of its card; docs/Features/effects/quadtree-zoom.md). */
+export const QUADTREE_ZOOM_PRESETS: readonly EffectPreset[] = [
+  // Small cells that follow every edge: the picture stays readable, flat areas turn into calm tiles.
+  { id: 'fine-print', name: 'Fine Print', params: { scale: 4, threshold: 0.012, amount: 1, speed: 0 } },
+  // Chunky tiles on the figure and large squares on the stage (the 4 x 4 grid test keeps the figure in large blocks).
+  { id: 'big-tiles', name: 'Big Tiles', params: { scale: 16, threshold: 0.04, amount: 1, speed: 0 } },
+  // Tiles laid half over the original: a soft mosaic veil that keeps faces and lines.
+  { id: 'tile-veil', name: 'Tile Veil', params: { scale: 8, threshold: 0.02, amount: 0.6, speed: 0.5 } },
+  // The split threshold pulses quickly, so cells keep splitting and merging.
+  { id: 'breathing-grid', name: 'Breathing Grid', params: { scale: 6, threshold: 0.03, amount: 0.9, speed: 2 } },
+];
+
+export const quadtreeZoom: ComputeEffectDefinition = {
+  ...createComputeEffect({
+    id: 'quadtree-zoom',
+    name: 'Quadtree Zoom',
+    entryPoint: 'quadtreeZoomCompute',
+    animated: true,
+    params: {
+      // 1080p pixels (quadtreeEffectGraph: Cell Size folder), so preview quality, 4K and export show the same cells.
+      scale: { type: 'number', label: 'Minimum Cell', default: 8, min: 2, max: 32, step: 1, unit: ' px', group: 'Structure' },
+      threshold: { type: 'number', label: 'Detail Threshold', default: 0.025, min: 0.001, max: 0.2, step: 0.001, group: 'Structure' },
+    },
+  }),
+  // The split pulses with timeline time (Speed), so a paused playhead holds still and export matches the preview.
+  requiresContinuousRender: false,
+  timelineAnimated: true,
+  paramWarnings: (values, width, height) => [
+    ...cellSizeWarnings('scale', values.scale, 2, width, height, 'Quadtree Zoom uses cells of 2 pixels'),
+    ...amountWarnings(values.amount),
+    ...(typeof values.threshold === 'number' && values.threshold <= 0
+      ? [`threshold: ${values.threshold} is 0 or below, so every cell splits down to Minimum Cell.`] : []),
+  ],
+  presets: QUADTREE_ZOOM_PRESETS,
+};
 export const contour = createComputeEffect({
   id: 'contour',
   name: 'Contour',

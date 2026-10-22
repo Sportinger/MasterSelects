@@ -16,14 +16,15 @@ describe('image.quadtree-partition compiler', () => {
     expect(program.wgsl.indexOf('let b = imageQuadtreeTone')).toBeLessThan(program.wgsl.indexOf('let e = imageQuadtreeTone'));
   });
 
-  it('evaluates a root partition through exactly five ordered loads when the first level terminates', () => {
+  it('evaluates a root partition through the five legacy loads, then the 4 x 4 grid, when the first level terminates', () => {
     const graph = createDefaultQuadtreeGraph();
     const plan = compileComputeImagePreview(graph, params, { nodeId: 'partition', direction: 'output', portId: 'origin' }).plan;
     const calls: Array<[number, number]> = [];
     const result = createImageOperatorEvaluator(plan)([0, 0, 0, 1], { uv: [37.5 / 128, 19.5 / 96], resolution: [128, 96],
       pixelCoordinate: [37, 19], timelineTimeSeconds: 0, loadImage: pixel => { calls.push([...pixel]); return [pixel[0] / 128, pixel[1] / 96, 0, 1]; } });
     expect(result).toEqual([0, 0, 0, 1]);
-    expect(calls).toEqual([[0, 0], [63, 0], [0, 63], [63, 63], [32, 32]]);
+    expect(calls.slice(0, 5)).toEqual([[0, 0], [63, 0], [0, 63], [63, 63], [32, 32]]);
+    expect(calls.slice(5)).toEqual([8, 24, 40, 56].flatMap(y => [8, 24, 40, 56].map(x => [x, y])));
   });
 
   it('rejects nested partition scopes instead of approximating them', () => {
