@@ -7,10 +7,15 @@
   {"name": "dither", "out": "docs/Features/assets/effects/dither.webp", "image": "dancer_stage", "width": 3840, "crop": [1440, 220, 800, 880],
    "layout": "compare", "outWidth": 1600, "left": {"effect": "original"}, "right": {"effect": "dither", "params": {}},
    "alt": "The dancer's face, shoulders and raised arm, original left and with Dithering right: skin, hair and dress turn into a fine checked pattern of a few flat colours, and the dark stage behind her becomes black with sparse grey and red pixels",
-   "caption": "Left: original. Right: Dithering at its default settings, a detail at twice the size."}
+   "caption": "Left: original. Right: Dithering at its default settings, a detail at twice the size."},
+  {"name": "riso", "out": "docs/Features/assets/effects/riso.webp", "image": "dancer_stage", "width": 3840, "crop": [1360, 120, 1200, 1320],
+   "layout": "compare", "outWidth": 1600, "left": {"effect": "original"}, "right": {"effect": "riso", "params": {}},
+   "alt": "The dancer's face, raised arm and dress on a dark stage, original left and with Riso right: the stage becomes deep indigo where both inks overlap, her skin turns into pink dots, the shadows of her dress into blue dots, and the light parts of the dress stay cream paper",
+   "caption": "Left: original. Right: Riso at its default settings, a detail."}
  ],
  "strips": [
   {"effect": "halftone", "image": "dancer_stage", "width": 1920, "crop": [660, 120, 560, 560], "cellWidth": 400, "columns": 3},
-  {"effect": "dither", "image": "dancer_stage", "width": 1920, "crop": [700, 110, 400, 400], "cellWidth": 400, "columns": 3}
+  {"effect": "dither", "image": "dancer_stage", "width": 1920, "crop": [700, 110, 400, 400], "cellWidth": 400, "columns": 3},
+  {"effect": "riso", "image": "dancer_stage", "width": 1920, "crop": [740, 100, 400, 400], "cellWidth": 400, "columns": 3}
  ]
 }

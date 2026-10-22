@@ -1,6 +1,6 @@
 # Crosshatch
 
-<!-- effect-docs: basic page sha=5de5bcc67f1b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=b13743290cc6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Renders tones as layered pen crosshatching with more line directions in darker areas, in Ink on Paper; Scale sets line spacing.
 
@@ -29,7 +29,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Contour Map](./contour-map.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
 
 ## Technical details
 

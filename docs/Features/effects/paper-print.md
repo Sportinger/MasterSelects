@@ -1,6 +1,6 @@
 # Paper Print
 
-<!-- effect-docs: basic page sha=0937851d3acf, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=7a35a304297b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Maps brightness to a grainy two-color press print between Ink and Paper; Press Grain sets the size of the noise texture.
 
@@ -29,7 +29,7 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Halftone](./halftone.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Halftone](./halftone.md), [Pixel Poster](./pixel-poster.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
 
 ## Technical details
 

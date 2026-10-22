@@ -15,9 +15,9 @@ function setup(locked = false) {
 describe('effect styles', () => {
   it('switches the look in place and keeps the ID, values and position', () => {
     setup();
-    changeEffectStyle('style-clip', 'fx', 'riso');
+    changeEffectStyle('style-clip', 'fx', 'crosshatch');
     const [effect] = useTimelineStore.getState().clips[0].effects;
-    expect(effect).toMatchObject({ id: 'fx', type: 'riso', name: 'riso', enabled: true,
+    expect(effect).toMatchObject({ id: 'fx', type: 'crosshatch', name: 'crosshatch', enabled: true,
       params: { scale: 12, amount: 0.7, angle: 30, colorA: '#101010', colorB: '#f0f0f0' } });
     // A saved node graph belongs to the previous look.
     expect(effect.params.operatorGraph).toBeUndefined();
@@ -28,7 +28,7 @@ describe('effect styles', () => {
     setup();
     expect(() => changeEffectStyle('style-clip', 'fx', 'chroma-key')).toThrow(/not a style/);
     setup(true);
-    expect(() => changeEffectStyle('style-clip', 'fx', 'riso')).toThrow(/locked/);
+    expect(() => changeEffectStyle('style-clip', 'fx', 'crosshatch')).toThrow(/locked/);
     expect(useTimelineStore.getState().clips[0].effects[0].type).toBe('halftone');
   });
 });

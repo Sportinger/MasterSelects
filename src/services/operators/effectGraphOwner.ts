@@ -70,7 +70,8 @@ import { createDefaultCrystalGraph } from './crystalEffectGraph';
 import { createDefaultGlassDispersionGraph } from './glassDispersionEffectGraph';
 import { createDefaultHalftoneGraph, type EditableHalftoneEffectType } from './halftoneEffectGraphs';
 import { createDefaultHoloGraph } from './holoRecipe';
-import { createDefaultRisoGraph, type EditableRisoEffectType } from './risoEffectGraphs';
+import { createDefaultRisoGraph, createEarlierRisoGraph, type EditableRisoEffectType } from './risoEffectGraphs';
+import { hasEarlierRisoParams } from './risoPrintEffectGraph';
 import { createDefaultDitherGraph, type EditableDitherEffectType } from './ditherEffectGraphs';
 import { createDefaultDitheringGraph, hasEarlierDitheringParams } from './ditheringEffectGraph';
 import { createDefaultPaperPrintGraph } from './paperPrintEffectGraph';
@@ -225,6 +226,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'crystal' ? createDefaultCrystalGraph
         : effectType === 'glass-dispersion' ? createDefaultGlassDispersionGraph
         : effectType === 'holo' ? createDefaultHoloGraph
+        // A graph-less Riso saved before Dot Size keeps the look it was saved with (the earlier recipe).
+        : effectType === 'riso' && hasEarlierRisoParams(effect.params) ? () => createEarlierRisoGraph('riso')
         : effectType === 'riso' || effectType === 'riso-glow' ? () => createDefaultRisoGraph(effectType)
         // A graph-less Dithering saved before Levels keeps the look it was saved with (the earlier recipe).
         : effectType === 'dither' ? (hasEarlierDitheringParams(effect.params) ? () => createDefaultDitherGraph('dither') : createDefaultDitheringGraph)

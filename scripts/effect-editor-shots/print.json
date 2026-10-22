@@ -9,6 +9,11 @@
    "alt": "Properties, Effects with a Dithering card: Preset menu showing Game Screen, Pixel Size under Pattern, Levels and Amount under Color, beside a strip of the preview turned into chunky pixels of a few colours",
    "caption": "Dithering with the Game Screen preset. 1 — Preset: pick a starting point. 2 — Pixel Size. 3 — Levels: steps per colour channel. 4 — Amount.",
    "marks": [{"target": "Preset", "label": "Preset"}, {"target": "Pixel Size", "label": "Pixel Size"}, {"target": "Levels", "label": "Levels"}, {"target": "Amount", "label": "Amount"}],
+   "hide": ["Particle Out"]},
+  {"name": "riso-inspector", "effect": "riso", "params": {"dotSize": 5, "scale": 2, "amount": 1, "colorA": "#00838a", "colorB": "#f15060"}, "image": "dancer_stage.jpg", "preview": 260, "top": "tabs",
+   "alt": "Properties, Effects with a Riso card: Preset menu showing Postcard, Dot Size and Registration under Pattern, Dark Ink, Warm Ink and Amount under Color, beside a strip of the preview printed in teal and red dots on cream paper",
+   "caption": "Riso with the Postcard preset. 1 — Preset: pick a starting point. 2 — Dot Size. 3 — Registration: how far the inks slip apart. 4 — Dark Ink. 5 — Warm Ink. 6 — Amount.",
+   "marks": [{"target": "Preset", "label": "Preset"}, {"target": "Dot Size", "label": "Dot Size"}, {"target": "Registration", "label": "Registration"}, {"target": "Dark Ink", "label": "Dark Ink"}, {"target": "Warm Ink", "label": "Warm Ink"}, {"target": "Amount", "label": "Amount"}],
    "hide": ["Particle Out"]}
  ]
 }

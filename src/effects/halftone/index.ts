@@ -3,6 +3,7 @@ import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_sh
 import { DRIFT_LINES_PRESETS, driftLinesWarnings } from './driftLines';
 import { HALFTONE_PRESETS } from './halftonePresets';
 import { DITHER_PRESETS } from './ditherPresets';
+import { RISO_PRESETS } from './risoPresets';
 
 /** Dither cells are whole output pixels (patternReferenceFrame.ts wholePixels): say when Pixel Size rounds on this frame. */
 function ditherWholePixelNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080): string[] {
@@ -18,6 +19,17 @@ function ditherNotes(params: Record<string, number | boolean | string>, width?: 
     ? ['This Dithering was saved before Levels and keeps its earlier look (each pixel stepped to four levels); add Dithering again to use Levels and the presets as designed.']
     : [];
   return [...earlier, ...ditherWholePixelNotes(params, width, height)];
+}
+
+/** A graph-less Riso saved before Dot Size (no `dotSize`, hasEarlierRisoParams) renders its earlier recipe; a Dot Size
+ * thinner than one pixel of a small frame renders one pixel. Say both in the card. */
+function risoNotes(params: Record<string, number | boolean | string>, width = 1920, height = 1080): string[] {
+  if (params.dotSize === undefined) {
+    return ['This Riso was saved before Dot Size and keeps its earlier look (both inks print the same darkness, without dots); add Riso again to use Dot Size and the presets as designed.'];
+  }
+  const size = Math.max(typeof params.dotSize === 'number' && Number.isFinite(params.dotSize) ? params.dotSize : 6, 2);
+  const pixels = size * Math.min(width, height) / 1080;
+  return pixels < 1 ? [`Dot Size ${Number(size.toPrecision(4))} px is thinner than one pixel on this ${width}×${height} frame; it renders 1 pixel.`] : [];
 }
 
 const select = (label: string, values: string[], defaultValue = values[0]) => ({
@@ -69,8 +81,23 @@ export const patternHalftone = createCatalogEffect({
 });
 export const riso = createCatalogEffect({
   id: 'riso', name: 'Riso', category: 'halftone', shader, entryPoint: 'risoFragment',
-  params: { scale: { type: 'number', label: 'Registration', default: 8, min: 1, max: 32, step: 1, group: 'Pattern' }, colorA: { type: 'color', label: 'Dark Ink', default: '#2046b3', group: 'Color' }, colorB: { type: 'color', label: 'Warm Ink', default: '#ef476f', group: 'Color' } },
+  // Same parameter ids as the other looks of the engine; Dot Size is its own. Card: Dot Size and Registration under
+  // Pattern, then the two inks and Amount under Color.
+  params: {
+    // How far the two inks slip apart, in 1080p pixels (0: in register). Effects saved without a value had 8.
+    scale: { type: 'number', label: 'Registration', default: 3, min: 0, max: 32, step: 0.5, unit: ' px', group: 'Pattern', legacyDefault: 8 },
+    // The cells of both dot screens, in 1080p pixels. A graph saved before Dot Size does not read it (graphOnly).
+    dotSize: { type: 'number', label: 'Dot Size', default: 6, min: 2, max: 40, step: 1, unit: ' px', renderMin: 2, graphOnly: true, group: 'Pattern' },
+    colorA: { type: 'color', label: 'Dark Ink', default: '#2046b3', group: 'Color' },
+    colorB: { type: 'color', label: 'Warm Ink', default: '#ef476f', group: 'Color' },
+    // The print alone by default; effects saved without an Amount keep the earlier 0.75.
+    amount: catalogBaseParam('amount', { group: 'Color', default: 1, legacyDefault: 0.75 }),
+  },
+  cardEnd: ['scale', 'colorA', 'colorB', 'amount'],
+  variantParam: 'dotSize',
   retired: ignoredBaseParams('Riso', ['angle']),
+  paramWarnings: risoNotes,
+  presets: RISO_PRESETS,
 });
 export const risoGlow = createCatalogEffect({
   id: 'riso-glow', name: 'Riso Glow', category: 'halftone', shader, entryPoint: 'risoGlowFragment', animated: true,

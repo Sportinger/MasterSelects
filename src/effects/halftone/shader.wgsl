@@ -172,10 +172,89 @@ fn risoColor(uv: vec2f, glow: f32) -> vec3f {
   return subtractive + glow * (a * params.colorA.rgb + b * params.colorB.rgb) * 0.3;
 }
 
+// Riso (createRisoPrintGraph in risoPrintEffectGraph.ts): two inks on cream paper, each through its own dot screen
+// (dark 15°, warm 75°) of Dot Size (the variant slot) on a drum that Registration slips apart. Each cell's colour (four
+// reads in linear light, weighted by alpha) is split between the inks by a least-squares fit of the light it takes from
+// the paper; the Tone step keeps its brightness exactly.
+
+fn risoTurn(p: vec2f, a: f32) -> vec2f {
+  return vec2f(p.x * cos(a) - p.y * sin(a), p.x * sin(a) + p.y * cos(a));
+}
+
+// The dot mask of one ink at a paper pixel: `layer` is the pixel on the ink's drum, `dark` picks the ink.
+fn risoInkMark(layer: vec2f, angle: f32, size: f32, paper: vec3f, dark: bool) -> f32 {
+  let a = angle * PI / 180.0;
+  let center = params.resolution * 0.5;
+  let cells = risoTurn(layer - center, a) / vec2f(size);
+  let place = fract(cells) - vec2f(0.5);
+  let cellCenter = risoTurn((floor(cells) + vec2f(0.5)) * size, -a) + center;
+  let stepX = risoTurn(vec2f(size * 0.25, 0.0), -a);
+  let stepY = risoTurn(vec2f(0.0, size * 0.25), -a);
+  // The four reads in the graph's order: centre − diagonal, + anti-diagonal, − anti-diagonal, + diagonal.
+  let diagonal = stepX + stepY;
+  let antiDiagonal = stepX - stepY;
+  let reads = array<vec2f, 4>(cellCenter - diagonal, cellCenter + antiDiagonal, cellCenter - antiDiagonal, cellCenter + diagonal);
+  var light = paper * 0.001;
+  var alpha = 0.001;
+  for (var tap = 0; tap < 4; tap++) {
+    let point = source(reads[tap] / params.resolution);
+    light += srgbToLinear(point.rgb) * point.a;
+    alpha += point.a;
+  }
+  let absorbsA = vec3f(1.0) - srgbToLinear(params.colorA.rgb);
+  let absorbsB = vec3f(1.0) - srgbToLinear(params.colorB.rgb);
+  let taken = max(vec3f(1.0) - (light / alpha) / paper, vec3f(0.0));
+  let m00 = dot(absorbsA, absorbsA) + 0.005;
+  let m11 = dot(absorbsB, absorbsB) + 0.005;
+  let m01 = dot(absorbsA, absorbsB);
+  let det = m00 * m11 - m01 * m01;
+  let towardsA = dot(taken, absorbsA);
+  let towardsB = dot(taken, absorbsB);
+  var share = 0.0;
+  var otherShare = 0.0;
+  if (dark) {
+    let first = clamp((m11 * towardsA - m01 * towardsB) / det, 0.0, 1.0);
+    otherShare = clamp((towardsB - m01 * first) / m11, 0.0, 1.0);
+    share = clamp((towardsA - m01 * otherShare) / m00, 0.0, 1.0);
+  } else {
+    let first = clamp((m00 * towardsB - m01 * towardsA) / det, 0.0, 1.0);
+    otherShare = clamp((towardsA - m01 * first) / m00, 0.0, 1.0);
+    share = clamp((towardsB - m01 * otherShare) / m11, 0.0, 1.0);
+  }
+  // Tone: scale both shares so the dots keep the cell's brightness, then this ink's coverage beside the other's.
+  let absorbedA = luminance(paper * absorbsA);
+  let absorbedB = luminance(paper * absorbsB);
+  let both = luminance(paper * absorbsA * absorbsB);
+  let paperLuma = luminance(paper);
+  let cellLuma = luminance(light / alpha);
+  let darkShare = select(otherShare, share, dark);
+  let warmShare = select(share, otherShare, dark);
+  let gap = max(paperLuma - cellLuma, 0.0);
+  let slope = darkShare * absorbedA + warmShare * absorbedB;
+  let overlap = darkShare * warmShare * both;
+  let root = sqrt(max(slope * slope - overlap * 4.0 * gap, 0.0));
+  let scale = min(gap * 2.0 / max(slope + root, 1e-6), slope / max(overlap * 2.0, 1e-6));
+  let otherCoverage = clamp(scale * otherShare, 0.0, 1.0);
+  let absorbedOwn = select(absorbedB, absorbedA, dark);
+  let absorbedOther = select(absorbedA, absorbedB, dark);
+  let left = paperLuma - otherCoverage * absorbedOther - cellLuma;
+  let coverage = clamp((left + scale * share * 0.001) / (absorbedOwn - otherCoverage * both + 0.001), 0.0, 1.0);
+  let edge = 0.5 / size;
+  let dotRadius = halftoneDotRadius(coverage) + (coverage * 2.0 - 1.0) * edge;
+  return 1.0 - smoothstep(dotRadius - edge, dotRadius + edge, length(place));
+}
+
 @fragment
 fn risoFragment(input: VertexOutput) -> @location(0) vec4f {
-  let color = source(input.uv);
-  return vec4f(mix(color.rgb, risoColor(input.uv, 0.0), params.amount), color.a);
+  let own = source(input.uv);
+  let pixel = input.uv * params.resolution;
+  let slip = vec2f(0.8, 0.6) * (max(params.scale, 0.0) * frameScale() * 0.5);
+  let size = referencePixels(max(params.variant, 2.0));
+  let paper = srgbToLinear(vec3f(0.96, 0.93, 0.85));
+  let markA = risoInkMark(pixel + slip, 15.0, size, paper, true);
+  let markB = risoInkMark(pixel - slip, 75.0, size, paper, false);
+  let printed = paper * mix(vec3f(1.0), srgbToLinear(params.colorA.rgb), markA) * mix(vec3f(1.0), srgbToLinear(params.colorB.rgb), markB);
+  return vec4f(mix(own.rgb, linearToSrgb(printed), params.amount), own.a);
 }
 
 @fragment

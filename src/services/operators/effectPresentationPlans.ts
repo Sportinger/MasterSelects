@@ -227,6 +227,37 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : /^(darkness|inverse-tone|dot-|paper-|dots-touch$|radius|edge-low$|edge-high$|distance$|edge$|mark$)/.test(id) ? 'dot'
         : /^(color-a-rgb|color-b-rgb|ink-color|mixed-color|combine)$/.test(id) ? 'finish' : 'screen',
   };
+  // Riso (createRisoPrintGraph): paper and inks, each ink's slipped and turned dot screen, the colour of its cells, the
+  // split between the inks, the tone that keeps the brightness, the round dots and the print. Each folder holds the dark
+  // ink's nodes and the warm ink's; stages only feed later ones.
+  if (type === 'riso') return {
+    labels: { inks: 'Paper & Inks', screen: 'Screens (Dot Size, Registration)', cell: 'Cell Colour', separation: 'Separation',
+      tone: 'Tone', dot: 'Dots', finish: 'Print & Mix (Amount)' },
+    portLabels: { 'registration-frame-pixels': 'Registration (px)', slip: 'Slip (px)', 'dark-layer': 'Dark Drum (px)', 'warm-layer': 'Warm Drum (px)',
+      'frame-center': 'Frame Centre (px)', 'paper-linear': 'Paper Light', 'paper-luma': 'Paper Brightness', 'dark-ink-linear': 'Dark Ink Light',
+      'warm-ink-linear': 'Warm Ink Light', 'dark-ink-absorbs': 'Dark Ink Takes', 'warm-ink-absorbs': 'Warm Ink Takes',
+      'dark-ink-absorbed': 'Dark Ink Takes (brightness)', 'warm-ink-absorbed': 'Warm Ink Takes (brightness)', 'both-absorbed': 'Both Inks Take (brightness)',
+      'fit-dark-dark': 'Dark · Dark', 'fit-warm-warm': 'Warm · Warm', 'fit-dark-warm': 'Dark · Warm', 'fit-determinant': 'Determinant',
+      'safe-dot-size-pixels': 'Dot Size (px)', 'edge-width': 'Half Edge (cells)', 'tap-reach': 'Quarter Cell (px)', 'half-vec2': 'Half (0.5, 0.5)',
+      'dark-cells': 'Dark Position in Cells', 'warm-cells': 'Warm Position in Cells', 'dark-place': 'Dark Place in Cell', 'warm-place': 'Warm Place in Cell',
+      'dark-cell-center': 'Dark Cell Centre (px)', 'warm-cell-center': 'Warm Cell Centre (px)', 'dark-cell-colour': 'Dark Cell Colour', 'warm-cell-colour': 'Warm Cell Colour',
+      'dark-cell-absorbs': 'Dark Cell Takes', 'warm-cell-absorbs': 'Warm Cell Takes', 'dark-towards-dark': 'Cell · Dark Ink', 'dark-towards-warm': 'Cell · Warm Ink',
+      'warm-towards-dark': 'Cell · Dark Ink', 'warm-towards-warm': 'Cell · Warm Ink', 'dark-free': 'Free Dark Share', 'warm-free': 'Free Warm Share',
+      'dark-first': 'First Dark Share', 'warm-first': 'First Warm Share',
+      'dark-share': 'Dark Share', 'dark-other-share': 'Warm Share (Dark Cell)', 'warm-share': 'Warm Share', 'warm-other-share': 'Dark Share (Warm Cell)',
+      'dark-tone-scale': 'Dark Tone Scale', 'warm-tone-scale': 'Warm Tone Scale', 'dark-other-coverage': 'Warm Coverage (Dark Cell)',
+      'warm-other-coverage': 'Dark Coverage (Warm Cell)', 'dark-coverage': 'Dark Coverage', 'warm-coverage': 'Warm Coverage',
+      'dark-mark': 'Dark Dots', 'warm-mark': 'Warm Dots', printed: 'Print', 'sample-split:rgb': 'Pixel RGB', 'sample-split:alpha': 'Pixel Alpha',
+      'min-uv': 'Lowest UV', 'max-uv': 'Highest UV', 'one-rgb': 'One (RGB)', 'zero-rgb': 'Zero (RGB)', 'dark-radians': 'Dark Angle (rad)', 'warm-radians': 'Warm Angle (rad)',
+      'dark-ink-absorbed-rgb': 'Dark Ink Takes from Paper', 'warm-ink-absorbed-rgb': 'Warm Ink Takes from Paper' },
+    portLabelsApply: graph => graph.nodes.some(node => node.id === 'dark-share'),
+    stage: ({ id }) => /^(paper|paper-vector|paper-linear|paper-luma|paper-dark-absorbs|one-rgb|zero-rgb|color-[ab]-rgb)$|^both-absorbed|^(dark|warm)-ink-/.test(id) ? 'inks'
+        : /^fit-|^(dark|warm)-(paper-ratio|cell-absorbs|towards-|free|first$|other-share|share)/.test(id) ? 'separation'
+          : /^(dark|warm)-(cell-luma$|tone-|other-coverage|other-takes$|other-overlap$|coverage$|coverage-(raw|left|reach)$)/.test(id) ? 'tone'
+            : /^(dark|warm)-(dot-|paper-left$|paper-root$|paper-gap$|dots-touch$|radius|coverage-(twice|signed)$|edge|distance$|mark$)/.test(id) ? 'dot'
+              : /^tap-reach$|^(dark|warm)-(back-radians|cell-center|cell-index|tap-|paper-light|cell-colour)/.test(id) ? 'cell'
+                : /^(dark-filter|warm-filter|paper-dark|printed-linear|printed|mixed-color|combine|sample|sample-split|clamped-uv)$/.test(id) ? 'finish' : 'screen',
+  };
   // Dithering (createDefaultDitheringGraph): the big pixels, each cell's colour, its two nearest steps, the Bayer step, the mix.
   if (type === 'dither') return {
     labels: { grid: 'Pixel Grid (Pixel Size)', cell: 'Cell Colour', levels: 'Levels', dither: 'Dither', finish: 'Mix (Amount)' },

@@ -26,7 +26,8 @@ grow where it is dark, dither patterns decide pixel by pixel between a few tones
 
 - **Ink** and **Paper** are the two colours most of them print with. Riso uses two inks on cream
   paper; Dithering keeps the picture's own colours.
-- **Scale** (or Pixel Size, Registration, Press Grain) sets the size of the marks.
+- **Scale** (or Dot Size, Pixel Size, Press Grain) sets the size of the marks; Riso's **Registration**
+  sets how far its two inks slip apart.
 - **Amount** mixes back towards the original: 1 is the full print.
 
 Halftone, Dithering, Riso and Paper Print share one pattern engine with most

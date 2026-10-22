@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { measureInReferenceFrame } from './patternReferenceFrame';
+import { createRisoPrintGraph } from './risoPrintEffectGraph';
 
 export type EditableRisoEffectType = 'riso' | 'riso-glow';
 type Ref = { node: string; port: string };
@@ -15,8 +16,20 @@ class Builder {
   binary(id: string, operator: string, a: Ref, b: Ref) { const out = this.node(id, operator); this.edge(a, out, 'a'); this.edge(b, out, 'b'); return out; }
 }
 
-/** Shared granular construction of the risoColor pipeline (shader.wgsl in src/effects/halftone is its WGSL reference). */
+/**
+ * The default graph of each look: Riso prints its two-ink separation (createRisoPrintGraph in risoPrintEffectGraph.ts),
+ * Riso Glow keeps the earlier shared recipe below.
+ */
 export function createDefaultRisoGraph(type: EditableRisoEffectType): EffectOperatorGraph {
+  return type === 'riso' ? createRisoPrintGraph() : createEarlierRisoGraph(type);
+}
+
+/**
+ * The earlier shared construction of the risoColor pipeline: both inks print the same darkness (1 − luminance), read a
+ * little left and right, without a dot screen. Riso Glow still renders it (its WGSL reference is risoGlowFragment in
+ * src/effects/halftone/shader.wgsl); a graph-less Riso saved before Dot Size keeps it (hasEarlierRisoParams).
+ */
+export function createEarlierRisoGraph(type: EditableRisoEffectType): EffectOperatorGraph {
   const g = new Builder(), frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const resolution = g.node('resolution', 'image.resolution'), resolutionSplit = g.node('resolution-split', 'vector.split.vec2', 'x'); g.edge(resolution, resolutionSplit, 'value');
   const scale = g.node('scale', 'values.number', 'value', { value: 'scale' }), amount = g.node('amount', 'values.number', 'value', { value: 'amount' });

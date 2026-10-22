@@ -1866,10 +1866,10 @@ rotated cell coordinates, luminance-derived mark size, ink mixing and preserved
 source alpha. Pattern Halftone keeps its Circle, Diamond and Line choice bound
 to the catalog-owned select schema instead of persisting duplicate options.
 
-Riso and Riso Glow expose their offset registration samples, Rec.709 ink loads,
-subtractive paper blend and source-alpha path as editable graph operations. Riso
-Glow adds its pulse from composition timeline time; colors and controls remain
-owned by the catalog schema.
+Riso prints a two-ink separation through two dot screens as an editable graph
+([Riso](#riso)). Riso Glow keeps the earlier recipe: offset registration samples,
+Rec.709 ink loads, subtractive paper blend and source-alpha path, plus a pulse from
+composition timeline time; colors and controls remain owned by the catalog schema.
 
 Dithering and Dither Studio expose their Bayer/checker thresholds, quantization,
 ink selection and source-alpha path as editable graph operations (Dithering's own
@@ -1902,8 +1902,8 @@ The 25 looks of the `two-tone-pattern` engine (`effectEngineMembers('two-tone-pa
   of a 1080p frame: `measureInReferenceFrame` (`src/services/operators/patternReferenceFrame.ts`)
   rewires a recipe's clamped size node to size × shorter side / 1080 (`frame-scale`), at least one
   output pixel (`<size>-pixels`). Half-quality previews, thumbnails, 1080p and 4K exports show the same
-  pattern. Measured: Halftone, Pattern Halftone, Dithering, Riso and Riso Glow (Registration, no pixel
-  floor), Paper Print, Pixel Poster, Cross Stitch, Tone Geometry, Glitch Grid, Scatter Mosaic, Glass
+  pattern. Measured: Halftone, Pattern Halftone, Dithering, Riso (Dot Size; Registration with no pixel
+  floor), Riso Glow (Registration, no pixel floor), Paper Print, Pixel Poster, Cross Stitch, Tone Geometry, Glitch Grid, Scatter Mosaic, Glass
   Dispersion, Crosshatch, Kilim, Vector Engraving, Embroidery, Toy Bricks and the Outline edge step.
   Dithering rounds to whole pixels (`wholePixels`; a 1.5-pixel Bayer cell beats into a plaid) and its
   card says so for frames where Pixel Size is not whole. A size thinner than one pixel of a small frame
@@ -1976,15 +1976,55 @@ edited before it acted does not read it and the card hides it. The stage folders
 presentation plan (Bands, Drift Wave, Shifted Sample, Line Shading & Alpha). Its four presets live in
 `src/effects/halftone/driftLines.ts`. Tests: `tests/unit/imageMotionHalftoneGraphs.test.ts`, `tests/unit/effectPresets.test.ts`.
 
-### Riso and Riso Glow inks
+### Riso
 
-Each ink filters the paper towards its own colour where it prints: the print colour is
-`paper × mix(1, inkA, a) × mix(1, inkB, b)`, with `a` and `b` the coverage of the dark and the warm
-ink (1 − luminance, read 0.35 × Registration pixels of a 1080p frame to the left and to the right). The default inks (#2046b3 blue,
-#ef476f pink) therefore print blue, pink and, where both overlap, a deep violet. The recipe
-(`risoEffectGraphs.ts`) and its WGSL reference (`src/effects/halftone/shader.wgsl`) share this
-formula; `tests/unit/imageRisoGraphs.test.ts` checks that each default ink prints in its own colour.
-Riso Glow adds `glow × (a·inkA + b·inkB) × 0.3` on top, pulsing with Speed.
+`createRisoPrintGraph` (`src/services/operators/risoPrintEffectGraph.ts`, WGSL twin `risoFragment`)
+prints the picture with two inks on a fixed cream paper (`RISO_PAPER`, sRGB 0.96, 0.93, 0.85), each
+through its own round-dot screen: the dark ink (`colorA`) at 15°, the warm ink (`colorB`) at 75°
+(`RISO_INKS`), cells of **Dot Size** (`dotSize`, 1080p pixels, at least one output pixel, reaching the
+twin through the variant slot). **Registration** (`scale`, 1080p pixels, no pixel floor) slips the two
+drums apart along `RISO_SLIP` (0.8, 0.6): the dark ink's layer reads the picture at pixel + slip, the warm
+ink's at pixel − slip, half the distance each. Per ink and cell:
+
+- **Cell Colour:** four reads a quarter cell from the cell's centre (`HALFTONE_TAPS`, turned back onto
+  the picture), in linear light and weighted by alpha, plus the paper at weight `RISO_PAPER_WEIGHT`
+  (0.001), so a cell whose reads are all transparent prints no ink.
+- **Separation:** the light the cell takes from the paper per channel, `max(1 − cell / paper, 0)`,
+  fitted by least squares with what a full layer of each ink takes (`1 − ink`, linear), ridge
+  `RISO_RIDGE` (0.005): this ink's free share, clamped to 0–1, the other ink refitted beside it, then
+  this ink again. Dots mix linearly with the paper, so the fit is linear in coverage (an optical-density
+  fit was tried: it shifted part-covered single-ink colours towards the other ink and printed mid-tones
+  20–30 % too light).
+- **Tone:** both shares scaled by one factor `t` so that the cell keeps its brightness with the inks
+  multiplying where they overlap: the smaller root of `overlap·t² − slope·t + gap = 0` (`min(2·gap /
+  (slope + √disc), slope / 2·overlap)`, which also covers the colours darker than the inks reach). The
+  other ink's coverage is `clamp(t × its share)`; this ink's coverage is solved exactly for the cell's
+  brightness beside it, so a saturated ink hands the rest to this one (`RISO_TONE_BLEND`, 0.001, leans
+  towards `t × share` only where this ink has no effect beside the other, as with two black inks).
+- **Dots:** the round dot that covers exactly that share of the cell (`HALFTONE_DOT`), edges one output
+  pixel soft.
+
+The print is `paper × mix(1, inkA, dotA) × mix(1, inkB, dotB)` in linear light, back to sRGB, mixed over
+the picture by **Amount** (default 1; effects saved without one keep 0.75) with the pixel's own alpha.
+Over an area the dots keep a colour's light within a few percent; colours outside the two inks' range
+keep their brightness and take the nearest mix. Stage folders: Paper & Inks, Screens (Dot Size,
+Registration), Cell Colour, Separation, Tone, Dots, Print & Mix (Amount). Presets in
+`src/effects/halftone/risoPresets.ts`.
+
+A graph-less Riso saved before Dot Size (`hasEarlierRisoParams`: its params lack `dotSize`) keeps the
+earlier recipe, `createEarlierRisoGraph('riso')` in `risoEffectGraphs.ts`; its card hides Dot Size
+(`graphOnly`) and says so, and Registration keeps 8 when it was saved without one (`legacyDefault`).
+Tests: `tests/unit/imageRisoGraphs.test.ts` (white, black and single-ink colours, area tone, the
+registration fringe, transparency, any ink pair, Amount, the earlier recipe), GPU parity
+`tests/browser/image-graph-probe.html?suite=riso-graphs` (Riso within one 8-bit step on at most 0.5 % of
+bytes: the graph sums channels node by node, the twin with `dot()`).
+
+### Riso Glow inks
+
+Riso Glow keeps the earlier shared recipe (`createEarlierRisoGraph('riso-glow')`): each ink filters the
+paper towards its own colour where it prints, `paper × mix(1, inkA, a) × mix(1, inkB, b)`, with `a` and
+`b` the coverage of the shadow and the glow ink (1 − luminance, read 0.35 × Registration pixels of a 1080p
+frame to the left and to the right), plus `glow × (a·inkA + b·inkB) × 0.3`, pulsing with Speed.
 
 ### CCTV noise speed
 

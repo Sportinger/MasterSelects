@@ -1,6 +1,6 @@
 # Cross Stitch
 
-<!-- effect-docs: basic page sha=9c94dc593ed5, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=27ddcc5b50d6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Renders the image as X-shaped cross stitches on Paper-colored fabric; Stitch Size sets the stitch grid, Ink tints the thread.
 
@@ -29,7 +29,7 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
 
 ## Technical details
 
