@@ -5,7 +5,7 @@ import { createDefaultGeometryFragmentGraph, type EditableGeometryFragmentEffect
 const types: EditableGeometryFragmentEffectType[] = ['contour-map', 'crosshatch', 'kilim', 'vector-tiling', 'embroidery', 'outline', 'bricks'];
 
 describe('geometry fragment effect graphs', () => {
-  it.each(types)('%s is a valid one-pass graph with clamped source sampling and original alpha', type => {
+  it.each(types)('%s is a valid graph with clamped source sampling and original alpha', type => {
     const graph = createDefaultGeometryFragmentGraph(type);
     expect(validateEffectGraph(graph)).toEqual([]);
     expect(graph.domain).toBe('image');
@@ -17,7 +17,8 @@ describe('geometry fragment effect graphs', () => {
       to: 'combined',
       input: 'alpha',
     }));
-    expect(graph.nodes.some(node => node.operator === 'image.materialize')).toBe(false);
+    // One pass each, except Vector Engraving's cached Cell Filter (two passes before the look).
+    expect(graph.nodes.some(node => node.operator === 'image.materialize')).toBe(type === 'vector-tiling');
     expect(graph.nodes.find(node => node.id === 'amount')?.bindings).toEqual({ value: 'amount' });
     if (type !== 'outline') expect(graph.nodes.find(node => node.id === 'scale')?.bindings).toEqual({ value: 'scale' });
     else expect(graph.nodes.some(node => node.id === 'scale')).toBe(false);
@@ -47,7 +48,9 @@ describe('geometry fragment effect graphs', () => {
     expect(vector.nodes.find(node => node.id === 'angle-degrees')?.operator).toBe('math.add.scalar');
     expect(vector.nodes.find(node => node.id === 'angle-radians')?.operator).toBe('convert.degrees-to-radians.scalar');
     expect(vector.nodes.find(node => node.id === 'rotated')?.operator).toBe('coordinates.rotate.vec2');
-    expect(vector.nodes.find(node => node.id === 'center-sample')?.operator).toBe('image.sample');
+    // Vector Engraving reads its tone through the half-spacing Cell Filter (patternCellFilter.ts).
+    expect(vector.nodes.find(node => node.id === 'tap-0-sample')?.operator).toBe('image.sample');
+    expect(vector.edges).toContainEqual(expect.objectContaining({ from: 'cell-filter', to: 'tap-0-sample', input: 'image' }));
     const embroidery = createDefaultGeometryFragmentGraph('embroidery');
     const outline = createDefaultGeometryFragmentGraph('outline');
     const bricks = createDefaultGeometryFragmentGraph('bricks');

@@ -76,6 +76,48 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "vector-tiling-inspector",
+      "effect": "vector-tiling",
+      "params": {
+        "scale": 9,
+        "weight": 1,
+        "angle": 0,
+        "amount": 1,
+        "colorA": "#2e1d12",
+        "colorB": "#f0e3c6"
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "alt": "Properties, Effects with a Vector Engraving card: Style menu, Preset menu showing Copper Plate, then Line Spacing, Angle, Line Weight, Amount, Ink and Paper, beside a strip of the preview drawn in wavy brown lines on cream",
+      "caption": "Vector Engraving with the Copper Plate preset. 1 — Preset: pick a starting point. 2 — Line Spacing. 3 — Angle: the direction of the lines. 4 — Line Weight: how heavy the lines get in the shadows. 5 — Ink.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Line Spacing",
+          "label": "Line Spacing"
+        },
+        {
+          "target": "Angle",
+          "label": "Angle"
+        },
+        {
+          "target": "Line Weight",
+          "label": "Line Weight"
+        },
+        {
+          "target": "Ink",
+          "label": "Ink"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

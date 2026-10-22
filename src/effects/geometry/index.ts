@@ -3,6 +3,7 @@ import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_sh
 import { createGlyphEffect } from '../glyph/glyphEffectFactory';
 import { createComputeEffect } from './computeEffectFactory';
 import { CROSSHATCH_PARAMS, CROSSHATCH_PRESETS } from './crosshatch';
+import { VECTOR_ENGRAVING_PARAMS, VECTOR_ENGRAVING_PRESETS } from './vectorEngraving';
 import type { ComputeEffectDefinition } from '../types';
 
 export const voronoi = createComputeEffect({
@@ -60,7 +61,8 @@ export const contourMap = createCatalogEffect({ id: 'contour-map', name: 'Contou
   params: { scale: catalogBaseParam('scale', { label: 'Band Density', styleRole: 'band-count' }) },
   retired: ignoredBaseParams('Contour Map', ['angle']) });
 export const contourType = createGlyphEffect({ id: 'contour-type', name: 'Contour Type', category: 'geometry', entryPoint: 'contourTypeFragment', defaultRamp: 'numeric', defaultCellSize: 20 });
-export const vectorTiling = createCatalogEffect({ id: 'vector-tiling', name: 'Vector Engraving', category: 'geometry', shader, entryPoint: 'vectorTilingFragment', scaleFloor: 3 });
+export const vectorTiling = createCatalogEffect({ id: 'vector-tiling', name: 'Vector Engraving', category: 'geometry', shader, entryPoint: 'vectorTilingFragment', scaleFloor: 3,
+  params: { scale: catalogBaseParam('scale', { label: 'Line Spacing', unit: ' px', min: 3 }), ...VECTOR_ENGRAVING_PARAMS }, variantParam: 'weight', presets: VECTOR_ENGRAVING_PRESETS });
 export const crosshatch = createCatalogEffect({ id: 'crosshatch', name: 'Crosshatch', category: 'geometry', shader, entryPoint: 'crosshatchFragment', scaleFloor: 2,
   params: { scale: catalogBaseParam('scale', { label: 'Line Spacing', unit: ' px' }), ...CROSSHATCH_PARAMS }, variantParam: 'weight', presets: CROSSHATCH_PRESETS, retired: ignoredBaseParams('Crosshatch', ['angle']) });
 export const embroidery = createCatalogEffect({ id: 'embroidery', name: 'Embroidery', category: 'geometry', shader, entryPoint: 'embroideryFragment', scaleFloor: 3, animated: true, retired: ignoredBaseParams('Embroidery', ['angle', 'colorB']) });

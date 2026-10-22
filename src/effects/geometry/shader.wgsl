@@ -21,12 +21,6 @@ fn toneAt(uv: vec2f) -> f32 {
   return luminance(source(uv).rgb);
 }
 
-fn rotatedGeometry(uv: vec2f) -> vec2f {
-  let angle = params.angle * PI / 180.0;
-  let point = uv - 0.5;
-  return vec2f(point.x * cos(angle) - point.y * sin(angle), point.x * sin(angle) + point.y * cos(angle)) + 0.5;
-}
-
 @fragment
 fn quadtreeZoomFragment(input: VertexOutput) -> @location(0) vec4f {
   let pixel = 1.0 / params.resolution;
@@ -63,13 +57,19 @@ fn referencePixels(size: f32) -> f32 {
   return max(size * (min(params.resolution.x, params.resolution.y) / 1080.0), 1.0);
 }
 
+// Vector Engraving (geometryFragmentEffectGraphs.ts ENGRAVING_LINE). The graph reads the tone from the picture
+// averaged over half a line spacing (patternCellFilter.ts); this twin reads the pixel itself.
 @fragment
 fn vectorTilingFragment(input: VertexOutput) -> @location(0) vec4f {
-  let uv = rotatedGeometry(input.uv);
-  let grid = params.resolution / referencePixels(max(params.scale, 3.0));
-  let cell = fract(uv * grid) - 0.5;
-  let tone = toneAt((floor(uv * grid) + 0.5) / grid);
-  let engraving = 1.0 - smoothstep(0.025, 0.09, abs(cell.y - sin(cell.x * 10.0) * (1.0 - tone) * 0.18));
+  let angle = params.angle * PI / 180.0;
+  let point = input.uv * params.resolution - params.resolution * 0.5;
+  let turned = vec2f(point.x * cos(angle) - point.y * sin(angle), point.x * sin(angle) + point.y * cos(angle));
+  let line = turned / referencePixels(max(params.scale, 3.0));
+  let darkness = 1.0 - toneAt(input.uv);
+  let across = line.y - sin(line.x * 2.1) * darkness * 0.3;
+  // Line Weight (variant slot, 0-1): 0 keeps the fixed width, 1 swells each line from a hairline on white.
+  let width = mix(0.0575, clamp(darkness * 0.46, 0.02, 0.46), clamp(params.variant, 0.0, 1.0));
+  let engraving = 1.0 - smoothstep(width - 0.0325, width + 0.0325, abs(fract(across) - 0.5));
   let color = source(input.uv);
   return vec4f(mix(color.rgb, mix(params.colorB.rgb, params.colorA.rgb, engraving), params.amount), color.a);
 }

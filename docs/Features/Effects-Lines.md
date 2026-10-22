@@ -23,13 +23,13 @@ Add one in **Properties → Effects → + Add Effect → Lines & Engraving**
 They all read the brightness of the picture and turn it into lines, in one of three ways:
 
 - **Lines across the tones**: Crosshatch, Vector Engraving and Wave Lines draw a line pattern whose
-  density or waviness follows how dark the picture is.
+  density, weight or waviness follows how dark the picture is.
 - **Lines along the tones**: Contour and Contour Map draw where the brightness crosses a level, like
   height lines on a map.
 - **Lines along edges**: Outline draws where the brightness changes quickly.
 
 **Ink** and **Paper** (Contour: **Line** and **Paper**) are the two colours of the drawing, **Scale**
-sets the line spacing (Crosshatch: **Line Spacing**; Contour Map: **Band Density**, more bands as it grows) and **Amount** mixes back
+sets the line spacing (Crosshatch and Vector Engraving: **Line Spacing**; Contour Map: **Band Density**, more bands as it grows) and **Amount** mixes back
 towards the original. Drift Lines, Outline and Wave
 Lines move over time.
 

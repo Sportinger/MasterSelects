@@ -1,4 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge, OperatorValue } from '../../types/operatorGraph';
+import { prefilterCellTaps } from './patternCellFilter';
 import { measureInReferenceFrame } from './patternReferenceFrame';
 
 export type EditableGeometryFragmentEffectType = 'contour-map' | 'crosshatch' | 'kilim' | 'vector-tiling' | 'embroidery' | 'outline' | 'bricks';
@@ -130,29 +131,43 @@ function kilim(g: GraphBuilder, c: ReturnType<typeof common>) {
   const styled = g.node('styled', 'math.multiply.rgb-scalar', 15); g.edge(textile, styled, 'a'); g.edge(brightness, styled, 'b'); finish(g, c.sourceColor, styled, c.amount);
 }
 
+/** Vector Engraving's line (shader twin: vectorTilingFragment). Shares of the line spacing: Line Weight 0 keeps the fixed
+ * half width of saved projects with its soft edge; at 1 a line is a hairline on white and swells to `heavy` in black. */
+export const ENGRAVING_LINE = { fixedWidth: .0575, soft: .0325, hairline: .02, heavy: .46, waveFrequency: 2.1, waveDepth: .3 } as const;
+
 function vectorTiling(g: GraphBuilder, c: ReturnType<typeof common>) {
   const half = g.literal('half', .5), half2 = g.unary('half-vec2', 'convert.scalar-to-vec2', half, 4);
   // Keep conversion in WGSL so legacy `(angle * PI) / 180` rounding is retained.
   const angleDegrees = g.binary('angle-degrees', 'math.add.scalar', g.node('angle', 'values.number', 0, { value: 'angle' }), c.zero, 4);
   const angle = g.unary('angle-radians', 'convert.degrees-to-radians.scalar', angleDegrees, 5);
-  const centered = g.binary('centered-uv', 'math.subtract.vec2', c.uv, half2, 5);
-  const rotated = g.node('rotated', 'coordinates.rotate.vec2', 6); g.edge(centered, rotated, 'value'); g.edge(angle, rotated, 'angle');
-  const geometryUv = g.binary('geometry-uv', 'math.add.vec2', rotated, half2, 7);
+  // The lines turn in pixels about the frame centre, so a line spacing is the same at every angle and frame shape.
+  const pixel = g.binary('pixel', 'math.multiply.vec2', c.uv, c.resolution, 5);
+  const centered = g.binary('centered-pixel', 'math.subtract.vec2', pixel, g.binary('frame-center', 'math.multiply.vec2', c.resolution, half2, 5), 6);
+  const rotated = g.node('rotated', 'coordinates.rotate.vec2', 7); g.edge(centered, rotated, 'value'); g.edge(angle, rotated, 'angle');
   const scale = g.node('scale', 'values.number', 0, { value: 'scale' }), safeScale = g.binary('safe-scale', 'math.max.scalar', scale, g.literal('minimum-scale', 3), 5);
-  const safeScale2 = g.unary('safe-scale-vec2', 'convert.scalar-to-vec2', safeScale, 6), grid = g.binary('grid', 'math.divide-ieee.vec2', c.resolution, safeScale2, 7);
-  const gridUv = g.binary('grid-uv', 'math.multiply.vec2', geometryUv, grid, 8), cell = g.binary('cell', 'math.subtract.vec2',
-    g.unary('cell-fraction', 'math.fract.vec2', gridUv, 9), half2, 10);
-  const centerCell = g.binary('center-cell', 'math.add.vec2', g.unary('cell-id', 'math.floor.vec2', gridUv, 9), half2, 10);
-  const sampleUv = g.binary('sample-uv', 'math.divide-ieee.vec2', centerCell, grid, 11), centerSample = sampleAt(g, c, 'center-sample', sampleUv, 12);
-  const centerTone = g.unary('center-tone', 'color.luminance-rec709.image', centerSample, 14, 'image');
-  const parts = g.unary('cell-components', 'vector.split.vec2', cell, 11), x = { node: parts.node, port: 'x' }, y = { node: parts.node, port: 'y' };
-  const wave = g.binary('wave-amplitude', 'math.multiply.scalar',
-    g.unary('wave', 'math.sin.scalar', g.binary('wave-phase', 'math.multiply.scalar', x, g.literal('wave-frequency', 10), 12), 13),
-    g.binary('inverse-tone', 'math.subtract.scalar', c.one, centerTone, 13), 14);
-  const waveScaled = g.binary('wave-scaled', 'math.multiply.scalar', wave, g.literal('wave-scale', .18), 14);
-  const distance = g.unary('engraving-distance', 'math.abs.scalar', g.binary('engraving-offset', 'math.subtract.scalar', y, waveScaled, 14), 15);
-  const smooth = g.node('engraving-smooth', 'math.smoothstep.scalar', 15); g.edge(g.literal('engraving-low', .025), smooth, 'edge0');
-  g.edge(g.literal('engraving-high', .09), smooth, 'edge1'); g.edge(distance, smooth, 'value');
+  const position = g.node('line-position', 'math.divide-ieee.vec2-scalar', 8); g.edge(rotated, position, 'a'); g.edge(safeScale, position, 'b');
+  const parts = g.unary('line-components', 'vector.split.vec2', position, 9), along = { node: parts.node, port: 'x' }, across = { node: parts.node, port: 'y' };
+  // Tone at the pixel, read from the picture averaged over half a line spacing (prefilterCellTaps), so lines swell smoothly.
+  const tap = sampleAt(g, c, 'tap-0-sample', c.uv, 9);
+  const darkness = g.binary('darkness', 'math.subtract.scalar', c.one, g.unary('tone', 'color.luminance-rec709.image', tap, 11, 'image'), 12);
+  // The wave runs along the whole line (not per cell), so the lines never break; its depth follows darkness.
+  const wave = g.unary('wave', 'math.sin.scalar', g.binary('wave-phase', 'math.multiply.scalar', along, g.literal('wave-frequency', ENGRAVING_LINE.waveFrequency), 10), 11);
+  const depth = g.binary('wave-depth', 'math.multiply.scalar', darkness, g.literal('wave-scale', ENGRAVING_LINE.waveDepth), 12);
+  const waved = g.binary('waved-across', 'math.subtract.scalar', across, g.binary('wave-offset', 'math.multiply.scalar', wave, depth, 13), 13);
+  const distance = g.unary('engraving-distance', 'math.abs.scalar', g.binary('engraving-offset', 'math.subtract.scalar',
+    g.unary('engraving-fraction', 'math.fract.scalar', waved, 13), half, 14), 14);
+  // Line Weight 0 keeps the fixed width; 1 swells each line from a hairline on white to near-solid ink in black.
+  const weight = g.node('weight-clamped', 'math.clamp.scalar', 12);
+  g.edge(g.node('weight', 'values.number', 0, { value: 'weight' }), weight, 'value'); g.edge(c.zero, weight, 'min'); g.edge(c.one, weight, 'max');
+  const heavy = g.node('heavy-width', 'math.clamp.scalar', 13);
+  g.edge(g.binary('darkness-width', 'math.multiply.scalar', darkness, g.literal('heavy-gain', ENGRAVING_LINE.heavy), 13), heavy, 'value');
+  g.edge(g.literal('hairline', ENGRAVING_LINE.hairline), heavy, 'min'); g.edge(g.literal('heavy-max', ENGRAVING_LINE.heavy), heavy, 'max');
+  const width = g.node('line-width', 'math.mix.scalar', 14);
+  g.edge(g.literal('fixed-width', ENGRAVING_LINE.fixedWidth), width, 'a'); g.edge(heavy, width, 'b'); g.edge(weight, width, 't');
+  const soft = g.literal('edge-soft', ENGRAVING_LINE.soft);
+  const smooth = g.node('engraving-smooth', 'math.smoothstep.scalar', 15);
+  g.edge(g.binary('engraving-low', 'math.subtract.scalar', width, soft, 14), smooth, 'edge0');
+  g.edge(g.binary('engraving-high', 'math.add.scalar', width, soft, 14), smooth, 'edge1'); g.edge(distance, smooth, 'value');
   const engraving = g.binary('engraving', 'math.subtract.scalar', c.one, smooth, 15);
   const styled = g.node('styled', 'math.mix.rgb', 15); g.edge(c.colorB!, styled, 'a'); g.edge(c.colorA!, styled, 'b'); g.edge(engraving, styled, 't');
   finish(g, c.sourceColor, styled, c.amount);
@@ -253,5 +268,7 @@ export function createDefaultGeometryFragmentGraph(type: EditableGeometryFragmen
   const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   // Pattern sizes and the Outline edge step count pixels of a 1080p frame (patternReferenceFrame.ts); Contour Map Scale is a level count.
   const size = REFERENCE_SIZE[type];
-  return size ? measureInReferenceFrame(graph, size.node, { minimumPixels: 1, ...(size.consumers ? { consumers: size.consumers } : {}) }) : graph;
+  const measured = size ? measureInReferenceFrame(graph, size.node, { minimumPixels: 1, ...(size.consumers ? { consumers: size.consumers } : {}) }) : graph;
+  // Vector Engraving reads its tone from the picture averaged over half a line spacing (patternCellFilter.ts).
+  return type === 'vector-tiling' ? prefilterCellTaps(measured, 'safe-scale-pixels') : measured;
 }
