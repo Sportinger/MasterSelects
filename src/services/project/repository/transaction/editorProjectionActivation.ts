@@ -159,7 +159,9 @@ async function activateEditorProjection(projection: RepositoryProjection, previo
     updateInternalPosition((timelineStore.getState() as TimelineStore).playheadPosition);
     staged.activate();
     syncHistoryRehydratedTimelineRuntimeResources((timelineStore.getState() as TimelineStore).clips);
-    scheduleMediaSourceArtifactProjectionForClips((timelineStore.getState() as TimelineStore).clips);
+    // On initial open the candidate session is not installed yet. Source-bound reads
+    // would return null and cache that miss; the lifecycle's ready hook hydrates it.
+    if (!initialOpen) scheduleMediaSourceArtifactProjectionForClips((timelineStore.getState() as TimelineStore).clips);
     layerBuilder.invalidateCache(); renderHostPort.clearCaches();
     if (signal.aborted) throw new RepositoryError('cancelled', 'Project activation cancelled after runtime rebind');
     publishEditorContentProjection(projection); renderHostPort.requestNewFrameRender();

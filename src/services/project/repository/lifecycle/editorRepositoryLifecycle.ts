@@ -1,7 +1,10 @@
 import type { BlobReference, JsonValue } from '../contracts';
 import type { RepositorySession } from '../RepositorySession';
 import { RepositoryError } from '../contracts';
-import { withRepositoryHydration } from '../transaction/storeMutationBoundary';
+import { getRepositoryStore, withRepositoryHydration } from '../transaction/storeMutationBoundary';
+import type { MediaState } from '../../../../stores/mediaStore/types';
+import type { TimelineStore } from '../../../../stores/timeline/types';
+import { scheduleMediaSourceArtifactProjectionForClips } from '../../../mediaArtifacts/mediaSourceArtifacts';
 import { setProjectLoadProgress, completeProjectLoadProgress, failProjectLoadProgress } from '../../load/loadProgress';
 import { editorRepositoryLifecycle as createLifecycle, type PrepareRepository } from './RepositoryLifecycle';
 import { activateRepositoryProjection } from '../transaction/editorProjectionActivation';
@@ -9,6 +12,7 @@ import { startScheduledLinkedMediaConnection } from '../transaction/editorLinked
 import { captureEditorProjectDomains, flushEditorRepositoryViews, readEditorRepositoryWorkspace, installEditorRepositorySession, getEditorRepositorySourceVersion, applyEditorRepositoryResult } from '../transaction/editorRepositorySession';
 import { holdEditorContentPublication, publishEditorContentProjection } from '../transaction/editorPublication';
 import { createRepositoryDomainPublication } from '../artifacts/createRepositoryDomainPublication';
+import { prepareArtifactSourceVersion } from '../artifacts/prepareArtifactSourceVersion';
 import { setRepositoryDomainPublication } from '../artifacts/RepositoryDomainPublication';
 import { createWorkerRepositoryArtifactStore } from '../artifacts/WorkerRepositoryArtifactStore';
 import { decodeAggregate, entityKey } from '../domains/jsonBoundary';
@@ -40,6 +44,15 @@ function publicationFor(session: RepositorySession) {
   host = createRepositoryDomainPublication({ coordinator: session.coordinator, artifacts: createWorkerRepositoryArtifactStore(session),
     readJournal: id => session.client.request<JsonValue | null>({ type: 'journal-read', id }),
     sourceVersion: target => getEditorRepositorySourceVersion(session, target),
+    prepareSourceVersion: target => {
+      const mediaId = target.endsWith('.json') ? target.slice(0, -5) : target;
+      return prepareArtifactSourceVersion(session, mediaId, {
+        isActive: () => lifecycle.getSession() === session,
+        readVersion: () => getEditorRepositorySourceVersion(session, target),
+        readFile: () => (getRepositoryStore('media')?.getState() as MediaState | undefined)
+          ?.files.find(file => file.id === mediaId)?.file,
+      });
+    },
     applyResult: (domain, target, version, manifest, reference) => applyEditorRepositoryResult(session, domain, target, version, manifest, reference),
     async readLegacyFile(folder, name) {
       const path = PROJECT_FOLDERS[folder] + '/' + name;
@@ -60,7 +73,13 @@ function publicationFor(session: RepositorySession) {
 const lifecycle = createLifecycle({
   progress(progress) {
     withRepositoryHydration(() => {
-      if (progress.phase === 'ready') { completeProjectLoadProgress(); startScheduledLinkedMediaConnection(); return; }
+      if (progress.phase === 'ready') {
+        completeProjectLoadProgress();
+        startScheduledLinkedMediaConnection();
+        const timeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
+        if (timeline) scheduleMediaSourceArtifactProjectionForClips(timeline.clips);
+        return;
+      }
       if (progress.phase === 'failed') { failProjectLoadProgress(new Error(progress.error ?? 'Project could not be opened')); return; }
       const stages = {
         opening: { phase: 'opening', percent: 8, message: 'Opening saved project' },
