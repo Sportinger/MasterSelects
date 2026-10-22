@@ -32,7 +32,7 @@ Phones, tablets and desktop browsers use the same editor shell; Mobile is a layo
 - **New Project...** opens the project setup dialog. Spaces in the name are fine; characters a file system cannot store are flagged as you type, and unsaved work is pointed out before anything is replaced.
 - **Open Project...** opens an existing project folder or browser project.
 - **Open Recent** lists the projects this browser remembers; **Clear Recent Projects** empties the list.
-- **Save now** writes the project immediately. Saving also runs on its own: the save mode lives in **Edit → Settings... → General**, and its default saves continuously a moment after each change.
+- **Save now** (`Ctrl+S`) waits until every pending change and the workspace are written. Saving is always continuous: each accepted change is written a moment later. Named versions are kept in **History**.
 - **Duplicate project...** saves the project under a new name.
 - **Export .msproj archive...** packs the project into one archive file to move or back it up.
 - **Rename Project...** renames the open project in the same name dialog.
@@ -43,7 +43,7 @@ Phones, tablets and desktop browsers use the same editor shell; Mobile is a layo
 
 - **Version** shows the running version; **About MasterSelects** and **Documentation** open the about page and these docs.
 - **Help** holds **Chat with dev**, **Leave note** and **Write issue**. The Info button shows `+1` while a reply from the developer is unread.
-- **Social** links to Discord, Reddit and Instagram.
+- **Social** links to Discord and Reddit; Instagram is listed but not linked yet.
 - **Tutorials → Workspace Tour** starts the guided tour of the editor.
 - **Legal** holds Imprint, Privacy Policy, Terms, Withdrawal, Cancel contracts here and Contact. Imprint and Privacy Policy open `/impressum` and `/datenschutz` in a new tab; Contact opens the legal dialog in German or English.
 
@@ -60,7 +60,7 @@ All docked panels can be:
 - Dragged to rearrange
 - Grouped in tabs
 - Resized via split panes
-- Closed and reopened from the View menu
+- Closed, and reopened from **View → Panels** or a tab bar's **+**
 - Floated as independent windows
 - Maximized from the hovered tab with the fullscreen shortcut
 - Dropped into the center of a pane with a large anchored preview, or onto the tab bar for exact tab insertion
@@ -97,7 +97,7 @@ Every panel can be added from the **+** at the end of a tab bar, or swapped in w
 
 | Group | Panels |
 |-------|--------|
-| **Nodes** | Nodes (the node graph of the selected clip; first entry, opens directly) |
+| **Nodes** | Nodes (the node graph of the whole timeline by default; its source selector follows the selected clip (**Active**) or pins one clip; first entry, opens directly) |
 | **Editing** | Preview, Multi Preview, Timeline, Curves, Media, Layers, Tools, Properties, History, Annotations, Notebook, Stats, Transitions |
 | **Color** | Color Nodes, Color Controls (the **Coloring** tab of the Video layout), Clips, Mini Timeline, Scopes, Keyframes |
 | **Audio** | Audio Mixer, MIDI Mapping |
@@ -106,7 +106,7 @@ Every panel can be added from the **+** at the end of a tab bar, or swapped in w
 | **Live** | Go Live, Slot Grid, Stream Chat, Stream Analytics |
 | **Capture & Output** | Capture, Export |
 
-Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once; every other panel exists once: **+** brings the open one to the front, and **Change to** moves it into the clicked slot. A few more panel types (AI Scene Description and the separate Waveform, Histogram and Vectorscope panels) still load in older saved layouts but are no longer offered in the menus. Feature pages: [Preview](./Preview.md), [Timeline](./Timeline.md), [Media Panel](./Media-Panel.md), [Keyframes](./Keyframes.md), [Notebook](./Documents.md), [Annotations](./Annotations.md), [Image Mode](./Image-Mode.md) (Layers, Tools), [Slot Grid](./Slot-Grid.md), [Export](./Export.md), [Screen Capture](./Screen-Capture.md), [Media Discovery](./Media-Discovery.md) (Discover), [AI Studio](./AI-Studio.md), [Story Workflow](./Seedance-Preproduction.md), [Color Correction](./Color-Correction.md).
+Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once; every other panel exists once: **+** brings the open one to the front, and **Change to** moves it into the clicked slot. A few more panel types (AI Scene Description and the separate Waveform, Histogram and Vectorscope panels) load only from older saved layouts. Feature pages: [Preview](./Preview.md), [Timeline](./Timeline.md), [Media Panel](./Media-Panel.md), [Keyframes](./Keyframes.md), [Notebook](./Documents.md), [Annotations](./Annotations.md), [Image Mode](./Image-Mode.md) (Layers, Tools), [Slot Grid](./Slot-Grid.md), [Export](./Export.md), [Screen Capture](./Screen-Capture.md), [Media Discovery](./Media-Discovery.md) (Discover), [AI Studio](./AI-Studio.md), [Story Workflow](./Seedance-Preproduction.md), [Color Correction](./Color-Correction.md).
 
 ### View Menu Grouping
 
@@ -138,15 +138,14 @@ Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once;
 
 ### Media Panel
 
-- Media browser with folders, compositions, and generated project items
-- Single toggle button switches between list view and grid view
-- Reorderable column headers in list view
-- Grid breadcrumb navigation for folder drilling
-- Add menu for compositions, folders, text, solids, live input, and nested 3D items (mesh, 3D text, camera, light, 3D effector, and Gaussian splat), plus motion nulls, adjustment layers, math scenes, and motion-shape primitives
+- Media browser with folders, compositions, imported media and project items
+- Three views: Classic list, Large icons and Board, switched with the segmented control in the header
+- Reorderable column headers in the Classic list
+- Folder breadcrumb in the Icons view
+- The header **Import** button and the right-click **Add** submenu offer Composition, Folder, Import files..., Live Input... and Import Gaussian Splat...; text, solids, blank clips, 3D and motion layers are created from the timeline's right-click menu
 - Dragging files or folders from the OS recreates the folder structure inside the project
 - Dropping multiple OS files directly on the timeline asks whether to place them side by side or stacked on new layers, while still importing through the Media Panel file path first
 - Drag-to-timeline support
-- Type-specific project items for text, solids, meshes, cameras, and splat effectors
 - Board mode right-drag supports smooth edge autopan; dragging far out onto a timeline lane hands off to the same timeline drag preview/drop path as list-view media drags, then restores the item at its original board position
 - Bottom-right **Generate** tray expands into the FlashBoard prompt composer for video, image, speech, and music generation without opening a separate dock tab
 - Appearance settings include a separate **Wooden media panel theme** checkbox, default off, that switches the Media Panel to the wooden studio skin; disabling it leaves the standard dark panel chrome unchanged
@@ -160,7 +159,7 @@ Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once;
 
 ### MIDI Mapping Panel
 
-- Open from `View -> Panels -> MIDI Mapping`
+- Open from **View → Panels → MIDI Mapping**
 - Shows all currently assigned MIDI notes and control-change bindings in one list
 - Includes global transport bindings, per-marker bindings, Slot Grid trigger bindings, and property parameter bindings
 - Each row shows the note, target, and resulting command behavior
@@ -172,9 +171,9 @@ Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once;
 - Marker bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`
 - Slot bindings can be created from the Slot Grid filled-slot context menu, which opens this panel with a pending `Listening...` mapping
 
-### Screen Capture Panel
+### Capture Panel
 
-- Records a display, window, or browser tab directly into an open project
+- **Capture** (Screen Capture) records a display, window, or browser tab directly into an open project
 - Supports display and microphone audio, cursor capture, preview, pause/resume, and recovery of interrupted recordings
 - Imports completed recordings into `Recordings`; when enabled, the experimental WebCodecs tier adds crop and scale controls
 
@@ -185,18 +184,11 @@ Preview, Nodes, Color Controls, Curves and Slot Grid can be open more than once;
 - Real-time mask overlay
 - Forward propagation for video
 
-### AI Scene Description Panel
-
-- Scene-by-scene video descriptions
-- Search within descriptions
-- Click-to-seek scene segments
-- Playback-synced highlighting
-
 ### Media Generator Tray
 
 - Compact bottom-right `Chat` / `Generate` / `Studio` / `Downloads` launcher inside the Media Panel
 - Expanded tray embeds only the compact FlashBoard prompt composer for hosted video, image, ElevenLabs audio, and Suno music flows
-- Studio opens a separate dock panel with parallel, persistent generation tabs and draggable result tiles; the compact Generate tray remains available unchanged
+- Studio opens a separate dock panel with parallel, persistent generation tabs and draggable result tiles; the compact Generate tray works beside it
 - Active generation jobs render as compact preview cards above the prompt, including queued/processing state, elapsed timer, progress, prompt, and failed-job dismissal
 - Service and provider selection reflect the active backend through the FlashBoard composer
 - Image, video, and audio media can be attached as ordered prompt references from the Media Panel context menu or by dragging them onto the expanded composer
@@ -263,8 +255,8 @@ One **Scopes** panel (View → Panels → Scopes, or the Color group of **+**) s
 | **Vectorscope** | hue and saturation |
 | **Histogram** | how many pixels sit at each brightness |
 
-- Waveform and Histogram offer the view modes RGB, R, G, B and Luma
-- IRE reference remains available
+- Waveform and Histogram offer the view modes RGB, R, G, B and Y (luma)
+- An IRE scale is drawn beside the waveform
 - The scopes are fully GPU-rendered. Waveform analysis computes only the channels required by the selected view and uses adaptive vertical sampling for HD/UHD sources while preserving exact horizontal sampling.
 - An unchanged paused frame is not analyzed repeatedly. Resizing a scope panel invalidates that cache once after the resize settles so the paused scope redraws at its new dimensions.
 
@@ -276,19 +268,10 @@ The Slot Grid is a 12 × 4 launch grid over the Timeline for playing composition
 
 ---
 
-## Looks Panel
-
-The standalone **Looks** panel is disabled in development and production. It is
-not registered as a dock panel, does not appear in the tab-bar `+` or
-`Change to` menus, and is removed when persisted layouts are restored. Live
-effect thumbnails remain available through the Properties effect catalog.
-
----
-
 ## Resolve Interface Theme
 
 The **Resolve** theme is hidden and disabled by default. Existing persisted
-Resolve selections migrate back to **Dark**. While Settings -> Appearance is
+Resolve selections migrate back to **Dark**. While **Settings → Appearance** is
 open, holding `Shift` and pressing `1`, `2`, `3`, `4` in sequence permanently
 unlocks its theme card for that user. Its palette and geometry are derived from
 semantic surface, separator, typography, control, selection, and timeline
@@ -331,13 +314,13 @@ same source-handle edges.
 | Tab | Contents |
 |-----|----------|
 | **Transform** | Compact Source, Transform, Composite, Speed Change, Cropping, and Stabilization sections with transform, opacity, blend, speed, crop, keyframe, and reset controls |
-| **Color / Image** | Clip-level color correction; remains available in every theme, including the hidden Resolve theme |
+| **Color / Image** | Clip-level color correction, in every theme including the hidden Resolve theme |
 | **Effects** | Applied video effects and an expandable Color grade; Video / Audio switch exposes clip or linked-audio effects (hidden by default for visual clips). |
 | **Masks** | Mask shapes with mode and feather controls |
 | **Analysis** | Shared analysis map, transcript controls, and compact scene blobs with faces, synchronized dialogue, cuts, metrics, quality, and descriptions |
 
 The Resolve inspector keeps the clip-level Color tab, presented as **Image** in
-the Resolve tab design. The dockable Color Controls panel remains available as
+the Resolve tab design. The dockable Color Controls panel is
 an additional surface and can be placed more than once.
 
 The Analysis workspace uses one source-time model for its collapsible graph and
@@ -535,7 +518,7 @@ Its timeline starts with two 70 px video tracks and one compact 48 px audio trac
 
 **Chat** fills the editor with the AI chat.
 
-Medium and Mobile are presentation modifiers above the selected named layout rather than separate layout entries (`src/stores/dockStore/overLayoutMode.ts`, `src/components/dock/useOverLayoutSync.ts`). The bottom workspace bar exposes a **Medium** toggle and a **Mobile** toggle beside **Layouts** while continuing to highlight the underlying Video, Audio, 3D, Color, Image, or custom layout. The two modifiers stack: Medium alone applies the Medium editing arrangement (and the `app--medium-experience` styling) over the base workspace, Mobile alone applies the compact phone/tablet arrangement, and Medium plus Mobile applies the Medium-Mobile timeline skin (`src/components/timeline/MediumMobileTimeline.css`) in which the main timeline controls move from the ruler strip into the timebar, the mobile action bubbles are suppressed, and the Preview split uses Medium-specific ratios. Changing the base layout while a modifier is active immediately reapplies the matching arrangement; turning the modifiers off restores the saved panel and timeline arrangement from before they were entered. That pre-modifier snapshot lives in memory only, so after a page reload turning the modifiers off restores the factory arrangement of the base layout instead. Its horizontal/portrait arrangement is selected internally from the active composition aspect. On each entry into either Mobile arrangement, the Preview split is fitted once to the active composition; subsequent divider changes remain under user control until Mobile or the underlying layout is entered again. Detected phones, tablets, and other coarse-pointer devices enter Mobile automatically, but the same toggle can explicitly return them to desktop mode. Browser widths at or below the compact breakpoint follow `Settings -> General -> Automatically use Mobile layout when space is limited` and can likewise be overridden from the workspace bar. In the Video workspace and both internal Mobile factories, AI Studio occupies the left-side position formerly used by Discover, while Coloring occupies the right-side position formerly used by AI Studio.
+Medium and Mobile are presentation modifiers above the selected named layout rather than separate layout entries (`src/stores/dockStore/overLayoutMode.ts`, `src/components/dock/useOverLayoutSync.ts`). The bottom workspace bar exposes a **Medium** toggle and a **Mobile** toggle beside **Layouts** while continuing to highlight the underlying Video, Audio, 3D, Color, Image, or custom layout. The two modifiers stack: Medium alone applies the Medium editing arrangement (and the `app--medium-experience` styling) over the base workspace, Mobile alone applies the compact phone/tablet arrangement, and Medium plus Mobile applies the Medium-Mobile timeline skin (`src/components/timeline/MediumMobileTimeline.css`) in which the main timeline controls move from the ruler strip into the timebar, the mobile action bubbles are suppressed, and the Preview split uses Medium-specific ratios. Changing the base layout while a modifier is active immediately reapplies the matching arrangement; turning the modifiers off restores the saved panel and timeline arrangement from before they were entered. That pre-modifier snapshot lives in memory only, so after a page reload turning the modifiers off restores the factory arrangement of the base layout instead. Its horizontal/portrait arrangement is selected internally from the active composition aspect. On each entry into either Mobile arrangement, the Preview split is fitted once to the active composition; subsequent divider changes remain under user control until Mobile or the underlying layout is entered again. Detected phones, tablets, and other coarse-pointer devices enter Mobile automatically, but the same toggle can explicitly return them to desktop mode. Browser widths at or below the compact breakpoint follow **Settings → General → Automatically use Mobile layout when space is limited** and can likewise be overridden from the workspace bar. In the Video workspace and both internal Mobile factories, AI Studio sits in the left group and Coloring in the right group.
 
 At toolbar widths of 767 px or less, the row of named layout buttons collapses into one light-gray **Layout** control. Click or touch opens a compact, color-neutral refracted-glass bubble containing every available layout; choosing one loads it and closes the picker. Escape and an outside press also close the menu.
 
@@ -579,12 +562,12 @@ directly to its neighbor without running the normal composition-change animation
 
 | Action | Location |
 |--------|----------|
-| Save Current Layout | View -> Layouts |
-| Save to Current Layout | View -> Layouts |
-| Load Saved Layout | View -> Layouts |
-| Set Current as Default | View -> Layouts |
-| Set Saved Layout as Default | View -> Layouts |
-| Load Default Layout | View -> Layouts |
+| Save Current Layout | View → Layouts |
+| Save to Current Layout | View → Layouts |
+| Load Saved Layout | View → Layouts |
+| Set Current as Default | View → Layouts |
+| Set Saved Layout as Default | View → Layouts |
+| Load Default Layout | View → Layouts |
 | Toggle Medium presentation | Bottom workspace bar, beside Layouts |
 | Toggle Mobile presentation | Bottom workspace bar, beside Layouts |
 
@@ -594,7 +577,7 @@ directly to its neighbor without running the normal composition-change animation
 
 ### Enabling MIDI
 
-Edit menu -> Settings -> MIDI
+**Edit → Settings... → MIDI**
 
 ### Requirements
 
@@ -610,7 +593,7 @@ MIDI Control (N devices)
 
 ### Mapping Overview
 
-- `View -> Panels -> MIDI Mapping` opens the dedicated mapping panel
+- **View → Panels → MIDI Mapping** opens the dedicated mapping panel
 - The panel lists all assigned transport, marker, slot, and parameter bindings
 - Clicking a binding previews the exact trigger path without needing a physical MIDI note
 - Matching mappings flash in the panel when the hardware input is used
@@ -624,7 +607,7 @@ MIDI Control (N devices)
 
 ### Output Resolution
 
-Configured in Settings -> General -> Output.
+Set in **Settings → General → Output — Default Resolution** for new compositions; the **Frame Rate** row beside it changes the open composition.
 
 | Preset | Dimensions |
 |--------|------------|
@@ -637,7 +620,7 @@ Custom width and height are also supported. This applies to newly created compos
 
 ### Preview Quality
 
-Configured in Settings -> General -> Preview.
+Set in **Settings → General → Preview Resolution**.
 
 | Option | Render Size |
 |--------|-------------|
@@ -653,27 +636,25 @@ Lower preview quality reduces GPU workload and memory use on engine-backed previ
 
 ### Opening
 
-Edit menu -> Settings
+**Edit → Settings...**
 
 ### Categories
 
 | Category | Contents |
 |----------|----------|
-| **General** | Copy media to project folder, save mode, autosave interval/enable state, timeline zoom anchor, layout, shortcut/mouse input display, output defaults, preview quality, GPU preference, and AI feature settings |
-| **Import** | Copy media to project folder (the same switch as in General) and the external source folders the project may read from |
+| **General** | Copy media to project folder, the Project storage note (saving is continuous), product analytics, timeline zoom anchor, Deselect selected clips on repeat click, automatic Mobile layout, shortcut and mouse-click display, default output resolution and frame rate, preview resolution, scrub cache, GPU power preference, and AI features (AI Replay, MatAnyone2) |
+| **Import** | Copy media to project folder (the same switch as in General), Copy media that cannot stay linked, and the external source folders the project may read from |
 | **MIDI** | Browser MIDI permission state, transport learning, and device list |
 | **Shortcuts** | Preset selection, overrides, recorder, reset, and custom preset controls |
-| **Appearance** | Dark, Light, Midnight, System, Crazy, and Custom theme selection; hidden persistent Resolve unlock via `Shift` + `1`, `2`, `3`, `4`; custom theme controls, interface text scale, interface font, high-readability colors, and studio surface skins |
+| **Appearance** | Dark, Light, Midnight, System, Crazy You, and Custom theme selection; custom theme controls, interface text scale, interface font, high-readability colors, and studio surface skins |
 | **Audio** | Browser input/output device selection, latency mode, device API status, output-routing status, and AudioContext diagnostics |
 | **Transcription** | Provider selection and pricing |
 | **Native Helper** | Native helper connection, port, helper-backed flows, and decode settings |
 | **Integrations** | Optional YouTube Data API key; AI uses authenticated hosted services |
 
-The Preferences dialog drag position is updated at animation-frame cadence during mouse movement so moving the dialog does not force React state updates for every raw mouse event.
-
 ### Integrations
 
-The dialog currently exposes only the optional YouTube Data API v3 key. AI features use authenticated hosted services rather than user-entered provider keys in Preferences.
+The only key you can enter is the optional YouTube Data API v3 key. AI features use authenticated hosted services rather than user-entered provider keys in Preferences.
 
 ---
 
