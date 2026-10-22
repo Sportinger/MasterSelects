@@ -1,7 +1,7 @@
 <!doctype html><meta charset="utf-8"><title>AI Edge Fill GPU regression</title>
 <style>body{font:16px system-ui;background:#202020;color:#eee;padding:24px}button{padding:12px}pre{white-space:pre-wrap}</style>
 <h1>AI Edge Fill · GPU pixel regression</h1>
-<p>Open through the Vite server. Tests the actual WGSL: opaque source preservation, transparent border fill, partial alpha and canvas placement.</p>
+<p>Open through the Vite server. Tests the actual WGSL: opaque source preservation, transparent border fill, partial alpha, canvas placement and a Seam Blend that keeps the fill's detail.</p>
 <button id="run">Run GPU checks</button><pre id="result">Ready</pre>
 <script type="module">
 import common from '/src/effects/_shared/commonShader.ts';
@@ -48,7 +48,63 @@ document.querySelector('#run').onclick = async () => {
       read.unmap();read.destroy();buffer.destroy();output.destroy();
     }
     if(!blendedHoles)throw Error('Seam blend did not affect any missing pixels.');
-    input.destroy();background.destroy();result.textContent=`PASS: ${checked} GPU channel checks. Original opaque pixels unchanged; every transparent canvas border filled; transformed photo stays in place. Seam blend changes only the added side.`;
+    input.destroy();background.destroy();
+    const seam = await seamDetailCheck(device, pipeline, sampler);
+    const corner = await seamCornerCheck(device, pipeline, sampler);
+    result.textContent=`PASS: ${checked} GPU channel checks. Original opaque pixels unchanged; every transparent canvas border filled; transformed photo stays in place. Seam blend changes only the added side. ${seam} ${corner}`;
   } catch(error){result.textContent='FAIL: '+error.message;} finally {device?.destroy();}
 };
+// Seam Blend shifts the fill's colour towards the photo and keeps its detail: a grey photo (128) on the left
+// half, a 60/100 checker fill on the right. Next to the photo the checker is lifted to the photo's level and
+// keeps its contrast; the lift fades with distance, without rings, and is gone beyond the Seam Blend radius.
+async function renderSeam(device, pipeline, sampler, W, H, radius, photo) {
+  const source = new Uint8Array(W * H * 4), fill = new Uint8Array(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (photo(x, y)) source.set([128, 128, 128, 255], (y * W + x) * 4);
+    const v = (x + y) % 2 ? 100 : 60; fill.set([v, v, v, 255], (y * W + x) * 4);
+  }
+  const tex = (format, usage) => device.createTexture({ size: [W, H], format, usage });
+  const input = tex('rgba8unorm', GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST);
+  const background = tex('r32uint', GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST);
+  device.queue.writeTexture({ texture: input }, source, { bytesPerRow: W * 4 }, [W, H]);
+  device.queue.writeTexture({ texture: background }, fill, { bytesPerRow: W * 4 }, [W, H]);
+  const buffer = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  device.queue.writeBuffer(buffer, 0, new Float32Array([1, 1, 0, radius / W, 1, 0, 0, 0, 0, 1, 0, 0]));
+  const output = tex('rgba8unorm', GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC);
+  const read = device.createBuffer({ size: 256 * H, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: sampler },
+    { binding: 1, resource: input.createView() }, { binding: 2, resource: { buffer } }, { binding: 5, resource: background.createView() }] });
+  const encoder = device.createCommandEncoder(), pass = encoder.beginRenderPass({ colorAttachments: [{ view: output.createView(), loadOp: 'clear', storeOp: 'store' }] });
+  pass.setPipeline(pipeline); pass.setBindGroup(0, bind); pass.draw(6); pass.end();
+  encoder.copyTextureToBuffer({ texture: output }, { buffer: read, bytesPerRow: 256 }, [W, H]); device.queue.submit([encoder.finish()]);
+  await read.mapAsync(GPUMapMode.READ); const pixels = new Uint8Array(read.getMappedRange()).slice(); read.unmap();
+  for (const item of [input, background, output]) item.destroy(); read.destroy(); buffer.destroy();
+  return { pixels, fill };
+}
+async function seamDetailCheck(device, pipeline, sampler) {
+  const W = 64, H = 16, edge = 32, radius = 16;
+  const { pixels, fill } = await renderSeam(device, pipeline, sampler, W, H, radius, x => x < edge);
+  const at = (x, y) => pixels[y * 256 + x * 4];
+  const column = x => { let sum = 0; for (let y = 0; y < H; y++) sum += at(x, y); return sum / H; };
+  for (let y = 0; y < H; y++) for (let x = 0; x < edge; x++) if (at(x, y) !== 128) throw Error(`Seam blend changed the photo at ${x},${y}: ${at(x, y)}`);
+  const next = column(edge);
+  if (Math.abs(next - 128) > 14) throw Error(`Fill beside the photo is not lifted to the photo's level: mean ${next.toFixed(1)}, expected about 128 (columns ${Array.from({ length: 20 }, (_, i) => column(edge + i).toFixed(0)).join(" ")}; row ${Array.from({ length: 8 }, (_, i) => at(edge + i, 0)).join(" ")})`);
+  let contrast = 0; for (let y = 0; y < H; y++) contrast += Math.abs(at(edge, y) - at(edge + 1, y)); contrast /= H;
+  if (contrast < 30) throw Error(`Seam blend smeared the fill's detail beside the photo: checker contrast ${contrast.toFixed(1)}, expected about 40`);
+  for (let x = edge + radius + 1; x < W; x++) for (let y = 0; y < H; y++) if (at(x, y) !== fill[(y * W + x) * 4]) throw Error(`Seam blend reached beyond its radius at ${x},${y}`);
+  for (let x = edge + 1; x <= edge + radius; x++) if (column(x) > column(x - 1) + 4) throw Error(`Seam blend has a ring at ${x - edge} px: ${column(x - 1).toFixed(1)} then ${column(x).toFixed(1)}`);
+  return `Seam blend lifts the fill beside the photo to ${next.toFixed(0)} with checker contrast ${contrast.toFixed(0)} and fades out by ${radius} px.`;
+}
+// The empty areas of a lens or perspective fix meet the photo at its corners. A quarter-plane photo (top left):
+// the fill diagonally off its corner and beside its edges right at the corner must be lifted like beside a
+// straight edge, not only by the small share of the disc the photo covers there.
+async function seamCornerCheck(device, pipeline, sampler) {
+  const W = 64, H = 64, edge = 32, radius = 12;
+  const { pixels } = await renderSeam(device, pipeline, sampler, W, H, radius, (x, y) => x < edge && y < edge);
+  // A 2x2 mean cancels the 60/100 checker (80 untouched, 128 when fully shifted).
+  const level = (x, y) => (pixels[y * 256 + x * 4] + pixels[y * 256 + (x + 1) * 4] + pixels[(y + 1) * 256 + x * 4] + pixels[(y + 1) * 256 + (x + 1) * 4]) / 4;
+  const spots = { diagonal: level(edge, edge), right: level(edge, edge - 2), below: level(edge - 2, edge) };
+  for (const [name, value] of Object.entries(spots)) if (value < 112) throw Error(`Seam blend fades at the photo corner (${name}): level ${value.toFixed(1)}, expected about 128 (80 = no shift)`);
+  return `At a photo corner the fill is lifted to ${Object.values(spots).map(value => value.toFixed(0)).join('/')}.`;
+}
 </script>

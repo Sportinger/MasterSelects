@@ -55,6 +55,14 @@ export const bulge: EffectDefinition = {
     edges: EDGES_PARAM,
   },
 
+  // Named after the picture they make; every preset is centred (move Center X / Y afterwards).
+  presets: [
+    { id: 'magnifying-glass', name: 'Magnifying Glass', params: { amount: 3, radius: .3 } },
+    { id: 'soft-swell', name: 'Soft Swell', params: { amount: 1.35, radius: .9 } },
+    { id: 'fishbowl', name: 'Fishbowl', params: { amount: 2, radius: .7, shape: 'frame' } },
+    { id: 'pinch', name: 'Pinch', params: { amount: .5, radius: .5 } },
+  ],
+
   paramWarnings: params => [...radiusWarnings(params), ...choiceWarnings(params), ...(typeof params.amount === 'number' && params.amount < 0
     ? [`amount: ${params.amount} acts like 0, the strongest pinch.`] : [])],
   packUniforms: (params, width, height) => new Float32Array([

@@ -1954,9 +1954,11 @@ service ownership, other consumers and migration candidates.
 correction with equidistant, equisolid-angle, stereographic, and orthographic
 projection models. Lens strength, field of view, curve bias, radius, center,
 zoom, anamorphic squeeze, rotation, edge behavior, feathering, chromatic
-aberration, vignette, and 1/4/8-sample quality are configurable and keyframeable
+aberration, vignette, and 1 to 8 samples per pixel are configurable and keyframeable
 where applicable. The WebGPU shader and worker-software export path implement
-the same parameter contract.
+the same parameter contract. The card uses the shared Resolve rows with short labels
+(Squeeze, Round Lens, Color Fringe, Softness; keys and stored values unchanged) and
+offers five presets: Wide Angle, Skate Fisheye, Crystal Ball, Peephole and Flatten Fisheye.
 
 Fisheye's default image graph is editable rather than an opaque distortion
 node. It exposes AA jitter, lens projection, edge policy, chromatic sampling,
@@ -1965,8 +1967,13 @@ Persisted edits therefore change preview and export execution, not merely the
 workspace diagram. Each sample is premultiplied as it is read and the averaged
 result is unpremultiplied, so lens and frame feathering, the outside mix and edge
 sampling lower coverage instead of darkening colour; the worker CPU path does the
-same. Untouched saved graphs of the earlier straight-alpha recipe (recognized by a
-frozen recipe fingerprint) load as the current recipe; edited graphs stay as saved.
+same. Untouched saved graphs of the earlier straight-alpha recipe and of the recipe
+whose eight sample offsets ran round the pixel (each recognized by a frozen recipe
+fingerprint) load as the current recipe; edited graphs stay as saved. The offsets
+(`sampleOffsets.ts`) come in opposite pairs, so every even count is centred on the
+pixel and every count from 1 to 8 adds samples. The presentation files the literal
+numbers under a top-level Constants folder and the frame size under Coordinates &
+Resources, like the other organized effects, so Fisheye Parameters holds only the controls.
 
 Image effects reuse a bounded cache of validated graphs and compiled CPU render
 plans across playback, inline rendering, previews and worker-software export.
@@ -1986,7 +1993,8 @@ in `0.25..4`, Center X/Y are `0.5` in `0..1`, and Rotation is `0` in
 defaults to `transparent` (also `clamp`, `mirror`, `repeat`), and Edge Feather
 is `0.005` in `0..0.1`. Chromatic Aberration is `0` in `0..0.05`, Vignette is
 `0` in `0..1`, Vignette Softness is `0.25` in `0.01..1`, and Samples defaults
-to `4` in `1..8`, normalized to the supported 1/4/8 quality levels. Numeric
+to `4` in `1..8`, rounded to a whole count (a rounded or capped value is named in
+the card and the tool result). Numeric
 bindings keep their existing keyframe IDs.
 
 Image graphs have an image-specific structural ceiling of 512 nodes and 2048
@@ -2888,36 +2896,51 @@ Camera Raw/LCP compatibility or a claim of matching Photoshop's output. Profile
 selection and numeric settings persist in project data and participate in undo;
 numeric controls support keyframes. Manual adjustments below are added on top.
 
-- **Geometry:** Remove Distortion controls radial barrel/pincushion correction;
+- **Geometry:** Distortion controls radial barrel/pincushion correction;
   negative values sample inward to correct barrel distortion, positive values
   correct pincushion distortion. Fine Distortion adds a fourth-order adjustment.
-  Scale zooms to crop uncovered borders; Optical Center X/Y moves the lens center.
-- **Chromatic aberration:** Red/Cyan Fringe and Blue/Yellow Fringe independently
+  Scale zooms to crop uncovered borders; Center X/Y moves the lens center.
+- **Chromatic aberration:** Red/Cyan and Blue/Yellow independently
   scale the red and blue channels around the optical center.
 - **Vignette:** Positive Amount lifts dark corners, negative Amount darkens them;
   Midpoint controls where the falloff starts.
 
 The default is an identity transform. Uncovered borders are transparent, and
 corrections are nondestructive, saved with the effect, and applied during export.
-Barrel correction strong enough to fold the outer picture back on itself (Remove
-Distortion below about −33, Fine Distortion below about −20, or less together with
-a profile) stops at the fold: pixels beyond it stay transparent, and the inspector
-and tool results say so. The fringe channels repeat the border pixel instead of
+Strong barrel correction never folds: where the radius polynomial would read less
+than a quarter source pixel per output pixel (it flattens and would turn back for
+strong negative Distortion or Fine Distortion, or less together with a profile), the
+mapping follows the larger of that straight line and the polynomial (`lensKnee` and
+`lensSourceRadius` in `lens-correction/lensFrameFit.ts`, packed into the shader and the
+software guide-photo path). Taking the larger hands back to the polynomial where it
+recovers (negative Distortion with positive Fine Distortion), so the picture never jumps
+while a control crosses the point where the dip appears. Where in the frame the line takes
+over depends on Distortion, Fine Distortion, Scale, Fit and the optical centre (for a
+centred frame at Scale 100 from about Distortion −25, with Fit from about −14); whenever it
+does, the inspector and tool results name the stretched part of the frame. The fringe channels repeat the border pixel instead of
 turning black, so no coloured line runs along the frame.
 Selecting a profile is explicit; automatic matching and other lens variants are
 not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed
 in [Third-party notices](../../THIRD_PARTY_NOTICES.md#lensfun-lens-calibration-data).
 
 The **Vignette** section of Lens Correction has its own enable switch. Bypassing
-it disables both calibrated profile vignetting and manual Vignette Amount while
-retaining their settings. Distortion and chromatic-aberration correction continue
+it disables both calibrated profile vignetting and the manual Amount while
+retaining their settings (the switch is the parameter Vignette Correction, `vignetteEnabled`). Distortion and chromatic-aberration correction continue
 unchanged. This applies equally to Preview, guide photos, AI Edge Fill captures and export.
 
 Under **Geometry → Framing**, **Fit entire photo** automatically fits the corrected
 source perimeter into the image texture instead of cropping it. Free areas remain
 transparent (black against an opaque viewer/export background), and the composition
-dimensions stay unchanged. The existing manual Scale setting is retained for
-**Original size**; automatic fitting caps it so increasing Scale cannot crop the photo.
+dimensions stay unchanged. The manual Scale setting is kept for **Original size**;
+choosing **Fit entire photo** in the card sets Scale back to 100 and hides its row, since the
+fit sets the scale itself. A Scale other than 100 under Fit (from a preset, a keyframe, a tool
+or an older project) is named as ignored in the inspector and tool results, and the card shows
+its row with the reset arrow until it is cleared.
+Fit works at every strength, since the mapping never folds. AI Edge Fill marks a fill
+made on a Lens Correction whose look changed visibly with these fixes (the same half-percent
+threshold as the card's stretch note) as made before the update; a task already running resumes.
+Aperture and Focus Distance only shape the profile vignette: with Vignette Correction off the
+card dims them and says so.
 The fit follows distortion, focal length, sensor crop and optical center adjustments.
 
 ### Guided Perspective
@@ -2948,10 +2971,17 @@ commits one undoable change; Cancel or Escape leaves the effect unchanged. Switc
 the selected clip or composition cancels the draft session.
 
 The effect derives a projective transform from the guide vanishing points and fits
-the entire photo with uniform scale. **Scale** can crop transparent borders;
+the entire photo with uniform scale. **Framing** on **Fill frame** (`fillFrame`)
+instead enlarges the result just enough that the four frame corners land inside the
+corrected photo (a bisection on the strength-blended matrix, in
+`guidedPerspectiveFillScale`), so no transparent border is left; it follows a
+keyframed Strength frame by frame, and when more than 20× would be needed it keeps
+the whole photo and reports it. **Scale** zooms on top of either framing;
 **Strength** blends the transform back toward the original geometry, so lines stay
 straight at any Strength (saved projects with Strength below 100 render this
-corrected blend). Both support keyframes. Slanted borders get a one-pixel soft edge;
+corrected blend). Both support keyframes. Presets set Framing and Strength and keep
+the drawn guides. The card's reset arrow in the Guides row removes the guides and
+their correction in one undo step. Slanted borders get a one-pixel soft edge;
 out-of-range Scale, Strength or matrix values are clamped and reported.
 Guides and correction persist in the project and render during export. Duplicate,
 short, incomplete, and unstable guide pairs are rejected with an explanation.
@@ -2964,21 +2994,35 @@ distortion or independently straighten several surfaces with different planes.
 
 **AI Edge Fill**, under **Lens & Distort**, fills transparent borders left by
 Lens Correction and Guided Perspective on still images, including CR2. Place it
-after those corrections and before other effects. Choose a generation size,
-adjust the editable prompt for the scene, and click **Generate fill**.
+after those corrections and before other effects. The card has two sections:
+**Generate** (Resolution, the **Scene** menu with Room, Stage, Street and Landscape, the
+editable scene text and the **Fill** button) and **Blend**
+(Fill Opacity, Seam Blend).
 
 Generation uploads a bounded, positioned full-composition photo reference and a
 white=missing binary mask to **Kie.ai / Nano Banana
 Pro**, using the existing hosted AI service and cloud credits. It is not a local
 model. The reference marks missing areas magenta; opaque black content in
-the actual photograph remains protected. The editable prompt explains both references.
+the actual photograph remains protected. The request is a fixed technical frame
+(`edgeFillPrompt.ts`) that explains both references, around the scene text the user
+edits (`scene`). A full prompt saved by an earlier version (the old Prompt field held the
+whole request) is sent unchanged, and the card offers **Use scene text**; the old default
+prompts map to the scene text, word for word the same request.
 
 Only transparent pixels use the generated image. Existing opaque pixels retain
 their original resolution and color, even if the model changes them in its output.
 **Fill Opacity** controls the added areas and supports keyframes.
-**Seam Blend** (default 12 composition pixels) softly matches the neighboring
-original color on the added side only, supports keyframes, and can be set to zero.
-It reduces color seams, not arbitrary structural mistakes made by the model.
+**Seam Blend** (default 12 composition pixels) shifts the fill's colour by the
+average photo-minus-fill difference measured over the photo pixels in a disc of that
+radius (48 samples on six rings, angle and ring radius jittered per pixel, nearest fill
+reads), weighted by the larger of two terms: how close the nearest photo sample is and
+the share of the disc the photo covers. So it is full beside a straight edge and at a
+photo corner, zero at the radius, without rings,
+and samples beyond the frame do not count. The fill keeps its own detail; the photo
+side is never changed. It supports keyframes and can be set to zero. It reduces colour
+seams, not structural mistakes made by the model. (Before 2026-10-22 it replaced the
+fill with averaged edge pixels at four fixed rings, which echoed the photo's edge in
+steps; `tests/manual/aiEdgeFillGPU.html` checks the new behaviour on the GPU.)
 Generations are
 1K, 2K or 4K; the saved fill is sampled at the composition/export resolution,
 so a larger original photo is supported without promising native generated detail
@@ -3145,7 +3189,7 @@ Notes for developers; each effect page adds its own formula and limits.
   the untouched recipes run as a hand-written pass with the same mapping, frame edges and
   premultiplied read, within 1/255 of the graph; edited graphs run through the graph interpreter.
 - **Warnings.** Clamped or degenerate values (Radius ≤ 0, negative Amount, unknown Shape or Frame
-  Edges choices, out-of-range Fisheye values, Lens Correction folding at the active composition size,
+  Edges choices, out-of-range Fisheye values, a Scale that Lens Correction's Fit entire photo ignores,
   Guided Perspective limits) appear below the effect in the inspector, judged on the values at the
   playhead, and in the `addEffect` / `updateEffect` tool results.
 - **Code.** The recipes live in `src/services/operators/uvDistortRecipes.ts` and

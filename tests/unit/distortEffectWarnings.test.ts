@@ -28,9 +28,9 @@ describe('distort effects report values they clamp or cannot show', () => {
     vi.mocked(useMediaStore.getState).mockReturnValue(initialMediaState);
   });
 
-  it('returns tool warnings for a folding lens correction and a zero-size bulge, none for normal values', async () => {
-    const lens = data(await handleAddEffect({ clipId: 'video-clip', effectType: 'lens-correction', params: { distortion: -60 } }, useTimelineStore.getState()));
-    expect(lens.warnings?.join(' ')).toContain('fold');
+  it('returns tool warnings for a Scale that Fit ignores and a zero-size bulge, none for normal values', async () => {
+    const lens = data(await handleAddEffect({ clipId: 'video-clip', effectType: 'lens-correction', params: { distortion: -20, fitFullImage: true, scale: 140 } }, useTimelineStore.getState()));
+    expect(lens.warnings?.join(' ')).toContain('Scale 140% is ignored while Fit Entire Photo is on');
     const bulge = data(await handleAddEffect({ clipId: 'video-clip', effectType: 'bulge', params: { amount: 2 } }, useTimelineStore.getState()));
     expect(bulge.warnings).toBeUndefined();
     const updated = data(await handleUpdateEffect({ clipId: 'video-clip', effectId: bulge.effectId, params: { radius: 0 } }, useTimelineStore.getState()));
@@ -38,12 +38,12 @@ describe('distort effects report values they clamp or cannot show', () => {
   });
 
   it('names clamped Fisheye values instead of normalizing them silently', () => {
-    expect(fisheyeParameterWarnings({ strength: 3, fieldOfView: 140, samples: 5, edgeMode: 'wrap' })).toEqual([
+    expect(fisheyeParameterWarnings({ strength: 3, fieldOfView: 140, samples: 12, edgeMode: 'wrap' })).toEqual([
       'strength: 3 is outside -1..1; using 1.',
       'edgeMode: "wrap" is not an option; using transparent.',
-      'samples: 5 is not 1, 4 or 8; using 4.',
+      'samples: 12 is not a whole number from 1 to 8; using 8.',
     ]);
-    expect(fisheyeParameterWarnings({ strength: -.5, samples: 8 })).toEqual([]);
+    expect(fisheyeParameterWarnings({ strength: -.5, samples: 5 })).toEqual([]);
   });
   it('names unknown Shape and Frame Edges choices instead of falling back silently', async () => {
     const warnings = (type: string, params: Record<string, string | number>) => (getEffect(type) as EffectDefinition).paramWarnings!(params);
@@ -56,17 +56,21 @@ describe('distort effects report values they clamp or cannot show', () => {
     expect(wave.warnings).toContain('edges: "tile" is not an option; using mirror.');
   });
 
-  it('judges a Lens Correction fold at the active composition size', async () => {
-    // An optical centre near the left edge reaches much farther on a wide frame than on a tall one.
+  it('reports no fold for strong barrel removal at any composition size: the mapping never folds', async () => {
+    // An optical centre near the left edge reaches much farther on a wide frame than on a tall one; neither folds.
     const lens = getEffect('lens-correction') as EffectDefinition;
     const params = (distortion: number) => ({ ...Object.fromEntries(Object.entries(lens.params).map(([id, schema]) => [id, schema.default])), centerX: .15, distortion }) as Record<string, number | string | boolean>;
-    const folds = (distortion: number, width: number, height: number) => lens.paramWarnings!(params(distortion), width, height).some(text => text.includes('fold'));
-    const distortion = [-5, -10, -15, -20, -25, -30, -35, -40, -50, -60, -70, -80].find(value => folds(value, 1920, 1080) !== folds(value, 1080, 1920));
-    expect(distortion).toBeDefined();
+    for (const distortion of [-30, -60, -100]) for (const [width, height] of [[1920, 1080], [1080, 1920]]) {
+      // Nothing folds; the only note names the outer ring a straight line stretches instead of straightening.
+      const notes = lens.paramWarnings!(params(distortion), width, height);
+      expect(notes).toHaveLength(1); expect(notes[0]).toContain('stretched evenly and its lines are not straightened');
+      expect(notes.join(' ')).not.toMatch(/fold/i);
+    }
     const tall = { id: 'tall', name: 'Tall', width: 1080, height: 1920 } as never;
     vi.mocked(useMediaStore.getState).mockReturnValue({ ...initialMediaState, activeCompositionId: 'tall', compositions: [tall],
       getActiveComposition: () => tall } as ReturnType<typeof useMediaStore.getState>);
-    const added = data(await handleAddEffect({ clipId: 'video-clip', effectType: 'lens-correction', params: { centerX: .15, distortion: distortion! } }, useTimelineStore.getState()));
-    expect((added.warnings ?? []).some(text => text.includes('fold'))).toBe(folds(distortion!, 1080, 1920));
+    const added = data(await handleAddEffect({ clipId: 'video-clip', effectType: 'lens-correction', params: { centerX: .15, distortion: -80 } }, useTimelineStore.getState()));
+    expect(added.warnings).toHaveLength(1);
+    expect(added.warnings![0]).toContain('of the way to the frame corner the correction is stronger than the lens model allows');
   });
 });

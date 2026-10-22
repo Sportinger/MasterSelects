@@ -36,6 +36,9 @@ export const EFFECT_DOC_EXTRAS = {
   // Generators: the still is the effect frame alone.
   'color-wheel': { thumb: { region: [0, 0, 1, 1] } },
   'perspective-grid': { thumb: { region: [0, 0, 1, 1] } },
+  // Lens shapes that read at card size: the round Crystal Ball and the Magnifying Glass, not the page's whole-frame still.
+  fisheye: { thumb: { shot: 'scripts/effect-lab-shots/distort-thumbs.json' } },
+  bulge: { thumb: { shot: 'scripts/effect-lab-shots/distort-thumbs.json' } },
   // Stick Figure: the thumbnail is cut from the still, the default figure walking alone on black (the
   // loop's poster catches it mid-jump at the right edge); below its parameters the card has the
   // Pose library, Motion and Actions sections of its own (StickFigureControls, StickFigureActionLane).
@@ -76,13 +79,40 @@ export const EFFECT_DOC_EXTRAS = {
       { key: 'spillSuppression', section: 'Spill', label: 'Suppression' }, { key: 'spillMethod', section: 'Spill', label: 'Method' },
     ],
   },
-  'ai-edge-fill': {
+  // Lens Correction's own card (LensCorrectionControls): Framing is a menu for Fit Entire Photo at the top of
+  // Geometry, the Vignette Correction switch sits in the Vignette header, and the lens rows show their units.
+  'lens-correction': {
+    sectionLabels: { Profile: 'Lens profile' },
     rows: [
-      'resolution',
-      { key: 'prompt', default: 'a description of the scene to continue (editable)' },
-      { label: 'Generate fill', range: 'button', default: '–' },
-      'mix',
-      'seamBlend',
+      { key: 'focalLength', range: '24 to 105 mm', default: '24 mm', before: 'aperture' },
+      { key: 'aperture', range: 'f/4 to f/22', default: 'f/4' },
+      { key: 'focusDistance', range: '0.45 to 1000 m', default: '1000 m', before: 'cropFactor' },
+      { key: 'cropFactor', range: '1× to 2×', default: '1×' },
+      { key: 'fitFullImage', label: 'Framing', range: 'Original size or Fit entire photo', default: 'Original size', before: 'distortion' },
+      { key: 'vignetteEnabled', range: 'On or off', before: 'vignette' },
+    ],
+  },
+  // Guided Perspective's own card (GuidedPerspectiveControls): the Guides row (Edit guides, Reset) draws the
+  // hidden guides in the Preview, and Fill Frame is the Framing menu.
+  'guided-perspective': {
+    rows: [
+      { key: 'guides', range: '2 to 8 lines per direction (Edit guides, Reset)', default: 'none', before: 'strength' },
+      { key: 'fillFrame', label: 'Framing', range: 'Whole photo or Fill frame', default: 'Whole photo', before: 'strength' },
+      { key: 'strength', range: '0 to 100 %', default: '100 %' },
+      { key: 'scale', range: '50 to 300 %', default: '100 %' },
+    ],
+  },
+  // AI Edge Fill's own card (AiEdgeFillControls): Generate holds the request (Resolution, Prompt and the
+  // Fill button), Blend how the saved fill meets the photo.
+  'ai-edge-fill': {
+    sections: ['Generate', 'Blend'],
+    rows: [
+      { key: 'resolution', section: 'Generate', range: '1K, 2K or 4K' },
+      { label: 'Scene', section: 'Generate', range: 'Room, Stage, Street, Landscape or Own words', default: 'Room' },
+      { label: 'Scene text', section: 'Generate', range: 'Any words', default: 'this room, walls, ceiling and floor' },
+      { label: 'Fill', section: 'Generate', range: 'Generate fill, Resume task or Regenerate fill', default: 'Generate fill' },
+      { key: 'mix', section: 'Blend', range: '0 to 100 %', default: '100 %' },
+      { key: 'seamBlend', section: 'Blend', range: '0 to 64 px', default: '12 px' },
     ],
   },
   'face-cables': {

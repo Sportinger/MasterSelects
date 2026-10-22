@@ -21,9 +21,9 @@ describe('Fisheye shared nested compositions', () => {
     expect(graph.nodes.filter(node => node.operator === 'coordinates.restore-lens.vec2')).toHaveLength(3);
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'coordinates.divide-x.vec2')).toHaveLength(6);
     expect(expanded.nodes).toHaveLength(269);
-    // 19 presentation areas, 3 lens transforms, 6 nested divides and 1 shared sample normalization.
+    // 20 presentation areas, 3 lens transforms, 6 nested divides and 1 shared sample normalization.
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'sampling.normalize-rgba')).toHaveLength(1);
-    expect(expanded.groups).toHaveLength(29);
+    expect(expanded.groups).toHaveLength(30);
     expect(semantic(expanded)).toEqual(semantic(original));
     expect(validateEffectGraph(graph)).toEqual([]);
     let roundTrip = graph;
@@ -76,15 +76,21 @@ describe('Fisheye shared nested compositions', () => {
     expect(recognizeOperatorCompositions(fanout).nodes.find(node => node.id === 'red-unsqueeze-x')).toBeDefined();
   });
 
-  it('keeps all six areas, separates the sample input from its resolve and respects custom grouping', () => {
+  it('keeps all six areas plus Constants and Coordinates & Resources, separates the sample input from its resolve and respects custom grouping', () => {
     const source = createDefaultFisheyeGraph(), graph = organizeFisheyeGraph(source);
     expect(graph.nodes).toBe(source.nodes); expect(graph.edges).toBe(source.edges);
-    expect(graph.groups!.filter(group => !group.parentId)).toHaveLength(6);
+    const topLevel = graph.groups!.filter(group => !group.parentId);
+    expect(topLevel.map(group => group.label)).toEqual(['Fisheye Parameters', 'Edge Sampling', 'Lens Projection', 'Frame Edges',
+      'Chromatic Aberration', 'Lens Resolve', 'Constants', 'Coordinates & Resources']);
+    // Fisheye Parameters holds only the controls: every literal number is in Constants.
+    const parameters = graph.groups!.find(group => group.id === 'fisheye-parameters')!.nodeIds;
+    expect(source.nodes.filter(node => parameters.includes(node.id)).every(node => !node.constants)).toBe(true);
+    expect(graph.groups!.find(group => group.id === 'fisheye-sources')!.nodeIds).toEqual(['resolution', 'resolution-split']);
     expect(graph.groups!.find(group => group.id === 'fisheye-sample-average')?.nodeIds).toContain('aa-reduce');
     expect(graph.groups!.some(group => group.nodeIds.includes('frame') || group.nodeIds.includes('output'))).toBe(false);
     expect(organizeFisheyeGraph(graph)).toBe(graph);
     const custom = createDefaultFisheyeGraph(); custom.groups![0].label = 'My settings';
     expect(organizeFisheyeGraph(custom)).toBe(custom);
-    expect(effectOperatorGraph({ type: 'fisheye', params: {}, operatorGraph: source }).groups).toHaveLength(29);
+    expect(effectOperatorGraph({ type: 'fisheye', params: {}, operatorGraph: source }).groups).toHaveLength(30);
   });
 });

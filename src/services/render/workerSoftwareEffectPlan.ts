@@ -13,6 +13,7 @@ import { COLOR_RECIPE_EFFECT_TYPES } from '../operators/colorEffectGraphs';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
+import { fisheyeSampleCount } from '../../effects/distort/fisheye/normalization';
 import { GLOW_DEFAULTS } from '../../effects/stylize/glow/glowBloom';
 import { chromaKeyHexColor, chromaKeyNumbers, chromaKeyScreen, chromaKeySpillMethod } from '../../effects/keying/chroma-key/keyerContract';
 import type { ChromaKeyCpuSettings } from '../../effects/keying/chroma-key/keyerCpu';
@@ -324,7 +325,6 @@ function effectFilterPart(
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
       const projection = effect.params.projection;
       const edgeMode = effect.params.edgeMode;
-      const parsedSamples = Number(effect.params.samples);
       (pixelEffects.fisheyeAdjustments ??= []).push({
         projection: projection === 'equisolid'
           || projection === 'stereographic'
@@ -350,7 +350,7 @@ function effectFilterPart(
         chromaticAberration: Math.max(0, Math.min(0.05, finiteEffectNumber(effect.params.chromaticAberration, 0))),
         vignette: Math.max(0, Math.min(1, finiteEffectNumber(effect.params.vignette, 0))),
         vignetteSoftness: Math.max(0.01, Math.min(1, finiteEffectNumber(effect.params.vignetteSoftness, 0.25))),
-        samples: parsedSamples >= 8 ? 8 : parsedSamples >= 4 ? 4 : 1,
+        samples: fisheyeSampleCount(effect.params.samples),
       });
       return '';
     }

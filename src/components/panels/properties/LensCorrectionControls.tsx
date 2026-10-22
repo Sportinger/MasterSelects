@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { EffectControlProps } from '../../../effects/types';
 import { LENS_CORRECTION_PARAMS, normalizeLensCorrection } from '../../../effects/distort/lens-correction';
 import { CANON_24_105_PROFILE, LENS_PROFILE_OPTIONS } from '../../../effects/distort/lens-correction/lensProfile';
@@ -12,16 +12,17 @@ import { EffectKeyframeToggle } from './shared';
 
 export function LensCorrectionControls({ params, onChange, clipId, effectInstanceId }: EffectControlProps) {
   const file = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.file);
-  const [metadata, setMetadata] = useState<RawPhotoMetadata>();
-  const [metadataError, setMetadataError] = useState(false);
+  // Metadata belongs to the file it was read from, so a new file shows nothing until its own read ends.
+  const [loaded, setLoaded] = useState<{ file: typeof file; metadata?: RawPhotoMetadata; error?: boolean }>();
+  const metadata = loaded?.file === file ? loaded?.metadata : undefined;
+  const metadataError = loaded?.file === file && loaded?.error === true;
   const latest = useRef({ params, onChange });
-  latest.current = { params, onChange };
+  useEffect(() => { latest.current = { params, onChange }; });
   useEffect(() => {
     let current = true;
-    setMetadata(undefined); setMetadataError(false);
     if (file && isRawImageFile(file)) void getRawPhotoMetadata(file).then(value => {
-      if (current) setMetadata(value);
-    }).catch(() => { if (current) setMetadataError(true); });
+      if (current) setLoaded({ file, metadata: value });
+    }).catch(() => { if (current) setLoaded({ file, error: true }); });
     return () => { current = false; };
   }, [file]);
   const p = normalizeLensCorrection(params);
@@ -38,9 +39,15 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
       } : value === CANON_24_105_PROFILE ? { sourceAspect: 0 } : {}),
     });
   };
+  const vignetteOff = params.vignetteEnabled === false;
+  // Fit sets the scale itself: Scale only reappears while it holds a value Fit ignores, so its reset arrow can clear it.
+  const fitHidesScale = params.fitFullImage === true && p.scale === 100;
+  // Aperture and Focus Distance only shape the profile's vignette: with the Vignette switch off they do nothing.
+  const vignetteOnly = (key: string) => vignetteOff && (key === 'aperture' || key === 'focusDistance');
   const rows = (group: string) => Object.entries(LENS_CORRECTION_PARAMS)
-    .filter(([key, def]) => def.type === 'number' && !def.hidden && def.group === group && !(key === 'scale' && params.fitFullImage === true))
+    .filter(([key, def]) => def.type === 'number' && !def.hidden && def.group === group && !(key === 'scale' && fitHidesScale))
     .map(([key, def]) => <ResolveInspectorNumberRow key={key} label={def.label}
+      disabled={vignetteOnly(key)} title={vignetteOnly(key) ? 'Acts on the vignette, which is switched off' : undefined}
       value={p[key]} defaultValue={def.default as number} min={def.min!} max={def.max!}
       hardMin={def.min!} hardMax={def.max!} step={def.step!} sensitivity={(def.max! - def.min!) / 100}
       decimals={def.step! >= 0.1 ? 1 : 3} suffix={key === 'focalLength' ? 'mm' : key === 'focusDistance' ? 'm' : undefined}
@@ -48,13 +55,19 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
       onChange={value => change(key, value)}
       keyframeToggle={clipId && effectInstanceId && def.animatable
         ? <EffectKeyframeToggle clipId={clipId} effectId={effectInstanceId} paramName={key} value={p[key]} /> : undefined} />);
-  return <div className="effects-tab transform-tab-compact">
+  // Pointer activation must not leave a focus ring on selects or buttons (keyboard focus stays visible).
+  const blurPointerFocus = (event: PointerEvent) => {
+    if (event.target instanceof Element) event.target.closest<HTMLElement>('button, select')?.blur();
+  };
+  // The shared effect-section layout (as Chroma Key): rows keep label, slider and value on one line in the card.
+  return <div className="effects-tab effect-sections" onPointerUp={blurPointerFocus}>
     <ResolveInspectorSection title="Lens profile" indicator="none">
       <ResolveInspectorRow label="Lens"><InspectorSelect ariaLabel="Lens profile" value={profile}
         options={LENS_PROFILE_OPTIONS} onChange={selectProfile} /></ResolveInspectorRow>
       {metadata && <p className="effect-info">{metadata.lens} · {metadata.focalLength} mm · f/{metadata.aperture}</p>}
       {metadataError && <p className="effect-info" role="status">Camera metadata unavailable. Set focal length and aperture below.</p>}
-      {profile !== 'manual' && <>{rows('profile')}<p className="effect-info">
+      {profile !== 'manual' && <>{rows('profile')}{vignetteOff && <p className="effect-info" role="status">
+        Aperture and Focus Distance act on the vignette, which is switched off.</p>}<p className="effect-info">
         Lensfun full-frame calibration. Set Sensor Crop for APS-C; 1000 m approximates infinity when focus distance is unknown.
       </p></>}
     </ResolveInspectorSection>
@@ -66,7 +79,9 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
     >{group === 'geometry' && <ResolveInspectorRow label="Framing"><InspectorSelect ariaLabel="Lens correction framing"
       value={params.fitFullImage === true ? 'fit' : 'original'}
       options={[{value:'original',label:'Original size'},{value:'fit',label:'Fit entire photo'}]}
-      onChange={value=>change('fitFullImage',value==='fit')} /></ResolveInspectorRow>}
+      onChange={value=>value==='fit'
+        ? onChange({ ...params, ...(metadata ? { sourceAspect: metadata.width / metadata.height } : {}), fitFullImage: true, scale: 100 })
+        : change('fitFullImage', false)} /></ResolveInspectorRow>}
       {rows(group)}</ResolveInspectorSection>)}
   </div>;
 }

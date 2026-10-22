@@ -2,11 +2,11 @@ import { FISHEYE_PARAMS } from './parameters';
 
 export type NormalizedFisheyeParameters = Record<keyof typeof FISHEYE_PARAMS, number | boolean | string>;
 
-function sampleCount(value: unknown): number {
+/** Edge Sampling: every whole count from 1 to 8 renders that many samples; a value that is no number renders 1. */
+export function fisheyeSampleCount(value: unknown): number {
   const parsed = typeof value === 'number' ? value : Number(value);
-  if (parsed >= 8) return 8;
-  if (parsed >= 4) return 4;
-  return 1;
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.min(8, Math.max(1, Math.round(parsed)));
 }
 
 /** Resolves arbitrary effect params into canonical UI units without mutating persisted values. */
@@ -14,7 +14,7 @@ export function normalizeFisheyeParameters(params: Record<string, unknown>): Nor
   const normalized = {} as NormalizedFisheyeParameters;
   for (const [id, schema] of Object.entries(FISHEYE_PARAMS)) {
     const key = id as keyof typeof FISHEYE_PARAMS, raw = params[id];
-    if (id === 'samples') { normalized[key] = sampleCount(raw); continue; }
+    if (id === 'samples') { normalized[key] = fisheyeSampleCount(raw); continue; }
     if (schema.type === 'number') {
       let value = typeof raw === 'number' && Number.isFinite(raw) ? raw : schema.default;
       if (schema.min !== undefined) value = Math.max(schema.min, value);
@@ -41,9 +41,9 @@ export function fisheyeParameterWarnings(params: Record<string, unknown>): strin
       warnings.push(`${id}: "${String(raw)}" is not an option; using ${String(schema.default)}.`);
     }
   }
-  const samples = Number(params.samples);
-  if (params.samples !== undefined && ![1, 4, 8].includes(samples)) {
-    warnings.push(`samples: ${String(params.samples)} is not 1, 4 or 8; using ${samples >= 8 ? 8 : samples >= 4 ? 4 : 1}.`);
+  const samples = Number(params.samples), count = fisheyeSampleCount(params.samples);
+  if (params.samples !== undefined && samples !== count) {
+    warnings.push(`samples: ${String(params.samples)} is not a whole number from 1 to 8; using ${count}.`);
   }
   return warnings;
 }

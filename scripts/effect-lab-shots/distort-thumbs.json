@@ -1,0 +1,61 @@
+{
+  "about": "The gallery thumbnails of Fisheye Lens and Bulge & Pinch: Fisheye shows the whole bent street inside the Peephole's dark-rimmed circle (Lens Radius 0.86 so the whole rim fits), Bulge the Magnifying Glass preset over the walker, cropped wide enough that the untouched street surrounds the glass, so the two read differently side by side. node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/distort-thumbs.json",
+  "pairs": [
+    {
+      "name": "fisheye-thumb",
+      "out": "docs/Features/assets/effects/thumbs/fisheye.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "single",
+      "crop": [
+        176,
+        20,
+        1568,
+        980
+      ],
+      "outWidth": 400,
+      "maxBytes": 24000,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "fisheye",
+        "params": {
+          "fieldOfView": 170,
+          "radius": 0.86,
+          "zoom": 0.25,
+          "edgeMode": "mirror",
+          "outside": "transparent",
+          "feather": 0.03,
+          "vignette": 0.6,
+          "vignetteSoftness": 0.35
+        }
+      }
+    },
+    {
+      "name": "bulge-thumb",
+      "out": "docs/Features/assets/effects/thumbs/bulge.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "single",
+      "crop": [
+        320,
+        140,
+        1280,
+        800
+      ],
+      "outWidth": 400,
+      "maxBytes": 24000,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "bulge",
+        "params": {
+          "amount": 3,
+          "radius": 0.3
+        }
+      }
+    }
+  ]
+}

@@ -10,10 +10,10 @@ photos. Add one in **Properties → Effects → + Add Effect → Lens & Distort*
 
 | Look | Use |
 |---|---|
-| a lens bump or a squeeze | [Bulge & Pinch](./effects/bulge.md) |
+| a lens bump or a squeeze in one round area, the rest untouched | [Bulge & Pinch](./effects/bulge.md) |
 | a swirl | [Twirl](./effects/twirl.md) |
 | ripples, heat shimmer | [Wave](./effects/wave.md) |
-| an ultra-wide round lens | [Fisheye Lens](./effects/fisheye.md) |
+| an ultra-wide round lens: the whole frame bends, the corners stay | [Fisheye Lens](./effects/fisheye.md) |
 | a symmetric pattern | [Kaleidoscope](./effects/kaleidoscope.md) |
 | a mirror image | [Mirror](./effects/mirror.md) |
 | colour fringes, a glitch | [RGB Split](./effects/rgb-split.md) |

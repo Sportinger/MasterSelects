@@ -1,9 +1,11 @@
+import type { PointerEvent } from 'react';
 import type { EffectControlProps } from '../../../effects/types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { IDENTITY, parsePerspectiveGuides } from '../../../effects/distort/guided-perspective/guideGeometry';
-import { ResolveInspectorSection, ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorSection, ResolveInspectorRow, ResolveInspectorIconButton, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
+import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { EffectKeyframeToggle } from './shared';
 import { usePerspectiveGuideEditing } from './perspectiveGuides/perspectiveGuideEditing';
 import { getFirstEditablePreviewPanelId } from '../../preview/previewPanelDom';
@@ -11,40 +13,65 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { useDockStore } from '../../../stores/dockStore';
 import './perspectiveGuides/PerspectiveGuides.css';
 
+const NUMBER_ROWS = [
+  { key: 'strength', label: 'Strength', min: 0, max: 100 },
+  { key: 'scale', label: 'Scale', min: 50, max: 300 },
+] as const;
+
 export function GuidedPerspectiveControls({ params, onChange, clipId, effectInstanceId }: EffectControlProps) {
   const target = usePerspectiveGuideEditing(state => state.target);
   const editing = target?.clipId === clipId && target?.effectId === effectInstanceId;
   const clip = useTimelineStore(state => state.clips.find(c => c.id === clipId));
   const guides = parsePerspectiveGuides(params.guides);
+  const vertical = guides.filter(guide => guide.axis === 'vertical').length;
+  // A correction can be active without readable guides (a matrix set by a tool, or guide text that no longer parses).
+  const corrected = IDENTITY.some((value, i) => typeof params[`matrix${i}`] === 'number' && Math.abs(params[`matrix${i}`] as number - value) > 1e-9);
+  const lensBefore = !!clip?.effects.slice(0, Math.max(0, clip.effects.findIndex(effect => effect.id === effectInstanceId)))
+    .some(effect => effect.type === 'lens-correction' && effect.enabled);
   const commit = (next: EffectControlProps['params']) => {
     startBatch('Guided Perspective');
     try { onChange(next); } finally { endBatch(); }
   };
-  return <ResolveInspectorSection title="Perspective" indicator="none">
-    <ResolveInspectorRow label="Guides"><button type="button" className="perspective-action"
-      disabled={!clip || clip.source?.type !== 'image' || !effectInstanceId} aria-pressed={editing}
-      onClick={() => {
-        if (editing && target) { usePerspectiveGuideEditing.getState().end(target.id); return; }
-        const compositionId = useMediaStore.getState().activeCompositionId;
-        if (!clipId || !effectInstanceId || !compositionId) return;
-        useTimelineStore.getState().pause();
-        useMediaStore.getState().setSourceMonitorFile(null);
-        useDockStore.getState().activatePanelType('preview');
-        usePerspectiveGuideEditing.getState().begin({ clipId, effectId: effectInstanceId, compositionId,
-          panelId: getFirstEditablePreviewPanelId() });
-      }}
-      onPointerUp={event => event.currentTarget.blur()}>Edit guides</button></ResolveInspectorRow>
-    <p className="effect-info">{clip && clip.source?.type !== 'image' ? 'Guides can be drawn on still photos (image clips) only. '
-      : ''}{guides.length ? `${guides.length} guides applied.` : 'Draw at least two vertical or horizontal guides, up to eight per direction.'}
-      {' '}Apply Lens Correction before this effect. Draw in Preview; wheel or pinch to zoom, right-click a guide to remove it.</p>
-    {(['strength', 'scale'] as const).map(key => <ResolveInspectorNumberRow key={key}
-      label={key === 'strength' ? 'Strength' : 'Scale'} value={typeof params[key] === 'number' ? params[key] as number : 100}
-      defaultValue={100} min={key === 'scale' ? 50 : 0} max={key === 'scale' ? 300 : 100} step={0.1} suffix="%"
-      hardMin={key === 'scale' ? 50 : 0} hardMax={key === 'scale' ? 300 : 100}
-      onChange={value => onChange({ ...params, [key]: value })}
-      keyframeToggle={clipId && effectInstanceId ? <EffectKeyframeToggle clipId={clipId} effectId={effectInstanceId} paramName={key} value={Number(params[key] ?? 100)} /> : undefined} />)}
-    <ResolveInspectorRow label="Correction"><button type="button" className="perspective-action"
-      onPointerUp={event => event.currentTarget.blur()} onClick={() => commit({ ...params, guides: '[]', strength: 100, scale: 100,
-        ...Object.fromEntries(IDENTITY.map((value, i) => [`matrix${i}`, value])) })}>Reset guides</button></ResolveInspectorRow>
-  </ResolveInspectorSection>;
+  const beginEditing = () => {
+    if (editing && target) { usePerspectiveGuideEditing.getState().end(target.id); return; }
+    const compositionId = useMediaStore.getState().activeCompositionId;
+    if (!clipId || !effectInstanceId || !compositionId) return;
+    useTimelineStore.getState().pause();
+    useMediaStore.getState().setSourceMonitorFile(null);
+    useDockStore.getState().activatePanelType('preview');
+    usePerspectiveGuideEditing.getState().begin({ clipId, effectId: effectInstanceId, compositionId,
+      panelId: getFirstEditablePreviewPanelId() });
+  };
+  // Pointer activation must not leave a focus ring on selects or buttons (keyboard focus stays visible).
+  const blurPointerFocus = (event: PointerEvent) => {
+    if (event.target instanceof Element) event.target.closest<HTMLElement>('button, select')?.blur();
+  };
+  return <div className="effects-tab effect-sections" onPointerUp={blurPointerFocus}>
+    <ResolveInspectorSection title="Perspective" indicator="none">
+      <ResolveInspectorRow label="Guides" className="perspective-guides-row" actions={<ResolveInspectorIconButton ariaLabel="Reset guides" className="resolve-inspector-reset-button"
+        disabled={!guides.length && !corrected} onClick={() => commit({ ...params, guides: '[]',
+          ...Object.fromEntries(IDENTITY.map((value, i) => [`matrix${i}`, value])) })}><ResolveResetIcon /></ResolveInspectorIconButton>}>
+        <button type="button" className="perspective-action"
+          disabled={!clip || clip.source?.type !== 'image' || !effectInstanceId} aria-pressed={editing}
+          onClick={beginEditing}>Edit guides</button></ResolveInspectorRow>
+      <p className="effect-info">{clip && clip.source?.type !== 'image' ? 'Guides can be drawn on still photos (image clips) only. ' : ''}
+        {editing ? 'Draw along edges in the Preview. Wheel or pinch zooms, right-click removes a guide, Apply keeps them.'
+          : guides.length ? `${[[vertical, 'vertical'], [guides.length - vertical, 'horizontal']].filter(([count]) => count)
+            .map(([count, axis]) => `${count} ${axis}`).join(' and ')} guides applied.`
+            : corrected ? 'A correction is set without readable guides. Reset clears it; Edit guides draws new ones.'
+            : `No guides yet: choose Edit guides and draw at least two lines along edges that should be vertical (or horizontal).${lensBefore ? '' : ' For a bent wide-angle photo, put Lens Correction before this effect.'}`}</p>
+      <ResolveInspectorRow label="Framing"><InspectorSelect ariaLabel="Guided Perspective framing"
+        value={params.fillFrame === true ? 'fill' : 'whole'}
+        options={[{ value: 'whole', label: 'Whole photo' }, { value: 'fill', label: 'Fill frame' }]}
+        onChange={value => onChange({ ...params, fillFrame: value === 'fill' })} /></ResolveInspectorRow>
+      {/* The 20× Fill frame limit shows once, in the card's shared warning notice (paramWarnings). */}
+      {NUMBER_ROWS.map(({ key, label, min, max }) => <ResolveInspectorNumberRow key={key}
+        label={label} value={typeof params[key] === 'number' ? params[key] as number : 100}
+        defaultValue={100} min={min} max={max} step={0.1} decimals={1} suffix="%" hardMin={min} hardMax={max}
+        sensitivity={(max - min) / 100}
+        persistenceKey={`effect.${clipId ?? 'global'}.${effectInstanceId ?? 'guided-perspective'}.${key}`}
+        onChange={value => onChange({ ...params, [key]: value })}
+        keyframeToggle={clipId && effectInstanceId ? <EffectKeyframeToggle clipId={clipId} effectId={effectInstanceId} paramName={key} value={Number(params[key] ?? 100)} /> : undefined} />)}
+    </ResolveInspectorSection>
+  </div>;
 }

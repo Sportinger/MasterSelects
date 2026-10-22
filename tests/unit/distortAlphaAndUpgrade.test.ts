@@ -5,7 +5,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FISHEYE_PARAMS } from '../../src/effects/distort/fisheye/parameters';
 import { createDefaultFisheyeGraph } from '../../src/services/operators/fisheyeEffectGraph';
-import { STRAIGHT_ALPHA_FISHEYE_FINGERPRINT, upgradeFisheyeGraph } from '../../src/services/operators/fisheyeGraphUpgrade';
+import { QUAD_SAMPLES_FISHEYE_FINGERPRINT, STRAIGHT_ALPHA_FISHEYE_FINGERPRINT, upgradeFisheyeGraph } from '../../src/services/operators/fisheyeGraphUpgrade';
 import { effectRecipeFingerprint } from '../../src/services/operators/recipeFingerprint';
 import { organizeFisheyeGraph } from '../../src/services/operators/fisheyeGraphPresentation';
 import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
@@ -111,6 +111,22 @@ describe('saved Fisheye graphs', () => {
     const presented = packOperatorCompositions(recognizeOperatorCompositions(organizeFisheyeGraph(legacy)));
     expect(effectRecipeFingerprint(JSON.parse(JSON.stringify(presented)))).toBe(STRAIGHT_ALPHA_FISHEYE_FINGERPRINT);
     expect(effectRecipeFingerprint(createDefaultFisheyeGraph())).not.toBe(STRAIGHT_ALPHA_FISHEYE_FINGERPRINT);
+  });
+
+  it('moves an untouched graph whose sample offsets ran round the pixel to the paired offsets', () => {
+    // The previous recipe: the same graph with the eight offsets in their old, circular order.
+    const previous = createDefaultFisheyeGraph();
+    const oldOrder = [[-.375, -.125], [.125, -.375], [.375, .125], [-.125, .375], [-.4375, .3125], [-.3125, -.4375], [.4375, -.3125], [.3125, .4375]];
+    oldOrder.forEach(([x, y], index) => {
+      previous.nodes.find(node => node.id === `jitter-${index}-x`)!.constants = { value: x };
+      previous.nodes.find(node => node.id === `jitter-${index}-y`)!.constants = { value: y };
+    });
+    expect(effectRecipeFingerprint(previous)).toBe(QUAD_SAMPLES_FISHEYE_FINGERPRINT);
+    expect(effectRecipeFingerprint(createDefaultFisheyeGraph())).not.toBe(QUAD_SAMPLES_FISHEYE_FINGERPRINT);
+    const upgraded = upgradeFisheyeGraph(previous);
+    expect(upgraded.nodes.find(node => node.id === 'jitter-1-x')!.constants).toEqual({ value: .375 });
+    const edited = structuredClone(previous); edited.nodes.find(node => node.id === 'half')!.constants = { value: .4 };
+    expect(upgradeFisheyeGraph(edited)).toBe(edited);
   });
 
   it('moves an untouched saved graph to the premultiplied recipe on load, and keeps edited ones', () => {

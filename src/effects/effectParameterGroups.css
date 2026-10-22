@@ -65,4 +65,11 @@
     margin-top: 8px;
     padding-top: 8px;
   }
+  /* The divider only separates extra controls from rows above them: a card that shows nothing else
+     (AI Edge Fill, Flocking) starts with its own controls, without an empty band under the header. */
+  .effect-extra-controls:first-child {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+  }
 }

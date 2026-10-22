@@ -17,7 +17,7 @@ describe('Fisheye dynamic hierarchy layout', () => {
     const clip = fixture(), all = project(clip, true);
     clip.nodeGraph = { version: 1, nodes: [], groups: Object.fromEntries(all.groups!.map(group => [group.id, { collapsed: group.id !== 'effect:f' }])) };
     const compact = project(clip);
-    expect(compact.nodes).toHaveLength(10);
+    expect(compact.nodes).toHaveLength(12);
     for (const area of all.groups!.filter(group => group.parentId === 'effect:f')) {
       const proxy = compact.nodes.find(node => node.id === area.proxyId)!;
       const ids = new Set(area.nodeIds);
@@ -35,6 +35,17 @@ describe('Fisheye dynamic hierarchy layout', () => {
     const parameters = compact.nodes.find(node => node.label === 'Fisheye Parameters')!;
     expect(parameters.outputs.some(port => /squeeze/i.test(port.label))).toBe(true);
     expect(compact.edges.length).toBeLessThan(90);
+  });
+  it('lays the folded stages out from left to right, as the docs overview shows them', () => {
+    const clip = fixture(), all = project(clip, true);
+    clip.nodeGraph = { version: 1, nodes: [], groups: Object.fromEntries(all.groups!.map(group => [group.id, { collapsed: group.id !== 'effect:f' }])) };
+    const stages = project(clip), placement = arrangeFlowPlacement(stages, reconcileCanvasPlacement(stages));
+    const x = (label: string) => placement.nodes[stages.nodes.find(node => node.label === label)!.id].x;
+    expect(x('Edge Sampling')).toBeLessThan(x('Lens Projection'));
+    expect(x('Input Frame')).toBeLessThan(x('Frame Edges'));
+    expect(x('Lens Projection')).toBeLessThan(x('Chromatic Aberration'));
+    expect(x('Frame Edges')).toBeLessThan(x('Chromatic Aberration'));
+    expect(x('Chromatic Aberration')).toBeLessThan(x('Lens Resolve'));
   });
   it('reuses immutable effect interiors across staged folds and produces the same projection', () => {
     const clip = fixture(), document = buildClipNodeGraphDocument(clip);

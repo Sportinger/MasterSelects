@@ -20,6 +20,8 @@ export const RESOLVE_ROW_EFFECTS: ReadonlySet<string> = new Set(['gaussian-blur'
   'acuarela', 'rom1', 'sheen', 'pixel-particle-disintegrate',
   'color-wheel', 'perspective-grid', 'stick-figure',
   'weave',
+  // Lens & Distort, revised to the effect standard.
+  'fisheye',
   // The pilot of the effect standard (presets, docs paragraphs): Documentation-Site.md "Effect pages".
   'drift-lines', ...GLYPH_RESOLVE_ROW_EFFECTS]);
 

@@ -121,6 +121,11 @@ const GRAPH_PORT_LABELS: Record<string, Record<string, string>> = {
     'spatial-profile': 'Profile Time', 'protection-mask': 'Center Protection', 'time-map-mix-0': 'Field Time',
     'time-map-mix-1': 'Field Time', 'subject-clamp': 'Subject Mask', 'rgb-time-preview': 'Time Map Preview' },
   'time-stack': { 'decay-clamped': 'Decay', opacity: 'Opacity', delay: 'Delay', history: 'Past Frame' },
+  // Fisheye Lens: what its folders hand on, so the overview reads as one path (fisheyeGraphPresentation.ts).
+  fisheye: { 'sample-uv': 'Sample Position', 'lens-direction': 'Direction', 'sample-radius': 'Read Distance',
+    'radius-half-safe': 'Lens Half Size', 'rotation-radians': 'Lens Rotation (rad)', 'frame-aspect': 'Frame Aspect',
+    center: 'Lens Centre', 'lens-position-radius': 'Distance from Centre', 'edge-mode-select': 'Frame with Edges',
+    'source-premultiplied': 'Premultiplied Source', 'chroma-select': 'Lens Colour', result: 'Fisheye Image' },
 };
 
 /** Names of what outputs carry (node id or `id:port`) for an effect's graph: card outputs and folder ports show them. */

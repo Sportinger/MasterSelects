@@ -12,7 +12,7 @@ import { canvasPlacement } from './canvasPlacement';
 import { edgeFillReference } from './edgeFillReference';
 import { getEffectiveScale } from '../../../utils/transformScale';
 import { rotationDegreesToRadians } from '../../../utils/rotationUnits';
-import { EDGE_FILL_PROMPT, LEGACY_EDGE_FILL_PROMPT } from './edgeFillPrompt';
+import { resolveEdgeFillPrompt } from './edgeFillPrompt';
 
 interface JobState { busy: boolean; message: string; error?: string; taskId?: string }
 const IDLE: JobState = { busy: false, message: '' };
@@ -74,14 +74,19 @@ export async function generateEdgeFill(clipId: string, effectId: string): Promis
     let aspect = checkpoint?.aspect;
     const pendingSignature = effect.params.taskId ? effect.params.taskSignature : checkpoint?.signature;
     if (taskId) update(clipId, effectId, { busy: true, message: 'Resuming saved task…', taskId });
-    if (taskId && pendingSignature !== source.signature) throw new Error('Pending task uses different corrections. Restore them or discard the task before generating again.');
+    // A task started before an update that redraws its correction (legacy signature) still resumes: it was paid for.
+    // Its fill keeps that older signature, so the card marks it as made before the update.
+    const matches = (signature: unknown) => signature === source.signature || signature === source.legacySignature;
+    if (taskId && !matches(pendingSignature)) throw new Error('Pending task uses different corrections. Restore them or discard the task before generating again.');
+    let resultSignature = taskId ? String(pendingSignature) : source.signature;
     if (!taskId) {
-      const enteredPrompt = String(effect.params.prompt || '').trim();
-      const prompt = enteredPrompt === LEGACY_EDGE_FILL_PROMPT ? EDGE_FILL_PROMPT : enteredPrompt;
-      if (!prompt) throw new Error('Enter a prompt describing how to extend the photograph.');
+      // The scene text in its fixed frame; a full prompt saved by an earlier version is sent as it was.
+      const prompt = resolveEdgeFillPrompt(effect.params);
       const requestId = String(effect.params.requestId || checkpoint?.requestId || `edge-fill:${crypto.randomUUID()}`);
       const requestSignature = effect.params.requestId ? effect.params.requestSignature : checkpoint?.requestId ? checkpoint.signature : source.signature;
-      if (requestSignature !== source.signature) throw new Error('Pending request uses different corrections. Restore them or discard it first.');
+      if (!matches(requestSignature)) throw new Error('Pending request uses different corrections. Restore them or discard it first.');
+      // A request saved before the update may already have reached the provider with the older geometry.
+      resultSignature = String(requestSignature);
       const preview = await createGuidedPhotoPreview(initial.file, source.effects);
       aspect = composition.width / composition.height;
       const placement = canvasPlacement({ ...initial.transform, scale: getEffectiveScale(initial.transform.scale),
@@ -116,11 +121,11 @@ export async function generateEdgeFill(clipId: string, effectId: string): Promis
     update(clipId, effectId, { busy: true, message: 'Saving fill image…', taskId });
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Fill download failed (${response.status}). Resume to retry.`);
-    const artifactId = await edgeFillArtifacts.save(await response.blob(), store, source.signature, aspect);
+    const artifactId = await edgeFillArtifacts.save(await response.blob(), store, resultSignature, aspect);
     current();
     startBatch('Generate AI edge fill');
     try { useTimelineStore.getState().updateClipEffect(clipId, effectId, {
-      artifactId, canvasSpace: true, sourceSignature: source.signature, taskId: '', taskSignature: '', requestId: '', requestSignature: '',
+      artifactId, canvasSpace: true, sourceSignature: resultSignature, taskId: '', taskSignature: '', requestId: '', requestSignature: '',
     }); } finally { endBatch(); }
     await publication?.appendJournal(checkpointId(clipId, effectId), { taskId: '' });
     update(clipId, effectId, { busy: false, message: 'Fill saved. Original pixels preserved.' });

@@ -52,11 +52,12 @@ export async function renderSoftwareGuidePhoto(bitmap: ImageBitmap, effects: Eff
           const dy = ((y + .5) / height - p[5]) * radiusScale / p[2];
           const r2 = dx * dx + dy * dy, r = Math.sqrt(r2), profileR = r * 1.80277564 / p[10];
           const measured = 1 + p[15] * (p[12] * profileR ** 3 + p[13] * profileR ** 2 + p[14] * profileR);
-          const radial = Math.max(.05, measured * (1 + p[0] * r2 + p[1] * r2 * r2));
+          // Beyond the knee (p[11]) the mapping follows the larger of a straight line and the polynomial, as in the shader.
+          const polynomial = Math.max(.05, measured * (1 + p[0] * r2 + p[1] * r2 * r2));
+          const radial = r > p[11] ? Math.max(polynomial, (p[24] + p[25] * (r - p[11])) / Math.max(r, 1e-6)) : polynomial;
           const sx = dx * radial / (p[3] * radiusScale), sy = dy * radial / radiusScale;
           const u = p[4] + sx, v = p[5] + sy;
-          // Beyond the fold radius (p[11]) the correction would mirror the picture: leave it empty.
-          const covered = coverage(u, v) * Math.max(0, Math.min(1, (p[11] - r) * width * p[2] / (p[3] * radiusScale) + .5));
+          const covered = coverage(u, v);
           if (covered <= 0) continue;
           const tcaR2 = profileR * profileR * radial * radial;
           const redScale = (p[17] + p[16] * tcaR2) * (1 + p[6]), blueScale = (p[19] + p[18] * tcaR2) * (1 + p[7]);

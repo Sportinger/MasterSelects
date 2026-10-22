@@ -55,6 +55,7 @@ export const HAND_MADE = [
   // definition, while the shared preset row would reset its other controls; doc-clip reads definition presets only.
   ...['mp4', 'webp'].map((extension) => ({ path: `${ASSET_DIR}/effects/clips/slit-scan-presets.${extension}`,
     reason: 'the Slit Scan presets grid, exported with doc-clip from SLIT_SCAN_LOOKS; a recipe once the presets can live in the definition' })),
+  { path: `${ASSET_DIR}/effects/presets/guided-perspective.webp`, reason: 'Guided Perspective presets act on drawn guides, which effect-lab --presets cannot pass yet (base params per strip): rendered by hand from scripts/effect-lab-shots/distort.json handMadeStrips' },
 ];
 export const handMadeReason = (asset) => HAND_MADE.find((entry) => (entry.path.endsWith('/') ? asset.startsWith(entry.path) : asset === entry.path))?.reason;
 
@@ -67,14 +68,10 @@ const BEFORE_RECIPES = 'a custom pair from before recipes were kept: the page re
 export const RECIPE_PENDING = {
   ...Object.fromEntries([
     'box-blur.webp',
-    'bulge.webp',
     'contrast.webp',
     'edge-detect.webp',
     'exposure.webp',
-    'fisheye.webp',
     'grain.webp',
-    'guided-perspective.webp',
-    'lens-correction.webp',
     'levels.webp',
     'motion-blur.webp',
     'radial-blur.webp',
