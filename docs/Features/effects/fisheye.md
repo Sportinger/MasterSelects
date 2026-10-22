@@ -6,9 +6,9 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-compare docs-shot--float-left">
 
-![The rainy night street with neon signs, original left and with Fisheye Lens right: on the right the walker with the umbrella in the middle comes much closer and the shop fronts at both sides bend round towards the edges, as through an ultra-wide fisheye lens, while the corners stay where they were](../assets/effects/fisheye.webp)
+![The harbour town, original left and with Fisheye Lens at its default settings right: the horizon and the quay bow into one curve across the whole frame, the town in the middle comes closer and the corners stay filled](../assets/effects/fisheye.webp)
 
-<figcaption>Left: original. Right: the default settings.</figcaption>
+<figcaption>Left: original. Right: the default settings. The horizon and the quay bend into one curve.</figcaption>
 </figure>
 
 **Use it for:** a skate-video or peephole look · a porthole, crystal ball or spy-hole frame · flattening footage from a real fisheye lens.
@@ -18,7 +18,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 - **Lens Radius** – the size of the lens circle: 1 or less shows a round image circle.
 - **Outside Lens** – keeps the picture around the circle or makes it transparent.
 
-**Tip:** the corners stay where they are and the middle comes closer, so give the subject room in the middle of the frame. For a round frame on another track, pick **Peephole**.
+**Tip:** Fisheye Lens bends the whole frame like a lens and keeps the corners in place; [Bulge & Pinch](./bulge.md) changes one round area and leaves the rest of the picture untouched ([which one?](../Effects-Distort.md#which-one)). Give the subject room in the middle of the frame. For a round frame on another track, pick **Peephole**.
 
 <div class="docs-float-end"></div>
 
@@ -26,20 +26,20 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The night street five times, labelled: Wide Angle with the shop fronts gently bowed, Skate Fisheye with the walker large in the middle, the fronts curving hard and darker corners, Crystal Ball with the walker inside a glass ball in the middle of the unchanged street, Peephole with that ball alone on blue, its rim dark, and Flatten Fisheye with the street pulled flat and stretched towards the corners](../assets/effects/presets/fisheye.webp)
+![The night street five times, labelled: Wide Angle with the shop fronts gently bowed, Skate Fisheye with the walker large in the middle, the fronts curving hard and darker corners, Crystal Ball with the walker inside a glass ball in the middle of the unchanged street, Peephole with the whole street small and bent inside a dark-rimmed circle alone on blue, and Flatten Fisheye with the street pulled flat and stretched towards the corners](../assets/effects/presets/fisheye.webp)
 
 <figcaption>The five presets on the night street. Blue: the transparent outside of Peephole.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so.
+Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. A preset also puts **Edge Sampling** back to 4: set it again for a final render at 8.
 
 **Wide Angle** – Strength 0.5, Field of View 120°: a gentle bow, like a 14 mm lens or a phone's ultra-wide camera. The frame stays full.
 
 **Skate Fisheye** – Field of View 165°, Curve Bias −1, Lens Vignette 0.4: the hard bend of a skate or music video. The middle comes close, the sides curve round and the corners darken. Keep the subject near the camera and in the middle.
 
-**Crystal Ball** – Stereographic, Field of View 160°, Lens Radius 0.9, Color Fringe 0.012: a round glass ball in the middle of the unchanged picture, with a soft rim and a touch of colour fringe.
+**Crystal Ball** – Stereographic, Field of View 160°, Lens Radius 0.9, Lens Feather 0.04, Color Fringe 0.012: a round glass ball in the middle of the unchanged picture, with a soft rim and a touch of colour fringe.
 
-**Peephole** – Field of View 170°, Lens Radius 0.95, Outside Lens Transparent and a dark rim: the view through a door's spy-hole, alone on a transparent frame. Put a background or a black solid on the track below.
+**Peephole** – Field of View 170°, Lens Radius 0.95, Zoom 0.25, Frame Edges Mirror, Outside Lens Transparent, Lens Feather 0.03, Lens Vignette 0.6 and Softness 0.35: the view through a door's spy-hole. The whole scene sits small and bent inside a circle with a dark rim, alone on a transparent frame; Mirror fills the far edge of the circle without streaks. Put a background or a black solid on the track below.
 
 **Flatten Fisheye** – Strength −1, Field of View 120°, Zoom 1.5: the other direction, for footage from a real fisheye or action camera. It pulls the bowed lines straight and zooms in until the frame is full again. On normal footage it stretches the corners outward.
 
@@ -49,24 +49,24 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <div class="docs-shot-stage">
 
-![Properties, Effects with a Fisheye Lens card on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, and the Edges section below, beside a strip of the preview with the walker inside a round glass ball](../assets/effects/editor/fisheye-inspector.webp)
+![Properties, Effects with a Fisheye Lens card on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, and the Edges section with Lens Feather 0.04, and the Optics and Quality sections below, beside the preview with the walker inside a round glass ball](../assets/effects/editor/fisheye-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1155" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1098" aria-hidden="true" focusable="false">
 <defs><marker id="fisheye-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M574 387 L658 387" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="574" cy="387" r="18" /><text x="574" y="387" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M586 425 L670 425" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="586" cy="425" r="18" /><text x="586" y="425" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M552 462 L636 462" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="552" cy="462" r="18" /><text x="552" y="462" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M555 616 L639 616" marker-end="url(#fisheye-inspector-arrow)" />
-<circle class="docs-shot-number" cx="555" cy="616" r="18" /><text x="555" y="616" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M661 224 L723 224" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="661" cy="224" r="18" /><text x="661" y="224" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M661 308 L730 308" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="661" cy="308" r="18" /><text x="661" y="308" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M661 368 L713 368" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="661" cy="368" r="18" /><text x="661" y="368" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M662 490 L715 490" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="662" cy="490" r="18" /><text x="662" y="490" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M661 792 L710 792" marker-end="url(#fisheye-inspector-arrow)" />
+<circle class="docs-shot-number" cx="661" cy="792" r="18" /><text x="661" y="792" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
-<figcaption>Fisheye Lens with the Crystal Ball preset. 1 — Preset: pick a starting point. 2 — Projection: the lens model. 3 — Strength: how far it bends. 4 — Field of View: how wide the lens sees. 5 — Lens Radius: the size of the lens circle.</figcaption>
+<figcaption>Fisheye Lens with the Crystal Ball preset. 1 — Preset: pick a starting point. 2 — Projection: the lens model. 3 — Field of View: how wide the lens sees. 4 — Lens Radius: the size of the lens circle. 5 — Lens Feather: softens the rim of the circle.</figcaption>
 </figure>
 
 **Preset** – a starting point for every control; see [Presets](#presets).
@@ -83,7 +83,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Framing
 
-**Lens Radius** – the size of the lens circle, in picture heights: at 1 the circle is as tall as the picture. Up to 1 you see a round image circle and the picture around it (see **Outside Lens**); the default 2.1 makes the circle just reach the corners, so the whole frame is lens. 0.1 to 3, default 2.1.
+**Lens Radius** – the size of the lens circle: 1 makes a circle as tall as the picture, 2.1 just reaches the corners of a 16:9 frame, so the whole frame is lens. Up to 1 you see a round image circle and the picture around it (see **Outside Lens**). 0.1 to 3, default 2.1.
 
 **Zoom** – enlarges or shrinks the picture inside the lens. Below 1 you see more around the middle and, at the edges, what lies beyond the picture; above 1 the middle fills the lens. 0.25 to 4, default 1.
 
@@ -117,7 +117,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Quality
 
-**Edge Sampling** – how many reads each pixel averages, a little apart, so the lens rim and fine bent lines stay smooth. 1 is the fastest and shows stair-steps at the rim, 4 is smooth, 8 helps on fine detail at strong settings. Every step from 1 to 8 counts. 1 to 8, default 4.
+**Edge Sampling** – how many reads each pixel averages, a little apart, so the lens rim and fine bent lines stay smooth. 1 is the fastest and shows stair-steps at the rim, 4 is smooth, 8 helps on fine detail at strong settings. Every step from 1 to 8 counts. A preset puts it back to 4. 1 to 8, default 4.
 
 ## Node setup
 
@@ -127,12 +127,12 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![The Fisheye Lens graph: Edge Sampling hands the Sample Position to Lens Projection and Lens Resolve; Input Frame feeds Frame Edges; Lens Projection and Frame Edges feed Chromatic Aberration, whose Lens Colour goes to Lens Resolve, which gives the Fisheye Image. Each stage lists the controls it reads as inputs](../assets/effects/graphs/fisheye.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 1070" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 1144" aria-hidden="true" focusable="false">
 <defs><marker id="fisheye-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M90 279 L90 363" marker-end="url(#fisheye-arrow)" />
 <circle class="docs-shot-number" cx="90" cy="279" r="18" /><text x="90" y="279" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M227 657 L227 741" marker-end="url(#fisheye-arrow)" />
-<circle class="docs-shot-number" cx="227" cy="657" r="18" /><text x="227" y="657" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M227 1121 L227 1037" marker-end="url(#fisheye-arrow)" />
+<circle class="docs-shot-number" cx="227" cy="1121" r="18" /><text x="227" y="1121" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M227 504 L227 588" marker-end="url(#fisheye-arrow)" />
 <circle class="docs-shot-number" cx="227" cy="504" r="18" /><text x="227" y="504" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M363 22 L363 81" marker-end="url(#fisheye-arrow)" />
@@ -157,14 +157,14 @@ Fisheye Lens works in five stages, one folder each in the Nodes tab: **Edge Samp
 
 ![Inside the Edge Sampling folder: Sequence Index feeds Eight Sample Offsets; Edge Sampling is compared with One by Greater Than, and a Switch picks the offset or a zero vector; Multiply scales it by one over the Resolution (Divide), and Add puts it onto the UV as the Sample Position](../assets/effects/graphs/fisheye-edge-sampling.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1141" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1084" aria-hidden="true" focusable="false">
 <defs><marker id="fisheye-edge-sampling-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M314 1119 L314 879" marker-end="url(#fisheye-edge-sampling-arrow)" />
-<circle class="docs-shot-number" cx="314" cy="1119" r="18" /><text x="314" y="1119" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M479 813 L395 813" marker-end="url(#fisheye-edge-sampling-arrow)" />
+<circle class="docs-shot-number" cx="479" cy="813" r="18" /><text x="479" y="813" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M509 141 L509 225" marker-end="url(#fisheye-edge-sampling-arrow)" />
 <circle class="docs-shot-number" cx="509" cy="141" r="18" /><text x="509" y="141" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M703 141 L703 225" marker-end="url(#fisheye-edge-sampling-arrow)" />
-<circle class="docs-shot-number" cx="703" cy="141" r="18" /><text x="703" y="141" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M703 500 L703 416" marker-end="url(#fisheye-edge-sampling-arrow)" />
+<circle class="docs-shot-number" cx="703" cy="500" r="18" /><text x="703" y="500" class="docs-shot-number-text">3</text>
 <path class="docs-shot-arrow" d="M897 141 L897 225" marker-end="url(#fisheye-edge-sampling-arrow)" />
 <circle class="docs-shot-number" cx="897" cy="141" r="18" /><text x="897" y="141" class="docs-shot-number-text">4</text>
 </svg>
@@ -193,8 +193,8 @@ Sequence Index counts the reads of one pixel, 0 to Edge Sampling − 1.
 
 <svg class="docs-shot-overlay" viewBox="0 0 590 1359" aria-hidden="true" focusable="false">
 <defs><marker id="fisheye-lens-projection-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M228 315 L228 465" marker-end="url(#fisheye-lens-projection-arrow)" />
-<circle class="docs-shot-number" cx="228" cy="315" r="18" /><text x="228" y="315" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M369 621 L285 621" marker-end="url(#fisheye-lens-projection-arrow)" />
+<circle class="docs-shot-number" cx="369" cy="621" r="18" /><text x="369" y="621" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M363 22 L363 86" marker-end="url(#fisheye-lens-projection-arrow)" />
 <circle class="docs-shot-number" cx="363" cy="22" r="18" /><text x="363" y="22" class="docs-shot-number-text">2</text>
 <path class="docs-shot-arrow" d="M228 1109 L228 1025" marker-end="url(#fisheye-lens-projection-arrow)" />
@@ -323,7 +323,7 @@ Combine Chromatic Channels then takes red from the red read, green from the gree
 
 ## Technical details
 
-- **Lens space.** Lens Radius counts picture heights with Round Lens on; Center X and Y are shares of the frame. The effect looks the same at every resolution.
+- **Lens space.** Lens Radius is the circle's diameter in picture heights with Round Lens on (half of it is the radius the shader uses); Center X and Y are shares of the frame. The effect looks the same at every resolution.
 - **Sampling.** One pass with 1 to 8 reads per pixel. Each read is premultiplied as it is taken and the average unpremultiplied, so lens and frame feathering lower coverage instead of darkening colour. Odd counts sit up to an eighth of a pixel off centre.
 - **Colour fringes.** Each channel takes its colour from its own read and the averaged alpha, so a fringe across a cut-out never exceeds the source colour.
 - **Software preview and export.** Without WebGPU the same recipe runs on the CPU, with the same reads.

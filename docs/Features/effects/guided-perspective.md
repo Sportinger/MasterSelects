@@ -8,7 +8,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 ![The rainy night street photographed with the camera tilted up, original left and with Guided Perspective right: on the left the house edges on both sides lean in towards the top; on the right they stand upright and parallel, and the picture is enlarged so it still fills the frame](../assets/effects/guided-perspective.webp)
 
-<figcaption>Left: a photo taken with the camera tilted up. Right: two vertical guides along the house edges, with the Fill Frame preset.</figcaption>
+<figcaption>Left: a photo taken with the camera tilted up. Right: corrected by two vertical guides along the house edges (shown under Controls), with the Fill Frame preset.</figcaption>
 </figure>
 
 **Use it for:** upright walls and buildings in architecture photos · a stage set or a portal photographed from the stalls · a keystone fix for a slanted photo of a poster, a screen or a projection surface.
@@ -30,7 +30,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 <figcaption>The four presets on the same two guides. Blue: the empty edges Whole Photo leaves.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets Framing, Strength and Scale at once, in one undo step, and keeps the guides you drew, so draw them first and then try the presets. Without guides a preset changes nothing.
+Pick one in the **Preset** row of the effect card. It sets Framing, Strength and Scale at once, in one undo step, and keeps the guides you drew, so draw them first and then try the presets. Without guides there is nothing to correct: a preset then only puts Scale back to 100 %.
 
 **Whole Photo** – the full correction, and every pixel of the photo stays visible. The straightened photo becomes a trapezoid with empty, transparent corners; fill them with [AI Edge Fill](./ai-edge-fill.md) or a background track.
 
@@ -48,18 +48,18 @@ Pick one in the **Preset** row of the effect card. It sets Framing, Strength and
 
 ![Properties, Effects with a Guided Perspective card: the Preset menu showing Fill Frame, the Perspective section with the Guides row, its Edit guides button and reset arrow, a note that two vertical guides are applied, the Framing menu on Fill frame, Strength 100 % and Scale 100 %, beside a strip of the preview with the straightened night street](../assets/effects/editor/guided-perspective-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 603" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 577" aria-hidden="true" focusable="false">
 <defs><marker id="guided-perspective-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#guided-perspective-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M570 377 L654 377" marker-end="url(#guided-perspective-inspector-arrow)" />
-<circle class="docs-shot-number" cx="570" cy="377" r="18" /><text x="570" y="377" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M562 468 L646 468" marker-end="url(#guided-perspective-inspector-arrow)" />
-<circle class="docs-shot-number" cx="562" cy="468" r="18" /><text x="562" y="468" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M560 506 L644 506" marker-end="url(#guided-perspective-inspector-arrow)" />
-<circle class="docs-shot-number" cx="560" cy="506" r="18" /><text x="560" y="506" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M582 543 L666 543" marker-end="url(#guided-perspective-inspector-arrow)" />
-<circle class="docs-shot-number" cx="582" cy="543" r="18" /><text x="582" y="543" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M568 282 L649 282" marker-end="url(#guided-perspective-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="282" r="18" /><text x="568" y="282" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M568 377 L654 377" marker-end="url(#guided-perspective-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="377" r="18" /><text x="568" y="377" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M569 442 L646 442" marker-end="url(#guided-perspective-inspector-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="442" r="18" /><text x="569" y="442" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M602 480 L644 480" marker-end="url(#guided-perspective-inspector-arrow)" />
+<circle class="docs-shot-number" cx="602" cy="480" r="18" /><text x="602" y="480" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M568 517 L666 517" marker-end="url(#guided-perspective-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="517" r="18" /><text x="568" y="517" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -70,9 +70,26 @@ Pick one in the **Preset** row of the effect card. It sets Framing, Strength and
 
 ### Perspective
 
-**Guides** – the lines that tell the effect what should be straight. Choose **Edit guides**: the Preview shows the photo (after Lens Correction, before this effect) and the playback bar gets **Vertical**, **Horizontal**, **Apply**, **Cancel** and **Clear guides**. Pick a direction and drag along an edge in the photo that should stand upright (a house corner, a door frame, the side of a portal), then along a second one far away from it. Two lines per direction are enough; more lines along other edges of the same wall even out small drawing errors. Drag a line or its end points to refine it, right-click to remove it; the wheel or a pinch zooms. **Apply** keeps the guides as one undo step, **Cancel** or Esc leaves everything as it was. Use edges of one wall or one direction only: lines from walls that face different ways cannot all become straight. The reset arrow of the row removes the guides and their correction. Guides can be drawn on still photos only; the card says so on a video clip. 2 to 8 lines per direction (Edit guides, Reset), default none.
+<figure class="docs-shot">
 
-**Framing** – what happens to the edges the correction moves. **Whole photo** shrinks the corrected photo until all of it fits in the frame, so nothing is cropped and the corners stay transparent. **Fill frame** enlarges it just enough that it covers the whole frame: the photo loses a little at its edges and leaves no empty corners. Fill frame follows Strength, so a weaker correction is enlarged less, also while Strength is keyframed. A correction so strong that it would have to be enlarged more than 20× keeps the whole photo, and the card says so. Whole photo or Fill frame, default Whole photo.
+<div class="docs-shot-stage">
+
+![The rainy night street photographed with the camera tilted up, the house edges on both sides leaning in towards the top, with two blue guide lines drawn along the left and the right house edge](../assets/effects/guided-perspective-guides.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1920 1080" aria-hidden="true" focusable="false">
+<line x1="417" y1="130" x2="278" y2="929" style="stroke:#48b8ff;stroke-width:6;stroke-linecap:round" />
+<line x1="1514" y1="130" x2="1655" y2="929" style="stroke:#48b8ff;stroke-width:6;stroke-linecap:round" />
+<circle cx="417" cy="130" r="13" style="fill:#48b8ff;stroke:#151515;stroke-width:4" /><circle cx="278" cy="929" r="13" style="fill:#48b8ff;stroke:#151515;stroke-width:4" />
+<circle cx="1514" cy="130" r="13" style="fill:#48b8ff;stroke:#151515;stroke-width:4" /><circle cx="1655" cy="929" r="13" style="fill:#48b8ff;stroke:#151515;stroke-width:4" />
+</svg>
+</div>
+
+<figcaption>The tilted photo with the two vertical guides of all pictures on this page, drawn along the left and the right house edge as the guide editor shows them.</figcaption>
+</figure>
+
+**Guides** – the lines that tell the effect what should be straight. Choose **Edit guides**: the Preview shows the photo (after Lens Correction, before this effect) and the playback bar gets **Vertical**, **Horizontal**, **Apply**, **Cancel** and **Clear guides**. Pick a direction and drag along an edge in the photo that should stand upright (a house corner, a door frame, the side of a portal), then along a second one far away from it. Two lines per direction are enough; more lines along other edges of the same wall even out small drawing errors. Drag a line or its end points to refine it, right-click to remove it; the wheel or a pinch zooms. **Apply** keeps the guides as one undo step, **Cancel** or Esc leaves everything as it was. Use edges of one wall or one direction only: lines from walls that face different ways cannot all become straight. The reset arrow of the row removes the guides and their correction, also a correction that a tool set without guides. Until guides are drawn, the card reminds you to put Lens Correction first when none comes before this effect. Guides can be drawn on still photos only; the card says so on a video clip. 2 to 8 lines per direction (Edit guides, Reset), default none.
+
+**Framing** – what happens to the edges the correction moves. **Whole photo** shrinks the corrected photo until all of it fits in the frame, so nothing is cropped and the corners stay transparent. **Fill frame** enlarges it just enough that it covers the whole frame: the photo loses a little at its edges and leaves no empty corners. Fill frame follows Strength, so a weaker correction is enlarged less, also while Strength is keyframed. A correction so strong that it would have to be enlarged more than 20× keeps Whole photo framing, and the card says so. Whole photo or Fill frame, default Whole photo.
 
 **Strength** – how much of the lean is removed. 100 makes the guides exactly upright, lower values keep part of the lean, and 0 is the photo as it was. Lines stay straight at every value. 75–90 often looks more natural on tall buildings than 100; animate it from 0 to 100 to let a building straighten up. 0 to 100 %, default 100 %.
 

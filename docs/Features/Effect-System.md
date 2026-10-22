@@ -2469,10 +2469,12 @@ numeric controls support keyframes. Manual adjustments below are added on top.
 
 The default is an identity transform. Uncovered borders are transparent, and
 corrections are nondestructive, saved with the effect, and applied during export.
-Barrel correction strong enough to fold the outer picture back on itself
-(Distortion below about −33, Fine Distortion below about −20, or less together with
-a profile) stops at the fold: pixels beyond it stay transparent, and the inspector
-and tool results say so. The fringe channels repeat the border pixel instead of
+Strong barrel correction never folds: where the radius polynomial would read less
+than a quarter source pixel per output pixel (it flattens and would turn back for
+strong negative Distortion or Fine Distortion, or less together with a profile), the
+mapping continues as a straight line at that slope (`lensKnee` in
+`lens-correction/lensFrameFit.ts`, packed into the shader and the software guide-photo
+path). A centred frame keeps the polynomial down to Distortion −25. The fringe channels repeat the border pixel instead of
 turning black, so no coloured line runs along the frame.
 Selecting a profile is explicit; automatic matching and other lens variants are
 not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed
@@ -2488,7 +2490,10 @@ source perimeter into the image texture instead of cropping it. Free areas remai
 transparent (black against an opaque viewer/export background), and the composition
 dimensions stay unchanged. The manual Scale setting is kept for **Original size**;
 **Fit entire photo** sets the scale itself and hides the Scale row, so a Scale kept from
-**Original size** never shrinks the fitted picture.
+**Original size** never shrinks the fitted picture; a Scale other than 100 under Fit
+(kept, keyframed or set by a tool) is named as ignored in the inspector and tool results.
+Fit works at every strength, since the mapping never folds. AI Edge Fill marks a fill
+made on a Lens Correction whose look changed with these fixes as out of date.
 The fit follows distortion, focal length, sensor crop and optical center adjustments.
 
 ### Guided Perspective
@@ -2543,22 +2548,29 @@ distortion or independently straighten several surfaces with different planes.
 **AI Edge Fill**, under **Lens & Distort**, fills transparent borders left by
 Lens Correction and Guided Perspective on still images, including CR2. Place it
 after those corrections and before other effects. The card has two sections:
-**Generate** (Resolution, the editable Prompt and the **Fill** button) and **Blend**
+**Generate** (Resolution, the **Scene** menu with Room, Stage, Street and Landscape, the
+editable scene text and the **Fill** button) and **Blend**
 (Fill Opacity, Seam Blend).
 
 Generation uploads a bounded, positioned full-composition photo reference and a
 white=missing binary mask to **Kie.ai / Nano Banana
 Pro**, using the existing hosted AI service and cloud credits. It is not a local
 model. The reference marks missing areas magenta; opaque black content in
-the actual photograph remains protected. The editable prompt explains both references.
+the actual photograph remains protected. The request is a fixed technical frame
+(`edgeFillPrompt.ts`) that explains both references, around the scene text the user
+edits (`scene`). A full prompt saved by an earlier version (the old Prompt field held the
+whole request) is sent unchanged, and the card offers **Use scene text**; the old default
+prompts map to the scene text, word for word the same request.
 
 Only transparent pixels use the generated image. Existing opaque pixels retain
 their original resolution and color, even if the model changes them in its output.
 **Fill Opacity** controls the added areas and supports keyframes.
 **Seam Blend** (default 12 composition pixels) shifts the fill's colour by the
 average photo-minus-fill difference measured over the photo pixels in a disc of that
-radius (48 jittered samples, bilinear fill reads), weighted by the share of the disc
-the photo covers: full beside a straight photo edge, zero at the radius, without rings,
+radius (48 samples on six rings, angle and ring radius jittered per pixel, nearest fill
+reads), weighted by the larger of two terms: how close the nearest photo sample is and
+the share of the disc the photo covers. So it is full beside a straight edge and at a
+photo corner, zero at the radius, without rings,
 and samples beyond the frame do not count. The fill keeps its own detail; the photo
 side is never changed. It supports keyframes and can be set to zero. It reduces colour
 seams, not structural mistakes made by the model. (Before 2026-10-22 it replaced the
@@ -2730,7 +2742,7 @@ Notes for developers; each effect page adds its own formula and limits.
   the untouched recipes run as a hand-written pass with the same mapping, frame edges and
   premultiplied read, within 1/255 of the graph; edited graphs run through the graph interpreter.
 - **Warnings.** Clamped or degenerate values (Radius ≤ 0, negative Amount, unknown Shape or Frame
-  Edges choices, out-of-range Fisheye values, Lens Correction folding at the active composition size,
+  Edges choices, out-of-range Fisheye values, a Scale that Lens Correction's Fit entire photo ignores,
   Guided Perspective limits) appear below the effect in the inspector, judged on the values at the
   playhead, and in the `addEffect` / `updateEffect` tool results.
 - **Code.** The recipes live in `src/services/operators/uvDistortRecipes.ts` and

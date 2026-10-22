@@ -45,6 +45,7 @@ export const HAND_MADE = [
   { path: `${ASSET_DIR}/transitions/`, reason: 'Crossfade filmstrips composed by hand from editor frames' },
   { path: `${ASSET_DIR}/keyframes/real-editor-current.png`, reason: 'a screenshot of the editor with a real project, taken by hand' },
   { path: `${ASSET_DIR}/effects/graphs/glitch-stages.svg`, reason: 'a stage diagram of Glitch drawn by hand as SVG' },
+  { path: `${ASSET_DIR}/effects/presets/guided-perspective.webp`, reason: 'Guided Perspective presets act on drawn guides, which effect-lab --presets cannot pass yet (base params per strip): rendered by hand from scripts/effect-lab-shots/distort.json handMadeStrips' },
 ];
 export const handMadeReason = (asset) => HAND_MADE.find((entry) => (entry.path.endsWith('/') ? asset.startsWith(entry.path) : asset === entry.path))?.reason;
 

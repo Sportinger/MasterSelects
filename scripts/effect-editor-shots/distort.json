@@ -19,24 +19,28 @@
       "marks": [
         {
           "target": "Preset",
-          "label": "Preset"
+          "label": "Preset",
+          "reach": 81
         },
         {
           "target": "Lens",
-          "label": "Lens"
+          "label": "Lens",
+          "reach": 104
         },
         {
           "target": "Framing",
-          "label": "Framing"
+          "label": "Framing",
+          "reach": 77
         },
         {
           "target": "Distortion",
           "label": "Distortion",
-          "reach": 150
+          "reach": 35
         },
         {
           "target": "Scale",
-          "label": "Scale"
+          "label": "Scale",
+          "reach": 98
         }
       ],
       "hide": [
@@ -71,23 +75,28 @@
       "marks": [
         {
           "target": "Preset",
-          "label": "Preset"
+          "label": "Preset",
+          "reach": 81
         },
         {
           "target": "Guides",
-          "label": "Guides"
+          "label": "Guides",
+          "reach": 86
         },
         {
           "target": "Framing",
-          "label": "Framing"
+          "label": "Framing",
+          "reach": 77
         },
         {
           "target": "Strength",
-          "label": "Strength"
+          "label": "Strength",
+          "reach": 42
         },
         {
           "target": "Scale",
-          "label": "Scale"
+          "label": "Scale",
+          "reach": 98
         }
       ],
       "hide": [
@@ -105,28 +114,33 @@
         "width": 1600,
         "height": 1100
       },
-      "alt": "Properties, Effects with an AI Edge Fill card: the Generate section with Resolution on 2K, the Prompt field with the request to continue a room, the Generate fill button and a note that Nano Banana Pro on Kie.ai receives the corrected photo and a mask of its empty edges, then the Blend section with Fill Opacity 100 % and Seam Blend 12 px",
-      "caption": "AI Edge Fill before its first fill. 1 — Resolution: the size of the generated picture. 2 — Prompt: what the empty edges should show. 3 — Fill: sends the request. 4 — Fill Opacity: how strongly the fill shows. 5 — Seam Blend: matches its colour to the photo.",
+      "alt": "Properties, Effects with an AI Edge Fill card: the Preset row, the Generate section with Resolution on 2K, the Scene menu on Room, the Scene text field with this room, walls, ceiling and floor, the Generate fill button and a note that Nano Banana Pro on Kie.ai receives the corrected photo and a mask of its empty edges, then the Blend section with Fill Opacity 100 % and Seam Blend 12 px",
+      "caption": "AI Edge Fill before its first fill. 1 — Resolution: the size of the generated picture. 2 — Scene: what the empty edges should continue. 3 — Fill: sends the request. 4 — Fill Opacity: how strongly the fill shows. 5 — Seam Blend: matches its colour to the photo.",
       "marks": [
         {
           "target": "Resolution",
-          "label": "Resolution"
+          "label": "Resolution",
+          "reach": 123
         },
         {
-          "target": "Prompt",
-          "label": "Prompt"
+          "target": "Scene",
+          "label": "Scene",
+          "reach": 159
         },
         {
-          "target": "Generate fill",
-          "label": "Fill"
+          "target": "Fill",
+          "label": "Fill",
+          "reach": 187
         },
         {
           "target": "Fill Opacity",
-          "label": "Fill Opacity"
+          "label": "Fill Opacity",
+          "reach": 119
         },
         {
           "target": "Seam Blend",
-          "label": "Seam Blend"
+          "label": "Seam Blend",
+          "reach": 110
         }
       ],
       "hide": [
@@ -171,34 +185,39 @@
         "chromaticAberration": 0.012
       },
       "image": "neon_rain_street.jpg",
-      "preview": 380,
+      "preview": 560,
       "top": "tabs",
       "viewport": {
         "width": 1600,
-        "height": 1300
+        "height": 1700
       },
-      "alt": "Properties, Effects with a Fisheye Lens card on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, and the Edges section below, beside a strip of the preview with the walker inside a round glass ball",
-      "caption": "Fisheye Lens with the Crystal Ball preset. 1 — Preset: pick a starting point. 2 — Projection: the lens model. 3 — Strength: how far it bends. 4 — Field of View: how wide the lens sees. 5 — Lens Radius: the size of the lens circle.",
+      "alt": "Properties, Effects with a Fisheye Lens card on the Crystal Ball preset: the Lens section with Projection Stereographic, Strength 1, Field of View 160° and Curve Bias 0, the Framing section with Lens Radius 0.9, Zoom, Center X and Y, Squeeze, Lens Rotation and Round Lens, the Edges section with Lens Feather 0.04, and the Optics and Quality sections below, beside a strip of the preview with the walker inside a round glass ball",
+      "caption": "Fisheye Lens with the Crystal Ball preset. 1 — Preset: pick a starting point. 2 — Projection: the lens model. 3 — Field of View: how wide the lens sees. 4 — Lens Radius: the size of the lens circle. 5 — Lens Feather: softens the rim of the circle.",
       "marks": [
         {
           "target": "Preset",
-          "label": "Preset"
+          "label": "Preset",
+          "reach": 62
         },
         {
           "target": "Projection",
-          "label": "Projection"
-        },
-        {
-          "target": "Strength",
-          "label": "Strength"
+          "label": "Projection",
+          "reach": 69
         },
         {
           "target": "Field of View",
-          "label": "Field of View"
+          "label": "Field of View",
+          "reach": 52
         },
         {
           "target": "Lens Radius",
-          "label": "Lens Radius"
+          "label": "Lens Radius",
+          "reach": 53
+        },
+        {
+          "target": "Lens Feather",
+          "label": "Lens Feather",
+          "reach": 49
         }
       ],
       "hide": [
@@ -213,7 +232,7 @@
         "radius": 0.3
       },
       "image": "neon_rain_street.jpg",
-      "preview": 640,
+      "preview": 380,
       "top": "tabs",
       "viewport": {
         "width": 1600,
@@ -224,23 +243,28 @@
       "marks": [
         {
           "target": "Preset",
-          "label": "Preset"
+          "label": "Preset",
+          "reach": 81
         },
         {
           "target": "Amount",
-          "label": "Amount"
+          "label": "Amount",
+          "reach": 71
         },
         {
           "target": "Radius",
-          "label": "Radius"
+          "label": "Radius",
+          "reach": 43
         },
         {
           "target": "Shape",
-          "label": "Shape"
+          "label": "Shape",
+          "reach": 48
         },
         {
           "target": "Frame Edges",
-          "label": "Frame Edges"
+          "label": "Frame Edges",
+          "reach": 28
         }
       ],
       "hide": [

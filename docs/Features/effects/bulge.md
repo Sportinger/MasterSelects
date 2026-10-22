@@ -17,7 +17,7 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 - **Radius** – how large the round area is.
 - **Center X / Center Y** – where it sits.
 
-**Tip:** keyframe **Amount** from 1 (no change) up to 2 to let a bump grow out of a still picture, and back to 1 to let it sink again.
+**Tip:** keyframe **Amount** from 1 (no change) up to 2 to let a bump grow out of a still picture, and back to 1 to let it sink again. Bulge & Pinch changes one round area and leaves the rest of the picture untouched; [Fisheye Lens](./fisheye.md) bends the whole frame like a lens and keeps the corners in place ([which one?](../Effects-Distort.md#which-one)).
 
 <div class="docs-float-end"></div>
 
@@ -48,18 +48,18 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ![Properties, Effects with a Bulge & Pinch card on the Magnifying Glass preset: the Preset menu, Amount 3, Radius 0.3, Center X and Y 0.5, Shape Circle and Frame Edges Mirror, beside a strip of the preview with the walker enlarged under a small round glass](../assets/effects/editor/bulge-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 424" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 581" aria-hidden="true" focusable="false">
 <defs><marker id="bulge-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M663 206 L747 206" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="663" cy="206" r="18" /><text x="663" y="206" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M656 251 L740 251" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="656" cy="251" r="18" /><text x="656" y="251" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M660 279 L744 279" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="660" cy="279" r="18" /><text x="660" y="279" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M663 361 L747 361" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="663" cy="361" r="18" /><text x="663" y="361" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M623 388 L707 388" marker-end="url(#bulge-inspector-arrow)" />
-<circle class="docs-shot-number" cx="623" cy="388" r="18" /><text x="623" y="388" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M568 282 L649 282" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="282" r="18" /><text x="568" y="282" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M568 344 L639 344" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="344" r="18" /><text x="568" y="344" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M602 382 L645 382" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="602" cy="382" r="18" /><text x="602" y="382" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M601 494 L649 494" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="601" cy="494" r="18" /><text x="601" y="494" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M567 532 L595 532" marker-end="url(#bulge-inspector-arrow)" />
+<circle class="docs-shot-number" cx="567" cy="532" r="18" /><text x="567" y="532" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -68,7 +68,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Preset** – a starting point for every control; see [Presets](#presets).
 
-**Amount** – how strongly the area swells or squeezes. 1 changes nothing. Above 1 the middle is magnified exactly that many times: the default 2 makes it twice as large, 3 three times, and towards 3 the enlarged pixels get soft. Below 1 it pinches: 0.5 makes the middle clearly smaller, and at 0 it shows about 2.6 times smaller. Below about 0.3 a ring halfway to the rim stretches into streaks that point to the middle. 0 to 3, default 2.
+**Amount** – how strongly the area swells or squeezes. 1 changes nothing. Above 1 the middle is magnified exactly that many times: the default 2 makes it twice as large, 3 three times, and towards 3 the enlarged pixels get soft. Below 1 it pinches, but not as the mirror image of a bulge: 0.5 shows the middle about 1.6 times smaller (not half), and 0 about 2.6 times smaller. Below about 0.3 a ring halfway to the rim stretches into streaks that point to the middle. 0 to 3, default 2.
 
 **Radius** – how large the round area is, as a share of the shorter side of the frame (the height of a wide picture). 0.5 makes a circle as tall as the picture, 0.2 a small spot, 1 reaches well beyond the top and bottom. Outside the area nothing moves, and towards its rim the effect fades out smoothly, so no edge shows. 0.05 to 1, default 0.5.
 

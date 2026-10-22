@@ -26,20 +26,20 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot docs-shot--detail">
 
-![The bent night street four times, labelled: Wide Angle with the shop fronts half straightened, Action Cam with them straight and upright and the picture slightly enlarged, Whole Photo with the corrected street shrunk into a cushion shape whose empty edges show blue, Even Corners with the street still bent and its dark corners a little brighter](../assets/effects/presets/lens-correction.webp)
+![The bent night street with dark corners four times, labelled: Wide Angle with the shop fronts half straightened and the corners still dark, Action Cam with the fronts straight and upright and the picture slightly enlarged, Whole Photo with the same straight street shrunk into a cushion shape whose empty edges show blue, Even Corners with the street still bent but its corners as bright as its middle](../assets/effects/presets/lens-correction.webp)
 
-<figcaption>The four presets on the shot from a strong wide-angle lens. Blue: the empty edges Whole Photo leaves.</figcaption>
+<figcaption>The four presets on a shot from a strong wide-angle lens with dark corners. Each preset fixes one part: the first three the bent lines, Even Corners the dark corners. Blue: the empty edges Whole Photo leaves.</figcaption>
 </figure>
 
-Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A preset sets the lens to Manual; a control with keyframes keeps them, and the card says so.
+Pick one in the **Preset** row of the effect card. It sets all controls at once, in one undo step, and the row then shows its name until you change something. A control with keyframes keeps them, and the card says so. A preset also sets **Lens** back to Manual: on a Canon raw photo with the measured profile, pick the preset first and the lens afterwards (the card reads the focal length from the file again).
 
 **Wide Angle** – Distortion −14: the gentle bow of a 16–24 mm lens or a phone's wide camera. The frame stays full, the outer edge is cropped a little.
 
 **Action Cam** – Distortion −28 and Scale 120: the strong barrel of an action camera or a very wide zoom. Scale enlarges the picture into the part that comes out straight.
 
-**Whole Photo** – Distortion −14 with Framing on Fit entire photo: the same correction as Wide Angle, but nothing is cropped. The picture shrinks into a cushion shape with empty, transparent edges; fill them with [AI Edge Fill](./ai-edge-fill.md) or a background track.
+**Whole Photo** – Distortion −28 with Framing on Fit entire photo: the same correction as Action Cam, but nothing is cropped. The picture shrinks into a cushion shape with empty, transparent edges; fill them with [AI Edge Fill](./ai-edge-fill.md) or a background track.
 
-**Even Corners** – Amount 40, Midpoint 30: lifts dark lens corners without touching the geometry. Good for photos of a white cyc or a projection surface that should look evenly lit.
+**Even Corners** – Amount 40, Midpoint 30: lifts dark lens corners without touching the geometry; the bent lines stay. Good for photos of a white cyc or a projection surface that should look evenly lit.
 
 ## Controls
 
@@ -51,16 +51,16 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 921" aria-hidden="true" focusable="false">
 <defs><marker id="lens-correction-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M565 282 L649 282" marker-end="url(#lens-correction-inspector-arrow)" />
-<circle class="docs-shot-number" cx="565" cy="282" r="18" /><text x="565" y="282" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M588 376 L672 376" marker-end="url(#lens-correction-inspector-arrow)" />
-<circle class="docs-shot-number" cx="588" cy="376" r="18" /><text x="588" y="376" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M562 480 L646 480" marker-end="url(#lens-correction-inspector-arrow)" />
-<circle class="docs-shot-number" cx="562" cy="480" r="18" /><text x="562" y="480" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M486 517 L636 517" marker-end="url(#lens-correction-inspector-arrow)" />
-<circle class="docs-shot-number" cx="486" cy="517" r="18" /><text x="486" y="517" class="docs-shot-number-text">4</text>
-<path class="docs-shot-arrow" d="M582 593 L666 593" marker-end="url(#lens-correction-inspector-arrow)" />
-<circle class="docs-shot-number" cx="582" cy="593" r="18" /><text x="582" y="593" class="docs-shot-number-text">5</text>
+<path class="docs-shot-arrow" d="M568 282 L649 282" marker-end="url(#lens-correction-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="282" r="18" /><text x="568" y="282" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M568 376 L672 376" marker-end="url(#lens-correction-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="376" r="18" /><text x="568" y="376" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M569 480 L646 480" marker-end="url(#lens-correction-inspector-arrow)" />
+<circle class="docs-shot-number" cx="569" cy="480" r="18" /><text x="569" y="480" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M601 517 L636 517" marker-end="url(#lens-correction-inspector-arrow)" />
+<circle class="docs-shot-number" cx="601" cy="517" r="18" /><text x="601" y="517" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M568 593 L666 593" marker-end="url(#lens-correction-inspector-arrow)" />
+<circle class="docs-shot-number" cx="568" cy="593" r="18" /><text x="568" y="593" class="docs-shot-number-text">5</text>
 </svg>
 </div>
 
@@ -87,11 +87,11 @@ The next four rows appear only with a measured lens.
 
 ### Geometry
 
-**Framing** – what happens to the edges. **Original size** keeps the frame as it is; correcting a barrel pulls the outer picture inward, so a little of the edge is cropped. **Fit entire photo** shrinks the corrected picture until every pixel of the original is visible again and leaves the free edges transparent; the Scale row is hidden meanwhile, since the fit sets the size. It shows the whole photo up to about Distortion −14; beyond that the fold below cuts off the outer corners, and the card says so. Original size or Fit entire photo, default Original size.
+**Framing** – what happens to the edges. **Original size** keeps the frame as it is; correcting a barrel pulls the outer picture inward, so a little of the edge is cropped. **Fit entire photo** shrinks the corrected picture until every pixel of the original is visible again and leaves the free edges transparent; the Scale row is hidden meanwhile, since the fit sets the size, and a Scale set before (or by keyframes or a tool) is ignored; the card says so. It works at every strength: the stronger the correction, the smaller the fitted picture. Original size or Fit entire photo, default Original size.
 
-**Distortion** – straightens lines that bow. Below 0 pulls the outer picture inward: lines that bulge outward like a barrel (wide lenses, action cameras) become straight. Above 0 pushes it outward: lines that pinch inward (long lenses) become straight, and empty edges appear that Scale can crop. −5 to −15 fixes a typical wide lens, −25 to −30 an action camera. Below about −33 the correction folds the outer picture back on itself: the area beyond the fold stays transparent, and the card says so. −100 to 100, default 0.
+**Distortion** – straightens lines that bow. Below 0 pulls the outer picture inward: lines that bulge outward like a barrel (wide lenses, action cameras) become straight. Above 0 pushes it outward: lines that pinch inward (long lenses) become straight, and empty edges appear that Scale can crop. −5 to −15 fixes a typical wide lens, −25 to −30 an action camera. Stronger values keep working: where the correction would stretch the outer picture more than four times, it goes on stretching it evenly instead of folding it back, so the whole photo stays in one piece. −100 to 100, default 0.
 
-**Fine Distortion** – the same kind of correction, but it acts mostly at the outer edge and leaves the middle alone. Use it after Distortion when the middle is straight and the edges still bend, the "moustache" bow of some wide lenses. Below about −20 it folds the edge like Distortion. −50 to 50, default 0.
+**Fine Distortion** – the same kind of correction, but it acts mostly at the outer edge and leaves the middle alone. Use it after Distortion when the middle is straight and the edges still bend, the "moustache" bow of some wide lenses. Strong values stretch the edge evenly, as with Distortion. −50 to 50, default 0.
 
 **Scale** – zooms the corrected picture in or out around the lens centre, in percent. Above 100 crops empty or still bent edges, below 100 shows more and leaves transparent edges. 50 to 200, default 100.
 
@@ -121,8 +121,9 @@ Lens Correction is one fixed shader with its own card: it has no node graph to o
 
 - **Units.** Distortion and Fine Distortion are coefficients of r² and r⁴ in percent, where r is the distance from the lens centre and 1 the distance of the frame corner. The fringe controls scale the red or blue channel by 0.1 % per step. Amount 100 brightens the corner by two stops.
 - **Profile.** The measured lens uses Lensfun calibrations (PTLens distortion, poly3 lateral fringes, PA vignetting), interpolated across focal length, aperture and focus distance; values outside the calibration use its nearest end. The vignetting correction acts on linear light.
-- **Empty edges.** Areas the corrected picture no longer covers are transparent. A correction strong enough to fold the picture back on itself stops at the fold, with a one-pixel soft edge; the card and the tool results say so.
+- **Empty edges.** Areas the corrected picture no longer covers are transparent.
+- **Strong barrel removal.** The radius polynomial r(1 + k r² + f r⁴) flattens and would turn back (fold the picture) for strong negative values. From the radius where it reads less than a quarter of a source pixel per output pixel, the mapping continues as a straight line at that slope, so it always moves outward and every source radius is reached. In a centred frame this changes nothing down to Distortion −25.
 - **Edges.** The fringe channels repeat the border pixel, so no coloured line runs along the frame. Cut-outs in the source keep their transparency.
-- **Saved projects.** Projects keep their values. With Fit entire photo the fit alone sets the size: a Scale kept from Original size, whose row is hidden, does not shrink the picture.
+- **Saved projects.** Projects keep their values. Two bug fixes change how some of them look: with Fit entire photo the fit alone sets the size (a Scale below the fitted size, whose row is hidden, used to shrink the picture further), and corrections stronger than about Distortion −25 now show their outer ring stretched instead of leaving it transparent beyond a fold. An [AI Edge Fill](./ai-edge-fill.md) made on such a setting is marked as out of date: generate it again.
 - Corrections are saved with the effect and applied in the export.
 - **More:** [Effect system: Lens Correction](../Effect-System.md#lens-correction) · [Guided Perspective](./guided-perspective.md) · [AI Edge Fill](./ai-edge-fill.md).

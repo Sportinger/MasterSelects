@@ -67,7 +67,8 @@ export const EFFECT_DOC_EXTRAS = {
     sections: ['Generate', 'Blend'],
     rows: [
       { key: 'resolution', section: 'Generate', range: '1K, 2K or 4K' },
-      { key: 'prompt', section: 'Generate', range: 'Any text', default: 'a request to continue a room, its walls, ceiling and floor' },
+      { label: 'Scene', section: 'Generate', range: 'Room, Stage, Street, Landscape or Own words', default: 'Room' },
+      { label: 'Scene text', section: 'Generate', range: 'Any words', default: 'this room, walls, ceiling and floor' },
       { label: 'Fill', section: 'Generate', range: 'Generate fill, Resume task or Regenerate fill', default: 'Generate fill' },
       { key: 'mix', section: 'Blend', range: '0 to 100 %', default: '100 %' },
       { key: 'seamBlend', section: 'Blend', range: '0 to 64 px', default: '12 px' },
