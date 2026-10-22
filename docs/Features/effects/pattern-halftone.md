@@ -1,6 +1,6 @@
 # Pattern Halftone
 
-<!-- effect-docs: basic page sha=ad9d3d1b564b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=b1f5b119caa9, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Halftone screen of circle, diamond or line marks sized by image darkness, in Ink on Paper; Shape picks the mark, Scale the cell size.
 
@@ -31,6 +31,8 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [Riso Glow](./riso-glow.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Riso](./riso.md), [Dither Studio](./dither-studio.md), [Tone Geometry](./tone-geometry.md), and 20 more looks from other groups.
+
 ## Technical details
 
-How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+Pattern Halftone is one look of the pattern engine; its looks share one node setup. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).

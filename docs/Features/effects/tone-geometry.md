@@ -1,6 +1,6 @@
 # Tone Geometry
 
-<!-- effect-docs: basic page sha=74837227bd38, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=2548bfc870be, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Replaces the image with a grid of squares, circles or triangles sized by darkness, in Ink on Paper; Shape picks the form, Scale the cell size.
 
@@ -33,6 +33,8 @@ Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effe
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [Riso Glow](./riso-glow.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Riso](./riso.md), [Dither Studio](./dither-studio.md), [Pattern Halftone](./pattern-halftone.md), and 20 more looks from other groups.
+
 ## Technical details
 
-It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+Tone Geometry is one look of the pattern engine; its looks share one node setup. It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).

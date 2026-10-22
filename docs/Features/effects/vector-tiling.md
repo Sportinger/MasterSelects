@@ -1,6 +1,6 @@
 # Vector Engraving
 
-<!-- effect-docs: basic page sha=a82f0a67f02d, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=3a46cb7e326c, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Redraws the image as rows of engraved wavy lines whose wave depth follows darkness, in Ink on Paper; Scale sets line spacing, Angle the direction.
 
@@ -30,7 +30,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [Drift Lines](./drift-lines.md), [Wave Lines](./wave-lines.md), [Outline](./outline.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), and 22 more looks from other groups.
 
 ## Technical details
 

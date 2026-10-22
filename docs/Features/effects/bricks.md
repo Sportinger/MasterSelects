@@ -1,6 +1,6 @@
 # Toy Bricks
 
-<!-- effect-docs: basic page sha=7e1a21602153, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=f9d77c714ef3, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Rebuilds the image from staggered, beveled toy bricks, each filled with one color; Scale sets the brick size.
 
@@ -28,7 +28,7 @@ Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](..
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [CRT Screen](./crt-screen.md), [Crystal Glass](./crystal.md), [Film Prism](./film-prism.md), [Glass Dispersion](./glass-dispersion.md), [Glitch](./glitch.md), [Holo](./holo.md), [Ribbon Scan](./ribbon-scan.md), [Wave Lines](./wave-lines.md), [Embroidery](./embroidery.md), [Outline](./outline.md), [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md), [Dither Studio](./dither-studio.md), [Pattern Halftone](./pattern-halftone.md), [Tone Geometry](./tone-geometry.md).
 
 ## Technical details
 

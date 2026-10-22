@@ -1,6 +1,6 @@
 # Glitch Grid
 
-<!-- effect-docs: basic page sha=93aa245d9553, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=e7a2014f26a0, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Randomly jumps grid cells sideways in flickering bursts for a blocky digital glitch; Scale sets cell size, Amount the displacement.
 
@@ -28,7 +28,7 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the shared values and keyframes: [CRT Screen](./crt-screen.md), [Glitch](./glitch.md), [Ribbon Scan](./ribbon-scan.md), and 24 more looks from other groups.
 
 ## Technical details
 
