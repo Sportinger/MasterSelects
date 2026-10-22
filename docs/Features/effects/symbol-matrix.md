@@ -1,6 +1,6 @@
 # Symbol Matrix
 
-<!-- effect-docs: basic page sha=74df73850bd9, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=8cba891e98e8, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Symbol character art where each cell randomly swaps glyphs and pulses in brightness; Speed controls the flicker rate.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | symbols |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Symbols |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

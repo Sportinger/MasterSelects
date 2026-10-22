@@ -2,7 +2,7 @@
 // call of createGlyphEffect. The runtime is the editable graph in
 // src/services/operators/asciiEffectGraph.ts (createDefaultGlyphGraph); shader.wgsl is its WGSL twin.
 // Cell geometry and the Speed clock: glyphGrid.ts.
-import { resolveAsciiRamp } from '../_shared/asciiRamps';
+import { ASCII_RAMP_LABELS, ASCII_RAMP_PRESETS, asciiRampWarnings, resolveAsciiRamp, type AsciiRampPreset } from '../_shared/asciiRamps';
 import { planGlyphAtlas } from '../_shared/glyphAtlas';
 import type { EffectCategory, EffectDefinition, EffectParam, EffectPreset } from '../types';
 import glyphInclude from '../_shared/glyph.wgsl?raw';
@@ -52,6 +52,11 @@ function numeric(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+/** The font weight an atlas is drawn with: the nearest of the nine CSS weights, so no value builds an atlas of its own. */
+export function atlasWeight(value: unknown): number {
+  return Math.min(900, Math.max(100, Math.round(numeric(value, 600) / 100) * 100));
+}
+
 export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition {
   const defaultRamp = options.defaultRamp ?? 'standard';
   const defaultCellSize = options.defaultCellSize ?? 14;
@@ -70,11 +75,12 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
     },
     rampPreset: {
       type: 'select', label: 'Ramp', default: defaultRamp, group: 'Glyphs',
-      options: ['standard', 'detailed', 'blocks', 'binary', 'numeric', 'symbols'].map((value) => ({ value, label: value })),
+      options: (Object.keys(ASCII_RAMP_PRESETS) as AsciiRampPreset[]).map((value) => ({ value, label: ASCII_RAMP_LABELS[value] })),
     },
     customRamp: { type: 'text', label: 'Custom Ramp', default: '', group: 'Glyphs' },
     fontFamily: { type: 'select', label: 'Font', default: FONT_OPTIONS[0].value, options: FONT_OPTIONS, group: 'Glyphs' },
-    fontWeight: { type: 'number', label: 'Weight', default: 600, min: 200, max: 900, step: 100, group: 'Glyphs' },
+    // Not keyframeable: every weight is its own glyph atlas (atlasWeight keeps them to the nine font weights).
+    fontWeight: { type: 'number', label: 'Weight', default: 600, min: 200, max: 900, step: 100, group: 'Glyphs', animatable: false },
     invert: { type: 'boolean', label: 'Invert Ramp', default: false, group: 'Style' },
     colorMode: {
       type: 'select', label: 'Color Source', default: 'source', group: 'Color',
@@ -124,11 +130,14 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
     // frame is never re-rendered; the docs still show them as loops.
     requiresContinuousRender: false,
     ...(moving ? { timelineAnimated: true } : {}),
-    paramWarnings: (values, width, height) => glyphCellWarnings(values, width, height, defaultCellSize),
+    paramWarnings: (values, width, height) => [
+      ...glyphCellWarnings(values, width, height, defaultCellSize),
+      ...asciiRampWarnings(values.rampPreset ?? defaultRamp, values.customRamp),
+    ],
     ...(options.presets ? { presets: options.presets } : {}),
     glyphAtlas: (values) => ({
       fontFamily: String(values.fontFamily ?? FONT_OPTIONS[0].value),
-      fontWeight: numeric(values.fontWeight, 600),
+      fontWeight: atlasWeight(values.fontWeight),
       charset: rampFor(values),
       cellSize: 64,
     }),
@@ -136,7 +145,7 @@ export function createGlyphEffect(options: GlyphEffectOptions): EffectDefinition
       const ramp = rampFor(values);
       const atlas = planGlyphAtlas({
         fontFamily: String(values.fontFamily ?? FONT_OPTIONS[0].value),
-        fontWeight: numeric(values.fontWeight, 600),
+        fontWeight: atlasWeight(values.fontWeight),
         charset: ramp,
         cellSize: 64,
       });

@@ -399,12 +399,33 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
 - **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light;
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).
-- **Transparency.** Input and output are straight alpha; the output keeps the source alpha per pixel,
-  so characters and Background appear only where the layer is opaque.
+- **Transparency.** Input and output are straight alpha. Each cell takes the alpha of its centre
+  sample, so a cut-out keeps its outline in whole cells and no character is cut in half.
+- **Amount** fades from the untouched picture (`original-sample` at the pixel's own UV) to the look,
+  alpha included (`mixed`, `mixed-alpha`); it used to fade towards the cell colour, so Amount 0 showed a
+  mosaic. A fix for new instances; saved node setups keep the earlier fade.
+- **Ramps** (`src/effects/_shared/asciiRamps.ts`): the menu shows names (Standard … Symbols) and has
+  **Bars** (` ▁▂▃▄▅▆▇█`). A Custom Ramp of one character draws it (it used to fall back silently);
+  one longer than `ASCII_RAMP_MAX_CHARACTERS` (256) keeps 256 spread from its first to its last
+  character, and `asciiRampWarnings` reports it and an unknown Ramp (a 20 000-character ramp used to
+  exceed the GPU texture size and leave the layer empty).
+- **Block Elements** (U+2580–U+259F) are drawn by the atlas rasterizer as exact shapes that fill the
+  tile (`src/effects/_shared/blockElementGlyphs.ts`; ░ ▒ ▓ as a 4 × 4 ordered dither), so Blocks and
+  Bars join without gaps in any font. This changes saved projects that use them (a fix: the font drew
+  them as narrow striped bars).
+- **Weight** is not keyframeable, and atlases are drawn at the nearest of the nine CSS weights
+  (`atlasWeight`), so no value builds and caches an atlas of its own.
+- **Card.** The looks use the shared inspector rows (`RESOLVE_ROW_EFFECTS`); Custom Ramp is a text row
+  with a reset. Folder ports are named by `GLYPH_PORTS` in `effectPresentationPlans.ts` (Cell Center,
+  Tone, Glyph Index, Glyph Coverage, Ink, Ground, …). ASCII's presets live in
+  `src/effects/glyph/glyphPresets.ts`.
 
 Tests: `tests/unit/glyphEngine.test.ts` (every shown control reaches the output, Background,
-1080p cells, Speed travel, timeline clock, WGSL literals), `tests/unit/imageAsciiGraph.test.ts` and
-`tests/unit/imageGlyphVariantGraphs.test.ts` (each look's recipe at Background 0).
+1080p cells, Speed travel, timeline clock, WGSL literals, Amount 0 gives the original, Ramp menu and
+warnings, Weight), `tests/unit/cellGrid.test.ts` (ramps), `tests/unit/glyphAtlasRaster.test.ts` (Block
+Elements), `tests/unit/imageAsciiGraph.test.ts`, `tests/unit/imageGlyphVariantGraphs.test.ts`,
+`tests/unit/imageInscribeGraph.test.ts` and `tests/unit/imageContourTypeGraph.test.ts` (each look's
+recipe at Background 0), `tests/unit/EffectsTabValueControls.test.tsx` (the text row).
 
 Acuarela is a four-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
 premultiplied source cache, two edge-aware 7 x 7 washes with per-pixel jittered taps

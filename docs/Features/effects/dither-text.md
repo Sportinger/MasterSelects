@@ -1,6 +1,6 @@
 # Dither Text
 
-<!-- effect-docs: basic page sha=2eda44bf185e, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=e9adb4fb155c, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Character art dithered with a checkerboard threshold and flickering noise so glyphs show mostly in brighter cells; Cell Size sets character size.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | standard |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Standard |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

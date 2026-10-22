@@ -47,6 +47,18 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   g.edge(sampleUv, clampedSourceUv, 'value'); g.edge(tiny2, clampedSourceUv, 'min'); g.edge(almost2, clampedSourceUv, 'max');
   const source = g.node('source-sample', 'image.sample', 'image'); g.edge(frame, source, 'image'); g.edge(clampedSourceUv, source, 'uv');
   const sourceSplit = g.node('source-split', 'vector.split.rgba', 'rgb'); g.edge(source, sourceSplit, 'image'); const sourceRgb = { node: sourceSplit.node, port: 'rgb' };
+  // Amount fades from the untouched picture (each pixel, not the cell's colour) to the look, transparency included.
+  const original = g.node('original-sample', 'image.sample', 'image'); g.edge(frame, original, 'image'); g.edge(uv, original, 'uv');
+  const originalSplit = g.node('original-split', 'vector.split.rgba', 'rgb'); g.edge(original, originalSplit, 'image');
+  const blend = (look: Ref) => {
+    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge({ node: originalSplit.node, port: 'rgb' }, mixed, 'a'); g.edge(look, mixed, 'b'); g.edge(amount, mixed, 't');
+    const originalAlpha = g.node('original-alpha', 'convert.alpha-to-scalar'); g.edge({ node: originalSplit.node, port: 'alpha' }, originalAlpha, 'alpha');
+    const cellAlpha = g.node('cell-alpha', 'convert.alpha-to-scalar'); g.edge({ node: sourceSplit.node, port: 'alpha' }, cellAlpha, 'alpha');
+    const mixedAlpha = g.node('mixed-alpha', 'math.mix.scalar'); g.edge(originalAlpha, mixedAlpha, 'a'); g.edge(cellAlpha, mixedAlpha, 'b'); g.edge(amount, mixedAlpha, 't');
+    const alphaChannel = g.node('mixed-alpha-channel', 'convert.scalar-to-alpha', 'alpha'); g.edge(mixedAlpha, alphaChannel, 'value');
+    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge(alphaChannel, combine, 'alpha');
+    return combine;
+  };
   const tone = g.node('tone', 'color.luminance-rec709.rgb'); g.edge(sourceRgb, tone, 'rgb'); const inverseTone = g.binary('inverse-tone', 'math.subtract.scalar', one, tone);
   const mapped = g.node('mapped-tone', 'select.scalar'); g.edge(tone, mapped, 'falseValue'); g.edge(inverseTone, mapped, 'trueValue'); g.edge(invert, mapped, 'condition');
   const clampedTone = g.node('clamped-tone', 'math.clamp.scalar'); g.edge(mapped, clampedTone, 'value'); g.edge(zero, clampedTone, 'min'); g.edge(indexMax, clampedTone, 'max');
@@ -135,8 +147,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const quantized = g.binary('quantized-tone', 'math.divide-ieee.scalar', floored, four), numberInk = g.node('number-ink', 'math.mix.rgb');
     g.edge(aRgb, numberInk, 'a'); g.edge(bRgb, numberInk, 'b'); g.edge(quantized, numberInk, 't');
     const marked = g.node('number-mark', 'math.multiply.rgb-scalar'); g.edge(numberInk, marked, 'a'); g.edge(inkCoverage(glyphAlpha), marked, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(marked, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const combine = blend(marked); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   if (variant === 'pixel-code') {
@@ -145,8 +156,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const darkRgb = g.node('code-dark-rgb', 'convert.vec3-to-rgb', 'rgb'), lightRgb = g.node('code-light-rgb', 'convert.vec3-to-rgb', 'rgb'); g.edge(dark, darkRgb, 'value'); g.edge(light, lightRgb, 'value');
     const codeColor = g.node('code-color', 'math.mix.rgb'); g.edge(darkRgb, codeColor, 'a'); g.edge(lightRgb, codeColor, 'b'); g.edge(tone, codeColor, 't');
     const mark = g.node('code-mark', 'math.multiply.rgb-scalar'); g.edge(codeColor, mark, 'a'); g.edge(inkCoverage(glyphAlpha), mark, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(mark, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const combine = blend(mark); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   if (variant === 'pixel-dither') {
@@ -156,8 +166,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const neonBase = g.node('pixel-dither-neon-base', 'math.mix.rgb'); g.edge(aRgb, neonBase, 'a'); g.edge(bRgb, neonBase, 'b'); g.edge(tone, neonBase, 't');
     const neonGlow = g.node('pixel-dither-neon-glow', 'math.multiply.rgb-scalar'); g.edge(neonBase, neonGlow, 'a'); g.edge(inkCoverage(glow), neonGlow, 'b');
     const neon = g.node('pixel-dither-neon', 'math.multiply.rgb-scalar'); g.edge(neonGlow, neon, 'a'); g.edge(g.number('pixel-dither-neon-scale', 1.25), neon, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(neon, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const combine = blend(neon); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   if (variant === 'retro-matrix') {
@@ -171,8 +180,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const scanPhase = g.binary('retro-scan-phase', 'math.multiply.scalar', scanPixel, g.number('retro-pi', 3.14159265359)), scanWave = g.unary('retro-scan-wave', 'math.sin.scalar', scanPhase);
     const scan = g.binary('retro-scan', 'math.add.scalar', g.number('retro-scan-base', .82), g.binary('retro-scan-modulation', 'math.multiply.scalar', g.number('retro-scan-scale', .18), scanWave));
     const scanned = g.node('retro-scanned', 'math.multiply.rgb-scalar'); g.edge(amber, scanned, 'a'); g.edge(scan, scanned, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(scanned, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const combine = blend(scanned); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   if (variant === 'matrix') {
@@ -189,8 +197,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
     const greenRgb = g.node('matrix-green-rgb', 'convert.vec3-to-rgb', 'rgb'); g.edge(green, greenRgb, 'value');
     const matrixGround = g.binary('background-tone', 'math.multiply.scalar', backgroundAmount, tone);
     const marked = g.node('matrix-marked', 'math.multiply.rgb-scalar'); g.edge(greenRgb, marked, 'a'); g.edge(inkCoverage(glyphAlpha, matrixGround), marked, 'b');
-    const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(marked, mixed, 'b'); g.edge(amount, mixed, 't');
-    const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha'); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
+    const combine = blend(marked); const output = g.node('output', 'image.output', ''); g.edge(combine, output, 'image');
     return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout };
   }
   const duotone = g.node('duotone', 'math.mix.rgb'); g.edge(aRgb, duotone, 'a'); g.edge(bRgb, duotone, 'b'); g.edge(tone, duotone, 't');
@@ -316,8 +323,7 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
   const lifted = g.node('background-lift', 'math.mix.rgb'); g.edge(background, lifted, 'a'); g.edge(ink, lifted, 'b'); g.edge(backgroundAmount, lifted, 't'); background = lifted;
   const alpha = g.node('glyph-alpha', 'math.clamp.scalar'); g.edge(inkAlpha, alpha, 'value'); g.edge(zero, alpha, 'min'); g.edge(one, alpha, 'max');
   const result = g.node('glyph-result', 'math.mix.rgb'); g.edge(background, result, 'a'); g.edge(ink, result, 'b'); g.edge(alpha, result, 't');
-  const mixed = g.node('mixed', 'math.mix.rgb'); g.edge(sourceRgb, mixed, 'a'); g.edge(result, mixed, 'b'); g.edge(amount, mixed, 't');
-  const combine = g.node('combine', 'vector.combine.rgba', 'image'); g.edge(mixed, combine, 'rgb'); g.edge({ node: sourceSplit.node, port: 'alpha' }, combine, 'alpha');
+  const combine = blend(result);
   if (variant === 'ascii-ghost') {
     const current = g.node('ghost-current', 'convert.image-to-vec4'); g.edge(combine, current, 'image');
     const history = g.node('history', 'image.frame-history', 'image'), historyValue = g.node('ghost-history-value', 'convert.image-to-vec4'); g.edge(history, historyValue, 'image');

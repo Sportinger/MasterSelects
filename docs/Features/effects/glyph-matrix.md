@@ -1,6 +1,6 @@
 # Glyph Matrix
 
-<!-- effect-docs: basic page sha=92dd8953e59b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=87a5da06041d, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Character art whose glyphs sweep diagonally through the character ramp over time, like a scrolling data wave; Speed sets the sweep rate.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | detailed |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Detailed |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

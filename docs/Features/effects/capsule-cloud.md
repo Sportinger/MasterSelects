@@ -1,6 +1,6 @@
 # Tag Pills
 
-<!-- effect-docs: basic page sha=78320f24d5c0, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=e17f71a63a95, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Places each character inside a faint rounded pill, like a cloud of UI tags, with glyphs cycling over time; Cell Size sets the pill size.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | detailed |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Detailed |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

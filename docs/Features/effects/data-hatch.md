@@ -1,6 +1,6 @@
 # Data Hatching
 
-<!-- effect-docs: basic page sha=c288e6db970c, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=0e8d370b4290, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Mixes cycling characters with diagonal hatching that thickens in darker areas; Cell Size sets character size, Speed the cycling.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | binary |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Binary |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

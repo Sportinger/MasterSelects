@@ -13,8 +13,10 @@ const smoothstep = (low: number, high: number, value: number) => {
 
 describe('Inscribe image operator graph', () => {
   it.each(['fine', 'coarse'] as const)('matches the sampled-cell derivative resolve with explicit %s CPU policy', derivativeAutoMode => {
-    const definition = getEffect('inscribe')!, values = { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.default])),
-      cellSize: 9, amount: 1, colorMode: 'source' };
+    // The recipe as saved before Background existed (the dark ground). Cell Size counts pixels of a 1080p frame,
+    // so on this 40 × 20 frame 486 is a 9-pixel cell.
+    const definition = getEffect('inscribe')!, values = { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.legacyDefault ?? spec.default])),
+      cellSize: 9 * 1080 / 20, amount: 1, colorMode: 'source' };
     const plan = compileImageOperatorGraph(createDefaultInscribeGraph(), values, { parameterSchema: definition.params,
       resolveGlyphAtlas: () => ({ fontFamily: 'monospace', fontWeight: 600, charset: ' .#@', cellSize: 64 }) });
     expect(plan.capabilities).toContain('derivative');

@@ -1,6 +1,6 @@
 # Creative UI Collage
 
-<!-- effect-docs: basic page sha=b21f39b89fdf, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=85deba8bb2e2, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Turns the image into boxed UI-like cells with characters, borders and cursor dots that shuffle over time; Cell Size sets the box size.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | binary |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Binary |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

@@ -162,4 +162,41 @@ describe('glyph engine', () => {
       for (const program of programs) if (program.wgsl) expect(program.wgsl, type).not.toMatch(/\de[+-]?\d+\.0\b/u);
     }
   });
+
+  it('the Ramp menu names its ramps, and the card reports a Custom Ramp it shortens or a ramp it does not know', () => {
+    const long = 'x'.repeat(300);
+    for (const type of GLYPH_LOOKS) {
+      const definition = getEffect(type)!;
+      const ramp = definition.params.rampPreset;
+      expect(ramp.type === 'select' && ramp.options!.map(option => option.label), type)
+        .toEqual(['Standard', 'Detailed', 'Blocks', 'Bars', 'Binary', 'Numeric', 'Symbols']);
+      const warnings = definition.paramWarnings!({ ...getDefaultParams(type), customRamp: long } as Record<string, number | boolean | string>, 1920, 1080);
+      expect(warnings, type).toContain('Custom Ramp has 300 characters; 256 of them are drawn, spread evenly from the first to the last.');
+      expect(definition.glyphAtlas!({ ...getDefaultParams(type), customRamp: long } as Record<string, number | boolean | string>).charset, type).toHaveLength(256);
+    }
+  });
+
+  it('Amount 0 gives back the untouched picture, pixel for pixel, in every look', () => {
+    // Every pixel has its own colour and alpha, so the cell's centre colour (the old fade target) differs from it.
+    const pixel = (uv: [number, number]): Rgba => [uv[0], uv[1], .5, .4 + uv[0] / 2];
+    const pixelCoordinate: [number, number] = [602, 508], uv: [number, number] = [602.5 / 1920, 508.5 / 1080];
+    // ASCII Ghost also keeps the fading trail of earlier frames on top (its feedback), so it is left out here.
+    for (const type of GLYPH_LOOKS.filter(look => look !== 'ascii-ghost')) {
+      const params: Record<string, unknown> = { ...getDefaultParams(type), amount: 0 };
+      const plan = compile(type, params);
+      const output = evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv, pixelCoordinate, derivativeAutoMode: 'fine', resolution: [1920, 1080], timelineTimeSeconds: 1,
+        sampleImage: pixel, sampleResource: () => [0, 0, 0, 1] }) as number[];
+      expect(output.map(value => Number(value.toFixed(5))), type).toEqual(pixel(uv).map(value => Number(value.toFixed(5))));
+    }
+  });
+
+  it('Weight is not keyframeable and draws one of the nine font weights, so no value builds an atlas of its own', () => {
+    for (const type of GLYPH_LOOKS) {
+      const definition = getEffect(type)!;
+      expect(definition.params.fontWeight.animatable, type).toBe(false);
+      const atlas = (fontWeight: number) => definition.glyphAtlas!({ ...getDefaultParams(type), fontWeight } as Record<string, number | boolean | string>).fontWeight;
+      expect([atlas(612.5), atlas(649), atlas(651), atlas(2000), atlas(-5)], type).toEqual([600, 600, 700, 900, 100]);
+    }
+  });
 });
+

@@ -1,6 +1,6 @@
 # ASCII Ghost
 
-<!-- effect-docs: basic page sha=acd09646c0ee, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=76708822bb60, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 ASCII art whose characters cycle over time and leave fading ghost trails; Cell Size sets character size, Speed the cycling rate.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | standard |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Standard |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

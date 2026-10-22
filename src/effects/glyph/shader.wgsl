@@ -23,6 +23,7 @@ struct GlyphParams {
 
 struct GlyphCell {
   source: vec4f,
+  original: vec4f,
   local: vec2f,
   id: vec2f,
   tone: f32,
@@ -45,7 +46,13 @@ fn glyphCell(uv: vec2f, indexOffset: f32) -> GlyphCell {
   let baseIndex = glyphIndexFromTone(tone, params.glyphCount, params.invert);
   let index = baseIndex + indexOffset - floor((baseIndex + indexOffset) / params.glyphCount) * params.glyphCount;
   let alpha = sampleGlyphAlpha(local, index, params.atlasColumns, params.atlasRows);
-  return GlyphCell(sourceColor, local, id, tone, index, alpha);
+  let original = textureSample(inputTex, texSampler, uv);
+  return GlyphCell(sourceColor, original, local, id, tone, index, alpha);
+}
+
+// Amount fades from the untouched picture (each pixel, not the cell's colour) to the look, transparency included.
+fn amountBlend(cell: GlyphCell, look: vec3f) -> vec4f {
+  return vec4f(mix(cell.original.rgb, look, params.amount), mix(cell.original.a, cell.source.a, params.amount));
 }
 
 // Timeline time × Speed, or the travel of a keyframed Speed.
@@ -63,7 +70,7 @@ fn glyphInk(cell: GlyphCell, alpha: f32, background: vec3f) -> vec4f {
   let ink = select(duotone, cell.source.rgb, params.colorMode < 0.5);
   let ground = mix(background, ink, params.background);
   let result = mix(ground, ink, clamp(alpha, 0.0, 1.0));
-  return vec4f(mix(cell.source.rgb, result, params.amount), cell.source.a);
+  return amountBlend(cell, result);
 }
 
 fn darkBackground(cell: GlyphCell) -> vec3f {
@@ -109,21 +116,21 @@ fn matrixFragment(input: VertexOutput) -> @location(0) vec4f {
   let cell = glyphCell(input.uv, rain);
   let head = pow(0.5 + 0.5 * sin(base.id.y * 0.43 - motionTime() * 5.0 + hash(base.id.xx) * TAU), 4.0);
   let green = vec3f(0.04, 0.35 + head * 0.65, 0.13);
-  return vec4f(mix(base.source.rgb, green * inkCoverage(cell.alpha, params.background * base.tone), params.amount), base.source.a);
+  return amountBlend(base, green * inkCoverage(cell.alpha, params.background * base.tone));
 }
 
 @fragment
 fn pixelCodeFragment(input: VertexOutput) -> @location(0) vec4f {
   let cell = glyphCell(input.uv, floor(hash(floor(input.uv * params.resolution / params.cellSize)) * params.glyphCount));
   let codeColor = mix(vec3f(0.08, 0.3, 0.48), vec3f(0.28, 0.95, 0.72), cell.tone);
-  return vec4f(mix(cell.source.rgb, codeColor * inkCoverage(cell.alpha, params.background), params.amount), cell.source.a);
+  return amountBlend(cell, codeColor * inkCoverage(cell.alpha, params.background));
 }
 
 @fragment
 fn numberFieldFragment(input: VertexOutput) -> @location(0) vec4f {
   let cell = glyphCell(input.uv, 0.0);
   let ink = mix(params.colorA.rgb, params.colorB.rgb, floor(cell.tone * 5.0) / 4.0);
-  return vec4f(mix(cell.source.rgb, ink * inkCoverage(cell.alpha, params.background), params.amount), cell.source.a);
+  return amountBlend(cell, ink * inkCoverage(cell.alpha, params.background));
 }
 
 @fragment
@@ -180,7 +187,7 @@ fn retroMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
   let base = glyphCell(input.uv, floor(motionTime() * 3.0 - input.uv.y * params.glyphCount));
   let amber = vec3f(1.0, 0.52, 0.08) * inkCoverage(base.alpha, params.background) * (0.55 + base.tone * 0.7);
   let scan = 0.82 + 0.18 * sin(input.uv.y * params.resolution.y * PI);
-  return vec4f(mix(base.source.rgb, amber * scan, params.amount), base.source.a);
+  return amountBlend(base, amber * scan);
 }
 
 @fragment
@@ -188,7 +195,7 @@ fn pixelDitherFragment(input: VertexOutput) -> @location(0) vec4f {
   let cell = glyphCell(input.uv, floor(motionTime()));
   let glow = smoothstep(0.05, 0.65, cell.alpha + (1.0 - length(cell.local - 0.5)) * 0.18);
   let neon = mix(params.colorA.rgb, params.colorB.rgb, cell.tone) * inkCoverage(glow, params.background) * 1.25;
-  return vec4f(mix(cell.source.rgb, neon, params.amount), cell.source.a);
+  return amountBlend(cell, neon);
 }
 
 @fragment

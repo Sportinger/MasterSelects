@@ -1,3 +1,4 @@
+import { blockElementRects } from './blockElementGlyphs';
 import { planGlyphAtlas, type GlyphAtlasOptions, type GlyphAtlasPlan } from './glyphAtlasPlan';
 
 export interface RasterizedGlyphAtlas {
@@ -26,6 +27,15 @@ export function rasterizeGlyphAtlas(options: GlyphAtlasOptions): RasterizedGlyph
     const glyph = plan.glyphs[index];
     const column = index % plan.columns;
     const row = Math.floor(index / plan.columns);
+    // Block Elements fill the whole tile as shapes, so a ramp of blocks joins into a solid mosaic.
+    const block = blockElementRects(glyph);
+    if (block) {
+      for (const [x0, y0, x1, y1] of block) {
+        context.fillRect(column * plan.cellSize + x0 * plan.cellSize, row * plan.cellSize + y0 * plan.cellSize,
+          (x1 - x0) * plan.cellSize, (y1 - y0) * plan.cellSize);
+      }
+      continue;
+    }
     const centerX = column * plan.cellSize + plan.cellSize / 2;
     const centerY = row * plan.cellSize + plan.cellSize / 2;
     const measured = Math.max(1, context.measureText(glyph).width);

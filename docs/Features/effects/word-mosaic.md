@@ -1,6 +1,6 @@
 # Word Mosaic
 
-<!-- effect-docs: basic page sha=7adb18f966cf, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=35befd38cf4b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Builds the image from rows of characters joined by thin connector strokes in brighter areas so they read like words; Cell Size sets letter size.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | detailed |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Detailed |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

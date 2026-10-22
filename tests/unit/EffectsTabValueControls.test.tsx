@@ -52,15 +52,23 @@ describe('EffectsTab numeric controls', () => {
     expect(screen.queryByText('Quality')).toBeNull();
   });
 
-  it('keeps the generic control for parameter types without a Resolve row in a Resolve-row effect', () => {
+  it('renders typed text in a Resolve-row effect as a text field with a reset (the ASCII Custom Ramp)', () => {
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
     const params = getEffect('gaussian-blur')!.params as Record<string, EffectParam>;
     params.previewNote = { type: 'text', label: 'Preview Note', default: 'a' };
     try {
       const effect: Effect = { id: 'gaussian-text', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewNote: 'b' } };
-      render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
-      expect(screen.getByText('Preview Note')).toBeInTheDocument();
+      const ascii: Effect = { id: 'ascii-text', type: 'ascii', name: 'ASCII', enabled: true, params: { customRamp: ' .:#' } };
+      render(<EffectsTab clipId="clip:effects-controls" effects={[effect, ascii]} />);
+      expect(screen.getByRole('textbox', { name: 'Preview Note' })).toHaveClass('resolve-inspector-text-input');
       expect(screen.getByLabelText('Radius slider')).toBeInTheDocument();
-      expect(hasResolveEffectParamRow({ type: 'text' })).toBe(false);
+      const ramp = screen.getByRole('textbox', { name: 'Custom Ramp' });
+      expect(ramp).toHaveClass('resolve-inspector-text-input');
+      expect(ramp).toHaveValue(' .:#');
+      fireEvent.click(screen.getByRole('button', { name: 'Reset Custom Ramp' }));
+      expect(JSON.stringify(patch.mock.calls)).toContain('"customRamp":""');
+      expect(screen.getByLabelText('Cell Size slider')).toBeInTheDocument();
+      expect(hasResolveEffectParamRow({ type: 'text' })).toBe(true);
       expect(hasResolveEffectParamRow({ type: 'select' })).toBe(true);
     } finally {
       delete params.previewNote;

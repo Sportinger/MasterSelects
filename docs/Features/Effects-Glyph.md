@@ -12,7 +12,7 @@ What each style changes; everything else works the same.
 
 | Look | Style |
 |---|---|
-| plain characters chosen by brightness | [ASCII](./effects/ascii.md) |
+| characters chosen by brightness, in the picture's colours | [ASCII](./effects/ascii.md) |
 | characters that cycle and leave fading ghosts | [ASCII Ghost](./effects/ascii-ghost.md) |
 | a diagonal wave sweeping through the characters | [Glyph Matrix](./effects/glyph-matrix.md) |
 | symbols that swap and pulse at random | [Symbol Matrix](./effects/symbol-matrix.md) |
@@ -43,12 +43,15 @@ drawn and coloured.
 - **Background** – how much of the picture fills each cell behind its character: 0 is the dark
   ground of classic ASCII art, 1 the full colour. New effects start at 0.3, so the picture stays
   readable; effects saved earlier keep their dark ground.
-- **Ramp** – the set of characters (standard, detailed, blocks, binary, numeric, symbols), or your own
-  in **Custom Ramp**. **Font** and **Weight** change the lettering.
+- **Ramp** – the set of characters (Standard, Detailed, Blocks, Bars, Binary, Numeric, Symbols), or your
+  own in **Custom Ramp**: one character puts the same sign in every cell, more than 256 are thinned
+  to 256. Blocks and Bars fill their cells edge to edge in any font. **Font** and **Weight** change the
+  lettering.
+- **Amount** – fades from the untouched picture (0) to the full look (1).
 - **Color Source** – **Source** takes the picture's colours; **Duotone** draws between **Dark** and
   **Light**. Matrix Rain, Retro Matrix and Pixel Code use their own colours, Number Field and Dither
   Glow always draw between Dark and Light; their cards hide what they do not use.
-- **Invert Ramp** swaps light and dense characters; **Amount** mixes back towards the original;
+- **Invert Ramp** swaps light and dense characters;
   **Speed** sets how fast the moving styles change; they move with the playhead and stand still
   when it stops, and a keyframed Speed speeds up smoothly.
 

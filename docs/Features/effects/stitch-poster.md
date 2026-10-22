@@ -1,6 +1,6 @@
 # Stitch Poster
 
-<!-- effect-docs: basic page sha=8cc025e0ed0c, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=bcbe9f71b7e0, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Combines character art with cross-stitch X marks that get denser in dark areas over a paper-tinted background; Cell Size sets stitch size.
 
@@ -27,7 +27,7 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 | Background | 0 to 1 | 0 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | symbols |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Symbols |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

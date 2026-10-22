@@ -1,0 +1,10 @@
+{
+  "shots": [
+    "ascii?plumbing=hide&omit=output,frame&marks=organized-ascii-grid:below,organized-ascii-source:above,compound-shared-zero:below,compound-shared-one:below,organized-ascii-appearance:below@ascii",
+    "ascii?focus=cell-grid&only=cellSize-clamped,safe-cell-short-side,safe-cell-frame-scale,safe-cell-pixels,safe-cell,safe-cell-vec2,grid,scaled-uv,cell-id,local-uv,half-vec2,sample-pixel,sample-uv&cables=avoid&marks=safe-cell-short-side:above,safe-cell:above,cell-id:above,local-uv:below,sample-uv:above@ascii-cell-grid",
+    "ascii?focus=cell-sampling-and-tone&only=compound-shared-clamped-source-uv,source-split,tone&cables=avoid&layout=float&name.tiny-vec2=Tiny&name.almost-vec2=Almost One&marks=compound-shared-clamped-source-uv:below,source-split:above,tone:below@ascii-cell-sampling",
+    "ascii?focus=tone-to-glyph&only=inverse-tone,mapped-tone,clamped-tone,safe-count,glyph-scaled,glyph-index&cables=avoid&marks=inverse-tone:below,mapped-tone:above,clamped-tone:above,glyph-scaled:above,glyph-index:below@ascii-tone-to-glyph",
+    "ascii?focus=atlas-alpha&only=column-ratio,atlas-row,row-width,atlas-column,atlas-tile,clamped-local-uv,atlas-pixel,atlas-size,atlas-uv,atlas-sample,atlas-vec4,atlas-split&cables=avoid&break=atlas-pixel&name.safe-columns=Atlas Columns&name.safe-rows=Atlas Rows&name.tiny-vec2=Tiny&name.almost-vec2=Almost One&marks=atlas-row:above,atlas-column:below,clamped-local-uv:right,atlas-sample:above,atlas-split:below@ascii-atlas-alpha",
+    "ascii?focus=ink-and-appearance&only=ink,source-dark,background,background-lift,glyph-result,mixed&cables=avoid&name.source-mode=Source Mode&name.color-a-dark=Dark Ground (Duotone)&name.background-clamped=Background&name.glyph-alpha=Glyph Coverage&break=background-lift&marks=ink:right,background:above,background-lift:above,glyph-result:above:46,mixed:above@ascii-ink-and-appearance"
+  ]
+}

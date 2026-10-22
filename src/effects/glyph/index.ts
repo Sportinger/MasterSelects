@@ -1,10 +1,11 @@
 import { createGlyphEffect, type GlyphColorControl } from './glyphEffectFactory';
+import { ASCII_PRESETS } from './glyphPresets';
 
 // Looks with a palette of their own (green rain, amber terminal, blue-to-mint code) never read the
 // shared colour controls; Number Field and Dither Glow always colour between Dark and Light.
 const OWN_PALETTE: readonly GlyphColorControl[] = ['colorMode', 'colorA', 'colorB'];
 
-export const ascii = createGlyphEffect({ id: 'ascii', name: 'ASCII', entryPoint: 'asciiFragment' });
+export const ascii = createGlyphEffect({ id: 'ascii', name: 'ASCII', entryPoint: 'asciiFragment', presets: ASCII_PRESETS });
 export const asciiGhost = createGlyphEffect({ id: 'ascii-ghost', name: 'ASCII Ghost', entryPoint: 'asciiGhostFragment', animated: true, feedback: true });
 export const ditherText = createGlyphEffect({ id: 'dither-text', name: 'Dither Text', entryPoint: 'ditherTextFragment', animated: true, defaultCellSize: 10 });
 export const wordMosaic = createGlyphEffect({ id: 'word-mosaic', name: 'Word Mosaic', entryPoint: 'wordMosaicFragment', defaultCellSize: 22, defaultRamp: 'detailed' });

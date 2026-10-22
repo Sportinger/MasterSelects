@@ -1,6 +1,6 @@
 # Matrix Rain
 
-<!-- effect-docs: basic page sha=da2279f0cb4e, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=8fade9188098, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Covers the image with falling green code characters with bright moving heads, like digital rain; Speed sets the fall rate, Cell Size the glyph size.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | symbols |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Symbols |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

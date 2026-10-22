@@ -29,7 +29,9 @@ function reference(params: { amount: number; cellSize: number; invert: boolean; 
   const ink = params.colorMode === 'source' ? source.slice(0, 3) : duotone;
   const background = params.colorMode === 'source' ? source.slice(0, 3).map(value => value * .08) : colorA.map(value => value * .15);
   const glyph = ink.map((value, channel) => mix(background[channel], value, alpha));
-  return { atlasUv, output: [...source.slice(0, 3).map((value, channel) => mix(value, glyph[channel], params.amount)), source[3]] as Rgba };
+  // Amount fades from the untouched pixel, not from the cell's colour.
+  const pixel = sourceSample(uv);
+  return { atlasUv, output: [...pixel.slice(0, 3).map((value, channel) => mix(value, glyph[channel], params.amount)), source[3]] as Rgba };
 }
 
 describe('ASCII image graph', () => {

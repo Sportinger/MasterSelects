@@ -1,6 +1,6 @@
 # Inscribe
 
-<!-- effect-docs: basic page sha=9f20d506b20b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=9b50d564404a, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Draws characters only along brightness edges over a darkened image, like text etched into the outlines; Cell Size sets character size.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | symbols |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Symbols |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |

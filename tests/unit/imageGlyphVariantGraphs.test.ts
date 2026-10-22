@@ -40,7 +40,8 @@ function cell(coords = uv, offset = 0) {
   const source = sourceAt(sourceUv), tone = source[0] * .2126 + source[1] * .7152 + source[2] * .0722;
   const baseIndex = Math.floor(Math.max(0, Math.min(.99999, tone)) * 4), index = ((baseIndex + offset) % 4 + 4) % 4;
   const atlasUv: [number, number] = [(index % 2 + local[0]) / 2, (Math.floor(index / 2) + local[1]) / 2];
-  return { source, tone, local, id, atlasUv, alpha: atlasAt('', atlasUv)[3] };
+  // Amount fades from the untouched pixel at coords, not from the cell's colour.
+  return { source, pixel: sourceAt(coords), tone, local, id, atlasUv, alpha: atlasAt('', atlasUv)[3] };
 }
 
 describe('shared glyph graph variants', () => {
@@ -51,7 +52,7 @@ describe('shared glyph graph variants', () => {
     const { output, samples } = evaluate('number-field', graph, { cellSize: 10, amount: .65, colorA: '#204060', colorB: '#e0c080' });
     const value = cell(), a = [0x20 / 255, 0x40 / 255, 0x60 / 255], b = [0xe0 / 255, 0xc0 / 255, 0x80 / 255];
     const level = Math.floor(value.tone * 5) / 4;
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, mix(a[index], b[index], level) * value.alpha, .65));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, mix(a[index], b[index], level) * value.alpha, .65));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -65,7 +66,7 @@ describe('shared glyph graph variants', () => {
     const coverage = Math.max(value.alpha, (1 - smooth) * .28);
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .8));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .8));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -77,7 +78,7 @@ describe('shared glyph graph variants', () => {
     const { output, samples } = evaluate('pixel-code', graph, { cellSize: 10, amount: .7 });
     const dark = [.08, .3, .48], light = [.28, .95, .72];
     const code = dark.map((channel, index) => mix(channel, light[index], value.tone) * value.alpha);
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, code[index], .7));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, code[index], .7));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -91,7 +92,7 @@ describe('shared glyph graph variants', () => {
     const connector = (Math.abs(value.local[1] - .5) <= .08 ? 1 : 0) * (value.tone >= .25 ? 1 : 0);
     const coverage = Math.max(value.alpha, connector * band * .45), background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .75));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .75));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -104,7 +105,7 @@ describe('shared glyph graph variants', () => {
       { cellSize: 10, amount: .7, speed, colorMode: 'source' }, coords, time);
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, value.alpha));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .7));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .7));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -124,7 +125,7 @@ describe('shared glyph graph variants', () => {
     const coverage = Math.max(value.alpha, hatch * (1 - value.tone) * .55);
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .85));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .85));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -139,7 +140,7 @@ describe('shared glyph graph variants', () => {
     const t = Math.max(0, Math.min(1, (edge - .02) / .03)), frame = 1 - t * t * (3 - 2 * t), coverage = Math.max(value.alpha, frame);
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .72));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .72));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -154,7 +155,7 @@ describe('shared glyph graph variants', () => {
     const coverage = Math.max(value.alpha, stitch * (.35 + .65 * (1 - value.tone)));
     const dark = value.source.slice(0, 3).map(channel => channel * .08), background = colorB.map((channel, index) => mix(channel, dark[index], .25));
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .68));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .68));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -168,7 +169,7 @@ describe('shared glyph graph variants', () => {
     const threshold = mix(.28, .72, checker), visible = value.tone + hash2d([value.id[0] + time, value.id[1] + time]) * .18 >= threshold ? 1 : 0;
     const coverage = value.alpha * visible, background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .74));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .74));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -182,7 +183,7 @@ describe('shared glyph graph variants', () => {
     const pulse = .65 + .35 * Math.sin(time * speed * 2 + hash2d(base.id) * 6.28318530718), coverage = value.alpha * pulse;
     const background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .81));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], .81));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -196,7 +197,7 @@ describe('shared glyph graph variants', () => {
     const radius = Math.hypot(value.local[0] - .5, value.local[1] - .5), glowInput = value.alpha + (1 - radius) * .18;
     const t = Math.max(0, Math.min(1, (glowInput - .05) / .6)), glow = t * t * (3 - 2 * t);
     const neon = colorA.map((channel, index) => mix(channel, colorB[index], value.tone) * glow * 1.25);
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, neon[index], .73));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, neon[index], .73));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -209,7 +210,7 @@ describe('shared glyph graph variants', () => {
       { cellSize: 10, amount, speed }, coords, time);
     const amberBase = [1, .52, .08], amber = amberBase.map(channel => channel * value.alpha * (.55 + value.tone * .7));
     const scan = .82 + .18 * Math.sin(coords[1] * resolution[1] * 3.14159265359), scanned = amber.map(channel => channel * scan);
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, scanned[index], amount));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, scanned[index], amount));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -226,7 +227,7 @@ describe('shared glyph graph variants', () => {
     const t = Math.max(0, Math.min(1, (distance + .02) / .05)), pill = 1 - t * t * (3 - 2 * t);
     const coverage = Math.max(value.alpha, pill * .18), background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -243,7 +244,7 @@ describe('shared glyph graph variants', () => {
     const cursor = Math.hypot(value.local[0] - .72, value.local[1] - .28) <= .07 ? 1 : 0;
     const coverage = Math.max(value.alpha, border * .42, cursor), background = value.source.slice(0, 3).map(channel => channel * .08);
     const glyph = value.source.slice(0, 3).map((channel, index) => mix(background[index], channel, coverage));
-    const expected = value.source.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
+    const expected = value.pixel.slice(0, 3).map((channel, index) => mix(channel, glyph[index], amount));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);
@@ -258,7 +259,7 @@ describe('shared glyph graph variants', () => {
     const phase = base.id[1] * .43 - time * speed * 5 + hash2d([base.id[0], base.id[0]]) * 6.28318530718;
     const head = Math.pow(.5 + .5 * Math.sin(phase), 4), green = [.04, .35 + head * .65, .13];
     const marked = green.map(channel => channel * value.alpha);
-    const expected = base.source.slice(0, 3).map((channel, index) => mix(channel, marked[index], amount));
+    const expected = base.pixel.slice(0, 3).map((channel, index) => mix(channel, marked[index], amount));
     expect(samples).toEqual([['glyph-atlas:atlas', ...value.atlasUv]]);
     expected.forEach((channel, index) => expect(output[index]).toBeCloseTo(channel, 12));
     expect(output[3]).toBe(.6);

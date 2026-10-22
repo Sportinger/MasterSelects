@@ -1,6 +1,6 @@
 # Retro Matrix
 
-<!-- effect-docs: basic page sha=8f15b7421c13, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=703a94f475fe, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Scrolls amber monochrome terminal characters vertically with scanlines, like an old phosphor display; Speed sets the scroll rate.
 
@@ -27,7 +27,7 @@ Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.
 | Background | 0 to 1 | 0.3 |
 | Invert Ramp | on or off | off |
 | **Glyphs** | | |
-| Ramp | standard, detailed, blocks, binary, numeric, symbols | numeric |
+| Ramp | Standard, Detailed, Blocks, Bars, Binary and 2 more | Numeric |
 | Custom Ramp | text | empty |
 | Font | Monospace, Serif, Sans Serif | Monospace |
 | Weight | 200 to 900 | 600 |
