@@ -68,7 +68,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 ### Grid
 
-**Cell Size** – how big one character is. 6–10 gives fine print that reads as a picture from afar, 14 small but clear characters, 24 and more large signs that read on a projection; at 72 a few dozen signs fill the frame. It counts pixels of a 1080p picture, so the preview, the thumbnails and a 4K export show the same grid. 4 to 72 px, default 14 px.
+**Cell Size** – how big one character is. 6–10 gives fine print that reads as a picture from afar, 14 small but clear characters, 24 and more large signs that read on a projection; at 72 the frame holds only 15 rows of large signs. It counts pixels of a 1080p picture, so the preview, the thumbnails and a 4K export show the same grid. 4 to 72 px, default 14 px.
 
 ### Style
 

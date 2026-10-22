@@ -196,7 +196,7 @@ describe('glyph engine', () => {
       const roll = getEffect(type)!.params.roll;
       if (!('speed' in getEffect(type)!.params)) { expect(roll, type).toBeUndefined(); continue; }
       expect(roll, type).toMatchObject({ legacyDefault: 1, min: 0, max: 1, renderMin: 0, renderMax: 1, graphOnly: true, animatable: true, group: 'Motion' });
-      expect(roll.default, type).toBe(type === 'glyph-matrix' ? .2 : 1);
+      expect(roll.default, type).toBe(type === 'glyph-matrix' ? .2 : type === 'symbol-matrix' ? .4 : 1);
     }
     // The test atlas ' .#@' is 2 × 2 glyphs; the source tone (.63) picks '#' (index 2).
     const glyphAt = (params: Record<string, unknown>, time: number) => {
@@ -229,6 +229,27 @@ describe('glyph engine', () => {
     expect(effectStyleOptions('glyph-matrix').map(option => option.value)).toEqual(expect.arrayContaining(['matrix', 'symbol-matrix', 'retro-matrix', 'data-hatch']));
     expect(effectStyleOptions('ascii').map(option => option.value)).toEqual(expect.arrayContaining(['word-mosaic', 'pixel-code', 'number-field']));
     expect(effectStyleOptions('ascii').map(option => option.value)).not.toContain('glyph-matrix');
+  });
+
+  it('Symbol Matrix swaps every cell at its own moment to an unrelated random character', () => {
+    // 8 × 8 cells of 14 px on a flat picture, so every cell has the same own character; Roll 1 draws from the whole ramp.
+    const cells = Array.from({ length: 64 }, (_, index) => [index % 8, Math.floor(index / 8)] as const);
+    const plans = [0, 1].map(speed => compile('symbol-matrix', { ...getDefaultParams('symbol-matrix'), roll: 1, speed }));
+    const glyphAt = ([x, y]: readonly [number, number], time: number, speed = 1) => {
+      let glyph = -1;
+      evaluateImageOperatorPlan(plans[speed], [0, 0, 0, 0], { uv: [(x + 20.5) * 14 / 1920, (y + 20.5) * 14 / 1080], resolution: [1920, 1080],
+        timelineTimeSeconds: time, sampleImage: () => source, sampleResource: (_id, [u, v]) => { glyph = Math.floor(u * 2) + Math.floor(v * 2) * 2; return [0, 0, 0, 0]; } });
+      return glyph;
+    };
+    const frames = Array.from({ length: 25 }, (_, frame) => cells.map(cell => glyphAt(cell, frame / 24)));
+    const changed = frames.slice(1).map((frame, index) => frame.filter((glyph, cell) => glyph !== frames[index][cell]).length);
+    // Four swaps a second per cell, spread over all frames: never every cell on one frame (as when all ticked together).
+    expect(changed.every(count => count > 0 && count < 32), changed.join(' ')).toBe(true);
+    // The draws are not one random field sliding along the diagonal (cell + 1 one tick later showed the same glyph).
+    const slid = cells.filter(([x, y]) => x < 7 && y < 7).filter(([x, y]) => glyphAt([x, y], 1.3) === glyphAt([x + 1, y + 1], 1.05)).length;
+    expect(slid / 49).toBeLessThan(.5);
+    // Speed 0 holds each cell on one character.
+    expect(new Set([0, .4, 1.7].map(time => glyphAt([3, 3], time, 0))).size).toBe(1);
   });
 
   it('Weight is not keyframeable and draws one of the nine font weights, so no value builds an atlas of its own', () => {

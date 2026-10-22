@@ -400,12 +400,20 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
   `1 + ceil(Roll × (ramp − 1))` characters around its own (`index-window`), kept inside the ramp
   (`index-window-start`), starting from its own character; the look's offset (Glyph Matrix: the
   diagonal sweep) moves it through that window. Roll 1 is exactly the earlier full-ramp wrap
-  (`legacyDefault: 1`, and the default of every look but Glyph Matrix, which starts at 0.2), 0 holds
+  (`legacyDefault: 1`, and the default of every look but Glyph Matrix and Symbol Matrix, which start
+  at 0.2 and 0.4), 0 holds
   each cell on its tone's character, and any Roll above 0 moves at least two characters. The
   quotient carries + ½ so GPU division never drops a cycle. `graphOnly`; outside 0–1 it renders
   clamped (`roll-clamped`). The moving looks show these nodes in two folders, **Glyph Offset** and
   **Roll Window**; `effectGraphProjection.ts` names the runtime-only travel card after its rate
   ("Speed Travel"). Glyph Matrix's presets live in `glyphPresets.ts` (`GLYPH_MATRIX_PRESETS`).
+- **Symbol Matrix swaps.** Each cell ticks at its own moment, `floor(4 × clock + Random (Cell))`
+  (`index-cell-random`, `index-tick`), and draws its offset from Random (Integer Hash) of (its random,
+  its tick) (`index-jitter`). It used to hash cell + `floor(4 × clock)`: every cell swapped on the same
+  frame, and since the sine hash only reads a dot product, the random field slid one cell diagonally
+  per tick. A fix for new instances and setups saved without a graph; stored setups keep the old swap.
+  Its brightness pulse (`symbol-*` nodes, 0.65 + 0.35 × sin(2 × clock + cell phase)) has its own
+  **Pulse** folder; presets: `SYMBOL_MATRIX_PRESETS`.
 - **Colour controls.** Matrix Rain, Retro Matrix and Pixel Code retire Color Source, Dark and Light;
   Number Field and Dither Glow retire Color Source (`deprecated`: hidden, tools say why, saved values
   load and the Style menu keeps them).
@@ -432,7 +440,7 @@ of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy
 
 Tests: `tests/unit/glyphEngine.test.ts` (every shown control reaches the output, Background,
 1080p cells, Speed travel, timeline clock, WGSL literals, Amount 0 gives the original, Ramp menu and
-warnings, Weight, Roll window and its legacy full-ramp sweep), `tests/unit/cellGrid.test.ts` (ramps), `tests/unit/glyphAtlasRaster.test.ts` (Block
+warnings, Weight, Roll window and its legacy full-ramp sweep, Symbol Matrix's staggered swaps), `tests/unit/cellGrid.test.ts` (ramps), `tests/unit/glyphAtlasRaster.test.ts` (Block
 Elements), `tests/unit/imageAsciiGraph.test.ts`, `tests/unit/imageGlyphVariantGraphs.test.ts`,
 `tests/unit/imageInscribeGraph.test.ts` and `tests/unit/imageContourTypeGraph.test.ts` (each look's
 recipe at Background 0), `tests/unit/EffectsTabValueControls.test.tsx` (the text row).

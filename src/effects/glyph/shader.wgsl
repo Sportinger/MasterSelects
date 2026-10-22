@@ -70,6 +70,32 @@ fn motionTime() -> f32 {
   return select(params.time * params.speed, params.travel, params.travel > -5e19);
 }
 
+// Uniform random of a whole-number cell (PCG2D, the graph's Random (Cell)).
+fn glyphCellRandom(p: vec2f) -> f32 {
+  var v = bitcast<vec2u>(vec2i(floor(p))) * 1664525u + 1013904223u;
+  v.x += v.y * 1664525u; v.y += v.x * 1664525u;
+  v = v ^ (v >> vec2u(16u));
+  v.x += v.y * 1664525u; v.y += v.x * 1664525u;
+  v = v ^ (v >> vec2u(16u));
+  return f32(v.x >> 8u) / 16777216.0;
+}
+
+// Integer hash of the exact float bits (the graph's Random (Integer Hash), hashPcg2d.wgsl).
+fn glyphHashPcg(p: vec2f) -> f32 {
+  var v = bitcast<vec2u>(p);
+  v = v ^ (v >> vec2u(16u));
+  v = v * vec2u(0x7feb352du, 0x846ca68bu);
+  v = v ^ (v >> vec2u(15u));
+  v = v * 1664525u + 1013904223u;
+  v.x = v.x + v.y * 1664525u;
+  v.y = v.y + v.x * 1664525u;
+  v = v ^ (v >> vec2u(16u));
+  v.x = v.x + v.y * 1664525u;
+  v.y = v.y + v.x * 1664525u;
+  v = v ^ (v >> vec2u(16u));
+  return f32(v.x >> 8u) * (1.0 / 16777216.0);
+}
+
 // Coverage of a look that colours every cell in its own palette: full under the character, Background around it.
 fn inkCoverage(alpha: f32, ground: f32) -> f32 {
   return mix(ground, 1.0, alpha);
@@ -186,7 +212,10 @@ fn glyphMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
 @fragment
 fn symbolMatrixFragment(input: VertexOutput) -> @location(0) vec4f {
   let base = glyphCell(input.uv, 0.0);
-  let jitter = floor(hash(base.id + floor(motionTime() * 4.0)) * params.glyphCount);
+  // Each cell swaps at its own moment to a random character (the graph's Random (Cell) and Random (Integer Hash)).
+  let cellRandom = glyphCellRandom(base.id);
+  let tick = floor(motionTime() * 4.0 + cellRandom);
+  let jitter = floor(glyphHashPcg(vec2f(cellRandom, tick)) * params.glyphCount);
   let cell = glyphCell(input.uv, jitter);
   let pulse = 0.65 + 0.35 * sin(motionTime() * 2.0 + hash(base.id) * TAU);
   return glyphInk(cell, cell.alpha * pulse, darkBackground(cell));

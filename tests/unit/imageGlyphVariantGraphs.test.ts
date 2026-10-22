@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { getEffect } from '../../src/effects';
 import { createDefaultBrandGeneratorGraph, createDefaultCapsuleCloudGraph, createDefaultDataHatchGraph, createDefaultDitherTextGraph, createDefaultGlyphMatrixGraph, createDefaultGridGlyphGraph, createDefaultMatrixGraph, createDefaultNumberFieldGraph, createDefaultPixelCodeGraph, createDefaultPixelDitherGraph, createDefaultRetroMatrixGraph, createDefaultStitchPosterGraph, createDefaultSymbolMatrixGraph, createDefaultUiCollageGraph, createDefaultWordMosaicGraph } from '../../src/services/operators/asciiEffectGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import { imageCellHash } from '../../src/services/operators/imageOperatorEvaluation';
+import { imageHashPcg2d } from '../../src/services/operators/imageHashPcg';
 
 type Rgba = [number, number, number, number];
 // Cell Size counts pixels of a 1080p frame: at 2160 × 1080 a Cell Size of 10 is a 10-pixel cell (grid 216 × 108).
@@ -175,9 +177,12 @@ describe('shared glyph graph variants', () => {
     expect(output[3]).toBe(.6);
   });
 
-  it('builds Symbol Matrix with hashed time jitter and pulsed glyph coverage', () => {
-    const coords: [number, number] = [.8, .7], time = .57, speed = 1.35, base = cell(coords), phase = Math.floor(time * speed * 4);
-    const value = cell(coords, Math.floor(hash2d([base.id[0] + phase, base.id[1] + phase]) * 4));
+  it('builds Symbol Matrix with a staggered per-cell random swap and pulsed glyph coverage', () => {
+    // Each cell ticks at its own moment (four ticks a second × Speed, shifted by its Random (Cell)) and draws its
+    // character from Random (Integer Hash) of (its random, its tick).
+    const coords: [number, number] = [.8, .7], time = .57, speed = 1.35, base = cell(coords), cellRandom = imageCellHash(base.id);
+    const tick = Math.floor(time * speed * 4 + cellRandom);
+    const value = cell(coords, Math.floor(imageHashPcg2d([cellRandom, tick]) * 4));
     const { output, samples } = evaluate('symbol-matrix', createDefaultSymbolMatrixGraph(),
       { cellSize: 10, amount: .81, speed, colorMode: 'source' }, coords, time);
     const pulse = .65 + .35 * Math.sin(time * speed * 2 + hash2d(base.id) * 6.28318530718), coverage = value.alpha * pulse;

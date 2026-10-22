@@ -27,3 +27,20 @@ export const GLYPH_MATRIX_PRESETS: readonly EffectPreset[] = [
   // Large letters that run through the alphabet, like a split-flap departure board.
   { id: 'split-flap', name: 'Split-Flap', params: { cellSize: 30, rampPreset: 'standard', customRamp: ' ABCDEFGHIJKLMNOPQRSTUVWXYZ', roll: 1, background: 0.55, fontWeight: 700 } },
 ];
+
+export const SYMBOL_MATRIX_PRESETS: readonly EffectPreset[] = [
+  // Faint dots on a night-blue ground; the figure is a constellation of warm white stars that twinkle slowly.
+  { id: 'night-sky', name: 'Night Sky', params: {
+    cellSize: 16, rampPreset: 'symbols', customRamp: ' ·+*✦', roll: 0.25, background: 0, speed: 0.5,
+    colorMode: 'duotone', colorA: '#3a4f9a', colorB: '#fff4d8', fontWeight: 800,
+  } },
+  // Large circles, diamonds, triangles and squares in the picture's colours that keep turning into one another.
+  { id: 'shape-shift', name: 'Shape Shift', params: { cellSize: 24, rampPreset: 'symbols', customRamp: ' ·○◇△□●◆■', roll: 0.35, background: 0.3 } },
+  // Random digits that change quickly in every cell; the figure shows in their colours.
+  { id: 'number-storm', name: 'Number Storm', params: { cellSize: 12, rampPreset: 'numeric', customRamp: '', roll: 1, background: 0.35, speed: 2 } },
+  // Glowing orange signs on a dark red ground that flare up and fade slowly, like sparks over a fire.
+  { id: 'embers', name: 'Embers', params: {
+    cellSize: 16, rampPreset: 'symbols', customRamp: '', roll: 0.6, background: 0.15, speed: 0.7,
+    colorMode: 'duotone', colorA: '#1a0500', colorB: '#ffb347', fontWeight: 800,
+  } },
+];

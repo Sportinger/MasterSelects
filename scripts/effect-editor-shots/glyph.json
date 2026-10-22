@@ -88,6 +88,51 @@
       "hide": [
         "Particle Out"
       ]
+    },
+    {
+      "name": "symbol-matrix-inspector",
+      "effect": "symbol-matrix",
+      "params": {
+        "cellSize": 24,
+        "rampPreset": "symbols",
+        "customRamp": " ·○◇△□●◆■",
+        "roll": 0.35,
+        "background": 0.3
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "top": "tabs",
+      "viewport": {
+        "width": 1600,
+        "height": 1450
+      },
+      "alt": "Properties, Effects with a Symbol Matrix card: Style menu, Preset menu showing Shape Shift, Cell Size, Amount, Background and Invert Ramp, then Ramp, Custom Ramp with a row of shapes, Font and Weight, then Color Source, Dark and Light, then Speed and Roll, beside a strip of the preview where the dancer is built from circles, diamonds, triangles and squares",
+      "caption": "Symbol Matrix with the Shape Shift preset. 1 — Preset: pick a starting point. 2 — Cell Size. 3 — Custom Ramp: the signs, here shapes. 4 — Speed: how often they swap. 5 — Roll: how far they may swap.",
+      "marks": [
+        {
+          "target": "Preset",
+          "label": "Preset"
+        },
+        {
+          "target": "Cell Size",
+          "label": "Cell Size"
+        },
+        {
+          "target": "Custom Ramp",
+          "label": "Custom Ramp"
+        },
+        {
+          "target": "Speed",
+          "label": "Speed"
+        },
+        {
+          "target": "Roll",
+          "label": "Roll"
+        }
+      ],
+      "hide": [
+        "Particle Out"
+      ]
     }
   ]
 }

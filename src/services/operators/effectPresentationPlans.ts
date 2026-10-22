@@ -298,14 +298,16 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   // Threshold and Posterize name their hard step and soft ramp (Softness, 2026-10-21).
   if (COLORS.has(type)) return type === 'threshold' || type === 'posterize' ? { ...ORIGINAL_COLOR_PRESENTATION, portLabels: POINTWISE_PORTS } : ORIGINAL_COLOR_PRESENTATION;
   // The moving looks split the glyph choice into Glyph Offset (how far each cell has moved on through
-  // the ramp right now) and Roll Window (the part of the ramp it may move through, Roll).
+  // the ramp right now) and Roll Window (the part of the ramp it may move through, Roll); Symbol Matrix's
+  // brightness pulse has a folder of its own (Pulse).
   if (GLYPH_PRESENTATION_EFFECTS.has(type) && GLYPH_MOVING_EFFECTS.has(type)) {
     const glyph = glyphPresentation();
-    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window' },
+    return { ...glyph, labels: { ...glyph.labels, offset: 'Glyph Offset', roll: 'Roll Window', pulse: 'Pulse' },
       portLabels: { ...GLYPH_PORTS, 'glyph-index': 'Tone Glyph', 'index-offset': 'Glyph Offset', 'index-time-speed': 'Clock', 'index-time-phase': 'Ticks',
-        'index-sweep': 'Sweep', 'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window' },
+        'index-sweep': 'Sweep', 'index-window': 'Window', 'index-window-start': 'Window Start', 'shifted-index': 'Step', 'index-window-wrapped': 'Place in Window',
+        'index-cell-random': 'Cell Random', 'index-tick': 'Cell Tick', 'index-jitter': 'Draw', 'symbol-pulse': 'Pulse', 'symbol-alpha': 'Pulsed Coverage' },
       stage: (node) => /^(roll-clamped$|rolled-index$|shifted-index$|index-(roll|window|in-window|ratio|cycles|wrap))/.test(node.id) ? 'roll'
-        : /^(index-|cell-id-split$)/.test(node.id) ? 'offset' : glyph.stage(node) };
+        : /^(index-|cell-id-split$)/.test(node.id) ? 'offset' : /^symbol-/.test(node.id) ? 'pulse' : glyph.stage(node) };
   }
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return glyphPresentation();
   return undefined;

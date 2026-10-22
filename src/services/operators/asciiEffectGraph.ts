@@ -101,8 +101,13 @@ function createDefaultGlyphGraph(variant: GlyphGraphVariant): EffectOperatorGrap
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-sweep', 'math.add.scalar',
           g.binary('index-sweep-x', 'math.add.scalar', phase, { node: idSplit.node, port: 'x' }), yPhase));
       } else if (variant === 'symbol-matrix') {
-        const phaseFloor = g.unary('index-time-floor', 'math.floor.scalar', phase), phaseVector = g.unary('index-time-vector', 'convert.scalar-to-vec2', phaseFloor);
-        const jitterPoint = g.binary('index-jitter-point', 'math.add.vec2', cellId, phaseVector), jitter = g.unary('index-jitter', 'noise.hash2d.vec2', jitterPoint);
+        // Each cell swaps at its own moment (ticks shifted by a random share of a tick, so the swaps spread over
+        // time instead of hitting every cell on one frame) to a random character of its window. The key pairs the
+        // cell's own random with its tick: hashing cell + tick slid one random field diagonally across the frame.
+        const cellRandom = g.unary('index-cell-random', 'noise.cell-hash.vec2', cellId);
+        const tick = g.unary('index-tick', 'math.floor.scalar', g.binary('index-tick-staggered', 'math.add.scalar', phase, cellRandom));
+        const jitterKey = g.node('index-jitter-key', 'vector.combine.vec2'); g.edge(cellRandom, jitterKey, 'x'); g.edge(tick, jitterKey, 'y');
+        const jitter = g.unary('index-jitter', 'noise.hash2d-pcg.vec2', jitterKey);
         offset = g.unary('index-offset', 'math.floor.scalar', g.binary('index-jitter-scaled', 'math.multiply.scalar', jitter, safeCount));
       } else if (variant === 'retro-matrix') {
         const uvParts = g.node('index-uv-split', 'vector.split.vec2', 'y'); g.edge(uv, uvParts, 'value');

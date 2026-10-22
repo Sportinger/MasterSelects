@@ -69,7 +69,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 <figcaption>Cell Size from 8 to 40 px and back.</figcaption>
 </figure>
 
-**Cell Size** – how big one character is. 8–10 gives fine print that shimmers like a screen full of data, 14 small but clear characters, 24 and more large letters that read on a projection; at 72 a few dozen signs fill the frame. It counts pixels of a 1080p picture, so the preview, the thumbnails and a 4K export show the same grid. 4 to 72 px, default 14 px.
+**Cell Size** – how big one character is. 8–10 gives fine print that shimmers like a screen full of data, 14 small but clear characters, 24 and more large letters that read on a projection; at 72 the frame holds only 15 rows of large signs. It counts pixels of a 1080p picture, so the preview, the thumbnails and a 4K export show the same grid. 4 to 72 px, default 14 px.
 
 <div class="docs-float-end"></div>
 
