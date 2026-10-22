@@ -15,14 +15,14 @@ Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effect
 - **Amount** – how much of the cells lies over the picture.
 - **Speed** – how fast the cell edges drift.
 
-**Tip:** keyframe **Cell Size** from 96 down to 6 px: a picture of a few large shards settles into fine glass.
+**Tip:** keyframe **Amount** from 0 to 1: the picture breaks into glass in place, without the cells moving.
 
 <div class="docs-float-end"></div>
 
 ## Presets
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/voronoi-presets.mp4" poster="../assets/effects/clips/voronoi-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Stained Glass top left with large flat cells like coloured glass, Fine Crackle top right with a fine net of small cells over the clear picture, Glass Veil bottom left with cells laid half over the original, Drifting Shards bottom right with big shards whose edges keep sliding"></video>
+<video src="../assets/effects/clips/voronoi-presets.mp4" poster="../assets/effects/clips/voronoi-presets.webp" width="962" height="938" autoplay muted loop playsinline preload="none" aria-label="The dancer four times in a grid, moving in sync, each with one preset: Stained Glass top left with large flat cells like coloured glass, Fine Crackle top right with a fine net of small cells that keeps her face and hands readable, Glass Veil bottom left with cells laid half over the original, Drifting Shards bottom right with big shards whose edges keep sliding"></video>
 <figcaption>The four presets on the moving dancer, in sync.</figcaption>
 </figure>
 
@@ -62,6 +62,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 Every cell takes the colour of one pixel, its seed, a little darker than the picture, with a thin light line where it meets the cell to its right or below, so the cells read as glass.
 
+**Preset** – picks one of the four starting points above and sets the three controls below.
+
 ### Structure
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
@@ -69,7 +71,7 @@ Every cell takes the colour of one pixel, its seed, a little darker than the pic
 <figcaption>Cell Size from 6 to 72 px and back, Amount 1.</figcaption>
 </figure>
 
-**Cell Size** – the distance between the seeds, so roughly the width of a cell. 6–12 keeps faces readable under a fine net, 24 shows clear cells, 48 and more turns a figure into a few shards. It counts pixels of a 1080p picture, so a 4K export and a lower Preview Quality show the same cells. Below 4 the cells stay at 4, and the card says so; above 96 the cells keep growing. 4 to 96 px, default 24 px.
+**Cell Size** – the distance between the seeds, so roughly the width of a cell. 6–12 keeps faces readable under a fine net, 24 shows clear cells, 48 and more turns a figure into a few shards. It counts pixels of a 1080p picture, so a 4K export and a lower Preview Quality show the same cells. Below 4 the cells stay at 4, and the card says so; above 96 the cells keep growing. A keyframed Cell Size grows the cells from the top-left corner. 4 to 96 px, default 24 px.
 
 <div class="docs-float-end"></div>
 
@@ -167,7 +169,7 @@ Voronoi works in four stages, one folder each in the Nodes tab: **Seeds & Distan
 
 **Read Nearest Seed** – reads, for this pixel, where its nearest seed lies. The two Read Nearest Seed nodes in Cell Edges do the same for the pixel to the right and the pixel below.
 
-**Switch** – the seed's position, or the pixel's own where no seed was found (Greater Than checks the record's validity).
+**Switch** – the seed's position, or the pixel's own where no seed was found (Greater Than tells whether a seed was found there).
 
 **Alpha to Scalar** – the transparency of the seed pixel as a number from 0 to 1.
 
@@ -203,9 +205,11 @@ Voronoi works in four stages, one folder each in the Nodes tab: **Seeds & Distan
 
 **Switch** – 1 on the edge of a cell, where the neighbour belongs to another seed (Greater Than Half 0.5), else 0.
 
+**Add** – Cell Shade 0.82 plus Edge Lift 0.18 times the edge mark: 0.82 inside the cell, 1 on its edge.
+
 **Multiply** – the cell colour times its shade: 0.82 inside the cell and 1 on its edge, so every cell is a little darker than the picture, with a light line along its right and lower edge.
 
-**Remix:** open the **Constants** folder and set the value **0.82** to **1**: the cells keep the picture's full brightness, and the edge lines vanish into them, a softer, seamless mosaic.
+**Remix:** open the **Constants** folder and set **Cell Shade 0.82** to **1**: the cells keep the picture's full brightness, and the edge lines shine brighter than the cells. For a seamless mosaic without lines, also set **Edge Lift 0.18** to **0**.
 
 ### Mix with Original
 
@@ -239,7 +243,7 @@ Voronoi works in four stages, one folder each in the Nodes tab: **Seeds & Distan
 
 ## Technical details
 
-- **Size.** Cell Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same cells. A cell is never smaller than 4 such pixels and 2 rendered pixels; the card says when Cell Size is below 4. The seed grid starts at the top-left corner.
+- **Size.** Cell Size counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same cells. A cell is never smaller than 4 such pixels and 2 rendered pixels; the card says when Cell Size is below 4. The seed grid starts at the top-left corner, so a keyframed Cell Size scales the cells towards that corner and new cells come in from the right and bottom edges.
 - **Accuracy.** The jump flood finds the nearest seed in about eleven passes for a 1080p frame. It is very close to exact; now and then a pixel at the corner where three cells meet takes the second-nearest seed, which shows as a pixel-sized step in an edge line.
 - **Time.** The seeds sway with the timeline time: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. Speed multiplies that time, so a keyframed Speed makes the seeds jump; to change the look on a cue, keyframe Cell Size or Amount instead.
 - **Transparency.** The cells keep the original transparency, so a cut-out figure keeps its outline. A cell whose seed is transparent leaves its pixels their own colour.

@@ -71,7 +71,7 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 **Levels** – how many shades each colour keeps. 8 gives 512 colours and stays close to the picture, 4 a bold palette of 64, 2 only black, white and six pure colours. Fewer levels also shift dark stage colours: a brown haze can turn dark red or olive. Whole numbers only. 2 to 64, default 8.
 
-**Dither** – breaks the bands where one shade meets the next into a regular checker of blocks, like the graphics of old games. 0 gives flat bands, 0.5 a calm pattern only where shades change, 1 a full checker. It fades out in the darkest shades, so black and a dark stage stay flat. 0 to 1, default 0.5.
+**Dither** – breaks the bands where one shade meets the next into a regular checker of blocks, like the graphics of old games. 0 gives flat bands, 0.5 a calm pattern only where shades change, 1 a full checker. It fades out only within about one shade of black, so black stays flat, but a dark stage haze still breaks into a checker at 4–8 Levels; lower Dither or more Levels calm it. 0 to 1, default 0.5.
 
 **Amount** – mixes the blocks with the original picture. 1 shows only blocks, 0.5 lays them half over the picture, 0 shows the original. Animate it for a mosaic that fades in. 0 to 1, default 1.
 
@@ -210,12 +210,12 @@ Blockify works in stages, one folder each in the Nodes tab: **Cell Size** turns 
 </svg>
 </div>
 
-<figcaption>Inside Posterize. 1 — Bayer Pattern: a 4 × 4 checker of thresholds. 2 — Shadow Guard: no dither in the dark. 3 — Floor: the shade each channel lands on. 4 — Divide: back to a colour.</figcaption>
+<figcaption>Inside Posterize. 1 — Bayer Pattern: a 4 × 4 checker of thresholds. 2 — Shadow Guard: no dither near black. 3 — Floor: the shade each channel lands on. 4 — Divide: back to a colour.</figcaption>
 </figure>
 
 **Bayer Pattern** – a fixed 4 × 4 pattern of thresholds, one per block (Bayer Cell is the block number). Minus a half and times Dither, it nudges each block up or down by up to almost half a shade, in a regular order: that is the checker.
 
-**Shadow Guard** – fades the nudge out in the darkest shades: none for black, the full nudge one shade up (at most a quarter of the way to white). That is why a dark stage stays flat instead of sparkling.
+**Shadow Guard** – fades the nudge out in the darkest shades: none for black, the full nudge one shade up (at most a quarter of the way to white). That is why black stays flat; a dark haze a few shades up still dithers.
 
 **Floor** – the Cell Colour times Levels − 1 (Multiply), plus a half and the guarded nudge, rounded down: the number of the shade each colour channel lands on.
 

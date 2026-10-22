@@ -41,6 +41,6 @@ on the effect's card, then on each folder ([The node setup](./Effects.md#the-nod
 
 ## Technical details
 
-Block and tile sizes are measured on a 1080p frame, so the preview, the export and 4K show the same blocks. The grid is centred, so animated sizes grow from the middle. Transparent pixels never darken a block.
+Block and tile sizes are measured on a 1080p frame, so the preview, the export and 4K show the same blocks. In Pixelate, Blockify and Block Mosaic the grid is centred, so animated sizes grow from the middle, and each block shows the average of its pixels. Quadtree Zoom and Voronoi measure in 1080p pixels too, but start at the top-left corner and paint each cell with one pixel's colour (the tile centre or the seed). Transparent pixels never darken a block.
 
 Developer notes: [Effect system: Pixel & Mosaic notes](./Effect-System.md#pixel--mosaic-notes).

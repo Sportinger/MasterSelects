@@ -65,7 +65,8 @@ fn blockGridVariance(origin: vec2i, size: i32) -> f32 {
 fn quadtreeZoomCompute(@builtin(global_invocation_id) invocation: vec3u) {
   if (invocation.x >= u32(params.resolution.x) || invocation.y >= u32(params.resolution.y)) { return; }
   let pixel = vec2i(invocation.xy);
-  let minimumSize = max(2, i32(round(params.scale)));
+  // Minimum Cell counts pixels of a 1080p frame, as in the graph's Cell Size folder.
+  let minimumSize = max(2, i32(round(params.scale * min(params.resolution.x, params.resolution.y) / 1080.0)));
   let pulse = 0.82 + 0.18 * sin(params.time * params.speed * 2.0);
   var blockSize = minimumSize * 32;
   for (var level = 0; level < 6; level += 1) {
@@ -79,9 +80,11 @@ fn quadtreeZoomCompute(@builtin(global_invocation_id) invocation: vec3u) {
   let sampled = loadClamped(center);
   let local = pixel - origin;
   let border = select(0.0, 1.0, local.x == 0 || local.y == 0);
-  let styled = sampled.rgb * (0.82 + 0.18 * border);
   let original = loadClamped(pixel);
-  textureStore(outputTex, pixel, vec4f(mix(original.rgb, styled, params.amount), original.a));
+  // A transparent centre keeps the pixel's own colour (the graph's Cell Colour folder).
+  let cellColor = mix(original.rgb, sampled.rgb, sampled.a);
+  let styled = cellColor * (0.82 + 0.18 * border);
+  textureStore(outputTex, pixel, vec4f(mix(original.rgb, styled, clamp(params.amount, 0.0, 1.0)), original.a));
 }
 
 fn edgePosition(a: f32, b: f32) -> f32 {

@@ -2929,7 +2929,7 @@ Notes for developers on Pixelate, Blockify, Block Mosaic, Quadtree Zoom and Voro
   plan now open in stage folders (`effectGraphOwner.ts` calls `organizeEffectFamilyGraph`).
   The split also tests a 4 x 4 grid inside the block when the legacy five pixels (corners, centre)
   find no detail (`imageOperatorQuadtreeWgsl.ts`, CPU oracle `imageQuadtreePartitionSemantics.ts`,
-  legacy `compute.wgsl` kept in parity): blocks only ever split further, so a figure between the
+  legacy `compute.wgsl` kept in parity, including the 1080p Minimum Cell, the centre-alpha colour and the Amount clamp; `image-graph-probe.html?suite=compute-quadtree`): blocks only ever split further, so a figure between the
   corners no longer vanishes into a large block.
 - **Voronoi** (2026-10-22). Cell Size is scaled by the shorter frame side over 1080 inside the
   fixed seed pass (`voronoiSeedCompute`, at least 4 such pixels and 2 rendered ones), and each seed

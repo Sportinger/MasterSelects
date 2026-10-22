@@ -65,6 +65,8 @@ Pick one in the **Preset** row of the effect card. It sets all controls at once,
 
 Every tile takes the colour of the pixel at its centre, a little darker than the picture, with a thin light line along its top and left edge, so the tiles read as tiles.
 
+**Preset** – picks one of the four starting points above and sets the four controls below.
+
 ### Structure
 
 <figure class="docs-shot docs-clip docs-shot--float-right">
@@ -81,7 +83,7 @@ Every tile takes the colour of the pixel at its centre, a little darker than the
 <figcaption>Detail Threshold from 0.003 to 0.08 and back.</figcaption>
 </figure>
 
-**Detail Threshold** – how much a tile may change in brightness before it splits into four smaller ones. Low values (0.005) split almost everywhere, so the whole picture turns into small tiles; 0.025 keeps flat stage and sky in large squares; 0.1 and more leaves big blocks even over a face. It works together with **Minimum Cell**: the threshold decides where to split, Minimum Cell how far. 0.001 to 0.2, default 0.025.
+**Detail Threshold** – how much a tile may change in brightness before it splits into four smaller ones. Low values (0.005) split everything with texture into small tiles, but a dark, even stage still stays in large squares; 0.025 keeps flat stage and sky in large squares; 0.1 and more leaves big blocks even over a face. It works together with **Minimum Cell**: the threshold decides where to split, Minimum Cell how far. 0.001 to 0.2, default 0.025.
 
 <div class="docs-float-end"></div>
 
@@ -96,7 +98,7 @@ Every tile takes the colour of the pixel at its centre, a little darker than the
 <figcaption>Speed 0, 1 and 4, about two seconds each.</figcaption>
 </figure>
 
-**Speed** – how fast the tiles breathe. The threshold swings between 82 % and 100 % of **Detail Threshold**, so tiles split and merge in a pulse even where nothing moves. 0 holds the split still, and tiles change only where the picture does; at 0.5 one breath takes about six seconds, at 4 less than a second. It follows the playhead, so a paused picture stands still and the export matches the preview. 0 to 4, default 0.5.
+**Speed** – how fast the tiles breathe. The threshold swings between about two thirds of and the full **Detail Threshold** (64 % to 100 %), so tiles split and merge in a pulse even where nothing moves. 0 holds the split still, and tiles change only where the picture does; at 0.5 one breath takes about six seconds, at 4 less than a second. It follows the playhead, so a paused picture stands still and the export matches the preview. 0 to 4, default 0.5.
 
 <div class="docs-float-end"></div>
 
@@ -255,6 +257,7 @@ Quadtree Zoom works in four stages, one folder each in the Nodes tab: **Cell Siz
 - **Size.** Minimum Cell counts pixels of a frame whose shorter side is 1080: a 4K export, a portrait frame, a lower Preview Quality and the thumbnails show the same tiles. A tile is a whole number of pixels and never smaller than 2; the card says when Minimum Cell is below that. The grid starts at the top-left corner, so tiles at the right and bottom edge may be cut.
 - **Detail.** The split tests a tile at its corners and centre, then on a 4 × 4 grid inside it (up to 21 pixels per level, six levels). A figure smaller than a quarter of a large tile can still fall between the grid pixels and disappear into it; a smaller Minimum Cell or a lower Detail Threshold keeps it.
 - **Time.** The breathing follows the timeline time: scrubbing, playback and export give the same frame for the same moment, and a paused picture needs no extra rendering. Speed multiplies that time, so a keyframed Speed makes the breath jump; to start a change on a cue, keyframe Detail Threshold instead.
+- **Colour.** A tile takes the colour of its centre pixel, not an average. A large tile therefore shows one pixel's colour, and on moving footage it can flash when its centre lands on an arm or the hair; a smaller Minimum Cell or a lower Detail Threshold keeps the tiles small enough to stay calm. [Blockify](blockify.md) averages its blocks instead.
 - **Transparency.** The tiles keep the original transparency, so a cut-out figure keeps its outline. A tile whose centre is transparent leaves its pixels their own colour.
 - **Saved projects.** Since 2026-10-22 Minimum Cell counts 1080p pixels (it counted output pixels, so the preview and a 4K export showed other tiles than a 1080p frame), a transparent centre no longer paints its tile black, Amount stays between 0 and 1, and the grid test splits large tiles that used to swallow a figure between their corners. Every tile that split before still splits, so the look changes only where detail had vanished. A Quadtree Zoom whose node setup you edited keeps its own recipe.
 - **More:** [Effect system](../Effect-System.md#pixel--mosaic-notes) · [Node Catalog](../Node-Catalog.md) · [Styles and presets](../Effects.md#styles-and-presets).
