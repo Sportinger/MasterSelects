@@ -4,6 +4,18 @@ import {
   type TimelineRuntimePolicyDescriptor,
   type TimelineRuntimePolicyId,
 } from './runtimeCoordinatorTypes';
+import { GIB, getReportedMemoryGB } from '../scrubCacheMemory';
+
+/**
+ * Heap budget of the export policy. The audio export holds whole-length PCM buffers (source,
+ * processed clip and mix: 48 kHz stereo float is ~1.4 GB per hour, two of them at a time), so
+ * a fixed 1.5 GiB refused audio longer than ~35 minutes on any machine. It grows with the
+ * reported RAM (Chrome reports at most 8): half of it, from 1.5 to 4 GiB.
+ */
+export function getExportHeapBudgetBytes(reported = getReportedMemoryGB()): number {
+  const gib = reported === null ? 1.5 : Math.min(4, Math.max(1.5, reported / 2));
+  return Math.round(gib * GIB);
+}
 
 export const RENDER_RESOURCE_KINDS = [
   'video-frame-provider',
@@ -241,7 +253,7 @@ export const TIMELINE_RUNTIME_POLICY_DESCRIPTORS = [
       maxImageBitmaps: 512,
       maxAudioSources: 24,
       maxJobs: 1,
-      maxHeapBytes: 1536 * 1024 * 1024,
+      maxHeapBytes: getExportHeapBudgetBytes(),
       maxGpuBytes: 2048 * 1024 * 1024,
     },
   },

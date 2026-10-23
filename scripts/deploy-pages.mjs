@@ -10,8 +10,10 @@
 //   4. after retention, dist/assets holds the live deployment's entry chunks and storage worker.
 // Only then it runs `wrangler pages deploy dist --project-name masterselects --branch main`.
 //
-// Usage: node scripts/deploy-pages.mjs [--dry-run] [--skip-build] [--keep 8]
+// Usage: node scripts/deploy-pages.mjs [--dry-run] [--skip-build] [--skip-ci] [--keep 8]
 //          [--project masterselects] [--branch main] [--dist dist]
+// --skip-ci leaves out check 1, only on the owner's explicit request for a hotfix that cannot wait
+// for the Security Checks run; the other checks still apply and the deploy log says so.
 // --dry-run runs every check (including the build and the retention into dist) and prints the
 // deploy command instead of running it. --skip-build reuses an existing dist (still checked).
 // A --dist other than dist needs --skip-build: `npm run build:deploy` always writes dist (build
@@ -27,12 +29,13 @@ import { checkBuildInfo, checkGreenCi, checkOwnBuild, checkPreviousDeploymentRet
 import { runCommand } from './run-command.mjs';
 
 export function parseDeployArgs(argv) {
-  const options = { dryRun: false, skipBuild: false, keep: 8, project: 'masterselects', branch: 'main', dist: 'dist' };
+  const options = { dryRun: false, skipBuild: false, skipCi: false, keep: 8, project: 'masterselects', branch: 'main', dist: 'dist' };
   for (let index = 0; index < argv.length; index += 1) {
     const name = argv[index];
     const value = argv[index + 1];
     if (name === '--dry-run') options.dryRun = true;
     else if (name === '--skip-build') options.skipBuild = true;
+    else if (name === '--skip-ci') options.skipCi = true;
     else if (name === '--keep') { options.keep = Number(value); index += 1; }
     else if (name === '--project') { options.project = value; index += 1; }
     else if (name === '--branch') { options.branch = value; index += 1; }
@@ -123,10 +126,14 @@ export async function deployPages({ argv = [], cwd = process.cwd(), run = runCom
   const assetsDir = path.join(dist, 'assets');
 
   const head = run('git', ['rev-parse', 'HEAD'], { cwd }).trim();
-  const ciRuns = listGreenSecurityRuns(run, cwd);
-  const ci = checkGreenCi({ head, successfulRuns: ciRuns, describeRange: sha => describeRange(run, cwd, sha) });
-  requireNone('CI check', ci.problems);
-  log(`[deploy-pages] Security Checks green for ${ci.coveredBy}${ci.coveredBy === head ? '' : ` (HEAD ${head} only bumps the version)`}`);
+  if (options.skipCi) {
+    log(`[deploy-pages] WARNING: CI check skipped (--skip-ci, owner's request); Security Checks are not confirmed for ${head}`);
+  } else {
+    const ciRuns = listGreenSecurityRuns(run, cwd);
+    const ci = checkGreenCi({ head, successfulRuns: ciRuns, describeRange: sha => describeRange(run, cwd, sha) });
+    requireNone('CI check', ci.problems);
+    log(`[deploy-pages] Security Checks green for ${ci.coveredBy}${ci.coveredBy === head ? '' : ` (HEAD ${head} only bumps the version)`}`);
+  }
 
   // The checkout must be clean before the build; the build itself may rewrite derived docs-site files.
   const changedBefore = changedPaths(run, cwd);
