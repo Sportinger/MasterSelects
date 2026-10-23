@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-10-22",
+    "type": "fix",
+    "title": "MasterSelects 3.2.9",
+    "description": "Saved transcripts load after reopening a project and stay bound to the verified source audio. Deepgram Auto-Detect now follows language changes within a recording, including German, English and French. Existing transcripts stay unchanged until you choose to transcribe again.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-22",
     "type": "improve",
     "title": "MasterSelects 3.2.8",
     "description": "Almost every effect now has three to five presets in its card, and many were reworked: the blurs no longer jump when animated, Contrast, Hue Shift, Chroma Key, Lens Correction, Glow and Sheen were fixed, Matrix Rain falls in real drops, Weave gained the Qualle form, and the pattern, print and text looks follow the timeline, keep their size at every resolution and switch between related looks in a Style menu that keeps your values. A preset keeps what belongs to the shot, such as the key colour, the measured lens or where a figure stands. Every effect page in the documentation explains each control with its limits and shows the presets, short video loops and the node setup with interactive callouts.",

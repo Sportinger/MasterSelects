@@ -196,6 +196,22 @@ can be reused by different immutable manifests with different metadata or
 source bindings. An older revision's artifact reference retains its original
 meaning when a later analysis adds metadata.
 
+Transcript and analysis saves wait for verification of the original media when
+its full source hash is not available yet. A missing or changed source fails
+the save explicitly; it cannot produce a successful save with an empty source
+binding that the reader would later reject. Existing artifacts without a source
+binding remain preserved and are reported in `RepositoryArtifacts` diagnostics.
+Recover them against the confirmed original media, retaining the old artifact;
+never attach them automatically to a relinked source or create a new transcript
+just because the binding is missing.
+
+On opening, media artifacts are hydrated after the repository session becomes
+active. A lookup before activation is not a completed hydration. Hydration caches
+belong to that session; late reads from a previous project cannot populate the
+new project's media, even when both projects retain the same media IDs.
+Transcript reads, writes and deletion use the active repository on every storage
+backend; they do not require a legacy project-folder handle.
+
 Retention accounts for all retained branches, named versions and journals,
 including source-bound results. Cleanup must not remove another project's
 assets or bytes still referenced by a confirmed revision. External media may
