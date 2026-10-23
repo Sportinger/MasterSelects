@@ -160,7 +160,8 @@ export function encodeProjectDomains(project: ProjectFile): EncodedProjectDomain
     if (ui.exportState) {
       const batch = ui.exportState.batch;
       root.export = add(entityKey('export', 'project', 'definitions'), 'export-definitions', { ...without(object(ui.exportState), ['selectedPresetId']), batch: without(object(batch), ['selectedJobId']) });
-      fields.export = { selectedPresetId: ui.exportState.selectedPresetId, selectedJobId: batch.selectedJobId };
+      // Projects saved before batch export have an exportState without batch.
+      fields.export = { selectedPresetId: ui.exportState.selectedPresetId, selectedJobId: object(batch).selectedJobId };
     }
   }
   if (project.flashboard) {

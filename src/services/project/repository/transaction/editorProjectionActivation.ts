@@ -23,7 +23,7 @@ import { renderHostPort } from '../../../render/renderHostPort';
 import { isExclusiveTimelineMutationLeaseActive } from '../../../../stores/timeline/exclusiveMutationLease';
 import { readDocumentsManifest } from '../../../documents/documentArtifacts';
 import { readEditorProjectionJournals, readInitialEditorFlashBoard, restoreEditorFlashBoardAuthoredFields } from './editorJournalHydration';
-import { createDefaultExportStoreData } from '../../../../stores/exportStore';
+import { sanitizeStoreData } from '../../../../stores/exportDefinitions';
 import { scheduleLinkedMediaConnection, startScheduledLinkedMediaConnection } from './editorLinkedMediaConnection';
 import { navigateEditorComposition } from './editorCompositionNavigation';
 
@@ -154,7 +154,7 @@ async function activateEditorProjection(projection: RepositoryProjection, previo
         })) });
       const midi = project.uiState?.midi;
       getRepositoryStore('midi')?.setState({ transportBindings: midi?.transportBindings ?? { playPause: null, stop: null }, slotBindings: midi?.slotBindings ?? {}, parameterBindings: midi?.parameterBindings ?? {} });
-      const value = project.uiState?.exportState ?? createDefaultExportStoreData(); getRepositoryStore('export')?.setState({ settings: value.settings, presets: value.presets, batch: { ...value.batch, selectedJobId: object(object(getRepositoryStore('export')?.getState()).batch).selectedJobId ?? null } });
+      const value = sanitizeStoreData(project.uiState?.exportState); getRepositoryStore('export')?.setState({ settings: value.settings, presets: value.presets, batch: { ...value.batch, selectedJobId: object(object(getRepositoryStore('export')?.getState()).batch).selectedJobId ?? null } });
     });
     updateInternalPosition((timelineStore.getState() as TimelineStore).playheadPosition);
     staged.activate();

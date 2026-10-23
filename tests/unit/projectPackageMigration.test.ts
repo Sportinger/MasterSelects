@@ -53,6 +53,7 @@ import { ProjectCoreService } from '../../src/services/project/core/ProjectCoreS
 import { fileStorageService } from '../../src/services/project/core/FileStorageService';
 import { readProjectParent } from '../../src/services/project/core/projectDirectoryPersistence';
 import { getRecentProjects } from '../../src/services/project/recentProjects';
+import { getTabLastProjectHandleKey } from '../../src/services/project/tabProjectPersistence';
 
 class MemoryFileHandle {
   readonly kind = 'file' as const;
@@ -104,6 +105,15 @@ class MemoryDirectoryHandle {
   async *values(): AsyncIterableIterator<MemoryFileHandle | MemoryDirectoryHandle> {
     yield* this.files.values();
     yield* this.directories.values();
+  }
+
+  /** Set when the folder was deleted or moved on disk: the browser then rejects its listing. */
+  removed = false;
+
+  async *keys(): AsyncIterableIterator<string> {
+    if (this.removed) throw new DOMException('A requested file or directory could not be found', 'NotFoundError');
+    yield* this.files.keys();
+    yield* this.directories.keys();
   }
 
   async queryPermission(): Promise<PermissionState> {
@@ -238,6 +248,29 @@ describe('project repository creation and legacy conversion', () => {
     await expect(core.loadProject(asDirectory(root))).resolves.toBe(false);
     expect(repo.openRepositoryProject).not.toHaveBeenCalled();
     expect(core.getProjectHandle()).toBeNull();
+  });
+
+  it('skips and forgets a last project folder that was deleted or moved on disk', async () => {
+    vi.stubGlobal('showDirectoryPicker', vi.fn());
+    vi.stubGlobal('showSaveFilePicker', vi.fn());
+    const folder = new MemoryDirectoryHandle('Gone Cut');
+    vi.spyOn(projectDB, 'getStoredHandle').mockImplementation(async (key: string) => (
+      key === getTabLastProjectHandleKey() ? folder as unknown as FileSystemHandle : null
+    ));
+    const deleteHandle = vi.spyOn(projectDB, 'deleteHandle').mockResolvedValue(undefined);
+    vi.spyOn(projectDB, 'storeHandle').mockResolvedValue(undefined);
+    vi.spyOn(projectDB, 'getAllHandles').mockResolvedValue([]);
+
+    // Present folder: restored as before.
+    await expect(new ProjectCoreService(fileStorageService).restoreLastProject()).resolves.toBe(true);
+    expect(repo.openRepositoryProject).toHaveBeenCalledWith({ kind: 'fsa', handle: folder });
+
+    // Removed folder: not restored, no load attempt, and the stale handle is forgotten.
+    folder.removed = true;
+    repo.openRepositoryProject.mockClear();
+    await expect(new ProjectCoreService(fileStorageService).restoreLastProject()).resolves.toBe(false);
+    expect(repo.openRepositoryProject).not.toHaveBeenCalled();
+    expect(deleteHandle).toHaveBeenCalledWith(getTabLastProjectHandleKey());
   });
 
   it('creates new projects as one named folder handed to a fresh repository', async () => {

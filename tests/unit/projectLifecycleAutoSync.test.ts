@@ -157,6 +157,20 @@ describe('project lifecycle auto sync', () => {
     } finally { track.mockRestore(); }
   });
 
+  it('reports a browser without writable project storage as a warning, not a code error', async () => {
+    const { Logger } = await import('../../src/services/logger');
+    const { RepositoryError } = await import('../../src/services/project/repository/contracts');
+    const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
+    Logger.clear();
+    mocks.ensureEditorScratchRepository.mockRejectedValueOnce(new RepositoryError('unsupported', 'Browser recovery is unavailable.'));
+    setupAutoSync();
+    try {
+      await vi.waitFor(() => expect(Logger.search('Scratch recovery unavailable')).toHaveLength(1));
+      expect(Logger.search('Scratch recovery')[0].level).toBe('WARN');
+      expect(Logger.errors().filter(entry => entry.module === 'ProjectSync')).toEqual([]);
+    } finally { teardownAutoSync(); }
+  });
+
   it('allows development reloads without the browser confirmation', async () => {
     vi.stubEnv('DEV', true);
     const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
