@@ -139,6 +139,22 @@
       ]
     },
     {
+      "id": "scrub",
+      "say": "[upbeat] Let's scrub through it once. [excited] Look at that, it weaves itself in! Thread by thread. [deadpan] Very nice. [short pause] But we're making a jellyfish, [pause] not a doormat.",
+      "captions": "top",
+      "steps": [
+        {"word": "scrub", "early": 0.5},
+        {"move": "ruler:0.1", "ms": 600},
+        {"word": "through", "early": 0.2},
+        {"camera": {"focus": "pane:tab=Preview:0.5,0.45", "zoom": 1.2}, "ms": 1200},
+        {"drag": "ruler:0.1", "to": "ruler:4.8", "ms": 3000, "approach": 150, "after": 200},
+        {"word": "nice", "early": 0.2},
+        {"move": "pane:tab=Preview:0.5,0.5", "ms": 700},
+        {"word": "doormat", "early": 0.3},
+        {"camera": "all", "ms": 900}
+      ]
+    },
+    {
       "id": "empty",
       "say": "Open the Nodes tab, pull it a little bigger, and switch it to Active. There's our Weave. Let's open it up. [deadpan] It comes with a whole woven cloth. [short pause] We don't need that. [casual] Right-drag around all of it, and hit Delete. [whisper] Goodbye, cloth.",
       "steps": [
