@@ -179,3 +179,9 @@ docs/ongoing/
 
 # Python bytecode from local test helpers
 __pycache__/
+
+# Tutorial videos and their work folders (scripts/tutorial-video.mjs)
+/tutorial-videos/
+# Voice recordings for tutorial recipes stay local (scripts/tutorials/README.md)
+/scripts/tutorials/audio/*
+!/scripts/tutorials/audio/.gitkeep

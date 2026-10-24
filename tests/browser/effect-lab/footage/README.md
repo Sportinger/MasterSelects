@@ -23,6 +23,11 @@ Generated with Kling for MasterSelects by its owner; free to use in this project
   `node scripts/docs-media.mjs --adopt <effect ids of its clips>` if the clips were made from the
   same picture, or `--stale` to make them again.
 
+- `opera_house_dolly.mp4` – a slow dolly towards an opera house at dusk, 6 s, 24 fps, 1920×1080
+  H.264 (no audio, 2.9 MB): the first clip of the tutorial video `scripts/tutorials/cut-a-video.json`
+  (imported as `opera_house.mp4`). Re-encoded from the Kling 3.0 original like the dancer above, only
+  at CRF 23 (SSIM 0.985 against it); the same `h264_metadata` tags.
+
 - `black_1080_10s.mp4` – plain black (Y 16 in every frame), 10 s, 30 fps, 1920×1080 H.264, no audio
   (27 KB): the clip under the generators that draw on black (Weave, Flocking, Stick Figure;
   `scripts/doc-clips/scene.json` and `generate.json`). An equivalent one:

@@ -129,9 +129,35 @@ export async function humanMouse(page, start) {
     }
     position = { ...to };
   };
+  /**
+   * A move through `points` in `ms`, at an even speed along the way with a soft start and stop:
+   * gestures such as circling a control or tracing a cable.
+   */
+  const path = async (points, { ms = 800 } = {}) => {
+    const way = [{ ...position }, ...points];
+    const lengths = way.slice(1).map((point, index) => Math.hypot(point.x - way[index].x, point.y - way[index].y));
+    const total = lengths.reduce((sum, length) => sum + length, 0) || 1;
+    const begin = Date.now();
+    for (let t = 0; t < 1;) {
+      t = Math.min(1, (Date.now() - begin) / ms);
+      // Ease only the first and last tenth, so a circle keeps its pace in between.
+      const k = t < 0.1 ? 5 * t * t : t > 0.9 ? 1 - 5 * (1 - t) ** 2 : t;
+      let along = k * total, index = 0;
+      while (index < lengths.length - 1 && along > lengths[index]) { along -= lengths[index]; index += 1; }
+      const f = lengths[index] ? Math.min(1, along / lengths[index]) : 1, a = way[index], b = way[index + 1];
+      const sent = Date.now(), x = a.x + (b.x - a.x) * f, y = a.y + (b.y - a.y) * f;
+      await page.evaluate(point => window.__docClipPointer.announce(point), { x, y });
+      await page.mouse.move(x, y);
+      moveTimes.push(Date.now() - sent);
+      if (t < 1) await pause(Math.max(0, 16 - (Date.now() - sent)));
+    }
+    position = { ...way.at(-1) };
+  };
   return {
     locate,
     glide,
+    path,
+    position: () => ({ ...position }),
     /** How long the page took to take each pointer move (ms): a busy page moves the pointer in jumps. */
     async moveStats() {
       const sorted = moveTimes.toSorted((a, b) => a - b);
