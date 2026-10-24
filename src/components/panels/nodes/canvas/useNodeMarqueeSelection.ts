@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode } from '../../../../services/nodeGraph';
 import { getNodeHeight, getNodeWidth, type Viewport } from './canvasGeometry';
 
@@ -51,6 +51,7 @@ interface Options {
 export function useNodeMarqueeSelection({ nodes, viewport, getGraphPoint, onSelectNodes, onSelectRect }: Options) {
   const gestureRef = useRef<Gesture | null>(null);
   const suppressContextMenuRef = useRef(false);
+  const deferredContextMenuRef = useRef<{ target: EventTarget; clientX: number; clientY: number } | null>(null);
   const [marquee, setMarquee] = useState<NodeMarqueeRect | null>(null);
 
   const start = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -63,6 +64,7 @@ export function useNodeMarqueeSelection({ nodes, viewport, getGraphPoint, onSele
       active: false,
     };
     suppressContextMenuRef.current = false;
+    deferredContextMenuRef.current = null;
     event.currentTarget.setPointerCapture(event.pointerId);
     return true;
   }, [onSelectNodes]);
@@ -89,10 +91,29 @@ export function useNodeMarqueeSelection({ nodes, viewport, getGraphPoint, onSele
   const finish = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = gestureRef.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return false;
-    suppressContextMenuRef.current = gesture.active;
+    const deferred = deferredContextMenuRef.current;
+    deferredContextMenuRef.current = null;
+    // A context menu that already arrived on press (Linux) leaves nothing to suppress afterwards.
+    suppressContextMenuRef.current = gesture.active && !deferred;
     gestureRef.current = null;
     setMarquee(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    // It was a plain right click after all: open the held context menu where it was asked for.
+    if (deferred && !gesture.active) {
+      deferred.target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: RIGHT_BUTTON,
+        clientX: deferred.clientX, clientY: deferred.clientY }));
+    }
+    return true;
+  }, []);
+
+  /**
+   * Linux delivers contextmenu on press, before the gesture can tell a click from a marquee drag:
+   * while a right-button gesture is open the menu is held, and finish() replays it only if the
+   * pointer did not drag. Returns true when the caller must not open its menu now.
+   */
+  const deferContextMenu = useCallback((event: ReactMouseEvent) => {
+    if (!gestureRef.current) return false;
+    deferredContextMenuRef.current = { target: event.target, clientX: event.clientX, clientY: event.clientY };
     return true;
   }, []);
 
@@ -102,5 +123,5 @@ export function useNodeMarqueeSelection({ nodes, viewport, getGraphPoint, onSele
     return true;
   }, []);
 
-  return { marquee, start, move, finish, suppressContextMenu };
+  return { marquee, start, move, finish, suppressContextMenu, deferContextMenu };
 }

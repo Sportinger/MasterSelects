@@ -589,7 +589,7 @@ export function NodeGraphCanvas({
         }}
         onContextMenu={(event) => {
           event.preventDefault();
-          if (nodeMarquee.suppressContextMenu()) return;
+          if (nodeMarquee.suppressContextMenu() || nodeMarquee.deferContextMenu(event)) return;
           if ((event.target as Element).closest('.node-workspace-port, .node-workspace-edge-hit')) {
             return;
           }

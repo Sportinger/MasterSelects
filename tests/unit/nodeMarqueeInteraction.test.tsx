@@ -60,6 +60,31 @@ describe('node workspace right-drag marquee interaction', () => {
     expect(s.openMenu).toHaveBeenCalledOnce();
   });
 
+  // Linux (X11/Wayland Chrome) fires contextmenu on press, before the drag is known.
+  it('holds a context menu that arrives on press and drops it when the pointer drags', () => {
+    const s = setup();
+    pointer(s.canvas, 'pointerdown', { x: -1000, y: -1000 });
+    fireEvent.contextMenu(s.canvas, { clientX: -1000, clientY: -1000 });
+    pointer(s.canvas, 'pointermove', { x: 10000, y: 10000 });
+    pointer(s.canvas, 'pointerup', { x: 10000, y: 10000 });
+    expect(s.selectNodes).toHaveBeenLastCalledWith(connectionFixture.nodes.map(node => node.id));
+    expect(s.openMenu).not.toHaveBeenCalled();
+    // Nothing is left suppressed for the next right click.
+    pointer(s.canvas, 'pointerdown');
+    pointer(s.canvas, 'pointerup');
+    fireEvent.contextMenu(s.canvas, { clientX: 10, clientY: 10 });
+    expect(s.openMenu).toHaveBeenCalledOnce();
+  });
+
+  it('opens a context menu that arrived on press once a stationary right click is released', () => {
+    const s = setup();
+    pointer(s.canvas, 'pointerdown');
+    fireEvent.contextMenu(s.canvas, { clientX: 10, clientY: 10 });
+    expect(s.openMenu).not.toHaveBeenCalled();
+    pointer(s.canvas, 'pointerup');
+    expect(s.openMenu).toHaveBeenCalledOnce();
+  });
+
   it.each(['touch', 'pen'])('does not turn a %s pointer into a right-drag marquee', pointerType => {
     const s = setup();
     pointer(s.canvas, 'pointerdown', { pointerType });

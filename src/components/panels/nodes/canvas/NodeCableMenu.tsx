@@ -30,7 +30,11 @@ export function NodeCableMenu({ menu, onClose, onAddBranch, onRemoveBranch, onDi
     const close = (event: Event) => { if (!(event.target instanceof Node) || !ref.current?.contains(event.target)) onClose(); };
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } };
     window.addEventListener('pointerdown', close, true); window.addEventListener('keydown', key, true); window.addEventListener('blur', onClose);
-    ref.current?.querySelector<HTMLButtonElement>(':scope > button')?.focus({ preventScroll: true });
+    // Typing goes into the insert search, as in the canvas add menu, never into the timeline's
+    // shortcuts; without nodes to insert, the first action takes the focus.
+    const root = ref.current;
+    (root?.querySelector<HTMLInputElement>(':scope > input[type="search"]') ?? root?.querySelector<HTMLButtonElement>(':scope > button'))
+      ?.focus({ preventScroll: true });
     return () => { window.removeEventListener('pointerdown', close, true); window.removeEventListener('keydown', key, true); window.removeEventListener('blur', onClose); };
   }, [onClose]);
   const act = (action: () => void) => () => { action(); onClose(); };

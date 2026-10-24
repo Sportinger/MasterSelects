@@ -165,7 +165,20 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
         });
       });
     },
-    deleteNode: (id: string) => route(id, (actions, node) => actions.deleteNode(localId(node))),
+    deleteNode: (id: string) => {
+      // A folder (a collapsed node group, also in a marquee selection) goes as a whole, as its
+      // context menu's Delete Group does; it is no node of the effect graph itself.
+      const folder = graph?.nodes.find(node => node.id === id);
+      if (folder?.binding?.kind === 'operator-group') {
+        const { effectId, groupId } = folder.binding;
+        safely(() => {
+          if (!clip || !effectId) throw new Error(`Delete the folder ${folder.label} from its context menu.`);
+          createEffectGraphActions(clip.id, effectId).deleteGroup(groupId.split('/').at(-1)!);
+        });
+        return;
+      }
+      route(id, (actions, node) => actions.deleteNode(localId(node)));
+    },
     connectPorts: (c: NodeGraphConnectionRequest) => safely(() => {
       if (graph?.nodes.find(node => node.id === c.fromNodeId)?.outputs.find(port => port.id === c.fromPortId)?.metadata?.readOnly
         || graph?.nodes.find(node => node.id === c.toNodeId)?.inputs.find(port => port.id === c.toPortId)?.metadata?.readOnly) return;
@@ -187,7 +200,8 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       const targets = graph?.nodes.find(node => node.id === c.toNodeId)?.inputs.find(port => port.id === c.toPortId)?.metadata?.groupEndpoints;
       c = { fromNodeId: a.nodeId, fromPortId: a.portId, toNodeId: b.nodeId, toPortId: b.portId };
       const from = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.fromNodeId), to = (graph?.expandedNodes ?? graph?.nodes)?.find(n => n.id === c.toNodeId);
-      if (!from || !to) return;
+      // Said, not skipped: a caller holding a newer graph than this one would count a connection that never happened.
+      if (!from || !to) throw new Error(`${!from ? c.fromNodeId : c.toNodeId} is not in this graph yet.`);
       if (from.binding?.kind === 'parameter-source' && clip) {
         const property = to.inputs.find(port => port.id === c.toPortId)?.metadata?.controlProperty;
         if (property) setParameterSourceBinding(clip.id, property, { source: { nodeId: from.binding.nodeId, portId: c.fromPortId }, enabled: true });

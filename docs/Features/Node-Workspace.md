@@ -302,9 +302,12 @@ stay unconnected: only the path to the output has to be complete, so a loose nod
 longer pauses the effect.
 
 Right-clicking a cable inside an effect graph also offers that graph's Nodes and
-Node Groups, without type filtering. The chosen node is placed at the pointer and
-wired between the cable's ends (preferring ports of the cable's type); if a side
-cannot connect, the node stays unconnected there and the original cable remains.
+Node Groups, without type filtering. The menu opens with the focus in its search field,
+so typing a node name searches instead of reaching the timeline's shortcuts, and Enter
+inserts the first match. The chosen node is placed at the pointer and wired between the
+cable's ends in the effect's own graph (preferring ports of the cable's type), in one undo
+step; if a side cannot connect, the node stays unconnected there, the original cable
+remains, and the console says how many sides joined.
 
 The Fisheye node groups include Lens Projection, Chromatic Aberration, Lens Vignette
 and Lens Coverage; its other processing areas are advanced building parts.
@@ -578,7 +581,13 @@ Reduced-motion preferences keep the same continuous zoom without smoothing.
 Right-dragging with a mouse draws a selection marquee after a short movement
 threshold and selects every intersecting node. A stationary right-click keeps the
 existing node/canvas context menu; the context-menu event following a completed
-marquee drag is suppressed. The gesture uses pointer capture so selection continues
+marquee drag is suppressed. Chrome on Linux sends that event on press, before the
+drag is known: during a right-button gesture the menu is held and opens on release
+only if the pointer did not drag. Delete removes the whole selection, folders
+(collapsed node groups) included, as the folder's Delete Group does; a node that cannot
+be deleted from the clip graph (the source, the target) is named in the workspace message.
+Pressing a node card keeps the keyboard focus in the node canvas without a ring, so
+Delete removes the selected node, never the clip that is still selected in the timeline. The gesture uses pointer capture so selection continues
 outside the initial hit target. Touch and pen input do not enter this mouse-specific
 gesture. Pointer activation does not leave focus styling behind, while keyboard
 navigation retains the intentional `focus-visible` outline.

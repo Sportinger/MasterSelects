@@ -142,7 +142,12 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
       }}
       onPointerDown={event => {
         if (event.button === 2 && event.pointerType === 'mouse') return;
-        event.preventDefault(); event.currentTarget.blur(); onStartNodeDrag(event, node);
+        event.preventDefault();
+        // Focus moves to the node canvas, not to the page (no ring for a pointer): Delete then removes
+        // the node instead of the clip that is still selected in the timeline.
+        const canvas = event.currentTarget.closest<HTMLElement>('.node-workspace-canvas');
+        if (canvas) canvas.focus({ preventScroll: true }); else event.currentTarget.blur();
+        onStartNodeDrag(event, node);
       }}
       onPointerMove={onNodePointerMove}
       onPointerUp={onFinishNodeDrag}

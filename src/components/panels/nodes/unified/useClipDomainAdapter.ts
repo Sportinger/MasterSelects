@@ -29,7 +29,9 @@ export function useClipDomainAdapter(subject: NodeGraphClipSubject | null, after
       deleteNode: (nodeId: string) => {
         const context = current();
         const node = subject.graph.nodes.find(candidate => candidate.id === nodeId);
-        if (!context || !canDeleteNodeFromClip(context.clip, node)) return;
+        if (!context) return;
+        // Said, not skipped: a selection may hold the source, the target or a renderer-owned node.
+        if (!canDeleteNodeFromClip(context.clip, node)) throw new Error(`${node?.label ?? 'This node'} cannot be deleted from the clip graph.`);
         clipWorkspaceBatch('Delete node', () => context.state.removeClipNodeGraphNode(clipId, nodeId));
         afterDelete([nodeId]);
       },

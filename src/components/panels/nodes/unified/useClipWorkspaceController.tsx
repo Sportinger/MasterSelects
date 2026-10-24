@@ -24,6 +24,7 @@ import { buildCableInsertEntries, buildNodeContextMenuEntries } from '../workspa
 import { resolveNodeContextDeleteTargets } from '../workspace/nodeContextDeleteTargets';
 import { addableEffectOperators } from '../../../../services/operators/effectGraphOwner';
 import { addEffectGraphNode } from '../workspace/addEffectGraphNode';
+import { insertNodeIntoCable } from './insertNodeIntoCable';
 import { createEmptyEffect, createSingleNodeEffect } from '../../../../services/operators/imageNodeGraphEffect';
 import { createEffectGraphActions } from '../../../../services/operators/effectGraphEditing';
 import { effectGraphId } from '../../../../services/nodeGraph/effectGraphProjection';
@@ -398,23 +399,16 @@ export function useClipWorkspaceController(clipId: string, panelId: string) {
               return buildCableInsertEntries({ effectId: 'new-group', effectName: 'a new group', operators: addableEffectOperators('invert'),
                 onAdd: operatorId => { try { addSingleNodeGroup(operatorId, point, { beforeEffectId: before }); } catch (error) { console.warn('Insert node into cable failed', error); } } });
             }
+            const toLocalId = to.binding.nodeId;
+            const fromLocalId = from?.binding?.kind === 'effect-operator' ? from.binding.nodeId : edge.fromNodeId.split('/').at(-1)!;
             return buildCableInsertEntries({ effectId: effect.id, effectName: getEffectDisplayName(effect),
               operators: addableEffectOperators(effect.type), onAdd: operatorId => {
-                const batch = startBatch('Insert node into cable');
                 try {
                   const offset = from?.groupOffset;
-                  const nodeId = addEffectGraphNode(subject.id, effect.id, operatorId, { x: point.x - (offset?.x ?? 0), y: point.y - (offset?.y ?? 0) });
-                  const operator = getEffectOperator(operatorId);
-                  const port = <T extends { id: string; type: string }>(ports: readonly T[] | undefined) => ports?.find(candidate => candidate.type === edge.type) ?? ports?.[0];
-                  const input = port(operator?.inputs), output = port(operator?.outputs);
-                  // No type filter: connect what fits; an unconnectable side keeps the original cable.
-                  let wired = 0;
-                  try { if (input) { unified.connectPorts({ fromNodeId: edge.fromNodeId, fromPortId: edge.fromPortId, toNodeId: nodeId, toPortId: input.id }); wired++; } } catch { /* stays unconnected */ }
-                  try { if (output) { unified.connectPorts({ fromNodeId: nodeId, fromPortId: output.id, toNodeId: edge.toNodeId, toPortId: edge.toPortId }); wired++; } } catch { /* stays unconnected */ }
-                  if (wired === 2) { try { unified.disconnectEdge(edge.id); } catch { /* already replaced */ } }
+                  const { nodeId } = insertNodeIntoCable(subject.id, effect.id, { ...edge, fromLocalId, toLocalId }, operatorId,
+                    { x: point.x - (offset?.x ?? 0), y: point.y - (offset?.y ?? 0) });
                   selectNode(nodeId);
                 } catch (error) { console.warn('Insert node into cable failed', error); }
-                finally { if (batch.opened) endBatch(); }
               } });
           }}
           onDisconnectEdge={unified.disconnectEdge}
