@@ -26,6 +26,7 @@ import { usePreviewDockPanelId } from './PreviewDockPanelContext';
 import { usePreviewTransportPortal } from './PreviewTransportPortalContext';
 import { PreviewCanvasZoomBar } from './PreviewCanvasZoomBar';
 import type { PreviewCanvasZoom } from './usePreviewCanvasZoom';
+import { withShortcutHint } from '../../services/shortcutRegistry';
 import './PreviewTransport.css';
 
 const PREVIEW_FRAME_RATE = 30;
@@ -370,7 +371,7 @@ export function PreviewTransport({
                   aria-pressed={loopPlayback}
                   className={loopPlayback ? 'active' : undefined}
                   onClick={toggleLoopPlayback}
-                  title={loopPlayback ? 'Loop on' : 'Loop off'}
+                  title={withShortcutHint(loopPlayback ? 'Loop on' : 'Loop off', 'playback.toggleLoop')}
                   type="button"
                 >
                   <IconRepeat aria-hidden="true" />

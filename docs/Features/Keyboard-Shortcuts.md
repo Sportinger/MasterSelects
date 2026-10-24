@@ -51,7 +51,8 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 - `J` reverses playback.
 - `K` pauses playback.
 - `L` plays forward.
-- `Shift+L` toggles loop playback in the default preset.
+- `Shift+L` toggles loop playback in the default preset. The loop buttons in the timeline and the
+  preview name the binding of the active preset in their tooltip (and none when it is unbound).
 - `I` sets the in point at the playhead.
 - `O` sets the out point at the playhead.
 - `X` clears in/out in the default preset.

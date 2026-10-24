@@ -26,6 +26,7 @@ import { TimelineToolPalette } from './tools/TimelineToolPalette';
 import { TimelineSnappingButton } from './components/TimelineSnappingButton';
 import { AudioExportPipeline } from '../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../services/audio/AudioRecordingService';
+import { withShortcutHint } from '../../services/shortcutRegistry';
 import {
   isAudioRecordingActivePhase,
   resolveTimelineRecordingRange,
@@ -264,7 +265,7 @@ function TimelineControlsComponent({
         <button
           className={`btn btn-sm btn-icon timeline-transport-button timeline-loop-button ${loopPlayback ? 'btn-active' : ''}`}
           onClick={onToggleLoop}
-          title={loopPlayback ? 'Loop On (L)' : 'Loop Off (L)'}
+          title={withShortcutHint(loopPlayback ? 'Loop On' : 'Loop Off', 'playback.toggleLoop')}
         >
           <IconRepeat className="timeline-transport-icon timeline-loop-icon" stroke={2.8} aria-hidden="true" />
         </button>

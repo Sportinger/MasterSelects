@@ -193,5 +193,11 @@ export function getShortcutRegistry(): ShortcutRegistry {
   return instance;
 }
 
+/** A tooltip with the shortcut the active preset binds to `action`, e.g. "Loop Off (Shift+L)"; unbound: the text alone. */
+export function withShortcutHint(text: string, action: ShortcutActionId): string {
+  const shortcut = getShortcutRegistry().getLabel(action);
+  return shortcut ? `${text} (${shortcut})` : text;
+}
+
 // Re-export for convenience
 export { comboToLabel, matchesCombo };
