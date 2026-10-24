@@ -10,7 +10,8 @@ little more than its scenes, and the agent works piece by piece. Roman's request
 - generate the voice line by line, so each line can be moved;
 - cut and assemble the episode in a MasterSelects project.
 
-[`agents.md`](agents.md) describes how the pipeline works today and its pitfalls. Work through the
+[`agents.md`](agents.md) describes how the pipeline works today and its pitfalls.
+[`test-yarn-2026-10-24.md`](test-yarn-2026-10-24.md) shows where a fresh agent lost its time. Work through the
 stages in order; each one is useful on its own. Tick off a stage here when it is done.
 
 ## Goals
@@ -203,3 +204,5 @@ The agent reads both before showing Roman.
   once, and whether a new project with an existing name should be refused or reported clearly.
 - **Weave orbit in Edit mode** (`cameraInteraction` like voxel relief), for the fly-around.
 - **Fit in the node canvas:** check whether hidden folder nodes enlarge the fitted area.
+- **The node inspector reopens** on every return to the Nodes tab, so hiding it does not last (yarn test).
+- **Narrow inspector layout:** values sit below their labels without sliders, not in the unified inspector design (yarn test).
