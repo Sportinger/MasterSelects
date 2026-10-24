@@ -49,6 +49,9 @@ Episode 2 still needs:
 - **Every episode opens the same way:** "Hey, what's up, Dominik Flamer here, and today …". It never
   opens with "BOOM" (Roman, 2026-10-24). The episode 2 part 1 voice still starts with "BOOM!" and
   needs a new first line.
+- **Pause before the node graph.** Do not let the clip play while the Nodes tab opens or nodes are
+  edited: the take stutters (Roman, 2026-10-24). Pause first, park the playhead on a frame that shows
+  the effect, and press play only to show a result.
 - **No title card intro.** Episode 1 opens straight with the presenter. The pointer moves like a
   person, not like a robot: arcs, small overshoots, a pause before a click.
 - **Zooms are light and emotional** (1.05–1.3): a slow push in for suspense, a quick snap back on the
