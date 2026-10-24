@@ -4,6 +4,10 @@ Narrated screen recordings of the real editor, made from a recipe, for the websi
 channels. The pointer is the presenter: it points, circles, drags panels and clicks, each move timed
 to a word of the voice. The camera only zooms lightly, for emphasis.
 
+**Agents start with [`guides/agents.md`](guides/agents.md)**: how the work goes with Roman, the
+session setup, and every pitfall so far. [`guides/plan.md`](guides/plan.md) is the plan for the next
+version: the voice line by line, the cut in a MasterSelects project, and 1800p recording.
+
 ## Folders
 
 | Path | What | In git |
@@ -101,13 +105,16 @@ that word is spoken; `nth` picks a repeated word. The steps:
 | `circle` (`r`, `ry`, `turns`) | loops around a control: "right here we've got …" |
 | `wave`, `nod` (`amp`, `cycles`) | swings sideways (hello) or up and down (yes) |
 | `trace` (`curve: true`) | follows a line, such as a node cable |
+| `connect`, `marquee`, `cableClick` | drags a cable between two node cards' ports; right-drags a selection around cards; right-clicks a cable |
 | `type`, `press`, `key` | types text, presses a key, or presses a key and shows its cap |
 | `files`, `pick`, `dropFiles` | a desktop window with media files, dragged into the editor |
 | `camera` | `"all"`, dock groups, or `{ "focus": <target>, "zoom": 1.2 }` with `ms` |
 | `waitFor`, `pause` | waits for media, clips, a download, a text, or a fixed time |
+| `defaultLayout` | (setup) loads the default dock layout and checks that it stays |
 
 Targets are visible text (`"File"`, `"Nodes@left-group"`), `button:<name>`, `pane:<group>:<x>,<y>`,
-`node:<node id>`, `handle:<group>:right` (a panel edge), `clip:`, `time:`, `ruler:`, or `~dx,dy`
+`node:<node id>`, `handle:<group>:right` (a panel edge), `pane:tab=<tab>:<x>,<y>` (a moved dock group),
+`aria:<label>[@group]`, `option:<menu entry>`, `input:<value>`, `clip:`, `time:`, `ruler:`, or `~dx,dy`
 relative to the pointer. `setup` holds steps that run on the open project before the recording
 starts; `storage` resets editor settings before the editor loads. The complete format is described
 at the top of `scripts/tutorial-video.mjs`.

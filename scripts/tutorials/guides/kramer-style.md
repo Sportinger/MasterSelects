@@ -107,7 +107,9 @@ Takeaways for scripts:
 
 ## 5. Formula: How a Kramer Intro Is Built
 
-1. Fast open: "Hey, what's up" + name + site + "very exciting tutorial"
+1. Fast open: "Hey, what's up" + name + site + "very exciting tutorial". **MasterSelects rule:**
+   Dominik Flamer always opens with "Hey, what's up, Dominik Flamer here, and today …", never with
+   "BOOM" (Roman, 2026-10-24).
 2. Show the finished result first: play the final effect, then briefly open the finished project so viewers see the node tree / layer stack. This is the "wow, I could never do that" moment (a commenter on the 2018 Fantasy FX tutorial described exactly that reaction to the opening seconds)
 3. Mini joke + pause: about how scary the finished project looks, dry, self-deprecating or absurd
 4. Clean slate: close it / start a new project. "So let's start from scratch."
@@ -139,7 +141,7 @@ For Dominik Flamer / MasterSelects:
 - "And that... is a jellyfish. [pause] Or a very confused lamp. Either way, it looks awesome."
 - "I'd tell you how long this took me to figure out, but I signed a non-disclosure agreement. With myself."
 - "Now we connect this node to that node. It's like matchmaking, but for pixels."
-- "BOOM! Hey what's up, Dominik Flamer here. Today's tutorial is like the sequel nobody asked for, but with even more nodes."
+- "Hey, what's up, Dominik Flamer here, and today's tutorial is like the sequel nobody asked for, but with even more nodes."
 - "This started as a quick little effect. Then I added one node. Then twelve. Then things got out of hand."
 
 ## 7. Do's & Don'ts

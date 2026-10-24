@@ -10,6 +10,7 @@ example. Use the tutorial voice `nQ95rSg3xpIIuIQxL1w6` (see `../README.md`, "The
 - Pauses are tags too (`[pause]`, `[short pause]`, `[long pause]`, `[dramatic pause]`), and so are
   ellipses inside a line ("very... exciting").
 - Hard switches carry the comedy: a dramatic line, then `[casual, as if nothing happened]`.
+- Every episode opens with "Hey, what's up, Dominik Flamer here, and today …", never with "BOOM".
 - The recipe's `say` texts hold exactly these words in this order; the tags may stay in, because
   the pipeline ignores everything in square brackets when it matches words to times.
 
