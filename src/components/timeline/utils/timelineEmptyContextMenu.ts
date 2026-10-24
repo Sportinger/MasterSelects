@@ -49,6 +49,23 @@ export function parseFlockLayerTarget(target: string): string | null {
   return target.slice(FLOCK_LAYER_TARGET_PREFIX.length) || null;
 }
 
+interface PlacedClip { trackId: string; startTime: number; duration: number }
+
+/**
+ * Where an Add Layer clip starts: at the beginning of the empty space that was right-clicked, the end
+ * of the last clip before `time` on that track, or 0 on an empty stretch. It used to start at the
+ * clicked time, so a Blank Clip never started at 0 and the preview stayed black at the playhead.
+ * A time inside a clip stays as it is.
+ */
+export function layerStartInGap(clips: readonly PlacedClip[], trackId: string, time: number): number {
+  const onTrack = clips.filter(clip => clip.trackId === trackId);
+  if (onTrack.some(clip => clip.startTime < time && time < clip.startTime + clip.duration)) return time;
+  return onTrack.reduce((start, clip) => {
+    const end = clip.startTime + clip.duration;
+    return end <= time + 1e-6 && end > start ? end : start;
+  }, 0);
+}
+
 export interface TimelineEmptyContextMenuCommand {
   key: string;
   label: string;

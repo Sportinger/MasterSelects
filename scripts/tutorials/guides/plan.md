@@ -196,9 +196,9 @@ The agent reads both before showing Roman.
 
 ## 9. Product work found by the tutorials
 
-- **New layers start where you right-click,** so a Blank Clip never starts at 0 and the preview
-  stays black (Roman, 2026-10-24). Fix: a new layer starts at the beginning of the empty space under
-  the click (0 on an empty track). It covers every Add Layer target, with a test and the feature doc.
+- ~~New layers start where you right-click~~ (fixed: an Add Layer clip starts at the beginning of the
+  empty space under the click, 0 on an empty track). In the live check, Ctrl+Z and the `undo` tool did
+  not remove two blank clips just added this way; check whether Add Layer is undoable.
 - **The project name dialog:** in the yarn test, the name was typed before the dialog's field was
   ready, and the setup went wrong after that. Check whether the dialog should focus its field at
   once, and whether a new project with an existing name should be refused or reported clearly.

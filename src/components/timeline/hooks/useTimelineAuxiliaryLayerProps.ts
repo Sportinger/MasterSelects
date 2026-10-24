@@ -4,7 +4,7 @@ import { trackTimelineEdit } from '../../../services/productAnalytics';
 import { createSubcompositionFromSelection } from '../../../services/timelineSubcomposition';
 import { useTimelineStore } from '../../../stores/timeline';
 import { endBatch, startBatch } from '../../../stores/historyStore';
-import { BLANK_CLIP_COLOR, parseFlockLayerTarget, type TimelineAddLayerTarget } from '../utils/timelineEmptyContextMenu';
+import { BLANK_CLIP_COLOR, layerStartInGap, parseFlockLayerTarget, type TimelineAddLayerTarget } from '../utils/timelineEmptyContextMenu';
 
 type TimelineContextMenuProps = TimelineAuxiliaryLayerProps['timelineContextMenuProps'];
 type EmptyContextMenuProps = TimelineAuxiliaryLayerProps['emptyContextMenuProps'];
@@ -95,8 +95,9 @@ export function useTimelineAuxiliaryLayerProps({
 
   const handleAddTimelineLayer = useCallback<
     NonNullable<EmptyContextMenuProps['onAddTimelineLayer']>
-  >((time, trackId, target: TimelineAddLayerTarget) => {
+  >((clickTime, trackId, target: TimelineAddLayerTarget) => {
     const timeline = useTimelineStore.getState();
+    const time = layerStartInGap(timeline.clips, trackId, clickTime);
     const selectCreatedClip = (clipId: string | null) => {
       if (clipId) useTimelineStore.getState().selectClip(clipId);
     };

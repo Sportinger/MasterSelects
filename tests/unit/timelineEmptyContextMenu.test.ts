@@ -2,9 +2,33 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createTimelineEmptyContextMenuModel,
   executeTimelineEmptyContextMenuCommand,
+  layerStartInGap,
   parseFlockLayerTarget,
 } from '../../src/components/timeline/utils/timelineEmptyContextMenu';
 import { FLOCK_PRESETS } from '../../src/services/flock/presets/flockPresets';
+
+// Add Layer used to start a clip at the right-clicked time, so a Blank Clip never started at 0.
+describe('where an Add Layer clip starts', () => {
+  const clips = [
+    { trackId: 'a', startTime: 2, duration: 3 },
+    { trackId: 'a', startTime: 10, duration: 2 },
+    { trackId: 'b', startTime: 0, duration: 20 },
+  ];
+
+  it('starts at 0 on an empty track, wherever the click was', () => {
+    expect(layerStartInGap(clips, 'c', 7.3)).toBe(0);
+  });
+
+  it('starts at the beginning of the clicked gap', () => {
+    expect(layerStartInGap(clips, 'a', 1.2)).toBe(0);
+    expect(layerStartInGap(clips, 'a', 8)).toBe(5);
+    expect(layerStartInGap(clips, 'a', 30)).toBe(12);
+  });
+
+  it('keeps a time inside a clip', () => {
+    expect(layerStartInGap(clips, 'a', 3)).toBe(3);
+  });
+});
 
 describe('timeline empty context menu model', () => {
   it('builds gap and view command descriptors with timeline coordinates', () => {
