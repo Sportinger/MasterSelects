@@ -172,7 +172,7 @@ export function installStage() {
  *   clip:<name>[#n][:start|end|middle|<seconds into the clip>]   a timeline clip (n-th of that name, from the left)
  *   time:<seconds>[@<track name>]                                 that time on a track lane (default: the first)
  *   ruler:<seconds> | ruler:end                                   that time on the time ruler (end: where the last clip ends)
- *   pane:<dock group>[:<x>,<y>]                                   a point in a dock group (0–1, default the middle)
+ *   pane:<dock group | tab=<tab name>>[:<x>,<y>]                  a point in a dock group (0–1, default the middle)
  *   file:<n>                                                      the n-th file (0-based) of the desktop window
  *   node:<node id>[:<x>,<y>]                                      a node card in the node editor (0–1, default the middle)
  *   handle:<dock group>[:right|left|top|bottom]                   the resize handle on that side of a dock group
@@ -241,7 +241,12 @@ export async function locateTutorialTarget(target) {
   }
   if (target.startsWith('pane:')) {
     const [group, at = '0.5,0.5'] = target.slice(5).split(':');
-    const rect = document.querySelector(`.dock-tab-pane[data-group-id="${group}"]`)?.getBoundingClientRect();
+    // tab=<name>: the dock group holding that tab (a group made by dragging a tab has a generated id).
+    const pane = group.startsWith('tab=')
+      ? [...document.querySelectorAll('.dock-tab-pane[data-group-id]')].find(element => [...element.querySelectorAll('.dock-tab')]
+        .some(tab => tab.textContent.trim().replace(/×$/, '') === group.slice(4)))
+      : document.querySelector(`.dock-tab-pane[data-group-id="${group}"]`);
+    const rect = pane?.getBoundingClientRect();
     if (!rect) return { missing: `no dock group ${group}` };
     const [fx, fy] = at.split(',').map(Number);
     return { x: rect.left + fx * rect.width, y: rect.top + fy * rect.height };

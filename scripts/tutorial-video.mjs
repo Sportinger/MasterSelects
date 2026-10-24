@@ -42,10 +42,15 @@
 //   { "files": [<media names>], "title", "at": <target> }   a desktop window, its top left at the target
 //   { "pick": [0, 1] }                                click the files of the window (more than one: shift-click)
 //   { "dropFiles": <target> }                         carry the picked files there and drop them
-//   { "drag": <target>, "via": [<target>], "to": <target>, "label", "ms" }  press, drag (through `via`), release
+//   { "drag": <target>, "via": [<target>], "to": <target>, "label", "ms", "hold" }  press (hold ms: 650 for a dock tab),
+//                                                     drag (through `via`), release
 //   { "click": <target>, "until": "<text>", "button": "right" }  click; with `until`, again until that text shows
 //                                                     (at most 3 times); "button": "right" for a context menu
 //   { "dblclick": <target> }                         double-click (a value field opens for typing)
+//   { "connect": { from, output, to, input, group }, "ms" }  drag a cable from the output port of node card `from`
+//                                                     to the input port of `to` (ports by their aria-label)
+//   { "marquee": [<node card labels>], "group", "pad" } right-drag a selection marquee around those cards
+//   { "cableClick": { from, output, to, input, group } }  right-click the cable between two node cards
 //   { "scroll": <target>, "dy": 240, "turns": 6 }     wheel turns there: scroll a panel, or zoom the node canvas (dy < 0 zooms in)
 //   { "move": <target> } | { "pause": ms } | { "type": "text" } | { "press": "Enter" }
 //   { "circle": <target>, "r", "ry", "turns", "ms" } loop the pointer around the target
@@ -168,7 +173,10 @@ export async function main(args, { chrome, fresh = false } = {}) {
       await applyEditorTheme(page, docShotSettings().theme);
       if (recipe.hide?.length) await page.addStyleTag({ content: `${recipe.hide.join(', ')} { display: none !important; }` });
       await page.evaluate(installStage);
-      const mouse = await humanMouse(page, recipe.pointer ? await page.evaluate(locateTutorialTarget, recipe.pointer) : { x: viewport.width * 0.62, y: viewport.height * 0.45 });
+      // The pointer starts at the recipe's point, or mid-frame while that target does not exist yet
+      // (the layout of an earlier take, before setup restores the default).
+      const startAt = recipe.pointer ? await page.evaluate(locateTutorialTarget, recipe.pointer) : null;
+      const mouse = await humanMouse(page, startAt && !startAt.missing ? startAt : { x: viewport.width * 0.62, y: viewport.height * 0.45 });
       await pause(1500);
 
       const locate = async target => {
@@ -199,6 +207,20 @@ export async function main(args, { chrome, fresh = false } = {}) {
         document.documentElement.append(ripple);
         setTimeout(() => ripple.remove(), 650);
       });
+      // A port of a node card by its aria-label, the one nearest the card (ports exist as page
+      // elements only while the pointer is over their card).
+      const portNear = async (label, card) => {
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          const point = await page.evaluate(({ label, card }) => {
+            const ports = [...document.querySelectorAll('.node-workspace-port')].filter(port => port.getAttribute('aria-label') === label && port.getBoundingClientRect().width);
+            const centers = ports.map(port => { const rect = port.getBoundingClientRect(); return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }; });
+            return centers.toSorted((a, b) => Math.hypot(a.x - card.x, a.y - card.y) - Math.hypot(b.x - card.x, b.y - card.y))[0] ?? null;
+          }, { label, card });
+          if (point) return point;
+          await pause(120);
+        }
+        throw new Error(`no port "${label}" near the card`);
+      };
       const press = async (button = 'left') => { await pause(140); await page.mouse.down({ button }); await pause(90); await page.mouse.up({ button }); };
 
       let t0 = now(), scene;
@@ -275,7 +297,7 @@ export async function main(args, { chrome, fresh = false } = {}) {
           await mouse.glide(await locate(step.drag), { ms: step.approach });
           await pause(180);
           await page.mouse.down();
-          await pause(120);
+          await pause(step.hold ?? 120);
           // A few pixels first, so the editor (and Chrome's HTML5 drag) recognize a drag before the long move.
           const from = await pointer();
           await mouse.glide({ x: from.x + 6, y: from.y + 2 }, { ms: 120, straight: true });
@@ -299,6 +321,60 @@ export async function main(args, { chrome, fresh = false } = {}) {
             await press(step.button);
             await pause(step.after ?? 250);
           }
+        } else if (step.cableClick) {
+          // Right-click the middle of the cable between two node cards (its context menu inserts nodes).
+          const { from, output, to, input, group = 'left-group' } = step.cableClick;
+          const source = await locate(`aria:${from}@${group}`);
+          await mouse.glide(source, { ms: step.approach });
+          await pause(150);
+          const start = await portNear(output, source);
+          const target = await locate(`aria:${to}@${group}`);
+          await mouse.glide(target, { ms: 450 });
+          await pause(150);
+          const end = await portNear(input, target);
+          await mouse.glide({ x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }, { ms: step.ms ?? 450 });
+          await press('right');
+          await pause(step.after ?? 300);
+        } else if (step.connect) {
+          // A cable between two node cards: ports exist as page elements only under the pointer, so
+          // the pointer rests on the source card, grabs its port, drags onto the target card and
+          // settles on the input that appeared there.
+          const { from, output, to, input, group = 'left-group' } = step.connect;
+          const source = await locate(`aria:${from}@${group}`);
+          await mouse.glide(source, { ms: step.approach });
+          await pause(200);
+          await mouse.glide(await portNear(output, source), { ms: 280 });
+          await pause(120);
+          await page.mouse.down();
+          await pause(100);
+          const target = await locate(`aria:${to}@${group}`);
+          await mouse.glide(target, { ms: step.ms ?? 900 });
+          await pause(220);
+          await mouse.glide(await portNear(input, target), { ms: 300 });
+          await pause(160);
+          await page.mouse.up();
+          await pause(step.after ?? 250);
+        } else if (step.marquee) {
+          // A right-drag marquee around the named node cards (with `pad` CSS px around them).
+          const group = step.group ?? 'left-group', pad = step.pad ?? 10;
+          const box = await page.evaluate(({ labels, group }) => {
+            const pane = document.querySelector(`.dock-tab-pane[data-group-id="${group}"]`);
+            const rects = labels.map(label => [...(pane?.querySelectorAll('[data-node-id][aria-label]') ?? [])]
+              .filter(element => element.getAttribute('aria-label') === label).map(element => element.getBoundingClientRect())
+              .filter(rect => rect.width > 8).toSorted((a, b) => b.width * b.height - a.width * a.height)[0]).filter(Boolean);
+            if (rects.length !== labels.length) return { missing: `only ${rects.length} of ${labels.length} node cards visible` };
+            return { left: Math.min(...rects.map(r => r.left)), top: Math.min(...rects.map(r => r.top)),
+              right: Math.max(...rects.map(r => r.right)), bottom: Math.max(...rects.map(r => r.bottom)) };
+          }, { labels: step.marquee, group });
+          if (box.missing) throw new Error(`marquee: ${box.missing}`);
+          await mouse.glide({ x: box.left - pad, y: box.bottom + pad }, { ms: step.approach });
+          await pause(150);
+          await page.mouse.down({ button: 'right' });
+          await pause(80);
+          await mouse.path([{ x: box.right + pad, y: box.top - pad }], { ms: step.ms ?? 900 });
+          await pause(120);
+          await page.mouse.up({ button: 'right' });
+          await pause(step.after ?? 250);
         } else if (step.dblclick) {
           await mouse.glide(await locate(step.dblclick), { ms: step.ms });
           await pause(140);
