@@ -24,6 +24,8 @@ During construction, flow-layout groups arrange unconnected nodes side by side i
 
 The narrow handle beside the right inspector hides or restores it, giving the graph the full panel width. Pointer interaction does not leave a blue focus ring on editor controls; keyboard Tab navigation still shows focus.
 
+Dragging a node parameter's value moves it by at most one parameter step per pixel (Shift ×10, Ctrl ×0.1). A value far smaller than its allowed range stays controllable: Yarn Profile's Radius of 0.03, allowed from 0 to 10, grows by 0.001 per pixel instead of jumping to about 0.3 on a short drag.
+
 Gaussian splat clips expose their scene nodes here. The **Splat Exploration** effect adds
 editable branches for Gaussian attributes, particles and reconstructed mesh wireframes;
 simulation forces and mesh materials are separate connected nodes. See

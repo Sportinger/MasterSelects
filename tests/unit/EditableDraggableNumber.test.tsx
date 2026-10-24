@@ -229,6 +229,25 @@ describe('EditableDraggableNumber drag behavior', () => {
     }
   });
 
+  it('keeps a small value in a wide range fine-grained with maxDragStep', () => {
+    // A yarn radius of 0.03 in 0 to 10: without the cap 60 px of drag jumped to about 0.31.
+    const drag = (maxDragStep?: number) => {
+      const onChange = vi.fn();
+      const { container, unmount } = render(
+        <EditableDraggableNumber value={0.03} onChange={onChange} decimals={3} min={0} max={10} maxDragStep={maxDragStep} />,
+      );
+      const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+      fireEvent.mouseDown(valueElement, { button: 0, clientX: 100, buttons: 1 });
+      for (let x = 103; x <= 160; x += 3) dispatchMouseMove(window, { clientX: x, movementX: 3, buttons: 1 });
+      const value = lastChangedValue(onChange);
+      fireEvent.mouseUp(window, { button: 0, buttons: 0 });
+      unmount();
+      return value;
+    };
+    expect(drag()).toBeGreaterThan(0.25);
+    expect(drag(0.001)).toBeCloseTo(0.09, 3);
+  });
+
   it('still resets to default on a right-click without drag movement', () => {
     const onChange = vi.fn();
     const { container } = render(

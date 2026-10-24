@@ -12,6 +12,8 @@ interface ResolveInspectorNumberRowProps {
   suffix?: string;
   decimals?: number;
   sensitivity?: number;
+  /** The most one pixel of field drag may change the value (see EditableDraggableNumber). */
+  maxDragStep?: number;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   onCommit?: ComponentProps<typeof LabeledValue>['onCommit'];
@@ -41,7 +43,7 @@ interface ResolveInspectorNumberRowProps {
 /** Transform-style slider, editable field and reset action for effect inspectors. */
 export function ResolveInspectorNumberRow({
   label, ariaLabel = label, value, defaultValue, min, max, step, disabled = false, title,
-  persistenceKey, onChange, onReset, keyframeToggle, actions, suffix, decimals, sensitivity = 2,
+  persistenceKey, onChange, onReset, keyframeToggle, actions, suffix, decimals, sensitivity = 2, maxDragStep,
   onDragStart, onDragEnd, onCommit, numberMin = min, numberMax = max, hardMin = -Infinity, hardMax = Infinity, midiTarget,
 }: ResolveInspectorNumberRowProps) {
   const drag = useInspectorHistoryBatch(label, onDragStart, onDragEnd);
@@ -64,7 +66,7 @@ export function ResolveInspectorNumberRow({
         onDragEnd={() => { drag.end(); onCommit?.('drag'); }} />
       <LabeledValue label="" ariaLabel={ariaLabel} className="resolve-inspector-field resolve-inspector-field--plain"
         value={value} defaultValue={defaultValue} min={numberMin} max={numberMax} decimals={decimals ?? (step >= 1 ? 0 : 3)} suffix={suffix}
-        sensitivity={sensitivity} onDragStart={drag.begin} onDragEnd={drag.end} onCommit={onCommit} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
+        sensitivity={sensitivity} maxDragStep={maxDragStep} onDragStart={drag.begin} onDragEnd={drag.end} onCommit={onCommit} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
         midiTarget={midiTarget}
         onChange={change} />
     </div>

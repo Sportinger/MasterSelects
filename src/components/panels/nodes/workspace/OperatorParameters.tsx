@@ -60,7 +60,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
   });
   const numberRow = (key: string, label: string, value: number, fallback: number, min = -30, max = 30, step = 0.01, animatable = true, suffix?: string) =>
     <ResolveInspectorNumberRow key={key} label={label} ariaLabel={`${operator.label} ${label}`} value={value} defaultValue={fallback}
-      min={min} max={max} step={step} suffix={suffix} onChange={v => set(key, v)} persistenceKey={`operator.${effectId}.${key}`}
+      min={min} max={max} step={step} maxDragStep={step} suffix={suffix} onChange={v => set(key, v)} persistenceKey={`operator.${effectId}.${key}`}
       keyframeToggle={animatable ? <button type="button" className="keyframe-toggle" aria-label={`Keyframe ${operator.label} ${label}`}
         onClick={() => readTimelineRuntimeState(useTimelineStore).addKeyframe(clip.id, `effect.${effectId}.${key}` as Keyframe['property'], value)}>◇</button> : undefined} />;
   return <div className="operator-parameters" onPointerUp={event => {
@@ -106,7 +106,7 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
           if (spec.type === 'number') return <ResolveInspectorNumberRow key={spec.id} label={spec.label} ariaLabel={`${operator.label} ${spec.label}`}
             value={Number(constant)} defaultValue={Number(spec.default)}
             min={operator.family === 'values.numeric' ? Math.min(spec.min ?? -30, Number(constant)) : spec.min ?? -30}
-            max={operator.family === 'values.numeric' ? Math.max(spec.max ?? 30, Number(constant)) : spec.max ?? 30} step={spec.step ?? 0.01}
+            max={operator.family === 'values.numeric' ? Math.max(spec.max ?? 30, Number(constant)) : spec.max ?? 30} step={spec.step ?? 0.01} maxDragStep={spec.step ?? 0.01}
             onChange={next => safely(() => setOperatorConstant(clip.id, effectId, node.id, spec.id, next))}
             persistenceKey={operatorConstantNumberPersistenceKey({ clipId: clip.id, effectId, nodeId: node.id, parameter: spec.id })} />;
           if (spec.type === 'text') return <ResolveInspectorRow key={spec.id} label={spec.label}><input aria-label={`${operator.label} ${spec.label}`}

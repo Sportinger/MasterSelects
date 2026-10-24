@@ -27,6 +27,9 @@ export interface EditableDraggableNumberProps {
   onChange: (value: number) => void;
   defaultValue?: number;
   sensitivity?: number;
+  /** The most one pixel of drag may change the value (before Shift/Ctrl): a value far smaller than its
+   * range, like a yarn radius of 0.03 in 0 to 10, stays fine-grained instead of jumping. */
+  maxDragStep?: number;
   decimals?: number;
   suffix?: string;
   min?: number;
@@ -65,13 +68,14 @@ function getPixelsForFullRange(range: number): number {
   return Math.min(12000, Math.max(700, Math.sqrt(Math.max(range, 1)) * 180));
 }
 
-function getPerPixelStep(value: number, sensitivity: number, decimals: number, min?: number, max?: number): number {
+function getPerPixelStep(value: number, sensitivity: number, decimals: number, min?: number, max?: number, maxDragStep?: number): number {
   const range = getAdaptiveRange(value, min, max);
   const pixelsForFullRange = getPixelsForFullRange(range);
   const baseStep = range / pixelsForFullRange;
   const sensitivityFactor = Math.max(1, 1 + sensitivity);
   const precisionFloor = Math.pow(10, -Math.max(decimals, 0)) * 0.1;
-  return Math.max(precisionFloor, baseStep / sensitivityFactor);
+  const step = Math.max(precisionFloor, baseStep / sensitivityFactor);
+  return maxDragStep !== undefined && maxDragStep > 0 ? Math.min(step, Math.max(precisionFloor, maxDragStep)) : step;
 }
 
 function formatEditableValue(value: number, decimals: number): string {
@@ -95,6 +99,7 @@ export function EditableDraggableNumber({
   onChange,
   defaultValue,
   sensitivity = 2,
+  maxDragStep,
   decimals = 2,
   suffix = '',
   min,
@@ -293,6 +298,7 @@ export function EditableDraggableNumber({
       decimals,
       effectiveMin,
       effectiveMax,
+      maxDragStep,
     );
     return roundValue(
       clampValue(
@@ -302,7 +308,7 @@ export function EditableDraggableNumber({
       ),
       decimals,
     );
-  }, [decimals, effectiveMax, effectiveMin, sensitivity]);
+  }, [decimals, effectiveMax, effectiveMin, maxDragStep, sensitivity]);
 
   const {
     feedbackElementRef,
@@ -412,7 +418,7 @@ export function EditableDraggableNumber({
       else if (event.ctrlKey) modifierMultiplier = 0.1;
 
       accumulatedDelta.current += dx * modifierMultiplier;
-      const perPixelStep = getPerPixelStep(startValue.current, sensitivity, decimals, effectiveMin, effectiveMax);
+      const perPixelStep = getPerPixelStep(startValue.current, sensitivity, decimals, effectiveMin, effectiveMax, maxDragStep);
       const deltaValue = accumulatedDelta.current * perPixelStep;
       const unclampedValue = startValue.current + deltaValue;
       const nextValue = clampValue(unclampedValue, effectiveMin, effectiveMax);
@@ -453,6 +459,7 @@ export function EditableDraggableNumber({
     onDragStart,
     openBoundsPopover,
     readDragDeltaX,
+    maxDragStep,
     sensitivity,
     shouldSuppressMouse,
     showBoundsPopover,
