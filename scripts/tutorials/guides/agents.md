@@ -43,6 +43,15 @@ Episode 2 still needs:
   piece by piece, in the real UI: nodes are added one by one and really connected.
 - **Everything on screen is real.** When the narration talks about nodes, real node cards and the
   running clip must be visible. Do not fake product UI with overlays.
+- **While building, take pictures and look at them.** After every step that builds a start state or
+  a scene, take a screenshot and check it, so you know the step did what it should. Do not build
+  blind and debug afterwards (Roman, 2026-10-24; `--shots` saves one per setup step).
+- **Always the real environment.** Build, probe and record in the same browser at the same size:
+  headless Chrome at 2560×1440 and 100% scale, once [`plan.md`](plan.md) stage 1 is done. A
+  different window or scale shows a different layout than the take.
+- **Work piece by piece.** Each part should start where the last one ended: same project, view,
+  settings and pointer. Until checkpoints exist ([`plan.md`](plan.md), stage 2), keep each part's
+  setup short and check its result picture against the last frame of the previous part.
 - **Look at it yourself before you show it.** Check a contact sheet of the key moments (the
   `video-glance` skill): is the clip in the preview (not black), are the nodes visible, does the
   pointer hit what the voice names? Roman should not find errors that a look would have shown.
@@ -114,7 +123,7 @@ Episode 2 still needs:
 ### Recording and timing
 
 - **Takes are 720p, scaled up.** Chrome's screencast sends the window's own pixels (1280×720). The
-  recipe's `scale: 2` does not raise that. Roman wants 1800p; [`plan.md`](plan.md), stage 4, has
+  recipe's `scale: 2` does not raise that. Roman wants headless 1440p at 100%; [`plan.md`](plan.md), stage 1, has
   the measurements and the way there.
 
 - **Heavy pages make gestures late.** In the node workspace with Weave running, steps came 1–3 s

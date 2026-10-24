@@ -6,7 +6,8 @@ to a word of the voice. The camera only zooms lightly, for emphasis.
 
 **Agents start with [`guides/agents.md`](guides/agents.md)**: how the work goes with Roman, the
 session setup, and every pitfall so far. [`guides/plan.md`](guides/plan.md) is the plan for the next
-version: the voice line by line, the cut in a MasterSelects project, and 1800p recording.
+version: headless 1440p recording, checkpoints for seamless parts, building with pictures, the voice
+line by line, and the cut in a MasterSelects project.
 
 ## Folders
 
