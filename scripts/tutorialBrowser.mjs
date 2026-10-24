@@ -47,13 +47,15 @@ export async function recorderTab(context, { viewport, scale = 2 }) {
     page, context,
     /** Applies the viewport again and checks it took. */
     emulate: async () => {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
+      // A page that is still settling after a project switch can report its own size for a few seconds.
+      let size;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
         await override();
-        const size = await page.evaluate(() => [innerWidth, innerHeight, devicePixelRatio]);
-        if (size[0] === viewport.width && size[1] === viewport.height && size[2] === scale) return;
-        await new Promise(resolve => setTimeout(resolve, 300));
+        size = await page.evaluate(() => [innerWidth, innerHeight, devicePixelRatio]).catch(() => null);
+        if (size?.[0] === viewport.width && size[1] === viewport.height && size[2] === scale) return;
+        await new Promise(resolve => setTimeout(resolve, 400));
       }
-      throw new Error(`The tab keeps its own viewport instead of ${viewport.width}×${viewport.height} @${scale}x`);
+      throw new Error(`The tab keeps its own viewport (${size?.join('×') ?? 'unreadable'}) instead of ${viewport.width}×${viewport.height} @${scale}x`);
     },
     done: async () => {
       page.off('domcontentloaded', onLoad);

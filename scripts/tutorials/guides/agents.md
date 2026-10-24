@@ -10,7 +10,7 @@ of the pipeline: the voice line by line, and the final cut in a MasterSelects pr
 1. Read "How Roman wants it" below. Skim the pitfalls of the area you will touch.
 2. Session setup (below): worktree, Vite on 5192, secrets, `tutorial-tab.mjs serve`, and one Allow
    click by Roman.
-3. Copy the last part recipe (`flamer-ep2-part2.json`) and write the scenes.
+3. Copy the last part recipe (`flamer-ep2-part3-yarn.json`) and write the scenes.
 4. `make … --voice none` until the steps work, then `make` with the voice.
 5. Check the contact sheet, show Roman, commit the recipe.
 
@@ -25,11 +25,11 @@ points, circles, drags panels and clicks, timed to the words. Tone and jokes:
 | Episode | State | Recipes |
 |---|---|---|
 | 1 | done. Roman's recorded voice, music, pointer gestures | `flamer-episode-1.json` |
-| 2, "Knitted Jellyfish" (Weave, Qualle form) | parts 1 and 2 recorded; an older one-piece version exists | `flamer-ep2-part1.json`, `flamer-ep2-part2.json`, `flamer-episode-2.json` |
+| 2, "Knitted Jellyfish" (Weave, Qualle form) | parts 1, 2 and 3 ("Yarn") recorded; an older one-piece version exists | `flamer-ep2-part1.json`, `flamer-ep2-part2.json`, `flamer-ep2-part3-yarn.json`, `flamer-episode-2.json` |
 
 Episode 2 still needs:
-- the parts after `yarn` (the scenes `form` … `outro` of `flamer-episode-2.json`, rebuilt in the new
-  part style);
+- the parts after part 3 (the scenes `form` … `outro` of `flamer-episode-2.json`, rebuilt in the new
+  part style; part 3 ends with "Next up: we turn this thing into a jellyfish");
 - the fly-around in edit mode (needs Weave orbit in MS, see [`plan.md`](plan.md));
 - the final cut in MasterSelects.
 
@@ -99,7 +99,8 @@ Episode 2 still needs:
 3. Try the take with `--voice none` until the steps work. That costs no credits. Then generate the
    voice and record.
 4. Read the log: `late for "<word>"` and scenes that ran over. Fix the steps (`early`, `ms`, `after`)
-   and run `make` again.
+   and run `make` again. A failed setup step names itself and leaves `setup.failed.png` in the work
+   folder; `--setup-shots` keeps a picture after every setup step.
 5. Check the contact sheet of the key moments, then show Roman the part.
 6. Commit the recipe on the task branch. Audio and videos stay local (`audio/`, `tutorial-videos/`).
 
@@ -117,6 +118,9 @@ Episode 2 still needs:
   takes. Tab ids shift, so use only the page the server opened.
 - **Navigation drops the viewport emulation** (1280×720 at 2×). The pipeline re-applies it on
   `domcontentloaded` and checks it. Keep it that way when you change the browser code.
+- **Never call Playwright's `page.screenshot` on the recording tab** (also not in an `eval` snippet).
+  It resets the emulated pixel ratio to 1, and the next take fails with "The tab keeps its own
+  viewport (1280×720×1)". The pipeline takes its pictures through DevTools (`Page.captureScreenshot`).
 - **The real mouse disturbs hovers.** If it crosses the Chrome window, the log warns. Roman should
   not touch that window during a take.
 
@@ -129,6 +133,9 @@ Episode 2 still needs:
 - **Heavy pages make gestures late.** In the node workspace with Weave running, steps came 1–3 s
   late. Fix one part with larger `early` values. The structural fix is in [`plan.md`](plan.md): place
   each voice line by the recorded step times.
+- **Drags in long setups and heavy scenes are slow.** A `connect` takes about 2.5 s, a `cableClick` about
+  2 s and a value `drag` about 1.4 s. Start them one word earlier (part 3: `connect` at "and", the
+  cable click at "So" or "perfect") and give them `approach` and `ms` of 300–600.
 - **A missing target fails the step.** `locate` retries for 1.5 s, then the take stops. The recording
   up to that point is kept, so `--recut` can show it.
 - **The pointer needs a start point.** Without `recipe.pointer` it starts mid-frame.
@@ -147,6 +154,10 @@ Episode 2 still needs:
 - **The clip must start at 0.** With the playhead at 0 and the clip at 0.05 s, the preview stayed
   black for a whole part, and Roman found it. Drag new clips to the start
   (`drag clip:<name>:middle → time:…@Video 1`) and check the preview in the contact sheet.
+- **The new project's name goes into the dialog field.** Until 2026-10-24 the pipeline typed it before
+  the dialog was open; the letters of "Qualle" reached the timeline as shortcuts (`l` played), and the
+  setup then ran against a playing project: menus closed mid-glide, a clip or the whole comp was gone.
+  If a setup behaves at random, look at `--setup-shots` for a running playhead first.
 - **Shortcuts:** L plays forward; the loop toggles with **Shift+L** (the tooltip said "L" until
   `54715ba9d`). Say the right key in the narration.
 - **Dock tabs need a hold before they drag.** Use `hold: 650` on the drag step (MS waits 500 ms).
@@ -178,6 +189,17 @@ Episode 2 still needs:
 - **Emptying Weave:** open the group, marquee Weave Pattern, Handmade, Reveal by Shape, Weave In,
   Yarn and Wind Cloth, then press Delete. Strand Render and Output stay. Then add Knit Sphere, connect
   it to Strand Render, and insert Yarn Profile into that cable.
+- **Adding inside the open Weave group:** right-click about `~-150,70` from Strand Render (inside the
+  group frame); the new node lands in the group. A node added or inserted into a cable is selected,
+  so the node inspector on the right shows its parameters at once (Yarn Profile: Plies, Fibers per
+  Ply, Radius, Ply Twist …). Targets: `Plies@left-group`, `aria:Yarn Profile Radius`.
+- **The node inspector comes back when the Nodes tab is opened again.** "Hide node inspector" in the
+  setup does not survive a switch to Media and back; plan the take with the inspector open.
+- **Dragging a value field:** the recording tab has no pointer lock (scripted moves cannot drive a
+  locked drag; the value jumped tenfold). Node parameters move at most one step per pixel since
+  2026-10-24, so `{"drag": "aria:Yarn Profile Radius", "to": "~19,0"}` adds about 0.025.
+- **The Weave group's frame** is `aria:Weave node group@left-group`; the empty Weave shows a black
+  preview until a curve generator feeds Strand Render.
 - **Edit mode for the Weave clip is 2D** (move, scale, zoom). The 3D workspace views do not show the
   Weave scene. Orbiting an effect (`cameraInteraction`) exists only for voxel relief so far.
 

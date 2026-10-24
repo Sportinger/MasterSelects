@@ -3,6 +3,7 @@
 //
 //   node scripts/tutorial-video.mjs scripts/tutorials/cut-a-video.json [--url http://localhost:5192]
 //       [--out <folder>] [--media <folder>] [--voice flamer|male|female|<voice id>|none] [--recut] [--attach]
+//       [--setup-shots] (a screenshot after every setup step, <work>/setup-NN.png)
 //
 // 1. Narration: every scene's `say`, spoken by ElevenLabs in one request with word times
 //    (scripts/tutorialVoice.mjs; default voice "flamer", with ELEVENLABS_BROWSER_API_KEY or
@@ -84,6 +85,9 @@ function pageHooks() {
   window.__tutorialHooks = true;
   window.showDirectoryPicker = async () => (await navigator.storage.getDirectory()).getDirectoryHandle(`tutorial-${Date.now()}`, { create: true });
   Object.defineProperty(Navigator.prototype, 'doNotTrack', { configurable: true, get: () => '1' });
+  // Scripted mouse moves cannot drive a pointer-locked drag: Chrome then reports each move's distance from
+  // the lock point, so a value field jumped tenfold. Without pointer lock the fields drag by clientX.
+  Object.defineProperty(Element.prototype, 'requestPointerLock', { configurable: true, value: undefined });
   // The editor saves an export through a download link; Playwright does not always report that
   // download, so the page notes every one itself (name and size of the blob behind the link).
   const blobs = new Map(), createObjectURL = URL.createObjectURL.bind(URL), click = HTMLAnchorElement.prototype.click;
@@ -160,15 +164,21 @@ export async function main(args, { chrome, fresh = false } = {}) {
         await page.locator('form input').first().fill(recipe.project ?? 'My first edit');
         await page.getByRole('button', { name: 'Continue' }).click();
       } else {
+        // The name goes into the dialog's own field: typed before the dialog is open, its letters
+        // reached the timeline as shortcuts (l played, and the setup ran against a playing project).
         await pause(1500);
         await page.getByText('File', { exact: true }).first().click();
         await page.getByText(/^New Project/).first().click();
-        await page.keyboard.press('Control+A');
-        await page.keyboard.type(recipe.project ?? 'My first edit');
-        await page.keyboard.press('Enter');
+        const dialog = page.locator('.project-name-dialog');
+        await dialog.locator('input').first().fill(recipe.project ?? 'My first edit', { timeout: 15000 });
+        await dialog.locator('input').first().press('Enter');
+        await dialog.waitFor({ state: 'detached', timeout: 30000 });
       }
       await page.getByRole('button', { name: 'End walkthrough' }).click({ timeout: 6000 }).catch(() => {});
       await page.waitForFunction(() => window.aiTools && document.querySelector('.track-lane'), null, { timeout: 60000 });
+      // The setup starts paused: playing, the editor re-renders under every step and menus close mid-glide.
+      const playing = page.locator('.dock-tab-pane[data-group-id="timeline-group"] button[aria-label="Pause"]').first();
+      if (await playing.isVisible().catch(() => false)) { console.log('the new project was playing: paused it'); await playing.click(); }
       await handle.emulate?.();
       await applyEditorTheme(page, docShotSettings().theme);
       if (recipe.hide?.length) await page.addStyleTag({ content: `${recipe.hide.join(', ')} { display: none !important; }` });
@@ -446,8 +456,25 @@ export async function main(args, { chrome, fresh = false } = {}) {
       };
 
       // Setup: steps on the open project before the recording starts.
+      // A picture of the page through DevTools: Playwright's page.screenshot resets the emulated
+      // pixel ratio of an attached tab to 1, and the take then fails its viewport check.
+      const snapshot = async file => {
+        const session = await context.newCDPSession(page);
+        try { fs.writeFileSync(file, Buffer.from((await session.send('Page.captureScreenshot', { format: 'png' })).data, 'base64')); }
+        finally { await session.detach().catch(() => {}); }
+      };
+      // A failed step names itself and leaves setup.failed.png; --setup-shots keeps a picture after every step.
       scene = { id: 'setup', start: now() };
-      for (const step of recipe.setup ?? []) await run(step);
+      for (const [index, step] of (recipe.setup ?? []).entries()) {
+        try {
+          await run(step);
+          if (args.includes('--setup-shots')) await snapshot(path.join(work, `setup-${String(index + 1).padStart(2, '0')}.png`));
+        } catch (error) {
+          const shot = path.join(work, 'setup.failed.png');
+          await snapshot(shot).catch(() => {});
+          throw new Error(`setup step ${index + 1} ${JSON.stringify(step)}: ${error.message} (the page at that moment: ${shot})`);
+        }
+      }
       camera.length = 0;
       fast.length = 0;
       await handle.emulate?.();
@@ -492,7 +519,7 @@ export async function main(args, { chrome, fresh = false } = {}) {
             await run(step);
           } catch (error) {
             const shot = path.join(work, `${item.id}.failed.png`);
-            await page.screenshot({ path: shot }).catch(() => {});
+            await snapshot(shot).catch(() => {});
             keepRecording(item.id);
             throw new Error(`${item.id}: ${error.message} (the page at that moment: ${shot})`);
           }
