@@ -146,6 +146,15 @@ the user sees. Build new cases the same way:
    the fix lands, Playwright reports the case as unexpectedly passing and the
    marker goes.
 
+**Dropping files from outside** (`foundation/drop-import.spec.ts`) is tested in
+stages: stage 1 replays the drop inside the page (a `DataTransfer` with a real
+`File`), stage 2 sends the drag through Chrome's own pipeline with a real file
+path (`Input.dispatchDragEvent` over DevTools, as a file manager would; works
+headless). Both drop the frame-code clip at a known time and prove the clip's
+start (within one frame) and its frames in the preview. Stage 3, a real Explorer
+drag, belongs to the Windows desktop host (`platform.windows-explorer-drop`).
+The shared start of a frame-code Sammeltest lives in `fixtures/frameCodeProject.ts`.
+
 On Linux the Playwright Chrome gets ANGLE on Vulkan (WebGPU), XWayland for a
 headed window and `--disable-vulkan-surface` headless (`chromeLaunchArgs` in
 `config/runtimeProfile.ts`); every platform gets `--force-color-profile=srgb`, so

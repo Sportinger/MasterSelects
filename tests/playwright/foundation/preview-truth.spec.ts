@@ -1,9 +1,6 @@
-import { randomUUID } from 'node:crypto'
-import { test as base, expect, type Page, type TestInfo } from '@playwright/test'
+import { test as base, expect, type TestInfo } from '@playwright/test'
 import type { BridgeClient } from '../fixtures/bridgeClient'
-import { EditorPage } from '../fixtures/editorPage'
-import { frameCodeClip, type FrameCodeClip } from '../fixtures/frameCodeMedia'
-import { PreviewProbe } from '../fixtures/previewProbe'
+import { openFrameCodeProject, type FrameCodeProject } from '../fixtures/frameCodeProject'
 import { ExportDriver } from '../drivers/ExportDriver'
 import { checkFrameSequence, readVideoFrameCodes } from '../assertions/frameCodeOracle'
 
@@ -14,36 +11,15 @@ import { checkFrameSequence, readVideoFrameCodes } from '../assertions/frameCode
  * Nothing trusts an engine "ready" flag or a fixed sleep: each step waits until
  * the preview's real pixels show the expected frame, and records when.
  */
-interface Shared { page: Page; editor: EditorPage; bridge: BridgeClient; clip: FrameCodeClip; probe: PreviewProbe }
+type Shared = FrameCodeProject
 
 const test = base.extend<object, { truth: Shared }>({
   truth: [async ({ browser }, provide, workerInfo) => {
-    const baseURL = workerInfo.project.use.baseURL
-    if (!baseURL) throw new Error('Playwright baseURL must be configured')
-    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, acceptDownloads: true })
-    const page = await context.newPage()
-    await warmGpu(page, baseURL)
-    const editor = await EditorPage.bootstrap(page, { baseURL, tabId: randomUUID() })
-    const clip = await frameCodeClip({ width: 640, height: 360, fps: 30, seconds: 4 })
-    // A composition of the clip's size and rate: the clip fills the preview, one composition frame is one source frame.
-    await editor.bridge.toolData('createComposition', { name: 'Vorschau-Wahrheit', width: clip.width, height: clip.height,
-      frameRate: clip.fps, duration: clip.frames / clip.fps, open: true })
-    await editor.bridge.toolData('importLocalFiles', { paths: [clip.path.replaceAll('\\', '/')], addToTimeline: true, startTime: 0 }, { timeoutMs: 60_000 })
-    await editor.waitForProjectIdle(30_000)
-    await provide({ page, editor, bridge: editor.bridge, clip, probe: new PreviewProbe(page) })
-    await context.close()
+    const project = await openFrameCodeProject(browser, workerInfo.project.use.baseURL, { composition: 'Vorschau-Wahrheit' })
+    await provide(project)
+    await project.context.close()
   }, { scope: 'worker', timeout: 180_000 }],
 })
-
-// A fresh Chrome on Linux/Vulkan reports no WebGPU adapter for about a second;
-// the editor must not initialise before the GPU answers.
-async function warmGpu(page: Page, baseURL: string): Promise<void> {
-  await page.goto(new URL('/favicon.png', baseURL).toString())
-  await expect.poll(() => page.evaluate(async () => {
-    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu
-    return gpu ? Boolean(await gpu.requestAdapter()) : 'no-webgpu-api'
-  }), { timeout: 15_000, message: 'Chrome never offered a WebGPU adapter' }).not.toBe(false)
-}
 
 test.describe.configure({ timeout: 120_000 })
 
