@@ -12,8 +12,24 @@ if (import.meta.hot) {
 /** Only one cold source analysis owns decoded PCM at a time. Cache reads stay
  * outside this queue, and queued work never holds a project artifact batch.
  */
-export function runBackgroundSourceWaveform<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-  return enqueue(state, work, signal);
+export function runBackgroundSourceWaveform<T>(
+  work: (progress: () => void) => Promise<T>,
+  signal?: AbortSignal,
+  stall: QueueStall = { ms: SOURCE_WAVEFORM_STALL_MS },
+): Promise<T> {
+  return enqueue(state, work, signal, stall);
+}
+
+/**
+ * A source analysis that reports no progress for this long stops holding the queue: the next sources start instead
+ * of waiting at 0 % behind one hung source. The stalled work keeps running and still delivers if it finishes.
+ */
+export const SOURCE_WAVEFORM_STALL_MS = 90_000;
+
+interface QueueStall {
+  ms: number;
+  /** Called once when the work stalls and the queue goes on without it. */
+  onStall?: () => void;
 }
 
 export function runBackgroundWaveformDerivation<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -26,11 +42,26 @@ export function runWaveformCacheWork<T>(work: () => Promise<T>, signal?: AbortSi
   return enqueue(queue, work, signal);
 }
 
-function enqueue<T>(queue: { tail: Promise<void> }, work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+function enqueue<T>(
+  queue: { tail: Promise<void> },
+  work: (progress: () => void) => Promise<T>,
+  signal?: AbortSignal,
+  stall?: QueueStall,
+): Promise<T> {
+  let release!: () => void;
+  const released = new Promise<void>(resolve => { release = resolve; });
   const result = queue.tail.then(() => {
     if (signal?.aborted) throw signal.reason ?? new DOMException('Waveform analysis cancelled', 'AbortError');
-    return work();
+    // Every progress report restarts the stall timer.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const progress = () => {
+      if (!stall) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { stall.onStall?.(); release(); }, stall.ms);
+    };
+    progress();
+    return work(progress).finally(() => clearTimeout(timer));
   });
-  queue.tail = result.then(() => undefined, () => undefined);
+  queue.tail = Promise.race([result.then(() => undefined, () => undefined), released]);
   return result;
 }

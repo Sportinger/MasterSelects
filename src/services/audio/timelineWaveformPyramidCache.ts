@@ -13,7 +13,7 @@ const LONG_WAV_READ_PROGRESS = 60;
 import { generateSourceWaveformPreview } from './sourceWaveformPreview';
 import { sourceWaveformAnalysisCacheForFile, rememberSourceWaveformAnalysis, getSourceWaveformProjectScope } from './sourceWaveformAnalysisCache';
 import { findSavedSourceWaveform, previewSavedSourceWaveform } from './sourceWaveformPersistence';
-import { runBackgroundSourceWaveform } from './sourceWaveformJobQueue';
+import { runBackgroundSourceWaveform, SOURCE_WAVEFORM_STALL_MS } from './sourceWaveformJobQueue';
 import type { AudioChannelLayout } from './audioArtifactTypes';
 import { isAudioAnalysisArtifactStaleForInput } from './audioAnalysisManifestKeys';
 import {
@@ -387,8 +387,18 @@ async function generateTimelineWaveformAnalysisForFileUncached(
       }
     }
   }
-  const work = () => decodeTimelineWaveformAnalysisForFile(file, options);
-  return options.background !== false ? runBackgroundSourceWaveform(work, options.signal) : work();
+  if (options.background === false) return decodeTimelineWaveformAnalysisForFile(file, options);
+  // Progress of the decode and the pyramid tells the queue that this source has not hung.
+  return runBackgroundSourceWaveform(progress => decodeTimelineWaveformAnalysisForFile(file, {
+    ...options,
+    onProgress: options.onProgress && ((value, preview) => { progress(); options.onProgress!(value, preview); }),
+    onPyramidProgress: value => { progress(); options.onPyramidProgress?.(value); },
+  }), options.signal, {
+    ms: SOURCE_WAVEFORM_STALL_MS,
+    onStall: () => log.warn('Source waveform analysis made no progress; the next sources go on without it', {
+      name: file.name, mediaFileId: options.mediaFileId, stalledAfterMs: SOURCE_WAVEFORM_STALL_MS,
+    }),
+  });
 }
 
 async function decodeTimelineWaveformAnalysisForFile(file: File, options: GenerateTimelineWaveformAnalysisOptions): Promise<TimelineWaveformAnalysisResult> {
