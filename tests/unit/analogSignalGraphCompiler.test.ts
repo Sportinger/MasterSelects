@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph, validateAnalogSignalGraph } from '../../src/services/operators/analogSignalGraph';
+import { cachedAnalogSignalPlan, compileAnalogSignalGraph, createDefaultAnalogSignalGraph, validateAnalogSignalGraph } from '../../src/services/operators/analogSignalGraph';
 import { ANALOG_SIGNAL_LAB_PARAMS } from '../../src/effects/analog/signal-lab/parameters';
 import { getEffectOperator } from '../../src/services/operators/operatorRegistry';
 import { createLegacyAnalogSignalGraph } from '../helpers/legacyAnalogSignalGraph';
 
 describe('Analog Signal operator graph compiler', () => {
+  it('compiles a graph and its parameters once for the render loop, and again when either changes', () => {
+    const graph = createDefaultAnalogSignalGraph();
+    const plan = cachedAnalogSignalPlan(graph, { rfNoise: 0.4 });
+    // A copy of the same graph (the layer builder may clone it per frame) and equal parameters share the plan.
+    expect(cachedAnalogSignalPlan(structuredClone(graph), { rfNoise: 0.4 })).toBe(plan);
+    expect(plan).toEqual(compileAnalogSignalGraph(graph, { rfNoise: 0.4 }));
+    expect(cachedAnalogSignalPlan(graph, { rfNoise: 0.5 })).not.toBe(plan);
+    graph.nodes.find(node => node.id === 'vhs')!.bypassed = true;
+    expect(cachedAnalogSignalPlan(graph, { rfNoise: 0.4 }).stages.map(stage => stage.kind)).not.toContain('vhs');
+  });
   it('rejects fragment derivatives before building a compute program', () => {
     const graph = createDefaultAnalogSignalGraph();
     graph.nodes.push({ id: 'fragment-gradient', operator: 'image.derivative.coarse.scalar', operatorVersion: 1, bindings: {} });

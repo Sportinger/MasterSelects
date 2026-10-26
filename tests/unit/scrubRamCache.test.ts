@@ -124,6 +124,26 @@ describe('two-tier scrub cache', () => {
     cache.cachePlaybackFrame(video);
     expect(convert).toHaveBeenCalledTimes(1);
   });
+  it('lets playback frames pass after an expensive capture, so capturing never costs playback its frame rate', () => {
+    const { cache } = gpu();
+    cache.setRamBudget(8192);
+    let callback!: VideoFrameRequestCallback;
+    const video = {
+      src: 'playing', paused: false, seeking: false,
+      requestVideoFrameCallback: vi.fn((next: VideoFrameRequestCallback) => { callback = next; return 1; }),
+      cancelVideoFrameCallback: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    // Each capture call costs 6 ms of main thread (createImageBitmap converting synchronously).
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const capture = vi.spyOn(cache, 'cacheFrameAtTime').mockImplementation(() => { clock += 6; });
+    cache.cachePlaybackFrame(video);
+    for (let frame = 0; frame < 10; frame++) callback(0, { mediaTime: frame / 30 } as VideoFrameCallbackMetadata);
+    // 6 ms against a budget of 1.5 ms per frame: one capture, then four frames pass.
+    expect(capture.mock.calls.map(call => Math.round(call[1] * 30))).toEqual([0, 5]);
+    expect(cache.getPlaybackCaptureStats()).toEqual({ lastCostMs: 6, skipped: 8 });
+    cache.clear();
+  });
   it('restores GPU-evicted frames from RAM and keeps their yellow ranges', async () => {
     pixelCanvas();
     const { cache, device } = gpu();

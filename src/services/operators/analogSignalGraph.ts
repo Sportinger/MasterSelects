@@ -132,6 +132,27 @@ function stageParams(item: BoundOperatorNode, definition: OperatorDefinition, pa
   }));
 }
 
+const compiledPlans = new Map<string, AnalogSignalPlan>();
+const COMPILED_PLAN_LIMIT = 16;
+
+/**
+ * The plan of a graph and its parameters for the render loop, compiled once per distinct graph and parameters (a
+ * compile per frame cost about 3 ms of main thread at 2560×1440 playback). The plan is shared: callers read it only.
+ */
+export function cachedAnalogSignalPlan(graph: EffectOperatorGraph, params: Record<string, unknown> = {}): AnalogSignalPlan {
+  const key = JSON.stringify([graph, params]);
+  const cached = compiledPlans.get(key);
+  if (cached) {
+    compiledPlans.delete(key);
+    compiledPlans.set(key, cached);
+    return cached;
+  }
+  const plan = compileAnalogSignalGraph(graph, params);
+  compiledPlans.set(key, plan);
+  if (compiledPlans.size > COMPILED_PLAN_LIMIT) compiledPlans.delete(compiledPlans.keys().next().value!);
+  return plan;
+}
+
 export function compileAnalogSignalGraph(graph: EffectOperatorGraph, params: Record<string, unknown> = {}): AnalogSignalPlan {
   const errors = validateAnalogSignalGraph(graph); if (errors.length) throw new Error(errors[0]);
   const nodes = new Map(graph.nodes.map(item => [item.id, item]));

@@ -22,6 +22,10 @@ export interface ScrubTextureCacheSnapshot {
   evictions: number;
 }
 
+/** Main-thread milliseconds per played frame that capturing frames for the scrub cache may cost on average. */
+const PLAYBACK_CAPTURE_BUDGET_MS = 1.5;
+const PLAYBACK_CAPTURE_MAX_SKIP = 30;
+
 export class ScrubTextureCache {
   private readonly device: GPUDevice;
   private readonly cache: Map<string, ScrubbingTextureEntry> = new Map();
@@ -37,6 +41,10 @@ export class ScrubTextureCache {
   private releases = 0;
   private pendingCaptures = new Set<string>();
   private playbackCallbacks = new Map<HTMLVideoElement, () => void>();
+  /** Playback frames still to pass after an expensive capture (see capturePlaybackImage). */
+  private playbackCaptureSkip = 0;
+  private playbackCaptureCostMs = 0;
+  private playbackCapturesSkipped = 0;
   private readonly ram = new ScrubRamCache();
   private pendingUploads = new Map<string, ScrubbingTextureEntry>();
   private generation = 0;
@@ -103,8 +111,24 @@ export class ScrubTextureCache {
   private capturePlaybackImage(video: HTMLVideoElement, time: number): void {
     // One conversion in flight: slow readback skips frames instead of queuing work.
     if (video.seeking || this.pendingCaptures.size > 0 || this.pendingUploads.size > 0) return;
+    // The capture must never cost playback its frame rate. createImageBitmap of a video converts synchronously on
+    // some drivers (about 6 ms per 1080p frame on Linux/Vulkan, 13 % of the main thread while playing), so an
+    // expensive capture lets the next frames pass: on average at most PLAYBACK_CAPTURE_BUDGET_MS per frame.
+    if (this.playbackCaptureSkip > 0) {
+      this.playbackCaptureSkip -= 1;
+      this.playbackCapturesSkipped += 1;
+      return;
+    }
+    const started = performance.now();
     // Playback runs this for every decoded frame: keep the CPU readback in the worker.
     this.cacheFrameAtTime(video, time, { offMainThread: true });
+    this.playbackCaptureCostMs = performance.now() - started;
+    this.playbackCaptureSkip = Math.min(PLAYBACK_CAPTURE_MAX_SKIP, Math.floor(this.playbackCaptureCostMs / PLAYBACK_CAPTURE_BUDGET_MS));
+  }
+
+  /** What capturing playback frames costs the main thread, and how many frames it let pass for that. */
+  getPlaybackCaptureStats(): { lastCostMs: number; skipped: number } {
+    return { lastCostMs: this.playbackCaptureCostMs, skipped: this.playbackCapturesSkipped };
   }
 
   /**

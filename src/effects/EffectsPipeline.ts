@@ -29,7 +29,7 @@ import { EffectPipelineCache } from './EffectPipelineCache';
 import { captureImageOperatorPreviews } from '../services/nodePreview/imageOperatorTexturePreviews';
 import { imageOperatorPreviewPrefix } from '../services/nodePreview/imageOperatorPreviewStages';
 import type { ImageOperatorMemoryWindowResource } from '../services/operators/imageOperatorExternalResources';
-import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
+import { cachedAnalogSignalPlan, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
 import { captureAnalogSignalStagePreviews } from '../services/nodePreview/analogSignalPreviews';
 import { captureAnalogImageOperatorPreviews } from '../services/nodePreview/analogImageOperatorPreviews';
 import { captureComputeImageOperatorPreviews, captureComputeImageOutputPreviews } from '../services/nodePreview/computeImageOperatorPreviews';
@@ -403,7 +403,7 @@ export class EffectsPipeline {
         const computeInstanceId = JSON.stringify([frameHistory?.scopeId ?? clock.scopeId, effect.id]);
         try {
           const analogPlan = definition.computeMode === 'analog-signal'
-            ? compileAnalogSignalGraph(effect.operatorGraph ?? createDefaultAnalogSignalGraph(), effect.params) : undefined;
+            ? cachedAnalogSignalPlan(effect.operatorGraph ?? createDefaultAnalogSignalGraph(), effect.params) : undefined;
           const rendered = this.computeRuntime.encode({
             commandEncoder,
             definition: definition as ComputeEffectDefinition,
