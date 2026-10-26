@@ -56,6 +56,9 @@ import {
   loadAudioMedia,
 } from '../../src/stores/timeline/clip/addAudioClip';
 import { loadVideoMedia } from '../../src/stores/timeline/clip/addVideoClip';
+import { createClipRuntimeUpdateActions } from '../../src/stores/timeline/clip/clipRuntimeUpdateActions';
+import type { TimelineStore } from '../../src/stores/timeline/types';
+import type { EditorAsyncMutation } from '../../src/services/project/repository/transaction/editorAsyncMutation';
 import { flags } from '../../src/engine/featureFlags';
 import { bindRuntimeToClip } from '../../src/services/mediaRuntime/clipBindings';
 import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
@@ -146,7 +149,7 @@ describe('direct video/audio add runtime sources', () => {
     let clips = [bindRuntimeToClip(
       createTimelineClip('audio-placeholder', 1),
       { file, mediaFileId: 'media-silent-prores' },
-    )];
+    ), { ...createTimelineClip('video-silent-prores', 1), linkedClipId: 'audio-placeholder' }];
     expect(mediaRuntimeRegistry.getRuntime('media:media-silent-prores')?.ownerCount()).toBe(1);
 
     await loadVideoMedia({
@@ -163,8 +166,25 @@ describe('direct video/audio add runtime sources', () => {
       },
     });
 
-    expect(clips).toHaveLength(0);
+    // Only the video stays, without its link to the removed placeholder.
+    expect(clips.map(clip => [clip.id, clip.linkedClipId])).toEqual([['video-silent-prores', undefined]]);
     expect(mediaRuntimeRegistry.getRuntime('media:media-silent-prores')).toBeNull();
+  });
+
+  it('takes a clip removed while it loads out of the selection', () => {
+    let state = {
+      clips: [createTimelineClip('video', 1), createTimelineClip('audio-placeholder', 1)],
+      selectedClipIds: new Set(['video', 'audio-placeholder']),
+    } as unknown as TimelineStore;
+    const binding = { isCurrent: () => true, assertCurrent: () => {}, run: action => action(), invoke: action => action() } as EditorAsyncMutation;
+    const { setClips } = createClipRuntimeUpdateActions({
+      get: () => state,
+      set: (partial) => { state = { ...state, ...(typeof partial === 'function' ? partial(state) : partial) }; },
+    }, { binding });
+
+    setClips(clips => clips.filter(clip => clip.id !== 'audio-placeholder'));
+
+    expect([...state.selectedClipIds]).toEqual(['video']);
   });
 
   it('loads browser video metadata without persisting video/audio elements on linked clips', async () => {
