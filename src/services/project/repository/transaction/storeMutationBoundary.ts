@@ -58,6 +58,12 @@ export function withRepositoryStoreMutation<T, Mutators extends [StoreMutatorIde
         return result;
       };
     }
+    // A second store for a domain (Vite re-ran a store module that does not keep its instance) takes over the
+    // repository boundary while the editor may still show the first one: edits of the first one are then refused.
+    // Say so instead of failing later with an ownership error.
+    if (stores.has(domain) && stores.get(domain) !== (store as unknown)) {
+      console.warn(`[Repository] The "${domain}" store was created a second time (a code update?); reload the editor if edits are refused.`);
+    }
     stores.set(domain, store as unknown as RepositoryStoreHandle);
     return wrapped;
   };

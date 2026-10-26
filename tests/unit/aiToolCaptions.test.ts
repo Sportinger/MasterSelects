@@ -134,6 +134,18 @@ describe('AI caption authoring tools', () => {
     expect(noInterval).toMatchObject({ success: false, error: 'No transcript-bearing source clip is active at startTime' });
   });
 
+  it('places a caption that only touches the next one, despite frame rounding', async () => {
+    // The next part's caption was moved to where this part ends, and lands a rounding error before that end.
+    useTimelineStore.setState({
+      clips: [{ ...sourceClip(), startTime: 17.5, duration: 20 },
+        { ...sourceClip(), id: 'next-caption', trackId: 'video-overlay', startTime: 17 + 23 / 30 + 18.4 - 1e-9, duration: 5 }],
+      tracks: [videoTrack('video-overlay'), videoTrack('video-source')],
+    });
+    const result = await handleCreateCaptionClip({ trackId: 'video-overlay', startTime: 17 + 23 / 30, duration: 18.4, sourceClipId: null },
+      useTimelineStore.getState());
+    expect(result.success).toBe(true);
+  });
+
   it('rejects an explicit occupied layer without changing the timeline', async () => {
     const before = useTimelineStore.getState().clips.length;
     const result = await handleCreateCaptionClip({

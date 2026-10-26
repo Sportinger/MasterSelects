@@ -86,7 +86,7 @@ export { setClipStemSeparationRunner } from './stemSeparationSlice';
 // Re-export selectors for optimized store subscriptions
 export * from './selectors';
 
-export const useTimelineStore = create<TimelineStore>()(
+const createTimelineStore = () => create<TimelineStore>()(
   subscribeWithSelector(withRepositoryStoreMutation('timeline', withTimelineRevision((set, get) => {
     // Create all slices
     const trackActions = createTrackSlice(set, get);
@@ -458,6 +458,13 @@ export const useTimelineStore = create<TimelineStore>()(
     };
   })))
 );
+
+// One store for the whole session. A code change that Vite re-runs this module for must not create a second, empty
+// store: it would register itself at the project repository boundary while the editor still shows the first one, and
+// every edit was refused ("Composition … is not part of the open project", 2026-10-26). Vite may also load a second
+// copy of this module after an update elsewhere without disposing the first, so the store is kept at once.
+export const useTimelineStore: ReturnType<typeof createTimelineStore> = import.meta.hot?.data?.timelineStore ?? createTimelineStore();
+if (import.meta.hot?.data) import.meta.hot.data.timelineStore = useTimelineStore;
 
 (globalThis as typeof globalThis & {
   __timelineStoreModule?: { useTimelineStore: typeof useTimelineStore };
