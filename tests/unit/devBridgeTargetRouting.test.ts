@@ -17,6 +17,14 @@ describe('dev bridge explicit target routing', () => {
     },
   )
 
+  it('takes tabId, the field name of the status listing, as the target', () => {
+    expect(parseExplicitBridgeTarget({ tabId: 'tab-listed' })).toEqual({ provided: true, valid: true, targetTabId: 'tab-listed' })
+    expect(parseExplicitBridgeTarget({ tabId: 'same', targetTabId: 'same' })).toEqual({ provided: true, valid: true, targetTabId: 'same' })
+    expect(parseExplicitBridgeTarget({ tabId: '' })).toEqual({ provided: true, valid: false, error: '"tabId" must be a non-empty string when provided' })
+    expect(parseExplicitBridgeTarget({ tabId: 'a', targetTabId: 'b' }))
+      .toEqual({ provided: true, valid: false, error: '"targetTabId" and "tabId" name different tabs' })
+  })
+
   it('preserves an exact explicit session id', () => {
     expect(parseExplicitBridgeTarget({ targetTabId: 'tab-md1-exact' })).toEqual({
       provided: true,

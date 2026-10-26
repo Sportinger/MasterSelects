@@ -569,6 +569,7 @@ POST /api/ai-tools -> Vite server -> HMR WebSocket -> browser -> executeAITool()
 - Supports `_list` and `_status` meta-commands alongside tool execution
 - Shares the dev bridge auth token and only accepts loopback browser origins
 - `GET /api/ai-tools` reports bridge/tab status without auth; `GET /api/ai-tools/auth-check` validates the bearer token without dispatching a browser tool
+- A request names its tab with a top-level `targetTabId` (or `tabId`, the field name of the status listing; both must agree). Without one the bridge picks the focused tab, so name it whenever more than one tab is connected
 - Dev-only browser helpers expose the same surface as `window.aiTools.execute()`, `window.aiTools.list()`, and `window.aiTools.status()`
 - `npm run mcp` exposes the reviewed tool set to a local MCP client with explicit confirm/dry-run, idempotency, and timeout controls
 - Production builds and the Native Helper do not expose an external-agent tool bridge
