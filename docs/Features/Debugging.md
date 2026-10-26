@@ -208,6 +208,15 @@ relink behavior is.
 
 ---
 
+### Code updates while a project is open
+
+The media and timeline stores keep their instance across Vite code updates (`import.meta.hot.data`, kept at once,
+not only on dispose): after an update elsewhere, Vite may load a second copy of a store module without disposing the
+first, and a second, empty store then took over the project repository boundary while the editor still showed the
+first one. Every edit was refused with `Composition "Comp 1" is not part of the open project` (2026-10-26). A store
+that registers at the repository boundary a second time logs `[Repository] The "<domain>" store was created a second
+time (a code update?)`; reload the editor when edits are refused after that.
+
 ## Monitoring Surfaces
 
 The app exposes several runtime monitors that feed the AI debug tools and the console:

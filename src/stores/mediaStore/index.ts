@@ -117,7 +117,7 @@ type MediaStoreState = MediaState &
     removeMotionShapeItem: (id: string) => void;
   };
 
-export const useMediaStore = create<MediaStoreState>()(
+const createMediaStore = () => create<MediaStoreState>()(
   subscribeWithSelector(withRepositoryStoreMutation('media', withExclusiveHistorySnapshotMutationLease((set, get) => ({
     // Initial state
     files: [],
@@ -565,6 +565,13 @@ export const useMediaStore = create<MediaStoreState>()(
     ...createProjectSlice(set, get),
   }))))
 );
+
+// One store for the whole session. A code change that Vite re-runs this module for must not create a second, empty
+// store: it would register itself at the project repository boundary while the editor still shows the first one, and
+// every edit was refused ("Composition … is not part of the open project", 2026-10-26). Vite may also load a second
+// copy of this module after an update elsewhere without disposing the first, so the store is kept at once.
+export const useMediaStore: ReturnType<typeof createMediaStore> = import.meta.hot?.data?.mediaStore ?? createMediaStore();
+if (import.meta.hot?.data) import.meta.hot.data.mediaStore = useMediaStore;
 
 // Register store globally for init.ts to access (avoids circular dependency)
 (globalThis as typeof globalThis & {

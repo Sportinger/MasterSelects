@@ -322,8 +322,11 @@ function parseCaptionUpdate(args: Record<string, unknown>): ParsedCaptionUpdate 
   };
 }
 
+/** Clips that only touch do not overlap; a millisecond absorbs the rounding of frame-quantised times (17.767 + 18.4). */
+const TOUCH_TOLERANCE = 0.001;
+
 function overlaps(clip: TimelineClip, startTime: number, endTime: number): boolean {
-  return clip.startTime < endTime && clip.startTime + clip.duration > startTime;
+  return clip.startTime < endTime - TOUCH_TOLERANCE && clip.startTime + clip.duration > startTime + TOUCH_TOLERANCE;
 }
 
 function resolveCaptionTrack(
