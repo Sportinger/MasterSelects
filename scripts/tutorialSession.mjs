@@ -153,6 +153,16 @@ export async function openSession(options) {
     const startAt = checkpoint?.pointer ?? (options.pointer ? await page.evaluate(m.locateTutorialTarget, options.pointer) : null);
     const mouse = await m.humanMouse(page, startAt && !startAt.missing ? startAt : { x: viewport.width * 0.62, y: viewport.height * 0.45 },
       { scale: options.pointerScale ?? Math.max(1, overlayScale * 0.625) });
+    // A reload of the page (Vite reloads it after a code change, e.g. a merge) drops the overlays and the pointer
+    // the steps need; they come back by themselves, so a long-lived build server keeps working.
+    page.on('load', () => void (async () => {
+      await page.waitForFunction(() => document.body && window.aiTools, null, { timeout: 60000 });
+      await m.applyEditorTheme(page, m.docShotSettings().theme);
+      if (options.hide?.length) await page.addStyleTag({ content: `${options.hide.join(', ')} { display: none !important; }` });
+      await page.evaluate(m.installStage, overlayScale);
+      await mouse.reinstall();
+      console.warn('the page reloaded (a code change?): overlays and pointer are back; the editor reopened its last project');
+    })().catch(error => console.warn(`the page reloaded, and its overlays did not come back: ${error.message}`)));
     const runner = m.stepRunner({ page, context, mouse, viewport, media, work, take, helpers: m });
     const session = { page, context, mouse, ...runner, take, viewport, checkpoint, profile, work, headless: Boolean(handle.headless), errors,
       emulate: handle.emulate, close, modules: m };

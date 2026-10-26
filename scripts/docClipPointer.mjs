@@ -163,6 +163,11 @@ export async function humanMouse(page, start, { scale = 1 } = {}) {
     glide,
     path,
     position: () => ({ ...position }),
+    /** After a reload of the page: the pointer again, where it was. */
+    async reinstall() {
+      await page.evaluate(pointerOverlay, scale);
+      await page.evaluate(point => window.__docClipPointer.announce(point), position);
+    },
     /** How long the page took to take each pointer move (ms): a busy page moves the pointer in jumps. */
     async moveStats() {
       const sorted = moveTimes.toSorted((a, b) => a - b);
