@@ -97,7 +97,10 @@ diamond, that opens a **Source** selector (local value / keyframes, **Fixed (kee
 control node, or **New Oscillator / Value / Keyframes**) and the port toggle. The line under a row
 (**Node · Source** with **Go to source**, **Fixed · Source**) appears only while a node drives the
 value, its value is fixed against its keys, or its source fails, so an undriven row looks like any
-other; the icon is then lit.
+other; the icon is then lit. A clip's drivable parameters are listed once per version of its
+transform, grade and effects and every row reads that list, so a large effect card such as Analog
+Signal Lab stays open during playback without slowing it (each row used to compile the effect's
+graph on every frame).
 When the Nodes panel shows the **Timeline**, Go to source opens the clip's lane in
 place and selects the source node instead of leaving the timeline view.
 Nodes with optional scalar controls show a compact `+` directly below their last

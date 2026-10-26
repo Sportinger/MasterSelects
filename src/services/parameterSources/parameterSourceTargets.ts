@@ -30,8 +30,30 @@ export interface ParameterSourceTarget {
 export type ParameterSourceClip = Pick<TimelineClip, 'effects' | 'colorCorrection' | 'nodeGraph' | 'startTime'>
   & Partial<Pick<TimelineClip, 'transitionSourceMap' | 'id' | 'transform'>>;
 
+interface CachedTargets {
+  effects: ParameterSourceClip['effects'];
+  colorCorrection: ParameterSourceClip['colorCorrection'];
+  transform: ParameterSourceClip['transform'];
+  targets: readonly ParameterSourceTarget[];
+}
+// Inspector rows ask for targets in store selectors, which run on every playhead tick; an effect with
+// an operator graph (Analog Signal Lab) compiles that graph to list its targets. The targets depend only
+// on the clip's transform, colour grade and effects, so each version of them is listed once.
+const targetCache = new WeakMap<ParameterSourceClip, CachedTargets>();
+
 /** Explicit consumer capabilities, not a promise that every numeric property is drivable. */
 export function parameterSourceTargets(clip: ParameterSourceClip): ParameterSourceTarget[] {
+  const cached = targetCache.get(clip);
+  if (cached && cached.effects === clip.effects && cached.colorCorrection === clip.colorCorrection && cached.transform === clip.transform) {
+    return cached.targets as ParameterSourceTarget[];
+  }
+  // Frozen, because every caller shares the cached list.
+  const targets = Object.freeze(listParameterSourceTargets(clip));
+  targetCache.set(clip, { effects: clip.effects, colorCorrection: clip.colorCorrection, transform: clip.transform, targets });
+  return targets as ParameterSourceTarget[];
+}
+
+function listParameterSourceTargets(clip: ParameterSourceClip): ParameterSourceTarget[] {
   const targets: ParameterSourceTarget[] = transformParameterTargets(clip.transform);
   for (const version of clip.colorCorrection?.versions ?? []) {
     for (const node of version.nodes.filter(isColorGradeNode)) {
