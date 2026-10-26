@@ -258,8 +258,8 @@ class ProjectFileService {
     return this.core.createProject(name, preserveCurrent);
   }
 
-  async createProjectInFolder(handle: FileSystemDirectoryHandle, name: string): Promise<boolean> {
-    return this.coreService.createProjectInFolder(handle, name);
+  async createProjectInFolder(handle: FileSystemDirectoryHandle, name: string, preserveCurrent = false): Promise<boolean> {
+    return this.coreService.createProjectInFolder(handle, name, preserveCurrent);
   }
   createProjectInBrowserStorage(path: string, name: string): Promise<boolean> { return this.coreService.createProjectInBrowserStorage(path, name); }
 

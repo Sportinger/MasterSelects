@@ -2,6 +2,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { getAllEffects, getDefaultParams, getEffect, hasEffect, getCategoriesWithEffects, resolveEffectTypeId, effectRateTravelParams, withoutRuntimeTravelParams } from '../../../effects';
 import { paramRangeNotes } from '../../../effects/paramRangeNotes';
 import type { ToolResult } from '../types';
+import type { TimelineClip } from '../../../types/timeline';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import {
   captureMutationEntitySnapshot,
@@ -115,6 +116,20 @@ export async function handleListEffects(): Promise<ToolResult> {
   };
 }
 
+/** The Volume tab's own effects of an audio clip; their parameters are keyframeable as effect.<id>.<param>. */
+const CLIP_AUDIO_EFFECT_TYPES = new Set(['audio-volume', 'audio-eq']);
+
+/** Like the Volume tab: a sound keeps one Volume and one EQ effect, created on first use. */
+function addClipAudioEffect(clip: TimelineClip, effectType: string, params: unknown): ToolResult {
+  if (clip.source?.type !== 'audio') return { success: false, error: `${effectType} belongs to an audio clip; ${clip.id} is a ${clip.source?.type ?? 'clip'} clip` };
+  const { addClipEffect, updateClipEffect } = useTimelineStore.getState();
+  const existing = clip.effects.find(effect => effect.type === effectType);
+  const effectId = existing?.id ?? addClipEffect(clip.id, effectType);
+  if (params && typeof params === 'object') updateClipEffect(clip.id, effectId, params as Partial<Record<string, string | number | boolean>>);
+  const effect = useTimelineStore.getState().clips.find(candidate => candidate.id === clip.id)?.effects.find(item => item.id === effectId);
+  return { success: true, data: { clipId: clip.id, effectId, effectType, reused: Boolean(existing), params: effect?.params ?? {} } };
+}
+
 export async function handleAddEffect(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
@@ -128,6 +143,7 @@ export async function handleAddEffect(
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
 
+  if (CLIP_AUDIO_EFFECT_TYPES.has(effectType)) return addClipAudioEffect(clip, effectType, args.params);
   if (!hasEffect(effectType)) {
     const available = getAllEffects().map(e => e.id).join(', ');
     return { success: false, error: `Unknown effect type: ${effectType}. Available: ${available}` };

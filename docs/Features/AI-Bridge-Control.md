@@ -130,6 +130,7 @@ Long inspection tool responses are bounded by their tool implementations:
 - `getClipAnalysis` returns a summary by default; use `includeFrames`, a source-time range, `offset`, and `limit` for details.
 - `getClipTranscript` returns a bounded word page with `hasMore` and `nextOffset` continuation metadata.
 - `setClipTranscript` sets known word times (seconds of the source media) on a clip's media, without speech-to-text; captions follow them. `importLocalFiles` reports the `clipId` of every clip it places.
+- `saveLocalProjectAs` is Save As without a picker: the open project's content becomes a new project at a folder below a granted workspace root and stays open (templates: open the template, save it under the new name). `addEffect` also creates an audio clip's Volume (`audio-volume`) or EQ (`audio-eq`) effect, once per clip, as the Volume tab does; their parameters are keyframeable as `effect.<id>.volume`. `debugExport` names its download with `filename`.
 
 ## History And Safety
 

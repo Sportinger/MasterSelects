@@ -75,6 +75,20 @@ export const statsToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'saveLocalProjectAs',
+      description: 'Save As without a picker: save the open project with its current content as a new project at an absolute folder path below a granted workspace root, and keep working in the new one (the original keeps its last saved state). The last path segment becomes the project name. Use it to start an episode from a template project. Refuses when the folder already holds a project or during an export. Dev bridge only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          directory: { type: 'string', description: 'Absolute path of the new project folder, e.g. "D:/Shows/Episode 2".' },
+        },
+        required: ['directory'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'profileAppInteraction',
       description: 'Measure browser frame gaps and long tasks while the connected dev tab is idle or while a visible canvas is panned in a circle with synthetic middle-pointer input. Dev-bridge debugging only.',
       parameters: {

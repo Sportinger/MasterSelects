@@ -11,8 +11,11 @@ A tutorial is about MasterSelects, and it is also cut in MasterSelects, **from t
 cut project is open before anything is recorded, every part goes into it as soon as its take is done,
 and Roman watches the episode grow there. Never record all parts first and cut at the end.
 
-1. **Open the cut project first:** the cut editor (below) in a visible browser tab, with a new project
-   for the episode (or its existing one).
+1. **Open the cut project first:** the cut editor (below) in a visible browser tab, with the episode's
+   project made from the template: `node scripts/tutorial-ms-template.mjs episode "<episode>"` (Save
+   As of `~/Documents/MasterSelects-Tutorials/_Template`: the labelled tracks Captions, Picture, Voice
+   and Music, with the music already in). The first time, make the template:
+   `node scripts/tutorial-ms-template.mjs create`.
 2. **Plan the episode in parts.** Write the beats of the episode (README of the episode or the first
    recipe's comment) and cut them into parts of at most about **20 seconds** each, one logical step
    per part, some shorter. Each part is its own recipe.
@@ -35,7 +38,8 @@ and Roman watches the episode grow there. Never record all parts first and cut a
       the next part.
 4. **The next part** starts from the checkpoint this take left: same project, dock layout, open
    panels, clips, playhead, selection, pointer and camera.
-5. **At the end,** music and export happen in the MasterSelects project.
+5. **Finish the episode** (below): music to the episode's end, the export from MasterSelects, the check
+   of the exported file, and Roman watches the whole episode. A tutorial is done only then.
 
 Two editors take part: the **take editor** (this worktree's Vite on 5192, in a headless Chrome) shows
 what is filmed; the **cut editor**, a visible tab with the episode's project, is where the parts are
@@ -58,6 +62,29 @@ works on.
 5. `make … --voice none` while the steps still fail (free), then `make` with the voice.
 6. Look at the part in the cut editor (the take put it there), fine-tune it, show Roman, commit the
    recipe. Then the next part, from the checkpoint the take left.
+7. After the last part: finish the episode (`tutorial-ms-finish.mjs`, below) and show Roman the export.
+
+## Finish the episode
+
+When the last part is in the cut and Roman has seen the parts:
+
+1. `node scripts/tutorial-ms-finish.mjs <episode>` in the cut editor's project. It ends the template's
+   music with the episode (the clips after the end go, the last one is cut there and fades out over
+   2.5 s; without template music it lays `audio/tutorial-music.wav` under the whole episode at -22 dB,
+   `--music <file>` and `--music-db` choose), saves the project, exports the episode from
+   MasterSelects (`debugExport`: the composition's size and frame rate, MP4 with H.264, on Linux
+   Chrome with Opus sound; WebM when MP4 fails), and moves the browser's download to
+   `tutorial-videos/<episode>.mp4`.
+2. Read its check: the export's length against the episode, size, frame rate, the sound's mean level
+   (it stops when the sound is missing or nearly silent, or the length is off), and look at
+   `tutorial-videos/<episode>.check.jpg`, eight pictures across the episode: the camera, the
+   captions and the presenter's pointer must be right in each.
+3. Show Roman the exported file. Fix what he finds in the MasterSelects project (or with a retake of
+   a part) and run `tutorial-ms-finish.mjs` again. Commit the recipes.
+
+The picture of every part is the take's full 2560×1440 without a camera; the recipe's camera moves are
+keyframes (position and scale, `cubic-in-out`) of the picture clip in MasterSelects, so a zoom up to
+1.33× stays sharp in the 1080p episode, and Roman can change a camera move there.
 
 ## What we make
 
@@ -150,9 +177,10 @@ Episode 2 still needs:
    the running build server. `tutorial-ms-cut.mjs` passes over the headless editors of takes and of
    the build server by themselves (their bridge tab ids start with `tutorial-`); `--tab` is only
    needed when two visible editor tabs are open.
-   **The episode's project** lives in `/home/admins/Documents/MasterSelects-Tutorials/<episode>`.
-   Create it through the bridge with `createLocalProject` (no folder dialog). That needs the folder
-   granted once per editor origin: `grantWorkspaceRoot` with `path:
+   **The episode's project** lives in `/home/admins/Documents/MasterSelects-Tutorials/<episode>`,
+   made from the template there (`tutorial-ms-template.mjs episode`, which opens the template and
+   saves it under the episode's name with `saveLocalProjectAs`; no folder dialog). Do that in a tab of
+   its own: it replaces the project open in that tab. It needs the folder granted once per editor origin: `grantWorkspaceRoot` with `path:
    "/home/admins/Documents/MasterSelects-Tutorials"` and a long `timeoutMs` shows a button in the
    editor; tell Roman, he clicks it once and picks exactly that folder. `listWorkspaceRoots` shows
    whether the grant is there. Never discard a project that is open in that tab with unsaved changes.
@@ -359,13 +387,14 @@ Episode 2 still needs:
 
 ### Cut in MasterSelects
 
-- **What a take delivers** (`tutorial-videos/<part>.cut/`): `<part>.mp4`, the picture (1920×1080, no
-  sound, no captions); `voice/<part>.NN-<scene>.wav`, one levelled file per line; `edl.json`, where
-  each line starts in the picture and its word times. `tutorial-videos/<part>.mp4` is only a quick
+- **What a take delivers** (`tutorial-videos/<part>.cut/`): `<part>.mp4`, the picture (the take's
+  2560×1440, no camera, sound or captions); `voice/<part>.NN-<scene>.wav`, one levelled file per line;
+  `edl.json`, where each line starts in the picture, its word times and the camera moves (which
+  become keyframes of the picture clip). `tutorial-videos/<part>.mp4` is only a quick
   look (picture and voice; `--captions` burns captions in for a video that is not cut in MS).
 - **`tutorial-ms-cut.mjs` appends** a part after the last clip on "Picture" (or `--at <s>`). A part
   that is already there is refused; `--replace` takes the old take out (picture, lines, its caption
-  clip) and puts the new one at the same start, as long as it does not run into the next part.
+  clip, its media) and puts the new one at the same start; the later parts move by the change in length.
 - **Moving half a line:** `splitClip` at a timeline time between two words, then `moveClip` the second
   half. Move the following lines too, or the moved half overlaps the next line on "Voice".
 - **Captions follow the voice clips.** Each line clip gets its ElevenLabs word times
@@ -374,9 +403,12 @@ Episode 2 still needs:
   the part's end needs its caption clip lengthened.
 - **The files are imported from `tutorial-videos/`** (the dev bridge reads below `~/Documents`). Do
   not delete a `.cut` folder whose clips are in the episode's project.
-- **The MS project** of an episode is created once in the cut editor (1920×1080, 30 fps). The bridge
-  cannot pick a folder without Roman's one-time grant, so ask Roman to create or open it, or use
-  `createLocalProject` below a granted root.
+- **The MS project** of an episode comes from the template (1920×1080, 30 fps,
+  `tutorial-ms-template.mjs episode`). The bridge cannot pick a folder without Roman's one-time grant
+  of `~/Documents/MasterSelects-Tutorials` per editor origin.
+- **Intro or bumper:** none exists yet. Episode 1 opened straight with the presenter (Roman's choice,
+  "How Roman wants it"). If Roman wants one, it belongs into the template project, before the
+  Picture clips, so every episode gets it.
 
 ### Intermediate render
 

@@ -1,10 +1,10 @@
 // Shared by tutorial-video.mjs: the edit of a tutorial recording. Screencast frames (sent whenever
-// the page changed, with their times) become a constant frame rate picture through a virtual camera
-// that eases between the boxes the recipe framed (cropped from the 2560×1440 take, so a zoomed shot
-// stays sharp); waits marked `fast` play sped up. The picture and the voice lines (one file per scene,
-// placed at each scene's start) are the material for the cut in MasterSelects (tutorial-ms-cut.mjs);
-// a quick look joins them, with music cues under the voice (tutorialMusic.mjs) and, on request, the
-// spoken words burned in as captions.
+// the page changed, with their times) become a constant frame rate picture; waits marked `fast` play sped up.
+// The picture keeps the take's full 2560×1440 and no camera: the camera moves the recipe framed go to
+// MasterSelects as keyframes of the picture clip (tutorial-ms-cut.mjs), where they can be changed, and a zoom
+// up to 1.33× in a 1080p episode stays sharp. The picture and the voice lines (one file per scene, placed at
+// each scene's start) are the material for the cut in MasterSelects; a quick look shows the take through the
+// camera at 1080p with the voice, music cues (tutorialMusic.mjs) and, on request, burned-in captions.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,6 +55,25 @@ const assTime = seconds => {
   return `${Math.floor(cs / 360000)}:${String(Math.floor(cs / 6000) % 60).padStart(2, '0')}:${String(Math.floor(cs / 100) % 60).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`;
 };
 const assText = text => text.replace(/[{}\\]/g, '');
+
+/**
+ * The camera moves of a take for keyframes in MasterSelects: [{ at, ms, from, to }] in output seconds, where each
+ * framing { cx, cy, zoom } is in take pixels and kept inside the picture (as the cropped quick look shows it). A
+ * move that starts while another one runs starts from where that one was.
+ */
+export function cameraSegments(recording, map) {
+  const { width, height } = recording.viewport, rest = { cx: width / 2, cy: height / 2, zoom: 1 };
+  const inside = ({ cx, cy, zoom }) => {
+    const halfW = width / zoom / 2, halfH = height / zoom / 2;
+    return { cx: Math.min(width - halfW, Math.max(halfW, cx)), cy: Math.min(height - halfH, Math.max(halfH, cy)), zoom };
+  };
+  const at = cameraPath(recording.camera ?? [], rest);
+  return (recording.camera ?? []).toSorted((a, b) => a.t - b.t).map(key => {
+    const start = map.toOutput(key.t), end = map.toOutput(key.t + (key.ms ?? 0) / 1000);
+    const before = at(Math.max(0, key.t - 1e-6));
+    return { at: start, ms: Math.round((end - start) * 1000), from: inside(key.ms ? before : key), to: inside(key) };
+  });
+}
 
 /**
  * Caption lines: a phrase ends at punctuation, a pause or a change of place, and a phrase longer
@@ -163,16 +182,51 @@ function voiceLines(placed, duration, dir, name) {
 }
 
 /**
+ * Writes the take's frames at a constant `fps` into `file`: through `cameraAt` (recording time → { cx, cy, zoom },
+ * a crop of the take scaled to width × height) or, without it, whole frames.
+ */
+async function encodeFrames({ recording, map, duration, fps, file, width, height, source, cameraAt, preset = 'slow' }) {
+  const frames = recording.frames, scale = source.width / recording.viewport.width, count = Math.ceil(duration * fps);
+  const args = ['-hide_banner', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${width}x${height}`, '-r', String(fps), '-i', '-',
+    '-vf', 'scale=out_color_matrix=bt709:out_range=limited,format=yuv420p', '-c:v', 'libx264', '-preset', preset, '-crf', '18',
+    '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-movflags', '+faststart', '-t', duration.toFixed(3), file];
+  const encoder = spawn('ffmpeg', args, { stdio: ['pipe', 'inherit', 'pipe'] });
+  let stderr = '';
+  encoder.stderr.on('data', chunk => { stderr += chunk; });
+  const done = new Promise((resolve, reject) => encoder.on('close', code => (code === 0 ? resolve() : reject(new Error(`ffmpeg failed: ${stderr.trim().split('\n').slice(-6).join('\n')}`)))));
+  const write = buffer => new Promise(resolve => (encoder.stdin.write(buffer) ? resolve() : encoder.stdin.once('drain', resolve)));
+  let index = 0, last;
+  for (let k = 0; k < count; k += 1) {
+    const time = map.toRecording(k / fps);
+    while (index + 1 < frames.length && frames[index + 1].time <= time) index += 1;
+    const camera = cameraAt ? cameraAt(time) : { cx: recording.viewport.width / 2, cy: recording.viewport.height / 2, zoom: 1 };
+    const w = Math.round(source.width / camera.zoom), h = Math.round(source.height / camera.zoom);
+    const left = Math.round(Math.min(source.width - w, Math.max(0, camera.cx * scale - w / 2)));
+    const top = Math.round(Math.min(source.height - h, Math.max(0, camera.cy * scale - h / 2)));
+    const key = `${index}:${left}:${top}:${w}:${h}`;
+    if (last?.key !== key) {
+      const image = sharp(frames[index].file).extract({ left, top, width: w, height: h });
+      const buffer = await (w === width && h === height ? image : image.resize(width, height, { fit: 'fill', kernel: 'lanczos3' }))
+        .removeAlpha().raw().toBuffer();
+      last = { key, buffer };
+    }
+    await write(last.buffer);
+  }
+  encoder.stdin.end();
+  await done;
+}
+
+/**
  * Encodes a take for the cut in MasterSelects and a quick look (the file names carry the part's `name`, so the
  * clips are recognisable in the MasterSelects media panel):
- * - `<cutDir>/<name>.mp4`: the picture, the frames through the camera, 1920×1080, no sound, no captions;
+ * - `<cutDir>/<name>.mp4`: the picture, every frame whole at the take's size (2560×1440), no camera, sound or captions;
  * - `<cutDir>/voice/<name>.NN-<scene>.wav`: one file per line, cut and levelled (voiceLines);
  * - `output`: the quick look, the picture with the voice (and the recipe's music); `burnCaptions` burns the word
  *   captions in (for a video that is not cut in MasterSelects).
  * recording: { frames: [{ file, time }], end, scenes: [{ id, start, captions }], camera: [{ t, cx, cy, zoom, ms }],
  *   fast: [{ from, to, factor }], viewport: { width, height } }
- * Returns { duration, frames, words, picture, lines: [{ id, file, at, duration, words, top }] } (line words in
- * seconds of the line's file).
+ * Returns { duration, frames, words, picture, size: { width, height }, camera: cameraSegments(…),
+ * lines: [{ id, file, at, duration, words, top }] } (line words in seconds of the line's file).
  */
 export async function cutTutorial({ recording, narration, name, output, cutDir, workDir, width = 1920, height = 1080, fps = 30, lead = 0.25,
   captions = {}, music, burnCaptions = false }) {
@@ -191,42 +245,15 @@ export async function cutTutorial({ recording, narration, name, output, cutDir, 
     for (const cue of cues) console.log(`  music ${cue.from.toFixed(2)}–${cue.to.toFixed(2)} s of the track at ${cue.start.toFixed(2)} s of the video`);
   }
 
-  const picture = path.join(cutDir, `${name}.mp4`);
-  const frames = recording.frames;
-  const source = await sharp(frames[0].file).metadata();
-  const scale = source.width / recording.viewport.width;
-  const count = Math.ceil(duration * fps);
-  const args = ['-hide_banner', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${width}x${height}`, '-r', String(fps), '-i', '-',
-    '-vf', 'scale=out_color_matrix=bt709:out_range=limited,format=yuv420p', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
-    '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-movflags', '+faststart', '-t', duration.toFixed(3), picture];
-  const encoder = spawn('ffmpeg', args, { stdio: ['pipe', 'inherit', 'pipe'] });
-  let stderr = '';
-  encoder.stderr.on('data', chunk => { stderr += chunk; });
-  const done = new Promise((resolve, reject) => encoder.on('close', code => (code === 0 ? resolve() : reject(new Error(`ffmpeg failed: ${stderr.trim().split('\n').slice(-6).join('\n')}`)))));
-  const write = buffer => new Promise(resolve => (encoder.stdin.write(buffer) ? resolve() : encoder.stdin.once('drain', resolve)));
-
+  const picture = path.join(cutDir, `${name}.mp4`), lookPicture = path.join(workDir, 'look-picture.mp4');
+  const source = await sharp(recording.frames[0].file).metadata();
   const cameraAt = cameraPath(recording.camera ?? [], { cx: recording.viewport.width / 2, cy: recording.viewport.height / 2, zoom: 1 });
-  let index = 0, last;
-  for (let k = 0; k < count; k += 1) {
-    const time = map.toRecording(k / fps);
-    while (index + 1 < frames.length && frames[index + 1].time <= time) index += 1;
-    const camera = cameraAt(time);
-    const w = Math.round(source.width / camera.zoom), h = Math.round(source.height / camera.zoom);
-    const left = Math.round(Math.min(source.width - w, Math.max(0, camera.cx * scale - w / 2)));
-    const top = Math.round(Math.min(source.height - h, Math.max(0, camera.cy * scale - h / 2)));
-    const key = `${index}:${left}:${top}:${w}:${h}`;
-    if (last?.key !== key) {
-      const buffer = await sharp(frames[index].file).extract({ left, top, width: w, height: h })
-        .resize(width, height, { fit: 'fill', kernel: 'lanczos3' }).removeAlpha().raw().toBuffer();
-      last = { key, buffer };
-    }
-    await write(last.buffer);
-  }
-  encoder.stdin.end();
-  await done;
+  // For the cut: every frame whole, at the take's size. For the quick look: through the camera, at the episode's size.
+  await encodeFrames({ recording, map, duration, fps, file: picture, width: source.width, height: source.height, source });
+  await encodeFrames({ recording, map, duration, fps, file: lookPicture, width, height, source, cameraAt, preset: 'veryfast' });
 
   // The quick look: the picture as it is, with the sound; captions only when they are burned in.
-  const look = ['-hide_banner', '-v', 'error', '-y', '-i', picture, ...(audioFile ? ['-i', audioFile] : [])];
+  const look = ['-hide_banner', '-v', 'error', '-y', '-i', lookPicture, ...(audioFile ? ['-i', audioFile] : [])];
   if (burnCaptions) {
     const assFile = path.join(workDir, 'captions.ass');
     fs.writeFileSync(assFile, captionFile(words, { width, height, ...captions }));
@@ -237,7 +264,8 @@ export async function cutTutorial({ recording, narration, name, output, cutDir, 
   run('ffmpeg', [...look, '-movflags', '+faststart', output]);
 
   return {
-    duration, frames: count, words: words.length, picture,
+    duration, frames: Math.ceil(duration * fps), words: words.length, picture,
+    size: { width: source.width, height: source.height }, camera: cameraSegments(recording, map),
     lines: lines.map(line => ({ id: line.id, file: line.file, at: line.delay, duration: line.cutTo - line.cutFrom, top: line.top,
       words: line.words.map(word => ({ text: word.text, start: word.start - line.delay, end: word.end - line.delay })) })),
   };

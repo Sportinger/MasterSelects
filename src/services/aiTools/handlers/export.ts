@@ -134,6 +134,11 @@ export async function handleDebugExport(args: Record<string, unknown>): Promise<
   const exportMode = pickValue(args.exportMode, ['fast', 'precise'] as const, settingsMode);
   const includeAudio = boolValue(args.includeAudio, exportSettings.includeAudio);
   const download = boolValue(args.download, false);
+  // A caller that picks up the download (the tutorial pipeline) names it: letters, digits, space, . _ - ( ).
+  if (args.filename !== undefined && (typeof args.filename !== 'string' || !/^[\w .()-]{1,80}$/.test(args.filename))) {
+    return { success: false, error: 'filename: 1–80 letters, digits, spaces or . _ - ( ), without the extension' };
+  }
+  const filename = typeof args.filename === 'string' ? args.filename : exportSettings.filename || 'debug-export';
   const container = pickValue(args.container, ['mp4', 'webm'] as const, exportSettings.containerFormat) as ContainerFormat;
   const codec = pickValue(args.codec, ['h264', 'h265', 'vp9', 'av1'] as const, exportSettings.videoCodec) as VideoCodec;
   const maxRuntimeMs = Math.round(finiteNumber(args.maxRuntimeMs, 25_000, 1_000, 600_000));
@@ -209,7 +214,7 @@ export async function handleDebugExport(args: Record<string, unknown>): Promise<
     }
 
     if (download) {
-      downloadBlob(blob, `${exportSettings.filename || 'debug-export'}.${fileExtension}`);
+      downloadBlob(blob, `${filename}.${fileExtension}`);
     }
     // Dev diagnostics: keep the in-memory result for in-tab inspection (decoded audio, frames) without a download.
     if (import.meta.env.DEV) (window as Window & { __lastDebugExportBlob?: Blob }).__lastDebugExportBlob = blob;
@@ -229,6 +234,7 @@ export async function handleDebugExport(args: Record<string, unknown>): Promise<
         exportHostAfter,
         errors,
         downloaded: download,
+        ...(download ? { filename: `${filename}.${fileExtension}` } : {}),
       },
     };
   } catch (error) {

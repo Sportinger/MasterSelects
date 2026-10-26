@@ -138,7 +138,7 @@ not synthetic platform evidence.
 
 ### Export Debug Via Bridge
 
-Use `debugExport` when the UI export fails or appears stuck and the dev server plus browser tab are already running. It is a dev-bridge-only handler, not a public chat tool.
+Use `debugExport` when the UI export fails or appears stuck and the dev server plus browser tab are already running. It is a dev-bridge-only handler, not a public chat tool. With `download: true` the browser saves the file as `<filename>.<container>`: `filename` (without the extension) names it, otherwise the export settings' name; the result reports the saved name. The tutorial pipeline exports episodes this way and picks the file up from the Downloads folder.
 
 ```powershell
 $token = Get-Content -Path .ai-bridge-token -Raw
