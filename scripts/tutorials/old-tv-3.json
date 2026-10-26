@@ -1,0 +1,58 @@
+{
+  "name": "old-tv-3",
+  "episode": "old-tv",
+  "from": "old-tv-2",
+  "voice": { "voice": "flamer", "model": "eleven_v4" },
+  "lead": 0.15,
+  "scenes": [
+    {
+      "id": "snowy",
+      "say": "[excited] The presets! Snowy Reception: [deadpan] the station is far away.",
+      "tail": 0.3,
+      "steps": [
+        { "word": "presets", "early": 0.5 },
+        { "click": "Apply preset…", "ms": 500 },
+        { "word": "Snowy", "early": 0.3 },
+        { "click": "option:Snowy Reception", "ms": 400 }
+      ]
+    },
+    {
+      "id": "vhs",
+      "say": "Worn VHS: your parents' wedding tape.",
+      "tail": 0.3,
+      "steps": [
+        { "click": "Snowy Reception@right-group", "ms": 450 },
+        { "click": "option:Worn VHS", "ms": 400 }
+      ]
+    },
+    {
+      "id": "tube",
+      "say": "Tube Television: the real thing.",
+      "tail": 0.3,
+      "steps": [
+        { "click": "Worn VHS@right-group", "ms": 450 },
+        { "click": "option:Tube Television", "ms": 400 }
+      ]
+    },
+    {
+      "id": "rolling",
+      "say": "Rolling Picture: [deadpan] somebody touched the antenna.",
+      "tail": 0.3,
+      "steps": [
+        { "click": "Tube Television@right-group", "ms": 450 },
+        { "click": "option:Rolling Picture", "ms": 400 },
+        { "camera": { "focus": "pane:preview-group:0.5,0.42", "zoom": 1.2 }, "ms": 1600 }
+      ]
+    },
+    {
+      "id": "bye",
+      "say": "[upbeat] Old TV. Thirty seconds. Bye!",
+      "tail": 0.2,
+      "steps": [
+        { "camera": { "panes": ["tab=Preview", "right-group"], "maxZoom": 1.33 }, "ms": 400 },
+        { "word": "Bye", "early": 0.6 },
+        { "wave": "pane:preview-group:0.75,0.55", "amp": 50, "cycles": 2, "ms": 750 }
+      ]
+    }
+  ]
+}

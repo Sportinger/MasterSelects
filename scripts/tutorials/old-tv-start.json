@@ -1,0 +1,34 @@
+{
+  "name": "old-tv-start",
+  "episode": "old-tv",
+  "project": "Old TV",
+  "media": { "opera_house.mp4": "tests/browser/effect-lab/footage/opera_house_dolly.mp4" },
+  "setup": [
+    { "files": ["opera_house.mp4"], "title": "Footage" },
+    { "pick": [0] },
+    { "dropFiles": "time:0@Video 1" },
+    { "waitFor": "clips", "count": 1 },
+    { "expect": { "clip": { "name": "opera_house.mp4", "start": 0 } } },
+    { "click": "clip:opera_house.mp4" },
+    { "click": "Properties" },
+    { "click": "Effects" },
+    { "click": "+ Add Effect" },
+    { "type": "analog" },
+    { "click": "Analog Signal Lab" },
+    { "click": "Apply preset…" },
+    { "click": "option:Tube Television" },
+    { "click": "aria:Enable loop" },
+    { "click": "ruler:6.0" },
+    { "click": "aria:Set Out point at playhead" },
+    { "click": "ruler:0" },
+    { "move": "pane:preview-group:0.72,0.62" },
+    { "pause": 800 },
+    { "expect": { "playing": false, "playhead": 0, "text": "Tube Television" } }
+  ],
+  "resume": [
+    { "click": "Properties" },
+    { "click": "Effects" },
+    { "move": "pane:preview-group:0.72,0.62" }
+  ],
+  "scenes": []
+}
