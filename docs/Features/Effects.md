@@ -11,7 +11,9 @@ Try it interactively: **Info → Tutorials → Effects & Color**.
 Select a clip in the timeline and open **Properties → Effects**. Click **+ Add Effect**, type part
 of a name (for example `blur`) or pick a group, then click a tile. The tiles preview each look on
 your own clip, so you can compare before you choose. Effects whose name matches your search come
-first.
+first. A tile marked **Detail** shows the middle of the picture at full size, because the effect's
+lines, grain or characters are too fine for the small tile. **No visible change** means that the
+effect, at its default settings, leaves the current frame as it is.
 
 <figure class="docs-shot docs-shot--detail">
 
