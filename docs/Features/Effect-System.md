@@ -219,12 +219,32 @@ GPU textures, `ImageBitmap`s, and other runtime handles stay outside durable
 state.
 
 Effect and Look tiles use a single captured frame at the current playhead as a
-shared source. The runtime renders 256x144 offscreen targets, caches by effect
-or stack parameters plus source-frame ID, schedules at most one queued preview
-job per animation frame, and only renders tiles within the viewport. This works
-for both main-thread and worker-presenting render hosts. Animated entries run at
-up to 12 fps for two seconds only while hovered or focused, with at most one
-animated tile active globally.
+shared source. The runtime (`lookThumbnailRuntime.ts`; what a tile shows is decided
+in `lookThumbnailViews.ts`) renders the stack at a working resolution close to the
+output, the frame's own size with the longest edge capped at 1280 px, not at tile
+size. Effects size their lines, masks, grain and glyph cells relative to the frame
+and fade them out below a few pixels, so a stack rendered straight into 256x144
+drew Scanlines, CRT Screen and the tube of Analog Signal Lab as almost nothing.
+From the working frame the runtime builds two 256x144 views: the whole frame
+(box-averaged to twice the tile, then halved through a binomial low-pass, so
+detail finer than the tile averages out instead of turning into moiré) and its
+centre at one working pixel per tile pixel. The tile shows the whole frame unless
+the centre shows at least 2.5 times the structural change (change of the luma
+gradient against the source) of the same region in the frame view; such a tile
+carries a **Detail** badge. Transparent output is composited over black, as on an
+empty frame (the CRT tube's corners, a keyed background), instead of being forced
+opaque with its hidden colour. An animated look whose first still shows no change
+(Glitch between bursts) is also rendered 0.5, 1, 2 and 3 s later, and its hover
+animation continues from the chosen still in the same view. When no view at any
+tried time differs visibly from the source (at least 0.5 % of the pixels changed
+by 6 levels, or a structural change of 0.5 levels), the tile shows the frame with
+a **No visible change** notice instead of passing the source off as the effect:
+for example Brightness at its default 0, or Chroma Key on a frame without green.
+Tiles are cached by effect or stack parameters plus source-frame ID; at most one
+queued preview job runs per animation frame, and only tiles within the viewport
+render. This works for both main-thread and worker-presenting render hosts.
+Animated entries run at up to 12 fps for two seconds only while hovered or
+focused, with at most one animated tile active globally.
 
 Clicking or touching an effect thumbnail adds that effect to the selected clip;
 the thumbnail is a keyboard-focusable button as well. Curated and custom Look

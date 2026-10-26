@@ -15,6 +15,7 @@ vi.mock('../../src/effects/looks/lookPreviewScheduler', () => ({
 vi.mock('../../src/effects/looks/lookThumbnailRuntime', () => ({
   lookThumbnailRuntime: {
     getCached: vi.fn(() => null),
+    getPreviewInfo: vi.fn(() => null),
     prewarm: vi.fn(async () => undefined),
     renderLook: vi.fn(async () => null),
   },
@@ -66,6 +67,7 @@ describe('LookTile bitmap lifetime', () => {
     });
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ clearRect: vi.fn(), drawImage } as unknown as CanvasRenderingContext2D);
     vi.mocked(lookThumbnailRuntime.getCached).mockReturnValue(null);
+    vi.mocked(lookThumbnailRuntime.getPreviewInfo).mockReturnValue(null);
     vi.mocked(lookThumbnailRuntime.renderLook).mockResolvedValue(null);
   });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -143,6 +145,37 @@ describe('LookTile bitmap lifetime', () => {
       act(() => vi.advanceTimersByTime(5000));
       expect(lookPreviewScheduler.enqueue).toHaveBeenCalledTimes(4);
     } finally { vi.useRealTimers(); }
+  });
+
+  it('says so when the still shows no visible change, and marks an enlarged detail', async () => {
+    const bitmap = { width: 256, height: 144 } as ImageBitmap;
+    vi.mocked(lookThumbnailRuntime.renderLook).mockResolvedValue(bitmap);
+    vi.mocked(lookThumbnailRuntime.getPreviewInfo).mockReturnValue({ view: 'frame', timeSeconds: 0, unchanged: true });
+    const { container, unmount } = render(<LookTile look={look} sourceFrameId="a" onApply={() => {}} />);
+    await act(async () => { await vi.mocked(lookPreviewScheduler.enqueue).mock.calls[0][1](); });
+    const notice = screen.getByText('No visible change');
+    expect(container.querySelector('canvas')).toHaveClass('is-ready');
+    expect(screen.getByRole('button', { name: 'Apply Lifetime from thumbnail' })).toHaveAttribute('aria-describedby', notice.id);
+    unmount();
+    vi.mocked(lookThumbnailRuntime.getPreviewInfo).mockReturnValue({ view: 'detail', timeSeconds: 0, unchanged: false });
+    render(<LookTile look={look} sourceFrameId="a" onApply={() => {}} />);
+    await act(async () => { await vi.mocked(lookPreviewScheduler.enqueue).mock.calls[1][1](); });
+    expect(screen.getByText('Detail')).toBeInTheDocument();
+    expect(screen.queryByText('No visible change')).toBeNull();
+  });
+
+  it('plays the hover animation from the still\'s time in the still\'s view', () => {
+    const timelineLook = { ...look, stack: [{ effectId: 'timeline-clock', enabled: true, params: {} }] };
+    vi.mocked(lookThumbnailRuntime.getPreviewInfo).mockReturnValue({ view: 'detail', timeSeconds: 2, unchanged: false });
+    const { container } = render(<LookTile look={timelineLook} sourceFrameId="a" onApply={() => {}} />);
+    frames.length = 0;
+    const start = performance.now();
+    fireEvent.pointerEnter(container.querySelector('article')!);
+    act(() => frames.shift()!(start + 100));
+    const [call] = vi.mocked(lookThumbnailRuntime.renderLook).mock.calls;
+    expect(call[3]).toBe(false);
+    expect(call[4]).toBeGreaterThanOrEqual(2);
+    expect(call[5]).toBe('detail');
   });
 
   it('retries a closed render result without marking the tile ready', async () => {

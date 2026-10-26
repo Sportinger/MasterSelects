@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getEffect } from '../../../effects';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createLookPlaceholder } from '../../../effects/looks/lookPlaceholder';
 import { lookPreviewScheduler } from '../../../effects/looks/lookPreviewScheduler';
 import { lookThumbnailRuntime } from '../../../effects/looks/lookThumbnailRuntime';
+import { isAnimatedLook } from '../../../effects/looks/lookThumbnailViews';
 import type { LookDefinition } from '../../../effects/looks/types';
 import { Logger } from '../../../services/logger';
 import './LookTile.css';
@@ -32,11 +32,11 @@ export function LookTile({ look, sourceFrameId, onApply, onDelete }: LookTilePro
   const stackHash = useMemo(() => JSON.stringify(look.stack), [look.stack]);
   const cacheKey = `${sourceFrameId}:${look.id}:${stackHash}`;
   const ready = readyKey === cacheKey;
+  // What the still shows (lookThumbnailViews.ts): the frame, an enlarged detail, or no change at all.
+  const info = ready ? lookThumbnailRuntime.getPreviewInfo(cacheKey) : null;
+  const noticeId = useId();
   // Moving looks (a live clock or the timeline clock) play on hover.
-  const animated = look.stack.some((entry) => {
-    const definition = getEffect(entry.effectId);
-    return definition?.requiresContinuousRender === true || (!!definition && 'timelineAnimated' in definition && definition.timelineAnimated === true);
-  });
+  const animated = isAnimatedLook(look);
 
   const draw = useCallback((bitmap: ImageBitmap | null) => {
     if (!bitmap || bitmap.width === 0 || bitmap.height === 0 || !canvasRef.current) return false;
@@ -152,13 +152,15 @@ export function LookTile({ look, sourceFrameId, onApply, onDelete }: LookTilePro
     let cancelled = false;
     let lastFrame = 0;
     const startedAt = performance.now();
+    // The animation continues from the still in the still's view (frame or detail).
+    const still = lookThumbnailRuntime.getPreviewInfo(cacheKey);
     const tick = (now: number) => {
       if (cancelled || now - startedAt > HOVER_DURATION_MS) return;
       if (now - lastFrame >= HOVER_FRAME_MS) {
         lastFrame = now;
-        // The look's time runs from 0 (the still) while the pointer rests on the tile.
-        const seconds = Math.max(0, now - startedAt) / 1_000;
-        void lookThumbnailRuntime.renderLook(look, sourceFrameId, `${cacheKey}:hover:${Math.floor(now)}`, false, seconds).then((bitmap) => {
+        // The look's time runs from the still's time while the pointer rests on the tile.
+        const seconds = (still?.timeSeconds ?? 0) + Math.max(0, now - startedAt) / 1_000;
+        void lookThumbnailRuntime.renderLook(look, sourceFrameId, `${cacheKey}:hover:${Math.floor(now)}`, false, seconds, still?.view ?? 'frame').then((bitmap) => {
           if (!cancelled) draw(bitmap);
           bitmap?.close();
         });
@@ -180,6 +182,7 @@ export function LookTile({ look, sourceFrameId, onApply, onDelete }: LookTilePro
       onBlur={stopHover}
     >
       <button
+        aria-describedby={info?.unchanged || info?.view === 'detail' ? noticeId : undefined}
         aria-label={`Apply ${look.name} from thumbnail`}
         className="look-tile-preview"
         onClick={onApply}
@@ -189,6 +192,15 @@ export function LookTile({ look, sourceFrameId, onApply, onDelete }: LookTilePro
       >
         <span className="look-tile-initials">{placeholder.initials}</span>
         <canvas className={ready ? 'is-ready' : ''} ref={canvasRef} width={256} height={144} />
+        {info?.unchanged ? (
+          <span className="look-tile-notice" id={noticeId} title="At its default settings this effect does not visibly change the current frame (animated effects were also checked at later times). Apply it to adjust its settings.">
+            No visible change
+          </span>
+        ) : info?.view === 'detail' ? (
+          <span className="look-tile-badge" id={noticeId} title="Fine detail: the tile shows the centre of the frame at full size, where the effect is visible.">
+            Detail
+          </span>
+        ) : null}
       </button>
       <div className="look-tile-footer">
         <button type="button" className="look-tile-apply" onClick={onApply} title={`Apply ${look.name}`}>
