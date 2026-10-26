@@ -155,6 +155,19 @@ start (within one frame) and its frames in the preview. Stage 3, a real Explorer
 drag, belongs to the Windows desktop host (`platform.windows-explorer-drop`).
 The shared start of a frame-code Sammeltest lives in `fixtures/frameCodeProject.ts`.
 
+**The mosaic** (`mosaic/`, SC-MOSAIC) applies the pattern to many features at
+once: one 1920×1080 composition whose 16-px-aligned tiles each test one feature
+(reference chart, keyframed transform, opacity and layer order, feathered mask,
+nested compositions, speed and reverse), with a video clock and a keyframe ruler
+on top and measured guard bands between the tiles. `mosaicLayout.ts` is the single
+map for the build (`mosaicBuild.ts`, Dev Bridge) and the oracles (`mosaicOracle.ts`);
+the expected value of every tile is computed from its parameters and the product
+rule it cites (file and line in the comments). The worker builds once, reads the
+paused preview at eight checkpoints and decodes one Fast export in full; every case
+judges one tile in one source. Its clips are frame code v2 (`frameCodeClipV2`):
+an identity row with the source number, codes inside an 8 % inset, BT.709 tags.
+Edges are measured in luma, the only channel 4:2:0 video keeps at full resolution.
+
 On Linux the Playwright Chrome gets ANGLE on Vulkan (WebGPU), XWayland for a
 headed window and `--disable-vulkan-surface` headless (`chromeLaunchArgs` in
 `config/runtimeProfile.ts`); every platform gets `--force-color-profile=srgb`, so

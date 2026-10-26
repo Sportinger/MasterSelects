@@ -20,16 +20,26 @@ export interface FrameCodeProject {
   probe: PreviewProbe
 }
 
+export interface CompositionSize { width: number; height: number; fps: number; seconds: number }
+
 export async function openFrameCodeProject(browser: Browser, baseURL: string | undefined,
-  { composition, clip: clipOptions = {}, placeClip = true }: { composition: string; clip?: FrameCodeClipOptions; placeClip?: boolean }): Promise<FrameCodeProject> {
+  { composition, clip: clipOptions = {}, placeClip = true, size, viewport = { width: 1920, height: 1080 } }: {
+    composition: string
+    clip?: FrameCodeClipOptions
+    placeClip?: boolean
+    /** Composition settings when they differ from the clip's (a composition holding many clips, e.g. the mosaic). */
+    size?: CompositionSize
+    viewport?: { width: number; height: number }
+  }): Promise<FrameCodeProject> {
   if (!baseURL) throw new Error('Playwright baseURL must be configured')
-  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, acceptDownloads: true })
+  const context = await browser.newContext({ viewport, acceptDownloads: true })
   const page = await context.newPage()
   await warmGpu(page, baseURL)
   const editor = await EditorPage.bootstrap(page, { baseURL, tabId: randomUUID() })
   const clip = await frameCodeClip({ width: 640, height: 360, fps: 30, seconds: 4, ...clipOptions })
-  await editor.bridge.toolData('createComposition', { name: composition, width: clip.width, height: clip.height,
-    frameRate: clip.fps, duration: clip.frames / clip.fps, open: true })
+  const settings = size ?? { width: clip.width, height: clip.height, fps: clip.fps, seconds: clip.frames / clip.fps }
+  await editor.bridge.toolData('createComposition', { name: composition, width: settings.width, height: settings.height,
+    frameRate: settings.fps, duration: settings.seconds, open: true })
   if (placeClip) {
     await editor.bridge.toolData('importLocalFiles', { paths: [clip.path.replaceAll('\\', '/')], addToTimeline: true, startTime: 0 }, { timeoutMs: 60_000 })
   }
