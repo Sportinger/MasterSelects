@@ -14,7 +14,14 @@ export default defineConfig({
   testDir: './tests/playwright',
   globalSetup: fileURLToPath(new URL('./tests/playwright/config/warmDevServer.ts', import.meta.url)),
   testMatch: '**/*.spec.ts',
-  testIgnore: ['**/built-editor-shell.spec.ts', '**/beta/**'],
+  // `nightly/` holds long journeys (large exports, long sources). They stay out of
+  // every other run, including the auto-repair acceptance, which resets grep but
+  // keeps testIgnore; run them with `npm run test:e2e:nightly`.
+  testIgnore: [
+    '**/built-editor-shell.spec.ts',
+    '**/beta/**',
+    ...(runtime.includeNightly ? [] : ['**/nightly/**']),
+  ],
   outputDir: 'test-results/playwright/artifacts',
   fullyParallel: false,
   workers: 1,

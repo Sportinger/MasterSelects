@@ -14,6 +14,7 @@ npm run test:e2e:headed
 npm run test:e2e:smoke
 npm run test:e2e:module -- --grep @module:masks
 npm run test:e2e:canary
+npm run test:e2e:nightly
 npm run test:e2e:built
 npm run test:e2e:release
 npm run test:e2e:report
@@ -32,6 +33,7 @@ npm run test:e2e:report
 - `release` runs the full repository build/type gate, the built smoke, then the
   required headed Dev Bridge journeys.
 - `report` opens the latest HTML report without rerunning tests.
+- `nightly` runs only the long journeys under `nightly/` (see below).
 
 Google Chrome Stable must be installed. The suite uses a fresh Playwright
 BrowserContext and never a personal Chrome profile. Tests run serially with one
@@ -42,6 +44,16 @@ The default bootstrap uses the visible Choose project dialog to create a unique
 project in that context's browser storage. Native file pickers are disabled only
 for this portable entry flow; the Windows beta profile keeps its native folder
 selection. Any autosave writes stay in the disposable context's test project.
+
+## Nightly journeys
+
+Long journeys (large exports, hour-long sources) live under `nightly/`. They are
+excluded from every other run through `testIgnore`, including the Fassandra
+auto-repair acceptance, which resets `grep` but keeps `testIgnore`; a `skip`
+would fail that acceptance. Include them with `npm run test:e2e:nightly` or
+`MASTERSELECTS_E2E_NIGHTLY=1`. Nightly journeys keep large sources and exported
+files in the OS temp folder, delete exports after their checks and attach a JSON
+summary instead: a test host returns at most 512 MB of evidence per run.
 
 ## Module and test tags
 

@@ -8,6 +8,8 @@ export interface PlaywrightRuntimeProfile {
   browserChannel: string
   headless: boolean
   host: string
+  /** Include the long-running `nightly/` journeys (excluded from every other run). */
+  includeNightly: boolean
   port: number
   reuseExistingServer: boolean
   startWebServer: boolean
@@ -29,6 +31,8 @@ export function resolveRuntimeProfile(
     browserChannel: env.MASTERSELECTS_E2E_BROWSER_CHANNEL?.trim() || 'chrome',
     headless: parseBoolean(env.MASTERSELECTS_E2E_HEADLESS, false),
     host,
+    includeNightly: env.npm_lifecycle_event === 'test:e2e:nightly'
+      || parseBoolean(env.MASTERSELECTS_E2E_NIGHTLY, false),
     port,
     reuseExistingServer: parseBoolean(env.MASTERSELECTS_E2E_REUSE_SERVER, false),
     startWebServer: !parseBoolean(env.MASTERSELECTS_E2E_SKIP_WEB_SERVER, false),
