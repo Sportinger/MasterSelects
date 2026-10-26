@@ -139,7 +139,8 @@ the old look and are reset. The row under the menu names each of these changes t
 something you set.
 
 **Presets.** Effects that come with presets have a **Preset** row under **Style**. A preset is a
-named starting point: it sets the controls of the card at once, and one undo takes it back. What
+named starting point: it sets the controls of the card at once, in a single update, so the
+playing preview does not stall (it used to write each control on its own), and one undo takes it back. What
 belongs to your shot stays as it is: the screen colour of a key, a measured lens, where a figure
 stands, and quality settings. A control with keyframes keeps them, and the card says so. An effect
 saved by an earlier version, or one you changed in the Nodes tab, may lack some controls a preset

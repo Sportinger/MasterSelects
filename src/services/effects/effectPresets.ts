@@ -256,11 +256,19 @@ export function applyEffectPreset(clipId: string, effectId: string, presetId: st
   const batch = startBatch(`Apply preset ${preset.name}`);
   // In a project repository session the edits must run inside the batch's gesture to form one undo step.
   const repository = getEditorRepositorySession() !== null && batch.batchId !== null;
+  // A number the card would simply store joins one effect update: one write per control made a store
+  // update, a repository transaction and a graph compile each (Analog Signal Lab: 0.5 s of frozen
+  // playback per preset). Numbers the card records as keys or writes through a constant-mode source
+  // still take its own path.
+  const ownPath = numbers.filter(([key]) => {
+    const property = `effect.${effect.id}.${key}` as AnimatableProperty;
+    return state.isRecording(clip.id, property) || clip.nodeGraph?.parameterSources?.targets[property]?.localMode === 'constant';
+  });
+  const patch = { ...Object.fromEntries(numbers.filter(entry => !ownPath.includes(entry))), ...others };
   const apply = () => {
     if (replace) state.updateClip(clip.id, { effects: clip.effects.map(candidate => candidate.id === effectId ? { ...candidate, ...effect } : candidate) });
-    // Numbers go through the card's own path (parameter sources in constant mode included).
-    for (const [key, value] of numbers) state.setPropertyValue(clip.id, `effect.${effect.id}.${key}` as AnimatableProperty, value);
-    if (Object.keys(others).length) state.updateClipEffect(clip.id, effect.id, others);
+    for (const [key, value] of ownPath) state.setPropertyValue(clip.id, `effect.${effect.id}.${key}` as AnimatableProperty, value);
+    if (Object.keys(patch).length) state.updateClipEffect(clip.id, effect.id, patch);
   };
   try {
     if (repository) runEditorGesture(batch.batchId!, apply); else apply();
