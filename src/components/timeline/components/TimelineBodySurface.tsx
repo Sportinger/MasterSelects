@@ -7,6 +7,8 @@ import type {
   ReactNode,
   RefObject,
 } from 'react';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { AudioLevelMeter } from './AudioLevelMeter';
 import { TimelineGlobalOverlayLayers } from './TimelineGlobalOverlayLayers';
 import { TimelineInteractionOverlays } from './TimelineInteractionOverlays';
 import { TimelineMarkerOverlays } from './TimelineMarkerOverlays';
@@ -85,6 +87,7 @@ export function TimelineBodySurface({
   globalCurveEditor,
   timelineCurveMode = 'timeline',
 }: TimelineBodySurfaceProps) {
+  const compactTimelineToolbar = useSettingsStore(state => state.compactTimelineToolbar);
   const bodyContentStyle: CSSProperties | undefined = slotGridProgress > 0
     ? {
         opacity: 1 - slotGridProgress,
@@ -152,6 +155,10 @@ export function TimelineBodySurface({
           ) : trackStack}
         </div>
 
+        {compactTimelineToolbar && <div className="timeline-master-meter-overlay">
+          <AudioLevelMeter streamScope={{ kind: 'master' }} streamFeatures={['level']}
+            label="Master level" orientation="vertical" display="mono" />
+        </div>}
         <TimelineGlobalOverlayLayers {...globalOverlayProps} />
         <TimelinePlayheadOverlay {...playheadOverlayProps} />
         <TimelineMarkerOverlays {...markerOverlayProps} />

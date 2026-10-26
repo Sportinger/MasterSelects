@@ -3,6 +3,7 @@
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   IconArrowsMaximize,
+  IconLayoutSidebarRightCollapse,
   IconLayoutGrid,
   IconList,
   IconMinus,
@@ -15,6 +16,7 @@ import {
 } from '@tabler/icons-react';
 import './TimelineControls.css';
 import type { TimelineControlsProps } from './types';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { readTimelinePlaybackPosition } from './hooks/useTimelineEditorPlaybackState';
 import { useAnnotationStore } from '../../stores/annotationStore';
@@ -79,6 +81,8 @@ function TimelineControlsComponent({
   slotGridActive,
   formatTime,
 }: TimelineControlsProps) {
+  const compactTimelineToolbar = useSettingsStore(state => state.compactTimelineToolbar);
+  const setCompactTimelineToolbar = useSettingsStore(state => state.setCompactTimelineToolbar);
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
   const [masterDropdownOpen, setMasterDropdownOpen] = useState(false);
   const [preflightMeasuring, setPreflightMeasuring] = useState(false);
@@ -153,7 +157,7 @@ function TimelineControlsComponent({
         : `Record armed audio track${armedAudioTracks.length === 1 ? '' : 's'} from ${formatTime(recordingRange.startTime)}`
       : 'Arm an audio track before recording';
   const showMainControls = variant !== 'utility';
-  const showUtilityControls = variant !== 'main' && variant !== 'transport' && variant !== 'zoom';
+  const showUtilityControls = variant !== 'main' && variant !== 'transport' && variant !== 'zoom' && variant !== 'recording';
 
   useEffect(() => audioRecordingService.subscribe(setRecordingState), []);
 
@@ -238,7 +242,10 @@ function TimelineControlsComponent({
     >
       {showMainControls && (
         <>
+      {(variant === 'full' || variant === 'transport' || variant === 'recording') && (
       <div className="timeline-controls" data-guided-target="timeline-transport-controls">
+        {variant !== 'recording' && <>
+
         <button
           className="btn btn-sm btn-icon timeline-transport-button"
           onClick={onStop}
@@ -269,6 +276,7 @@ function TimelineControlsComponent({
         >
           <IconRepeat className="timeline-transport-icon timeline-loop-icon" stroke={2.8} aria-hidden="true" />
         </button>
+        </>}
         <button
           className={`btn btn-sm btn-icon timeline-transport-button timeline-record-button ${isRecording ? 'recording' : ''} ${armedAudioTracks.length > 0 ? 'armed' : ''}`}
           onClick={handleRecordToggle}
@@ -282,7 +290,7 @@ function TimelineControlsComponent({
             type="button"
             className="btn btn-sm timeline-record-recovery"
             title={`${recoveryEntries.length} audio recording recovery entr${recoveryEntries.length === 1 ? 'y' : 'ies'}`}
-            onClick={() => setMasterDropdownOpen(true)}
+            onClick={() => useTimelineStore.getState().selectMasterProperties()}
           >
             {recoveryEntries.length}
           </button>
@@ -295,15 +303,22 @@ function TimelineControlsComponent({
             !
           </span>
         )}
-        <button
+        {variant !== 'recording' && <button
           className={`btn btn-sm timeline-proxy-button ${proxyEnabled ? 'btn-active' : ''} ${isProxyGenerating ? 'is-generating' : ''}`}
           onClick={onToggleProxy}
           title={proxyTitle}
         >
           {isProxyGenerating ? proxyGenerationLabel : 'Proxy'}
-        </button>
+        </button>}
+        {variant !== 'recording' && <button type="button"
+          className="btn btn-sm btn-icon timeline-layout-toggle"
+          aria-label="Use compact timeline" title="Use compact timeline: move controls to the ruler sidebar"
+          onClick={() => setCompactTimelineToolbar(true)}>
+          <IconLayoutSidebarRightCollapse size={16} stroke={1.7} aria-hidden="true" />
+        </button>}
       </div>
-      <div className="timeline-edit-tools" data-guided-target="timeline-edit-tools">
+      )}
+      {(variant === 'full' || variant === 'main') && <div className="timeline-edit-tools" data-guided-target="timeline-edit-tools">
         <div className="timeline-edit-tools-items">
           <TimelineToolPalette />
           <TimelineSnappingButton
@@ -311,12 +326,12 @@ function TimelineControlsComponent({
             onToggleSnapping={onToggleSnapping}
           />
         </div>
-      </div>
+      </div>}
         </>
       )}
       {showUtilityControls && (
         <>
-      <div className="timeline-master-audio" ref={masterDropdownRef}>
+      {!compactTimelineToolbar && <div className="timeline-master-audio" ref={masterDropdownRef}>
         <button
           className={`btn btn-sm ${masterPropertiesSelected || masterDropdownOpen || masterEffectCount > 0 || masterAudio.limiterEnabled ? 'btn-active' : ''} ${preflightIssueCount > 0 ? 'audio-preflight-alert' : ''}`}
           onClick={() => {
@@ -448,7 +463,7 @@ function TimelineControlsComponent({
             </div>
           </div>
         )}
-      </div>
+      </div>}
       <div className="timeline-ram-preview" data-guided-target="timeline-view-controls">
         <RulerLanesMenu />
         <MetronomeButton />
@@ -457,6 +472,7 @@ function TimelineControlsComponent({
             className={`btn btn-sm ${viewDropdownOpen ? 'btn-active' : ''}`}
             onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
             title="View options"
+            aria-expanded={viewDropdownOpen}
           >
             View
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 4 }}>
@@ -465,103 +481,103 @@ function TimelineControlsComponent({
           </button>
           {viewDropdownOpen && (
             <div className="view-dropdown-menu">
-              <div
+              <button type="button"
                 className="view-dropdown-item"
                 onClick={onToggleProxy}
               >
-                <span className={`view-check ${proxyEnabled ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${proxyEnabled ? 'checked' : ''}`}>✓</span>
                 <span>
                   Proxy
                   {isProxyGenerating && ` (${proxyGenerationLabel})`}
                   {!isProxyGenerating && proxyReadyLabel && ` (${proxyReadyLabel})`}
                 </span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className="view-dropdown-item"
                 onClick={onToggleThumbnails}
               >
-                <span className={`view-check ${thumbnailsEnabled ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${thumbnailsEnabled ? 'checked' : ''}`}>✓</span>
                 <span>Thumbnails</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className="view-dropdown-item"
                 onClick={onToggleWaveforms}
               >
-                <span className={`view-check ${waveformsEnabled ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${waveformsEnabled ? 'checked' : ''}`}>✓</span>
                 <span>Waveforms</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className="view-dropdown-item"
                 onClick={toggleFaceRanges}
               >
-                <span className={`view-check ${showFaceRanges ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${showFaceRanges ? 'checked' : ''}`}>✓</span>
                 <span>Face Ranges</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className="view-dropdown-item"
                 onClick={toggleRulerAnnotations}
               >
-                <span className={`view-check ${rulerAnnotationsVisible ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${rulerAnnotationsVisible ? 'checked' : ''}`}>✓</span>
                 <span>Annotation Bars</span>
-              </div>
+              </button>
               <div className="view-dropdown-divider" />
-              <div
+              <button type="button"
                 className={`view-dropdown-item ${trackFocusMode === 'balanced' ? 'active' : ''}`}
                 onClick={() => onSetTrackFocusMode('balanced')}
               >
-                <span className={`view-check ${trackFocusMode === 'balanced' ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${trackFocusMode === 'balanced' ? 'checked' : ''}`}>✓</span>
                 <span>Balanced Tracks</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className={`view-dropdown-item ${trackFocusMode === 'audio' ? 'active' : ''}`}
                 onClick={onToggleAudioFocusMode}
               >
-                <span className={`view-check ${audioFocusMode ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${audioFocusMode ? 'checked' : ''}`}>✓</span>
                 <span>Audio Focus</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className={`view-dropdown-item ${trackFocusMode === 'video' ? 'active' : ''}`}
                 onClick={() => onSetTrackFocusMode('video')}
               >
-                <span className={`view-check ${trackFocusMode === 'video' ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${trackFocusMode === 'video' ? 'checked' : ''}`}>✓</span>
                 <span>Video Focus</span>
-              </div>
+              </button>
               <div className="view-dropdown-divider" />
-              <div
+              <button type="button"
                 className={`view-dropdown-item ${audioDisplayMode === 'compact' ? 'active' : ''}`}
                 onClick={() => onSetAudioDisplayMode('compact')}
               >
-                <span className={`view-check ${audioDisplayMode === 'compact' ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${audioDisplayMode === 'compact' ? 'checked' : ''}`}>✓</span>
                 <span>Compact Audio</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className={`view-dropdown-item ${audioDisplayMode === 'detailed' ? 'active' : ''}`}
                 onClick={() => onSetAudioDisplayMode('detailed')}
               >
-                <span className={`view-check ${audioDisplayMode === 'detailed' ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${audioDisplayMode === 'detailed' ? 'checked' : ''}`}>✓</span>
                 <span>Detailed Audio</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className={`view-dropdown-item ${audioDisplayMode === 'spectral' ? 'active' : ''}`}
                 onClick={() => onSetAudioDisplayMode('spectral')}
               >
-                <span className={`view-check ${audioDisplayMode === 'spectral' ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${audioDisplayMode === 'spectral' ? 'checked' : ''}`}>✓</span>
                 <span>Spectral Audio</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className="view-dropdown-item"
                 onClick={onToggleAudioRegionEditMarkers}
               >
-                <span className={`view-check ${showAudioRegionEditMarkers ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${showAudioRegionEditMarkers ? 'checked' : ''}`}>✓</span>
                 <span>Audio Region Markers</span>
-              </div>
-              <div
+              </button>
+              <button type="button"
                 className="view-dropdown-item"
                 onClick={onToggleTranscriptMarkers}
               >
-                <span className={`view-check ${showTranscriptMarkers ? 'checked' : ''}`}>✓</span>
+                <span aria-hidden="true" className={`view-check ${showTranscriptMarkers ? 'checked' : ''}`}>✓</span>
                 <span>Transcript Markers</span>
-              </div>
+              </button>
             </div>
           )}
         </div>
@@ -583,7 +599,7 @@ function TimelineControlsComponent({
       </div>
         </>
       )}
-      {showMainControls && (
+      {(variant === 'full' || variant === 'zoom') && (
       <div className="timeline-zoom-controls" data-guided-target="timeline-zoom-controls">
         <button className="btn btn-sm btn-icon timeline-zoom-button" onClick={() => onSetZoom(zoom - 10)} title="Zoom out">
           <IconMinus size={14} stroke={2.4} aria-hidden="true" />

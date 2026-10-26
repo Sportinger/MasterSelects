@@ -1,0 +1,92 @@
+@layer features {
+.preview-time-display {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 17px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.preview-transport .preview-time-value {
+  width: auto;
+  height: auto;
+  min-height: 26px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  backdrop-filter: none;
+}
+
+.preview-transport .preview-time-value:hover {
+  color: var(--accent);
+  background: transparent;
+}
+
+.preview-time-separator,
+.preview-time-fps {
+  color: var(--text-muted);
+  font-size: 0.82em;
+  font-weight: 400;
+}
+
+.preview-time-fps small { margin-left: 2px; }
+.preview-time-range { color: var(--warning); }
+
+.preview-duration-input {
+  width: 9ch;
+  min-width: 0;
+  padding: 2px 3px;
+  box-sizing: content-box;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+
+/* A narrow dock panel keeps both the full clock and all transport buttons. */
+.preview-transport { container-type: inline-size; container-name: preview-transport; }
+.preview-transport-row:has(.preview-time-display) {
+  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
+  gap: 8px;
+}
+@container preview-transport (max-width: 720px) {
+  .preview-transport-row:has(.preview-time-display) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .preview-transport-row:has(.preview-time-display) .perspective-guide-transport-slot:empty { display: none; }
+  .preview-transport-row:has(.preview-time-display) .preview-transport-buttons { grid-column: 1; justify-self: start; gap: 2px; }
+  .preview-time-display { grid-column: 2; font-size: 13px; gap: 3px; }
+}
+@container preview-transport (max-width: 490px) {
+  .preview-transport-row:has(.preview-time-display) {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0;
+    padding: 0 4px;
+  }
+  .preview-transport-row:has(.preview-time-display) .preview-transport-buttons {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
+  }
+  .preview-time-display { grid-column: 1; grid-row: 2; justify-self: center; font-size: 12px; }
+  .preview-transport-row:has(.preview-time-display) .preview-transport-buttons button { height: 18px; width: 24px; }
+  .preview-transport .preview-time-value { min-height: 18px; padding: 0; }
+  .preview-transport-row:has(.preview-time-display) .perspective-guide-transport-slot:not(:empty) { position: absolute; left: 4px; }
+}
+
+.preview-transport :is(button, select, input) { -webkit-tap-highlight-color: transparent; }
+.preview-transport button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.preview-transport button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+}

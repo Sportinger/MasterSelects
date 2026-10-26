@@ -33,6 +33,17 @@
   transition: background 0.1s;
 }
 
+button.view-dropdown-item {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+}
+
+.timeline-metronome-label { display: none; }
+
 .view-dropdown-item:hover {
   background: var(--bg-tertiary);
 }

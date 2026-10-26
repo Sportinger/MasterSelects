@@ -42,6 +42,7 @@ export function TimelineRootShell({
   trackHeaderWidth,
   trackScaleGestureActive,
 }: TimelineRootShellProps) {
+  const compactTimelineToolbar = useSettingsStore(state => state.compactTimelineToolbar);
   const resolveThemeActive = useSettingsStore(state => state.theme === 'resolve');
   const setTrackHeaderWidth = useTimelineStore(state => state.setTrackHeaderWidth);
   const tracks = useTimelineStore(state => state.tracks);
@@ -99,6 +100,7 @@ export function TimelineRootShell({
 
   const className = [
     'timeline-container',
+    compactTimelineToolbar ? 'timeline-compact-toolbar' : '',
     `audio-mode-${audioDisplayMode}`,
     `audio-layer-${effectiveAudioLayerAdvancedMode ? 'advanced' : 'basic'}`,
     `timeline-split-mode-${trackFocusMode}`,
