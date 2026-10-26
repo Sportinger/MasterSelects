@@ -98,6 +98,7 @@ export interface ProjectUIState {
     scrollX?: number;
     inPoint?: number | null;
     outPoint?: number | null;
+    loopPlayback?: boolean;
   }>;
   // Media panel settings
   mediaPanelColumns?: string[];

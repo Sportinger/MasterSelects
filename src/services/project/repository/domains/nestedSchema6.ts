@@ -75,7 +75,7 @@ export const schemas6: Record<string, DomainSchema> = {
 "n672": {"fields":{"x":{"class":"content","owner":"timeline","node":null},"y":{"class":"content","owner":"timeline","node":null}}},
 "n673": {"fields":{"width":{"class":"content","owner":"timeline","node":null},"height":{"class":"content","owner":"timeline","node":null}}},
 "n674": {"dictionary":"n675"},
-"n675": {"fields":{"playheadPosition":{"class":"workspace","owner":"timeline","node":null},"zoom":{"class":"workspace","owner":"timeline","node":null},"scrollX":{"class":"workspace","owner":"timeline","node":null},"inPoint":{"class":"workspace","owner":"timeline","node":null},"outPoint":{"class":"workspace","owner":"timeline","node":null}}},
+"n675": {"fields":{"playheadPosition":{"class":"workspace","owner":"timeline","node":null},"zoom":{"class":"workspace","owner":"timeline","node":null},"scrollX":{"class":"workspace","owner":"timeline","node":null},"inPoint":{"class":"workspace","owner":"timeline","node":null},"outPoint":{"class":"workspace","owner":"timeline","node":null},"loopPlayback":{"class":"workspace","owner":"timeline","node":null}}},
 "n676": {"variants":[]},
 "n677": {"fields":{"zoom":{"class":"content","owner":"media","node":null},"panX":{"class":"content","owner":"media","node":null},"panY":{"class":"content","owner":"media","node":null}}},
 "n678": {"dictionary":"n17"},

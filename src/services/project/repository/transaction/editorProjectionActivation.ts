@@ -134,6 +134,7 @@ async function activateEditorProjection(projection: RepositoryProjection, previo
         for (const field of ['playheadPosition', 'zoom', 'scrollX']) {
           const value = object(workspace)[`timeline/${activeCompositionId}/${field}`]; if (typeof value === 'number') restoreView[field] = value;
         }
+        const loop = object(workspace)[`timeline/${activeCompositionId}/loopPlayback`]; if (typeof loop === 'boolean') restoreView.loopPlayback = loop;
         timelineStore.setState(restoreView);
         if (object(workspace)['dock/layout']) getRepositoryStore('dock')?.setState({ layout: object(workspace)['dock/layout'] });
 

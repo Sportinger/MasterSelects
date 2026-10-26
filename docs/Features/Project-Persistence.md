@@ -317,7 +317,7 @@ versioned, and large data is split into bounded structural blocks. Unchanged
 binary artifacts are reused. Saving a keyframe does not rebuild a complete
 `.msproj` package or duplicate every mesh and audio result.
 
-Workspace changes such as playhead, zoom, scroll and dock layout use coalesced
+Workspace changes such as playhead, zoom, scroll, the loop toggle and dock layout use coalesced
 view slots. They do not append content revisions on every playback tick. Each
 view has two slots so an interrupted update can retain its last valid value.
 A workspace that lacks a view (a new tab, browser or machine) takes it from the
@@ -383,7 +383,7 @@ navigation in that session must not be reported as a new repository commit.
 | --- | --- | --- |
 | Project content | Composition settings, clips, tracks, keyframes, effects, masks, markers, authored In/Out ranges and per-composition master audio | Yes |
 | Other authored domains | Documents, graphs, MIDI mappings, tracking results, storyboard decisions, generated items, export settings and saved job definitions | Yes |
-| Workspace | Active tabs, selection, playhead, zoom, scroll, panel layout, inspector state and display preferences | Separately preserved |
+| Workspace | Active tabs, selection, playhead, zoom, scroll, loop toggle, panel layout, inspector state and display preferences | Separately preserved |
 | External journals | Conversations, provider requests, job events, execution evidence and Agent Timeline records | No |
 | Artifacts | Original media, document attachments, audio bakes, transcripts and analysis results | Through immutable references |
 | Runtime | File handles, object URLs, DOM/media elements, decoders, GPU resources and running workers | Recreated, never serialized into content |
