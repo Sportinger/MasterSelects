@@ -15,6 +15,11 @@ import './InspectorSelect.css';
 
 export interface InspectorSelectOption<T extends string = string> {
   disabled?: boolean;
+  /**
+   * A disabled option with this handler stays clickable (aria-disabled) so it
+   * can explain why it is unavailable; it is never selected.
+   */
+  onUnavailableClick?: () => void;
   label: string;
   style?: CSSProperties;
   supportsAlpha?: boolean;
@@ -224,9 +229,14 @@ export function InspectorSelect<T extends string>({
   }, [disabled, enabledOptions, onChange, open, wheelSelection]);
 
   const choose = (option: InspectorSelectOption<T>, restoreKeyboardFocus = true) => {
-    if (disabled || option.disabled) return;
-    wheelValueRef.current = option.value;
-    onChange(option.value);
+    if (disabled) return;
+    if (option.disabled) {
+      if (!option.onUnavailableClick) return;
+      option.onUnavailableClick();
+    } else {
+      wheelValueRef.current = option.value;
+      onChange(option.value);
+    }
     setOpen(false);
     if (restoreKeyboardFocus) triggerRef.current?.focus();
     else triggerRef.current?.blur();
@@ -307,7 +317,7 @@ export function InspectorSelect<T extends string>({
     let closestOption: HTMLButtonElement | undefined;
     let closestDistance = Number.POSITIVE_INFINITY;
 
-    for (const option of menu.querySelectorAll<HTMLButtonElement>('.inspector-select-option:not(:disabled)')) {
+    for (const option of menu.querySelectorAll<HTMLButtonElement>('.inspector-select-option:not(:disabled):not([aria-disabled="true"])')) {
       const optionRect = option.getBoundingClientRect();
       const distance = Math.abs(optionRect.top + optionRect.height / 2 - menuCenter);
       if (distance < closestDistance) {
@@ -336,13 +346,14 @@ export function InspectorSelect<T extends string>({
         {group.label && <div className="inspector-select-group-label" id={groupLabelId}>{group.label}</div>}
         {group.options.map(option => {
           const optionId = `${listboxId}-${String(option.value).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+          const explainsUnavailable = option.disabled === true && option.onUnavailableClick !== undefined;
           return (
             <button
               aria-disabled={option.disabled || undefined}
               aria-selected={option.value === value}
-              className={`inspector-select-option${option.value === activeValue ? ' is-active' : ''}`}
+              className={`inspector-select-option${option.value === activeValue ? ' is-active' : ''}${explainsUnavailable ? ' is-unavailable' : ''}`}
               data-value={option.value}
-              disabled={option.disabled}
+              disabled={option.disabled && !explainsUnavailable}
               id={optionId}
               key={option.value}
               onClick={event => choose(option, event.detail === 0)}

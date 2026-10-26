@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useExportScreenWakeLock } from '../../hooks/useExportScreenWakeLock';
 import { useShallow } from 'zustand/react/shallow';
 import { Logger } from '../../services/logger';
+import { reportLinuxCodecSupport } from '../../services/codecNotices/linuxCodecNotices';
 import { FrameExporter } from '../../engine/export';
 import type { ExportProgress, VideoCodec, ContainerFormat } from '../../engine/export';
 import { AudioEncoderWrapper, type AudioCodec } from '../../engine/audio';
@@ -111,6 +112,7 @@ export function useExportState(
     vp9: false,
     av1: false,
   });
+  const [codecSupportReady, setCodecSupportReady] = useState(false);
   const [isFFmpegLoading, setIsFFmpegLoading] = useState(false);
   const [isFFmpegReady, setIsFFmpegReady] = useState(false);
   const [ffmpegLoadError, setFfmpegLoadError] = useState<string | null>(null);
@@ -158,11 +160,16 @@ export function useExportState(
         av1: await FrameExporter.checkCodecSupport('av1', actualWidth, actualHeight, actualFps),
       };
       setCodecSupport(support);
+      setCodecSupportReady(true);
 
       const availableCodecs = FrameExporter.getVideoCodecs(containerFormat);
       if (!support[videoCodec]) {
         const firstSupported = availableCodecs.find(c => support[c.id]);
         if (firstSupported) {
+          // A saved setting or preset asked for H.265: say so instead of switching silently.
+          if (videoCodec === 'h265') {
+            reportLinuxCodecSupport('h265-encode', false, { fallbackCodec: firstSupported.label });
+          }
           setSettings({ videoCodec: firstSupported.id });
         }
       }
@@ -323,6 +330,7 @@ export function useExportState(
     videoCodec,
     setVideoCodec: (value: VideoCodec) => setSettings({ videoCodec: value }),
     codecSupport,
+    codecSupportReady,
     rateControl,
     setRateControl: (value: 'vbr' | 'cbr') => setSettings({ rateControl: value }),
     ffmpegCodec,

@@ -119,7 +119,7 @@
 
   /* Pointer highlighting stays on the compositor/style path: no React render per row. */
   @media (hover: hover) {
-    .inspector-select-menu:not(.inspector-select-menu--touch) .inspector-select-option:not(:disabled):hover {
+    .inspector-select-menu:not(.inspector-select-menu--touch) .inspector-select-option:not(:disabled):not(.is-unavailable):hover {
       background: color-mix(in srgb, var(--accent) 72%, #164a9d);
       color: #fff;
     }
@@ -130,8 +130,14 @@
     }
   }
 
-  .inspector-select-option:disabled {
+  .inspector-select-option:disabled,
+  .inspector-select-option.is-unavailable {
     color: var(--text-disabled, #666);
+  }
+
+  /* Unavailable but explainable: clicking shows why instead of selecting. */
+  .inspector-select-option.is-unavailable {
+    cursor: help;
   }
 
   .inspector-select-touch-layer {

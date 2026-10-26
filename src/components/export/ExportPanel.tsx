@@ -26,6 +26,7 @@ import { ExportInspectorSections } from './panel/ExportInspectorSections';
 import { ExportRenderQualitySection } from './panel/ExportRenderQualitySection';
 import { ExportActionFooter } from './panel/ExportActionFooter';
 import { ExportPresetSection } from './panel/ExportPresetSection';
+import { useLinuxAacExportNotice } from './useLinuxAacExportNotice';
 import { GlyphArtifactExportSection } from './panel/GlyphArtifactExportSection';
 import type {
   ExportBasicsActions,
@@ -141,7 +142,7 @@ export function ExportPanel() {
     fps, setFps, customFps, setCustomFps, useCustomFps, setUseCustomFps,
     useInOut, setUseInOut, filename, setFilename,
     bitrate, setBitrate, containerFormat, setContainerFormat,
-    videoCodec, setVideoCodec, codecSupport, rateControl, setRateControl,
+    videoCodec, setVideoCodec, codecSupport, codecSupportReady, rateControl, setRateControl,
     ffmpegCodec, ffmpegContainer,
     proresProfile, setProresProfile, dnxhrProfile, setDnxhrProfile,
     hapFormat, setHapFormat,
@@ -322,6 +323,12 @@ export function ExportPanel() {
     imageQuality,
     specialContainer,
     isExporting: isExporting || (batchActive && isBatchRunning),
+  });
+  useLinuxAacExportNotice({
+    usesBrowserMp4Audio: isVideoMode && !isGifMode && isWebCodecsEncoder && containerFormat === 'mp4'
+      && includeAudio && !browserAudioUnavailable,
+    detectedAudioCodec: audioCodec,
+    ffmpegAvailable,
   });
   const compositionMatchingAvailable = !batchActive && !!composition;
   const [matchCompositionResolution, setMatchCompositionResolution] = useState(() => (
@@ -577,6 +584,7 @@ export function ExportPanel() {
     containerFormat,
     videoCodec,
     codecSupport,
+    codecSupportReady,
     ffmpegCodec,
     ffmpegContainer,
     proresProfile,

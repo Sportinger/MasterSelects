@@ -8,7 +8,7 @@ MP4/MOV sources tagged `hvc1` or `hev1` use the shared `hevc` frame provider. Th
 2. Ask WebCodecs whether that configuration is supported, then require an actual decoded first frame.
 3. If unsupported, configuration fails, decoding errors, or no frame arrives within the bounded wait, use FFmpeg's HEVC decoder in the existing libavcodec WASM worker. Subsequent native decoding failures use the same fallback.
 
-The WASM binary is fetched only for software decoding. No upload, external service, browser flags, or pre-conversion is required. Decode stays off the main thread. Main and Main10 4:2:0 output are supported; unsupported pixel formats report an error. Software decoding does not guarantee real-time 4K playback. This feature does not automatically create proxies.
+The WASM binary is fetched only for software decoding. No upload, external service, browser flags, or pre-conversion is required. Decode stays off the main thread. Main and Main10 4:2:0 output are supported; unsupported pixel formats report an error. Software decoding does not guarantee real-time 4K playback. This feature does not automatically create proxies. On Linux, a dismissible banner names the clip that is decoded in software ([Export: Linux H.265 and AAC](./Export.md#linux-h265-and-aac)).
 
 ## Playback slower than real time
 

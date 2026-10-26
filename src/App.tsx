@@ -11,6 +11,7 @@ import { useOverLayoutSync } from './components/dock/useOverLayoutSync';
 import { TouchGooLayer } from './components/common/touchGoo/TouchGooLayer';
 import { IndexedDBErrorDialog } from './components/common/IndexedDBErrorDialog';
 import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
+import { LinuxCodecNotices } from './components/common/LinuxCodecNotices';
 import { ProjectLoadProgressOverlay } from './components/common/ProjectLoadProgressOverlay';
 import { HistoryActionToast } from './components/common/HistoryActionToast';
 import { EditRejectedToast } from './components/common/EditRejectedToast';
@@ -533,6 +534,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
       ].filter(Boolean).join(' ')}
     >
       {!isStartLayout && <LinuxVulkanWarning />}
+      {!isStartLayout && <LinuxCodecNotices />}
       {showStartTransitionBackground && (
         <div className="app-start-transition-background" aria-hidden="true" />
       )}
