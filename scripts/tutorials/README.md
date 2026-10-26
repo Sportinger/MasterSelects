@@ -117,7 +117,7 @@ next part. Trim, move lines, add the music and export there.
 
 `node scripts/tutorial-ms-template.mjs create` makes the template project
 `~/Documents/MasterSelects-Tutorials/_Template` once (tracks Captions, Picture, Voice, Music; the music
-at -22 dB, faded in); change it in MasterSelects as you like. `tutorial-ms-template.mjs episode "<name>"`
+at -22 dB, faded in); change it in MasterSelects as you like. `tutorial-ms-template.mjs new "<name>"`
 saves it as the episode's project. After the last part, `node scripts/tutorial-ms-finish.mjs <episode>`
 ends the music with the episode, exports it from MasterSelects to `tutorial-videos/<episode>.mp4` and
 checks the file (length, size, frame rate, sound, eight pictures in `<episode>.check.jpg`).

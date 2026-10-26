@@ -5,8 +5,9 @@
 //       makes the template: ~/Documents/MasterSelects-Tutorials/_Template, the tracks of a cut (Captions above
 //       Picture, Voice, Music) and the music laid in from 0 at its level, faded in. Change it in MasterSelects as you
 //       like (another music, an intro …) and save; every later episode gets it.
-//   node scripts/tutorial-ms-template.mjs episode <episode name>
-//       opens the template and saves it as ~/Documents/MasterSelects-Tutorials/<episode name>, the episode's project.
+//   node scripts/tutorial-ms-template.mjs new <tutorial name>
+//       opens the template and saves it as ~/Documents/MasterSelects-Tutorials/<tutorial name>: every tutorial starts
+//       from zero, from the template, never from an earlier tutorial's project.
 //
 //   [--editor <origin>] [--tab <tabId>]   the cut editor; [--root <folder>] instead of ~/Documents/MasterSelects-Tutorials
 //
@@ -55,7 +56,7 @@ async function episodeProject(call, root, episode) {
 export async function main(args) {
   const [mode, episode] = args.filter((arg, index) => !arg.startsWith('--') && !['--music', '--music-db', '--editor', '--tab', '--root'].includes(args[index - 1]));
   const root = path.resolve(option(args, '--root', path.join(os.homedir(), 'Documents', 'MasterSelects-Tutorials')));
-  if (mode !== 'create' && !(mode === 'episode' && episode)) throw new Error('Usage: tutorial-ms-template.mjs create | episode <episode name>');
+  if (mode !== 'create' && !(['new', 'episode'].includes(mode) && episode)) throw new Error('Usage: tutorial-ms-template.mjs create | new <tutorial name>');
   // A new project is no cut project yet: name the editor by its origin (and tab) if more than one is running.
   const call = await cutEditor(option(args, '--editor'), option(args, '--tab'), { anyProject: true });
   if (mode === 'create') {

@@ -12,9 +12,10 @@ cut project is open before anything is recorded, every part goes into it as soon
 and Roman watches the episode grow there. Never record all parts first and cut at the end.
 
 1. **Open the cut project first:** the cut editor (below) in a visible browser tab, with the episode's
-   project made from the template: `node scripts/tutorial-ms-template.mjs episode "<episode>"` (Save
+   project made from the template: `node scripts/tutorial-ms-template.mjs new "<episode>"` (Save
    As of `~/Documents/MasterSelects-Tutorials/_Template`: the labelled tracks Captions, Picture, Voice
-   and Music, with the music already in). The first time, make the template:
+   and Music, with the music already in). Every tutorial starts from zero like this, never from an
+   earlier tutorial's project. The first time, make the template:
    `node scripts/tutorial-ms-template.mjs create`.
 2. **Plan the episode in parts.** Write the beats of the episode (README of the episode or the first
    recipe's comment) and cut them into parts of at most about **20 seconds** each, one logical step
@@ -178,7 +179,7 @@ Episode 2 still needs:
    the build server by themselves (their bridge tab ids start with `tutorial-`); `--tab` is only
    needed when two visible editor tabs are open.
    **The episode's project** lives in `/home/admins/Documents/MasterSelects-Tutorials/<episode>`,
-   made from the template there (`tutorial-ms-template.mjs episode`, which opens the template and
+   made from the template there (`tutorial-ms-template.mjs new`, which opens the template and
    saves it under the episode's name with `saveLocalProjectAs`; no folder dialog). Do that in a tab of
    its own: it replaces the project open in that tab. It needs the folder granted once per editor origin: `grantWorkspaceRoot` with `path:
    "/home/admins/Documents/MasterSelects-Tutorials"` and a long `timeoutMs` shows a button in the
@@ -404,7 +405,7 @@ Episode 2 still needs:
 - **The files are imported from `tutorial-videos/`** (the dev bridge reads below `~/Documents`). Do
   not delete a `.cut` folder whose clips are in the episode's project.
 - **The MS project** of an episode comes from the template (1920×1080, 30 fps,
-  `tutorial-ms-template.mjs episode`). The bridge cannot pick a folder without Roman's one-time grant
+  `tutorial-ms-template.mjs new`). The bridge cannot pick a folder without Roman's one-time grant
   of `~/Documents/MasterSelects-Tutorials` per editor origin.
 - **Intro or bumper:** none exists yet. Episode 1 opened straight with the presenter (Roman's choice,
   "How Roman wants it"). If Roman wants one, it belongs into the template project, before the
