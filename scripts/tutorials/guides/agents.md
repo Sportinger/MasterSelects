@@ -149,7 +149,9 @@ Episode 2 still needs:
    `node scripts/tutorial-tab.mjs serve --from flamer-ep2-part3-yarn` (with the secrets loaded). It
    opens the editor in a headless Chrome (2560×1440, scale 1, hardware WebGPU); nothing opens on
    Roman's desktop. After a crash or restart, `serve --keep` continues its last editor. A new `serve`
-   takes over from a running one (the old one exits), so there is never more than one.
+   takes over from a running one (the old one exits), so there is never more than one. Media for
+   `files` steps: `--recipe <part.json>` uses that recipe's `media` names; without it, a step names a
+   file in the docs footage (`tests/browser/effect-lab/footage/`) or a `--media <folder>`.
 5. Checkpoints are local (`tutorial-videos/checkpoints/`). If one is missing, rebuild it from its
    recipe: `node scripts/tutorial-video.mjs scripts/tutorials/flamer-ep2-part2-end.json --setup-only
    --save flamer-ep2-part2`, or take the previous part again.
