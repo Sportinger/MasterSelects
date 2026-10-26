@@ -1,4 +1,6 @@
 import { Fragment, type RefObject } from 'react';
+import { IconAdjustmentsHorizontal, IconChevronDown } from '@tabler/icons-react';
+import { useSettingsStore } from '../../../stores/settingsStore';
 
 import type { DockDragState, DockPanel, DockTabGroup, HoveredDockTabTarget } from '../../../types/dock';
 import { WIP_PANEL_TYPES } from '../../../types/dock';
@@ -121,6 +123,9 @@ export function DockTabStrip({
   onAddButtonClick,
 }: DockTabStripProps) {
   const showCompositionTabs = hasTimelinePanel && openCompositions.length > 0 && slotGridProgress < 1;
+  const compactTimelineToolbar = useSettingsStore(state => state.compactTimelineToolbar);
+  const compactTimelineSidebarOpen = useSettingsStore(state => state.compactTimelineSidebarOpen);
+  const setCompactTimelineSidebarOpen = useSettingsStore(state => state.setCompactTimelineSidebarOpen);
   const handleHoldClasses = getHoldClasses('timeline-handle', holdingTabId, holdProgress);
   const placeAddButtonAfterActiveTab = group.id === 'mobile-v-tools-group';
   const addPanelButton = !hasTimelinePanel ? (
@@ -193,6 +198,24 @@ export function DockTabStrip({
               </button>
             </div>
           ))}
+          {compactTimelineToolbar && (
+            <div className="dock-tab-timeline-actions" role="presentation">
+              <button
+                className={`dock-tab-timeline-settings${compactTimelineSidebarOpen ? ' active' : ''}`}
+                type="button"
+                aria-label="Timeline settings"
+                aria-controls={compactTimelineSidebarOpen ? "timeline-compact-settings-panel" : undefined}
+                aria-expanded={compactTimelineSidebarOpen}
+                title={compactTimelineSidebarOpen ? 'Close timeline settings' : 'Timeline settings'}
+                onPointerDown={event => event.stopPropagation()}
+                onMouseDown={event => event.stopPropagation()}
+                onClick={() => setCompactTimelineSidebarOpen(!compactTimelineSidebarOpen)}
+              >
+                <IconAdjustmentsHorizontal size={14} aria-hidden="true" />
+                <IconChevronDown size={10} aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </>
       ) : (
         group.panels.map((panel, index) => {

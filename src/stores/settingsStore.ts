@@ -139,6 +139,7 @@ interface SettingsState {
   // Timeline interaction
   deselectClipOnRepeatClick: boolean;
   compactTimelineToolbar: boolean;
+  compactTimelineSidebarOpen: boolean;
   timelineZoomAnchor: TimelineZoomAnchor;  // Where Ctrl/Alt+wheel zoom keeps focus
   nodeCableStyle: NodeCableStyle; nodeCableAvoid: boolean; nodePlaybackSignals: boolean; nodeAdvancedCatalog: boolean;  // Node editor cables, playback signal dots, advanced building blocks in menus
   /** CPU-simulated Flock filmstrips on the timeline. Off by default: the simulation runs on the main thread. */
@@ -225,6 +226,7 @@ interface SettingsState {
   setNativeHelperConnected: (connected: boolean) => void;
   setDeselectClipOnRepeatClick: (enabled: boolean) => void;
   setCompactTimelineToolbar: (compact: boolean) => void;
+  setCompactTimelineSidebarOpen: (open: boolean) => void;
   setTimelineZoomAnchor: (anchor: TimelineZoomAnchor) => void;
   setNodeCableStyle: (style: NodeCableStyle) => void; setNodeCableAvoid: (enabled: boolean) => void; setNodePlaybackSignals: (enabled: boolean) => void; setNodeAdvancedCatalog: (enabled: boolean) => void;
   setFlockTimelineThumbnails: (enabled: boolean) => void;
@@ -297,6 +299,7 @@ export const useSettingsStore = create<SettingsState>()(
       nativeHelperConnected: false, // Not connected initially
       deselectClipOnRepeatClick: false,
       compactTimelineToolbar: false,
+      compactTimelineSidebarOpen: false,
       timelineZoomAnchor: 'mouse' as TimelineZoomAnchor, // Zoom toward the mouse pointer by default
       nodeCableStyle: 'curved' as NodeCableStyle,
       nodeCableAvoid: false, nodePlaybackSignals: true, nodeAdvancedCatalog: false, flockTimelineThumbnails: false,
@@ -391,7 +394,11 @@ export const useSettingsStore = create<SettingsState>()(
       setDeselectClipOnRepeatClick: (enabled) => set({ deselectClipOnRepeatClick: enabled }),
       setNodeCableStyle: (nodeCableStyle) => set({ nodeCableStyle }), setNodeCableAvoid: (nodeCableAvoid) => set({ nodeCableAvoid }), setNodePlaybackSignals: (nodePlaybackSignals) => set({ nodePlaybackSignals }), setNodeAdvancedCatalog: (nodeAdvancedCatalog) => set({ nodeAdvancedCatalog }),
       setFlockTimelineThumbnails: (flockTimelineThumbnails) => set({ flockTimelineThumbnails }),
-      setCompactTimelineToolbar: (compact) => set({ compactTimelineToolbar: compact }),
+      setCompactTimelineToolbar: (compact) => set({
+        compactTimelineToolbar: compact,
+        compactTimelineSidebarOpen: compact ? get().compactTimelineSidebarOpen : false,
+      }),
+      setCompactTimelineSidebarOpen: (open) => set({ compactTimelineSidebarOpen: open }),
       setTimelineZoomAnchor: (anchor) => {
         set({ timelineZoomAnchor: anchor });
       },

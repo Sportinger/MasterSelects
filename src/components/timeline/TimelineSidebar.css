@@ -11,29 +11,35 @@
   pointer-events: none;
 }
 
-.timeline-sidebar-handle {
-  position: absolute;
-  top: 3px;
-  right: 5px;
+.dock-tab-timeline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 0 42px;
+  min-width: 42px;
+  margin-left: auto;
+}
+
+.dock-tab-timeline-settings {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   width: 38px;
   height: 24px;
+  flex: 0 0 38px;
+  margin: 0 5px;
   padding: 0;
   border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: var(--bg-secondary);
+  border-radius: 4px;
+  background: transparent;
   color: var(--text-secondary);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 20%);
-  pointer-events: auto;
   cursor: pointer;
   transition: color 150ms, border-color 150ms, background 150ms;
 }
 
-.timeline-sidebar-handle:hover,
-.timeline-sidebar-handle.active {
+.dock-tab-timeline-settings:hover,
+.dock-tab-timeline-settings.active {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border-color));
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
@@ -41,7 +47,8 @@
 
 .timeline-sidebar-panel {
   position: absolute;
-  top: 32px;
+  z-index: 1401;
+  top: 4px;
   right: 5px;
   width: calc(100% - 10px);
   max-height: calc(100% - 36px);
@@ -153,6 +160,9 @@ html:not(.pointer-focus) .timeline-ruler-control-strip button:focus-visible {
 }
 .timeline-sidebar-panel .timeline-zoom-controls { gap: 4px; }
 .timeline-sidebar-panel .timeline-curve-mode-toggle { margin: 0; }
+.dock-tab-timeline-settings { -webkit-tap-highlight-color: transparent; }
+.dock-tab-timeline-settings:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.dock-tab-timeline-settings:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .timeline-sidebar :is(button, input, select) { -webkit-tap-highlight-color: transparent; }
 .timeline-sidebar button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .timeline-sidebar :is(button, [role="checkbox"]):focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
@@ -179,6 +189,6 @@ html:not(.pointer-focus) .timeline-ruler-control-strip button:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   .timeline-sidebar-panel { animation: none; }
-  .timeline-sidebar-handle { transition: none; }
+  .dock-tab-timeline-settings { transition: none; }
 }
 }

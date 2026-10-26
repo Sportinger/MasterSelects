@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { IconChevronLeft, IconChevronRight, IconAdjustmentsHorizontal } from '@tabler/icons-react';
+import { useEffect, useRef } from 'react';
+import { IconAdjustmentsHorizontal } from '@tabler/icons-react';
 import { TimelineControls } from '../TimelineControls';
 import type { TimelineControlsProps } from '../types';
 import { useLegacyTransitionCompositionUpgrade } from '../hooks/useLegacyTransitionCompositionUpgrade';
@@ -19,12 +19,11 @@ export function TimelineSidebar({
   timelineControlsProps,
   timelineCurveMode,
 }: TimelineSidebarProps) {
+  const open = useSettingsStore(state => state.compactTimelineSidebarOpen);
+  const setOpen = useSettingsStore(state => state.setCompactTimelineSidebarOpen);
   const setCompactTimelineToolbar = useSettingsStore(state => state.setCompactTimelineToolbar);
-  const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const handleRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const panelId = useId();
   const upgradeSources = useLegacyTransitionCompositionUpgrade();
 
   useEffect(() => {
@@ -37,7 +36,7 @@ export function TimelineSidebar({
       event.preventDefault();
       event.stopPropagation();
       setOpen(false);
-      handleRef.current?.focus();
+      document.querySelector<HTMLButtonElement>('.dock-tab-timeline-settings')?.focus();
     };
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown, true);
@@ -50,36 +49,9 @@ export function TimelineSidebar({
   return (
     <div className="timeline-sidebar" ref={containerRef}
       onPointerDown={event => event.stopPropagation()}
-      onPointerUp={event => {
-        if (event.target instanceof Element) {
-          const button = event.target.closest('button');
-          if (button instanceof HTMLButtonElement) button.blur();
-        }
-      }}
     >
-      <button
-        ref={handleRef}
-        type="button"
-        className={`timeline-sidebar-handle${open ? ' active' : ''}`}
-        aria-label="Timeline settings"
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        aria-haspopup="dialog"
-        title={open ? 'Close timeline settings' : 'Timeline settings'}
-        onClick={event => {
-          setOpen(value => !value);
-          if (!open && event.detail === 0) {
-            requestAnimationFrame(() => panelRef.current?.querySelector('button')?.focus());
-          }
-        }}
-      >
-        <IconAdjustmentsHorizontal size={14} stroke={1.7} aria-hidden="true" />
-        {open
-          ? <IconChevronRight size={10} aria-hidden="true" />
-          : <IconChevronLeft size={10} aria-hidden="true" />}
-      </button>
       {open && (
-        <div ref={panelRef} id={panelId} role="dialog" aria-label="Timeline settings" className="timeline-sidebar-panel">
+        <div ref={panelRef} id="timeline-compact-settings-panel" role="dialog" aria-label="Timeline settings" className="timeline-sidebar-panel">
           <div className="timeline-sidebar-heading">Timeline <span>Settings</span></div>
           <TimelineControls variant="utility" {...timelineControlsProps} />
           <div className="timeline-sidebar-section">
