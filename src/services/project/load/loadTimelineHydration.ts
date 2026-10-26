@@ -167,6 +167,7 @@ type CompositionViewState = Record<string, {
   scrollX?: number;
   inPoint?: number | null;
   outPoint?: number | null;
+  loopPlayback?: boolean;
 }>;
 
 export type ProjectLoadTimelineStore = ReturnType<typeof useTimelineStore.getState>;
@@ -431,7 +432,7 @@ export function convertProjectCompositionToStore(
       duration, durationLocked,
       zoom: viewState?.zoom ?? 1, scrollX: viewState?.scrollX ?? 0,
       inPoint: viewState?.inPoint ?? null, outPoint: viewState?.outPoint ?? null,
-      loopPlayback: false,
+      loopPlayback: viewState?.loopPlayback === true,
       videoBakeRegions: pc.videoBakeRegions ? structuredClone(pc.videoBakeRegions) : undefined,
       sharedSceneGraphs: pc.sharedSceneGraphs, compositionGraph: pc.compositionGraph,
       masterAudioState: pc.masterAudioState ? structuredClone(pc.masterAudioState) : undefined,

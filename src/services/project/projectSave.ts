@@ -362,6 +362,7 @@ export async function syncStoresToProject(): Promise<void> {
         scrollX?: number;
         inPoint?: number | null;
         outPoint?: number | null;
+        loopPlayback?: boolean;
       }> = {};
 
       // Get current timeline state for active composition
@@ -373,6 +374,7 @@ export async function syncStoresToProject(): Promise<void> {
           scrollX: timelineState.scrollX,
           inPoint: timelineState.inPoint,
           outPoint: timelineState.outPoint,
+          loopPlayback: timelineState.loopPlayback,
         };
       }
 
@@ -385,6 +387,7 @@ export async function syncStoresToProject(): Promise<void> {
             scrollX: comp.timelineData.scrollX,
             inPoint: comp.timelineData.inPoint,
             outPoint: comp.timelineData.outPoint,
+            loopPlayback: comp.timelineData.loopPlayback,
           };
         }
       }

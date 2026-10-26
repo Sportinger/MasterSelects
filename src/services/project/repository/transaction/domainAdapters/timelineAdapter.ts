@@ -79,7 +79,7 @@ export function prepareTimelineMutation(before: TimelineStore, patch: Partial<Ti
     throw new RepositoryError('ownership', `Composition "${owner.name}" is not part of the open project; the edit was not saved.`);
   }
   // Playback and view preferences never become content revisions.
-  for (const key of ['playheadPosition', 'zoom', 'scrollX', 'selectedClipIds', 'selectedKeyframeIds', 'inPoint', 'outPoint'] as const) {
+  for (const key of ['playheadPosition', 'zoom', 'scrollX', 'loopPlayback', 'selectedClipIds', 'selectedKeyframeIds', 'inPoint', 'outPoint'] as const) {
     if (before[key] !== next[key] && key !== 'inPoint' && key !== 'outPoint') {
       const value = next[key];
       plan.views.push({ key: `timeline/${owner.id}/${key}`, value: value instanceof Set ? [...value] : value });
