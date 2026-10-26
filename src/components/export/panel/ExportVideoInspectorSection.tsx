@@ -19,6 +19,7 @@ import {
   type GifPaletteMode,
 } from '../../../engine/gif/gifOptions';
 import type { BatchExportMediaType } from '../../../stores/exportStore';
+import { useUiSettingsStore } from '../../../stores/uiSettingsStore';
 import { ResolutionOrientationToggle } from '../../common/ResolutionOrientationToggle';
 import type {
   ExportBasicsActions,
@@ -29,6 +30,7 @@ import type {
   ExportBasicsVideoState,
 } from './exportBasicsTypes';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
+import { isLinuxCodecNoticePlatform, reportLinuxCodecSupport } from '../../../services/codecNotices/linuxCodecNotices';
 import {
   ExportInspectorMatchCheckbox,
   ExportInspectorNote,
@@ -58,6 +60,9 @@ function CodecControl({
   mode,
   video,
 }: Pick<ExportVideoInspectorSectionProps, 'actions' | 'display' | 'mode' | 'video'>) {
+  const h265NoticeDismissed = useUiSettingsStore(state => (
+    Array.isArray(state.dismissedCodecNotices) && state.dismissedCodecNotices.includes('h265-encode')
+  ));
   if (mode.isGifMode) return <span className="export-inspector-static">{display.currentCodecLabel}</span>;
 
   if (mode.encoder === 'hap') {
@@ -82,6 +87,8 @@ function CodecControl({
   }
 
   if (mode.isWebCodecsEncoder) {
+    // On Linux a greyed-out H.265 explains itself on click instead of doing nothing.
+    const explainH265 = video.codecSupportReady === true && !h265NoticeDismissed && isLinuxCodecNoticePlatform();
     return (
       <InspectorSelect
         ariaLabel="Video codec"
@@ -89,6 +96,9 @@ function CodecControl({
         options={FrameExporter.getVideoCodecs(video.containerFormat).map(codec => ({
           disabled: !video.codecSupport[codec.id],
           label: codec.label,
+          onUnavailableClick: explainH265 && codec.id === 'h265'
+            ? () => reportLinuxCodecSupport('h265-encode', video.codecSupport.h265)
+            : undefined,
           value: codec.id,
         }))}
         value={video.videoCodec}

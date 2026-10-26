@@ -9,6 +9,7 @@ import type { ExportSettings, VideoCodec, ContainerFormat } from './types';
 import { getCodecString, isCodecSupportedInContainer, getFallbackCodec } from './codecHelpers';
 import { isMobileAppleWebKit } from '../../utils/mobileAppleWebKit';
 import { resolveVideoEncoderBitrate } from './videoEncoderConfigPolicy';
+import { reportLinuxCodecSupport } from '../../services/codecNotices/linuxCodecNotices';
 
 /** Frame-rate hint used when an encoder rejects the real rate (see init). */
 const HARDWARE_FRAMERATE_HINT = 30;
@@ -150,6 +151,7 @@ export class VideoEncoderWrapper {
 
     if (supportedEncoderConfigs.length === 0) {
       log.error(`Codec not supported: ${codecString}`);
+      if (this.effectiveVideoCodec === 'h265') reportLinuxCodecSupport('h265-encode', false);
       return false;
     }
 
@@ -240,6 +242,8 @@ export class VideoEncoderWrapper {
         if (opusSupported) {
           this.audioCodec = 'opus';
           log.info('AAC not supported, using Opus audio for MP4 (fallback)');
+          // Make the fallback visible on Linux, whatever started the export (panel, batch, agent tool).
+          reportLinuxCodecSupport('aac-encode', false);
         } else {
           log.warn('No audio codec supported, disabling audio');
           this.hasAudio = false;

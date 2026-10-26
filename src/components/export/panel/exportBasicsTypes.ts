@@ -126,6 +126,8 @@ export interface ExportBasicsVideoState {
   containerFormat: ContainerFormat;
   videoCodec: VideoCodec;
   codecSupport: Record<VideoCodec, boolean>;
+  /** The browser has answered the encoder capability checks for the current size and rate. */
+  codecSupportReady?: boolean;
   ffmpegCodec: FFmpegVideoCodec;
   ffmpegContainer: FFmpegContainer;
   proresProfile: ProResProfile;

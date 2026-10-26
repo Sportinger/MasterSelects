@@ -1,0 +1,102 @@
+@layer overlays {
+/* Dismissible Linux platform banners (WebGPU/Vulkan warning, codec notices) */
+.linux-banner {
+  background: linear-gradient(135deg, #7c2d12 0%, #9a3412 100%);
+  border-bottom: 1px solid #ea580c;
+  padding: 8px 16px;
+  flex-shrink: 0;
+}
+
+/* Codec notices explain a fallback; the editor keeps working, so the tone is calmer. */
+.linux-banner--notice {
+  background: color-mix(in srgb, var(--warning) 16%, var(--bg-secondary));
+  border-bottom-color: color-mix(in srgb, var(--warning) 45%, var(--border-subtle));
+  padding: 6px 16px;
+}
+
+.linux-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.linux-banner-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.linux-banner--notice .linux-banner-icon {
+  color: var(--warning-light);
+  font-size: 14px;
+}
+
+.linux-banner-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--gray-0);
+  line-height: 1.4;
+}
+
+.linux-banner--notice .linux-banner-text {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.linux-banner-text code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  color: var(--warning-light);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.linux-banner-dismiss {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: var(--gray-0);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.linux-banner--notice .linux-banner-dismiss {
+  background: transparent;
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+}
+
+.linux-banner-dismiss:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.linux-banner-dismiss:focus-visible {
+  outline: 2px solid var(--warning-light);
+  outline-offset: 2px;
+}
+
+.linux-banner-dismiss:hover {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.linux-banner--notice .linux-banner-dismiss:hover {
+  background: color-mix(in srgb, var(--warning) 22%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 60%, var(--border-subtle));
+}
+}

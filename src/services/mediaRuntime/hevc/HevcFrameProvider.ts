@@ -4,6 +4,7 @@ import { GopDecodeEngine } from '../codec/GopDecodeEngine';
 import type { GopPacket } from '../codec/GopPacketSource';
 import { HevcPacketSource } from './HevcPacketSource';
 import { NativeHevcDecoder, WasmHevcDecoder, supportsNativeHevc } from './hevcDecoders';
+import { reportLinuxCodecSupport } from '../../codecNotices/linuxCodecNotices';
 
 const log = Logger.create('HEVC');
 // Laufzeitwissen gehört zur Dateiinstanz, nicht in gespeicherte Projekte.
@@ -43,7 +44,13 @@ export class HevcFrameProvider extends CodecFrameProviderBase<GopPacket, HevcFra
     // Ein positives isConfigSupported genügt nicht: ein echtes Bild ist Pflicht.
     const frame = await this.decodeWithFallback(first);
     closeVideoFrame(frame);
+    if (!this.native) this.reportSoftwareDecode();
     return source;
+  }
+
+  /** The browser cannot decode this H.265 config natively; WASM works, but slower (Linux banner). */
+  private reportSoftwareDecode(): void {
+    reportLinuxCodecSupport('h265-decode', false, { sourceName: this.options.file.name });
   }
 
   protected hasDecoder(): boolean { return this.engine !== null; }
@@ -83,7 +90,9 @@ export class HevcFrameProvider extends CodecFrameProviderBase<GopPacket, HevcFra
       this.native = false;
       log.warn('Browser-HEVC liefert kein nutzbares Bild; wechsle zu WASM.', { reason: this.fallbackReason });
       await this.openEngine();
-      return this.decodeBounded(packet);
+      const frame = await this.decodeBounded(packet);
+      this.reportSoftwareDecode();
+      return frame;
     }
   }
 

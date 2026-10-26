@@ -50,7 +50,7 @@ From top to bottom:
 1. **Presets**: the **Preset** list holds the project's saved export settings; choosing one loads it. **Save** stores the current settings under a name, **Update** overwrites the selected preset. For a video export whose range holds storyboard scenes, a **Storyboard output** row follows (not while a batch is queued): **Normal video** (blocked while a scene has no accepted media) or **Animatic (slates + stills)**, which renders empty scenes as labelled slates.
 2. **Output**: **Same as composition** keeps resolution and frame rate in step with the active composition. **Name** is the file name, **Container** chooses the deliverable, grouped as Video, Image, Audio and Timeline (`.fcpxml`), and **Method** chooses how a video is encoded.
 3. **Video** (**Image** for a still or image sequence, **GIF** for an animated GIF): the switch in its header turns the picture off for an audio-only export. Below it: codec, resolution, frame rate, rate control and bitrate, and under **Alpha** the **Alpha Channel** and **Stacked Alpha** options. Animated GIF shows its palette controls here.
-4. **Audio**: the switch in its header turns sound off for a silent video. Below it: codec, sample rate, bitrate for compressed audio and **Normalize** under Processing. MP4 uses AAC; where the browser cannot encode AAC (Chrome on Linux, as in the picture), it falls back to Opus and the codec reads **OPUS (fallback)**.
+4. **Audio**: the switch in its header turns sound off for a silent video. Below it: codec, sample rate, bitrate for compressed audio and **Normalize** under Processing. MP4 uses AAC; where the browser cannot encode AAC (Chrome on Linux, as in the picture), it falls back to Opus and the codec reads **OPUS (fallback)**. On Linux a banner also says so ([Linux: H.265 and AAC](#linux-h265-and-aac)).
 5. **Range & Summary** (closed at first): **Range** is **Full timeline** or **In / Out markers**, followed by the timecode, duration, frame count, output size and the estimated file size.
 6. **Render Quality** (closed at first, for video and images): how 3D scenes are rendered ([Render Quality](#render-quality)).
 7. The green **Export** button, with the estimated size beside its label.
@@ -187,6 +187,18 @@ Supported codecs are checked at runtime:
 - Dense particle material needs far higher bitrates than camera footage; 4K60 HEVC of fine point clouds looks soft below roughly 60 Mbps.
 - Encoder backpressure waits for encoded output instead of flushing, so hardware encoders keep their GOP and rate control. At least eight frames may be in flight (bounded by a 384 MB ceiling, so 8K stays at two) because hardware encoders hold several frames before their first output.
 - Motion frame state is validated once per frame: replicator evaluations and modifier plans created by the frame runtime are sealed and proven by their input key instead of being re-evaluated and compared as JSON.
+
+### Linux: H.265 and AAC
+
+Chrome on Linux has no AAC encoder and usually cannot encode H.265; H.265 decoding depends on the graphics hardware. On Linux only, a banner at the top of the editor tells you when this affects your work, says what happens instead and what you can do. **✕** closes it for good: each notice is remembered on its own, also after a reload.
+
+| When | Banner |
+|---|---|
+| You click the greyed-out **H.265 (HEVC)** codec, a preset or saved setting asks for H.265 (the export switches to H.264), or an export starts with H.265 | H.265 encoding is not available: choose H.264, VP9 or AV1 (the FFmpeg export has no H.265 either), or use Chrome on Windows or macOS. |
+| You choose a browser MP4 export with audio (container, method, audio switch, preset) or start one | AAC is not available: the MP4 gets Opus audio, which QuickTime and some editors cannot open. For AAC choose the **.mov** container (FFmpeg export with AAC audio), or use Chrome on Windows or macOS. |
+| An H.265 clip is imported or opened and the browser cannot decode it | The clip is decoded in software ([HEVC Decoding](./HEVC-Decoding.md)), so playback and export are slower; convert it to H.264, or use Chrome on Windows or macOS. |
+
+The banner appears only when the browser's own check (`VideoEncoder`/`AudioEncoder`/`VideoDecoder.isConfigSupported()` with the configuration the export or clip actually uses) says no; never on Windows or macOS, never when the check passes. Opening the panel with saved MP4 settings stays quiet until you change them or start the export. The fallback is logged once per session under `LinuxCodecNotice`, also after the banner was closed. Code: `src/services/codecNotices/` (decision and texts), `src/components/common/LinuxCodecNotices.tsx`; closed notices are stored in `uiSettingsStore.dismissedCodecNotices`.
 
 ---
 

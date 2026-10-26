@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
+import type { LinuxCodecNoticeId } from '../services/codecNotices/linuxCodecNoticePolicy';
 
 export type InterfaceFontFamily = 'system' | 'segoe' | 'arial' | 'verdana' | 'mono';
 export type AudioLatencyHint = 'interactive' | 'balanced' | 'playback';
@@ -34,6 +35,8 @@ interface UiSettingsState {
   captureDisplayAudioEnabled: boolean;
   captureMuteCapturedTab: boolean;
   captureAutoPlaceOnTimeline: boolean;
+  /** Linux codec notices the user closed; they stay closed across reloads. */
+  dismissedCodecNotices: LinuxCodecNoticeId[];
   setInterfaceTextScale: (scale: number) => void;
   setInterfaceFontFamily: (fontFamily: InterfaceFontFamily) => void;
   setHighReadabilityMode: (enabled: boolean) => void;
@@ -48,6 +51,7 @@ interface UiSettingsState {
   setCaptureDisplayAudioEnabled: (enabled: boolean) => void;
   setCaptureMuteCapturedTab: (enabled: boolean) => void;
   setCaptureAutoPlaceOnTimeline: (enabled: boolean) => void;
+  dismissCodecNotice: (id: LinuxCodecNoticeId) => void;
 }
 
 export const useUiSettingsStore = create<UiSettingsState>()(
@@ -70,6 +74,7 @@ export const useUiSettingsStore = create<UiSettingsState>()(
         captureDisplayAudioEnabled: true,
         captureMuteCapturedTab: false,
         captureAutoPlaceOnTimeline: false,
+        dismissedCodecNotices: [],
         setInterfaceTextScale: (scale) => set({ interfaceTextScale: clampInterfaceTextScale(scale) }),
         setInterfaceFontFamily: (fontFamily) => set({ interfaceFontFamily: fontFamily }),
         setHighReadabilityMode: (enabled) => set({ highReadabilityMode: enabled }),
@@ -84,6 +89,11 @@ export const useUiSettingsStore = create<UiSettingsState>()(
         setCaptureDisplayAudioEnabled: (enabled) => set({ captureDisplayAudioEnabled: enabled }),
         setCaptureMuteCapturedTab: (enabled) => set({ captureMuteCapturedTab: enabled }),
         setCaptureAutoPlaceOnTimeline: (enabled) => set({ captureAutoPlaceOnTimeline: enabled }),
+        dismissCodecNotice: (id) => set((state) => (
+          state.dismissedCodecNotices.includes(id)
+            ? state
+            : { dismissedCodecNotices: [...state.dismissedCodecNotices, id] }
+        )),
       }),
       {
         name: 'masterselects-ui-settings',
