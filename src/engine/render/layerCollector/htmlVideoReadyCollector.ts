@@ -19,6 +19,7 @@ import {
 } from './htmlVideoFrameCache';
 import {
   filterPausedHtmlTargetFrame,
+  pausedHtmlTargetFrameRate,
   isPausedHtmlTargetMediaTimeUsable,
   shouldGuardPausedHtmlTargetFrames,
 } from './htmlVideoPausedFrameGuard';
@@ -68,6 +69,7 @@ function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerR
     isDragging,
     isExporting: deps.isExporting,
   });
+  const pausedFrameRate = pausedHtmlTargetFrameRate(video);
   const lastPresentedTime = deps.scrubbingCache?.getLastPresentedTime(video);
   const lastPresentedOwner = deps.scrubbingCache?.getLastPresentedOwner(video);
   const hasUsableLivePlaybackFrame =
@@ -94,7 +96,7 @@ function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerR
   const hasFreshPresentedFrame =
     hasConfirmedPresentedFrame &&
     (shouldGuardPausedTargetFrames
-      ? isPausedHtmlTargetMediaTimeUsable(lastPresentedTime, targetTime)
+      ? isPausedHtmlTargetMediaTimeUsable(lastPresentedTime, targetTime, pausedFrameRate)
       : Math.abs(lastPresentedTime - targetTime) <= 0.12);
   const presentedDriftSeconds = hasConfirmedPresentedFrame
     ? Math.abs(lastPresentedTime - targetTime)
@@ -107,7 +109,7 @@ function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerR
     !video.seeking &&
     Number.isFinite(currentTime) &&
     (shouldGuardPausedTargetFrames
-      ? isPausedHtmlTargetMediaTimeUsable(currentTime, targetTime)
+      ? isPausedHtmlTargetMediaTimeUsable(currentTime, targetTime, pausedFrameRate)
       : currentTimeDriftSeconds <= 0.12);
   const reportedDisplayedTime =
     Number.isFinite(currentTime) &&
@@ -125,7 +127,8 @@ function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerR
   const lastSameClipFrame = filterPausedHtmlTargetFrame(
     getDragHoldFrame(layer, video, deps, shouldGuardPausedTargetFrames ? undefined : targetTime),
     targetTime,
-    shouldGuardPausedTargetFrames
+    shouldGuardPausedTargetFrames,
+    pausedFrameRate
   );
   const dragHoldFrame = isDragging
     ? isFrameNearTarget(
@@ -158,7 +161,8 @@ function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerR
     filterPausedHtmlTargetFrame(
       getSafeLastFrameFallback(layer, video, deps, targetTime),
       targetTime,
-      shouldGuardPausedTargetFrames
+      shouldGuardPausedTargetFrames,
+      pausedFrameRate
     ) ?? dragHoldFrame;
   const shouldPreferStableHold = controller.shouldPreferHtmlHold(layerReuseKey, {
     hasHoldFrame: !!safeFallback || !!emergencyHoldFrame || !!sameClipHoldFrame,
@@ -197,7 +201,8 @@ function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerR
     const pausedTargetCachedFrame = filterPausedHtmlTargetFrame(
       cachedFrame,
       targetTime,
-      shouldGuardPausedTargetFrames
+      shouldGuardPausedTargetFrames,
+      pausedFrameRate
     );
     if (pausedTargetCachedFrame) {
       controller.armHtmlHold(layerReuseKey);

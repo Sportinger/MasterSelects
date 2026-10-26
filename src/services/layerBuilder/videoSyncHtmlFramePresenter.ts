@@ -1,4 +1,4 @@
-import { rememberPresentedSourceFrame, videoHasTargetFrame } from './videoSyncFrameSelection';
+import { presentedPtsFitsTarget, rememberPresentedSourceFrame, videoAtFrameSeekTime, videoHasTargetFrame } from './videoSyncFrameSelection';
 import { shouldStageHtmlVideoFrame } from '../../engine/texture/videoFrameCopyPolicy';
 import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
@@ -91,6 +91,17 @@ export class VideoSyncHtmlFramePresenter {
       this.deps.htmlSeeks.clearPendingTarget(clipId);
       const finishPresentedFrame = () => {
         const playback = this.deps.getTimelinePlaybackState();
+        if (!playback.isPlaying && !playback.isDragging && desiredTime !== undefined
+          && videoAtFrameSeekTime(video, desiredTime) && !presentedPtsFitsTarget(video, presentedTime, desiredTime)) {
+          // The browser's frame for a frame-exact seek is the best the element can show; say when
+          // its timestamp still is not the target's frame instead of passing it off as exact.
+          vfPipelineMonitor.record('vf_seek_wrong_frame', {
+            clipId,
+            targetMs: Math.round(desiredTime * 1000),
+            seekMs: Math.round(video.currentTime * 1000),
+            presentedMs: Math.round(presentedTime * 1000),
+          });
+        }
         if (playback.isPlaying || playback.isDragging || desiredTime === undefined || videoHasTargetFrame(video, desiredTime)) {
           scrubSettleState.resolve(clipId);
         } else {

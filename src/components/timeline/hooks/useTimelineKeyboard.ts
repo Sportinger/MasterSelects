@@ -17,6 +17,7 @@ import type { TimelineEditOperationActions } from '../../../stores/timeline/type
 import { TIMELINE_TOOL_DEFINITIONS } from '../tools/registry';
 import { runTimelineToolCommand } from '../tools/timelineToolCommands';
 import { readTimelinePlaybackPosition } from './useTimelineEditorPlaybackState';
+import { stepTimeByFrames } from '../../../utils/timelineFrameQuantization';
 
 const GROUP_SHORTCUT_ACTIONS = new Set([
   'tool.selectionGroup',
@@ -436,11 +437,7 @@ export function useTimelineKeyboard({
         if (timelineState.maskEditMode === 'editing' && timelineState.selectedVertexIds.size > 0) return;
         if (!claimShortcut(e, 'nav.frameBackward')) return;
         if (activeComposition) {
-          const frameRate = Math.max(1, activeComposition.frameRate || 30);
-          const currentPosition = getFreshPlayheadPosition(playheadPosition);
-          const currentFrame = Math.round(currentPosition * frameRate);
-          const newPosition = Math.max(0, (currentFrame - 1) / frameRate);
-          setPlayheadPosition(newPosition);
+          setPlayheadPosition(stepTimeByFrames(getFreshPlayheadPosition(playheadPosition), -1, activeComposition.frameRate, duration));
         }
         return;
       }
@@ -451,12 +448,7 @@ export function useTimelineKeyboard({
         if (timelineState.maskEditMode === 'editing' && timelineState.selectedVertexIds.size > 0) return;
         if (!claimShortcut(e, 'nav.frameForward')) return;
         if (activeComposition) {
-          const frameRate = Math.max(1, activeComposition.frameRate || 30);
-          const currentPosition = getFreshPlayheadPosition(playheadPosition);
-          const currentFrame = Math.round(currentPosition * frameRate);
-          const maxFrame = Math.round(duration * frameRate);
-          const newPosition = Math.min(duration, (Math.min(maxFrame, currentFrame + 1)) / frameRate);
-          setPlayheadPosition(newPosition);
+          setPlayheadPosition(stepTimeByFrames(getFreshPlayheadPosition(playheadPosition), 1, activeComposition.frameRate, duration));
         }
         return;
       }

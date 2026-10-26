@@ -14,6 +14,7 @@ import {
 } from './htmlVideoFrameCache';
 import {
   filterPausedHtmlTargetFrame,
+  pausedHtmlTargetFrameRate,
   shouldGuardPausedHtmlTargetFrames,
 } from './htmlVideoPausedFrameGuard';
 import type { HtmlVideoCollectRequest } from './htmlVideoCollector';
@@ -32,10 +33,12 @@ export function collectNotReadyHtmlVideo(
     isDragging,
     isExporting: deps.isExporting,
   });
+  const pausedFrameRate = pausedHtmlTargetFrameRate(video);
   const lastSameClipFrame = filterPausedHtmlTargetFrame(
     getDragHoldFrame(layer, video, deps, shouldGuardPausedTargetFrames ? undefined : targetTime),
     targetTime,
-    shouldGuardPausedTargetFrames
+    shouldGuardPausedTargetFrames,
+    pausedFrameRate
   );
   const dragHoldFrame = isSettling
     ? (() => {
@@ -71,7 +74,8 @@ export function collectNotReadyHtmlVideo(
   const safeFallback = filterPausedHtmlTargetFrame(
     getSafeLastFrameFallback(layer, video, deps, targetTime),
     targetTime,
-    shouldGuardPausedTargetFrames
+    shouldGuardPausedTargetFrames,
+    pausedFrameRate
   ) ?? dragHoldFrame;
   const cachedFrame =
     deps.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
@@ -81,7 +85,8 @@ export function collectNotReadyHtmlVideo(
   const pausedTargetCachedFrame = filterPausedHtmlTargetFrame(
     cachedFrame,
     targetTime,
-    shouldGuardPausedTargetFrames
+    shouldGuardPausedTargetFrames,
+    pausedFrameRate
   );
   if (pausedTargetCachedFrame) {
     controller.armHtmlHold(layerReuseKey);

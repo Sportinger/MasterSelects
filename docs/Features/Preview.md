@@ -69,6 +69,8 @@ Current preview-related overlays and modes include:
 - Registers as an active-comp or independent render target in `renderTargetStore`.
 - Normal composition previews use the same viewer navigation model as the Source Monitor: wheel or trackpad gestures zoom around the pointer, middle-button drag pans, and zooming fully out stops at Fit (100%) and restores the centered position.
 - The shared lower transport provides scrubbing, edit/frame navigation, playback, and toggleable timeline In/Out flags. Clicking an active In or Out flag removes that point again.
+- Previous/Next frame, the scrubber step and the timecode follow the active composition's frame rate (24, 25, 29.97, 50, 60, ...). A step goes from the frame shown at the playhead (frame k covers [k/fps, (k+1)/fps)) to the start of the neighbouring frame, computed from the frame index (`stepTimeByFrames` in `src/utils/timelineFrameQuantization.ts`, shared with the timeline's Left/Right arrows), so repeated steps land exactly on the frame grid and never drift. Stepping while playing pauses first and steps from the paused playhead.
+- A paused seek (frame step, ruler or scrubber release, `setPlayhead`, pause after playback) ends with the preview showing exactly the playhead's frame without another user action; see [Frame-exact paused preview](#frame-exact-paused-preview).
 - A failed WebGPU initialization replaces the canvas with a large, high-contrast error panel. The message distinguishes unavailable WebGPU, missing adapters, request timeouts, and renderer-resource failures without recommending a particular browser and keeps Linux/Vulkan guidance visible.
 - The Linux/Vulkan performance banner remains visible until dismissed. Dismissal is stored locally, so subsequent engine initializations do not show it again.
 
@@ -124,9 +126,42 @@ The source monitor shows a raw media file in the preview panel instead of the co
 The engine render loop is RAF-based and has three important behaviors:
 
 - It idles after about 1 second of inactivity.
+- While paused on a video clip, the held frame is re-presented every 250 ms. A requested render (a paused seek, the decoded frame it asked for, a capture) runs at display cadence instead; a request held back by a frame limiter stays pending for the next allowed tick rather than being dropped.
 - Idle detection is suppressed until the first play event so browser video surfaces can warm up after reload.
 - A watchdog checks for stalls and restarts the loop if it dies while the engine is expected to render.
 - The composition playback clock is hosted above individual dock layouts. Switching between Video Edit, Color, and other editor layouts therefore preserves active playback and keeps every mounted transport and compact playhead synchronized.
+
+### Frame-exact paused preview
+
+Paused preview frames come from the HTML video element of the clip (or its caches) and are
+judged by frame index, never by a time distance that also admits a neighbour:
+
+- **Seeks go into the target frame.** Chromium truncates a seek position to whole microseconds
+  but rounds demuxed frame timestamps (MP4: microseconds, WebM: milliseconds), so a seek to exactly
+  k/fps presented frame k-1 for every third frame at 30 fps. Every HTML seek therefore goes to
+  `htmlVideoFrameSeekTime`: up to 1 ms into the target's source frame, never past the middle of what
+  remains of it (`src/services/layerBuilder/videoSyncFrameSelection.ts`, applied by
+  `VideoSyncManager.safeSeekTime`). The background scrub-cache fill seeks each 1/30 s slot the same
+  way (`SLOT_SEEK_LEAD_SECONDS`), so a slot no longer holds the frame before its own.
+- **The previous frame is never the target frame.** A presented frame (its
+  `requestVideoFrameCallback` timestamp) matches the target by its source frame bin; the
+  "earlier PTS within one frame" allowance for averaged VFR rates keeps a 1 ms rounding margin, so
+  floating-point noise (0.1333 − 0.1 < 1/30) no longer passes frame 3 off as frame 4. Only an
+  element at the frame-exact seek position for the target counts as seeked onto it.
+- **Held and cached frames show the target frame only.** The paused guard
+  (`htmlVideoPausedFrameGuard.ts`) compares frame indices on the source grid, never finer than the
+  scrub cache's 1/30 s slots; it used to accept anything from one 1/30 s slot back to 50 ms ahead.
+- **Pause keeps the playhead.** After playback the playhead stays where the pause put it, and the
+  frozen video element is seeked frame-exactly to the playhead's frame (`vf_stop_resync`): a paused
+  element's clock does not prove its picture, the frame shown after playback can be one off the
+  frame holding `currentTime` in either direction. Only an element already at the frame-exact seek
+  position is kept as is. The playhead is no longer moved onto the video's frame a render later.
+- **Failures are visible.** A frame-exact seek whose presented timestamp still is not the target's
+  frame records `vf_seek_wrong_frame` (target, seek position, presented time) in the VF pipeline.
+
+`tests/playwright/foundation/preview-truth.spec.ts` checks this against the preview's real pixels
+(frame-code clip, Next frame ×37, play/pause); `tests/unit/pausedFrameExactSeek.test.ts` pins the
+seek positions, frame identity, guard and stepping at 24 to 60 fps.
 
 ### Playback Limits
 

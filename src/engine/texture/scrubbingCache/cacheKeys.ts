@@ -1,4 +1,8 @@
 export const SCRUB_CACHE_FPS = 30;
+/** A slot is filled with the frame shown just after its start: seeking exactly to k/30 can present
+ * the previous frame, because Chromium truncates the seek position to whole microseconds but rounds
+ * frame timestamps (at 30 fps e.g. slots 2, 5, 8 used to hold the frame before their own). */
+export const SLOT_SEEK_LEAD_SECONDS = 0.001;
 /** Slots absorb the 3-decimal key strings and float noise (0.67 ms), never a real frame step. */
 const SLOT_EPSILON = 0.02;
 

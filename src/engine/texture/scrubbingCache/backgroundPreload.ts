@@ -12,7 +12,7 @@ import {
   seekBackgroundVideo,
   yieldBackgroundPreload,
 } from './backgroundVideoOps';
-import { frameIndexForTime, SCRUB_CACHE_FPS } from './cacheKeys';
+import { frameIndexForTime, SCRUB_CACHE_FPS, SLOT_SEEK_LEAD_SECONDS } from './cacheKeys';
 import { ScrubTextureCache } from './scrubTextureCache';
 import { getScrubPreloadWindow } from './scrubPreloadWindow';
 
@@ -309,7 +309,7 @@ export class BackgroundPreloadController {
 
         const time = frameIndex / SCRUB_CACHE_FPS;
         const startedAt = performance.now();
-        const ready = await seekBackgroundVideo(session, time, {
+        const ready = await seekBackgroundVideo(session, time + SLOT_SEEK_LEAD_SECONDS, {
           metadataTimeoutMs: this.metadataTimeoutMs,
           seekTimeoutMs: this.seekTimeoutMs,
         });

@@ -129,6 +129,20 @@ recovery rather than waking a failed queue. This limits latency, not shader cost
 - Check whether RAM preview is stale while the target moved.
 - Confirm whether the render loop is idle and requires restarting.
 
+### Paused Preview Shows A Neighbouring Frame
+
+The playhead moved (frame step, ruler, `setPlayhead`, pause) but the preview shows the frame
+before or after it:
+
+- In `__VF_PIPELINE__.events()` look for `vf_seek_wrong_frame` (a frame-exact seek presented
+  another frame, e.g. unusual container timestamps), and compare `vf_preview_frame`
+  `targetTimeMs` with `displayedTimeMs`: on a correct paused frame both lie in the same source frame.
+- `vf_stop_resync` after a pause is the frame-exact seek of the frozen video onto the playhead's
+  frame (`offsetMs`: how far its clock was off); the playhead itself never moves after the pause.
+- A paused render request is presented at display cadence; a delay of about 250 ms between
+  `vf_seek_done` and the next `vf_preview_frame` points at a dropped render request.
+- Background: [Frame-exact paused preview](./Preview.md#frame-exact-paused-preview).
+
 ### Drift During Playback
 
 - Check `driftSeconds`, handoff events, and active anomaly flags.

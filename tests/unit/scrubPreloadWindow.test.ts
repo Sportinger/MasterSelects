@@ -49,6 +49,10 @@ describe('budget-sized idle preload', () => {
     controller.preloadAroundTime(video, 0);
     expect(controller.getStats().queuedFrames).toBeLessThanOrEqual(72);
     await vi.waitFor(() => expect(captures.size).toBe(200));
+    // Each slot is seeked 1 ms into its frame (an exact k/30 seek can show the previous frame) and
+    // still stored under its slot start.
+    const seekTimes = seek.mock.calls.map(call => (call as unknown as [unknown, number])[1]);
+    expect(seekTimes.every(time => Math.abs(time * 30 - Math.round(time * 30) - 0.03) < 1e-6)).toBe(true);
     setBudget(16 * 402);
     controller.preloadAroundTime(video, 0);
     await vi.waitFor(() => expect(captures.size).toBe(400));

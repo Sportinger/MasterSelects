@@ -108,13 +108,7 @@ test('after a reload the preview shows frame 0 within the budget, never a wrong 
   await editor.waitForProjectIdle(30_000)
 })
 
-// Known product defect, found by this test (2026-10-26): while paused, a seek moves the playhead but the
-// preview keeps the previous frame on screen (the newly decoded frame is never repainted). Remove the
-// marker when the fix lands; Playwright then reports this case as unexpectedly passing.
-const PAUSED_REPAINT_DEFECT = 'paused preview is not repainted after a seek (stale frame on screen)'
-
 test('each Next frame click shows exactly the next frame, 37 clicks land on frame 37 @module:foundation', async ({ truth }, testInfo) => {
-  test.fail(true, PAUSED_REPAINT_DEFECT)
   const { page, bridge, probe, clip } = truth
   await reset(truth, testInfo)
   const next = page.getByRole('button', { name: 'Next frame', exact: true })
@@ -130,7 +124,6 @@ test('each Next frame click shows exactly the next frame, 37 clicks land on fram
 })
 
 test('playing advances the frames in order without jumps or freezes, pausing holds the frame @module:foundation', async ({ truth }, testInfo) => {
-  test.fail(true, PAUSED_REPAINT_DEFECT)
   const { page, probe, bridge, clip } = truth
   await reset(truth, testInfo)
   probe.mark()

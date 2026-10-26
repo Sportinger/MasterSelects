@@ -43,6 +43,35 @@ export function quantizeTimeToFrame(
   return Math.round(time * fps) / fps;
 }
 
+// Absorbs floating-point noise in a frame start (e.g. 0.06666666666666665 * 30), never a real frame.
+const FRAME_INDEX_EPSILON = 0.000001;
+
+/** The frame shown at `time`: frame k covers [k/fps, (k+1)/fps). */
+export function frameIndexAtTime(time: number, frameRate: number | null | undefined): number {
+  const fps = sanitizeTimelineFrameRate(frameRate);
+  return Number.isFinite(time) ? Math.floor(Math.max(0, time) * fps + FRAME_INDEX_EPSILON) : 0;
+}
+
+/**
+ * The start of the frame `frames` steps away from the frame shown at `time`; stepping past the
+ * last frame start lands on the timeline end, stepping before 0 on 0. Computed from the frame
+ * index, so repeated steps land exactly on the frame grid at any rate (23.976, 29.97, ...) and
+ * never drift through accumulated fractions.
+ */
+export function stepTimeByFrames(
+  time: number,
+  frames: number,
+  frameRate: number | null | undefined,
+  duration: number,
+): number {
+  const fps = sanitizeTimelineFrameRate(frameRate);
+  const safeDuration = Number.isFinite(duration) ? Math.max(0, duration) : 0;
+  const lastFrame = Math.floor(safeDuration * fps + FRAME_INDEX_EPSILON);
+  const frame = frameIndexAtTime(time, fps) + Math.trunc(frames);
+  if (frame > lastFrame) return safeDuration;
+  return Math.max(0, frame) / fps;
+}
+
 export function isFrameLockedClip(clip: Pick<
   FrameTimedClip,
   'linkedClipId' | 'source' | 'sourceType'

@@ -1,8 +1,7 @@
-import { rememberSourceFrameRate, videoHasTargetFrame } from './videoSyncFrameSelection';
+import { rememberSourceFrameRate, videoAtFrameSeekTime, videoHasTargetFrame } from './videoSyncFrameSelection';
 import { clipSourceTimeToLocal, isReverseVideoPlayback } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types';
 import { flags } from '../../engine/featureFlags';
-import { useTimelineStore } from '../../stores/timeline';
 import { renderHostPort } from '../render/renderHostPort';
 import { playheadState } from './PlayheadState';
 import { scrubSettleState } from '../scrubSettleState';
@@ -78,8 +77,6 @@ export type VideoSyncHtmlClipCoordinatorDeps = {
 };
 
 export class VideoSyncHtmlClipCoordinator {
-  private static readonly PLAYBACK_STOP_SEEK_THRESHOLD = 0.05;
-
   private readonly deps: VideoSyncHtmlClipCoordinatorDeps;
 
   constructor(deps: VideoSyncHtmlClipCoordinatorDeps) {
@@ -349,16 +346,18 @@ export class VideoSyncHtmlClipCoordinator {
       const localStopTime = ctx.hasKeyframes(clip.id)
         ? undefined
         : clipSourceTimeToLocal(clip, pauseTargetTime);
-      const newPlayheadPos = localStopTime === undefined
-        ? currentPlayhead : clip.startTime + localStopTime;
-      const playheadDelta = newPlayheadPos - currentPlayhead;
-      // The stop position belongs to the playhead: a video that ran ahead or lagged is seeked back to it.
-      const videoOffPlayhead = Math.abs(playheadDelta) > VideoSyncHtmlClipCoordinator.PLAYBACK_STOP_SEEK_THRESHOLD;
-      const shouldSnapPlayheadToStopFrame = Math.abs(playheadDelta) > 0.01 && !videoOffPlayhead;
+      const playheadDelta = localStopTime === undefined
+        ? 0 : clip.startTime + localStopTime - currentPlayhead;
+      // The stop position belongs to the playhead and is never moved after the pause (moving it onto
+      // the video's frame happened a render later, so the paused state changed under its reader).
+      // A paused element's clock does not prove its picture: after playback the shown frame can be
+      // one off the frame holding currentTime, either way. Unless the element already sits at the
+      // frame-exact seek position for the playhead, it is seeked there.
+      const videoOffPlayhead = !videoAtFrameSeekTime(actualVideo, timeInfo.clipTime)
+        || !videoHasTargetFrame(actualVideo, timeInfo.clipTime);
       const handoffReleased = clipVideoElement !== actualVideo;
       if (videoOffPlayhead) vfPipelineMonitor.record('vf_stop_resync', { clipId: clip.id, offsetMs: Math.round(playheadDelta * 1000) });
-      if (videoOffPlayhead ||
-          (localStopTime === undefined && !videoHasTargetFrame(actualVideo, timeInfo.clipTime))) {
+      if (videoOffPlayhead) {
         if (handoffReleased) {
           this.deps.setHandoff(clip.id, actualVideo);
         }
@@ -379,10 +378,6 @@ export class VideoSyncHtmlClipCoordinator {
         !renderHostPort.captureVideoFrameAtTime(actualVideo, pauseTargetTime, clip.id)
       ) {
         renderHostPort.ensureVideoFrameCached(actualVideo, clip.id);
-      }
-      if (shouldSnapPlayheadToStopFrame) {
-        playheadState.position = newPlayheadPos;
-        useTimelineStore.setState({ playheadPosition: newPlayheadPos });
       }
       if (handoffReleased) {
         this.deps.setHandoff(clip.id, actualVideo);

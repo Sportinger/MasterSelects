@@ -20,7 +20,9 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { PreviewQuality } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
+import { sanitizeTimelineFrameRate, stepTimeByFrames } from '../../utils/timelineFrameQuantization';
 import { formatTimelineTimecode } from '../timeline/utils/timelineGrid';
 import { usePreviewDockPanelId } from './PreviewDockPanelContext';
 import { usePreviewTransportPortal } from './PreviewTransportPortalContext';
@@ -28,7 +30,6 @@ import { PreviewCanvasZoomBar } from './PreviewCanvasZoomBar';
 import type { PreviewCanvasZoom } from './usePreviewCanvasZoom';
 import './PreviewTransport.css';
 
-const PREVIEW_FRAME_RATE = 30;
 const MUTED_MASTER_VOLUME_DB = -60;
 
 interface PreviewTransportProps {
@@ -67,6 +68,10 @@ export function PreviewTransport({
   const maximizedPanelId = useDockStore(state => state.maximizedPanelId);
   const setMaximizedPanel = useDockStore(state => state.setMaximizedPanel);
   const isPanelMaximized = dockPanelId !== null && maximizedPanelId === dockPanelId;
+  // Stepping, the slider grid and the timecode follow the active composition's frame rate.
+  const frameRate = useMediaStore(state => sanitizeTimelineFrameRate(
+    state.compositions.find(composition => composition.id === state.activeCompositionId)?.frameRate,
+  ));
   const {
     clips,
     duration,
@@ -157,7 +162,9 @@ export function PreviewTransport({
   };
   const stepFrame = (direction: -1 | 1) => {
     if (isPlaying) pause();
-    seek(playheadPosition + direction / PREVIEW_FRAME_RATE);
+    // Read the playhead fresh: pausing just above can move it after this render's snapshot.
+    const position = useTimelineStore.getState().playheadPosition;
+    seek(stepTimeByFrames(position, direction, frameRate, safeDuration));
   };
   const toggleInPoint = () => {
     if (inPoint !== null) {
@@ -184,7 +191,7 @@ export function PreviewTransport({
   };
   // Collapsed transport keeps only the show/hide toggle visible.
   const showViewerTools = playbackControlsVisible && !sourceMonitorActive && sceneObjectOverlayEnabled;
-  const formattedTimecode = formatTimelineTimecode(playheadPosition, PREVIEW_FRAME_RATE);
+  const formattedTimecode = formatTimelineTimecode(playheadPosition, frameRate);
   const resolveStyleTimecode = formattedTimecode.split(':').length === 3
     ? `00:${formattedTimecode}`
     : formattedTimecode;
@@ -309,7 +316,7 @@ export function PreviewTransport({
               onPointerCancel={endScrub}
               onPointerDown={beginScrub}
               onPointerUp={endScrub}
-              step={1 / PREVIEW_FRAME_RATE}
+              step={1 / frameRate}
               tabIndex={playbackControlsVisible ? 0 : -1}
               type="range"
               value={Math.min(playheadPosition, safeDuration || 1)}

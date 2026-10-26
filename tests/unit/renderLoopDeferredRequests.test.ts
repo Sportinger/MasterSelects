@@ -68,4 +68,24 @@ describe('RenderLoop deferred render requests', () => {
       expect(onRender).toHaveBeenCalledOnce();
     } finally { loop.stop(); }
   });
+
+  it('renders a paused video preview request at display cadence instead of the 250 ms hold tick', () => {
+    const { loop, onRender, tick } = startLoop({ recovering: false, exporting: false });
+    try {
+      // Paused on a video clip: the held frame is re-presented every 250 ms without a request.
+      loop.setTimelineVisualDemand(true);
+      loop.setHasActiveVideo(true);
+      loop.requestRender(); tick();
+      expect(onRender).toHaveBeenCalledTimes(1);
+      // The seek's decoded frame arrives 5 ms later: the 15 ms limiter holds it, but keeps the request.
+      tick(5); loop.requestNewFrameRender(); tick(5);
+      expect(onRender).toHaveBeenCalledTimes(1);
+      tick(16);
+      expect(onRender).toHaveBeenCalledTimes(2);
+      expect(onRender).toHaveBeenLastCalledWith({ newFrameReady: true });
+      // Without a request nothing renders at display cadence (only the 250 ms hold tick re-presents).
+      for (let elapsed = 0; elapsed < 200; elapsed += 16) tick();
+      expect(onRender).toHaveBeenCalledTimes(2);
+    } finally { loop.stop(); }
+  });
 });

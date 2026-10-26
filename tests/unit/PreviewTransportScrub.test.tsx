@@ -24,8 +24,20 @@ const timelineState = vi.hoisted(() => ({
   tracks: [],
 }));
 
+const mediaState = vi.hoisted(() => ({
+  activeCompositionId: 'comp',
+  compositions: [{ id: 'comp', frameRate: 30 as number | undefined }],
+}));
+
 vi.mock('../../src/stores/timeline', () => ({
-  useTimelineStore: (selector: (state: typeof timelineState) => unknown) => selector(timelineState),
+  useTimelineStore: Object.assign(
+    (selector: (state: typeof timelineState) => unknown) => selector(timelineState),
+    { getState: () => timelineState },
+  ),
+}));
+
+vi.mock('../../src/stores/mediaStore', () => ({
+  useMediaStore: (selector: (state: typeof mediaState) => unknown) => selector(mediaState),
 }));
 
 import { PreviewTransport } from '../../src/components/preview/PreviewTransport';
@@ -35,6 +47,9 @@ import { useDockStore } from '../../src/stores/dockStore';
 
 afterEach(() => {
   cleanup();
+  timelineState.playheadPosition = 0;
+  timelineState.isPlaying = false;
+  mediaState.compositions[0].frameRate = 30;
   timelineState.inPoint = null;
   timelineState.masterAudioState.volumeDb = 0;
   timelineState.outPoint = null;
@@ -246,5 +261,70 @@ describe('PreviewTransport scrubbing', () => {
 
     fireEvent.click(unmuteButton);
     expect(timelineState.setMasterAudioVolumeDb).toHaveBeenLastCalledWith(0);
+  });
+
+  it.each([24, 25, 30000 / 1001, 50, 60])('steps exactly one frame of the %f fps composition, without drift', (fps) => {
+    mediaState.compositions[0].frameRate = fps;
+    timelineState.duration = 600;
+    const { rerender } = render(
+      <PreviewTransport
+        playbackControlsVisible
+        onTogglePlaybackControls={vi.fn()}
+        onToggleSceneObjectOverlay={vi.fn()}
+        onToggleTransparency={vi.fn()}
+        previewQuality={1}
+        sceneObjectOverlayEnabled
+        setPreviewQuality={vi.fn()}
+        showTransparencyGrid={false}
+      />,
+    );
+    timelineState.setPlayheadPosition.mockImplementation((position: number) => { timelineState.playheadPosition = position; });
+    const next = screen.getByRole('button', { name: 'Next frame' });
+    for (let frame = 1; frame <= 300; frame++) {
+      fireEvent.click(next);
+      expect(timelineState.playheadPosition).toBe(frame / fps);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Previous frame' }));
+    expect(timelineState.playheadPosition).toBe(299 / fps);
+    rerender(
+      <PreviewTransport
+        playbackControlsVisible
+        onTogglePlaybackControls={vi.fn()}
+        onToggleSceneObjectOverlay={vi.fn()}
+        onToggleTransparency={vi.fn()}
+        previewQuality={1}
+        sceneObjectOverlayEnabled
+        setPreviewQuality={vi.fn()}
+        showTransparencyGrid={false}
+      />,
+    );
+    expect(screen.getByRole('slider', { name: 'Preview playhead' })).toHaveAttribute('step', String(1 / fps));
+    // 299 frames: 11 s 11 frames at 25 fps; the timecode counts composition frames.
+    if (fps === 25) expect(screen.getByText('00:00:11:24')).toBeInTheDocument();
+    timelineState.setPlayheadPosition.mockReset();
+    timelineState.duration = 10;
+  });
+
+  it('pauses before stepping and steps from the paused playhead', () => {
+    timelineState.isPlaying = true;
+    timelineState.playheadPosition = 1;
+    timelineState.pause.mockImplementation(() => { timelineState.isPlaying = false; timelineState.playheadPosition = 2.1997; });
+    render(
+      <PreviewTransport
+        playbackControlsVisible
+        onTogglePlaybackControls={vi.fn()}
+        onToggleSceneObjectOverlay={vi.fn()}
+        onToggleTransparency={vi.fn()}
+        previewQuality={1}
+        sceneObjectOverlayEnabled
+        setPreviewQuality={vi.fn()}
+        showTransparencyGrid={false}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Next frame' }));
+    expect(timelineState.pause).toHaveBeenCalledOnce();
+    // Paused mid-frame 65 (2.1997 s at 30 fps): the next frame is 66.
+    expect(timelineState.setPlayheadPosition).toHaveBeenCalledWith(66 / 30);
+    timelineState.pause.mockReset();
   });
 });

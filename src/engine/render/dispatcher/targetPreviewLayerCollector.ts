@@ -7,6 +7,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from '../htmlVideoPreviewFallback';
 import {
   filterPausedHtmlTargetFrame,
+  pausedHtmlTargetFrameRate,
   shouldGuardPausedHtmlTargetFrames,
 } from '../layerCollector/htmlVideoPausedFrameGuard';
 import type { RenderDeps } from '../RenderDispatcher';
@@ -97,6 +98,7 @@ export class TargetPreviewLayerCollector {
           isDragging,
           isExporting,
         });
+        const pausedFrameRate = pausedHtmlTargetFrameRate(video);
         if (!isExporting) {
           scrubbingCache?.preloadAroundTime?.(video, targetTime, {
             isDragging,
@@ -142,7 +144,8 @@ export class TargetPreviewLayerCollector {
             ? scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null
             : null,
           targetTime,
-          shouldGuardPausedTargetFrames
+          shouldGuardPausedTargetFrames,
+          pausedFrameRate
         );
         const dragHoldFrame = isDragging
           ? this.isFrameNearTarget(
@@ -172,7 +175,8 @@ export class TargetPreviewLayerCollector {
         const safeFallback = filterPausedHtmlTargetFrame(
           this.getSafePreviewFallback(layer, video),
           targetTime,
-          shouldGuardPausedTargetFrames
+          shouldGuardPausedTargetFrames,
+          pausedFrameRate
         ) ?? dragHoldFrame;
         const allowDragLiveVideoImport =
           !video.seeking &&
@@ -195,7 +199,8 @@ export class TargetPreviewLayerCollector {
                 ? null
                 : scrubbingCache.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames)),
               targetTime,
-              shouldGuardPausedTargetFrames
+              shouldGuardPausedTargetFrames,
+              pausedFrameRate
             );
             if (cachedFrame) {
               layerData.push({
@@ -317,7 +322,8 @@ export class TargetPreviewLayerCollector {
             ? null
             : scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames)),
           targetTime,
-          shouldGuardPausedTargetFrames
+          shouldGuardPausedTargetFrames,
+          pausedFrameRate
         );
         if (notReadyCachedFrame) {
           layerData.push({
