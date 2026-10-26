@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-26",
+    "type": "fix",
+    "title": "MasterSelects 3.3.1",
+    "description": "After stepping frame by frame or pausing, the preview now always shows exactly the playhead's frame instead of keeping an older one, and frame steps (buttons and arrow keys) follow the composition's frame rate. On Linux a notice explains when the browser cannot export H.265 or AAC (MP4 audio then uses Opus) or decode an H.265 clip. A composition keeps its loop setting when the project reopens, Add Layer starts at the beginning of the empty space, effect previews are sharper with a detail view, building node graphs by hand works with marquee, Delete and fine parameter drags, presets apply faster, and one stuck waveform analysis no longer blocks the others.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-23",
     "type": "fix",
     "title": "MasterSelects 3.3.0",
