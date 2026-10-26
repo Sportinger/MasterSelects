@@ -5,21 +5,23 @@ channels. The pointer is the presenter: it points, circles, drags panels and cli
 to a word of the voice. The camera only zooms lightly, for emphasis.
 
 Takes record in a headless Chrome at 2560×1440 and 100% scale, and the cut makes 1920×1080 from it.
-Each part continues from the checkpoint the previous part left, so parts join seamlessly and a part
-needs no long setup.
+An episode is made of short parts (about 20 s or less). Each part continues from the checkpoint the
+previous part left, so parts join seamlessly and a part needs no long setup. Every part goes into the
+episode's MasterSelects project, where the tutorial is cut and exported.
 
 **Agents start with [`guides/agents.md`](guides/agents.md)**: how the work goes with Roman, the
-session setup, and every pitfall so far. [`guides/plan.md`](guides/plan.md) is the plan for the rest:
-the voice line by line, and the cut in a MasterSelects project.
+session setup, and every pitfall so far. [`guides/plan.md`](guides/plan.md) lists what is built and
+what is still open.
 
 ## Folders
 
 | Path | What | In git |
 |---|---|---|
 | `scripts/tutorials/<name>.json` | the recipe: voice, scenes, pointer steps | yes |
-| `scripts/tutorials/audio/` | voice recordings (`.mp3`, `.wav`) and the music the recipes use | no, local only |
+| `scripts/tutorials/audio/` | voice recordings (`.mp3`, `.wav`), the music the recipes use, and the generated voice lines (`voice/<part>/<scene>-<hash>.mp3`) | no, local only |
 | `scripts/tutorials/guides/` | how to write the voice script: `elevenlabs-script.md` (audio tags, Episode 1 as the example) and `kramer-style.md` (tone and jokes) | yes |
-| `tutorial-videos/<name>.mp4` | the finished video | no |
+| `tutorial-videos/<name>.cut/` | the material for the cut in MasterSelects: the picture `<name>.mp4` (no sound, no captions), `voice/<name>.NN-<scene>.wav` (one file per line), `edl.json` | no |
+| `tutorial-videos/<name>.mp4` | a quick look: picture and voice | no |
 | `tutorial-videos/<name>.work/` | screencast frames, `recording.json`, the voice, the pictures (`setup.jpg`, `scenes.jpg`, `seam.jpg`, `*.failed.jpg`) and the profile copy of the take | no |
 | `tutorial-videos/checkpoints/<name>/` | a checkpoint: Chrome profile, `checkpoint.json`, `last.png` | no |
 | `tutorial-videos/.tab/` | the build server: its profile, pictures (`work/steps/`, `shots/`) and jobs | no |
@@ -42,9 +44,12 @@ Every MasterSelects tutorial speaks with one voice, "Dominik Flamer": the Eleven
 The voice belongs to the ElevenLabs account whose key is `ELEVENLABS_BROWSER_API_KEY`; without that
 key the pipeline tries `ELEVENLABS_API_KEY`. Make recorded voice files with the same voice.
 
-A recipe without `audio` sends its scene texts to ElevenLabs in one request and caches the result
-in the work folder, so a new take or `--recut` costs no further credits. `--voice none` times the
-words at an even pace instead, to check a take before paying for the voice.
+A recipe without `audio` sends every scene's `say` to ElevenLabs as its own line and caches each line
+in `audio/voice/<recipe>/` by its text and settings, so a changed sentence costs only that line and a
+new take or `--recut` costs nothing. Each line becomes its own clip in the MasterSelects cut. A scene's
+`speed` (0.7–1.2) slows its line, and its `tail` sets the pause after it. `--voice none` times the
+words at an even pace instead, to check a take before paying for the voice. `"voice": { "whole": true
+}` speaks the whole part in one request (recipes recorded before 2026-10-26).
 
 ## The music
 
@@ -82,12 +87,29 @@ voice and music together do not clip. To try other cues without recording a new 
    holds its words in the order they are spoken. Audio tags such as `[whisper]` may stay in.
 3. Build it: `node scripts/tutorial-video.mjs scripts/tutorials/my-episode.json`. While you build a
    part, use the build server instead (next section): `make` there runs the same take.
-4. Watch `tutorial-videos/my-episode.mp4`. To change only the camera, the captions or the sound,
-   add `--recut`: it encodes the kept recording again without recording a new take.
+4. Watch `tutorial-videos/my-episode.mp4`, the quick look; `--captions` burns the word captions in when
+   the video is not cut in MasterSelects. To change only the camera or the sound, add `--recut`: it
+   encodes the kept recording again without recording a new take.
+
+## Cut in MasterSelects
+
+A take writes `tutorial-videos/<name>.cut/`: the picture, one file per voice line, and `edl.json`
+(where each line starts in the picture, and its word times). Put the part into the project that is
+open in the cut editor (the dev server's editor, `npm run dev:full` in the main folder):
+
+```bash
+node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json            # after the last part
+node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json --replace  # a retake of a part already there
+```
+
+It uses the AI bridge of the editor at `--editor` (default `http://localhost:5173`). The picture goes
+onto the video track "Picture", each line onto the audio track "Voice", and a caption clip onto the
+video track "Captions" above. Every line clip carries its word times (`setClipTranscript`), so the
+captions stay with a line that is split or moved. Trim, move lines, add the music and export there.
 
 ## Parts, checkpoints and the build server
 
-An episode is recorded in parts of about a minute. A finished take saves its end as a checkpoint
+An episode is recorded in parts of about 20 seconds or less (the take warns above 20 s). A finished take saves its end as a checkpoint
 named after the recipe (or its `checkpoint`). The next part starts with `"from": "<checkpoint>"`:
 its take runs on a copy of that checkpoint's Chrome profile, so the project, the layout and the
 settings are there, and playhead, selection and pointer come back. Views the editor keeps only in
@@ -157,4 +179,4 @@ back on the punchline.
 
 After each scene the log says whether a step came late (`late for "organized"`) or the scene ran
 over. Shorten that step's `ms` or `after`, or start it earlier with a larger `early`, then run
-`make` again.
+`make` again. Fine shifts of a voice line need no retake: move its clip in the MasterSelects cut.

@@ -301,12 +301,15 @@ export async function handleImportLocalFiles(
         const before = new Set(useTimelineStore.getState().clips.map(clip => clip.id));
         await useTimelineStore.getState().addClip(targetTrackId!, mediaFile.file, currentTime, mediaFile.duration, mediaFile.id);
         // Report only clips that were actually created (e.g. audio is refused on a video track).
-        if (!useTimelineStore.getState().clips.some(clip => !before.has(clip.id))) {
+        const created = useTimelineStore.getState().clips.filter(clip => !before.has(clip.id));
+        if (!created.length) {
           const track = useTimelineStore.getState().tracks.find(candidate => candidate.id === targetTrackId);
           errors.push({ path: result.path, error: `Could not place ${result.name} (${mediaFile.type}) on ${track?.type ?? 'unknown'} track ${track?.name ?? targetTrackId}.` });
           continue;
         }
-        placedClips.push({ name: result.name, trackId: targetTrackId!, startTime: currentTime, type: mediaFile.type });
+        // The clip on the target track; a linked audio clip of a video lands on an audio track.
+        const clipId = (created.find(clip => clip.trackId === targetTrackId) ?? created[0]).id;
+        placedClips.push({ name: result.name, trackId: targetTrackId!, startTime: currentTime, clipId, type: mediaFile.type });
         if (sequential) {
           currentTime += mediaFile.duration || 5;
         }

@@ -12,6 +12,10 @@ and word highlighting.
 
 - `Auto - active transcript` follows the top-most transcript-bearing video or
   audio clip at the current timeline frame. A caption can also pin one source.
+- `createCaptionClip` in automatic mode needs a transcript-bearing clip at its
+  start time, or, when the call gives an explicit duration, anywhere inside that
+  interval, so one caption clip can cover a stretch whose speech starts a little
+  later. An interval without any spoken clip is refused with that reason.
 - Transcript timestamps remain in media-source time. Preview and export map the
   playhead through clip placement, trim points, speed, reverse state, and
   transition source mappings before selecting the active word.
@@ -22,6 +26,18 @@ and word highlighting.
   are not carried into the incoming segment.
 - Transcript Source remains a deliberate dropdown: mouse-wheel scrolling over
   the closed control scrolls the panel and never changes the selected source.
+
+## Known word times
+
+When the word times are already known, for example from a text-to-speech service
+that returns them with its audio, the editor tool `setClipTranscript` writes them
+onto the clip's source media instead of running speech-to-text. Times are seconds
+of the source file. The words replace the media's transcript, every clip of that
+media and every caption that follows it pick them up, and they stay correct after
+the clip is split, trimmed or moved. Invalid words (no text, end before start) are
+refused with the reason; words that end after the media's duration are reported.
+The tutorial pipeline uses it for every voice line it puts into a MasterSelects
+cut (`scripts/tutorial-ms-cut.mjs`).
 
 ## Lines and layout
 

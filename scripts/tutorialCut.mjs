@@ -1,8 +1,10 @@
 // Shared by tutorial-video.mjs: the edit of a tutorial recording. Screencast frames (sent whenever
-// the page changed, with their times) become a constant frame rate video through a virtual camera
-// that eases between the boxes the recipe framed (cropped from the 2× screencast, so a zoomed
-// shot stays sharp); waits marked `fast` play sped up; the narration lands at each scene's start;
-// the spoken words are burned in as captions; music cues go under the voice (tutorialMusic.mjs).
+// the page changed, with their times) become a constant frame rate picture through a virtual camera
+// that eases between the boxes the recipe framed (cropped from the 2560×1440 take, so a zoomed shot
+// stays sharp); waits marked `fast` play sped up. The picture and the voice lines (one file per scene,
+// placed at each scene's start) are the material for the cut in MasterSelects (tutorial-ms-cut.mjs);
+// a quick look joins them, with music cues under the voice (tutorialMusic.mjs) and, on request, the
+// spoken words burned in as captions.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -102,8 +104,8 @@ function run(tool, args) {
 }
 
 /**
- * Where each scene's narration lands in the output: { delay, words } per scene. A scene's first
- * word starts `lead` seconds after the scene starts.
+ * Where each scene's line lands in the output: { delay, words } per scene. A scene's first word starts
+ * `lead` seconds after the scene starts; `delay` is where the line's cut (cutFrom) starts.
  */
 export function placeNarration(recording, narration, map, lead) {
   return recording.scenes.map(scene => {
@@ -111,42 +113,77 @@ export function placeNarration(recording, narration, map, lead) {
     if (!part?.words.length) return { id: scene.id, words: [] };
     const at = map.toOutput(scene.start) + lead;
     return {
-      id: scene.id, cutFrom: part.cutFrom, cutTo: part.cutTo, delay: at - (part.start - part.cutFrom),
+      id: scene.id, file: part.file ?? narration.file, cutFrom: part.cutFrom, cutTo: part.cutTo, delay: at - (part.start - part.cutFrom),
+      top: scene.captions === 'top',
       words: part.words.map(word => ({ text: word.text, start: at + word.start - part.start, end: at + word.end - part.start, top: scene.captions === 'top' })),
     };
   });
 }
 
-/** The narration track: every scene's cut of the voice file at its place, loudness-normalized. */
-function voiceTrack(narration, placed, duration, file) {
-  const parts = placed.filter(part => part.words.length);
-  // One decode split into the parts: several direct reads of [0:a] can stall ffmpeg on some MP3s.
-  const split = `[0:a]aresample=48000,asplit=${parts.length}${parts.map((_, index) => `[s${index}]`).join('')}`;
-  const filters = [split, ...parts.map((part, index) => `[s${index}]atrim=${part.cutFrom.toFixed(3)}:${part.cutTo.toFixed(3)},asetpts=PTS-STARTPTS,`
-    + `adelay=${Math.max(0, Math.round(part.delay * 1000))}:all=1[a${index}]`)];
-  // A silent base of the video's length as the first input fixes the length (an open-ended apad
-  // behind amix never ended on a mono MP3).
+/** Integrated loudness (LUFS) of an audio file. */
+function loudness(file) {
+  const result = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', file, '-af', 'loudnorm=print_format=json', '-f', 'null', '-'], { encoding: 'utf8' });
+  const json = result.stderr.match(/\{[^{}]*"input_i"[^{}]*\}/)?.[0];
+  return json ? Number(JSON.parse(json).input_i) : NaN;
+}
+
+/** Places the line files (each `{ file, delay }`) on a silent base of `duration` s. */
+function mixLines(lines, duration, file, { gainDb = 0 } = {}) {
   const base = `anullsrc=channel_layout=stereo:sample_rate=48000:duration=${duration.toFixed(3)}[base]`;
-  const mix = `[base]${parts.map((_, index) => `[a${index}]`).join('')}amix=inputs=${parts.length + 1}:normalize=0:duration=first,`
-    + 'loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[out]';
-  run('ffmpeg', ['-hide_banner', '-v', 'error', '-y', '-i', narration.file, '-filter_complex', [base, ...filters, mix].join(';'), '-map', '[out]', '-c:a', 'pcm_s16le', file]);
+  const parts = lines.map((line, index) => `[${index}:a]aresample=48000,adelay=${Math.max(0, Math.round(line.delay * 1000))}:all=1[a${index}]`);
+  const mix = `[base]${lines.map((_, index) => `[a${index}]`).join('')}amix=inputs=${lines.length + 1}:normalize=0:duration=first,`
+    + `volume=${gainDb.toFixed(2)}dB,alimiter=limit=0.84:level=false,aresample=48000[out]`;
+  run('ffmpeg', ['-hide_banner', '-v', 'error', '-y', ...lines.flatMap(line => ['-i', line.file]), '-filter_complex', [base, ...parts, mix].join(';'),
+    '-map', '[out]', '-c:a', 'pcm_s16le', file]);
 }
 
 /**
- * Encodes the tutorial: frames → camera → captions (+ narration) → H.264/AAC MP4.
+ * The voice of a part as one file per line (the clips of the MasterSelects cut) and as one track (for the quick
+ * look). Every line is cut from its source at cutFrom–cutTo; all lines of a part get the same gain, so the part's
+ * voice reaches -14 LUFS without changing the balance between lines. Returns the lines with their files.
+ */
+function voiceLines(placed, duration, dir, name) {
+  const spoken = placed.filter(part => part.words.length);
+  if (!spoken.length) return [];
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const cut = (part, index, gainDb) => {
+    const file = path.join(dir, `${name}.${String(index + 1).padStart(2, '0')}-${part.id}.wav`);
+    run('ffmpeg', ['-hide_banner', '-v', 'error', '-y', '-i', part.file, '-af', `atrim=${part.cutFrom.toFixed(3)}:${part.cutTo.toFixed(3)},asetpts=PTS-STARTPTS,`
+      + `aresample=48000,volume=${gainDb.toFixed(2)}dB,alimiter=limit=0.84:level=false`, '-ac', '1', '-c:a', 'pcm_s16le', file]);
+    return file;
+  };
+  const raw = spoken.map((part, index) => ({ ...part, file: cut(part, index, 0) }));
+  const probe = path.join(dir, 'probe.wav');
+  mixLines(raw, duration, probe);
+  const measured = loudness(probe);
+  const gainDb = Number.isFinite(measured) ? Math.max(-12, Math.min(12, -14 - measured)) : 0;
+  fs.rmSync(probe);
+  return spoken.map((part, index) => ({ ...part, file: cut(part, index, gainDb), gainDb }));
+}
+
+/**
+ * Encodes a take for the cut in MasterSelects and a quick look (the file names carry the part's `name`, so the
+ * clips are recognisable in the MasterSelects media panel):
+ * - `<cutDir>/<name>.mp4`: the picture, the frames through the camera, 1920×1080, no sound, no captions;
+ * - `<cutDir>/voice/<name>.NN-<scene>.wav`: one file per line, cut and levelled (voiceLines);
+ * - `output`: the quick look, the picture with the voice (and the recipe's music); `burnCaptions` burns the word
+ *   captions in (for a video that is not cut in MasterSelects).
  * recording: { frames: [{ file, time }], end, scenes: [{ id, start, captions }], camera: [{ t, cx, cy, zoom, ms }],
  *   fast: [{ from, to, factor }], viewport: { width, height } }
- * music: { file, cues } (see tutorialMusic.mjs), mixed under the narration.
+ * Returns { duration, frames, words, picture, lines: [{ id, file, at, duration, words, top }] } (line words in
+ * seconds of the line's file).
  */
-export async function cutTutorial({ recording, narration, output, workDir, width = 1920, height = 1080, fps = 30, lead = 0.25, captions = {}, music }) {
+export async function cutTutorial({ recording, narration, name, output, cutDir, workDir, width = 1920, height = 1080, fps = 30, lead = 0.25,
+  captions = {}, music, burnCaptions = false }) {
   const map = timeMap(recording.fast);
   const duration = map.toOutput(recording.end);
   const placed = placeNarration(recording, narration, map, lead);
   const words = placed.flatMap(part => part.words);
-  const assFile = path.join(workDir, 'captions.ass');
-  fs.writeFileSync(assFile, captionFile(words, { width, height, ...captions }));
-  const voiceFile = narration.file ? path.join(workDir, 'voice.wav') : null;
-  if (voiceFile) voiceTrack(narration, placed, duration, voiceFile);
+  fs.mkdirSync(cutDir, { recursive: true });
+  const lines = narration.file || narration.lines ? voiceLines(placed, duration, path.join(cutDir, 'voice'), name) : [];
+  const voiceFile = lines.length ? path.join(workDir, 'voice.wav') : null;
+  if (voiceFile) mixLines(lines.map(line => ({ file: line.file, delay: line.delay })), duration, voiceFile);
   let audioFile = voiceFile;
   if (music?.cues?.length) {
     audioFile = path.join(workDir, 'mix.wav');
@@ -154,17 +191,14 @@ export async function cutTutorial({ recording, narration, output, workDir, width
     for (const cue of cues) console.log(`  music ${cue.from.toFixed(2)}–${cue.to.toFixed(2)} s of the track at ${cue.start.toFixed(2)} s of the video`);
   }
 
+  const picture = path.join(cutDir, `${name}.mp4`);
   const frames = recording.frames;
   const source = await sharp(frames[0].file).metadata();
   const scale = source.width / recording.viewport.width;
   const count = Math.ceil(duration * fps);
-  const args = ['-hide_banner', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${width}x${height}`, '-r', String(fps), '-i', '-'];
-  if (audioFile) args.push('-i', audioFile);
-  args.push('-vf', `ass=${assFile.replace(/[:\\']/g, '\\$&')},scale=out_color_matrix=bt709:out_range=limited,format=yuv420p`,
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709',
-    '-movflags', '+faststart', '-t', duration.toFixed(3));
-  if (audioFile) args.push('-c:a', 'aac', '-b:a', '160k', '-shortest');
-  args.push(output);
+  const args = ['-hide_banner', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${width}x${height}`, '-r', String(fps), '-i', '-',
+    '-vf', 'scale=out_color_matrix=bt709:out_range=limited,format=yuv420p', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
+    '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-movflags', '+faststart', '-t', duration.toFixed(3), picture];
   const encoder = spawn('ffmpeg', args, { stdio: ['pipe', 'inherit', 'pipe'] });
   let stderr = '';
   encoder.stderr.on('data', chunk => { stderr += chunk; });
@@ -190,5 +224,21 @@ export async function cutTutorial({ recording, narration, output, workDir, width
   }
   encoder.stdin.end();
   await done;
-  return { duration, frames: count, words: words.length };
+
+  // The quick look: the picture as it is, with the sound; captions only when they are burned in.
+  const look = ['-hide_banner', '-v', 'error', '-y', '-i', picture, ...(audioFile ? ['-i', audioFile] : [])];
+  if (burnCaptions) {
+    const assFile = path.join(workDir, 'captions.ass');
+    fs.writeFileSync(assFile, captionFile(words, { width, height, ...captions }));
+    look.push('-vf', `ass=${assFile.replace(/[:\\']/g, '\\$&')}`, '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
+      '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709');
+  } else look.push('-c:v', 'copy');
+  if (audioFile) look.push('-c:a', 'aac', '-b:a', '160k', '-shortest');
+  run('ffmpeg', [...look, '-movflags', '+faststart', output]);
+
+  return {
+    duration, frames: count, words: words.length, picture,
+    lines: lines.map(line => ({ id: line.id, file: line.file, at: line.delay, duration: line.cutTo - line.cutFrom, top: line.top,
+      words: line.words.map(word => ({ text: word.text, start: word.start - line.delay, end: word.end - line.delay })) })),
+  };
 }

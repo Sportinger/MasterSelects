@@ -396,11 +396,14 @@ function validateCaptionSource(
   return source;
 }
 
-function activeAutomaticSource(store: TimelineStore, startTime: number): TimelineClip | null {
-  return getCaptionSourceCandidates(store.clips)
-    .map((candidate) => candidate.clip)
-    .find((clip) => startTime >= clip.startTime && startTime < clip.startTime + clip.duration)
-    ?? null;
+/** The source active at startTime, or else (with an interval end) the earliest source active inside the interval. */
+function activeAutomaticSource(store: TimelineStore, startTime: number, endTime?: number): TimelineClip | null {
+  const candidates = getCaptionSourceCandidates(store.clips).map((candidate) => candidate.clip);
+  const atStart = candidates.find((clip) => startTime >= clip.startTime && startTime < clip.startTime + clip.duration);
+  if (atStart || endTime === undefined) return atStart ?? null;
+  return candidates
+    .filter((clip) => clip.startTime < endTime && clip.startTime + clip.duration > startTime)
+    .toSorted((left, right) => left.startTime - right.startTime)[0] ?? null;
 }
 
 function captionLayoutTextPatch(clip: TimelineClip): Partial<TextClipProperties> {
@@ -502,14 +505,21 @@ export async function handleCreateCaptionClip(
     ? requestedSource?.startTime ?? timelineStore.playheadPosition
     : finiteInRange(args.startTime, 'startTime', 0, Number.MAX_SAFE_INTEGER);
   if (rawStart instanceof Error) return failure(rawStart.message);
-  const automaticSource = requestedSource ?? activeAutomaticSource(timelineStore, rawStart);
-  if (!automaticSource) {
-    return failure('No transcript-bearing source clip is active at startTime');
-  }
-  const rawDuration = args.duration === undefined
-    ? Math.max(0.1, automaticSource.startTime + automaticSource.duration - rawStart)
+  const explicitDuration = args.duration === undefined
+    ? undefined
     : finiteInRange(args.duration, 'duration', 0.1, Number.MAX_SAFE_INTEGER);
-  if (rawDuration instanceof Error) return failure(rawDuration.message);
+  if (explicitDuration instanceof Error) return failure(explicitDuration.message);
+  // With an explicit interval, automatic captions may start before the first spoken clip (a voice line that
+  // begins shortly after a part starts); the caption follows whichever source is active at each frame.
+  const automaticSource = requestedSource
+    ?? activeAutomaticSource(timelineStore, rawStart, explicitDuration === undefined ? undefined : rawStart + explicitDuration);
+  if (!automaticSource) {
+    return failure(explicitDuration === undefined
+      ? 'No transcript-bearing source clip is active at startTime'
+      : 'No transcript-bearing source clip is active in the requested interval');
+  }
+  const rawDuration = explicitDuration
+    ?? Math.max(0.1, automaticSource.startTime + automaticSource.duration - rawStart);
   const endTime = rawStart + rawDuration;
   const validSource = validateCaptionSource(automaticSource.id, timelineStore, {
     startTime: rawStart,

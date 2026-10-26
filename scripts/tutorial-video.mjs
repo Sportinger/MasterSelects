@@ -2,18 +2,19 @@
 // recipe (scripts/tutorials/*.json), for the website and social channels.
 //
 //   node scripts/tutorial-video.mjs scripts/tutorials/cut-a-video.json [--url http://localhost:5192]
-//       [--out <folder>] [--media <folder>] [--voice flamer|male|female|<voice id>|none] [--recut]
+//       [--out <folder>] [--media <folder>] [--voice flamer|male|female|<voice id>|none] [--recut] [--captions]
 //       [--setup-only [--save <checkpoint>]]  run the start and the setup, save the result as a checkpoint
 //                                              (default name <recipe name>-start), record nothing
 //       [--no-shots] (no picture after every setup step) [--no-seam] (skip the seamless check)
 //       [--attach] (record in a tab of the user's running Chrome: 1280×720 only, for trying things)
 //
-// 1. Narration: every scene's `say`, spoken by ElevenLabs in one request with word times
+// 1. Voice: every scene's `say` is one line, spoken by ElevenLabs with word times, one request per line
 //    (scripts/tutorialVoice.mjs; default voice "flamer", with ELEVENLABS_BROWSER_API_KEY or
-//    ELEVENLABS_API_KEY). --voice none times the words at an even pace instead, to check a recording
-//    before paying for a voice. A recipe with `audio` brings a recorded voice: Deepgram times its words
-//    (DEEPGRAM_API_KEY), and the recording keeps the voice's own pauses (each scene lasts until the
-//    next scene's first word). Cached in the work folder.
+//    ELEVENLABS_API_KEY), cached per line in scripts/tutorials/audio/voice/<name>/, so a changed line
+//    costs only that line. It comes before the recording, so every scene waits for its line.
+//    --voice none times the words at an even pace instead (free). A recipe with `audio` brings a recorded
+//    voice: Deepgram times its words (DEEPGRAM_API_KEY), and the recording keeps the voice's own pauses
+//    (each scene lasts until the next scene's first word).
 // 2. Start (scripts/tutorialSession.mjs): a headless Chrome with the hardware GPU at 2560×1440, scale 1
 //    (scripts/tutorialBrowser.mjs). With `from`, on a copy of that checkpoint's profile: its project
 //    reopens, and its playhead, selection, pointer and `resume` steps come back
@@ -27,15 +28,22 @@
 //    as long as its sentence. recording.json keeps every step's start and end; <work>/scenes.jpg shows the
 //    frame after every step. A finished take saves its end as a checkpoint (named after the recipe, or its
 //    `checkpoint`), so the next part can continue from it.
-// 4. Cut: the frames through the scene cameras, sped-up waits, the narration and word captions
-//    (scripts/tutorialCut.mjs). --recut encodes the kept recording again (camera, captions, voice).
+// 4. Cut (scripts/tutorialCut.mjs): the frames through the scene cameras and sped-up waits become the picture;
+//    the voice becomes one file per line. --recut encodes the kept recording again (camera, voice).
 //
-// Writes <out>/<name>.mp4 (default out: tutorial-videos/, not tracked); <out>/<name>.work keeps the
-// screencast frames, recording.json, the pictures and the narration.
+// Writes, under <out> (default tutorial-videos/, not tracked):
+//   <name>.cut/<name>.mp4        the picture, 1920×1080, no sound, no captions
+//   <name>.cut/voice/<name>.NN-<scene>.wav   one file per line
+//   <name>.cut/edl.json          where each line goes (seconds of the picture) and its word times: the input of
+//                                scripts/tutorial-ms-cut.mjs, which puts the part into the episode's MasterSelects project
+//   <name>.mp4                   a quick look: picture and voice (and the recipe's music); --captions burns the word
+//                                captions in (for a video that is not cut in MasterSelects)
+//   <name>.work/                 screencast frames, recording.json, the pictures
 //
 // Recipe: { name, project, from "<checkpoint>", checkpoint "<name to save the end as>", viewport { width, height }
 //   (default 2560×1440), output { width, height, fps },
-//   voice { voice, model, stability, similarity, speed, prefix } | audio "<voice file>", music { file, cues }
+//   voice { voice, model, stability, similarity, speed, seed, prefix, whole (one request for the part, the older way) }
+//   | audio "<voice file>", music { file, cues }
 //   (scripts/tutorialMusic.mjs),
 //   captions { font, size, maxWords },
 //   lead (s before a scene's first word), media { "<name shown>": "<file name or path>" },
@@ -44,7 +52,8 @@
 //   setup [step] (after the project opens, not recorded), scenes [scene],
 //   resume [step] (saved with this part's checkpoint: rebuild what a reload loses, such as the node graph's source
 //   and an expanded group; a part that continues from the checkpoint runs them before its setup) }
-// Scene: { id, say, camera, captions: "top" | "bottom", tail (s after the last word), steps [step] }
+// Scene: { id, say, speed (this line's ElevenLabs speed, 0.7–1.2), camera, captions: "top" | "bottom",
+//   tail (s after the last word: the pause before the next line), steps [step] }
 // Steps (scripts/tutorialSteps.mjs):
 //   { "card": { title, subtitle, brand }, "ms" }     a title card; "keep": true leaves it up
 //   { "hideCard": true }
@@ -87,6 +96,8 @@ import { pathToFileURL } from 'node:url';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Share of pixels that may differ between a checkpoint's last frame and the next part's first frame.
 const SEAM_TOLERANCE = 0.003;
+// A part should stay short (Roman, 2026-10-26): it is planned, voiced, recorded and cut on its own.
+const PART_SECONDS = 20;
 
 /**
  * Makes the tutorial. chrome: a connected context of the user's Chrome to record in (a long-lived
@@ -118,10 +129,18 @@ export async function main(args, { chrome, fresh = false } = {}) {
 
   /** The page now as a PNG (for checkpoints and the seamless check). */
   const still = async (session, name) => m.snapshot(session.context, session.page, path.join(work, name));
+  /**
+   * The end of a part for its checkpoint: a playing timeline is paused at the playhead it reached, so last.png and
+   * the saved playhead show the same frame; the next part compares against that frame and plays on when it records.
+   */
+  const settleEnd = async session => {
+    const runtime = await m.settleRuntime(session.page);
+    return { runtime, last: await still(session, 'last.png') };
+  };
   /** The checkpoint's state from an open session (call before closing it). */
-  const checkpointState = async (session, camera) => ({
+  const checkpointState = (session, camera, runtime) => ({
     recipe: recipe.name, origin: new URL(url).origin, viewport, project: recipe.project,
-    runtime: await session.page.evaluate(m.readRuntime), pointer: session.mouse.position(), camera, resume: recipe.resume ?? [],
+    runtime, pointer: session.mouse.position(), camera, resume: recipe.resume ?? [],
   });
   const restCamera = { cx: viewport.width / 2, cy: viewport.height / 2, zoom: 1 };
 
@@ -138,9 +157,9 @@ export async function main(args, { chrome, fresh = false } = {}) {
       if (args.includes('--setup-only')) {
         const name = option('--save', `${recipe.name}-start`);
         if (!session.headless) throw new Error('--setup-only saves a checkpoint, which needs the headless Chrome (leave out --attach)');
-        const last = await still(session, 'last.png');
+        const { runtime, last } = await settleEnd(session);
         await m.saveCheckpoint({ name, page, profile: session.profile, close: session.close, lastPng: last,
-          state: await checkpointState(session, session.checkpoint?.camera ?? restCamera) });
+          state: checkpointState(session, session.checkpoint?.camera ?? restCamera, runtime) });
         return { checkpoint: name };
       }
 
@@ -175,6 +194,8 @@ export async function main(args, { chrome, fresh = false } = {}) {
       // A part that continues a checkpoint starts with that part's last camera.
       if (session.checkpoint?.camera) take.camera.push({ t: 0, ms: 0, ...session.checkpoint.camera });
       await cdp.send('Page.startScreencast', { format: 'jpeg', quality: recipe.jpegQuality ?? 90, everyNthFrame: 1 });
+      // The previous part ended while the timeline played: it plays on from the same frame.
+      if (session.checkpoint?.runtime?.playing) await page.evaluate(() => window.aiTools.execute('play', {}));
 
       // A failed step still leaves the recording up to it (recording.json with "failed"), so --recut can show it.
       const keepRecording = failed => {
@@ -190,9 +211,10 @@ export async function main(args, { chrome, fresh = false } = {}) {
         const part = narration.scenes.find(entry => entry.id === item.id);
         take.scene = { id: item.id, start, part };
         scenes.push({ id: item.id, start: start - take.t0, captions: item.captions ?? 'bottom' });
-        // A recorded voice keeps its pauses: the scene lasts until the next sentence starts.
+        // A recorded voice keeps its pauses: the scene lasts until the next sentence starts. Lines spoken on their own
+        // have no pause between them; the scene's tail is that pause.
         const next = timedScenes[timedScenes.indexOf(part) + 1];
-        const needed = !part?.words.length ? 0 : (narration.recorded || recipe.keepPauses) && next
+        const needed = !part?.words.length ? 0 : (narration.recorded || recipe.keepPauses && !narration.lines) && next
           ? next.start - part.start : lead + (part.end - part.start) + (item.tail ?? 0.45);
         if (item.camera) await session.run({ camera: item.camera, ms: item.cameraMs });
         for (const [index, step] of (item.steps ?? []).entries()) {
@@ -220,7 +242,6 @@ export async function main(args, { chrome, fresh = false } = {}) {
         console.log(`${item.id}: ${(m.now() - start).toFixed(1)} s recorded${needed ? `, sentence ${needed.toFixed(1)} s` : ''}`);
       }
       await pause(recipe.end ?? 400);
-      const last = await still(session, 'last.png');
       await cdp.send('Page.stopScreencast');
       await cdp.detach().catch(() => {});
       const foreign = await page.evaluate(() => window.__docClipPointer.foreign);
@@ -236,8 +257,9 @@ export async function main(args, { chrome, fresh = false } = {}) {
 
       if (session.headless) {
         const camera = m.cameraPath(take.camera, restCamera)(recording.end);
+        const { runtime, last } = await settleEnd(session);
         await m.saveCheckpoint({ name: recipe.checkpoint ?? recipe.name, page, profile: session.profile, close: session.close, lastPng: last,
-          state: await checkpointState(session, camera) });
+          state: checkpointState(session, camera, runtime) });
       }
       return recording;
     } finally {
@@ -246,20 +268,34 @@ export async function main(args, { chrome, fresh = false } = {}) {
   }
 
   fs.mkdirSync(work, { recursive: true });
-  const narration = recipe.audio ? await m.recordedNarration(recipe, work, path.dirname(path.resolve(recipeFile)))
-    : voice === 'none' || args.includes('--setup-only') ? m.estimatedNarration(recipe.scenes) : await m.narrate(recipe, work, { voice });
+  const recipeDir = path.dirname(path.resolve(recipeFile));
+  const narration = recipe.audio ? await m.recordedNarration(recipe, work, recipeDir)
+    : voice === 'none' || args.includes('--setup-only') ? m.estimatedNarration(recipe.scenes)
+      : recipe.voice?.whole ? await m.narrate(recipe, work, { voice })
+        : await m.narrateLines(recipe, path.join(recipeDir, 'audio', 'voice', recipe.name), { voice });
   const recordingFile = path.join(work, 'recording.json');
   const recording = args.includes('--recut') ? JSON.parse(fs.readFileSync(recordingFile, 'utf8')) : await record(narration);
   if (recording.checkpoint) return recording;
-  const output = path.join(out, `${recipe.name}.mp4`);
-  const music = recipe.music && { ...recipe.music, file: path.resolve(path.dirname(path.resolve(recipeFile)), recipe.music.file) };
-  const result = await m.cutTutorial({ recording, narration, output, workDir: work, lead, captions: recipe.captions, music,
-    ...recipe.output });
+  const output = path.join(out, `${recipe.name}.mp4`), cutDir = path.join(out, `${recipe.name}.cut`);
+  const music = recipe.music && { ...recipe.music, file: path.resolve(recipeDir, recipe.music.file) };
+  const result = await m.cutTutorial({ recording, narration, name: recipe.name, output, cutDir, workDir: work, lead, captions: recipe.captions, music,
+    burnCaptions: args.includes('--captions'), ...recipe.output });
+  // The edit list for the cut in MasterSelects (scripts/tutorial-ms-cut.mjs).
+  const say = Object.fromEntries(recipe.scenes.map(item => [item.id, item.say]));
+  const edl = { name: recipe.name, episode: recipe.episode ?? null, from: recipe.from ?? null, duration: result.duration,
+    picture: result.picture, lines: result.lines.map(line => ({ ...line, say: say[line.id] })), recorded: new Date().toISOString() };
+  fs.writeFileSync(path.join(cutDir, 'edl.json'), `${JSON.stringify(edl, null, 2)}\n`);
   const speed = m.timeMap(recording.fast);
-  console.log(`\n${path.relative(process.cwd(), output)}: ${result.duration.toFixed(1)} s, ${result.frames} frames, ${result.words} caption words`
-    + `${narration.file ? '' : ' (no voice: words at an estimated pace)'}`);
+  const voiced = narration.file || narration.lines;
+  console.log(`\n${path.relative(process.cwd(), cutDir)}/: picture ${result.duration.toFixed(1)} s, ${result.lines.length} voice lines, edl.json`
+    + `${voiced ? '' : ' (no voice: --voice none)'}`);
+  console.log(`${path.relative(process.cwd(), output)}: quick look${args.includes('--captions') ? ' with captions' : ''}`);
   for (const item of recording.scenes) console.log(`  ${speed.toOutput(item.start).toFixed(1).padStart(5)} s  ${item.id}`);
-  return { output, ...result };
+  if (result.duration > PART_SECONDS + 0.5) {
+    console.warn(`NOTE: this part runs ${result.duration.toFixed(1)} s; parts should stay at about ${PART_SECONDS} s or less. Split it into two recipes`
+      + ' (the first one\'s checkpoint is the second one\'s "from").');
+  }
+  return { output, cutDir, ...result };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

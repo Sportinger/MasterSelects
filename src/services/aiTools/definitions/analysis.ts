@@ -351,6 +351,37 @@ export const analysisToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'setClipTranscript',
+      description: 'Set a known word-timed transcript on the source media of a clip instead of running speech-to-text, for example the word times a text-to-speech service returned with its audio. Times are seconds of the source media (0 = start of the file). Replaces the media\'s transcript; every clip of that media and the dynamic captions follow it, also after splits and moves.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: {
+            type: 'string',
+            description: 'An existing timeline clip ID whose source media gets the transcript',
+          },
+          words: {
+            type: 'array',
+            minItems: 1,
+            description: 'The spoken words in order, in seconds of the source media',
+            items: {
+              type: 'object',
+              properties: {
+                text: { type: 'string' },
+                start: { type: 'number', minimum: 0 },
+                end: { type: 'number', minimum: 0 },
+              },
+              required: ['text', 'start', 'end'],
+            },
+          },
+        },
+        required: ['clipId', 'words'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'startClipTranscription',
       description: 'Start speech-to-text transcription for one existing timeline clip. Transcription runs in the background and only one clip can be transcribed at a time. Poll getClipTranscript until transcriptStatus is ready or error before starting another clip.',
       parameters: {

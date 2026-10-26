@@ -1,12 +1,14 @@
-// Shared by tutorial-video.mjs: the narration of a tutorial. One ElevenLabs request speaks every
-// scene's `say` in one go (one voice, one breath: prosody stays even across scenes) and returns the
-// time of every character; the words are split back into the scenes, so the recording can wait for
-// each scene's sentence and the captions can follow the words.
+// Shared by tutorial-video.mjs: the narration of a tutorial. By default every scene's `say` is its own
+// line: one ElevenLabs request per line with the time of every character (narrateLines). Each line is
+// cached by its own text and settings in scripts/tutorials/audio/voice/<recipe>/, so a changed sentence
+// costs only that line, and each line becomes its own audio clip in the MasterSelects cut. The
+// neighbour lines go along as context (previous_text / next_text) with a fixed seed, so the
+// intonation stays even. `"voice": { "whole": true }` keeps the older way: one request for the whole
+// part, cached in the work folder (narrate).
 //
 // The voice of every MasterSelects tutorial is "flamer" (FLAMER_VOICE, the default), an ElevenLabs voice
 // of the account whose key is ELEVENLABS_BROWSER_API_KEY (else ELEVENLABS_API_KEY is used). Other voices:
-// a voice id, or "male" / "female" from ELEVENLABS_VOICE_MALE / ELEVENLABS_VOICE_FEMALE with ELEVENLABS_API_KEY. The result is cached in the work folder by text,
-// voice and settings, so a new recording or encode costs no second request.
+// a voice id, or "male" / "female" from ELEVENLABS_VOICE_MALE / ELEVENLABS_VOICE_FEMALE with ELEVENLABS_API_KEY.
 //
 // A recipe with `audio` brings its own recorded voice instead: Deepgram (DEEPGRAM_API_KEY) hears
 // the words and their times, which are matched to the scenes' `say` (recordedNarration).
@@ -157,7 +159,81 @@ function voiceId(voice) {
   return id;
 }
 
-/** The narration of the recipe's scenes: { file, scenes: [{ id, words, start, end, cutFrom, cutTo }] }. */
+/** The ElevenLabs key for a voice: the tutorial voice lives in another account than the male/female voices. */
+function apiKeyFor(voice) {
+  const apiKey = (voice === FLAMER_VOICE && process.env.ELEVENLABS_BROWSER_API_KEY) || process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) throw new Error('ELEVENLABS_BROWSER_API_KEY / ELEVENLABS_API_KEY is not set (or pass --voice none)');
+  return apiKey;
+}
+
+const voiceSettings = (settings, speed = settings.speed) => ({ stability: settings.stability,
+  ...(settings.similarity !== undefined && { similarity_boost: settings.similarity }), ...(speed !== undefined && { speed }) });
+
+/** Where a line's sound starts and ends in its file: the first and last character, audio tags included. */
+function soundRange({ characters, character_start_times_seconds: starts, character_end_times_seconds: ends }, duration) {
+  const first = characters.findIndex(char => !/\s/.test(char));
+  const last = characters.findLastIndex(char => !/\s/.test(char));
+  if (first < 0) return { cutFrom: 0, cutTo: duration };
+  return { cutFrom: Math.max(0, starts[first] - 0.1), cutTo: Math.min(duration, ends[last] + 0.3) };
+}
+
+/** Whether ElevenLabs refused the request because of the neighbour-text context (some models do not take it). */
+const contextRefused = (status, body) => (status === 400 || status === 422) && /previous_text|next_text|request stitching|context/i.test(body);
+
+/**
+ * The narration line by line: one ElevenLabs request per scene `say`, cached in
+ * `cacheDir/<scene id>-<hash>.mp3` (+ `.json`, the character times) by the line's text, voice, model,
+ * settings and seed. A scene may set its own `speed` (ElevenLabs 0.7–1.2) when its line runs too fast.
+ * Returns { lines: true, scenes: [{ id, file, duration, words, start, end, cutFrom, cutTo }] }; times are
+ * seconds of each line's own file.
+ */
+export async function narrateLines(recipe, cacheDir, { voice: voiceOverride } = {}) {
+  const settings = { voice: 'flamer', model: 'eleven_v3', stability: 0.5, prefix: '', seed: 4242, ...recipe.voice };
+  const voice = voiceId(voiceOverride ?? settings.voice);
+  const withSay = recipe.scenes.filter(scene => scene.say);
+  const texts = withSay.map((scene, index) => `${index === 0 && settings.prefix ? `${settings.prefix} ` : ''}${scene.say}`);
+  fs.mkdirSync(cacheDir, { recursive: true });
+  let withContext = settings.context !== false;
+  const lines = [];
+  for (const [index, scene] of withSay.entries()) {
+    const speed = scene.speed ?? settings.speed;
+    const key = createHash('sha256').update(JSON.stringify({ text: texts[index], voice, model: settings.model, ...voiceSettings(settings, speed),
+      seed: settings.seed })).digest('hex').slice(0, 12);
+    const file = path.join(cacheDir, `${scene.id}-${key}.mp3`), timing = path.join(cacheDir, `${scene.id}-${key}.json`);
+    if (!fs.existsSync(file) || !fs.existsSync(timing)) {
+      const request = async context => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}/with-timestamps?output_format=mp3_44100_128`, {
+        method: 'POST',
+        headers: { 'xi-api-key': apiKeyFor(voice), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: texts[index], model_id: settings.model, voice_settings: voiceSettings(settings, speed), seed: settings.seed,
+          ...(context && texts[index - 1] && { previous_text: texts[index - 1] }), ...(context && texts[index + 1] && { next_text: texts[index + 1] }) }),
+      });
+      console.log(`Voice: line ${scene.id} (${spokenWords(texts[index]).length} words) to ElevenLabs (${settings.model}) …`);
+      let response = await request(withContext);
+      if (!response.ok && withContext) {
+        const body = await response.text();
+        if (!contextRefused(response.status, body)) throw new Error(`ElevenLabs ${response.status}: ${body.slice(0, 300)}`);
+        console.warn(`Voice: ${settings.model} refuses the neighbour lines as context (${body.slice(0, 120)}); the lines go without it.`);
+        withContext = false;
+        response = await request(false);
+      }
+      if (!response.ok) throw new Error(`ElevenLabs ${response.status}: ${(await response.text()).slice(0, 300)}`);
+      const result = await response.json();
+      fs.writeFileSync(file, Buffer.from(result.audio_base64, 'base64'));
+      fs.writeFileSync(timing, JSON.stringify(result.alignment));
+    }
+    const alignment = JSON.parse(fs.readFileSync(timing, 'utf8'));
+    const words = alignmentWords(alignment), duration = audioDuration(file);
+    const expected = spokenWords(scene.say).length + (index === 0 ? spokenWords(settings.prefix).length : 0);
+    if (words.length !== expected) console.warn(`Voice: line ${scene.id} came back with ${words.length} words, its text has ${expected}; its captions may drift.`);
+    lines.push({ id: scene.id, file, duration, words, start: words[0]?.start ?? 0, end: words.at(-1)?.end ?? 0, ...soundRange(alignment, duration) });
+  }
+  return { lines: true, scenes: recipe.scenes.map(scene => lines.find(line => line.id === scene.id) ?? { id: scene.id, words: [], start: 0, end: 0 }) };
+}
+
+/**
+ * The narration of the recipe's scenes in one request (`"voice": { "whole": true }`, the older way):
+ * { file, scenes: [{ id, words, start, end, cutFrom, cutTo }] }.
+ */
 export async function narrate(recipe, workDir, { voice: voiceOverride } = {}) {
   const settings = { voice: 'flamer', model: 'eleven_v3', stability: 0.5, prefix: '', ...recipe.voice };
   const voice = voiceId(voiceOverride ?? settings.voice);
@@ -166,15 +242,11 @@ export async function narrate(recipe, workDir, { voice: voiceOverride } = {}) {
     ...(settings.similarity !== undefined && { similarity: settings.similarity }), ...(settings.speed !== undefined && { speed: settings.speed }) })).digest('hex').slice(0, 16);
   const file = path.join(workDir, `narration-${key}.mp3`), timing = path.join(workDir, `narration-${key}.json`);
   if (!fs.existsSync(file) || !fs.existsSync(timing)) {
-    // The tutorial voice lives in another account than the male/female voices.
-    const apiKey = (voice === FLAMER_VOICE && process.env.ELEVENLABS_BROWSER_API_KEY) || process.env.ELEVENLABS_API_KEY;
-    if (!apiKey) throw new Error('ELEVENLABS_API_KEY is not set (or pass --voice none)');
     console.log(`Narration: ${spokenWords(text).length} words to ElevenLabs (${settings.model}) …`);
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}/with-timestamps?output_format=mp3_44100_128`, {
       method: 'POST',
-      headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, model_id: settings.model, voice_settings: { stability: settings.stability,
-        ...(settings.similarity !== undefined && { similarity_boost: settings.similarity }), ...(settings.speed !== undefined && { speed: settings.speed }) } }),
+      headers: { 'xi-api-key': apiKeyFor(voice), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, model_id: settings.model, voice_settings: voiceSettings(settings) }),
     });
     if (!response.ok) throw new Error(`ElevenLabs ${response.status}: ${(await response.text()).slice(0, 300)}`);
     const result = await response.json();

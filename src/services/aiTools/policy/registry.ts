@@ -634,6 +634,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['startMediaAnalysis', mutatingLow()],
   ['startMediaTranscription', mutatingLow()],
   ['repairClipTranscript', mutatingLow()],
+  ['setClipTranscript', mutatingLow()],
   ['startClipAudioIntelligence', mutatingLow()],
   ['searchYouTube', mutatingLow()],
   // searchVideos is the definition name for the same handler as searchYouTube

@@ -118,6 +118,22 @@ describe('AI caption authoring tools', () => {
     expect(clipsOnAllocatedTrack).toHaveLength(1);
   });
 
+  it('accepts an automatic caption interval that starts before the first spoken clip', async () => {
+    useTimelineStore.setState({
+      clips: [{ ...sourceClip(), startTime: 0.3, duration: 2 }],
+      tracks: [videoTrack('video-overlay'), videoTrack('video-source')],
+    });
+    const result = await handleCreateCaptionClip({ trackId: 'video-overlay', startTime: 0, duration: 6, sourceClipId: null },
+      useTimelineStore.getState());
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ startTime: 0, duration: 6, captionProperties: { sourceClipId: null } });
+
+    const silent = await handleCreateCaptionClip({ startTime: 3, duration: 1, sourceClipId: null }, useTimelineStore.getState());
+    expect(silent).toMatchObject({ success: false, error: 'No transcript-bearing source clip is active in the requested interval' });
+    const noInterval = await handleCreateCaptionClip({ startTime: 0, sourceClipId: null }, useTimelineStore.getState());
+    expect(noInterval).toMatchObject({ success: false, error: 'No transcript-bearing source clip is active at startTime' });
+  });
+
   it('rejects an explicit occupied layer without changing the timeline', async () => {
     const before = useTimelineStore.getState().clips.length;
     const result = await handleCreateCaptionClip({

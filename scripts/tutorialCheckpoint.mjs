@@ -58,6 +58,23 @@ export async function readRuntime() {
   };
 }
 
+/**
+ * Node side: the runtime state for a checkpoint. A playing timeline is paused at the playhead it reached, so the
+ * last frame taken after this and the saved playhead agree; `playing` stays true, and the part that continues
+ * from the checkpoint plays on when it starts recording.
+ */
+export async function settleRuntime(page) {
+  const runtime = await page.evaluate(readRuntime);
+  if (runtime.playing) {
+    await page.evaluate(async time => {
+      await window.aiTools.execute('pause', {});
+      await window.aiTools.execute('setPlayhead', { time });
+    }, runtime.playhead);
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
+  return runtime;
+}
+
 /** Page side: brings back playhead and selection (pauses first: a playing project re-renders under every step). */
 export async function restoreRuntime({ playhead, selected }) {
   const tools = window.aiTools;

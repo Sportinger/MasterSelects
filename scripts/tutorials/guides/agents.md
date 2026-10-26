@@ -2,18 +2,54 @@
 
 Read this before you work on a MasterSelects tutorial video. [`../README.md`](../README.md) explains
 the recipe format and the commands. This page covers how the work goes with Roman, the setup of a
-session, and every pitfall we have hit so far. [`plan.md`](plan.md) is the plan for the rest of the
-pipeline: the voice line by line, and the final cut in a MasterSelects project.
+session, and every pitfall we have hit so far. [`plan.md`](plan.md) lists what is built and what is
+still open.
 
-## Quick start
+## The workflow
+
+A tutorial is about MasterSelects, and it is also cut in MasterSelects. It is built piece by piece:
+
+1. **Plan the episode in parts.** Write the beats of the episode (README of the episode or the first
+   recipe's comment) and cut them into parts of at most about **20 seconds** each, one logical step
+   per part, some shorter. Each part is its own recipe.
+2. **Per part:**
+   1. **Plan the part:** its scenes (one line of voice each) and the gestures, in a recipe with
+      `"from": "<checkpoint of the previous part>"`.
+   2. **Build the steps with pictures** in the build server, which runs from the same checkpoint
+      (`tutorial-tab.mjs serve --from …`, then `step`, `locate`, `state`, `shot`).
+   3. **Generate the voice and record:** `tutorial-tab.mjs make <part>.json`. The voice comes first,
+      one ElevenLabs request per line (cached per line); the take waits for every line, records in
+      the headless Chrome at 2560×1440, and leaves a checkpoint where it ended.
+   4. **Look at it:** `scenes.jpg` and the quick look `tutorial-videos/<part>.mp4`.
+   5. **Put it into the episode's MasterSelects project:** `node scripts/tutorial-ms-cut.mjs
+      scripts/tutorials/<part>.json`. The picture goes onto track "Picture" after the previous
+      part, each voice line becomes its own clip on "Voice", and a caption clip on "Captions"
+      shows the words.
+   6. **Fine-tune there:** a line that runs too fast is split (`splitClip`) and its second half moved
+      (`moveClip`); the captions follow the clips. Show Roman the part, commit the recipe.
+3. **The next part** starts from the checkpoint this take left: same project, dock layout, open
+   panels, clips, playhead, selection, pointer and camera. Record it, put it in after this one.
+4. **At the end,** music and export happen in the MasterSelects project.
+
+Two editors take part: the **take editor** (this worktree's Vite on 5192, in a headless Chrome)
+shows what is filmed; the **cut editor** (the dev server's editor, `https://localhost:5173/editor`
+or `http://localhost:5173/editor`, with the episode's project open) is where the parts are cut.
+`tutorial-ms-cut.mjs` drives the cut editor through the AI bridge.
+
+## Quick start for a new tutorial
 
 1. Read "How Roman wants it" below. Skim the pitfalls of the area you will touch.
-2. Session setup (below): worktree, Vite on 5192, secrets, and the build server from the previous
-   part's checkpoint: `node scripts/tutorial-tab.mjs serve --from <checkpoint>`. No Chrome, no Allow click.
-3. Copy the last part recipe (`flamer-ep2-part3-yarn.json`), set `"from"` to the previous part's
-   checkpoint, and write the scenes. Try single steps with `tutorial-tab.mjs step` and look at each picture.
-4. `make … --voice none` until the steps work (read `scenes.jpg`), then `make` with the voice.
-5. Look at the video, show Roman, commit the recipe. The take left a checkpoint for the next part.
+2. Session setup (below): worktree, Vite on 5192, secrets, the cut editor on 5173 with the episode's
+   project.
+3. **A new episode:** start the build server on a new project (`tutorial-tab.mjs serve`), build the
+   start state step by step with pictures, and either record part 1 from it with `setup` steps or
+   save it as a checkpoint (`tutorial-tab.mjs checkpoint <episode>-start`). **The next part of an
+   episode:** `serve --from <previous part>`.
+4. Copy the last part recipe (`flamer-ep2-part3-yarn.json`), set `"from"` and `"episode"`, and write
+   the scenes. Try single steps with `tutorial-tab.mjs step` and look at each picture.
+5. `make … --voice none` while the steps still fail (free), then `make` with the voice.
+6. Look at the quick look, put the part into the cut editor (`tutorial-ms-cut.mjs`), show Roman,
+   commit the recipe. The take left a checkpoint for the next part.
 
 ## What we make
 
@@ -29,6 +65,11 @@ points, circles, drags panels and clicks, timed to the words. Tone and jokes:
 | 2, "Knitted Jellyfish" (Weave, Qualle form) | parts 1 and 2 recorded in 720p; part 3 ("Yarn") in 1440p from checkpoint `flamer-ep2-part2`; an older one-piece version exists | `flamer-ep2-part1.json`, `flamer-ep2-part2.json`, `flamer-ep2-part2-end.json` (builds the checkpoint), `flamer-ep2-part3-yarn.json`, `flamer-episode-2.json` |
 
 Episode 2 still needs:
+- a clean checkpoint at the end of part 3: `flamer-ep2-part3-yarn` was saved while playing and its
+  recipe has no `resume` steps, so a part from it differs in 17.6 % of the first frame (playhead,
+  Properties tab Transform instead of Effects, playback controls, the move gizmo of the selected
+  clip). Add the `resume` steps and take part 3 again (its voice is cached), or build the start state
+  with `--setup-only --save`;
 - parts 1 and 2 again in 1440p (part 1 with the new first line); part 2 should end where
   `flamer-ep2-part2-end.json` ends, so part 3 can continue from its checkpoint;
 - the parts after part 3, starting from checkpoint `flamer-ep2-part3-yarn` (the scenes `form` … `outro` of `flamer-episode-2.json`, rebuilt in the new
@@ -40,8 +81,16 @@ Episode 2 still needs:
 
 - **Short German replies, small steps.** Do not explain what can be looked up. Report what you did
   and what comes next in a few lines.
-- **Work in parts** of about a minute each. Finish one part and show it before you start the next.
-  Do not write one long script for the whole episode.
+- **Work in parts** of at most about 20 seconds, one logical step each (Roman, 2026-10-26). Plan,
+  voice, record and cut one part, show it, then start the next. Do not write one long script for
+  the whole episode. The take warns when a part runs longer than 20 s.
+- **The tutorial is cut in MasterSelects.** Every part goes into the episode's MS project
+  (`tutorial-ms-cut.mjs`); trimming, moving voice lines, music and the export happen there, not in
+  ffmpeg (Roman, 2026-10-26).
+- **The voice must not rush.** Give a line room with the scene's `tail` (the pause after it, default
+  0.45 s), slow one line with the scene's `speed` (ElevenLabs, 0.7–1.2), or split the voice clip in
+  MS and move its second half. Where the picture must wait too, re-record the part with a longer
+  `tail`: a 20 s part with cached voice takes about a minute.
 - **Show the result first.** Each episode opens with the finished effect. Then build it from scratch,
   piece by piece, in the real UI: nodes are added one by one and really connected.
 - **Everything on screen is real.** When the narration talks about nodes, real node cards and the
@@ -70,8 +119,8 @@ Episode 2 still needs:
 - **Zooms are light and emotional** (1.05–1.33): a slow push in for suspense, a quick snap back on the
   punchline. At 100% the UI is small in a 1080p video, so frame the area being explained more often:
   a zoom up to 1.33 on the 2560 px take stays sharp (`"camera": {"panes": ["tab=Preview", "left-group"], "maxZoom": 1.33}`).
-- **Intermediate renders.** When Roman asks for a "Zwischenstand", join the finished parts with the
-  music. Open the file for him with `xdg-open`.
+- **Intermediate renders.** When Roman asks for a "Zwischenstand", export it from the cut editor
+  (or join the parts' quick looks, see "Intermediate render"). Open the file for him with `xdg-open`.
 - **Jokes come from the action.** Examples: "the jellyfish is tall, so we need a portrait comp", "we're
   making a jellyfish, not a doormat". Roman adds ideas mid-way; write them into the part recipe.
 - **Bugs found while recording are product bugs.** Fix them in MS at their root, with a targeted test
@@ -82,23 +131,31 @@ Episode 2 still needs:
 ## Session setup
 
 1. Your own task worktree (root `AGENTS.md`, section 1), a real `npm ci`, and Vite on its own port:
-   `npx vite --port 5192 --strictPort` (in the background).
-2. Secrets in `~/.config/agent-secrets/env`: `ELEVENLABS_BROWSER_API_KEY` (the account with credits),
+   `npx vite --port 5192 --strictPort` (in the background). This is the take editor.
+2. The cut editor: the main folder's `npm run dev:full` (5173; start it if it is not running, root
+   `AGENTS.md`, section 3) and its editor open in a browser tab with the episode's MS project. Only
+   one editor tab should be connected to it, or pass `--tab` to `tutorial-ms-cut.mjs`. The cut editor
+   needs the editor tool `setClipTranscript` (from 2026-10-26) for captions; an older checkout gets
+   the clips without captions, and `--editor http://localhost:5192` uses this worktree's editor
+   instead (start its Vite with `MASTERSELECTS_BRIDGE_TOKEN_FILE=.ai-bridge-token`, so it writes its
+   bridge token, and open the editor there, for example `tutorial-tab.mjs serve --project <name>`).
+3. Secrets in `~/.config/agent-secrets/env`: `ELEVENLABS_BROWSER_API_KEY` (the account with credits),
    `DEEPGRAM_API_KEY`. Load them with `set -a && . ~/.config/agent-secrets/env && set +a` in the same
    shell command. Never print them or write them into files.
-3. The build server in the background, from the checkpoint the part continues:
+4. The build server in the background, from the checkpoint the part continues:
    `node scripts/tutorial-tab.mjs serve --from flamer-ep2-part3-yarn` (with the secrets loaded). It
    opens the editor in a headless Chrome (2560×1440, scale 1, hardware WebGPU); nothing opens on
    Roman's desktop. After a crash or restart, `serve --keep` continues its last editor. A new `serve`
    takes over from a running one (the old one exits), so there is never more than one.
-4. Checkpoints are local (`tutorial-videos/checkpoints/`). If one is missing, rebuild it from its
+5. Checkpoints are local (`tutorial-videos/checkpoints/`). If one is missing, rebuild it from its
    recipe: `node scripts/tutorial-video.mjs scripts/tutorials/flamer-ep2-part2-end.json --setup-only
    --save flamer-ep2-part2`, or take the previous part again.
 
 ## Making a part
 
-1. Write the part's scenes into its own recipe with `"from": "<previous checkpoint>"`. One scene is
-   one beat; its `say` follows the style guides. Put the joke where the action gives it.
+1. Write the part's scenes into its own recipe with `"from": "<previous checkpoint>"` and
+   `"episode": "<episode>"`. One scene is one beat and one voice line; its `say` follows the style
+   guides. Put the joke where the action gives it. Keep the part at about 20 s or less.
 2. Try each new gesture in the build server before it goes into a scene:
    `tutorial-tab.mjs step '<step json>'` runs it and prints the picture; `locate '<target>'` shows where
    a target is; `state` lists clips, playhead, panels and what has the focus. A step changes the
@@ -108,15 +165,19 @@ Episode 2 still needs:
    with `tutorial-tab.mjs checkpoint <name> '[<resume steps>]'`. Keep those steps in a recipe
    (`*-end.json` with `--setup-only`) so the checkpoint can be rebuilt.
 4. Try the take with `--voice none` until the steps work. That costs no credits. Then generate the
-   voice and record: `node scripts/tutorial-tab.mjs make scripts/tutorials/<part>.json`.
+   voice and record: `node scripts/tutorial-tab.mjs make scripts/tutorials/<part>.json`. Each line is
+   cached by its text, so a changed sentence costs only that line.
 5. Read the log (`seamless: …`, `late for "<word>"`, scenes that ran over) and `scenes.jpg`, the frame
    after every step. A failed step stops with `<scene>.failed.jpg`: before and after, the error and
    the editor's warnings. Fix the steps (`early`, `ms`, `after`) and run `make` again; the retake
    starts from the clean checkpoint.
 6. List in `resume` what the part's end view needs after a reload (see "Checkpoints" below), so the
    next part continues seamlessly.
-7. Look at the video, show Roman the part, commit the recipe on the task branch. Audio, videos and
-   checkpoints stay local (`audio/`, `tutorial-videos/`).
+7. Look at the quick look, then put the part into the cut editor:
+   `node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json` (a retake: `--replace`). Check
+   the timeline there (`getTimelineState`, a screenshot of the preview at a spoken word).
+8. Show Roman the part, commit the recipe on the task branch. Audio, videos and checkpoints stay
+   local (`audio/`, `tutorial-videos/`).
 
 ## Pitfalls
 
@@ -152,6 +213,10 @@ Episode 2 still needs:
 - **A checkpoint belongs to its origin and size.** The project lives in the storage of
   `http://localhost:5192`; a take with another `--url` or viewport refuses the checkpoint.
 - **A failed take saves no checkpoint**; the previous one stays as it was.
+- **A part that ends while the timeline plays** is paused at the frame it reached before its checkpoint
+  is saved (`settleRuntime`), so `last.png` and the playhead agree; the next part starts there and
+  plays on when its recording starts. Checkpoints saved before 2026-10-26 (`flamer-ep2-part3-yarn`)
+  kept the playhead of a later moment and differ from their `last.png`.
 
 ### Recording and timing
 
@@ -242,9 +307,14 @@ Episode 2 still needs:
   `ELEVENLABS_BROWSER_API_KEY`; the other account has no credits for it.
 - **Model:** the code defaults to `eleven_v3`. Episode 2 sets `eleven_v4` in the recipe; keep that
   for new parts.
-- **The whole narration is one request.** A changed sentence regenerates the whole part and costs
-  credits for every line again. [`plan.md`](plan.md) changes this to one request per line. Until then,
-  iterate with `--voice none`.
+- **One request per line.** Every scene's `say` is spoken on its own and cached in
+  `scripts/tutorials/audio/voice/<part>/<scene>-<hash>.mp3` by its text, voice, model, settings and
+  seed. The neighbour lines go along as context (`previous_text` / `next_text`) with a fixed `seed`;
+  if a model refuses that context, the log says so and the lines go without it. Recipes recorded
+  before 2026-10-26 set `"voice": { "whole": true }` (one request for the part) so their cached voice
+  stays valid; new parts leave it out.
+- **Too fast:** a scene's `speed` (0.7–1.2) slows only that line and regenerates only it; `tail`
+  lengthens the pause after it.
 - **Audio tags** such as `[excited]` are directions, not words. They are left out when words are
   counted and matched. If the voice returns a different word count, the log warns that captions may
   drift.
@@ -259,9 +329,30 @@ Episode 2 still needs:
 - **Music cues** are fixed by Roman (intro from 0:19.6 of the track, ending from 2:26). The README has
   the numbers. Use the same cue for intermediate renders.
 
+### Cut in MasterSelects
+
+- **What a take delivers** (`tutorial-videos/<part>.cut/`): `<part>.mp4`, the picture (1920×1080, no
+  sound, no captions); `voice/<part>.NN-<scene>.wav`, one levelled file per line; `edl.json`, where
+  each line starts in the picture and its word times. `tutorial-videos/<part>.mp4` is only a quick
+  look (picture and voice; `--captions` burns captions in for a video that is not cut in MS).
+- **`tutorial-ms-cut.mjs` appends** a part after the last clip on "Picture" (or `--at <s>`). A part
+  that is already there is refused; `--replace` takes the old take out (picture, lines, its caption
+  clip) and puts the new one at the same start, as long as it does not run into the next part.
+- **Moving half a line:** `splitClip` at a timeline time between two words, then `moveClip` the second
+  half. Move the following lines too, or the moved half overlaps the next line on "Voice".
+- **Captions follow the voice clips.** Each line clip gets its ElevenLabs word times
+  (`setClipTranscript`), and the caption clip shows the words of the voice clip under the playhead,
+  so a split or moved line keeps its captions. A caption clip covers its part; a line moved beyond
+  the part's end needs its caption clip lengthened.
+- **The files are imported from `tutorial-videos/`** (the dev bridge reads below `~/Documents`). Do
+  not delete a `.cut` folder whose clips are in the episode's project.
+- **The MS project** of an episode is created once in the cut editor (1920×1080, 30 fps). The bridge
+  cannot pick a folder without Roman's one-time grant, so ask Roman to create or open it, or use
+  `createLocalProject` below a granted root.
+
 ### Intermediate render
 
-Join the parts with the concat demuxer (`-c copy`, same encoding settings). Extract the joined voice
-as WAV, mix the intro cue with `mixMusic` from `tutorialMusic.mjs`, and mux it back. The result goes
-to `tutorial-videos/<episode>-zwischenstand.mp4`. This step should become the cut in MS
-([`plan.md`](plan.md)).
+Export from the cut editor. Without it: join the parts' quick looks with the concat demuxer (`-c
+copy`, same encoding settings), extract the joined voice as WAV, mix the intro cue with `mixMusic`
+from `tutorialMusic.mjs`, and mux it back. The result goes to
+`tutorial-videos/<episode>-zwischenstand.mp4`.

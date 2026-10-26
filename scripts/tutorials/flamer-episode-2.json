@@ -5,7 +5,7 @@
   "scale": 2,
   "jpegQuality": 82,
   "output": {"width": 1920, "height": 1080, "fps": 30},
-  "voice": {"voice": "flamer", "model": "eleven_v4", "stability": 0.5, "similarity": 0.75, "speed": 1.0},
+  "voice": {"voice": "flamer", "model": "eleven_v4", "stability": 0.5, "similarity": 0.75, "speed": 1.0, "whole": true},
   "keepPauses": true,
   "music": {"file": "audio/tutorial-music.wav", "cues": [{"at": 0, "from": 19.6, "volume": [[0, -60], [0.4, 0], [1.6, 0], [2.0, -7], [23, -60]]}, {"end": true, "from": 146, "volume": [[0, -60], [6, -7]]}]},
   "captions": {"size": 64, "maxWords": 4},

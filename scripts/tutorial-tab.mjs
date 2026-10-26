@@ -143,8 +143,9 @@ async function serve() {
       if (!name) throw new Error('name the checkpoint: checkpoint <name> [\'<resume steps json>\']');
       const m = await load('scripts/tutorialCheckpoint.mjs');
       const { snapshot } = await load('scripts/tutorialPictures.mjs');
+      const runtime = await m.settleRuntime(session.page);
       const last = await snapshot(session.context, session.page, path.join(work, 'last.png'));
-      const state = { recipe: null, origin: new URL(url).origin, viewport: session.viewport, runtime: await session.page.evaluate(m.readRuntime),
+      const state = { recipe: null, origin: new URL(url).origin, viewport: session.viewport, runtime,
         pointer: session.mouse.position(), camera: { cx: session.viewport.width / 2, cy: session.viewport.height / 2, zoom: 1 },
         resume: resume ? [JSON.parse(resume)].flat() : (session.checkpoint?.resume ?? []) };
       await m.saveCheckpoint({ name, page: session.page, profile, close: session.close, lastPng: last, state });

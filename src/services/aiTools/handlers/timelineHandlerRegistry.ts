@@ -50,6 +50,7 @@ import {
 } from './analysisStarters';
 import { handleGetSpeechMarkers } from './speechMarkers';
 import { handleRepairClipTranscript } from './repairTranscript';
+import { handleSetClipTranscript } from './setTranscript';
 import {
   handleAssignClipFaceReviewCandidate,
   handleMergeClipFacePeople,
@@ -206,6 +207,7 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   startClipFaceAnalysis: handleStartClipFaceAnalysis,
   startClipTranscription: handleStartClipTranscription,
   repairClipTranscript: handleRepairClipTranscript,
+  setClipTranscript: handleSetClipTranscript,
   captureFrame: handleCaptureFrame,
   captureStrandMap: handleCaptureStrandMap,
   getCutPreviewQuad: handleGetCutPreviewQuad,

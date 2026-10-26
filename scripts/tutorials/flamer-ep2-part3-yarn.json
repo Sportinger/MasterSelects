@@ -7,7 +7,7 @@
   "captions": {"size": 64, "maxWords": 4},
   "hide": [".project-media-copy-toast"],
   "end": 1500,
-  "voice": {"voice": "flamer", "model": "eleven_v4", "stability": 0.5, "similarity": 0.75, "speed": 1.0},
+  "voice": {"voice": "flamer", "model": "eleven_v4", "stability": 0.5, "similarity": 0.75, "speed": 1.0, "whole": true},
   "keepPauses": true,
   "scenes": [
     {

@@ -10,6 +10,15 @@ little more than its scenes, and the agent works piece by piece. Roman's request
 - generate the voice line by line, so each line can be moved;
 - cut and assemble the episode in a MasterSelects project.
 
+Roman's requests from 2026-10-26:
+
+- a fresh agent that gets a topic knows from the guides how to work ([`agents.md`](agents.md), "The
+  workflow");
+- parts of at most about 20 seconds, each planned, voiced, recorded and put into MS on its own;
+- the recorded parts are imported into a MasterSelects session and cut there with the bridge;
+- a voice that runs too fast can be split and moved in MS for more pause;
+- the next take starts exactly where the last one ended (checkpoints, stage 2).
+
 [`agents.md`](agents.md) describes how the pipeline works today and its pitfalls.
 [`test-yarn-2026-10-24.md`](test-yarn-2026-10-24.md) shows where a fresh agent lost its time. Work through the
 stages in order; each one is useful on its own. Tick off a stage here when it is done.
@@ -133,30 +142,26 @@ in the yarn test an agent searched for a lost clip for most of an hour.
 **Done when** a broken setup step names itself with before/after pictures, without the agent
 writing its own probe scripts.
 
-## 4. The voice line by line
+## 4. The voice line by line ✓ (2026-10-26)
 
-Today one ElevenLabs request speaks the whole part (`narrate` in `tutorialVoice.mjs`). A changed
-sentence regenerates every line, and a line cannot be moved on its own.
+**Done:** `narrateLines` in `tutorialVoice.mjs` sends one request per scene `say` to
+`/v1/text-to-speech/<voice>/with-timestamps` and caches each line in
+`scripts/tutorials/audio/voice/<recipe>/<scene>-<hash>.mp3` plus `.json` (the hash covers text,
+voice, model, settings and seed, not the neighbours, so a changed line costs only itself). The
+neighbour lines go along as `previous_text` / `next_text` with a fixed `seed`; a model that refuses
+them gets the lines without context, and the log says so. Each line is cut from 0.1 s before its
+first sound to 0.3 s after its last one. A scene's `speed` slows one line. A recorded voice (Roman's
+own) is cut into lines at the middle of the pauses between scenes. `--voice none` stays the free dry
+run; `"voice": { "whole": true }` keeps the old single request for recipes recorded with it.
 
-- One request per scene `say` to `/v1/text-to-speech/<voice>/with-timestamps`. Each line keeps its
-  character alignment, so captions and `word` steps keep working.
-- Cache each line by a hash of its text, voice, model, settings and neighbour texts. Store it in
-  `scripts/tutorials/audio/voice/<recipe>/<scene>-<hash>.mp3` plus `.json` (gitignored). Only changed
-  lines cost credits.
-- Keep the intonation even: send `previous_text` / `next_text` and a fixed `seed`. Check that
-  `eleven_v4` accepts both.
-- Trim leading and trailing silence per line down to about 0.1 s.
-- A recorded voice (Roman's own) is split into lines at the pauses between scenes.
-- `--voice none` stays the free dry run.
-
-**Done when** changing one `say` regenerates only that line.
-
-## 5. Record first, place the voice afterwards
+## 5. Record first, place the voice afterwards (partly done)
 
 Gestures come 1–3 s late on heavy pages, and every fix needed a retake.
 
-- The voice is generated before the recording, so each line's duration is known. A scene still waits
-  at least as long as its line.
+- ✓ The voice is generated before the recording, so each line's duration is known. A scene still
+  waits at least as long as its line. In MS, each line is its own clip and can be moved by hand.
+
+Open:
 - The recording logs each step's real start and end in `recording.json`.
 - The cut places each line by an anchor: by default the scene start plus `lead`. With
   `"sync": { "word": "here", "step": 2 }`, the word "here" lands on the start of step 2.
@@ -166,29 +171,26 @@ Gestures come 1–3 s late on heavy pages, and every fix needed a retake.
 
 **Done when** a take with late gestures still has the voice exactly on the pointer.
 
-## 6. Cut in a MasterSelects project
+## 6. Cut in a MasterSelects project ✓ for parts (2026-10-26); music open
 
-The episode is assembled in a MasterSelects project and exported from MS. Roman can then move voice
-lines, trim parts and change the music in the editor.
+**Done:** a take delivers `tutorial-videos/<part>.cut/`: the picture without sound or captions
+(`<part>.mp4`), one levelled file per voice line (`voice/<part>.NN-<scene>.wav`, the part's voice at
+−14 LUFS), and `edl.json` (where each line starts, its word times). `node scripts/tutorial-ms-cut.mjs
+<part>.json …` puts parts into the project open in the cut editor (the dev server's editor, through
+the bridge): the picture on video track "Picture" after the previous part, each line on audio track
+"Voice", a caption clip per part on video track "Captions" above. The new editor tool
+`setClipTranscript` gives every line clip its ElevenLabs word times, so the captions follow a split
+or moved line. `--replace` swaps in a retake. `importLocalFiles` now reports the `clipId` of each
+placed clip.
 
-- **A take delivers:** the picture with the camera moves, without captions or sound
-  (`<part>.video.mp4`); the voice lines; and an edit list `<part>.edl.json`.
-- **The episode recipe** lists the parts in order and the music cues (README, "The music").
-- **`node scripts/tutorial-ms-cut.mjs <episode>.json`** builds the project with the editor's own
-  tools:
-  - `createLocalProject`, `saveProject`;
-  - `importLocalFiles` with track and start: Video 1 holds the parts, Audio 1 the voice lines,
-    Audio 2 the music;
-  - `addKeyframe` for the music volume;
-  - `createCaptionClip` for captions that follow the voice clips.
-- **Captions need transcripts on the voice clips.** Either use `startClipTranscription` (check its
-  cost), or add a small atomic MS tool that sets a clip transcript from the ElevenLabs word times.
-- **Export** through the MS Export panel at 1920×1080, 30 fps.
-- **Open question:** the bridge runs only with the main folder's `dev:full` (5173). Build the cut in
-  the main editor, or let the headless Chrome of stage 1 drive the worktree editor directly.
-
-**Done when** two parts become an MS project with picture, voice lines, music and captions. A moved
-voice line stays in sync with its captions, and the export looks like today's cut.
+Open:
+- **Music in MS:** place the cues of README "The music" on an audio track "Music" with `trimClip`
+  and `audio-volume` keyframes for the fades. Until then add the music by hand or in the quick look.
+- **Export** through the MS Export panel at 1920×1080, 30 fps: check that the export matches the
+  quick look (captions, voice level).
+- **Hold the picture for a pause:** a pause added in MS by moving a voice line has no picture to fill
+  it; today the part is re-recorded with a longer `tail`. A freeze-frame tool for agents (the editor
+  has freeze frame at the playhead) would let the cut hold a frame instead.
 
 ## 7. Automatic check after every take
 

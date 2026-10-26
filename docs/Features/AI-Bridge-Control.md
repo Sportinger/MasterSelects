@@ -129,6 +129,7 @@ Long inspection tool responses are bounded by their tool implementations:
 
 - `getClipAnalysis` returns a summary by default; use `includeFrames`, a source-time range, `offset`, and `limit` for details.
 - `getClipTranscript` returns a bounded word page with `hasMore` and `nextOffset` continuation metadata.
+- `setClipTranscript` sets known word times (seconds of the source media) on a clip's media, without speech-to-text; captions follow them. `importLocalFiles` reports the `clipId` of every clip it places.
 
 ## History And Safety
 

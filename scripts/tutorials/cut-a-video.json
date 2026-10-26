@@ -4,7 +4,7 @@
   "viewport": { "width": 1280, "height": 720 },
   "scale": 2,
   "output": { "width": 1920, "height": 1080, "fps": 30 },
-  "voice": { "voice": "flamer", "stability": 0.5 },
+  "voice": { "voice": "flamer", "stability": 0.5, "whole": true },
   "captions": { "size": 66, "maxWords": 4 },
   "media": {
     "opera_house.mp4": "opera_house_dolly.mp4",
