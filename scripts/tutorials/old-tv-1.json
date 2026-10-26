@@ -1,0 +1,49 @@
+{
+  "name": "old-tv-1",
+  "episode": "old-tv",
+  "from": "old-tv-start",
+  "voice": { "voice": "flamer", "model": "eleven_v4" },
+  "_beats": [
+    "Episode old-tv, 'An old TV in thirty seconds': Analog Signal Lab and its four presets on the opera house clip.",
+    "Part 1 (old-tv-1): the result first (Tube Television, playing), the intro, the joke, then the effect is removed: start from scratch.",
+    "Part 2 (old-tv-2): select the clip, Properties, Effects, + Add Effect, type analog, Analog Signal Lab; it starts as a broadcast.",
+    "Part 3 (old-tv-3): the Preset menu: Snowy Reception, Worn VHS, Tube Television, Rolling Picture; the sign-off."
+  ],
+  "scenes": [
+    {
+      "id": "hello",
+      "say": "[upbeat] Hey, what's up, Dominik Flamer here, and today: an old TV... in thirty seconds. [deadpan] The intro doesn't count.",
+      "steps": [
+        { "camera": { "panes": ["tab=Preview", "right-group"], "maxZoom": 1.33 }, "ms": 0 },
+        { "word": "today", "early": 0.4 },
+        { "click": "aria:Play@preview-group" },
+        { "move": "pane:preview-group:0.78,0.55", "ms": 900 }
+      ]
+    },
+    {
+      "id": "opera",
+      "say": "[proudly] This is a brand new opera house. [deadpan] Broadcast live... from nineteen eighty-three.",
+      "steps": [
+        { "word": "opera", "early": 0.3 },
+        { "circle": "pane:preview-group:0.5,0.45", "r": 300, "ry": 170, "ms": 1100 },
+        { "word": "Broadcast", "early": 0.2 },
+        { "camera": { "focus": "pane:preview-group:0.5,0.42", "zoom": 1.25 }, "ms": 2600 }
+      ]
+    },
+    {
+      "id": "scratch",
+      "say": "[snaps back to upbeat] Okay! So let's build it from scratch.",
+      "steps": [
+        { "camera": { "panes": ["tab=Preview", "right-group"], "maxZoom": 1.33 }, "ms": 350 },
+        { "word": "build", "early": 0.5 },
+        { "click": "aria:Remove Analog Signal Lab" },
+        { "pause": 500 },
+        { "expect": { "gone": "Tube Television" } }
+      ]
+    }
+  ],
+  "resume": [
+    { "click": "Properties" },
+    { "click": "Effects" }
+  ]
+}

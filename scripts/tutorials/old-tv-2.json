@@ -1,0 +1,49 @@
+{
+  "name": "old-tv-2",
+  "episode": "old-tv",
+  "from": "old-tv-1",
+  "voice": { "voice": "flamer", "model": "eleven_v4" },
+  "scenes": [
+    {
+      "id": "add",
+      "say": "[casual] The clip is selected, so: Effects... [quickly] plus, Add Effect.",
+      "steps": [
+        { "word": "selected", "early": 0.3 },
+        { "circle": "clip:opera_house.mp4", "r": 170, "ry": 50, "ms": 800 },
+        { "word": "Effects", "early": 0.5 },
+        { "circle": "Effects@right-group", "r": 60, "ry": 26, "ms": 650 },
+        { "word": "Add", "early": 0.7 },
+        { "click": "+ Add Effect" }
+      ]
+    },
+    {
+      "id": "search",
+      "say": "Type analog... [pleased] and there it is: Analog Signal Lab.",
+      "steps": [
+        { "word": "analog", "early": 0.3 },
+        { "type": "analog" },
+        { "word": "there", "early": 0.1 },
+        { "circle": "Analog Signal Lab@right-group", "r": 110, "ry": 70, "ms": 800 },
+        { "word": "Lab", "early": 0.45 },
+        { "click": "Analog Signal Lab@right-group" },
+        { "pause": 400 },
+        { "expect": { "text": "Apply preset…" } }
+      ]
+    },
+    {
+      "id": "broadcast",
+      "say": "[impressed] Out of the box, it's a TV broadcast. A little soft, a little noisy... [deadpan] like the evening news in nineteen ninety.",
+      "steps": [
+        { "word": "broadcast", "early": 0.3 },
+        { "move": "pane:preview-group:0.72,0.6", "ms": 900 },
+        { "camera": { "focus": "pane:preview-group:0.5,0.42", "zoom": 1.25 }, "ms": 2400 },
+        { "word": "evening", "early": 0.2 },
+        { "camera": { "panes": ["tab=Preview", "right-group"], "maxZoom": 1.33 }, "ms": 500 }
+      ]
+    }
+  ],
+  "resume": [
+    { "click": "Properties" },
+    { "click": "Effects" }
+  ]
+}
