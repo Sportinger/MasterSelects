@@ -28,8 +28,8 @@ what is still open.
 
 ## Requirements
 
-- The Vite dev server of this checkout: `npx vite --port 5192 --strictPort`. The default `--url` is
-  `http://localhost:5192`.
+- The Vite dev server of this checkout: `MASTERSELECTS_BRIDGE_TOKEN_FILE=.ai-bridge-token npx vite --port 5192
+  --strictPort` (the variable lets it be the cut editor too). The default `--url` is `http://localhost:5192`.
 - Google Chrome, `ffmpeg`, and the Playwright package from `npm ci`. Takes run in a headless Chrome
   with the hardware GPU (Vulkan); nothing opens on the desktop and Chrome asks for no permission.
 - `DEEPGRAM_API_KEY` in the environment for a recorded voice (word timing), or

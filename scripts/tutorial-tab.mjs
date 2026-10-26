@@ -46,13 +46,13 @@ async function serve() {
   let chrome, session, shots = fs.existsSync(path.join(work, 'steps'))
     ? Math.max(0, ...fs.readdirSync(path.join(work, 'steps')).map(name => Number(name.match(/^step(\d+)-/)?.[1] ?? 0))) : 0;
 
-  // The desktop window's files (`files` steps): the media names of --recipe, else any file name in the media
-  // folders of a take (--media, the docs footage and images, see scripts/docShotSettings.mjs).
-  const mediaFiles = async () => {
-    const { findMedia } = await load('scripts/docShotSettings.mjs');
-    const recipe = option(rest, '--recipe');
-    const named = recipe ? JSON.parse(fs.readFileSync(recipe, 'utf8')).media ?? {} : {};
-    return new Proxy(named, { get: (target, name) => typeof name === 'string' ? findMedia(target[name] ?? name, { media: option(rest, '--media') }) : undefined });
+  // The desktop window's files (`files` steps) are found as in a take (recipeMedia): the names of --recipe's `media`,
+  // else file names in the media folders. Each `step` job adds the files its steps show.
+  const recipeFile = option(rest, '--recipe');
+  const named = recipeFile ? JSON.parse(fs.readFileSync(recipeFile, 'utf8')).media ?? {} : {};
+  const mediaFor = async steps => {
+    const { recipeMedia } = await load('scripts/tutorialSession.mjs');
+    return recipeMedia({ media: named, setup: steps }, option(rest, '--media'));
   };
 
   // The editor in the headless Chrome, on the build server's own profile (a copy of `from`, if given).
@@ -60,7 +60,7 @@ async function serve() {
     const { openSession } = await load('scripts/tutorialSession.mjs');
     const { copyProfile, readCheckpoint } = await load('scripts/tutorialCheckpoint.mjs');
     if (!keep) copyProfile(from ? readCheckpoint(from).profile : null, profile);
-    const media = await mediaFiles();
+    const media = await mediaFor([]);
     session = await openSession({ url, work, profile, from: keep ? undefined : from, project: keep ? false : option(rest, '--project', 'Workbench'),
       storage: { settings: { hasSeenTutorial: true, hasSeenTutorialPart2: true } }, media, fresh: true });
     Object.assign(session, { from, media });
@@ -103,6 +103,8 @@ async function serve() {
       await needSession();
       const { runSteps } = await load('scripts/tutorialSession.mjs');
       const steps = args.flatMap(arg => [JSON.parse(arg)].flat());
+      // The same object the page's media route and the step runner read.
+      Object.assign(session.media, await mediaFor(steps));
       shots += 1;
       const items = await runSteps(session, steps, { prefix: `step${String(shots).padStart(3, '0')}` });
       for (const item of items) console.log(`${item.label}: ${path.relative(process.cwd(), item.file)}`);

@@ -6,7 +6,8 @@
 //       [--editor http://localhost:5173]   the editor's dev server (default: the main folder's dev:full); a worktree's
 //                                          own Vite writes its bridge token only when started with
 //                                          MASTERSELECTS_BRIDGE_TOKEN_FILE=.ai-bridge-token
-//       [--tab <tabId>]                    the editor tab, when more than one tab is connected
+//       [--tab <tabId>]                    the editor tab, when more than one visible editor is connected (the
+//                                          headless editors of takes and the build server are passed over)
 //       [--at <seconds>]                   where the (first) part starts; default: after the last part
 //       [--replace]                        a part that is already in the timeline is taken out and put in again
 //       [--no-captions]                    no caption clips
@@ -53,9 +54,14 @@ function bridgeFor(origin) {
 /** Calls editor tools in one tab through the bridge. */
 async function connect({ origin, token }, tab) {
   const status = await (await fetch(`${origin}/api/ai-tools`)).json().catch(() => ({ clientTabs: [] }));
-  // A closed tab (the headless Chrome of a finished take) stays listed for a while without a heartbeat.
-  const tabs = (status.clientTabs ?? []).filter(item => item.tabId === tab || item.lastSeenAgoMs < 10000);
-  if (!tabs.length) throw new Error(`No editor tab is connected to ${origin}: open ${origin}/editor with the episode's project`);
+  // A closed tab stays listed for a while without a heartbeat. The editors of takes and of the build server
+  // (tab ids "tutorial-…", set by scripts/tutorialSession.mjs) are never the cut editor.
+  const live = (status.clientTabs ?? []).filter(item => item.lastSeenAgoMs < 10000);
+  const tabs = tab ? (status.clientTabs ?? []).filter(item => item.tabId === tab) : live.filter(item => !item.tabId.startsWith('tutorial-'));
+  if (!tabs.length) {
+    throw new Error(tab ? `Tab ${tab} is not connected to ${origin} (connected: ${live.map(item => item.tabId).join(', ') || 'none'})`
+      : `No cut editor is connected to ${origin}${live.length ? ` (only the take's headless editor)` : ''}: open ${origin}/editor in a visible tab with the episode's project`);
+  }
   if (!tab && tabs.length > 1) {
     throw new Error(`${tabs.length} editor tabs are connected to ${origin}; name one with --tab: ${tabs.map(item => `${item.tabId} (${item.visibilityState}${item.hasFocus ? ', focused' : ''})`).join(', ')}`);
   }

@@ -105,7 +105,7 @@ const PART_SECONDS = 20;
  */
 export async function main(args, { chrome, fresh = false } = {}) {
   const local = name => import(`${pathToFileURL(path.join(import.meta.dirname, name)).href}${fresh ? `?t=${Date.now()}` : ''}`);
-  const { openSession, runSteps, tutorialModules } = await local('tutorialSession.mjs');
+  const { openSession, recipeMedia, runSteps, tutorialModules } = await local('tutorialSession.mjs');
   const m = await tutorialModules(fresh);
 
   const valued = ['--url', '--out', '--media', '--voice', '--save'];
@@ -121,11 +121,7 @@ export async function main(args, { chrome, fresh = false } = {}) {
   const attach = chrome ?? (args.includes('--attach') ? 'attach' : undefined);
   const viewport = recipe.viewport ?? (attach ? { width: 1280, height: 720 } : m.DEFAULT_VIEWPORT);
 
-  const media = Object.fromEntries(Object.entries(recipe.media ?? {}).map(([name, file]) => {
-    const found = m.findMedia(file, { media: option('--media') });
-    if (!found) throw new Error(`Media ${file} not found; pass --media <folder> (searched ${m.mediaDirs({ media: option('--media') }).join(', ')})`);
-    return [name, found];
-  }));
+  const media = await recipeMedia(recipe, option('--media'));
 
   /** The page now as a PNG (for checkpoints and the seamless check). */
   const still = async (session, name) => m.snapshot(session.context, session.page, path.join(work, name));

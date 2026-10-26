@@ -130,18 +130,18 @@ Episode 2 still needs:
 
 ## Session setup
 
-1. Your own task worktree (root `AGENTS.md`, section 1), a real `npm ci`, and Vite on its own port:
-   `npx vite --port 5192 --strictPort` (in the background). This is the take editor.
-2. The cut editor: the main folder's `npm run dev:full` (5173; start it if it is not running, root
-   `AGENTS.md`, section 3) and its editor open in a browser tab with the episode's MS project. Only
-   one editor tab should be connected to it, or pass `--tab` to `tutorial-ms-cut.mjs`. The cut editor
-   needs the editor tool `setClipTranscript` (from 2026-10-26) for captions; an older checkout gets
-   the clips without captions, and `--editor http://localhost:5192` uses this worktree's editor
-   instead (start its Vite with `MASTERSELECTS_BRIDGE_TOKEN_FILE=.ai-bridge-token`, so it writes its
-   bridge token). Open that cut editor in its own visible browser tab (`http://localhost:5192/editor`),
-   so Roman can watch the cut, and never through `tutorial-tab.mjs serve`: a new `serve` ends the
-   running build server. The build server's headless tab is connected to the same bridge, so pass
-   the cut editor's tab with `--tab` (`GET /api/ai-tools` lists the tabs).
+1. Your own task worktree (root `AGENTS.md`, section 1), a real `npm ci`, and Vite on its own port,
+   in the background: `MASTERSELECTS_BRIDGE_TOKEN_FILE=.ai-bridge-token npx vite --port 5192
+   --strictPort`. This is the take editor; the variable makes it write its bridge token, so it can
+   also be the cut editor (step 2).
+2. The cut editor, in a visible browser tab with the episode's MS project, so Roman can watch the cut.
+   It is the main folder's `npm run dev:full` editor (5173; start it if it is not running, root
+   `AGENTS.md`, section 3) once that checkout has the editor tool `setClipTranscript` (from
+   2026-10-26, needed for captions). Until then open `http://localhost:5192/editor` and cut with
+   `--editor http://localhost:5192`. Never open it through `tutorial-tab.mjs serve`: a new `serve` ends
+   the running build server. `tutorial-ms-cut.mjs` passes over the headless editors of takes and of
+   the build server by themselves (their bridge tab ids start with `tutorial-`); `--tab` is only
+   needed when two visible editor tabs are open.
 3. Secrets in `~/.config/agent-secrets/env`: `ELEVENLABS_BROWSER_API_KEY` (the account with credits),
    `DEEPGRAM_API_KEY`. Load them with `set -a && . ~/.config/agent-secrets/env && set +a` in the same
    shell command. Never print them or write them into files.
