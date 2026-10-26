@@ -637,7 +637,8 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                       Orbit
                     </button>
                   )}
-                  <button className="btn btn-sm btn-danger" onClick={() => {
+                  <button className="btn btn-sm btn-danger" aria-label={`Remove ${getEffectDisplayName(effect)}`}
+                    title="Remove effect" onClick={() => {
                     removeClipEffect(clipId, effect.id);
                     trackEditorControlCommitted({
                       area: 'effect',

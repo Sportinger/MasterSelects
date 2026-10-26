@@ -249,4 +249,12 @@ describe('EffectsTab numeric controls', () => {
     view.rerender(<EffectsTab clipId="clip:effects-controls" effects={[{ ...effect, params: { amount: 2 } }]} />);
     expect(screen.queryByText(/rendered range/)).toBeNull();
   });
+
+  it('names the remove button after its effect', () => {
+    const remove = vi.spyOn(useTimelineStore.getState(), 'removeClipEffect').mockImplementation(() => {});
+    const effect: Effect = { id: 'named-remove', type: 'brightness', name: 'Brightness', enabled: true, params: { amount: 0.25 } };
+    render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Brightness' }));
+    expect(remove).toHaveBeenCalledWith('clip:effects-controls', 'named-remove');
+  });
 });
