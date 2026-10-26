@@ -163,6 +163,33 @@ shared desktop: `MASTERSELECTS_E2E_HEADLESS=1 MASTERSELECTS_E2E_PORT=<free port>
 npx playwright test tests/playwright/foundation/preview-truth.spec.ts`. The
 clips need `ffmpeg` and `ffprobe` on the test host.
 
+## When a test finds a defect
+
+Growing the suite will keep finding real defects; that is its purpose (the first
+five Vorschau-Wahrheit cases found two). Handle each one the same way:
+
+1. **Classify first.** Is it the test (wrong expectation, locator, timing,
+   arrangement) or the product? Re-run, read the observation log and the
+   failure screenshot, reduce it to the smallest reproduction. Never weaken an
+   oracle, widen a tolerance or add a sleep to make a case pass.
+2. **A product defect stays visible.** Keep the case and mark it
+   `test.fail(true, '<named defect>')` with a dated comment that says what the
+   test saw. The shared project keeps going: the per-case reset falls back to a
+   reload (noted as `reset-reload`), and in a build phase a failed UI step is
+   recorded red and its result built through the Dev Bridge instead, so one
+   defect costs only its own case and the rest keeps measuring.
+3. **Fix it at the root, in the product.** Not in the test, not in the project
+   content (see "Nodes and effects" in `AGENTS.md`). Use your own task branch,
+   or hand a larger defect to a sub-agent in its own worktree, with the failing
+   case as the reproduction. Before touching shared engine areas (playback,
+   seek, render loop, export), tell the other agents working on MasterSelects
+   which files you change, so nobody fixes the same thing twice; then add
+   targeted unit tests and update the feature doc as `AGENTS.md` requires.
+4. **Close the loop.** When the fix lands, Playwright reports the marked case as
+   unexpectedly passing: remove the marker, run the spec three times in a row,
+   and update the test catalog (state, spec; record a verification only for a
+   revision that is merged).
+
 ## Reference-project media pack
 
 The larger reference-project sources live in

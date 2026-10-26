@@ -210,6 +210,15 @@ connection or bridge-specific skill is not required. Reuse the existing test
 tab and inspect the rendered result. If the user requests browser-only testing,
 do not use the bridge for that task.
 
+**Playwright journeys** (`tests/playwright/`) follow the deterministic pattern in
+`tests/playwright/README.md`, sections "Deterministic cases" and "When a test
+finds a defect": read the preview's real pixels instead of engine flags, never
+wait on fixed sleeps, one catalog case per `test()` in a shared Sammeltest
+project, and a product defect stays visible (`test.fail` with its name) and is
+fixed at its root in the product, never worked around in the test. Coordinate
+fixes in shared engine areas with the other MasterSelects agents first. Run
+journeys headless on a shared desktop (`MASTERSELECTS_E2E_HEADLESS=1`).
+
 The AI bridge below is an optional diagnostic/automation transport when useful
 and consistent with the user's instructions. Its absence is not a blocker when
 the same check can be completed in the browser.
