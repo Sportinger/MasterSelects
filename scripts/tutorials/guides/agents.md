@@ -138,7 +138,10 @@ Episode 2 still needs:
    needs the editor tool `setClipTranscript` (from 2026-10-26) for captions; an older checkout gets
    the clips without captions, and `--editor http://localhost:5192` uses this worktree's editor
    instead (start its Vite with `MASTERSELECTS_BRIDGE_TOKEN_FILE=.ai-bridge-token`, so it writes its
-   bridge token, and open the editor there, for example `tutorial-tab.mjs serve --project <name>`).
+   bridge token). Open that cut editor in its own visible browser tab (`http://localhost:5192/editor`),
+   so Roman can watch the cut, and never through `tutorial-tab.mjs serve`: a new `serve` ends the
+   running build server. The build server's headless tab is connected to the same bridge, so pass
+   the cut editor's tab with `--tab` (`GET /api/ai-tools` lists the tabs).
 3. Secrets in `~/.config/agent-secrets/env`: `ELEVENLABS_BROWSER_API_KEY` (the account with credits),
    `DEEPGRAM_API_KEY`. Load them with `set -a && . ~/.config/agent-secrets/env && set +a` in the same
    shell command. Never print them or write them into files.
