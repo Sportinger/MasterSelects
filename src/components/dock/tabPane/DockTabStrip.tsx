@@ -155,24 +155,6 @@ export function DockTabStrip({
     >
       {showCompositionTabs ? (
         <>
-          {compactTimelineToolbar && (
-            <div className="dock-tab-timeline-actions" role="presentation">
-              <button
-                className={`dock-tab-timeline-settings${compactTimelineSidebarOpen ? ' active' : ''}`}
-                type="button"
-                aria-label="Timeline settings"
-                aria-controls={compactTimelineSidebarOpen ? "timeline-compact-settings-panel" : undefined}
-                aria-expanded={compactTimelineSidebarOpen}
-                title={compactTimelineSidebarOpen ? 'Close timeline settings' : 'Timeline settings'}
-                onPointerDown={event => event.stopPropagation()}
-                onMouseDown={event => event.stopPropagation()}
-                onClick={() => setCompactTimelineSidebarOpen(!compactTimelineSidebarOpen)}
-              >
-                <IconAdjustmentsHorizontal size={11} aria-hidden="true" />
-                <IconChevronDown size={8} aria-hidden="true" />
-              </button>
-            </div>
-          )}
           {timelinePanel && (
             <div
               className={`dock-tab-handle ${handleHoldClasses.isHolding ? 'hold-glow' : ''} ${handleHoldClasses.isReady ? 'hold-ready' : ''} ${handleHoldClasses.isFading ? 'hold-fade' : ''}`}
@@ -216,6 +198,24 @@ export function DockTabStrip({
               </button>
             </div>
           ))}
+          {compactTimelineToolbar && (
+            <div className="dock-tab-timeline-actions" role="presentation">
+              <button
+                className={`dock-tab-timeline-settings${compactTimelineSidebarOpen ? ' active' : ''}`}
+                type="button"
+                aria-label="Timeline settings"
+                aria-controls={compactTimelineSidebarOpen ? "timeline-compact-settings-panel" : undefined}
+                aria-expanded={compactTimelineSidebarOpen}
+                title={compactTimelineSidebarOpen ? 'Close timeline settings' : 'Timeline settings'}
+                onPointerDown={event => event.stopPropagation()}
+                onMouseDown={event => event.stopPropagation()}
+                onClick={() => setCompactTimelineSidebarOpen(!compactTimelineSidebarOpen)}
+              >
+                <IconAdjustmentsHorizontal size={14} aria-hidden="true" />
+                <IconChevronDown size={10} aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </>
       ) : (
         group.panels.map((panel, index) => {

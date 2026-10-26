@@ -14,21 +14,21 @@
 .dock-tab-timeline-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  flex: 0 0 27px;
-  min-width: 27px;
-  margin: 0;
+  justify-content: flex-end;
+  flex: 1 0 42px;
+  min-width: 42px;
+  margin-left: auto;
 }
 
 .dock-tab-timeline-settings {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  width: 25px;
+  gap: 2px;
+  width: 38px;
   height: 24px;
-  flex: 0 0 25px;
-  margin: 0 2px 0 0;
+  flex: 0 0 38px;
+  margin: 0 5px;
   padding: 0;
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -170,10 +170,10 @@ html:not(.pointer-focus) .timeline-ruler-control-strip button:focus-visible {
 .timeline-master-meter-overlay {
   position: absolute;
   top: 36px;
-  left: var(--track-header-width, 210px);
+  left: 0;
   bottom: 10px;
   z-index: 35;
-  width: 6px;
+  width: 4px;
   pointer-events: none;
 }
 .timeline-master-meter-overlay .audio-level-meter {
