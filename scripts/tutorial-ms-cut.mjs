@@ -122,10 +122,28 @@ export function readEdl(file, out = path.resolve(import.meta.dirname, '..', 'tut
   return edl;
 }
 
+/**
+ * Whether a clip or media name belongs to the part `name`: its picture `<name>.mp4` or a line `<name>.NN-<scene>.wav`.
+ * A file imported again gets a hash before its extension (`old-tv-3-4f803cd84654998c.mp4`), which counts as well.
+ */
+export function isPartName(fileName, name, kind) {
+  const part = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), hash = '(?:-[0-9a-f]{6,})?';
+  return new RegExp(kind === 'picture' ? `^${part}${hash}\\.mp4$` : kind === 'line' ? `^${part}\\.\\d\\d-.+?${hash}\\.wav$`
+    : `^(?:${part}${hash}\\.mp4|${part}\\.\\d\\d-.+?${hash}\\.wav)$`).test(fileName);
+}
+
 /** The part's clips already in the timeline: its picture and its lines, recognised by their file names. */
 export function partClips(state, name) {
   const all = [...state.videoTracks, ...state.audioTracks].flatMap(track => track.clips.map(clip => ({ ...clip, trackName: track.name })));
-  return all.filter(clip => clip.name === `${name}.mp4` || clip.name.startsWith(`${name}.`) && clip.name.endsWith('.wav'));
+  return all.filter(clip => isPartName(clip.name, name));
+}
+
+/** Moves clips by `delta` seconds, in an order in which no clip runs into one not moved yet. */
+async function shiftClips(call, clips, delta) {
+  if (Math.abs(delta) < 0.001) return;
+  for (const clip of clips.toSorted((a, b) => delta > 0 ? b.startTime - a.startTime : a.startTime - b.startTime)) {
+    await call('moveClip', { clipId: clip.id, newStartTime: clip.startTime + delta });
+  }
 }
 
 /** Where captions go for each run of lines with the same place (bottom or top): [{ top, start, end }] in part seconds. */
@@ -164,20 +182,30 @@ async function placePart(call, edl, { at, replace, captions }) {
   }
 
   let start = at;
+  // A retake replaces the part where it was: the old clips, its captions and its media go, and the later parts move
+  // by the difference in length (a shorter take leaves no gap, a longer one does not run into the next part).
+  let later = [];
   if (old.length) {
-    const oldPicture = old.find(clip => clip.name === `${edl.name}.mp4`);
-    start ??= oldPicture?.startTime;
+    const oldPicture = old.find(clip => isPartName(clip.name, edl.name, 'picture'));
+    const oldStart = oldPicture?.startTime ?? Math.min(...old.map(clip => clip.startTime));
     const oldEnd = Math.max(...old.map(clip => clip.endTime));
-    const next = state.videoTracks.find(track => track.id === pictureTrack).clips
-      .filter(clip => clip.startTime >= oldEnd - 0.01 && !old.some(item => item.id === clip.id)).toSorted((a, b) => a.startTime - b.startTime)[0];
-    // The editor puts clips on whole frames, so a part may end up to a frame later than its picture lasts.
-    if (next && start + edl.duration > next.startTime + 0.04) {
-      throw new Error(`the new take of ${edl.name} (${edl.duration.toFixed(2)} s) would run into ${next.name} at ${next.startTime.toFixed(2)} s; move the later parts first`);
-    }
-    const captionClips = captionTrack ? state.videoTracks.find(track => track.id === captionTrack).clips
-      .filter(clip => clip.startTime < oldEnd - 0.01 && clip.endTime > (oldPicture?.startTime ?? 0) + 0.01) : [];
+    start ??= oldStart;
+    const cutTracks = [...state.videoTracks, ...state.audioTracks].filter(track => [pictureTrack, captionTrack, voiceTrack].includes(track.id));
+    const inPart = clip => clip.startTime >= oldStart - 0.01 && clip.endTime <= oldEnd + 0.01;
+    const captionClips = captionTrack ? cutTracks.find(track => track.id === captionTrack).clips.filter(inPart) : [];
+    later = cutTracks.flatMap(track => track.clips).filter(clip => clip.startTime >= oldEnd - 0.01 && !old.some(item => item.id === clip.id));
     await call('deleteClips', { clipIds: [...old, ...captionClips].map(clip => clip.id) });
     console.log(`  took out the old take (${old.length + captionClips.length} clips)`);
+    // Its media items too, so the Media panel keeps one picture and one file per line of each part.
+    const used = new Set([...state.videoTracks, ...state.audioTracks].flatMap(track => track.clips)
+      .filter(clip => !old.some(item => item.id === clip.id)).map(clip => clip.name));
+    const media = (await call('getMediaItems', { recursive: true })).files ?? [];
+    for (const item of media.filter(file => isPartName(file.name, edl.name) && !used.has(file.name))) {
+      await call('deleteMediaItem', { itemId: item.id }).catch(error => console.warn(`  media ${item.name} stays: ${error.message}`));
+    }
+    // Room for a longer take before it goes in; the exact shift follows once the picture is placed.
+    await shiftClips(call, later, Math.max(0, edl.duration - (oldEnd - oldStart)) + 0.1);
+    later = later.map(clip => ({ ...clip, startTime: clip.startTime + Math.max(0, edl.duration - (oldEnd - oldStart)) + 0.1 }));
   }
   if (start === undefined) {
     start = Math.max(0, ...state.videoTracks.find(track => track.id === pictureTrack).clips.map(clip => clip.endTime));
@@ -191,6 +219,11 @@ async function placePart(call, edl, { at, replace, captions }) {
   if (placed) start = placed.startTime;
   const length = placed ? placed.endTime - placed.startTime : edl.duration;
   console.log(`  picture ${edl.name}.mp4 at ${start.toFixed(2)} s (${length.toFixed(2)} s)`);
+  if (later.length) {
+    const delta = start + length - Math.min(...later.map(clip => clip.startTime));
+    await shiftClips(call, later, delta);
+    console.log(`  the later parts follow at ${(start + length).toFixed(2)} s`);
+  }
 
   let transcripts = 0;
   for (const line of edl.lines ?? []) {
