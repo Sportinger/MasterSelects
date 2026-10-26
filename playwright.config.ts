@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import { moduleGrepForGate } from './tests/playwright/config/moduleGates'
-import { resolveRuntimeProfile } from './tests/playwright/config/runtimeProfile'
+import { chromeLaunchArgs, resolveRuntimeProfile } from './tests/playwright/config/runtimeProfile'
 
 const runtime = resolveRuntimeProfile()
 const bridgeTokenFile = process.env.MASTERSELECTS_BRIDGE_TOKEN_FILE?.trim()
@@ -44,7 +44,7 @@ export default defineConfig({
     headless: runtime.headless,
     viewport: { width: 1920, height: 1080 },
     launchOptions: {
-      args: ['--window-size=1920,1080'],
+      args: chromeLaunchArgs(process.platform, runtime.headless),
     },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

@@ -101,6 +101,59 @@ changes do not trigger HMR or full-page reloads during a journey, while the
 targeted Dev Bridge websocket remains active. This prevents unrelated workspace
 agents from invalidating an in-progress headed test.
 
+## Deterministic cases: the Vorschau-Wahrheit pattern
+
+`foundation/preview-truth.spec.ts` is the reference for how a case proves what
+the user sees. Build new cases the same way:
+
+1. **Media that says what it is.** `fixtures/frameCodeMedia.ts` generates clips
+   with ffmpeg at test time (cached in `test-results/playwright/frame-code-media/`,
+   no binary media in the repository). Every frame carries its number as 16
+   black/white blocks with a check nibble, plus six colour bars and a grey ramp.
+   The composition matches the clip's size and rate, so one composition frame is
+   one source frame and the clip fills the preview.
+2. **Pixels, not flags.** No engine "ready" signal proves that a frame reached
+   the screen (they all fire before the paint; on Linux the preview is a 2D
+   canvas painted asynchronously after a GPU readback). `fixtures/previewProbe.ts`
+   screenshots the preview canvas and decodes the frame code
+   (`assertions/frameCodeOracle.ts`). A black or flat image, a blend of two frames
+   and a misread are invalid, never a wrong number; an inverted image still reads
+   its number and says so.
+3. **Wait for the right frame, never for time.** `probe.waitForFrame(n, { allowed })`
+   reads until frame `n` shows on two consecutive reads. Frames that may show on
+   the way are listed explicitly (`allowed`); any other valid frame fails at once,
+   because the preview then showed a wrong picture. No `waitForTimeout`.
+4. **Record when things became visible.** Every read is logged; failures print the
+   compressed log ("273-9199 ms no preview yet · 9525-10086 ms flat/black ·
+   10479 ms frame 0") and the first-frame case attaches it. Budgets are split:
+   reload to preview (dev-server boot, generous) and preview to the right frame
+   (the editor's own loading, strict).
+5. **One case, one test, one shared project.** A worker-scoped fixture prepares
+   the project once; each case resets what it depends on and verifies its start
+   state through pixels. When the reset cannot reach it (a previous case left the
+   preview stuck), it reloads the page and notes `reset-reload` on the case, so
+   one defect never turns its neighbours red.
+6. **The action under test goes through the UI** (buttons, effect picker,
+   export panel); arrangement may use the Dev Bridge (creating the composition,
+   importing the clip, selecting a clip on the canvas-drawn timeline).
+7. **Effects are measured.** Invert: every colour bar equals 255 minus its value
+   before (±4 per channel) and the frame code still reads, inverted.
+8. **Exports are decoded outside the browser.** `readVideoFrameCodes` runs ffmpeg
+   in Node and `checkFrameSequence` requires exactly frames `from … from+count-1`,
+   none missing, doubled or out of order.
+9. **Known product defects stay visible.** A case that fails because of a real
+   defect is marked `test.fail(true, '<defect>')` with a comment naming it; when
+   the fix lands, Playwright reports the case as unexpectedly passing and the
+   marker goes.
+
+On Linux the Playwright Chrome gets ANGLE on Vulkan (WebGPU), XWayland for a
+headed window and `--disable-vulkan-surface` headless (`chromeLaunchArgs` in
+`config/runtimeProfile.ts`); every platform gets `--force-color-profile=srgb`, so
+pixel reads do not depend on the monitor profile. Diagnostic headless runs on a
+shared desktop: `MASTERSELECTS_E2E_HEADLESS=1 MASTERSELECTS_E2E_PORT=<free port>
+npx playwright test tests/playwright/foundation/preview-truth.spec.ts`. The
+clips need `ffmpeg` and `ffprobe` on the test host.
+
 ## Reference-project media pack
 
 The larger reference-project sources live in
