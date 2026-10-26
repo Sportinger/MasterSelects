@@ -24,7 +24,15 @@ stages in order; each one is useful on its own. Tick off a stage here when it is
   its start state by clicking.
 - **Every step is seen.** Building steps and takes produce pictures, and the agent looks at them.
 
-## 1. The real environment: headless Chrome at 2560×1440
+## 1. The real environment: headless Chrome at 2560×1440 ✓ (2026-10-26)
+
+**Done.** `tutorialBrowser.mjs` launches it by default; the build server and the takes use it, and
+`--attach` remains for trying things in Roman's Chrome. Part 3 was recorded this way: real
+2560×1440 frames, 1920×1080 output, a 1.33 zoom on the node scenes stays sharp. Learned on the way:
+`requestAdapter()` answers null for about a second after the launch (`warmGpu` waits before the
+editor loads), and Vite must not watch `tutorial-videos/` (ENOSPC). The drawn pointer is 1.25× and
+the overlays scale with the page width. Open: retune the pixel offsets of the 720p recipes when
+their parts are recorded again.
 
 **Finding (2026-10-24):** every take so far was 1280×720, scaled up to 1080p. Chrome's screencast
 sends the window's own pixels. The emulated device scale (`scale: 2`) does not raise that, and a
@@ -58,7 +66,15 @@ To do:
 
 **Done when** a take's frames are 2560×1440, the output is 1920×1080, and Roman's Chrome is not used.
 
-## 2. Checkpoints: continue exactly where the last part ended
+## 2. Checkpoints: continue exactly where the last part ended ✓ (2026-10-26)
+
+**Done** as described below, with one change: views the editor keeps only in memory come back through
+`resume` steps of the part that saves the checkpoint, not through MS hooks. The node graph's source
+and an expanded group survive a reload by themselves; hidden playback controls, the Properties tab
+and the Media selection do not. Part 3 now starts from checkpoint `flamer-ep2-part2` with no setup
+step (it had 43); the seamless check measured 0.02 % difference (the pointer). Saving a checkpoint
+takes about 20 s; `flamer-ep2-part2-end.json --setup-only` rebuilds that start state in 67 s,
+pixel-identical to the hand-built one.
 
 Today every part rebuilds its start state with `setup` steps. In the yarn test, an agent needed about
 an hour for a setup of about 40 steps. Parts also cannot join seamlessly, because nothing records
@@ -94,7 +110,12 @@ A checkpoint is everything needed to see the same picture again:
 **Done when** part 3 starts from part 2's checkpoint with zero setup steps, and its first frame
 matches part 2's last frame.
 
-## 3. Build with pictures
+## 3. Build with pictures ✓ (2026-10-26)
+
+**Done:** a picture after every setup and `resume` step and every build server `step`, contact sheets
+of 16 pictures (`setup.jpg`, `scenes.jpg` from the take's own frames), before and after for a failed
+step with the editor's warnings, `expect` checks, and the build server's `locate`, `state` and `shot`,
+so an agent needs no probe scripts of its own. `type` refuses to type when no field has the focus.
 
 An agent that builds a start state or a scene must see each step. Today the setup is invisible, and
 in the yarn test an agent searched for a lost clip for most of an hour.
@@ -202,6 +223,8 @@ The agent reads both before showing Roman.
 - **The project name dialog:** in the yarn test, the name was typed before the dialog's field was
   ready, and the setup went wrong after that. Check whether the dialog should focus its field at
   once, and whether a new project with an existing name should be refused or reported clearly.
+- **Views lost on reload:** hidden playback controls, the Properties tab and the Media selection reset
+  when a project reopens. Keeping them would make checkpoints need fewer `resume` steps.
 - **Weave orbit in Edit mode** (`cameraInteraction` like voxel relief), for the fly-around.
 - **Fit in the node canvas:** check whether hidden folder nodes enlarge the fitted area.
 - **The node inspector reopens** on every return to the Nodes tab, so hiding it does not last (yarn test).

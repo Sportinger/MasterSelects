@@ -5,33 +5,38 @@
 // thumbnails, a re-rendering preview) and takes a move late, the pointer still glides instead of
 // jumping.
 
-/** Page side: draws the pointer and a click ripple (docs-callout yellow); installs once. */
-function pointerOverlay() {
+/**
+ * Page side: draws the pointer and a click ripple (docs-callout yellow); installs once. scale: their size
+ * in CSS px against the 26 px pointer of a 1280 px wide page.
+ */
+function pointerOverlay(scale = 1) {
   if (document.getElementById('doc-clip-pointer')) return;
+  const tip = 2 * scale;
   const style = document.createElement('style');
   style.textContent = `
     #doc-clip-pointer { position: fixed; left: 0; top: 0; z-index: 2147483647; pointer-events: none; will-change: transform;
       transform: translate(-200px, -200px); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); transition: transform 90ms linear; }
-    #doc-clip-pointer svg { display: block; transform-origin: 2px 2px; transition: transform 110ms ease-out; }
+    #doc-clip-pointer svg { display: block; transform-origin: ${tip}px ${tip}px; transition: transform 110ms ease-out; }
     #doc-clip-pointer.pressed svg { transform: scale(.86); }
-    .doc-clip-ripple { position: fixed; z-index: 2147483646; pointer-events: none; width: 46px; height: 46px; margin: -23px 0 0 -23px;
-      border-radius: 50%; border: 2px solid rgba(255, 213, 74, .95); background: rgba(255, 213, 74, .16);
+    .doc-clip-ripple { position: fixed; z-index: 2147483646; pointer-events: none; width: ${46 * scale}px; height: ${46 * scale}px;
+      margin: ${-23 * scale}px 0 0 ${-23 * scale}px; border-radius: 50%; border: ${2 * scale}px solid rgba(255, 213, 74, .95); background: rgba(255, 213, 74, .16);
       animation: doc-clip-ripple 560ms ease-out forwards; }
     @keyframes doc-clip-ripple { from { transform: scale(.2); opacity: 1; } to { transform: scale(1); opacity: 0; } }`;
   const pointer = document.createElement('div');
   pointer.id = 'doc-clip-pointer';
-  pointer.innerHTML = '<svg width="26" height="26" viewBox="0 0 26 26"><path d="M2 2 L2 21 L7 16.6 L10.3 23.8 L13.9 22.2 L10.7 15.2 L17.4 15.2 Z" '
+  pointer.innerHTML = `<svg width="${26 * scale}" height="${26 * scale}" viewBox="0 0 26 26">`
+    + '<path d="M2 2 L2 21 L7 16.6 L10.3 23.8 L13.9 22.2 L10.7 15.2 L17.4 15.2 Z" '
     + 'fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>';
   document.documentElement.append(style, pointer);
   // The browser window is on a real desktop: when the real mouse crosses it, its events are as
   // trusted as the script's. The pointer follows only the positions the script announced (the
   // last few: a busy page handles input after later announcements), and every other event is
   // counted, so the recording can say it was disturbed.
-  const state = window.__docClipPointer = { expected: [], foreign: 0, announce(point) { this.expected = [...this.expected.slice(-15), point]; } };
+  const state = window.__docClipPointer = { expected: [], foreign: 0, tip, announce(point) { this.expected = [...this.expected.slice(-15), point]; } };
   const ours = event => !state.expected.length || state.expected.some(point => Math.hypot(event.clientX - point.x, event.clientY - point.y) < 3);
   const follow = event => {
     if (!ours(event)) { state.foreign += 1; return false; }
-    pointer.style.transform = `translate(${event.clientX - 2}px, ${event.clientY - 2}px)`;
+    pointer.style.transform = `translate(${event.clientX - tip}px, ${event.clientY - tip}px)`;
     return true;
   };
   const options = { capture: true, passive: true };
@@ -100,9 +105,9 @@ function locateTarget({ target, value }) {
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const ease = t => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
-/** Installs the pointer and returns calm mouse actions that start at `start` (CSS px). */
-export async function humanMouse(page, start) {
-  await page.evaluate(pointerOverlay);
+/** Installs the pointer (`scale`: its size, 1 = 26 px) and returns calm mouse actions that start at `start` (CSS px). */
+export async function humanMouse(page, start, { scale = 1 } = {}) {
+  await page.evaluate(pointerOverlay, scale);
   let position = { ...start };
   const moveTimes = [];
   await page.evaluate(point => window.__docClipPointer.announce(point), position);

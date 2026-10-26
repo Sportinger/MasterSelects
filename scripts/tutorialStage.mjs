@@ -8,10 +8,14 @@
 //   key caps           the shortcut a step presses, next to the pointer
 //   a download chip    the browser's download bubble, which a screencast does not show either
 
-/** Page side: installs the overlays once; window.__tutorial drives them. */
-export function installStage() {
+/**
+ * Page side: installs the overlays once; window.__tutorial drives them. scale: their size against a
+ * 1280 px wide page (2 at 2560×1440, so cards, key caps and the file window keep their size in the video).
+ */
+export function installStage(scale = 1) {
   if (window.__tutorial) return;
   const style = document.createElement('style');
+  const px = value => `${value * scale}px`;
   style.textContent = `
     .tut-layer { position: fixed; z-index: 2147483640; pointer-events: none; font-family: Inter, "Segoe UI", system-ui, sans-serif; }
     .tut-fade { transition: opacity 260ms ease, transform 260ms ease; }
@@ -47,7 +51,7 @@ export function installStage() {
     .tut-download b { display: block; font-size: 15px; }
     .tut-download small { color: #5b5f6a; }
     .tut-download .tut-arrow { width: 34px; height: 34px; border-radius: 50%; background: #0a6eff; color: #fff; display: flex; align-items: center;
-      justify-content: center; font-size: 20px; font-weight: 700; }`;
+      justify-content: center; font-size: 20px; font-weight: 700; }`.replace(/(\d*\.?\d+)px/g, (_, value) => px(Number(value)));
   document.documentElement.append(style);
   const layer = (className, html = '') => {
     const element = document.createElement('div');
@@ -61,7 +65,7 @@ export function installStage() {
   const escape = text => String(text).replace(/[&<>"]/g, char => `&#${char.charCodeAt(0)};`);
 
   let card, files, ghost, carried;
-  const ghostTo = (x, y) => { if (ghost) ghost.style.transform = `translate(${x + 14}px, ${y + 16}px)`; };
+  const ghostTo = (x, y) => { if (ghost) ghost.style.transform = `translate(${x + 14 * scale}px, ${y + 16 * scale}px)`; };
   const state = window.__tutorial = {
     card({ brand = 'MasterSelects', title = '', subtitle = '' }) {
       card?.remove();
@@ -104,7 +108,7 @@ export function installStage() {
       }
       carried = { transfer, over: null };
       ghost = layer('tut-ghost', selected.length > 1
-        ? `<div class="tut-stack">${selected.slice(0, 3).map((file, index) => `<img src="${file.thumb}" style="left:${index * 6}px;top:${index * 5}px">`).join('')}`
+        ? `<div class="tut-stack">${selected.slice(0, 3).map((file, index) => `<img src="${file.thumb}" style="left:${px(index * 6)};top:${px(index * 5)}">`).join('')}`
           + `<div class="tut-count">${selected.length}</div></div>`
         : `<div class="tut-chip"><img src="${selected[0].thumb}">${escape(selected[0].name)}</div>`);
       ghost.classList.remove('tut-fade', 'tut-hidden');
@@ -120,7 +124,7 @@ export function installStage() {
     },
     key(label, { x, y }) {
       const cap = layer('tut-key', escape(label));
-      Object.assign(cap.style, { left: `${x + 26}px`, top: `${y - 54}px` });
+      Object.assign(cap.style, { left: `${x + 26 * scale}px`, top: `${y - 54 * scale}px` });
       show(cap);
       setTimeout(() => hide(cap), 1100);
     },
@@ -160,7 +164,8 @@ export function installStage() {
     if (!event.isTrusted) return;
     ghostTo(event.clientX, event.clientY);
     const pointer = document.getElementById('doc-clip-pointer');
-    if (pointer) pointer.style.transform = `translate(${event.clientX - 2}px, ${event.clientY - 2}px)`;
+    const tip = window.__docClipPointer?.tip ?? 2;
+    if (pointer) pointer.style.transform = `translate(${event.clientX - tip}px, ${event.clientY - tip}px)`;
   }, options);
   const endDrag = event => { if (event.isTrusted && !carried) { ghost?.remove(); ghost = undefined; state.dragLabel = undefined; } };
   addEventListener('drop', endDrag, options);
@@ -317,7 +322,12 @@ export function cameraFor(spec) {
     const [x, y, w, h] = options.box;
     box = { left: x, top: y, right: x + w, bottom: y + h };
   } else {
-    const rects = options.panes.map(id => document.querySelector(`.dock-tab-pane[data-group-id="${id}"]`)?.getBoundingClientRect());
+    // A pane by its dock group id, or "tab=<name>" for the group whose active tab has that name (a group
+    // that was dragged elsewhere gets a generated id).
+    const paneOf = id => (id.startsWith('tab=')
+      ? [...document.querySelectorAll('.dock-tab-pane[data-group-id]')].find(pane => pane.querySelector('.dock-tab-bar [role="tab"][aria-selected="true"] .dock-tab-title')?.textContent.trim() === id.slice(4))
+      : document.querySelector(`.dock-tab-pane[data-group-id="${id}"]`));
+    const rects = options.panes.map(id => paneOf(id)?.getBoundingClientRect());
     if (rects.some(rect => !rect)) return { missing: `no dock group among ${options.panes.join(', ')}` };
     const pad = options.pad ?? 8;
     box = { left: Math.min(...rects.map(rect => rect.left)) - pad, top: Math.min(...rects.map(rect => rect.top)) - pad,

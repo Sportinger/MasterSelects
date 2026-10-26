@@ -2,17 +2,18 @@
 
 Read this before you work on a MasterSelects tutorial video. [`../README.md`](../README.md) explains
 the recipe format and the commands. This page covers how the work goes with Roman, the setup of a
-session, and every pitfall we have hit so far. [`plan.md`](plan.md) is the plan for the next version
-of the pipeline: the voice line by line, and the final cut in a MasterSelects project.
+session, and every pitfall we have hit so far. [`plan.md`](plan.md) is the plan for the rest of the
+pipeline: the voice line by line, and the final cut in a MasterSelects project.
 
 ## Quick start
 
 1. Read "How Roman wants it" below. Skim the pitfalls of the area you will touch.
-2. Session setup (below): worktree, Vite on 5192, secrets, `tutorial-tab.mjs serve`, and one Allow
-   click by Roman.
-3. Copy the last part recipe (`flamer-ep2-part3-yarn.json`) and write the scenes.
-4. `make … --voice none` until the steps work, then `make` with the voice.
-5. Check the contact sheet, show Roman, commit the recipe.
+2. Session setup (below): worktree, Vite on 5192, secrets, and the build server from the previous
+   part's checkpoint: `node scripts/tutorial-tab.mjs serve --from <checkpoint>`. No Chrome, no Allow click.
+3. Copy the last part recipe (`flamer-ep2-part3-yarn.json`), set `"from"` to the previous part's
+   checkpoint, and write the scenes. Try single steps with `tutorial-tab.mjs step` and look at each picture.
+4. `make … --voice none` until the steps work (read `scenes.jpg`), then `make` with the voice.
+5. Look at the video, show Roman, commit the recipe. The take left a checkpoint for the next part.
 
 ## What we make
 
@@ -25,10 +26,12 @@ points, circles, drags panels and clicks, timed to the words. Tone and jokes:
 | Episode | State | Recipes |
 |---|---|---|
 | 1 | done. Roman's recorded voice, music, pointer gestures | `flamer-episode-1.json` |
-| 2, "Knitted Jellyfish" (Weave, Qualle form) | parts 1, 2 and 3 ("Yarn") recorded; an older one-piece version exists | `flamer-ep2-part1.json`, `flamer-ep2-part2.json`, `flamer-ep2-part3-yarn.json`, `flamer-episode-2.json` |
+| 2, "Knitted Jellyfish" (Weave, Qualle form) | parts 1 and 2 recorded in 720p; part 3 ("Yarn") in 1440p from checkpoint `flamer-ep2-part2`; an older one-piece version exists | `flamer-ep2-part1.json`, `flamer-ep2-part2.json`, `flamer-ep2-part2-end.json` (builds the checkpoint), `flamer-ep2-part3-yarn.json`, `flamer-episode-2.json` |
 
 Episode 2 still needs:
-- the parts after part 3 (the scenes `form` … `outro` of `flamer-episode-2.json`, rebuilt in the new
+- parts 1 and 2 again in 1440p (part 1 with the new first line); part 2 should end where
+  `flamer-ep2-part2-end.json` ends, so part 3 can continue from its checkpoint;
+- the parts after part 3, starting from checkpoint `flamer-ep2-part3-yarn` (the scenes `form` … `outro` of `flamer-episode-2.json`, rebuilt in the new
   part style; part 3 ends with "Next up: we turn this thing into a jellyfish");
 - the fly-around in edit mode (needs Weave orbit in MS, see [`plan.md`](plan.md));
 - the final cut in MasterSelects.
@@ -43,15 +46,16 @@ Episode 2 still needs:
   piece by piece, in the real UI: nodes are added one by one and really connected.
 - **Everything on screen is real.** When the narration talks about nodes, real node cards and the
   running clip must be visible. Do not fake product UI with overlays.
-- **While building, take pictures and look at them.** After every step that builds a start state or
-  a scene, take a screenshot and check it, so you know the step did what it should. Do not build
-  blind and debug afterwards (Roman, 2026-10-24; `--shots` saves one per setup step).
-- **Always the real environment.** Build, probe and record in the same browser at the same size:
-  headless Chrome at 2560×1440 and 100% scale, once [`plan.md`](plan.md) stage 1 is done. A
-  different window or scale shows a different layout than the take.
-- **Work piece by piece.** Each part should start where the last one ended: same project, view,
-  settings and pointer. Until checkpoints exist ([`plan.md`](plan.md), stage 2), keep each part's
-  setup short and check its result picture against the last frame of the previous part.
+- **While building, take pictures and look at them.** Every setup step and every `tutorial-tab.mjs
+  step` leaves a picture; look at it before the next step, so you know the step did what it should.
+  Add `expect` steps where a mistake would cost a take (a clip at 0, a paused timeline). Do not build
+  blind and debug afterwards (Roman, 2026-10-24).
+- **Always the real environment.** Build, probe and record in the headless Chrome at 2560×1440 and
+  100% scale: the build server and the takes use the same one. Never probe in another window or at
+  another size; it shows a different layout than the take.
+- **Work piece by piece.** Each part starts from the checkpoint the previous part left (`"from"`), so
+  project, view, settings and pointer are the same, and the take checks that its first frame matches
+  the checkpoint's last frame. A part's own `setup` stays short or empty.
 - **Look at it yourself before you show it.** Check a contact sheet of the key moments (the
   `video-glance` skill): is the clip in the preview (not black), are the nodes visible, does the
   pointer hit what the voice names? Roman should not find errors that a look would have shown.
@@ -63,8 +67,9 @@ Episode 2 still needs:
   the effect, and press play only to show a result.
 - **No title card intro.** Episode 1 opens straight with the presenter. The pointer moves like a
   person, not like a robot: arcs, small overshoots, a pause before a click.
-- **Zooms are light and emotional** (1.05–1.3): a slow push in for suspense, a quick snap back on the
-  punchline.
+- **Zooms are light and emotional** (1.05–1.33): a slow push in for suspense, a quick snap back on the
+  punchline. At 100% the UI is small in a 1080p video, so frame the area being explained more often:
+  a zoom up to 1.33 on the 2560 px take stays sharp (`"camera": {"panes": ["tab=Preview", "left-group"], "maxZoom": 1.33}`).
 - **Intermediate renders.** When Roman asks for a "Zwischenstand", join the finished parts with the
   music. Open the file for him with `xdg-open`.
 - **Jokes come from the action.** Examples: "the jellyfish is tall, so we need a portrait comp", "we're
@@ -81,54 +86,74 @@ Episode 2 still needs:
 2. Secrets in `~/.config/agent-secrets/env`: `ELEVENLABS_BROWSER_API_KEY` (the account with credits),
    `DEEPGRAM_API_KEY`. Load them with `set -a && . ~/.config/agent-secrets/env && set +a` in the same
    shell command. Never print them or write them into files.
-3. Roman's Chrome: open it with `/home/admins/.local/bin/chrome-angemeldet` if needed. Remote debugging
-   must be on at `chrome://inspect/#remote-debugging`.
-4. Start the build server in the background: `node scripts/tutorial-tab.mjs serve` (with the secrets
-   loaded). Tell Roman to click **Allow** in Chrome. He has to do this once per server start, so keep
-   the server running for the whole session.
-5. Each take: `node scripts/tutorial-tab.mjs make scripts/tutorials/<recipe>.json`. If you changed only
-   the camera, captions or sound, add `--recut`. To find a target, use
-   `node scripts/tutorial-tab.mjs eval '<code>'`: it runs a snippet in the recording tab.
+3. The build server in the background, from the checkpoint the part continues:
+   `node scripts/tutorial-tab.mjs serve --from flamer-ep2-part3-yarn` (with the secrets loaded). It
+   opens the editor in a headless Chrome (2560×1440, scale 1, hardware WebGPU); nothing opens on
+   Roman's desktop. After a crash or restart, `serve --keep` continues its last editor. A new `serve`
+   takes over from a running one (the old one exits), so there is never more than one.
+4. Checkpoints are local (`tutorial-videos/checkpoints/`). If one is missing, rebuild it from its
+   recipe: `node scripts/tutorial-video.mjs scripts/tutorials/flamer-ep2-part2-end.json --setup-only
+   --save flamer-ep2-part2`, or take the previous part again.
 
 ## Making a part
 
-1. Write the part's scenes into its own recipe. One scene is one beat; its `say` follows the style
-   guides. Put the joke where the action gives it.
-2. Build the start state in `setup`. The setup is not recorded. It runs on the open project before
-   the take: load the default layout, build the finished effect for an intro, set loops, resize panels.
-3. Try the take with `--voice none` until the steps work. That costs no credits. Then generate the
-   voice and record.
-4. Read the log: `late for "<word>"` and scenes that ran over. Fix the steps (`early`, `ms`, `after`)
-   and run `make` again. A failed setup step names itself and leaves `setup.failed.png` in the work
-   folder; `--setup-shots` keeps a picture after every setup step.
-5. Check the contact sheet of the key moments, then show Roman the part.
-6. Commit the recipe on the task branch. Audio and videos stay local (`audio/`, `tutorial-videos/`).
+1. Write the part's scenes into its own recipe with `"from": "<previous checkpoint>"`. One scene is
+   one beat; its `say` follows the style guides. Put the joke where the action gives it.
+2. Try each new gesture in the build server before it goes into a scene:
+   `tutorial-tab.mjs step '<step json>'` runs it and prints the picture; `locate '<target>'` shows where
+   a target is; `state` lists clips, playhead, panels and what has the focus. A step changes the
+   build server's editor; `serve --from <checkpoint>` again gives the clean start.
+3. If the part needs a start state the previous take did not leave, put the steps into `setup` (run
+   before the take, not recorded, a picture after each), or build it in the build server and save it
+   with `tutorial-tab.mjs checkpoint <name> '[<resume steps>]'`. Keep those steps in a recipe
+   (`*-end.json` with `--setup-only`) so the checkpoint can be rebuilt.
+4. Try the take with `--voice none` until the steps work. That costs no credits. Then generate the
+   voice and record: `node scripts/tutorial-tab.mjs make scripts/tutorials/<part>.json`.
+5. Read the log (`seamless: …`, `late for "<word>"`, scenes that ran over) and `scenes.jpg`, the frame
+   after every step. A failed step stops with `<scene>.failed.jpg`: before and after, the error and
+   the editor's warnings. Fix the steps (`early`, `ms`, `after`) and run `make` again; the retake
+   starts from the clean checkpoint.
+6. List in `resume` what the part's end view needs after a reload (see "Checkpoints" below), so the
+   next part continues seamlessly.
+7. Look at the video, show Roman the part, commit the recipe on the task branch. Audio, videos and
+   checkpoints stay local (`audio/`, `tutorial-videos/`).
 
 ## Pitfalls
 
-### Chrome and the connection
+### The headless Chrome
 
-- **Every new DevTools connection asks Roman to click Allow.** Use the build server; it keeps one
-  connection open. It retries a refused (403) or timed-out connection for about 2 minutes, so tell
-  Roman at once when you start it. `--attach` without the server asks again on every run.
-- **Do not start a separate Chrome by mistake.** Without `--attach` or the server, `tutorial-video.mjs`
-  starts its own Chrome profile. That is not Roman's browser, and he noticed ("du startest die mit
-  falscher Flag").
-- **Never navigate or close Roman's own tabs.** The recorder opens its own tab and reuses it between
-  takes. Tab ids shift, so use only the page the server opened.
-- **Navigation drops the viewport emulation** (1280×720 at 2×). The pipeline re-applies it on
-  `domcontentloaded` and checks it. Keep it that way when you change the browser code.
-- **Never call Playwright's `page.screenshot` on the recording tab** (also not in an `eval` snippet).
-  It resets the emulated pixel ratio to 1, and the next take fails with "The tab keeps its own
-  viewport (1280×720×1)". The pipeline takes its pictures through DevTools (`Page.captureScreenshot`).
-- **The real mouse disturbs hovers.** If it crosses the Chrome window, the log warns. Roman should
-  not touch that window during a take.
+- **Takes are real 2560×1440.** Chrome's screencast sends the window's own pixels, so a visible window
+  on Roman's 3440×1440 monitor gave 1280×720 at most, and an emulated device scale did not raise it.
+  The headless Chrome has no such limit (`tutorialBrowser.mjs`; about 26 fps when the whole page
+  repaints).
+- **Headless Chrome needs the Vulkan flags for WebGPU** (`--use-angle=vulkan --enable-features=Vulkan
+  --disable-vulkan-surface`), and right after the launch `requestAdapter()` answers null for about a
+  second. The pipeline asks from the editor's favicon until the GPU answers, then loads the editor
+  (`warmGpu`). An editor that loads earlier starts without WebGPU.
+- **Vite must not watch `tutorial-videos/`.** Its tens of thousands of frames exhausted the inotify
+  watches and Vite died with ENOSPC; the folder is unwatched since 2026-10-26 (`tools/devServerWatch.ts`).
+- **"Storage persistence DENIED"** in the editor warnings is the headless Chrome refusing persistent
+  storage. It does not matter for checkpoints.
+- **`--attach` (Roman's Chrome) is for trying things only.** Every new DevTools connection asks him
+  to click Allow, the screencast stays 1280×720, and the real mouse can cross the window. Never
+  navigate or close his own tabs, and never use Playwright's `page.screenshot` there (it resets the
+  emulated pixel ratio); the pipeline takes pictures through DevTools (`Page.captureScreenshot`).
+
+### Checkpoints
+
+- **A reload keeps the project, not every view.** After a checkpoint reopens, the project, the dock
+  layout, the node graph's source and an expanded Weave group are back. Lost are: hidden playback
+  controls, the Properties tab (Effects falls back to Transform) and the selected row in Media. The
+  part that saves the checkpoint lists the steps that bring them back in `resume`
+  (`flamer-ep2-part2-end.json` has the four for the Qualle start).
+- **The seamless check finds what is missing.** It stops when more than 0.3 % of the first frame
+  differs from the checkpoint's last frame, names the area, and writes `seam.jpg`. Add the missing
+  view to `resume`, or pass `--no-seam` when the cut does not join there.
+- **A checkpoint belongs to its origin and size.** The project lives in the storage of
+  `http://localhost:5192`; a take with another `--url` or viewport refuses the checkpoint.
+- **A failed take saves no checkpoint**; the previous one stays as it was.
 
 ### Recording and timing
-
-- **Takes are 720p, scaled up.** Chrome's screencast sends the window's own pixels (1280×720). The
-  recipe's `scale: 2` does not raise that. Roman wants headless 1440p at 100%; [`plan.md`](plan.md), stage 1, has
-  the measurements and the way there.
 
 - **Heavy pages make gestures late.** In the node workspace with Weave running, steps came 1–3 s
   late. Fix one part with larger `early` values. The structural fix is in [`plan.md`](plan.md): place
@@ -138,26 +163,32 @@ Episode 2 still needs:
   cable click at "So" or "perfect") and give them `approach` and `ms` of 300–600.
 - **A missing target fails the step.** `locate` retries for 1.5 s, then the take stops. The recording
   up to that point is kept, so `--recut` can show it.
-- **The pointer needs a start point.** Without `recipe.pointer` it starts mid-frame.
+- **The pointer needs a start point.** A part from a checkpoint starts where the last part left the
+  pointer; otherwise `recipe.pointer`, or mid-frame.
+- **Pixel offsets depend on the layout.** At 2560×1440 the panels are proportionally larger: the moved
+  Preview drops at `@14,660`, the node group widens by `~600,0`, the timeline shrinks by `~0,200`.
+  Offsets around a control (`~250,0` into a submenu, `~-150,70` beside a node card) stay the same.
 - **A scene lasts at least as long as its sentence.** A recorded voice keeps its own pauses: each
   scene lasts until the next scene's first word.
 
 ### Editor state and the test project
 
 - **The test project is real.** Text typed into a menu that is not open goes to the timeline as
-  shortcuts. In episode 2, a Delete after a card click removed the clip (fixed in MS since). Before
-  `type`, make sure the menu or field is open and focused, for example with `click … until`.
+  shortcuts. In episode 2, a Delete after a card click removed the clip (fixed in MS since). `type`
+  now stops when no text field has the focus; open the menu or field first (`click … until`).
 - **Load Default Layout through the menu is flaky** (hover timing). Use the step
   `{ "defaultLayout": true }`: it loads the layout and checks that it stays.
 - **A layout reset drops the node graph source** (Timeline / Active / clip). Do the node setup after
   the last layout reset.
 - **The clip must start at 0.** With the playhead at 0 and the clip at 0.05 s, the preview stayed
-  black for a whole part, and Roman found it. Drag new clips to the start
-  (`drag clip:<name>:middle → time:…@Video 1`) and check the preview in the contact sheet.
+  black for a whole part, and Roman found it. Add Layer now starts a clip at the beginning of the
+  empty space under the click (0 on an empty track); check it with
+  `{"expect": {"clip": {"name": "Blank", "start": 0}}}`.
+- **`previewNotBlack` is for clips that should show something.** An empty Weave is black on purpose.
 - **The new project's name goes into the dialog field.** Until 2026-10-24 the pipeline typed it before
   the dialog was open; the letters of "Qualle" reached the timeline as shortcuts (`l` played), and the
   setup then ran against a playing project: menus closed mid-glide, a clip or the whole comp was gone.
-  If a setup behaves at random, look at `--setup-shots` for a running playhead first.
+  If a setup behaves at random, look at the setup pictures for a running playhead first.
 - **Shortcuts:** L plays forward; the loop toggles with **Shift+L** (the tooltip said "L" until
   `54715ba9d`). Say the right key in the narration.
 - **Dock tabs need a hold before they drag.** Use `hold: 650` on the drag step (MS waits 500 ms).
@@ -183,9 +214,11 @@ Episode 2 still needs:
   typing at once.
 - **Linux sends `contextmenu` on press, not on release.** MS now holds it during a right gesture and
   opens the menu on release only if there was no drag. Keep this in mind if a menu pops up mid-drag.
-- **Fit in a short canvas leaves the graph tiny.** The node canvas was only 277 px high, so Fit had
-  little room. Shrink the timeline in `setup` (`drag handle:left-group:bottom ~0,140`) before Fit.
-  Fit may also count hidden folder nodes; that is not checked yet.
+- **Fit in a short canvas leaves the graph tiny.** Shrink the timeline before Fit
+  (`drag handle:left-group:bottom ~0,200` at 2560×1440). Fit may also count hidden folder nodes; that
+  is not checked yet.
+- **The selected clip shows a move gizmo in the preview** (red and green arrows). It is visible in
+  part 3; hide it before the next takes if it distracts.
 - **Emptying Weave:** open the group, marquee Weave Pattern, Handmade, Reveal by Shape, Weave In,
   Yarn and Wind Cloth, then press Delete. Strand Render and Output stay. Then add Knit Sphere, connect
   it to Strand Render, and insert Yarn Profile into that cable.
