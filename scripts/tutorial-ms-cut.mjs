@@ -3,9 +3,10 @@
 // The episode is then cut there like any other video: lines split, moved, trimmed, music added, export.
 //
 //   node scripts/tutorial-ms-cut.mjs <part recipe | edl.json> [<more parts> …]
-//       [--editor http://localhost:5173]   the editor's dev server (default: the main folder's dev:full); a worktree's
-//                                          own Vite writes its bridge token only when started with
-//                                          MASTERSELECTS_BRIDGE_TOKEN_FILE=.ai-bridge-token
+//       [--editor <origin>]                the cut editor's dev server; default: the first of the main folder's
+//                                          dev:full and this worktree's Vite whose editor holds a cut project
+//                                          (a worktree's Vite writes its bridge token only when started with
+//                                          MASTERSELECTS_BRIDGE_TOKEN_FILE=.ai-bridge-token)
 //       [--tab <tabId>]                    the editor tab, when more than one visible editor is connected (the
 //                                          headless editors of takes and the build server are passed over)
 //       [--at <seconds>]                   where the (first) part starts; default: after the last part
@@ -14,7 +15,8 @@
 //
 // Tracks, found by name and created on first use: the video track "Picture" holds the parts one after another, the
 // audio track "Voice" holds one clip per line, and the video track "Captions" above the picture holds one caption
-// clip per part. A caption clip shows the words of the voice clip under it (setClipTranscript gives every line its
+// clip per part. Parts only go into a cut project: one with the track "Picture", or an empty one, never a project
+// someone works on. A take (scripts/tutorial-video.mjs) calls this after every voiced part. A caption clip shows the words of the voice clip under it (setClipTranscript gives every line its
 // ElevenLabs word times), so captions stay with a line that is split or moved.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -53,7 +55,8 @@ function bridgeFor(origin) {
 
 /** Calls editor tools in one tab through the bridge. */
 async function connect({ origin, token }, tab) {
-  const status = await (await fetch(`${origin}/api/ai-tools`)).json().catch(() => ({ clientTabs: [] }));
+  const status = await fetch(`${origin}/api/ai-tools`).then(response => response.json().catch(() => ({ clientTabs: [] })), () => null);
+  if (!status) throw new Error(`no dev server answers at ${origin}`);
   // A closed tab stays listed for a while without a heartbeat. The editors of takes and of the build server
   // (tab ids "tutorial-…", set by scripts/tutorialSession.mjs) are never the cut editor.
   const live = (status.clientTabs ?? []).filter(item => item.lastSeenAgoMs < 10000);
@@ -77,6 +80,37 @@ async function connect({ origin, token }, tab) {
     if (!response.ok || result.success === false) throw new Error(`${tool}: ${result.error ?? JSON.stringify(result).slice(0, 300)}`);
     return result.data ?? result;
   };
+}
+
+/** The origins of the dev servers that may hold the cut editor: the main folder's dev:full, then this worktree's Vite. */
+function knownOrigins() {
+  return [...new Set([mainFolder(), path.resolve(import.meta.dirname, '..')].map(folder => path.join(folder, '.ai-bridge-url'))
+    .filter(file => fs.existsSync(file)).map(file => new URL(fs.readFileSync(file, 'utf8').trim()).origin))];
+}
+
+/** Whether the open project is a cut project: it has the track "Picture", or nothing at all yet. */
+export function isCutProject(state) {
+  const tracks = [...state.videoTracks, ...state.audioTracks];
+  return tracks.some(track => track.name === TRACKS.picture) || tracks.every(track => !track.clips.length);
+}
+
+/** The cut editor: --editor, else the first known dev server whose editor holds a cut project. */
+async function cutEditor(editor, tab) {
+  const reasons = [];
+  for (const origin of editor ? [new URL(editor).origin] : knownOrigins()) {
+    try {
+      const call = await connect(bridgeFor(origin), tab);
+      if (isCutProject(await call('getTimelineState'))) {
+        console.log(`cut editor: ${origin}/editor`);
+        return call;
+      }
+      reasons.push(`the project open at ${origin} is no cut project (it has clips and no track "${TRACKS.picture}")`);
+    } catch (error) {
+      reasons.push(error.message);
+    }
+  }
+  throw new Error(`no cut editor: ${reasons.join('; ') || 'no dev server has written a bridge token'}. Open the episode's project (or a new one)`
+    + ' in a visible editor tab, or name the editor with --editor');
 }
 
 /** The edit list of a part: the edl.json itself, or the one a recipe's take wrote. */
@@ -183,7 +217,7 @@ export async function main(args) {
   const valued = ['--editor', '--tab', '--at'];
   const files = args.filter((arg, index) => !arg.startsWith('--') && !valued.includes(args[index - 1]));
   if (!files.length) throw new Error('Name a part recipe or its edl.json, e.g. scripts/tutorials/flamer-ep2-part3-yarn.json');
-  const call = await connect(bridgeFor(option(args, '--editor', 'http://localhost:5173')), option(args, '--tab'));
+  const call = await cutEditor(option(args, '--editor'), option(args, '--tab'));
   let at = option(args, '--at') === undefined ? undefined : Number(option(args, '--at'));
   for (const file of files) {
     const edl = readEdl(file);

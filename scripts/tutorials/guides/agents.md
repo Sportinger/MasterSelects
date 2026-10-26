@@ -7,40 +7,48 @@ still open.
 
 ## The workflow
 
-A tutorial is about MasterSelects, and it is also cut in MasterSelects. It is built piece by piece:
+A tutorial is about MasterSelects, and it is also cut in MasterSelects, **from the first part on**: the
+cut project is open before anything is recorded, every part goes into it as soon as its take is done,
+and Roman watches the episode grow there. Never record all parts first and cut at the end.
 
-1. **Plan the episode in parts.** Write the beats of the episode (README of the episode or the first
+1. **Open the cut project first:** the cut editor (below) in a visible browser tab, with a new project
+   for the episode (or its existing one).
+2. **Plan the episode in parts.** Write the beats of the episode (README of the episode or the first
    recipe's comment) and cut them into parts of at most about **20 seconds** each, one logical step
    per part, some shorter. Each part is its own recipe.
-2. **Per part:**
+3. **Per part, one after the other:**
    1. **Plan the part:** its scenes (one line of voice each) and the gestures, in a recipe with
       `"from": "<checkpoint of the previous part>"`.
    2. **Build the steps with pictures** in the build server, which runs from the same checkpoint
       (`tutorial-tab.mjs serve --from …`, then `step`, `locate`, `state`, `shot`).
    3. **Generate the voice and record:** `tutorial-tab.mjs make <part>.json`. The voice comes first,
       one ElevenLabs request per line (cached per line); the take waits for every line, records in
-      the headless Chrome at 2560×1440, and leaves a checkpoint where it ended.
-   4. **Look at it:** `scenes.jpg` and the quick look `tutorial-videos/<part>.mp4`.
-   5. **Put it into the episode's MasterSelects project:** `node scripts/tutorial-ms-cut.mjs
-      scripts/tutorials/<part>.json`. The picture goes onto track "Picture" after the previous
-      part, each voice line becomes its own clip on "Voice", and a caption clip on "Captions"
-      shows the words.
-   6. **Fine-tune there:** a line that runs too fast is split (`splitClip`) and its second half moved
-      (`moveClip`); the captions follow the clips. Show Roman the part, commit the recipe.
-3. **The next part** starts from the checkpoint this take left: same project, dock layout, open
-   panels, clips, playhead, selection, pointer and camera. Record it, put it in after this one.
-4. **At the end,** music and export happen in the MasterSelects project.
+      the headless Chrome at 2560×1440, leaves a checkpoint where it ended, and **puts the part into
+      the cut project right away**: the picture onto track "Picture" after the previous part, each
+      voice line as its own clip on "Voice", a caption clip on "Captions". A retake replaces the part
+      there. A take without voice stays out (`--cut` puts it in); `--no-cut` skips the cut, and
+      `node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json` does it by hand.
+   4. **Look at it in the cut editor:** play the part there. `scenes.jpg` and the quick look
+      `tutorial-videos/<part>.mp4` help to find a fault.
+   5. **Fine-tune there:** a line that runs too fast is split (`splitClip`) and its second half moved
+      (`moveClip`); the captions follow the clips. Show Roman the part, commit the recipe. Only then
+      the next part.
+4. **The next part** starts from the checkpoint this take left: same project, dock layout, open
+   panels, clips, playhead, selection, pointer and camera.
+5. **At the end,** music and export happen in the MasterSelects project.
 
-Two editors take part: the **take editor** (this worktree's Vite on 5192, in a headless Chrome)
-shows what is filmed; the **cut editor** (the dev server's editor, `https://localhost:5173/editor`
-or `http://localhost:5173/editor`, with the episode's project open) is where the parts are cut.
-`tutorial-ms-cut.mjs` drives the cut editor through the AI bridge.
+Two editors take part: the **take editor** (this worktree's Vite on 5192, in a headless Chrome) shows
+what is filmed; the **cut editor**, a visible tab with the episode's project, is where the parts are
+cut (Session setup, step 2). `tutorial-ms-cut.mjs` drives it through the AI bridge and finds it by
+itself: the first dev server (the main folder's, then this worktree's) whose editor holds a cut
+project, one with the track "Picture" or an empty one. It never puts parts into a project someone
+works on.
 
 ## Quick start for a new tutorial
 
 1. Read "How Roman wants it" below. Skim the pitfalls of the area you will touch.
-2. Session setup (below): worktree, Vite on 5192, secrets, the cut editor on 5173 with the episode's
-   project.
+2. Session setup (below): worktree, Vite on 5192, secrets, and the cut editor with the episode's
+   project, open before the first take.
 3. **A new episode:** start the build server on a new project (`tutorial-tab.mjs serve`), build the
    start state step by step with pictures, and either record part 1 from it with `setup` steps or
    save it as a checkpoint (`tutorial-tab.mjs checkpoint <episode>-start`). **The next part of an
@@ -48,8 +56,8 @@ or `http://localhost:5173/editor`, with the episode's project open) is where the
 4. Copy the last part recipe (`flamer-ep2-part3-yarn.json`), set `"from"` and `"episode"`, and write
    the scenes. Try single steps with `tutorial-tab.mjs step` and look at each picture.
 5. `make … --voice none` while the steps still fail (free), then `make` with the voice.
-6. Look at the quick look, put the part into the cut editor (`tutorial-ms-cut.mjs`), show Roman,
-   commit the recipe. The take left a checkpoint for the next part.
+6. Look at the part in the cut editor (the take put it there), fine-tune it, show Roman, commit the
+   recipe. Then the next part, from the checkpoint the take left.
 
 ## What we make
 
@@ -178,9 +186,9 @@ Episode 2 still needs:
    starts from the clean checkpoint.
 6. List in `resume` what the part's end view needs after a reload (see "Checkpoints" below), so the
    next part continues seamlessly.
-7. Look at the quick look, then put the part into the cut editor:
-   `node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json` (a retake: `--replace`). Check
-   the timeline there (`getTimelineState`, a screenshot of the preview at a spoken word).
+7. The voiced take put the part into the cut editor (its log says `cut editor: …`, or `NOT IN THE
+   CUT YET` with the reason and the command to run once it is fixed). Check the timeline there
+   (`getTimelineState`, a screenshot of the preview at a spoken word).
 8. Show Roman the part, commit the recipe on the task branch. Audio, videos and checkpoints stay
    local (`audio/`, `tutorial-videos/`).
 

@@ -94,18 +94,21 @@ voice and music together do not clip. To try other cues without recording a new 
 ## Cut in MasterSelects
 
 A take writes `tutorial-videos/<name>.cut/`: the picture, one file per voice line, and `edl.json`
-(where each line starts in the picture, and its word times). Put the part into the project that is
-open in the cut editor (the dev server's editor, `npm run dev:full` in the main folder):
+(where each line starts in the picture, and its word times). A voiced take then puts the part into the
+episode's project in the cut editor right away, so the cut grows part by part; open that project in a
+visible editor tab before the first take. By hand, or after `--no-cut`:
 
 ```bash
 node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json            # after the last part
 node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json --replace  # a retake of a part already there
 ```
 
-It uses the AI bridge of the editor at `--editor` (default `http://localhost:5173`). The picture goes
-onto the video track "Picture", each line onto the audio track "Voice", and a caption clip onto the
-video track "Captions" above. Every line clip carries its word times (`setClipTranscript`), so the
-captions stay with a line that is split or moved. Trim, move lines, add the music and export there.
+It uses the AI bridge of the cut editor: `--editor <origin>`, else the first of the main folder's
+dev:full and this worktree's Vite whose editor holds a cut project (the track "Picture", or an empty
+project; never a project someone works on). The picture goes onto the video track "Picture", each line
+onto the audio track "Voice", and a caption clip onto the video track "Captions" above. Every line clip
+carries its word times (`setClipTranscript`), so the captions stay with a line that is split or moved.
+Trim, move lines, add the music and export there.
 
 ## Parts, checkpoints and the build server
 
