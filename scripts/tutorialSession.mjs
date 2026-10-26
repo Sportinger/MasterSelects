@@ -42,7 +42,7 @@ function pageHooks() {
 export async function tutorialModules(fresh = false) {
   const local = name => import(`${pathToFileURL(path.join(import.meta.dirname, name)).href}${fresh ? `?t=${Date.now()}` : ''}`);
   const names = ['docClipPointer.mjs', 'docShotSettings.mjs', 'tutorialCut.mjs', 'tutorialStage.mjs', 'tutorialVoice.mjs', 'tutorialBrowser.mjs',
-    'tutorialGestures.mjs', 'tutorialSteps.mjs', 'tutorialPictures.mjs', 'tutorialCheckpoint.mjs'];
+    'tutorialGestures.mjs', 'tutorialSteps.mjs', 'tutorialPictures.mjs', 'tutorialCheckpoint.mjs', 'tutorialPreviewWatch.mjs'];
   return Object.assign({}, ...await Promise.all(names.map(local)));
 }
 

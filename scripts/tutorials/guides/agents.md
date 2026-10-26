@@ -239,6 +239,15 @@ Episode 2 still needs:
 
 ### Recording and timing
 
+- **The preview must keep up (Roman's rule).** While the timeline plays, the preview must show at
+  least 16 new pictures in every second. A take checks that itself
+  (`scripts/tutorialPreviewWatch.mjs`): it counts the screencast frames in which the preview area
+  changed and fails with `PREVIEW BELOW 16 FPS: … at <from>–<to> s (scene …)`, before saving a
+  checkpoint. Then find the cause and fix it in MasterSelects first, above all for simple things: a
+  real-time effect such as Analog Signal Lab must play smoothly. Profile the moment in the build
+  server (`eval` with the DevTools Profiler). `--allow-slow-preview` keeps a take only when a heavy
+  moment is the point of the part. Do not trust `getStats` for this: it averages over five seconds
+  and did not see gaps of 150–230 ms (2026-10-26).
 - **Heavy pages make gestures late.** In the node workspace with Weave running, steps came 1–3 s
   late. Fix one part with larger `early` values. The structural fix is in [`plan.md`](plan.md): place
   each voice line by the recorded step times.

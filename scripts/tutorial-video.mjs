@@ -7,6 +7,7 @@
 //                                              (default name <recipe name>-start), record nothing
 //       [--no-shots] (no picture after every setup step) [--no-seam] (skip the seamless check)
 //       [--attach] (record in a tab of the user's running Chrome: 1280×720 only, for trying things)
+//       [--allow-slow-preview] (keep a take whose preview fell below 16 new pictures per second while playing)
 //       [--no-cut] (a voiced take is not put into the cut) [--cut] (a take without voice is put in too)
 //       [--editor <origin>] [--tab <tabId>] (the cut editor, see scripts/tutorial-ms-cut.mjs)
 //
@@ -192,6 +193,12 @@ export async function main(args, { chrome, fresh = false } = {}) {
       // A part that continues a checkpoint starts with that part's last camera.
       if (session.checkpoint?.camera) take.camera.push({ t: 0, ms: 0, ...session.checkpoint.camera });
       await cdp.send('Page.startScreencast', { format: 'jpeg', quality: recipe.jpegQuality ?? 90, everyNthFrame: 1 });
+      // The preview watch (scripts/tutorialPreviewWatch.mjs): whether the timeline plays and where the preview is.
+      const views = [];
+      const viewTimer = setInterval(() => {
+        const t = m.now() - take.t0;
+        page.evaluate(m.previewView).then(view => views.push({ t, ...view }), () => {});
+      }, 250);
       // The previous part ended while the timeline played: it plays on from the same frame.
       if (session.checkpoint?.runtime?.playing) await page.evaluate(() => window.aiTools.execute('play', {}));
 
@@ -240,6 +247,7 @@ export async function main(args, { chrome, fresh = false } = {}) {
         console.log(`${item.id}: ${(m.now() - start).toFixed(1)} s recorded${needed ? `, sentence ${needed.toFixed(1)} s` : ''}`);
       }
       await pause(recipe.end ?? 400);
+      clearInterval(viewTimer);
       await cdp.send('Page.stopScreencast');
       await cdp.detach().catch(() => {});
       const foreign = await page.evaluate(() => window.__docClipPointer.foreign);
@@ -252,6 +260,19 @@ export async function main(args, { chrome, fresh = false } = {}) {
         label: `${step.scene} ${step.index} ${step.label}` }));
       const sheets = await m.contactSheet(items, path.join(work, 'scenes.jpg'));
       if (sheets) console.log(`scenes: ${items.length} pictures in ${sheets.map(sheet => path.relative(process.cwd(), sheet)).join(', ')}`);
+
+      // Roman's rule: a preview below MIN_PREVIEW_FPS for a second while playing fails the take before its checkpoint.
+      const slow = m.watchTake(views, recording.frames);
+      const sceneAt = time => scenes.findLast(item => item.start <= time)?.id ?? 'start';
+      for (const item of slow) {
+        console.warn(`PREVIEW BELOW ${m.MIN_PREVIEW_FPS} FPS: ${item.fps.toFixed(0)} new pictures/s at ${item.from.toFixed(1)}–${item.to.toFixed(1)} s`
+          + ` (scene ${sceneAt(item.from)})`);
+      }
+      if (slow.length && !args.includes('--allow-slow-preview')) {
+        throw new Error(`the preview stuttered in ${slow.length} place(s) (above). Find the cause (profile it in the build server) and fix it`
+          + ' before this part goes on; --allow-slow-preview records anyway. No checkpoint was saved.');
+      }
+      if (!slow.length) console.log(`preview: at least ${m.MIN_PREVIEW_FPS} new pictures per second wherever the timeline played`);
 
       if (session.headless) {
         const camera = m.cameraPath(take.camera, restCamera)(recording.end);
