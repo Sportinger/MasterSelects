@@ -100,7 +100,7 @@ visible editor tab before the first take. By hand, or after `--no-cut`:
 
 ```bash
 node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json            # after the last part
-node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json --replace  # a retake of a part already there
+node scripts/tutorial-ms-cut.mjs scripts/tutorials/<part>.json --replace  # a retake: replaces the part where it was
 ```
 
 It uses the AI bridge of the cut editor: `--editor <origin>`, else the first of the main folder's
@@ -108,7 +108,9 @@ dev:full and this worktree's Vite whose editor holds a cut project (the track "P
 project; never a project someone works on). The picture goes onto the video track "Picture", each line
 onto the audio track "Voice", and a caption clip onto the video track "Captions" above. Every line clip
 carries its word times (`setClipTranscript`), so the captions stay with a line that is split or moved.
-Trim, move lines, add the music and export there.
+A replaced part takes out its old clips, its own captions and its media items, and the later parts move
+by the difference in length, so a shorter retake leaves no gap and a longer one does not run into the
+next part. Trim, move lines, add the music and export there.
 
 ## Parts, checkpoints and the build server
 
