@@ -133,6 +133,12 @@ points, circles, drags panels and clicks, timed to the words. Tone and jokes:
    the running build server. `tutorial-ms-cut.mjs` passes over the headless editors of takes and of
    the build server by themselves (their bridge tab ids start with `tutorial-`); `--tab` is only
    needed when two visible editor tabs are open.
+   **The episode's project** lives in `/home/admins/Documents/MasterSelects-Tutorials/<episode>`.
+   Create it through the bridge with `createLocalProject` (no folder dialog). That needs the folder
+   granted once per editor origin: `grantWorkspaceRoot` with `path:
+   "/home/admins/Documents/MasterSelects-Tutorials"` and a long `timeoutMs` shows a button in the
+   editor; tell Roman, he clicks it once and picks exactly that folder. `listWorkspaceRoots` shows
+   whether the grant is there. Never discard a project that is open in that tab with unsaved changes.
 3. Secrets in `~/.config/agent-secrets/env`: `ELEVENLABS_BROWSER_API_KEY` (the account with credits),
    `DEEPGRAM_API_KEY`. Load them with `set -a && . ~/.config/agent-secrets/env && set +a` in the same
    shell command. Never print them or write them into files.

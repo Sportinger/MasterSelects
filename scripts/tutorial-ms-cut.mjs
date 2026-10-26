@@ -170,7 +170,8 @@ async function placePart(call, edl, { at, replace, captions }) {
     const oldEnd = Math.max(...old.map(clip => clip.endTime));
     const next = state.videoTracks.find(track => track.id === pictureTrack).clips
       .filter(clip => clip.startTime >= oldEnd - 0.01 && !old.some(item => item.id === clip.id)).toSorted((a, b) => a.startTime - b.startTime)[0];
-    if (next && start + edl.duration > next.startTime + 0.01) {
+    // The editor puts clips on whole frames, so a part may end up to a frame later than its picture lasts.
+    if (next && start + edl.duration > next.startTime + 0.04) {
       throw new Error(`the new take of ${edl.name} (${edl.duration.toFixed(2)} s) would run into ${next.name} at ${next.startTime.toFixed(2)} s; move the later parts first`);
     }
     const captionClips = captionTrack ? state.videoTracks.find(track => track.id === captionTrack).clips
@@ -184,7 +185,12 @@ async function placePart(call, edl, { at, replace, captions }) {
 
   const picture = await call('importLocalFiles', { paths: [edl.picture.replace(/\\/g, '/')], addToTimeline: true, trackId: pictureTrack, startTime: start });
   if (!picture.placedClips?.length) throw new Error(`${edl.name}: the picture was not placed (${JSON.stringify(picture.errors ?? picture).slice(0, 200)})`);
-  console.log(`  picture ${edl.name}.mp4 at ${start.toFixed(2)} s (${edl.duration.toFixed(2)} s)`);
+  // Lines and captions follow the picture clip as the editor placed it (on whole frames), not the take's own
+  // length: a caption that ran past the picture overlapped the next part's caption.
+  const placed = (await call('getTimelineState')).videoTracks.flatMap(track => track.clips).find(clip => clip.id === picture.placedClips[0].clipId);
+  if (placed) start = placed.startTime;
+  const length = placed ? placed.endTime - placed.startTime : edl.duration;
+  console.log(`  picture ${edl.name}.mp4 at ${start.toFixed(2)} s (${length.toFixed(2)} s)`);
 
   let transcripts = 0;
   for (const line of edl.lines ?? []) {
@@ -204,13 +210,13 @@ async function placePart(call, edl, { at, replace, captions }) {
   }
 
   if (captions && transcripts) {
-    for (const run of captionRuns(edl.lines, edl.duration)) {
+    for (const run of captionRuns(edl.lines, length)) {
       await call('createCaptionClip', { trackId: captionTrack, startTime: start + run.start, duration: run.end - run.start, sourceClipId: null,
         positionX: 50, positionY: run.top ? 12 : 88, ...CAPTION_STYLE });
     }
-    console.log(`  captions over ${edl.duration.toFixed(2)} s`);
+    console.log(`  captions over ${length.toFixed(2)} s`);
   }
-  return start + edl.duration;
+  return start + length;
 }
 
 export async function main(args) {
