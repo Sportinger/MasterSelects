@@ -16,6 +16,8 @@ const UNWATCHED_ROOT_FOLDERS: ReadonlySet<string> = new Set([
   'licenses',
   'migrations',
   'scripts',
+  // Tutorial takes: tens of thousands of screencast frames and the headless Chrome profiles they record in.
+  'tutorial-videos',
   'wit',
   'workers',
 ]);

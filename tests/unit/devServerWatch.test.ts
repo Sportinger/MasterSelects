@@ -38,6 +38,8 @@ describe('dev server watch list', () => {
       'tests/unit/effectStyles.test.ts',
       'tests/playwright/editor.spec.ts',
       'tools/native-helper/src/main.rs',
+      'tutorial-videos/flamer-ep2-part2.work/frames/45557.jpg',
+      'tutorial-videos/checkpoints/part2/profile/Default/IndexedDB',
     ]) {
       expect(unwatched(relative), relative).toBe(true);
     }
