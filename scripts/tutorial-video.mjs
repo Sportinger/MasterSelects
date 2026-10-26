@@ -7,6 +7,8 @@
 //                                              (default name <recipe name>-start), record nothing
 //       [--no-shots] (no picture after every setup step) [--no-seam] (skip the seamless check)
 //       [--attach] (record in a tab of the user's running Chrome: 1280×720 only, for trying things)
+//       [--no-cut] (a voiced take is not put into the cut) [--cut] (a take without voice is put in too)
+//       [--editor <origin>] [--tab <tabId>] (the cut editor, see scripts/tutorial-ms-cut.mjs)
 //
 // 1. Voice: every scene's `say` is one line, spoken by ElevenLabs with word times, one request per line
 //    (scripts/tutorialVoice.mjs; default voice "flamer", with ELEVENLABS_BROWSER_API_KEY or
@@ -105,10 +107,10 @@ const PART_SECONDS = 20;
  */
 export async function main(args, { chrome, fresh = false } = {}) {
   const local = name => import(`${pathToFileURL(path.join(import.meta.dirname, name)).href}${fresh ? `?t=${Date.now()}` : ''}`);
-  const { openSession, runSteps, tutorialModules } = await local('tutorialSession.mjs');
+  const { openSession, recipeMedia, runSteps, tutorialModules } = await local('tutorialSession.mjs');
   const m = await tutorialModules(fresh);
 
-  const valued = ['--url', '--out', '--media', '--voice', '--save'];
+  const valued = ['--url', '--out', '--media', '--voice', '--save', '--editor', '--tab'];
   const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
   const recipeFile = args.find((arg, index) => !arg.startsWith('--') && !valued.includes(args[index - 1]));
   if (!recipeFile) throw new Error('Name a recipe, e.g. scripts/tutorials/cut-a-video.json');
@@ -121,11 +123,7 @@ export async function main(args, { chrome, fresh = false } = {}) {
   const attach = chrome ?? (args.includes('--attach') ? 'attach' : undefined);
   const viewport = recipe.viewport ?? (attach ? { width: 1280, height: 720 } : m.DEFAULT_VIEWPORT);
 
-  const media = Object.fromEntries(Object.entries(recipe.media ?? {}).map(([name, file]) => {
-    const found = m.findMedia(file, { media: option('--media') });
-    if (!found) throw new Error(`Media ${file} not found; pass --media <folder> (searched ${m.mediaDirs({ media: option('--media') }).join(', ')})`);
-    return [name, found];
-  }));
+  const media = await recipeMedia(recipe, option('--media'));
 
   /** The page now as a PNG (for checkpoints and the seamless check). */
   const still = async (session, name) => m.snapshot(session.context, session.page, path.join(work, name));
@@ -295,6 +293,14 @@ export async function main(args, { chrome, fresh = false } = {}) {
     console.warn(`NOTE: this part runs ${result.duration.toFixed(1)} s; parts should stay at about ${PART_SECONDS} s or less. Split it into two recipes`
       + ' (the first one\'s checkpoint is the second one\'s "from").');
   }
+  // Piece by piece: a voiced part goes into the episode's MasterSelects project right away (a retake replaces it
+  // there), so the cut grows part by part and is looked at before the next part is made.
+  if (!args.includes('--no-cut') && (voiced || args.includes('--cut'))) {
+    const { main: cut } = await local('tutorial-ms-cut.mjs');
+    const target = ['--editor', '--tab'].flatMap(name => option(name) ? [name, option(name)] : []);
+    await cut([path.join(cutDir, 'edl.json'), '--replace', ...target]).catch(error => console.warn(`NOT IN THE CUT YET: ${error.message}.`
+      + ` Then: node scripts/tutorial-ms-cut.mjs ${path.relative(process.cwd(), recipeFile)}`));
+  } else if (!voiced) console.log('Not put into the cut: a take without voice (--cut puts it in anyway).');
   return { output, cutDir, ...result };
 }
 

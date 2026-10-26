@@ -26,7 +26,15 @@ export function createClipRuntimeUpdateActions(context: ClipActionContext, optio
     get().updateDuration(); });
   };
   const setClips = (updater: (clips: TimelineClip[]) => TimelineClip[]) => {
-    if (binding.isCurrent()) binding.run(() => set({ clips: updater(get().clips) }));
+    if (!binding.isCurrent()) return;
+    binding.run(() => {
+      const clips = updater(get().clips);
+      // A clip removed while it loads (the audio placeholder of a silent video) leaves the selection too.
+      const ids = new Set(clips.map((clip) => clip.id));
+      const selected = get().selectedClipIds;
+      const kept = [...selected].filter((id) => ids.has(id));
+      set(kept.length === selected.size ? { clips } : { clips, selectedClipIds: new Set(kept) });
+    });
   };
   return { setClips, updateClip };
 }

@@ -36,7 +36,10 @@ function removeLinkedAudioPlaceholder(
     const clip = clips.find((candidate) => candidate.id === clipId);
     if (!clip) return clips;
     releaseClipTreeRuntimeBindings(clip);
-    return clips.filter((candidate) => candidate.id !== clipId);
+    // The silent video keeps no link to the removed placeholder, so selecting it selects no missing clip.
+    return clips
+      .filter((candidate) => candidate.id !== clipId)
+      .map((candidate) => (candidate.linkedClipId === clipId ? { ...candidate, linkedClipId: undefined } : candidate));
   });
 }
 

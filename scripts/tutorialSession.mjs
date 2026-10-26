@@ -16,6 +16,12 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 function pageHooks() {
   if (window.__tutorialHooks) return;
   window.__tutorialHooks = true;
+  // The bridge lists this editor under a tab id that says it is a take or build server editor, so the cut
+  // (tutorial-ms-cut.mjs) finds the visible cut editor without --tab. The editor keeps its tab id here.
+  try {
+    const key = 'masterselects.aiBridgeTabId';
+    if (!sessionStorage.getItem(key)?.startsWith('tutorial-')) sessionStorage.setItem(key, `tutorial-${crypto.randomUUID()}`);
+  } catch { /* no sessionStorage: the cut then needs --tab */ }
   window.showDirectoryPicker = async () => (await navigator.storage.getDirectory()).getDirectoryHandle(`tutorial-${Date.now()}`, { create: true });
   Object.defineProperty(Navigator.prototype, 'doNotTrack', { configurable: true, get: () => '1' });
   // Scripted mouse moves cannot drive a pointer-locked drag: Chrome then reports each move's distance from
@@ -38,6 +44,23 @@ export async function tutorialModules(fresh = false) {
   const names = ['docClipPointer.mjs', 'docShotSettings.mjs', 'tutorialCut.mjs', 'tutorialStage.mjs', 'tutorialVoice.mjs', 'tutorialBrowser.mjs',
     'tutorialGestures.mjs', 'tutorialSteps.mjs', 'tutorialPictures.mjs', 'tutorialCheckpoint.mjs'];
   return Object.assign({}, ...await Promise.all(names.map(local)));
+}
+
+/**
+ * Every file the recipe's `files` steps show, { <name>: <file> }. A name is the recipe's `media` entry for it (a file
+ * name or path), else the name itself, looked up in the media folders (`folder` = --media, then the docs footage and
+ * images): a step can name `opera_house_dolly.mp4` without a `media` entry. Throws before the take starts when a file
+ * is missing. The build server passes the steps of one job as `setup`.
+ */
+export async function recipeMedia(recipe, folder) {
+  const { findMedia, mediaDirs } = await import('./docShotSettings.mjs');
+  const named = recipe.media ?? {};
+  const steps = [...recipe.setup ?? [], ...recipe.resume ?? [], ...(recipe.scenes ?? []).flatMap(scene => scene.steps ?? [])];
+  const names = [...new Set([...Object.keys(named), ...steps.flatMap(step => step.files ?? [])])];
+  const files = Object.fromEntries(names.map(name => [name, findMedia(named[name] ?? name, { media: folder })]));
+  const missing = names.filter(name => !files[name]).map(name => named[name] ?? name);
+  if (missing.length) throw new Error(`Media ${missing.join(', ')} not found; pass --media <folder> (searched ${mediaDirs({ media: folder }).join(', ')})`);
+  return files;
 }
 
 /**

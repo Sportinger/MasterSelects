@@ -165,6 +165,8 @@ export function stepRunner({ page, context, mouse, viewport, media = {}, work, t
       if (framing.missing) throw new Error(framing.missing);
       take.camera.push({ t: now() - take.t0, ms: step.ms ?? 900, ...framing });
     } else if (step.files) {
+      const missing = step.files.filter(name => !media[name]);
+      if (missing.length) throw new Error(`No file for ${missing.join(', ')}: name it in the recipe's "media" (or serve --recipe / --media)`);
       const at = await locate(step.at ?? 'pane:preview-group:0.3,0.2');
       await page.evaluate(window_ => window.__tutorial.files(window_), {
         title: step.title ?? 'Desktop', x: at.x, y: at.y,
