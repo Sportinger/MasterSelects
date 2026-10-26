@@ -126,9 +126,9 @@ The build server keeps one editor open in the same headless Chrome, for building
 step and looking at every step:
 
 ```bash
-node scripts/tutorial-tab.mjs serve --from flamer-ep2-part2   # or without --from: a new project; --recipe <part.json>: its media
-node scripts/tutorial-tab.mjs step '{"files": ["opera_house_dolly.mp4"]}'   # a desktop window with files to drag in
+node scripts/tutorial-tab.mjs serve --from <checkpoint>   # or without --from: a new project
 node scripts/tutorial-tab.mjs step '{"click": "Nodes@left-group"}' '{"pause": 800}'   # a picture after each
+node scripts/tutorial-tab.mjs step '{"files": ["opera_house_dolly.mp4"]}'   # files to drag in (serve --recipe: its media names)
 node scripts/tutorial-tab.mjs locate 'aria:Strand Render@left-group'   # where a target is, marked in a picture
 node scripts/tutorial-tab.mjs state            # clips, playhead, playing?, panels, focus
 node scripts/tutorial-tab.mjs shot             # a picture of the page
