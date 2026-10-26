@@ -71,9 +71,9 @@ export class RenderLoop {
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
   private readonly IDLE_SUPPRESSION_TIMEOUT = 3000; // bounded reload warmup
-  // Requested renders (seek, decoded frame, preview capture) still run immediately.
-  // Between them a paused view only needs an occasional re-present; full-rate
-  // re-renders of heavy effects starved editor interaction after every wake.
+  // Requested renders (seek, decoded frame, preview capture) still run at display
+  // cadence. Between them a paused view only needs an occasional re-present;
+  // full-rate re-renders of heavy effects starved editor interaction after every wake.
   private readonly PAUSED_PREVIEW_HOLD_FRAME_TIME = 250;
   private readonly VIDEO_FRAME_TIME = 15; // ~60fps target with tolerance for 16.6ms display ticks
   private readonly SCRUB_FRAME_TIME = 15; // ~60fps during scrubbing with tolerance for 16.6ms display ticks
@@ -207,11 +207,17 @@ export class RenderLoop {
       if (this.hasActiveVideo || playbackRenderActive || scrubRenderActive || this.continuousRender) {
         const previousRenderTime = this.lastRenderTime;
         const timeSinceLastRender = timestamp - previousRenderTime;
+        // A frame held back by the limiter keeps its request: the next allowed
+        // tick must still show the change (seek, decoded frame) it asked for.
+        const holdForLimiter = () => {
+          this.renderRequested ||= pendingRequest;
+          this.animationId = requestAnimationFrame(loop);
+        };
         if (playbackRenderActive) {
           // Decoder notifications may beat the sampling clock, but must not turn
           // a high-refresh display into unbounded compositing work.
           if (previousRenderTime > 0 && timeSinceLastRender < this.VIDEO_FRAME_TIME) {
-            this.animationId = requestAnimationFrame(loop);
+            holdForLimiter();
             return;
           }
           if (
@@ -219,18 +225,22 @@ export class RenderLoop {
             && this.playbackNextRenderTime > 0
             && timestamp + this.FRAME_TIME_TOLERANCE < this.playbackNextRenderTime
           ) {
-            this.animationId = requestAnimationFrame(loop);
+            holdForLimiter();
             return;
           }
         } else if (this.continuousRender) {
           // Non-playback continuous layers stay responsive at the display cadence.
           if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
-            this.animationId = requestAnimationFrame(loop);
+            holdForLimiter();
             return;
           }
         } else if (pausedPreviewHoldActive) {
-          if (timeSinceLastRender < this.PAUSED_PREVIEW_HOLD_FRAME_TIME) {
-            this.animationId = requestAnimationFrame(loop);
+          // Only the unrequested re-present of the held frame waits for the hold
+          // interval. A requested one (paused seek, the decoded frame it asked
+          // for) used to be consumed here and wait up to 250 ms for that tick.
+          const pausedFrameTime = pendingRequest ? this.VIDEO_FRAME_TIME : this.PAUSED_PREVIEW_HOLD_FRAME_TIME;
+          if (timeSinceLastRender < pausedFrameTime) {
+            holdForLimiter();
             return;
           }
         } else if (scrubRenderActive) {
@@ -238,7 +248,7 @@ export class RenderLoop {
           // BUT: if RVFC signaled a new decoded frame is ready, render immediately
           // to minimize latency between decode completion and display.
           if (!this.newFrameReady && timeSinceLastRender < this.SCRUB_FRAME_TIME) {
-            this.animationId = requestAnimationFrame(loop);
+            holdForLimiter();
             return;
           }
           this.newFrameReady = false;

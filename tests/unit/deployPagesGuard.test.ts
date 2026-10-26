@@ -149,6 +149,14 @@ describe('deploy:pages guard', () => {
     expect(calls.some(call => call[1] === 'run' && call[2] === 'build:deploy')).toBe(false);
     expect(deployCalls()).toEqual([]);
   });
+
+  it('deploys without asking GitHub for Security Checks only with --skip-ci, and says so', async () => {
+    const logs: string[] = [];
+    const result = await deployPages({ argv: ['--skip-build', '--skip-ci'], cwd: root, run: fakeRun({ greenRuns: [] }), log: line => logs.push(line) });
+    expect(result.deployed).toBe(true);
+    expect(calls.some(call => call[0] === 'gh')).toBe(false);
+    expect(logs.join('\n')).toMatch(/CI check skipped/);
+  });
 });
 
 describe('deploy:pages tool errors', () => {

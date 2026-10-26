@@ -1,7 +1,7 @@
 {
   "name": "masterselects",
   "private": true,
-  "version": "3.2.8",
+  "version": "3.3.0",
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
@@ -47,6 +47,7 @@
     "test:e2e:smoke": "playwright test --headed --project=chrome-headed-dev --grep \"@smoke|@module:foundation\"",
     "test:e2e:module": "playwright test --headed --project=chrome-headed-dev",
     "test:e2e:canary": "playwright test --headed --project=chrome-headed-dev",
+    "test:e2e:nightly": "playwright test --headed --project=chrome-headed-dev nightly/",
     "test:e2e:built:run": "playwright test --config=playwright.built.config.ts --project=chrome-headed-built-smoke",
     "test:e2e:built": "npm run build:deploy && npm run test:e2e:built:run",
     "test:e2e:release": "npm run test:e2e:types && npm run build && npm run test:e2e:built:run && playwright test --headed --project=chrome-headed-dev",

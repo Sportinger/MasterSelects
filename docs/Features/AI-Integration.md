@@ -656,8 +656,12 @@ Features: Smart formatting, word timestamps/confidence, automatic language detec
   Per-word
   speaker labels, transcription confidence, speaker
   confidence, and source-relative word timestamps are retained in the
-  MasterSelects transcript. An explicitly selected language is sent as a
-  language hint; `auto` enables Deepgram language detection.
+  MasterSelects transcript. An explicitly selected language restricts recognition
+  to that language. With hosted Deepgram (including Best Quality), `Auto-Detect`
+  uses Nova-3's multilingual mode (`language=multi`), which follows language
+  switches within a recording, including German, English and French. Words stay
+  in their spoken language; changing this setting does not translate or replace
+  an existing transcript. See [Deepgram's language support](https://developers.deepgram.com/docs/language/).
 
 #### Best Quality: Deepgram Text + OpenAI Speakers
 

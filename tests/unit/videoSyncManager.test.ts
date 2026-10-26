@@ -18,6 +18,7 @@ import type { VideoSyncHtmlSeekState } from '../../src/services/layerBuilder/vid
 import type { VideoSyncWarmupState } from '../../src/services/layerBuilder/videoSyncWarmupState';
 import type { VideoSyncWebCodecsSeekState } from '../../src/services/layerBuilder/videoSyncWebCodecsSeekState';
 import { scrubSettleState } from '../../src/services/scrubSettleState';
+import { htmlVideoFrameSeekTime } from '../../src/services/layerBuilder/videoSyncFrameSelection';
 import {
   getLazyTimelineVideoElementForClip,
   hydrateTimelineMediaWindow,
@@ -1688,7 +1689,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       manager.syncClipVideo(clip, pausedCtx);
 
       expect(useTimelineStore.getState().playheadPosition).toBe(2);
-      expect(video.currentTime).toBe(2);
+      expect(video.currentTime).toBe(htmlVideoFrameSeekTime(video, 2));
       expect(testEngine.markVideoFramePresented).not.toHaveBeenCalledWith(video, 1.7, clip.id);
       expect(testEngine.captureVideoFrameAtTime).not.toHaveBeenCalledWith(video, 1.7, clip.id);
       expect(testEngine.ensureVideoFrameCached).not.toHaveBeenCalled();
@@ -1698,7 +1699,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     }
   });
 
-  it('keeps a nearby decoded stop frame instead of starting another seek', () => {
+  it('keeps the playhead after a pause and seeks a stop frame one frame behind it onto the playhead frame', () => {
     flags.useFullWebCodecsPlayback = false;
 
     const manager = createManager();
@@ -1716,6 +1717,89 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       playbackRate: 1,
       src: 'blob:clip-stop-near',
     });
+    ctx.mediaFileById.get('clip-stop-near-media')!.fps = 30;
+
+    try {
+      useTimelineStore.setState({ playheadPosition: 1.5 });
+      ctx.isPlaying = true;
+      ctx.playheadPosition = 1.5;
+      ctx.getSourceTimeForClip = () => 1.5;
+      manager.syncClipVideo(clip, ctx);
+
+      // The element froze 30 ms behind the wall-clock playhead: frame 44, while the playhead shows frame 45.
+      const pausedCtx = { ...ctx, isPlaying: false } as FrameContext;
+      video.currentTime = 1.47;
+      manager.syncClipVideo(clip, pausedCtx);
+
+      // The paused state does not change under its reader: the playhead stays, the video follows it.
+      expect(useTimelineStore.getState().playheadPosition).toBe(1.5);
+      expect(video.currentTime).toBe(htmlVideoFrameSeekTime(video, 1.5));
+      expect(testEngine.markVideoFramePresented).not.toHaveBeenCalledWith(video, 1.47, clip.id);
+    } finally {
+      useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
+    }
+  });
+
+  it('seeks a stop frame onto the playhead frame even when its clock already lies in that frame', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    mockRenderHostMode('main');
+    const previousPlayheadPosition = useTimelineStore.getState().playheadPosition;
+    const { clip, ctx, video } = createLazyVideoClip('clip-stop-same', {
+      currentTime: 1.5,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      duration: 10,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      src: 'blob:clip-stop-same',
+    });
+    ctx.mediaFileById.get('clip-stop-same-media')!.fps = 30;
+
+    try {
+      useTimelineStore.setState({ playheadPosition: 1.52 });
+      ctx.isPlaying = true;
+      ctx.playheadPosition = 1.5;
+      ctx.getSourceTimeForClip = () => 1.5;
+      manager.syncClipVideo(clip, ctx);
+
+      // Playhead 1.52 and the element clock 1.51 both lie in frame 45, but a paused element may still
+      // show frame 44 or 46 after playback (seen in Chrome): only a frame-exact seek proves frame 45.
+      const pausedCtx = { ...ctx, isPlaying: false, playheadPosition: 1.52, getSourceTimeForClip: () => 1.52 } as FrameContext;
+      video.currentTime = 1.51;
+      manager.syncClipVideo(clip, pausedCtx);
+
+      expect(video.currentTime).toBe(htmlVideoFrameSeekTime(video, 1.52));
+      expect(useTimelineStore.getState().playheadPosition).toBe(1.52);
+      expect(testEngine.markVideoFramePresented).not.toHaveBeenCalledWith(video, 1.51, clip.id);
+    } finally {
+      useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
+    }
+  });
+
+  it('keeps a stopped element that already sits at the playhead frame seek position', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    mockRenderHostMode('main');
+    const previousPlayheadPosition = useTimelineStore.getState().playheadPosition;
+    const { clip, ctx, video } = createLazyVideoClip('clip-stop-exact', {
+      currentTime: 1.5,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      duration: 10,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      src: 'blob:clip-stop-exact',
+    });
+    ctx.mediaFileById.get('clip-stop-exact-media')!.fps = 30;
 
     try {
       useTimelineStore.setState({ playheadPosition: 1.5 });
@@ -1725,12 +1809,12 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       manager.syncClipVideo(clip, ctx);
 
       const pausedCtx = { ...ctx, isPlaying: false } as FrameContext;
-      video.currentTime = 1.47;
+      const seekPosition = htmlVideoFrameSeekTime(video, 1.5);
+      video.currentTime = seekPosition;
       manager.syncClipVideo(clip, pausedCtx);
 
-      expect(video.currentTime).toBe(1.47);
-      expect(useTimelineStore.getState().playheadPosition).toBe(1.47);
-      expect(testEngine.markVideoFramePresented).toHaveBeenCalledWith(video, 1.47, clip.id);
+      expect(video.currentTime).toBe(seekPosition);
+      expect(testEngine.markVideoFramePresented).toHaveBeenCalledWith(video, seekPosition, clip.id);
     } finally {
       useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
     }
@@ -1775,7 +1859,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       manager.syncClipVideo(clip, pausedCtx);
 
       expect(useTimelineStore.getState().playheadPosition).toBe(2);
-      expect(video.currentTime).toBe(2);
+      expect(video.currentTime).toBe(htmlVideoFrameSeekTime(video, 2));
       expect(testEngine.markVideoFramePresented).not.toHaveBeenCalledWith(video, 2.25, clip.id);
     } finally {
       useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
@@ -2021,7 +2105,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       now: 1040,
     });
 
-    expect(assignedSeekTimes).toEqual([1.5]);
+    expect(assignedSeekTimes).toEqual([htmlVideoFrameSeekTime(video, 1.5)]);
   });
 
   it('allows no-fastSeek drag precise seeks after the interactive cadence window', () => {
@@ -2059,7 +2143,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       now: 1070,
     });
 
-    expect(assignedSeekTimes).toEqual([1.5, 2.5]);
+    expect(assignedSeekTimes).toEqual([1.5, 2.5].map(time => htmlVideoFrameSeekTime(video, time)));
   });
 
   it('preloads the paused jump neighborhood after a large paused seek', () => {

@@ -8,6 +8,8 @@ export interface PlaywrightRuntimeProfile {
   browserChannel: string
   headless: boolean
   host: string
+  /** Include the long-running `nightly/` journeys (excluded from every other run). */
+  includeNightly: boolean
   port: number
   reuseExistingServer: boolean
   startWebServer: boolean
@@ -29,10 +31,29 @@ export function resolveRuntimeProfile(
     browserChannel: env.MASTERSELECTS_E2E_BROWSER_CHANNEL?.trim() || 'chrome',
     headless: parseBoolean(env.MASTERSELECTS_E2E_HEADLESS, false),
     host,
+    includeNightly: env.npm_lifecycle_event === 'test:e2e:nightly'
+      || parseBoolean(env.MASTERSELECTS_E2E_NIGHTLY, false),
     port,
     reuseExistingServer: parseBoolean(env.MASTERSELECTS_E2E_REUSE_SERVER, false),
     startWebServer: !parseBoolean(env.MASTERSELECTS_E2E_SKIP_WEB_SERVER, false),
   }
+}
+
+/**
+ * Chrome flags for this host. Linux needs ANGLE on Vulkan for WebGPU (without it
+ * the preview never renders, and a headless run has no GPU at all); a headed
+ * window runs through XWayland like the owner's own Chrome, because Chrome's
+ * native Wayland window does not get Vulkan. `--force-color-profile=srgb` keeps
+ * pixel reads independent of the monitor profile on every platform.
+ */
+export function chromeLaunchArgs(platform: NodeJS.Platform, headless: boolean): string[] {
+  const args = ['--window-size=1920,1080', '--force-color-profile=srgb']
+  if (platform !== 'linux') return args
+  args.push('--use-gl=angle', '--use-angle=vulkan', '--enable-features=Vulkan,DefaultANGLEVulkan,VulkanFromANGLE',
+    '--enable-unsafe-webgpu', '--ignore-gpu-blocklist')
+  if (headless) args.push('--disable-vulkan-surface')
+  else args.push('--ozone-platform=x11')
+  return args
 }
 
 function resolveActiveGate(env: NodeJS.ProcessEnv): ActiveGate {

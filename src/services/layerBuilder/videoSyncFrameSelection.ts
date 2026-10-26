@@ -1,17 +1,42 @@
 import type { TimelineClip } from '../../types/timeline';
 import type { FrameContext } from './types';
 import { getMediaFileForClip } from './FrameContext';
+import { getVideoSourceFrameRate, setVideoSourceFrameRate } from '../videoSourceFrameRate';
 
-// Runtime metadata only; also available to deferred seek callbacks without a
-// stale FrameContext. Composition fps is not a substitute for source fps.
-const sourceFrameRates = new WeakMap<object, number>();
 const presentedFrames = new WeakMap<HTMLVideoElement, { seekTime: number; pts: number }>();
+
+// Chromium truncates a seek position to whole microseconds but rounds demuxed timestamps to the
+// nearest one (WebM: whole milliseconds), so a seek to exactly k/fps presents frame k-1 whenever
+// k/fps lies just below the frame's rounded timestamp (at 30 fps e.g. frames 2, 5, 8). A frame-exact
+// seek therefore goes slightly into the target's frame, never past the middle of what remains of it.
+const FRAME_SEEK_LEAD_SECONDS = 0.001;
+// Without a known source rate only the microsecond truncation can be absorbed safely.
+const UNKNOWN_RATE_FRAME_SEEK_LEAD_SECONDS = 0.000002;
+// Container timestamps are rounded to microseconds (MP4) or milliseconds (WebM). A presented frame
+// that starts one frame duration (less that rounding) before the target is the previous frame.
+const PTS_ROUNDING_SECONDS = 0.001;
 
 export function rememberSourceFrameRate(target: object | null | undefined, clip: TimelineClip, ctx: FrameContext): void {
   if (!target) return;
   const fps = ctx.mediaFileById && ctx.mediaFileByName ? getMediaFileForClip(ctx, clip)?.fps : undefined;
-  if (fps && Number.isFinite(fps) && fps > 0) sourceFrameRates.set(target, fps);
-  else sourceFrameRates.delete(target);
+  setVideoSourceFrameRate(target, fps);
+}
+
+/**
+ * Where an HTML video element must be positioned to present the source frame holding `target`
+ * (frame k covers [k/fps, (k+1)/fps)). Every paused seek goes through this, see FRAME_SEEK_LEAD_SECONDS.
+ */
+export function htmlVideoFrameSeekTime(video: object, target: number): number {
+  if (!Number.isFinite(target)) return target;
+  const fps = getVideoSourceFrameRate(video);
+  if (!fps) return target + UNKNOWN_RATE_FRAME_SEEK_LEAD_SECONDS;
+  const frameEnd = (Math.floor(target * fps + 1e-9) + 1) / fps;
+  return target + Math.min(FRAME_SEEK_LEAD_SECONDS, Math.max(0, (frameEnd - target) / 2));
+}
+
+/** The element sits exactly where a frame-exact seek for `target` put it. */
+export function videoAtFrameSeekTime(video: HTMLVideoElement, target: number): boolean {
+  return Math.abs(video.currentTime - htmlVideoFrameSeekTime(video, target)) < 1e-6;
 }
 
 export function sameSourceFrame(actual: number, target: number, fps?: number): boolean {
@@ -29,24 +54,32 @@ export function sameSourceFrame(actual: number, target: number, fps?: number): b
 
 export function videoHasTargetFrame(video: HTMLVideoElement, target: number): boolean {
   const presented = presentedFrames.get(video);
-  if (presented && Math.abs(presented.seekTime - video.currentTime) < 1e-7 && sourceFrameRates.has(video)) {
+  const seekedForTarget = videoAtFrameSeekTime(video, target);
+  if (presented && Math.abs(presented.seekTime - video.currentTime) < 1e-7 && getVideoSourceFrameRate(video)) {
+    // A frame-exact seek's presented frame is the browser's frame for the target (also a WebM
+    // timestamp rounded up past the exact target); otherwise judge the PTS itself.
+    if (seekedForTarget && presented.pts <= video.currentTime + 0.000002) return true;
     return samePresentedSourceFrame(video, presented.pts, target);
   }
-  return sameSourceFrame(video.currentTime, target, sourceFrameRates.get(video));
+  if (seekedForTarget) return true;
+  return sameSourceFrame(video.currentTime, target, getVideoSourceFrameRate(video));
 }
 
 /** Paused settle check: an element that moved past the target by playing (warmup, preroll) can show a
  * later frame than one seeked there, so without a presented PTS it must be seeked onto the target. */
 export function videoPausedOnTargetFrame(video: HTMLVideoElement, target: number): boolean {
   const presented = presentedFrames.get(video);
-  const seekedOntoTarget = Math.abs(video.currentTime - target) < 1e-6;
-  if (presented && Math.abs(presented.seekTime - video.currentTime) < 1e-7 && sourceFrameRates.has(video)) {
-    // Seeked exactly onto the target, the browser presents the frame at or before it (VFR-safe).
-    if (seekedOntoTarget && presented.pts <= target + 0.000002) return true;
+  // Only a frame-exact seek position proves the browser resolved this target. An element placed
+  // exactly on k/fps may show frame k-1 (see FRAME_SEEK_LEAD_SECONDS) and is judged by its frame.
+  const seekedForTarget = videoAtFrameSeekTime(video, target);
+  if (presented && Math.abs(presented.seekTime - video.currentTime) < 1e-7 && getVideoSourceFrameRate(video)) {
+    // Seeked for the target, the browser presents the frame at or before the seek position (VFR-safe).
+    if (seekedForTarget && presented.pts <= video.currentTime + 0.000002) return true;
     return samePresentedSourceFrame(video, presented.pts, target);
   }
+  if (seekedForTarget) return true;
   if (video.currentTime > target + 1e-6) return false;
-  return sameSourceFrame(video.currentTime, target, sourceFrameRates.get(video));
+  return sameSourceFrame(video.currentTime, target, getVideoSourceFrameRate(video));
 }
 
 export function rememberPresentedSourceFrame(video: HTMLVideoElement, pts: number): void {
@@ -54,18 +87,26 @@ export function rememberPresentedSourceFrame(video: HTMLVideoElement, pts: numbe
 }
 
 export function samePresentedSourceFrame(video: HTMLVideoElement, pts: number, target: number): boolean {
-  const fps = sourceFrameRates.get(video);
+  const fps = getVideoSourceFrameRate(video);
   // A frame that starts after the target is never the frame shown at it. Nominal fps can be an
   // average (VFR), so its bins may hold two real frames; the PTS bound keeps the later one out.
   if (pts > target + 0.000002) return false;
   // Encoded PTS can be rounded down to microseconds; target time remains exact. Within one
-  // nominal frame duration an earlier PTS is the held frame (bins of an averaged fps can split it).
-  return fps ? Math.floor((pts + 0.000001) * fps) === Math.floor(target * fps + 1e-9) || target - pts < 1 / fps
+  // nominal frame duration an earlier PTS is the held frame (bins of an averaged fps can split it),
+  // but the previous frame starts a full duration earlier: compared without the rounding margin,
+  // floating-point noise (0.1333.. - 0.1 < 1/30) used to accept it as the target's frame.
+  return fps ? Math.floor((pts + 0.000001) * fps) === Math.floor(target * fps + 1e-9)
+    || target - pts < 1 / fps - PTS_ROUNDING_SECONDS
     : sameSourceFrame(pts, target);
 }
 
+/** Diagnostic: the presented PTS is the target's frame, allowing for a timestamp rounded up past it. */
+export function presentedPtsFitsTarget(video: HTMLVideoElement, pts: number, target: number): boolean {
+  return samePresentedSourceFrame(video, pts, target) || (pts > target && pts - target <= PTS_ROUNDING_SECONDS);
+}
+
 export function sameVideoSeekFrame(video: HTMLVideoElement, actual: number, target: number): boolean {
-  return sameSourceFrame(actual, target, sourceFrameRates.get(video));
+  return sameSourceFrame(actual, target, getVideoSourceFrameRate(video));
 }
 
 export interface FrameSelectionProvider {
@@ -95,5 +136,5 @@ export function providerHasTargetFrame(provider: FrameSelectionProvider, target:
 
 function providerFrameRate(provider: FrameSelectionProvider): number | undefined {
   const fps = provider.getFrameRate?.();
-  return fps && Number.isFinite(fps) && fps > 0 ? fps : sourceFrameRates.get(provider);
+  return fps && Number.isFinite(fps) && fps > 0 ? fps : getVideoSourceFrameRate(provider);
 }

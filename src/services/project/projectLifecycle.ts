@@ -2,6 +2,7 @@ import { beginOperationTrace, type OperationTrace } from '../productAnalytics/op
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
 import { installEditorWriterHandover } from './repository/lifecycle/editorWriterHandover';
 import { isBrowserStorageUnavailableError } from './core/browserStorageFailure';
+import { RepositoryError } from './repository/contracts';
 import { discardStoredProjectArchive, releaseRestoredProjectArchive, storeProjectArchiveInBrowser } from './browserProjectArchive';
 import { isRepositoryHydrating } from './repository/transaction/storeMutationBoundary';
 // Project Lifecycle — create, open, close, auto-sync
@@ -418,9 +419,11 @@ export async function closeCurrentProject(): Promise<void> {
  */
 export function setupAutoSync(): void {
   teardownAutoSync();
-  // Unavailable browser storage is the environment (the save status says so), not a code error.
+  // Unavailable or unsupported browser storage is the environment (the save status says so), not a code error.
   void ensureEditorScratchRepository().catch(error => isBrowserStorageUnavailableError(error)
     ? log.warn('Scratch recovery unavailable: browser storage could not be opened', error)
+    : error instanceof RepositoryError && error.code === 'unsupported'
+    ? log.warn('Scratch recovery unavailable: this browser has no writable project storage', error)
     : log.error('Scratch recovery could not be opened', error));
   // Answer write-access requests from other tabs, and let this tab request them.
   registerAutoSyncDisposer(installEditorWriterHandover());

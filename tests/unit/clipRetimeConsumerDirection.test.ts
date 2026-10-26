@@ -9,7 +9,7 @@ import { syncVideoClipToPlayback } from '../../src/services/layerPlayback/mediaS
 import { VideoSyncHtmlClipCoordinator, type VideoSyncHtmlClipCoordinatorDeps } from '../../src/services/layerBuilder/videoSyncHtmlClipCoordinator';
 import { VideoSyncHtmlSeekCoordinator } from '../../src/services/layerBuilder/videoSyncHtmlSeekCoordinator';
 import { VideoSyncHtmlSeekState } from '../../src/services/layerBuilder/videoSyncHtmlSeekState';
-import { providerHasTargetFrame, rememberPresentedSourceFrame, rememberSourceFrameRate, sameSourceFrame, videoHasTargetFrame, videoPausedOnTargetFrame } from '../../src/services/layerBuilder/videoSyncFrameSelection';
+import { htmlVideoFrameSeekTime, providerHasTargetFrame, rememberPresentedSourceFrame, rememberSourceFrameRate, sameSourceFrame, videoHasTargetFrame, videoPausedOnTargetFrame } from '../../src/services/layerBuilder/videoSyncFrameSelection';
 import { shouldSeekPausedWebCodecsProviderPolicy } from '../../src/services/layerBuilder/videoSyncWebCodecsPolicy';
 import { ensureRuntimeFrameProvider } from '../../src/services/mediaRuntime/runtimePlayback';
 
@@ -311,15 +311,22 @@ describe('paused frame acceptance versus active playback drift', () => {
     const ahead = videoAt(1.2917);
     rememberSourceFrameRate(ahead, c, vfr);
     expect(videoPausedOnTargetFrame(ahead, 1.2833)).toBe(false);
-    // Seeked onto the target, the presented 10 fps frame (pts 1.2) counts even though an averaged
-    // 23.33 fps bin would separate it; a later presented frame never does.
+    // Seeked for the target (the frame-exact seek position), the presented 10 fps frame (pts 1.2)
+    // counts even though an averaged 23.33 fps bin would separate it; a later presented frame never does.
     const onTarget = videoAt(1.2833);
     rememberSourceFrameRate(onTarget, c, vfr);
+    onTarget.currentTime = htmlVideoFrameSeekTime(onTarget, 1.2833);
     expect(videoPausedOnTargetFrame(onTarget, 1.2833)).toBe(true);
     rememberPresentedSourceFrame(onTarget, 1.2);
     expect(videoPausedOnTargetFrame(onTarget, 1.2833)).toBe(true);
     rememberPresentedSourceFrame(onTarget, 1.3);
     expect(videoPausedOnTargetFrame(onTarget, 1.2833)).toBe(false);
+    // Placed exactly on the target instead, a held earlier frame is not proof: Chromium may have
+    // rounded that seek into the previous frame, so the element is seeked frame-exactly.
+    const exact = videoAt(1.2833);
+    rememberSourceFrameRate(exact, c, vfr);
+    rememberPresentedSourceFrame(exact, 1.2);
+    expect(videoPausedOnTargetFrame(exact, 1.2833)).toBe(false);
   });
 
   it('allows unit-rate forward Warp preplay despite retained flags and rejects a loop wrap', () => {

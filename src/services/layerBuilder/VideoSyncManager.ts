@@ -16,6 +16,7 @@ import {
   updateRuntimePlaybackTime,
 } from '../mediaRuntime/runtimePlayback';
 import { scrubSettleState } from '../scrubSettleState';
+import { htmlVideoFrameSeekTime } from './videoSyncFrameSelection';
 import { resolveVideoSyncMedia } from './videoSyncMediaResolver';
 import { hydrateTimelineMediaWindow, keepLazyTimelineVideoElementAlive } from '../timeline/lazyMediaElements';
 import { VideoSyncForceDecodeManager } from './videoSyncForceDecodeManager';
@@ -196,14 +197,16 @@ export class VideoSyncManager {
   }
 
   /**
-   * Clamp seek time to valid range, preventing EOF decoder stalls.
-   * H.264 B-frame decoders stall when seeking to exactly video.duration
-   * because they wait for reference frames that don't exist.
+   * The frame-exact position for a source time (see htmlVideoFrameSeekTime: an
+   * exact k/fps seek can present frame k-1), clamped to the valid range to
+   * prevent EOF decoder stalls. H.264 B-frame decoders stall when seeking to
+   * exactly video.duration because they wait for reference frames that don't exist.
    */
   private safeSeekTime(video: HTMLVideoElement, time: number): number {
+    const frameTime = htmlVideoFrameSeekTime(video, time);
     const dur = video.duration;
-    if (!isFinite(dur) || dur <= 0) return Math.max(0, time);
-    return Math.max(0, Math.min(time, dur - 0.001));
+    if (!isFinite(dur) || dur <= 0) return Math.max(0, frameTime);
+    return Math.max(0, Math.min(frameTime, dur - 0.001));
   }
 
   private usesFullWebCodecsPreview(clip: TimelineClip): boolean {

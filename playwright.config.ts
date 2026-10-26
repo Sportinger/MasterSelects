@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import { moduleGrepForGate } from './tests/playwright/config/moduleGates'
-import { resolveRuntimeProfile } from './tests/playwright/config/runtimeProfile'
+import { chromeLaunchArgs, resolveRuntimeProfile } from './tests/playwright/config/runtimeProfile'
 
 const runtime = resolveRuntimeProfile()
 const bridgeTokenFile = process.env.MASTERSELECTS_BRIDGE_TOKEN_FILE?.trim()
@@ -14,7 +14,14 @@ export default defineConfig({
   testDir: './tests/playwright',
   globalSetup: fileURLToPath(new URL('./tests/playwright/config/warmDevServer.ts', import.meta.url)),
   testMatch: '**/*.spec.ts',
-  testIgnore: ['**/built-editor-shell.spec.ts', '**/beta/**'],
+  // `nightly/` holds long journeys (large exports, long sources). They stay out of
+  // every other run, including the auto-repair acceptance, which resets grep but
+  // keeps testIgnore; run them with `npm run test:e2e:nightly`.
+  testIgnore: [
+    '**/built-editor-shell.spec.ts',
+    '**/beta/**',
+    ...(runtime.includeNightly ? [] : ['**/nightly/**']),
+  ],
   outputDir: 'test-results/playwright/artifacts',
   fullyParallel: false,
   workers: 1,
@@ -37,7 +44,7 @@ export default defineConfig({
     headless: runtime.headless,
     viewport: { width: 1920, height: 1080 },
     launchOptions: {
-      args: ['--window-size=1920,1080'],
+      args: chromeLaunchArgs(process.platform, runtime.headless),
     },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

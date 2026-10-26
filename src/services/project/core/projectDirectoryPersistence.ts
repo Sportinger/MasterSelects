@@ -40,3 +40,14 @@ export async function rememberLastProject(handle: FileSystemDirectoryHandle): Pr
     log.warn('Failed to store last project:', error);
   }
 }
+
+/** A picked folder that was deleted or moved since its handle was stored rejects its first listing with NotFoundError. */
+export async function directoryHandleExists(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  try {
+    await (handle as FileSystemDirectoryHandle & { keys(): AsyncIterableIterator<string> }).keys().next();
+    return true;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'NotFoundError') return false;
+    throw error;
+  }
+}

@@ -67,6 +67,10 @@ granted is logged and offered by the Reconnect media dialog. Media
 that still lack access are offered in the Reconnect media dialog; choosing
 "Allow on every visit" in the browser prompt (or the installed app, see
 below) avoids the prompt after a browser restart.
+A stored last-project folder that was deleted or moved on disk since is not
+restored: startup logs it as info, forgets that stored folder handle and opens
+the editor without a project, the same as a browser-storage project removed
+since.
 Media imported as single files (picker or drop) keep their exact saved file
 location. The dialog's single "Reconnect media" click re-allows those files
 directly (up to 8 browser prompts) instead of asking for a folder. With more
@@ -121,6 +125,9 @@ OPFS projects are subject to browser quota, eviction and clearing site data.
 Persistent-storage permission reduces eviction risk but does not prevent a
 user from deleting site data. OPFS projects do not become independent backups
 merely because the browser remembers their names.
+A browser without OPFS or writable file streams (for example an older iOS
+Safari) cannot open the scratch recovery; the editor logs that as a warning
+about the environment, not as a code error.
 
 WebKit (every iOS/iPadOS browser) can refuse OPFS with an opaque `UnknownError`
 while its storage process resumes, in Private Browsing, in in-app browsers or on
@@ -387,6 +394,9 @@ navigation in that session must not be reported as a new repository commit.
 | External journals | Conversations, provider requests, job events, execution evidence and Agent Timeline records | No |
 | Artifacts | Original media, document attachments, audio bakes, transcripts and analysis results | Through immutable references |
 | Runtime | File handles, object URLs, DOM/media elements, decoders, GPU resources and running workers | Recreated, never serialized into content |
+
+Projects saved before batch export carry export settings without a batch
+section; opening or resuming them fills in an empty batch instead of failing.
 
 Undo does not restart an export or provider request and does not erase chat.
 Selection is cleaned up when its referenced object no longer exists. Each

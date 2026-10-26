@@ -5,6 +5,8 @@ import { RepositoryError, type EntityDTO, type JsonValue } from '../contracts';
 import type { ProjectTransactionCoordinator } from '../transaction/ProjectTransactionCoordinator';
 import type { ProjectFolderKey } from '../../core/constants';
 import type { RepositoryDomainPublication } from './RepositoryDomainPublication';
+import { Logger } from '../../../logger';
+const log = Logger.create('RepositoryArtifacts');
 export interface DomainPublicationOptions {
   coordinator: ProjectTransactionCoordinator;
   artifacts: ArtifactStore;
@@ -14,10 +16,14 @@ export interface DomainPublicationOptions {
   readLegacyFile?(folder: ProjectFolderKey, name: string): Promise<File | null>;
   /** Full verified source identity; null means no source-bound result may attach. */
   sourceVersion(target: string): string | null;
+  /** Verify the captured original before saving a source-bound result. */
+  prepareSourceVersion?(target: string): Promise<string | null>;
   /** Rechecks active session/source/target and commits synchronously; no await. */
   applyResult(domain: string, target: string, sourceVersion: string, manifest: ArtifactManifest, manifestReference?: import('../contracts').RecordReference): boolean;
 }
 const pathKey = (folder: ProjectFolderKey, name: string) => `artifact-file:${folder}:${encodeURIComponent(name)}`;
+const isSourceBound = (folder: ProjectFolderKey, name: string) =>
+  (folder === 'ANALYSIS' || folder === 'TRANSCRIPTS') && name.endsWith('.json');
 function fileEntity(manifest: ArtifactManifest, reference: import('../contracts').RecordReference): EntityDTO {
   return { type: 'repository-artifact-file', schemaVersion: 1,
     value: { artifactId: manifest.artifactId, mimeType: manifest.mimeType }, references: [reference],
@@ -26,6 +32,13 @@ function fileEntity(manifest: ArtifactManifest, reference: import('../contracts'
 /** All operations share the project's coordinator, receipt queue and ownership guard. */
 export function createRepositoryDomainPublication(options: DomainPublicationOptions): RepositoryDomainPublication {
   const { coordinator, artifacts } = options;
+  const reportedBindings = new Set<string>();
+  const reportBinding = (folder: ProjectFolderKey, name: string, reason: string) => {
+    const key = `${folder}:${name}:${reason}`;
+    if (reportedBindings.has(key)) return;
+    reportedBindings.add(key);
+    log.warn('Saved source artifact could not be loaded', { folder, name, reason });
+  };
   const journal = async (id: string, value: JsonValue) => { await coordinator.flush(coordinator.appendJournal(id, value)); };
   const mutate = async (key: string, entity: EntityDTO | null) => {
     const token = coordinator.begin('Persist project result', 'artifact');
@@ -36,12 +49,19 @@ export function createRepositoryDomainPublication(options: DomainPublicationOpti
   return {
     repositoryId: coordinator.repositoryId, sessionEpoch: coordinator.sessionEpoch, artifacts,
     async readFile(folder, name) {
-      const sourceBound = (folder === 'ANALYSIS' || folder === 'TRANSCRIPTS') && name.endsWith('.json');
+      const sourceBound = isSourceBound(folder, name);
       const version = sourceBound ? options.sourceVersion(name) : null;
-      if (sourceBound && !version) return null;
-      const matchesSource = (manifest: ArtifactManifest) => !sourceBound ||
-        options.sourceVersion(name) === version && manifest.sourceRefs.includes(version!);
       const entity = coordinator.getProjection().entities.get(pathKey(folder, name));
+      if (sourceBound && !version) {
+        if (entity?.type === 'repository-artifact-file') reportBinding(folder, name, 'source-not-verified');
+        return null;
+      }
+      const matchesSource = (manifest: ArtifactManifest) => {
+        if (!sourceBound) return true;
+        const matches = options.sourceVersion(name) === version && manifest.sourceRefs.includes(version!);
+        if (!matches) reportBinding(folder, name, manifest.sourceRefs.length ? 'source-version-mismatch' : 'source-binding-missing');
+        return matches;
+      };
       if (!entity) {
         const event = await options.readJournal(`artifact-file:${folder}:${name}`);
         if (event && typeof event === 'object' && !Array.isArray(event) && event.type === 'artifact-file-tombstone') return null;
@@ -58,8 +78,14 @@ export function createRepositoryDomainPublication(options: DomainPublicationOpti
     },
     async writeFile(folder, name, input) {
       // Capture source and current target binding BEFORE hashing/publishing any bytes.
-      const sourceVersion = options.sourceVersion(name);
       const prior = coordinator.getProjection().entities.get(pathKey(folder, name));
+      const sourceBound = isSourceBound(folder, name);
+      const sourceVersion = options.sourceVersion(name)
+        ?? (sourceBound ? await options.prepareSourceVersion?.(name) ?? null : null);
+      if (sourceBound && (!sourceVersion || options.sourceVersion(name) !== sourceVersion)) {
+        throw new RepositoryError('ownership', `Cannot save ${folder}/${name}: original media source is not verified`);
+      }
+      if (coordinator.getProjection().entities.get(pathKey(folder, name)) !== prior) return false;
       const journalOnly = folder === 'AI_CHAT' || name.startsWith('agent-timeline-pointer-');
       const cacheOnly = folder.startsWith('CACHE') || folder === 'PROXY' || folder === 'AUDIO_PROXIES';
       const blob = typeof input === 'string' ? new Blob([input], { type: 'application/json' }) : input;

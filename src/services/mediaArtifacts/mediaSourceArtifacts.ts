@@ -10,10 +10,12 @@ import type { TimelineClip } from '../../types/timeline';
 import { restoreCachedClipAnalysis } from '../faceAnalysis/faceAnalysisPersistence';
 import { Logger } from '../logger';
 import { projectFileService } from '../projectFileService';
+import { captureRepositoryDomainPublication } from '../project/repository/artifacts/RepositoryDomainPublication';
 
 const log = Logger.create('MediaSourceArtifacts');
 const hydrationRuns = new Map<string, Promise<MediaFile | undefined>>();
 const hydratedMediaIds = new Set<string>();
+let hydrationPublication: ReturnType<typeof captureRepositoryDomainPublication> | undefined;
 
 function calculateCoverage(ranges: [number, number][], duration: number | undefined): number {
   if (!duration || duration <= 0 || ranges.length === 0) return 0;
@@ -134,6 +136,7 @@ export function projectMediaSourceArtifactsOntoClip(
 }
 
 async function runHydration(mediaFileId: string): Promise<MediaFile | undefined> {
+  const publication = captureRepositoryDomainPublication();
   const current = useMediaStore.getState().files.find(file => file.id === mediaFileId);
   if (!current || !projectFileService.isProjectOpen()) return current;
 
@@ -148,6 +151,8 @@ async function runHydration(mediaFileId: string): Promise<MediaFile | undefined>
     needsAnalysis ? projectFileService.getAnalysisRanges(mediaFileId) : Promise.resolve([]),
     needsScenes ? projectFileService.getSceneDescriptions(mediaFileId) : Promise.resolve(null),
   ]);
+  // A late read from the previous project must never populate the newly opened one.
+  if (captureRepositoryDomainPublication() !== publication) return undefined;
 
   const transcriptWords = storedTranscript?.words as TranscriptWord[] | undefined;
   const hasStoredTranscript = Array.isArray(storedTranscript?.words);
@@ -215,6 +220,13 @@ async function runHydration(mediaFileId: string): Promise<MediaFile | undefined>
 
 export function hydrateMediaSourceArtifacts(mediaFileId: string): Promise<MediaFile | undefined> {
   const current = useMediaStore.getState().files.find(file => file.id === mediaFileId);
+  if (!current || !projectFileService.isProjectOpen()) return Promise.resolve(current);
+  const publication = captureRepositoryDomainPublication();
+  if (hydrationPublication !== publication) {
+    hydrationPublication = publication;
+    hydrationRuns.clear();
+    hydratedMediaIds.clear();
+  }
   // A rebuilt media record (project reactivation, undo/redo) keeps its ready status without the loaded
   // words; hydrate it again instead of trusting the earlier run.
   const lostTranscript = current?.transcriptStatus === 'ready' && !current.transcript?.length;
@@ -224,8 +236,10 @@ export function hydrateMediaSourceArtifacts(mediaFileId: string): Promise<MediaF
   const running = hydrationRuns.get(mediaFileId);
   if (running) return running;
   const run = runHydration(mediaFileId).finally(() => {
-    hydrationRuns.delete(mediaFileId);
-    hydratedMediaIds.add(mediaFileId);
+    if (hydrationRuns.get(mediaFileId) === run) {
+      hydrationRuns.delete(mediaFileId);
+      if (captureRepositoryDomainPublication() === publication) hydratedMediaIds.add(mediaFileId);
+    }
   });
   hydrationRuns.set(mediaFileId, run);
   return run;

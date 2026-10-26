@@ -1,4 +1,5 @@
 import { Logger } from '../../logger';
+import { captureRepositoryDomainPublication } from '../repository/artifacts/RepositoryDomainPublication';
 import type { AnalysisService } from '../domains/AnalysisService';
 import type { CacheService } from '../domains/CacheService';
 import {
@@ -392,7 +393,8 @@ export async function saveTranscript(
   transcript: unknown,
   transcribedRanges?: [number, number][],
 ): Promise<boolean> {
-  if (context.activeBackend === 'native') {
+  const repository = captureRepositoryDomainPublication();
+  if (repository || context.activeBackend === 'native') {
     const incoming: StoredTranscript = Array.isArray(transcript)
       ? { words: transcript }
       : { ...(transcript as StoredTranscript) };
@@ -404,7 +406,8 @@ export async function saveTranscript(
     const data: StoredTranscript = resolvedRanges === undefined
       ? incoming
       : { ...incoming, transcribedRanges: resolvedRanges };
-    return context.writeFile('TRANSCRIPTS', `${mediaId}.json`, JSON.stringify(data, null, 2));
+    return (repository?.writeFile.bind(repository) ?? context.writeFile.bind(context))(
+      'TRANSCRIPTS', `${mediaId}.json`, JSON.stringify(data, null, 2));
   }
   const handle = context.getProjectHandle();
   if (!handle) return false;
@@ -415,8 +418,9 @@ export async function getTranscript(
   context: ArtifactStorageContext,
   mediaId: string,
 ): Promise<StoredTranscript | null> {
-  if (context.activeBackend === 'native') {
-    const file = await context.readFile('TRANSCRIPTS', `${mediaId}.json`);
+  const repository = captureRepositoryDomainPublication();
+  if (repository || context.activeBackend === 'native') {
+    const file = await (repository?.readFile.bind(repository) ?? context.readFile.bind(context))('TRANSCRIPTS', `${mediaId}.json`);
     if (!file) return null;
     try {
       const parsed = JSON.parse(await file.text()) as StoredTranscript | unknown[];
@@ -434,7 +438,7 @@ export async function getTranscribedRanges(
   context: ArtifactStorageContext,
   mediaId: string,
 ): Promise<[number, number][]> {
-  if (context.activeBackend === 'native') {
+  if (captureRepositoryDomainPublication() || context.activeBackend === 'native') {
     return (await getTranscript(context, mediaId))?.transcribedRanges ?? [];
   }
   const handle = context.getProjectHandle();
@@ -443,6 +447,8 @@ export async function getTranscribedRanges(
 }
 
 export async function deleteTranscript(context: ArtifactStorageContext, mediaId: string): Promise<boolean> {
+  const repository = captureRepositoryDomainPublication();
+  if (repository) return repository.deleteFile('TRANSCRIPTS', `${mediaId}.json`);
   if (context.activeBackend === 'native') {
     return context.deleteFile('TRANSCRIPTS', `${mediaId}.json`);
   }

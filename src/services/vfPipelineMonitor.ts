@@ -16,6 +16,7 @@ export type VFPipelineEventType =
   | 'vf_seek_fast'       // fastSeek() during drag scrub
   | 'vf_seek_precise'    // currentTime = X (exact seek)
   | 'vf_seek_done'       // seeked event / RVFC callback
+  | 'vf_seek_wrong_frame'// frame-exact paused seek presented a frame whose PTS is not the target's
   | 'vf_settle_seek'     // precise seek after scrub-stop (HTMLVideo)
   | 'vf_wc_settle_seek'  // precise seek after scrub-stop (WebCodecs)
   | 'vf_transition_hold_seek' // precise seek for virtual transition hold frames

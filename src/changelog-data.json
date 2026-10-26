@@ -1,5 +1,19 @@
 [
   {
+    "date": "2026-10-23",
+    "type": "fix",
+    "title": "MasterSelects 3.3.0",
+    "description": "Projects saved before batch export open and resume again instead of failing. If the folder of your last project was deleted or moved, the editor now starts without a project instead of showing an error. Browsers without writable project storage are reported as a browser limitation, not as an editor error.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-22",
+    "type": "fix",
+    "title": "MasterSelects 3.2.9",
+    "description": "Saved transcripts load after reopening a project and stay bound to the verified source audio. Deepgram Auto-Detect now follows language changes within a recording, including German, English and French. Existing transcripts stay unchanged until you choose to transcribe again.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-22",
     "type": "improve",
     "title": "MasterSelects 3.2.8",

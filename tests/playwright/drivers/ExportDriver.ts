@@ -38,6 +38,15 @@ export class ExportDriver {
     await expect(syncCheckbox).toBeChecked();
   }
 
+  /** Picks a container by its label in the Container list, e.g. '.wav' or '.mp3'. */
+  async selectContainer(label: string): Promise<void> {
+    await this.ensureOpen();
+    const container = this.panel.getByRole('combobox', { name: 'Export container', exact: true });
+    await container.click();
+    await this.page.getByRole('option', { name: label, exact: true }).click();
+    await expect(container).toContainText(label);
+  }
+
   async setFilename(filename: string): Promise<void> {
     await this.ensureOpen();
     const input = this.panel.getByRole('textbox', { name: 'Output name', exact: true });
@@ -47,17 +56,11 @@ export class ExportDriver {
   }
 
   async useInOutMarkers(): Promise<void> {
-    await this.ensureOpen();
-    const section = this.panel.getByRole('button', { name: 'Range & Summary', exact: true });
-    await expect(section).toBeVisible();
-    if (await section.getAttribute('aria-expanded') !== 'true') {
-      await section.click();
-    }
-    const range = this.panel.getByRole('combobox', { name: 'Export range', exact: true });
-    await expect(range).toBeVisible();
-    await range.click();
-    await this.page.getByRole('option', { name: 'In / Out markers', exact: true }).click();
-    await expect(range).toContainText('In / Out markers');
+    await this.selectRange('In / Out markers');
+  }
+
+  async useFullTimeline(): Promise<void> {
+    await this.selectRange('Full timeline');
   }
 
   async exportTo(destination: string, timeout = 120_000): Promise<Download> {
@@ -111,6 +114,20 @@ export class ExportDriver {
     await tab.click();
     await expect(tab).toHaveAttribute('aria-selected', 'true');
     await expect(this.panel).toBeVisible();
+  }
+
+  private async selectRange(name: 'In / Out markers' | 'Full timeline'): Promise<void> {
+    await this.ensureOpen();
+    const section = this.panel.getByRole('button', { name: 'Range & Summary', exact: true });
+    await expect(section).toBeVisible();
+    if (await section.getAttribute('aria-expanded') !== 'true') {
+      await section.click();
+    }
+    const range = this.panel.getByRole('combobox', { name: 'Export range', exact: true });
+    await expect(range).toBeVisible();
+    await range.click();
+    await this.page.getByRole('option', { name, exact: true }).click();
+    await expect(range).toContainText(name);
   }
 
   private async selectMethod(name: 'WebCodecs Fast' | 'HTMLVideo Precise'): Promise<void> {

@@ -408,12 +408,12 @@ The toolbar and wheel gestures drive playback and navigation:
 - `I` and `O` set in/out points.
 - `X` clears in/out.
 - Stop returns the playhead to the In point when one is set; otherwise it returns to timeline start.
-- Pause and Stop freeze playing timeline videos in the same task, before the next (possibly slow, e.g. 4K) render. The playhead keeps the stop position; a video element that ran past or lagged behind it is seeked back to the playhead (`vf_stop_resync` in the VF pipeline) instead of moving the playhead to the video's time. Only sub-tolerance offsets (≤ 50 ms) snap the playhead onto the decoded frame.
+- Pause and Stop freeze playing timeline videos in the same task, before the next (possibly slow, e.g. 4K) render. The playhead keeps the stop position and is not moved afterwards; the frozen video element is seeked frame-exactly to the playhead's frame (`vf_stop_resync` in the VF pipeline), because after playback the frame it shows can be one off its `currentTime` and the wall clock. The paused state read right after a pause therefore stays valid, and the preview ends on the playhead's frame.
 - `M` adds a marker at the playhead.
 - Right-clicking a marker opens marker transport and MIDI actions.
 - Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.
 - Marker MIDI bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`.
-- Left/Right arrows step frame by frame.
+- Left/Right arrows step frame by frame at the composition frame rate, from the frame shown at the playhead to the start of the neighbouring frame (shared with the Preview transport's Previous/Next frame).
 - The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted). See [Timeline Rulers](./Timeline-Rulers.md).
 - The timeline **body** lane grid (behind clips, distinct from the ruler) still uses the active composition frame rate at deep zoom: the base time grid crossfades out while frame-accurate grid lines fade in with zoom.
 - Unselected clips keep persistent white edge brackets: each vertical edge has short top and bottom caps that fade inward, so adjacent clips form a visible `][` cut marker without obscuring thumbnails or waveforms. Selected clips retain the complete white outline.

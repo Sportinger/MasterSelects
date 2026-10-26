@@ -5,7 +5,7 @@ import { projectDB } from '../../projectDB';
 import type { FileStorageService } from './FileStorageService';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 import { acquireProjectRoot, getProjectWriteSupportError, resolveProjectRootMode, listProjectFolderNames } from './projectRootAccess';
-import { rememberLastProject, rememberProjectParent } from './projectDirectoryPersistence';
+import { directoryHandleExists, rememberLastProject, rememberProjectParent } from './projectDirectoryPersistence';
 import { addRecentFsaProject, addRecentOpfsProject, getRecentFsaProjectMediaFileIds, getRecentFsaProjectMediaSourceRootIds } from '../recentProjects';
 import { requestMediaFileAccess, requestMediaSourceRootAccess } from '../mediaSourceRootAccess';
 import { getTabLastProjectHandleKey, LEGACY_LAST_PROJECT_HANDLE_KEY, readLastOpfsProjectName } from '../tabProjectPersistence';
@@ -109,13 +109,22 @@ export class ProjectCoreService {
     }
     if (resolveProjectRootMode() === 'opfs') return false;
     try {
-      const stored = await projectDB.getStoredHandle(getTabLastProjectHandleKey()) ?? await projectDB.getStoredHandle(LEGACY_LAST_PROJECT_HANDLE_KEY);
+      const tabKey = getTabLastProjectHandleKey();
+      const tabStored = await projectDB.getStoredHandle(tabKey);
+      const storedKey = tabStored ? tabKey : LEGACY_LAST_PROJECT_HANDLE_KEY;
+      const stored = tabStored ?? await projectDB.getStoredHandle(storedKey);
       if (!stored || stored.kind !== 'directory') return false;
       const handle = stored as FileSystemDirectoryHandle;
       // Chrome keeps folder access only for the browsing session: after a browser restart the stored
       // handle asks again. It stays the same project; one click re-grants it (see requestPendingPermission).
       const permission = await handle.queryPermission({ mode: 'readwrite' });
       if (permission !== 'granted') { this.pendingHandle = handle; log.info('Last project needs folder access again', { name: handle.name, permission }); return false; }
+      // Like a removed browser-storage project: a folder deleted or moved on disk is simply not restored.
+      if (!await directoryHandleExists(handle)) {
+        log.info('Last project folder no longer exists; nothing restored', { name: handle.name });
+        await projectDB.deleteHandle(storedKey).catch(error => log.warn('Could not forget the missing last project folder', error));
+        return false;
+      }
       return this.loadProject(handle);
     } catch (error) { log.warn('Repository restore failed; previous session retained', error); return false; }
   }
