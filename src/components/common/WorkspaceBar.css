@@ -257,6 +257,21 @@
   min-width: 0;
 }
 
+.workspace-bar-mobile-error {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  max-width: 280px;
+  padding: 6px 10px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-subtle);
+  color: var(--danger-light);
+  font-size: var(--font-sm);
+  white-space: normal;
+}
+
 .workspace-bar-layouts-trigger {
   min-width: 64px;
   align-self: stretch;

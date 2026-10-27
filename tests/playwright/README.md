@@ -246,6 +246,13 @@ real-device gate.
   stubs to prove the download fallback. Export cases need `ffmpeg`/`ffprobe` and a
   headless Chromium that can encode (H.264 or the VP9 fallback). Run:
 
+- `mobile/m5-assistant.spec.ts`: the assistant sheet opens the chat composer and
+  closes again (no live chat run). `mobile/m6-entry.spec.ts`: a phone opening
+  `/editor` lands on `/m`, **Full editor** opens and keeps the desktop editor across
+  a reload, and the **Mobile** toggle brings the phone editor back. It uses its own
+  context (`screen` set to the viewport so the phone check sees a phone screen),
+  because it leaves `/m`.
+
 ```text
 MASTERSELECTS_E2E_HEADLESS=1 MASTERSELECTS_E2E_PORT=5180 \
   npx playwright test -c playwright.phone.config.ts tests/playwright/mobile/m1-edit.spec.ts --project=pixel-7

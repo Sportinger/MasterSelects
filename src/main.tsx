@@ -13,6 +13,7 @@ import {
   ensureDirectEntryReturnsToLanding,
   resolveEntryExperience,
 } from './routing/entryExperience'
+import { readPhoneEntryEnvironment, resolvePhoneEntryRedirect } from './routing/phoneEntry'
 import { installChunkLoadRecovery, recoverFromChunkRenderError } from './runtime/chunkLoadRecovery'
 import { createReactRootErrorHandlers } from './services/diagnostics/diagnosticReporter'
 import { configureInspectorGraphWorker } from './services/operators/inspectorGraphClient'
@@ -30,6 +31,12 @@ document.addEventListener('pointerdown', () => {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Tab') document.documentElement.classList.remove('pointer-focus');
 }, true);
+
+// Phones open the phone editor unless the user chose the full editor on this device.
+const phoneEntryRedirect = resolvePhoneEntryRedirect(window.location, readPhoneEntryEnvironment());
+if (phoneEntryRedirect) {
+  window.history.replaceState(window.history.state, '', phoneEntryRedirect);
+}
 
 const initialExperience = resolveEntryExperience(window.location);
 const canonicalPath = canonicalEntryPath(window.location);

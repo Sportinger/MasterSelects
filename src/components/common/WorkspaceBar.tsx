@@ -12,6 +12,8 @@ import {
 import type { SavedDockLayout } from '../../types/dock';
 import { APP_VERSION } from '../../version';
 import { WorkspacePageIcon } from './WorkspacePageIcon';
+import { openPhoneEditor } from './openPhoneEditor';
+import { isPhoneSizedTouchDevice, readPhoneEntryEnvironment } from '../../routing/phoneEntry';
 import './WorkspaceBar.css';
 
 function getVisibleLayouts(layouts: SavedDockLayout[]): SavedDockLayout[] {
@@ -62,6 +64,8 @@ export function WorkspaceBar() {
     setMobileLayoutOverride: state.setMobileLayoutOverride,
   })));
   const [menuOpen, setMenuOpen] = useState(false);
+  const [phoneEditorOpening, setPhoneEditorOpening] = useState(false);
+  const [phoneEditorError, setPhoneEditorError] = useState<string | null>(null);
   const menuRootRef = useRef<HTMLDivElement>(null);
   const activeOverLayout = getWorkspaceOverLayout(activeSavedLayoutId);
   const mediumLayoutEnabled = mediumLayoutOverride ?? (activeOverLayout === 'medium');
@@ -95,6 +99,24 @@ export function WorkspaceBar() {
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [menuOpen]);
+
+  // Mobile opens the phone editor. On a tablet the automatic Mobile dock layout still turns off here;
+  // on a phone one tap always goes back to the phone editor.
+  const mobileOpensPhoneEditor = !mobileLayoutEnabled || isPhoneSizedTouchDevice(readPhoneEntryEnvironment());
+  const toggleMobile = async () => {
+    if (!mobileOpensPhoneEditor) {
+      setMobileLayoutOverride(false);
+      return;
+    }
+    if (phoneEditorOpening) return;
+    setPhoneEditorOpening(true);
+    setPhoneEditorError(null);
+    const result = await openPhoneEditor();
+    if (!result.ok) {
+      setPhoneEditorError(result.message);
+      setPhoneEditorOpening(false);
+    }
+  };
 
   const selectLayout = (layoutId: string) => {
     loadSavedLayout(layoutId);
@@ -140,15 +162,18 @@ export function WorkspaceBar() {
           aria-label="Mobile mode"
           aria-pressed={mobileLayoutEnabled}
           className="workspace-bar-over-layout-toggle workspace-bar-mobile-toggle"
-          disabled={!overLayoutsAvailable}
-          onClick={() => setMobileLayoutOverride(!mobileLayoutEnabled)}
+          disabled={mobileOpensPhoneEditor ? phoneEditorOpening : !overLayoutsAvailable}
+          onClick={() => void toggleMobile()}
           onPointerUp={(event) => event.currentTarget.blur()}
-          title={mobileLayoutEnabled ? 'Disable Mobile design' : 'Enable Mobile design'}
+          title={mobileOpensPhoneEditor ? (phoneEditorError ?? 'Open the phone editor') : 'Disable Mobile design'}
           type="button"
         >
           <IconDeviceMobile aria-hidden="true" size={17} stroke={1.7} />
           <span>Mobile</span>
         </button>
+        {phoneEditorError ? (
+          <span className="workspace-bar-mobile-error" role="alert">{phoneEditorError}</span>
+        ) : null}
 
         <button
           aria-expanded={menuOpen}

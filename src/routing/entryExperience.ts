@@ -118,7 +118,7 @@ function matchesPathPrefix(pathname: string, basePath: string): boolean {
   return pathname === basePath || pathname.startsWith(`${basePath}/`);
 }
 
-function hasEditorOverride(search = ''): boolean {
+export function hasEditorOverride(search = ''): boolean {
   const query = search.startsWith('?') ? search.slice(1) : search;
   const params = new URLSearchParams(query);
   return params.has('test') || params.get('entry') === 'editor';

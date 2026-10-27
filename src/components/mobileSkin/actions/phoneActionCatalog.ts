@@ -2,6 +2,7 @@
 // Actions of later milestones stay visible and resolve to an unavailable state with a reason.
 import {
   isMilestoneShipped,
+  PHONE_FULL_EDITOR_HINT,
   type PhoneActionAvailability,
   type PhoneActionContext,
   type PhoneActionDefinition,
@@ -20,10 +21,8 @@ import {
   rippleDeleteSelectedClips,
 } from './phoneClipEditActions';
 
-const FULL_EDITOR_HINT = 'Use the full editor at /editor meanwhile.';
-
 function pending(label: string, milestone: PhoneMilestone): string {
-  return `${label} arrives with milestone ${milestone} of the phone editor. ${FULL_EDITOR_HINT}`;
+  return `${label} arrives with milestone ${milestone} of the phone editor. ${PHONE_FULL_EDITOR_HINT}`;
 }
 
 interface ClipSpan {

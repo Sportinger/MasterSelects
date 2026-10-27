@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PHONE_TEST_IDS } from '../contracts';
+import { PHONE_FULL_EDITOR_HINT, PHONE_TEST_IDS } from '../contracts';
 import { Logger } from '../../../services/logger';
 import { getPlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -112,7 +112,7 @@ export function PhoneTransport() {
           actionId="keyframe"
           label="Add keyframe"
           icon="keyframe"
-          reason="Keyframes arrive with milestone M2 of the phone editor. Use the full editor at /editor meanwhile."
+          reason={`Keyframes arrive with milestone M2 of the phone editor. ${PHONE_FULL_EDITOR_HINT}`}
         />
         <button
           type="button"
@@ -142,7 +142,7 @@ export function PhoneTransport() {
           actionId="fullscreen"
           label="Fullscreen preview"
           icon="fullscreen"
-          reason="Fullscreen preview arrives with milestone M3 of the phone editor. Use the full editor at /editor meanwhile."
+          reason={`Fullscreen preview arrives with milestone M3 of the phone editor. ${PHONE_FULL_EDITOR_HINT}`}
         />
       </div>
     </div>

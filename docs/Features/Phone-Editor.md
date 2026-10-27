@@ -9,9 +9,10 @@
 <figcaption>The phone editor with a clip selected. Tools of later milestones stay visible but greyed out.</figcaption>
 </figure>
 
-Open **masterselects.com/m** on your phone to edit with your thumb. It is the same editor
-underneath: the same timeline, effects, undo history and projects as on the desktop. A project you
-start on the phone opens unchanged at /editor, and the other way round.
+Open **masterselects.com** on your phone and the phone editor opens by itself, made for your thumb
+(the address is **masterselects.com/m**). It is the same editor underneath: the same timeline,
+effects, undo history and projects as on the desktop. A project you start on the phone opens
+unchanged in the full editor, and the other way round. Tablets and computers keep the full editor.
 
 ## Start or reopen a project
 
@@ -27,6 +28,12 @@ The home screen opens when no project is open, and any time you tap **Projects**
 
 Closing the browser does not lose anything: reopen /m and the last project comes back with the same
 timeline. If the browser asks for access to the project folder again, one tap resumes it.
+
+## Switch to the full editor
+
+**Full editor** on the home screen and in the project sheet saves the project and opens it in the
+full editor with every tool. The phone remembers that choice. To come back, tap **Mobile** in the
+bottom bar of the full editor.
 
 ## The editing screen
 
@@ -70,7 +77,8 @@ ready, **Share** hands it to the phone's share sheet (`navigator.share` with the
 downloads it; phones without file sharing offer Save.
 
 **Tip:** a greyed-out tool is not hidden on purpose. Tap it: it tells you why it does not work on
-the phone yet. Until then, the same project opens in the full editor at /editor.
+the phone yet. Until then, the same project opens in the full editor (tap the project name, then
+**Full editor**).
 
 ## Assistant (beta)
 
@@ -92,8 +100,14 @@ milestone when tapped.
 
 - Entry: the path `/m` (also `/m/…`) resolves to the `phone` experience in
   `src/routing/entryExperience.ts` and loads `src/components/mobileSkin/PhoneApp.tsx` lazily, without
-  the desktop `App`. `?test` and `?entry=editor` still force the desktop editor. `/editor`,
-  `/medium` and the automatic mobile dock layout are unchanged.
+  the desktop `App`. Before the first render, `src/main.tsx` sends phones from `/` and `/editor` to
+  `/m` (`src/routing/phoneEntry.ts`): a phone is a device whose primary pointer is coarse and whose
+  screen has a short side below 600 CSS px, so tablets and unfolded foldables stay in the desktop
+  editor with its automatic Mobile dock layout. `?test`, `?entry=editor`, `/medium`, `/chat` and
+  deep links below `/editor/` never move. **Full editor** (`project/phoneFullEditor.ts`) saves and
+  stores `ms.phoneEditor.preferFullEditor` in localStorage; the desktop **Mobile** toggle
+  (`src/components/common/openPhoneEditor.ts`) saves, clears that choice and opens `/m`. A failed
+  save keeps the current editor open and shows why.
 - Runtime: `runtime/PhoneRuntimeHost.tsx` owns the single `useEngine()` and `useGlobalHistory()`,
   mounts the playback and FlashBoard runtime hosts and restores the last project like the desktop
   toolbar (`runToolbarProjectBootRestore`, then `setupAutoSync`).
@@ -127,7 +141,7 @@ milestone when tapped.
   (cloud service) with the story workflow provider the desktop dock normally supplies, and activates the
   primary chat workspace like `/medium`. No prompt, tool or kernel code changes.
 - Tests: `tests/unit/phoneTimelineGeometry.test.ts`, `phoneCutActions.test.ts`, `phoneActionCatalog.test.ts`,
-  `entryExperience.test.ts`; Playwright journeys in `tests/playwright/mobile/` (`npm run test:e2e:phone`,
+  `entryExperience.test.ts`, `phoneEntry.test.ts`, `WorkspaceBar.test.tsx`; Playwright journeys in `tests/playwright/mobile/` (`npm run test:e2e:phone`,
   Pixel-7 and iPhone viewports with touch). The phone emulation does not spoof an Android user agent:
   the engine's Linux/Mesa presentation path is keyed on "not Android", and a spoofed Android agent on a
   Linux test host leaves the WebGPU preview black.

@@ -161,7 +161,7 @@ async function waitForProjectIdle(page: Page, bridge: BridgeClient, timeoutMs: n
   void page
 }
 
-async function installDeterministicStorage(page: Page, tabId: string): Promise<void> {
+export async function installDeterministicStorage(page: Page, tabId: string): Promise<void> {
   const version = (JSON.parse(await readFile(path.join(DEFAULT_REPO_ROOT, 'package.json'), 'utf8')) as { version: string }).version
   await page.addInitScript((seed) => {
     window.sessionStorage.setItem('masterselects.aiBridgeTabId', seed.tabId)

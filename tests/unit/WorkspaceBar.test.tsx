@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const openPhoneEditor = vi.hoisted(() => vi.fn());
+vi.mock('../../src/components/common/openPhoneEditor', () => ({ openPhoneEditor }));
+
 import { WorkspaceBar } from '../../src/components/common/WorkspaceBar';
 import {
   FACTORY_COLOR_LAYOUT_ID,
@@ -14,6 +17,8 @@ import {
 const originalDockState = useDockStore.getState();
 
 beforeEach(() => {
+  openPhoneEditor.mockReset();
+  openPhoneEditor.mockResolvedValue({ ok: true });
   act(() => {
     useDockStore.setState({
       activeSavedLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
@@ -52,12 +57,23 @@ describe('WorkspaceBar', () => {
     expect(screen.getByTitle('Load Video')).not.toHaveAttribute('aria-current');
   });
 
-  it('enables Mobile mode from the global toggle', () => {
+  it('opens the phone editor from the global Mobile toggle', () => {
     render(<WorkspaceBar />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Mobile mode' }));
 
-    expect(useDockStore.getState().setMobileLayoutOverride).toHaveBeenCalledWith(true);
+    expect(openPhoneEditor).toHaveBeenCalledTimes(1);
+    expect(useDockStore.getState().setMobileLayoutOverride).not.toHaveBeenCalled();
+  });
+
+  it('says why the phone editor did not open and keeps the desktop editor', async () => {
+    openPhoneEditor.mockResolvedValue({ ok: false, message: 'The project could not be saved, so the phone editor did not open.' });
+    render(<WorkspaceBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mobile mode' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The project could not be saved');
+    expect(screen.getByRole('button', { name: 'Mobile mode' })).not.toBeDisabled();
   });
 
   it('enables Medium beside Mobile while keeping Video selected underneath', () => {
@@ -70,7 +86,7 @@ describe('WorkspaceBar', () => {
     expect(screen.queryByTitle('Load Medium')).not.toBeInTheDocument();
   });
 
-  it('can re-enable Mobile from an exact unsaved desktop layout', () => {
+  it('opens the phone editor from an exact unsaved desktop layout', () => {
     act(() => {
       useDockStore.setState({
         activeSavedLayoutId: null,
@@ -83,7 +99,7 @@ describe('WorkspaceBar', () => {
     expect(mobileToggle).not.toBeDisabled();
     fireEvent.click(mobileToggle);
 
-    expect(useDockStore.getState().setMobileLayoutOverride).toHaveBeenCalledWith(true);
+    expect(openPhoneEditor).toHaveBeenCalledTimes(1);
   });
 
   it('releases pointer focus from the Mobile toggle after a touch or click', () => {

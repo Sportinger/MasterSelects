@@ -41,6 +41,9 @@ export function phoneActionTestId(actionId: string): string {
 export type PhoneMilestone = 'M0' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6';
 
 /** The milestone currently shipped by the skin; later actions render greyed out with a reason. */
+/** Where an unavailable tool points meanwhile: the full editor, reached from the project sheet. */
+export const PHONE_FULL_EDITOR_HINT = 'Use the full editor meanwhile: tap the project name, then Full editor.';
+
 export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M1';
 
 const MILESTONE_ORDER: readonly PhoneMilestone[] = ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
@@ -216,6 +219,8 @@ export const PHONE_M1_TEST_IDS = {
   exportShare: 'phone-export-share',
   exportSave: 'phone-export-save',
   exportSummary: 'phone-export-summary',
+  /** Leaves the phone editor for the full editor (project sheet and home). */
+  fullEditor: 'phone-full-editor',
 } as const;
 
 export type PhoneProjectFormatId = '9:16' | '16:9' | '1:1' | '4:5';

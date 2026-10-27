@@ -1,4 +1,5 @@
-// Phone home screen: start a project (name + canvas format), reopen a stored one, import a .msproj.
+// Phone home screen: start a project (name + canvas format), reopen a stored one, import a .msproj,
+// or switch to the full editor.
 // Everything goes through usePhoneProjectCommands(); a failed command is shown, never swallowed.
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -11,6 +12,7 @@ import {
 import { validateProjectName } from '../../common/projectNameValidation';
 import { Logger } from '../../../services/logger';
 import { usePhoneProjectCommands, type PhoneStoredProject } from '../project/usePhoneProjectCommands';
+import { saveAndOpenFullEditor } from '../project/phoneFullEditor';
 import { usePhoneProjectSelection } from '../runtime/PhoneRuntimeContext';
 import { PhoneIcon } from '../shell/phoneIcons';
 import './PhoneHome.css';
@@ -91,6 +93,17 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
     } finally {
       setBusy(null);
     }
+  };
+
+  const openFullEditor = async () => {
+    if (busy) return;
+    setBusy('Opening the full editor');
+    setError(null);
+    setNote(null);
+    const result = await saveAndOpenFullEditor();
+    if (result.ok) return;
+    setError(result.message);
+    setBusy(null);
   };
 
   const submitCreate = (event: FormEvent<HTMLFormElement>) => {
@@ -263,6 +276,19 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
             if (file) void run('Importing the project', () => commands.importArchive(file));
           }}
         />
+
+        <button
+          type="button"
+          className="phone-home__wide"
+          aria-disabled={busy !== null}
+          data-testid={PHONE_M1_TEST_IDS.fullEditor}
+          onClick={() => void openFullEditor()}
+        >
+          <span className="phone-home__wide-title">Full editor</span>
+          <span className="phone-home__wide-meta">
+            {busy === 'Opening the full editor' ? 'Opening…' : 'All tools, same projects'}
+          </span>
+        </button>
       </div>
     </main>
   );

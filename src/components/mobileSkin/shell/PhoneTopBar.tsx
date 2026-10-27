@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { PHONE_TEST_IDS, type PhoneIconName } from '../contracts';
+import { PHONE_FULL_EDITOR_HINT, PHONE_TEST_IDS, type PhoneIconName } from '../contracts';
 import { Logger } from '../../../services/logger';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -9,7 +9,6 @@ import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from './phoneIcons';
 
 const log = Logger.create('PhoneTopBar');
-const FULL_EDITOR_HINT = 'Use the full editor at /editor meanwhile.';
 
 interface GreyedButtonProps {
   actionId: string;
@@ -111,7 +110,7 @@ function CompositionTabs() {
         label="New composition"
         icon="plus"
         className="phone-comp-tabs__add"
-        reason={`Multiple compositions arrive in M3. ${FULL_EDITOR_HINT}`}
+        reason={`Multiple compositions arrive in M3. ${PHONE_FULL_EDITOR_HINT}`}
       />
     </div>
   );

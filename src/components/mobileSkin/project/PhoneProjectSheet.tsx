@@ -1,6 +1,6 @@
 // 'projects' sheet: rename the open project (Done = rename), see its canvas and save state, and go
 // back to the project list. Going back saves, closes the project through the desktop close path and
-// asks the phone UI to show its home screen.
+// asks the phone UI to show its home screen. Full editor saves and opens the same project at /editor.
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { PHONE_M1_TEST_IDS, type PhoneSheetComponent } from '../contracts';
@@ -8,6 +8,7 @@ import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { renamePhoneProject } from './usePhoneProjectCommands';
 import { PhoneStorageStatus } from './PhoneStorageStatus';
+import { saveAndOpenFullEditor } from './phoneFullEditor';
 import { validateProjectName } from '../../common/projectNameValidation';
 import { Logger } from '../../../services/logger';
 import { projectFileService } from '../../../services/projectFileService';
@@ -50,7 +51,7 @@ export const PhoneProjectSheet: PhoneSheetComponent = () => {
   const showToast = usePhoneUiStore((state) => state.showToast);
   const currentName = useMemo(() => projectFileService.getProjectData()?.name ?? '', []);
   const [draft, setDraft] = useState(currentName);
-  const [busy, setBusy] = useState<'rename' | 'close' | null>(null);
+  const [busy, setBusy] = useState<'rename' | 'close' | 'full-editor' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const aliveRef = useRef(true);
   const compositionSummary = useCompositionSummary();
@@ -117,6 +118,19 @@ export const PhoneProjectSheet: PhoneSheetComponent = () => {
     }
   };
 
+  const openFullEditor = async () => {
+    if (busy) return;
+    setBusy('full-editor');
+    setError(null);
+    const result = await saveAndOpenFullEditor();
+    if (result.ok) return;
+    if (aliveRef.current) {
+      setError(result.message);
+      setBusy(null);
+    }
+    showToast(result.message, 'error');
+  };
+
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void commitRename();
@@ -163,6 +177,15 @@ export const PhoneProjectSheet: PhoneSheetComponent = () => {
           onClick={() => void backToProjects()}
         >
           {busy === 'close' ? 'Saving and closing…' : 'Back to projects'}
+        </button>
+        <button
+          type="button"
+          className="phone-project-sheet__button"
+          aria-disabled={busy !== null}
+          data-testid={PHONE_M1_TEST_IDS.fullEditor}
+          onClick={() => void openFullEditor()}
+        >
+          {busy === 'full-editor' ? 'Saving and opening…' : 'Full editor · all tools'}
         </button>
       </form>
     </PhoneSheet>
