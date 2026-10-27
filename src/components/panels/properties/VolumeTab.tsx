@@ -203,6 +203,7 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
     setClipEffectEnabled,
     updateClipEffect,
     setClipPreservesPitch,
+    setClipAudioMuted,
     addClipAudioEffectInstance,
     updateClipAudioEffectInstance,
     setClipAudioEffectInstanceEnabled,
@@ -306,6 +307,10 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
             interaction: method === 'reset' ? 'reset' : 'change', itemId: 'volume', itemKind: 'property',
           })}
         />
+        <ResolveInspectorRow label="Mute" title="Silence this clip in playback and export without changing its level">
+          <input type="checkbox" aria-label="Mute clip" checked={clip?.audioState?.muted === true}
+            onChange={(event) => setClipAudioMuted(clipId, event.target.checked)} />
+        </ResolveInspectorRow>
       </EffectCard>
 
       <EffectCard title="Speed Settings" {...builtinCardProps('speed')}

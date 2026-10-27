@@ -42,7 +42,7 @@ describe('phone action catalog', () => {
       'Edit', 'Audio', 'Text', 'Effects', 'Overlay', 'Captions', 'Filters', 'Adjust', 'Format', 'Assistant', 'Media',
     ]);
     expect(getPhoneActionsForScope('clip').map((a) => a.label)).toEqual([
-      'Split', 'Delete', 'Delete & close gap', 'Duplicate', 'Speed', 'Volume', 'Animation', 'Effects', 'Filters', 'Adjust', 'Mask',
+      'Split', 'Delete', 'Delete & close gap', 'Duplicate', 'Edit text', 'Speed', 'Volume', 'Animation', 'Effects', 'Filters', 'Adjust', 'Mask',
       'Crop', 'Transition', 'Keyframe', 'Replace', 'Reorder',
     ]);
   });
@@ -84,7 +84,7 @@ describe('phone action catalog', () => {
   });
 
   it('opens a design sheet from every M2 action', () => {
-    const m2 = PHONE_ACTIONS.filter((action) => action.milestone === 'M2');
+    const m2 = PHONE_ACTIONS.filter((action) => action.milestone === 'M2' && action.id !== 'edit-text');
     expect(m2.length).toBe(16);
     for (const action of m2) {
       expect(resolvePhoneActionState(action, baseContext)).toEqual({ kind: 'available' });

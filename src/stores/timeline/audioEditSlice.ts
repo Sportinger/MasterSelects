@@ -421,6 +421,34 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
     get().invalidateCache();
   },
 
+  setClipAudioMuted: (clipId, muted) => {
+    const { clips, tracks } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip) {
+      log.warn('Cannot mute a missing clip', { clipId });
+      return;
+    }
+    if (tracks.find(t => t.id === clip.trackId)?.locked) {
+      log.warn('Cannot mute a clip on a locked track', { clipId });
+      return;
+    }
+    if ((clip.audioState?.muted === true) === muted) return;
+
+    captureSnapshot(muted ? 'Mute clip' : 'Unmute clip');
+    set({
+      clips: clips.map(currentClip => {
+        if (currentClip.id !== clipId) return currentClip;
+        const { muted: _previous, ...audioState } = currentClip.audioState ?? {};
+        // Mute is part of the processed-analysis identity (audioAnalysisIdentity.ts).
+        return clearProcessedAudioAnalysisRefs({
+          ...currentClip,
+          audioState: muted ? { ...audioState, muted: true } : audioState,
+        });
+      }),
+    });
+    get().invalidateCache();
+  },
+
   removeClipAudioEditOperation: (clipId, operationId) => {
     const { clips, tracks } = get();
     const clip = clips.find(c => c.id === clipId);

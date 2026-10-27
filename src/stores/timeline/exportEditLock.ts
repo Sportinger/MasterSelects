@@ -54,6 +54,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'pasteAudioRegionToSelection',
   'setClipAudioEditOperationRange',
   'setClipAudioEditOperationEnabled',
+  'setClipAudioMuted',
   'removeClipAudioEditOperation',
   'clearClipAudioEditStack',
   'bakeClipAudioEditStack',

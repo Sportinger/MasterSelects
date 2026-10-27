@@ -20,6 +20,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { DEFAULT_TEXT_DURATION } from '../../../stores/timeline/constants';
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import type { PhoneActionResult } from '../contracts';
+import { DEFAULT_PHONE_TEXT_STYLE, readPhoneTextStyle, writePhoneTextDraft, type PhoneTextStyle } from './phoneTextStyle';
 
 const log = Logger.create('PhoneTitle');
 const EPSILON = 1e-4;
@@ -69,10 +70,12 @@ async function createTitleClip(): Promise<string | null> {
 export interface PhoneTitleSession {
   readonly mode: 'create' | 'edit';
   readonly originalText: string;
-  /** Live preview of the draft in the composition (inside the open transaction). */
-  preview: (text: string) => Promise<void>;
-  /** Applies the final text and commits everything as one undo step. */
-  commit: (text: string) => Promise<PhoneActionResult>;
+  /** The style the sheet starts from: the edited clip's style at the playhead, or the editor default. */
+  readonly originalStyle: PhoneTextStyle;
+  /** Live preview of the draft (text + style) in the composition (inside the open transaction). */
+  preview: (text: string, style?: PhoneTextStyle) => Promise<void>;
+  /** Applies the final text + style and commits everything as one undo step. */
+  commit: (text: string, style?: PhoneTextStyle) => Promise<PhoneActionResult>;
   /** Rolls back the live preview; never calls undo. */
   cancel: () => void;
   readonly closed: boolean;
@@ -82,6 +85,9 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
   const mode: 'create' | 'edit' = editClip ? 'edit' : 'create';
   const label = mode === 'edit' ? 'Edit title' : 'Add title';
   const originalText = editClip?.textProperties?.text ?? '';
+  const originalStyle = editClip
+    ? readPhoneTextStyle(editClip, useTimelineStore.getState().playheadPosition - editClip.startTime)
+    : DEFAULT_PHONE_TEXT_STYLE;
   let clipId: string | null = editClip?.id ?? null;
   let gesture: { id: number; token: TransactionToken } | null = null;
   let legacyBatch: { opened: boolean } | null = null;
@@ -115,9 +121,10 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
     if (!clipId) throw new Error('No video track is available for the title.');
   };
 
-  const applyText = (text: string) => inGesture(() => useTimelineStore.getState().updateTextProperties(clipId!, { text }));
+  /** Absolute write of the whole draft (text and style), safe to repeat after a platform-ended gesture. */
+  const applyText = (text: string, style: PhoneTextStyle) => inGesture(() => writePhoneTextDraft(clipId!, text, style));
 
-  const preview = (text: string) => {
+  const preview = (text: string, style: PhoneTextStyle = originalStyle) => {
     if (closed) return chain;
     if (mode === 'create' && !started && text.trim() === '') return chain;
     started = true;
@@ -126,14 +133,14 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
       if (mode === 'create' && !clipExists() && text.trim() === '') return;
       open();
       await ensureClip();
-      if (!closed) applyText(text);
+      if (!closed) applyText(text, style);
     }).catch((error) => {
       log.warn('Title preview failed', error);
     });
     return chain;
   };
 
-  const commit = async (text: string): Promise<PhoneActionResult> => {
+  const commit = async (text: string, style: PhoneTextStyle = originalStyle): Promise<PhoneActionResult> => {
     if (closed) return { ok: false, message: 'This title was already closed.' };
     if (text.trim() === '') return { ok: false, message: 'Type a title first.' };
     await chain;
@@ -141,20 +148,20 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
     try {
       if (gestureAlive()) {
         await ensureClip();
-        applyText(text);
+        applyText(text, style);
         inGesture(() => useTimelineStore.getState().selectClip(clipId));
         finishEditorGesture(gesture!.id);
       } else if (repository()) {
         // No live transaction (nothing previewed, or it was cancelled by the platform): one batch.
         await runEditorBatch(label, async () => {
           await ensureClip();
-          applyText(text);
+          applyText(text, style);
         });
         useTimelineStore.getState().selectClip(clipId);
       } else {
         if (!legacyBatch) legacyBatch = { opened: startBatch(label).opened };
         await ensureClip();
-        applyText(text);
+        applyText(text, style);
         useTimelineStore.getState().selectClip(clipId);
         if (legacyBatch.opened) endBatch();
       }
@@ -172,7 +179,7 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
     // Fallback when someone else owned the batch: undo only our own preview changes.
     const state = useTimelineStore.getState();
     if (mode === 'create' && clipExists()) state.removeClip(clipId!);
-    else if (mode === 'edit' && clipExists() && legacyBatch) state.updateTextProperties(clipId!, { text: originalText });
+    else if (mode === 'edit' && clipExists() && legacyBatch) writePhoneTextDraft(clipId!, originalText, originalStyle);
   };
 
   const cancel = () => {
@@ -186,7 +193,7 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
   };
 
   return {
-    mode, originalText, preview, commit, cancel,
+    mode, originalText, originalStyle, preview, commit, cancel,
     get closed() { return closed; },
   };
 }

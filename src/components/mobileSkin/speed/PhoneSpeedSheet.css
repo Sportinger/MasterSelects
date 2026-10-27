@@ -1,0 +1,56 @@
+/* Speed sheet (PhoneSpeedSheet.tsx). Scoped under .mobile-skin. */
+.mobile-skin .phone-speed-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mobile-skin .phone-speed-sheet__target {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+}
+.mobile-skin .phone-speed-sheet__target-label { flex: 0 0 auto; color: var(--phone-text-dim); font-size: 13px; }
+.mobile-skin .phone-speed-sheet__target-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-skin .phone-speed-sheet__readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mobile-skin .phone-speed-sheet__value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mobile-skin .phone-speed-sheet__duration { color: var(--phone-text-dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+.mobile-skin .phone-speed-sheet__chips {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.mobile-skin .phone-speed-sheet__chips::-webkit-scrollbar { display: none; }
+.mobile-skin .phone-speed-sheet__curves {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.mobile-skin .phone-speed-sheet__curves .phone-choice__glyph { width: 32px; height: 22px; background: none; }
+.mobile-skin .phone-speed-sheet__note {
+  margin: 0;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.mobile-skin .phone-speed-sheet__message {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--phone-surface);
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.mobile-skin .phone-speed-sheet__message--error { color: var(--phone-danger); }

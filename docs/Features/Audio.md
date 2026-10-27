@@ -139,6 +139,7 @@ the master bus switches the same panel to `MASTER Controls` and `MASTER Effects`
 For audio clips, `CLIP Effects` renders the `VolumeTab`.
 
 - Volume is stored as the `audio-volume` effect and displayed in dB. Its slider spans silence (-60 dB) to +18 dB; numeric entry allows up to +64 dB. Reset restores 0 dB (unity gain).
+- **Mute** in the Volume card silences the clip in playback and export but keeps its level (`clip.audioState.muted`, set with the timeline action `setClipAudioMuted`; the phone editor's Volume sheet uses the same flag). Clips on locked tracks are refused with a log.
 - EQ is stored as the canonical `audio-eq` effect. It supports 10-band parameters and a flexible schema for 3-band, 10-band graphic, parametric, mastering, match, or custom band layouts up to 24 bands.
 - `AudioEffectRegistry` is the source of truth for audio effect descriptors, defaults, automation metadata, and render support.
 - The searchable audio effect picker uses bold, uppercase poster-style tiles. Each word fills the tile width, with shorter words taking more height; multiword names stack without truncation as the panel resizes. Full effect names remain available to screen readers and in hover titles.

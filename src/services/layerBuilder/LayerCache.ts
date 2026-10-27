@@ -6,6 +6,7 @@ import type { Layer, TimelineClip, TimelineTrack } from '../../types';
 import type { FrameContext } from './types';
 import type { TimelineLayerTransformPreview } from '../../stores/timeline/storeTypes/toolTypes';
 import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
+import { getLazyImageStatusRevision } from '../timeline/lazyImageElements';
 
 const log = Logger.create('LayerCache');
 
@@ -34,6 +35,7 @@ export class LayerCache {
   private lastProxyEnabled = false;
   private lastLayerTransformPreview: TimelineLayerTransformPreview | null = null;
   private lastLiveInputRevision = -1;
+  private lastLazyImageRevision = -1;
 
   // Stats for debugging
   private cacheHits = 0;
@@ -64,6 +66,9 @@ export class LayerCache {
       ctx.layerTransformPreview !== this.lastLayerTransformPreview;
     const liveInputRevision = liveInputRuntime.getRevision();
     const liveInputChanged = liveInputRevision !== this.lastLiveInputRevision;
+    // An image that finished loading (or failed) after the last build must enter the layer list.
+    const lazyImageRevision = getLazyImageStatusRevision();
+    const lazyImageChanged = lazyImageRevision !== this.lastLazyImageRevision;
 
     const needsRebuild = !this.cacheValid ||
       clipsChanged ||
@@ -74,6 +79,7 @@ export class LayerCache {
       proxyChanged ||
       layerTransformPreviewChanged ||
       liveInputChanged ||
+      lazyImageChanged ||
       frameChanged;
 
     // Log cache stats periodically
@@ -97,6 +103,7 @@ export class LayerCache {
     this.lastProxyEnabled = ctx.proxyEnabled;
     this.lastLayerTransformPreview = ctx.layerTransformPreview;
     this.lastLiveInputRevision = liveInputRevision;
+    this.lastLazyImageRevision = lazyImageRevision;
 
     return { useCache: false, layers: [] };
   }

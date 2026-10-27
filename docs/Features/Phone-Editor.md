@@ -73,6 +73,52 @@ tap empty space (or the clip again) to deselect.
 Sheets (media, text, export, projects) rise from the bottom with **Cancel** and **Done**. Cancel
 throws the draft away and never changes your project; **Done** commits it as one undo step.
 
+## Design your video
+
+Every design tool opens as a sheet under the preview, so you see each change live. **Cancel** throws
+the change away and leaves your project exactly as it was; **Done** keeps it as one step you can undo.
+
+**Effects, filters and colour:** select a clip and tap **Effects** to browse every effect of the
+editor by group, or search for one, and tap a card to add it. Your clip's effects are listed above the
+cards: switch one off, move it up or down, remove it, or drag its slider to set its main value. With
+nothing selected, **Effects** adds an adjustment layer at the playhead that changes everything below
+it (Brightness, Contrast, Saturation, Invert and Gaussian Blur so far). **Filters** puts one look on
+the clip, with **Strength** to make it subtler and **None** to remove it. **Adjust** changes the
+colour: tap a tile (Brightness, Exposure, Contrast, Saturation, Temperature, Tint, Highlights, Shadows
+and more) and drag the slider; **Reset** and **Reset all** go back to the defaults.
+
+**Transitions:** wherever two clips meet on a track, the timeline shows a small square at the cut. Tap
+it, pick a transition (Dissolve, Wipe, Slide and more) or None, and set its length. **Apply to all
+cuts** gives every cut on that track the same transition. A square turns solid once its cut has one.
+
+**Speed:** select a clip and tap **Speed**. Under **Normal**, drag the slider (0.1x to 10x) or tap a
+preset; the clip gets shorter or longer on the timeline. **Keep pitch** keeps voices natural and
+**Reverse** plays the clip backwards. Under **Curve**, a preset such as Speed up or Slow middle
+changes the pace inside the clip and keeps its length.
+
+**Sound:** select a clip and tap **Volume** for its level (silent to +18 dB), **Mute**, **Fade in** and
+**Fade out**; on a video clip it changes the video's own sound. With nothing selected, **Audio** adds
+**Music & sounds** from your phone at the playhead, records a **Voiceover** with your microphone, or
+**Extracts the audio** of the video under the playhead into its own clip.
+
+**Text style and animation:** in the Text sheet, the tabs above the text row set the font, size,
+colour, outline, shadow and alignment while you type. To change a title later, select it and tap
+**Edit text**. **Animation** brings a clip **In**, takes it **Out**, does both (**Combo**) or builds a
+title letter by letter (**Reveal**); the slider sets how long it takes. The presets are ordinary
+keyframes, so they open unchanged in the full editor.
+
+**Keyframes:** select a clip, move the playhead and tap the **diamond** in the transport. It keys the
+clip's position, size, rotation and opacity there and fills while you stand on a keyframe; tap it
+again to remove those keys. **Keyframe** in the clip tools lists the animated properties, jumps to the
+previous or next key and deletes one.
+
+**Mask, crop and canvas:** **Mask** cuts the clip with a shape (Linear, Mirror, Circle, Rectangle,
+Star, Heart) with position, size, angle, **Soft edge** and **Invert**. **Crop & transform** crops to a
+ratio or edge by edge, and moves, scales, rotates, fades or flips the clip; **Fit** and **Fill** size
+it to the frame. With nothing selected, **Overlay** puts a photo or video on top of your picture at
+the playhead as a picture in picture, and **Format** changes the whole canvas (9:16, 16:9, 1:1, 4:5,
+4:3, 21:9) while keeping every clip in proportion.
+
 ## Export and share
 
 **Export** (top right) opens the export sheet for the composition at 1080p. It needs at least one
@@ -94,11 +140,12 @@ like the desktop chat. **Close** keeps the conversation; it continues on the des
 
 ## What works today
 
-The phone editor grows in milestones. **M0** proved touch and speed. **M1** (this version) is the
-story cutter: projects, gallery import, trim, split, move, delete, delete and close gap, duplicate,
-titles, undo, export with share, and reopening, plus the assistant as a beta. Effects, colour, transitions, speed and audio come
-with **M2**; everything else follows. Every tool already has its place in the toolbar and shows its
-milestone when tapped.
+The phone editor grows in milestones. **M0** proved touch and speed, **M1** brought the story cutter
+(projects, gallery import, trim, split, move, delete, titles, export, reopening) and the assistant as a
+beta, and **M2** (this version) the design tools above. Captions, multiple compositions, every
+parameter of an effect and the other pro tools follow with **M3**; the landscape editors (nodes,
+mixer, multicam, colour wheels) with **M4**. Every tool already has its place and shows its milestone
+when tapped.
 
 ## Technical details
 
@@ -135,6 +182,24 @@ milestone when tapped.
   chunk that fails to load shows a toast and closes.
 - Clip edits: `actions/phoneClipEditActions.ts` holds delete, ripple delete and duplicate for the
   selected clips; `actions/phoneActionCatalog.ts` wires them, the sheets and the hints to the toolbar.
+- Design sheets (M2): `effects/` (Effects, Filters = the editor's Looks via `applyLookToClip`, Adjust =
+  the clip's colour grade Primaries), `transition/` + `timeline/PhoneCutButtons.tsx` (cut buttons,
+  the editor's transition operations), `speed/` (`setClipSpeed`, `setClipPreservesPitch`,
+  `toggleClipReverse`, `setClipTimeRemap` curves), `audio/` (volume and fades, `setClipAudioMuted`,
+  music import, voiceover recording, extract audio), `text/` (title styles), `animation/` (In / Out /
+  Combo / Reveal presets written as transform, opacity and text keyframes), `keyframe/` +
+  `shell/PhoneTransport.tsx` (diamond and keyframe list), `mask/`, `crop/`, `overlay/` and `format/`
+  (`updateComposition` with `resizeLayout: 'relative'`). Every sheet edits through
+  `sheets/phoneEditSession.ts`: live changes inside one owned transaction (a repository gesture, or a
+  history batch without a repository), **Done** commits one undo step, **Cancel** or closing the sheet
+  rolls back to the exact earlier state. Options the phone cannot do yet stay visible, greyed, and
+  explain themselves on tap.
+- Editor changes made for M2 (also on the desktop): the timeline action `setClipAudioMuted` with a
+  **Mute** row in the Properties Volume tab (`clip.audioState.muted` was honoured by playback and
+  export but had no control); `updateComposition(id, updates, { resizeLayout: 'relative' })` keeps
+  clips in proportion when the canvas changes (the default `'pixels'` is unchanged); the layer cache
+  rebuilds when a lazily loaded image finishes (`getLazyImageStatusRevision`), so a photo added under a
+  paused playhead appears at once.
 - Preview: `preview/PhonePreview.tsx` registers its canvas as the `activeComp` render target
   `phone-main-preview`; backing size follows the desktop preview-quality policy.
 - Timeline: `timeline/phoneTimelineGeometry.ts` holds the fixed-centre geometry (half-viewport padding
@@ -151,7 +216,9 @@ milestone when tapped.
   (cloud service) with the story workflow provider the desktop dock normally supplies, and activates the
   primary chat workspace like `/medium`. No prompt, tool or kernel code changes.
 - Tests: `tests/unit/phoneTimelineGeometry.test.ts`, `phoneCutActions.test.ts`, `phoneActionCatalog.test.ts`,
-  `entryExperience.test.ts`, `phoneEntry.test.ts`, `WorkspaceBar.test.tsx`; Playwright journeys in `tests/playwright/mobile/` (`npm run test:e2e:phone`,
+  `entryExperience.test.ts`, `phoneEntry.test.ts`, `WorkspaceBar.test.tsx` and the `phone*` unit tests of
+  each M2 sheet; Playwright `m2-*.spec.ts` prove for every sheet that Done changes the picture, one Undo
+  restores it and Cancel leaves pixels and timeline unchanged; Playwright journeys in `tests/playwright/mobile/` (`npm run test:e2e:phone`,
   Pixel-7 and iPhone viewports with touch). The phone emulation does not spoof an Android user agent:
   the engine's Linux/Mesa presentation path is keyed on "not Android", and a spoofed Android agent on a
   Linux test host leaves the WebGPU preview black.

@@ -2,18 +2,32 @@
 // rides on --phone-keyboard-inset). Typing previews the text live in the composition inside one
 // owned, cancellable transaction (usePhoneTitleCommands); Done or the check button commits it as
 // ONE undo step: a new title at the playhead, or the selected text clip updated. Cancel discards.
-// Styling tabs are visible but greyed out until text styling ships on the phone.
+// The style tabs (Font, Color, Outline, Shadow, Align) edit the same draft live inside that
+// transaction; editing a selected title starts from its style at the playhead. Box and Animation
+// stay visible but greyed out with their reason (owner rule).
 
 import { useState, type KeyboardEvent } from 'react';
 
-import { PHONE_M1_TEST_IDS, phoneActionTestId, type PhoneSheetComponent } from '../contracts';
+import { PHONE_M1_TEST_IDS, type PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { PhoneIcon } from '../shell/phoneIcons';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { blurAfterPointer } from './phoneControls';
+import type { PhoneTextStyle } from './phoneTextStyle';
+import {
+  PhoneTextAlignPanel, PhoneTextColorPanel, PhoneTextFontPanel, PhoneTextOutlinePanel, PhoneTextShadowPanel,
+} from './PhoneTextStylePanels';
+import { PHONE_TEXT_STYLE_TABS, PHONE_TEXT_TEST_IDS, phoneTextTabTestId, type PhoneTextStyleTab } from './phoneTextTestIds';
 import { usePhoneTitleCommands } from './usePhoneTitleCommands';
+import './PhoneTitleSheet.css';
 
-const STYLE_TABS = ['Font', 'Style', 'Outline / Shadow', 'Animation'] as const;
-const STYLE_REASON = 'Text styling is not on the phone yet; it arrives with the design tools (M2). The title uses the default text style until then.';
+const TAB_LABELS: Record<PhoneTextStyleTab, string> = {
+  font: 'Font', color: 'Color', outline: 'Outline', shadow: 'Shadow', box: 'Box', align: 'Align', animation: 'Animation',
+};
+const UNAVAILABLE_TABS: Partial<Record<PhoneTextStyleTab, string>> = {
+  box: 'A filled box behind the text is not in the MasterSelects text engine yet: titles have fill, outline and shadow. For a backdrop, put a colour clip or shape under the title in the full editor.',
+  animation: 'Title animation is in the clip tools: tap Done, keep the title selected and tap Animation (In, Out, Combo and character Reveal).',
+};
 
 export const PhoneTitleSheet: PhoneSheetComponent = () => {
   const closeSheet = usePhoneUiStore((state) => state.closeSheet);
@@ -21,6 +35,8 @@ export const PhoneTitleSheet: PhoneSheetComponent = () => {
   const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
   const session = usePhoneTitleCommands();
   const [text, setText] = useState(session.originalText);
+  const [style, setStyle] = useState<PhoneTextStyle>(session.originalStyle);
+  const [tab, setTab] = useState<PhoneTextStyleTab | null>(null);
   const [multiline, setMultiline] = useState(session.originalText.includes('\n'));
   const [busy, setBusy] = useState(false);
   const empty = text.trim() === '';
@@ -28,7 +44,23 @@ export const PhoneTitleSheet: PhoneSheetComponent = () => {
   const onChange = (value: string) => {
     const next = multiline ? value : value.replace(/\r?\n/g, ' ');
     setText(next);
-    void session.preview(next);
+    void session.preview(next, style);
+  };
+
+  const onStyle = (next: PhoneTextStyle) => {
+    setStyle(next);
+    void session.preview(text, next);
+  };
+
+  const onTab = (next: PhoneTextStyleTab) => {
+    const reason = UNAVAILABLE_TABS[next];
+    if (reason) {
+      showUnavailable({ actionId: `title-${next}`, label: TAB_LABELS[next], reason });
+      return;
+    }
+    // Close the keyboard so the panel has room above it; the text row stays below.
+    if (document.activeElement instanceof HTMLTextAreaElement) document.activeElement.blur();
+    setTab((current) => (current === next ? null : next));
   };
 
   const done = async () => {
@@ -38,7 +70,7 @@ export const PhoneTitleSheet: PhoneSheetComponent = () => {
       return;
     }
     setBusy(true);
-    const result = await session.commit(text);
+    const result = await session.commit(text, style);
     closeSheet();
     if (!result.ok) showToast(result.message, 'error');
   };
@@ -67,20 +99,35 @@ export const PhoneTitleSheet: PhoneSheetComponent = () => {
     >
       <div className="phone-title-sheet">
         <p className="phone-title-sheet__status">{status} · the preview updates while you type.</p>
-        <div className="phone-title-sheet__tabs" role="group" aria-label="Text styling">
-          {STYLE_TABS.map((label) => (
+        <div className="phone-title-sheet__tabs" role="tablist" aria-label="Text style">
+          {PHONE_TEXT_STYLE_TABS.map((id) => (
             <button
-              key={label}
+              key={id}
               type="button"
+              role="tab"
               className="phone-title-sheet__tab"
-              aria-disabled="true"
-              data-testid={phoneActionTestId(`title-${label.toLowerCase().replace(/[^a-z]+/g, '-')}`)}
-              onClick={() => showUnavailable({ actionId: `title-${label}`, label, reason: STYLE_REASON })}
+              aria-selected={tab === id}
+              aria-disabled={UNAVAILABLE_TABS[id] ? 'true' : undefined}
+              data-testid={phoneTextTabTestId(id)}
+              onPointerUp={blurAfterPointer}
+              onClick={() => onTab(id)}
             >
-              {label}
+              {TAB_LABELS[id]}
             </button>
           ))}
         </div>
+        {tab && (
+          <div className="phone-title-sheet__panel" role="tabpanel" aria-label={TAB_LABELS[tab]} data-testid={`${PHONE_TEXT_TEST_IDS.panel}-${tab}`}>
+            {tab === 'font' && <PhoneTextFontPanel style={style} onChange={onStyle} />}
+            {tab === 'color' && <PhoneTextColorPanel style={style} onChange={onStyle} />}
+            {tab === 'outline' && <PhoneTextOutlinePanel style={style} onChange={onStyle} />}
+            {tab === 'shadow' && <PhoneTextShadowPanel style={style} onChange={onStyle} />}
+            {tab === 'align' && <PhoneTextAlignPanel style={style} onChange={onStyle} />}
+            {session.mode === 'create' && empty && (
+              <p className="phone-design-note">Type the title below to see the style in the preview.</p>
+            )}
+          </div>
+        )}
         <div className="phone-title-sheet__input-row">
           <textarea
             className="phone-title-sheet__input"

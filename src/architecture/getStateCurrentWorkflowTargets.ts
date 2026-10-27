@@ -1,4 +1,4 @@
-// 2026-10-27: the phone editor (/m, 17 files, 60 reads), the Preview transport step and the Linux codec
+// 2026-10-27: the phone editor (/m, getStatePhoneEditorTargets.ts), the Preview transport step and the Linux codec
 // notices (6 reads) joined; the compact timeline sidebar added one read to TimelineControls.
 import { phoneEditorGetStateHardTargets } from './getStatePhoneEditorTargets';
 

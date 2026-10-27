@@ -1,6 +1,6 @@
 // Phone timeline: a FIXED centre playhead with the active composition's tracks running beneath
 // it. Reads the editor's timeline store only (no second timeline model). Gestures belong to
-// usePhoneTimelineNavigation; tiles re-render only when the rendered time window, the zoom, the
+// usePhoneTimelineNavigation; transition buttons sit at every cut (PhoneCutButtons); tiles re-render only when the rendered time window, the zoom, the
 // clips or the selection change.
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
@@ -10,7 +10,9 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { sanitizeTimelineFrameRate } from '../../../utils/timelineFrameQuantization';
 import { PHONE_TEST_IDS } from '../contracts';
+import { findPhoneCuts } from '../transition/phoneTransitionCuts';
 import { PhoneClipStrip, type PhoneLane, type PhoneLaneKind } from './PhoneClipStrip';
+import { PhoneCutButtons } from './PhoneCutButtons';
 import {
   formatRulerTime, rulerTicks, rulerTickStep, timelineContentEnd, visibleClipsInWindow,
 } from './phoneTimelineGeometry';
@@ -75,6 +77,8 @@ export function PhoneTimeline() {
   const clips = useTimelineStore((state) => state.clips);
   const duration = useTimelineStore((state) => state.duration);
   const selectedClipIds = useTimelineStore((state) => state.selectedClipIds) ?? EMPTY_SELECTION;
+  const primaryClipId = useTimelineStore((state) => state.primarySelectedClipId);
+  const handleClipId = primaryClipId && selectedClipIds.has(primaryClipId) ? primaryClipId : null;
   const activeComp = useMediaStore((state) => state.compositions.find((comp) => comp.id === state.activeCompositionId));
   const frameRate = sanitizeTimelineFrameRate(activeComp?.frameRate);
   const thumbnailAspect = activeComp && activeComp.height > 0 ? activeComp.width / activeComp.height : 16 / 9;
@@ -87,6 +91,8 @@ export function PhoneTimeline() {
     return clips.filter((clip) => trackIds.has(clip.trackId));
   }, [clips, lanes]);
   const contentEnd = timelineContentEnd(laneClips, duration);
+  const cutsByTrack = useMemo(() => findPhoneCuts(laneClips), [laneClips]);
+  const clipsById = useMemo(() => new Map(laneClips.map((clip) => [clip.id, clip])), [laneClips]);
 
   const { timeWindow, zoom } = usePhoneTimelineNavigation({
     surfaceRef,
@@ -160,6 +166,14 @@ export function PhoneTimeline() {
                 thumbnailAspect={thumbnailAspect}
               />
             ))}
+            <PhoneCutButtons
+              lanes={lanes}
+              cutsByTrack={cutsByTrack}
+              clipsById={clipsById}
+              zoom={zoom}
+              timeWindow={timeWindow}
+              handleClipId={handleClipId}
+            />
           </div>
           {laneClips.length === 0 && (
             <p className="phone-timeline__empty">No clips in this composition yet. Add media to start editing.</p>

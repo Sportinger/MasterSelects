@@ -17,6 +17,11 @@ export interface CompositionDuplicateOptions {
   name?: string;
 }
 
+export interface CompositionUpdateOptions {
+  /** See CompositionResizeLayout in composition/resizeTransforms.ts. */
+  resizeLayout?: import('./composition/resizeTransforms').CompositionResizeLayout;
+}
+
 export interface CompositionActions {
   createComposition: (name: string, settings?: Partial<Composition>) => Composition;
   /**
@@ -26,7 +31,8 @@ export interface CompositionActions {
    */
   duplicateComposition: (id: string, options?: CompositionDuplicateOptions) => Composition | null;
   removeComposition: (id: string) => void;
-  updateComposition: (id: string, updates: Partial<Composition>) => void;
+  /** `options.resizeLayout` decides how layers follow a width/height change (default 'pixels'). */
+  updateComposition: (id: string, updates: Partial<Composition>, options?: CompositionUpdateOptions) => void;
   setActiveComposition: (id: string | null) => void;
   getActiveComposition: () => Composition | undefined;
   openCompositionTab: (id: string, options?: CompositionSwitchOptions) => void | Promise<void>;

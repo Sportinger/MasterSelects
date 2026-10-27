@@ -429,8 +429,9 @@ test('11 a tool of a later milestone is visible, greyed out, and tapping it show
   const state = await importViaSheet(m1, { visual: [m1.media.short.path] }, { main: 1, total: 1 })
   await tapClip(m1, state.main[0].id)
   await expect(m1.toolbar).toHaveAttribute('data-scope', 'clip')
-  const speed = page.getByTestId(phoneActionTestId('speed'))
-  await expect(speed, 'Speed (M2) stays visible on the clip toolbar').toBeVisible()
+  // Replace ships with M3: visible on the clip toolbar, greyed out until then.
+  const speed = page.getByTestId(phoneActionTestId('replace'))
+  await expect(speed, 'Replace (M3) stays visible on the clip toolbar').toBeVisible()
   await expect(speed).toHaveAttribute('aria-disabled', 'true')
   expect(await speed.evaluate(element => (element as HTMLButtonElement).disabled), 'greyed out but focusable').toBe(false)
   await expect(page.getByTestId(IDS.unavailableNotice)).toHaveCount(0)
@@ -439,6 +440,9 @@ test('11 a tool of a later milestone is visible, greyed out, and tapping it show
   await expect(notice, 'tapping a greyed tool explains why').toBeVisible()
   expect((await notice.innerText()).trim().length, 'the notice carries a reason').toBeGreaterThan(10)
   await expect(speed).toBeVisible()
+  // OK closes the notice. Left open, its backdrop would swallow the next spec's first tap in the shared phone world.
+  await tapOn(m1, notice.getByRole('button', { name: 'OK' }))
+  await expect(notice, 'OK dismisses the notice').toBeHidden()
 })
 
 test('12 regression: /editor still boots the desktop layout in a desktop-sized context @phone', async ({ browserName: _browserName }, testInfo) => {

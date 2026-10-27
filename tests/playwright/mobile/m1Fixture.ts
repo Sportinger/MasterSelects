@@ -463,6 +463,13 @@ async function resetEditor(world: M1World, testInfo: TestInfo): Promise<void> {
     await tapOn(world, page.getByTestId(IDS.sheetCancel))
     await expect(sheet).toBeHidden({ timeout: 10_000 })
   }
+  // A leftover "not yet" notice is modal: its backdrop would swallow the next case's first tap.
+  const notice = page.getByTestId(IDS.unavailableNotice)
+  if (await notice.isVisible()) {
+    testInfo.annotations.push({ type: 'reset-notice', description: 'an unavailable notice was still open and was closed' })
+    await tapOn(world, notice.getByRole('button', { name: 'OK' }))
+    await expect(notice).toBeHidden({ timeout: 10_000 })
+  }
   await bridge.waitForTarget({ timeoutMs: 30_000, requireVisible: true })
   await bridge.toolData('pause')
   await bridge.toolData('clearSelection')

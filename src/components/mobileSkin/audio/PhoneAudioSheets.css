@@ -1,0 +1,170 @@
+/* Volume and Audio sheets of the phone skin (scoped beneath .mobile-skin). */
+.mobile-skin .phone-audio-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mobile-skin .phone-audio-sheet__status,
+.mobile-skin .phone-audio-sheet__hint,
+.mobile-skin .phone-audio-sheet__target {
+  margin: 0;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.mobile-skin .phone-audio-sheet__target { color: var(--phone-text); font-size: 14px; }
+.mobile-skin .phone-audio-sheet__blocked,
+.mobile-skin .phone-audio-sheet__notes p {
+  margin: 0;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.mobile-skin .phone-audio-sheet__notes { display: flex; flex-direction: column; gap: 4px; }
+.mobile-skin .phone-audio-sheet__blocked { padding: 8px 10px; border-radius: 10px; background: var(--phone-surface-3); color: var(--phone-text); }
+.mobile-skin .phone-audio-sheet__error,
+.mobile-skin .phone-audio-sheet__problems { margin: 0; color: var(--phone-danger); font-size: 13px; line-height: 1.4; }
+.mobile-skin .phone-audio-sheet__problems { padding-left: 18px; }
+
+/* Slider row: label, readout, typed value, reset; slider underneath. */
+.mobile-skin .phone-audio-row { display: flex; flex-direction: column; gap: 2px; }
+.mobile-skin .phone-audio-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+.mobile-skin .phone-audio-row__label { flex: 0 0 auto; min-width: 72px; font-size: 14px; font-weight: 600; }
+.mobile-skin .phone-audio-row__detail { flex: 1 1 auto; min-width: 0; color: var(--phone-text-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+.mobile-skin .phone-audio-row__field-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.mobile-skin .phone-audio-row__field {
+  width: 72px;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--phone-border);
+  border-radius: 8px;
+  background: var(--phone-surface);
+  color: var(--phone-text);
+  font: inherit;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-appearance: textfield;
+}
+.mobile-skin .phone-audio-row__field::-webkit-outer-spin-button,
+.mobile-skin .phone-audio-row__field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.mobile-skin .phone-audio-row__field:focus { outline: none; border-color: var(--phone-accent); }
+.mobile-skin .phone-audio-row__suffix { min-width: 14px; color: var(--phone-text-dim); font-size: 13px; }
+.mobile-skin .phone-audio-row__reset {
+  min-width: 52px;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 10px;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+}
+.mobile-skin .phone-audio-row__reset:active { background: var(--phone-surface-3); }
+.mobile-skin .phone-audio-row__slider {
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  accent-color: var(--phone-accent);
+  touch-action: pan-y;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.mobile-skin .phone-audio-row__slider::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--phone-surface-3); }
+.mobile-skin .phone-audio-row__slider::-moz-range-track { height: 4px; border-radius: 2px; background: var(--phone-surface-3); }
+.mobile-skin .phone-audio-row__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -10px;
+  border-radius: 50%;
+  background: var(--phone-text);
+  border: 2px solid var(--phone-accent);
+}
+.mobile-skin .phone-audio-row__slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--phone-text); border: 2px solid var(--phone-accent); }
+.mobile-skin .phone-audio-row__slider:focus { outline: none; }
+.mobile-skin .phone-audio-row__slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--phone-accent); }
+.mobile-skin .phone-audio-row__slider:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--phone-accent); }
+.mobile-skin .phone-audio-row[data-disabled] .phone-audio-row__label,
+.mobile-skin .phone-audio-row[data-disabled] .phone-audio-row__field,
+.mobile-skin .phone-audio-row[data-disabled] .phone-audio-row__reset { color: var(--phone-text-off); }
+.mobile-skin .phone-audio-row[data-disabled] .phone-audio-row__slider { opacity: 0.4; }
+
+/* Toggle (mute) and big actions. */
+.mobile-skin .phone-audio-toggle,
+.mobile-skin .phone-audio-big {
+  min-height: 48px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.mobile-skin .phone-audio-toggle[aria-pressed='true'] { background: var(--phone-danger); color: var(--phone-bg); }
+.mobile-skin .phone-audio-big { min-height: 64px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.mobile-skin .phone-audio-big--recording { background: var(--phone-danger); color: var(--phone-bg); }
+.mobile-skin .phone-audio-big__timer { font-variant-numeric: tabular-nums; font-weight: 500; }
+.mobile-skin .phone-audio-toggle:active,
+.mobile-skin .phone-audio-big:active { filter: brightness(1.15); }
+.mobile-skin .phone-audio-toggle[aria-disabled='true'],
+.mobile-skin .phone-audio-big[aria-disabled='true'] { color: var(--phone-text-off); background: var(--phone-surface-2); }
+
+/* Section tabs of the Audio sheet. */
+.mobile-skin .phone-audio-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mobile-skin .phone-audio-tabs::-webkit-scrollbar { display: none; }
+.mobile-skin .phone-audio-tabs__tab {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 22px;
+  background: var(--phone-surface-3);
+  color: var(--phone-text-dim);
+  font-size: 14px;
+}
+.mobile-skin .phone-audio-tabs__tab[aria-selected='true'] { background: var(--phone-text); color: var(--phone-bg); font-weight: 600; }
+.mobile-skin .phone-audio-tabs__tab[aria-disabled='true'] { color: var(--phone-text-off); }
+.mobile-skin .phone-audio-section { display: flex; flex-direction: column; gap: 10px; }
+
+.mobile-skin .phone-audio-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.mobile-skin .phone-audio-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 48px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--phone-surface);
+}
+.mobile-skin .phone-audio-list__name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-skin .phone-audio-list__meta { color: var(--phone-text-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* Greyed tools (owner rule: visible, disabled, explain on tap). */
+.mobile-skin .phone-audio-more { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px solid var(--phone-border); }
+.mobile-skin .phone-audio-more__heading { color: var(--phone-text-dim); font-size: 12px; }
+.mobile-skin .phone-audio-more__items { display: flex; flex-wrap: wrap; gap: 6px; }
+.mobile-skin .phone-audio-more__item {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--phone-border);
+  color: var(--phone-text-off);
+  font-size: 13px;
+}

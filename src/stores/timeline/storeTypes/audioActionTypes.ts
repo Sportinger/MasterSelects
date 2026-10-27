@@ -49,6 +49,8 @@ export interface AudioEditActions {
   copySelectedAudioRegion: () => boolean;
   pasteAudioRegionToSelection: () => string | null;
   setClipAudioEditOperationEnabled: (clipId: string, operationId: string, enabled: boolean) => void;
+  /** Silences a clip in playback and export without touching its level (`audioState.muted`). */
+  setClipAudioMuted: (clipId: string, muted: boolean) => void;
   removeClipAudioEditOperation: (clipId: string, operationId: string) => void;
   clearClipAudioEditStack: (clipId: string) => void;
   bakeClipAudioEditStack: (clipId: string) => Promise<string | null>;

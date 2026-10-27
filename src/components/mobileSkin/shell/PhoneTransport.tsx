@@ -6,6 +6,7 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { usePhoneRuntime } from '../runtime/PhoneRuntimeContext';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { PhoneKeyframeButton } from '../keyframe/PhoneKeyframeButton';
 import { PhoneIcon } from './phoneIcons';
 
 const log = Logger.create('PhoneTransport');
@@ -43,7 +44,7 @@ interface GreyedProps {
   actionId: string;
   label: string;
   reason: string;
-  icon: 'keyframe' | 'fullscreen';
+  icon: 'fullscreen';
 }
 
 function GreyedTransportButton({ actionId, label, reason, icon }: GreyedProps) {
@@ -108,12 +109,7 @@ export function PhoneTransport() {
         <PhoneIcon name={isPlaying ? 'pause' : 'play'} size={26} />
       </button>
       <div className="phone-transport__tools">
-        <GreyedTransportButton
-          actionId="keyframe"
-          label="Add keyframe"
-          icon="keyframe"
-          reason={`Keyframes arrive with milestone M2 of the phone editor. ${PHONE_FULL_EDITOR_HINT}`}
-        />
+        <PhoneKeyframeButton />
         <button
           type="button"
           className="phone-icon-button"

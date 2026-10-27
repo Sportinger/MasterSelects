@@ -4,7 +4,8 @@
 // While playing, the content follows the live playhead under the fixed centre marker without
 // seeking. The phone scroll is derived from the centre time and never written to the desktop.
 // Clip edit gestures (trim handles, long-press move) run in usePhoneClipEditGesture; pointers they
-// own are yielded here so they never pan, pinch or tap.
+// own are yielded here so they never pan, pinch or tap. A tap on a transition button at a cut
+// (PhoneCutButtons) opens that button instead of selecting; a drag that starts on one still scrubs.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
@@ -15,6 +16,7 @@ import { stepTimeByFrames } from '../../../utils/timelineFrameQuantization';
 import { selectPhoneClip } from '../actions/phoneCutActions';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { usePhoneClipEditGesture } from './usePhoneClipEditGesture';
+import { PHONE_CUT_SELECTOR } from './PhoneCutButtons';
 import {
   alignTimeToFrame, clampPhoneZoom, clampTime, hitTestClip, overscanWindow, pinchScroll,
   scrollForTime, windowNeedsRefresh,
@@ -84,6 +86,8 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
   const modeRef = useRef<Mode>('idle');
   const pointersRef = useRef(new Map<number, PointerPoint>());
   const gestureRef = useRef({ x: 0, y: 0, t0: 0, centre: 0, vScroll: 0, zoom: 0, dist: 1, midX: 0, dragging: false });
+  /** Transition button under the first finger: a tap on it opens its sheet, a drag from it still scrubs. */
+  const cutButtonRef = useRef<HTMLElement | null>(null);
   const seekRef = useRef<{ time: number | null; raf: number | null }>({ time: null, raf: null });
   const zoomRafRef = useRef<{ zoom: number | null; raf: number | null }>({ zoom: null, raf: null });
 
@@ -208,6 +212,7 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
       const point = local(event);
       pointersRef.current.set(event.pointerId, point);
       if (pointersRef.current.size === 1) {
+        cutButtonRef.current = event.target instanceof Element ? event.target.closest<HTMLElement>(PHONE_CUT_SELECTOR) : null;
         modeRef.current = 'pending';
         Object.assign(gestureRef.current, {
           x: point.x, y: point.y, t0: performance.now(), centre: centreRef.current, vScroll: vScrollRef.current, dragging: false,
@@ -273,8 +278,12 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
       }
       if (pointersRef.current.size > 0) return;
       if (mode === 'pending' && !cancelled && !editArbiter.consumedPointer(event.pointerId) && performance.now() - g.t0 <= TAP_MAX_MS) {
-        handleTap(event.clientX, event.clientY);
+        // The surface captured the pointer, so the button gets no native click: hand the tap to it.
+        // Pointer-focus hygiene: the touched button lets go of focus before it opens its sheet.
+        if (cutButtonRef.current?.isConnected) { cutButtonRef.current.blur(); cutButtonRef.current.click(); }
+        else handleTap(event.clientX, event.clientY);
       }
+      cutButtonRef.current = null;
       if (g.dragging) {
         g.dragging = false;
         commitSeek(centreRef.current);
@@ -297,6 +306,8 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
     const onKeyDown = (event: KeyboardEvent) => {
       // Trim handles use the arrow keys to trim by a frame.
       if (event.target instanceof Element && event.target.closest('[data-phone-trim-edge]')) return;
+      // A focused transition button handles its own Enter/Space.
+      if (event.target instanceof Element && event.target.closest(PHONE_CUT_SELECTOR)) return;
       if (event.key === 'Escape') { selectPhoneClip(null); return; }
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();

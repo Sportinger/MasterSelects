@@ -179,7 +179,7 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
     }
   },
 
-  updateComposition: (id: string, updates: Partial<Composition>) => {
+  updateComposition: (id: string, updates: Partial<Composition>, options) => {
     const oldComp = get().compositions.find((c) => c.id === id);
     if (!oldComp) {
       return;
@@ -206,7 +206,7 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
       const newW = updates.width ?? oldComp.width;
       const newH = updates.height ?? oldComp.height;
       if (newW !== oldComp.width || newH !== oldComp.height) {
-        adjustClipTransformsOnResize(get, id, oldComp.width, oldComp.height, newW, newH, normalizedUpdates);
+        adjustClipTransformsOnResize(get, id, oldComp.width, oldComp.height, newW, newH, normalizedUpdates, options?.resizeLayout);
       }
     }
 

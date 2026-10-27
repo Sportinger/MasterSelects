@@ -1,0 +1,23 @@
+/* Title sheet style tabs (the base title sheet layout lives in timeline/PhoneTimeline.css). */
+.mobile-skin .phone-title-sheet .phone-title-sheet__tab {
+  color: var(--phone-text);
+}
+.mobile-skin .phone-title-sheet .phone-title-sheet__tab[aria-selected='true'] {
+  border-color: var(--phone-accent);
+  background: color-mix(in srgb, var(--phone-accent) 22%, transparent);
+  font-weight: 600;
+}
+.mobile-skin .phone-title-sheet .phone-title-sheet__tab[aria-disabled='true'] {
+  color: var(--phone-text-off);
+  border-style: dashed;
+}
+.mobile-skin .phone-title-sheet .phone-title-sheet__tab:focus-visible {
+  outline: 2px solid var(--phone-accent);
+  outline-offset: -2px;
+}
+.mobile-skin .phone-title-sheet__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 4px;
+}

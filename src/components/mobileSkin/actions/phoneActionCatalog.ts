@@ -14,6 +14,7 @@ import {
 } from '../contracts';
 import { useTimelineStore } from '../../../stores/timeline';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { getSelectedPhoneTextClip } from '../text/usePhoneTitleCommands';
 import { splitSelectedAtPlayhead } from './phoneCutActions';
 import {
   deleteSelectedClips,
@@ -105,6 +106,12 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('delete', 'Delete', 'delete', 'clip', 'M1', { run: () => deleteSelectedClips() }),
   def('ripple-delete', 'Delete & close gap', 'delete', 'clip', 'M1', { run: () => rippleDeleteSelectedClips() }),
   def('duplicate', 'Duplicate', 'duplicate', 'clip', 'M1', { run: () => duplicateSelectedClips() }),
+  def('edit-text', 'Edit text', 'text', 'clip', 'M2', {
+    availability: () => (getSelectedPhoneTextClip()
+      ? { kind: 'available' }
+      : { kind: 'unavailable', reason: 'Select a title (a text clip on an unlocked track) to edit its text and style.' }),
+    run: () => openPhoneSheet('title'),
+  }),
   def('speed', 'Speed', 'speed', 'clip', 'M2', { run: () => openPhoneSheet('speed') }),
   def('volume', 'Volume', 'volume', 'clip', 'M2', { run: () => openPhoneSheet('volume') }),
   def('animation', 'Animation', 'animation', 'clip', 'M2', { run: () => openPhoneSheet('animation') }),

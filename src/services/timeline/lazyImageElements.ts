@@ -53,6 +53,17 @@ const MAX_LAZY_IMAGE_ELEMENTS = 64;
 
 const lazyImageRecords = new Map<string, LazyImageRecord>();
 
+/**
+ * Bumped whenever a lazy image finishes loading or fails. Layer caches compare it: a layer list
+ * built while an image was still loading lacks that image, and nothing else in the frame changes
+ * when it arrives (paused playhead, same clips), so without it the preview stays stale.
+ */
+let lazyImageStatusRevision = 0;
+
+export function getLazyImageStatusRevision(): number {
+  return lazyImageStatusRevision;
+}
+
 function getRecordKey(clipId: string): string {
   return `image:${clipId}`;
 }
@@ -305,6 +316,7 @@ function createImageRecord(ctx: LazyImageLookupContext, clip: TimelineClip): Laz
 
   image.onload = () => {
     record.status = 'ready';
+    lazyImageStatusRevision += 1;
     clearImageDecodeFailure(record.failureInput);
     reportLazyImageRecord(record);
     notifyStatusCallbacks(record);
@@ -312,6 +324,7 @@ function createImageRecord(ctx: LazyImageLookupContext, clip: TimelineClip): Laz
   };
   image.onerror = () => {
     record.status = 'error';
+    lazyImageStatusRevision += 1;
     // The record stays in 'error' while the clip remains desired, so this reports once per load attempt.
     void reportImageDecodeFailure(record.failureInput);
     reportLazyImageRecord(record);
@@ -329,7 +342,7 @@ function createImageRecord(ctx: LazyImageLookupContext, clip: TimelineClip): Laz
     }).catch(error => {
       if (lazyImageRecords.get(getRecordKey(clip.id)) !== record) return;
       log.warn('RAW image decoding failed', error);
-      record.status = 'error'; reportLazyImageRecord(record); notifyStatusCallbacks(record);
+      record.status = 'error'; lazyImageStatusRevision += 1; reportLazyImageRecord(record); notifyStatusCallbacks(record);
       renderHostPort.requestRender();
     });
   } else {

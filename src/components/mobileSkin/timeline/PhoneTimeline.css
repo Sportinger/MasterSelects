@@ -411,3 +411,55 @@
   outline: 2px solid var(--phone-accent, var(--accent));
   outline-offset: 2px;
 }
+
+/* ---- Transition buttons at cuts (PhoneCutButtons.tsx): a 44 px hit area, a small mark ---- */
+.mobile-skin .phone-cut {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.mobile-skin .phone-cut__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  border: 1px solid var(--phone-border, #2b2f39);
+  border-radius: 5px;
+  background: var(--phone-surface-2, #1c1f26);
+  color: var(--phone-text-dim, #98a0ad);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.mobile-skin .phone-cut__mark svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+
+.mobile-skin .phone-cut--has .phone-cut__mark {
+  border-color: var(--phone-accent, #5b8def);
+  background: var(--phone-accent, #5b8def);
+  color: #fff;
+}
+
+.mobile-skin .phone-cut--has .phone-cut__mark svg { fill: currentColor; }
+
+.mobile-skin .phone-cut--active .phone-cut__mark {
+  outline: 2px solid var(--phone-text, #eef0f4);
+  outline-offset: 1px;
+}
+
+.mobile-skin .phone-cut:active .phone-cut__mark { transform: scale(0.92); }
+
+.mobile-skin .phone-cut:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+
+.mobile-skin .phone-cut:focus-visible { outline: none; }
+
+.mobile-skin .phone-cut:focus-visible .phone-cut__mark {
+  outline: 2px solid var(--phone-accent, #5b8def);
+  outline-offset: 2px;
+}
