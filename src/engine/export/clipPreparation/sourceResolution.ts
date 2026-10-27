@@ -132,6 +132,23 @@ export async function resolveClipExportFile(
   return null;
 }
 
+/** First export candidate whose bytes can actually be read, with its first 12 bytes (brand). */
+export async function resolveReadableClipExportFile(
+  clip: TimelineClip,
+  mediaFile?: MediaFile | null
+): Promise<{ file: File; header: Uint8Array } | null> {
+  for await (const { file, origin } of exportFileCandidates(clip, mediaFile)) {
+    try {
+      const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+      if (header.byteLength > 0) return { file, header };
+      log.warn(`Empty export file for ${clip.name} (${origin}); trying the next source`);
+    } catch (error) {
+      log.warn(`Resolved export file access failed for ${clip.name} (${origin}):`, error);
+    }
+  }
+  return null;
+}
+
 export async function loadClipFileData(
   clip: TimelineClip,
   mediaFile?: MediaFile | null

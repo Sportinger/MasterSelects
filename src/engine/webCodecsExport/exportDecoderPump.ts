@@ -204,6 +204,10 @@ export class ExportDecoderPump {
     }
 
     const decoder = this.getConfiguredDecoderOrThrow(`decodeSampleWindow ${startIndex}-${endIndexExclusive}`);
+    // Sources read on demand carry no bytes until their window is requested. Hold this window's
+    // bytes: a later window may drop them from the samples while this loop waits on the decoder.
+    await this.player.ensureSampleData?.(startIndex, Math.min(endIndexExclusive, samples.length));
+    const windowData = samples.slice(startIndex, endIndexExclusive).map((sample) => sample.data);
 
     for (let i = startIndex; i < endIndexExclusive; i++) {
       // Backpressure: wait for the decode queue to drain before queuing more, so
@@ -231,7 +235,7 @@ export class ExportDecoderPump {
         type: sample.is_sync ? 'key' : 'delta',
         timestamp: this.hooks.sampleTimestampUs(sample),
         duration: (sample.duration * 1_000_000) / sample.timescale,
-        data: sample.data,
+        data: windowData[i - startIndex],
       });
 
       try {

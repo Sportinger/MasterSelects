@@ -1,4 +1,5 @@
-import { loadMp4ForWebCodecs } from '../webcodecs/mp4DemuxLoader';
+import type { FileSampleDataOptions } from '../webcodecs/fileSampleData';
+import { loadMp4FileOnDemand, loadMp4ForWebCodecs, type Mp4DemuxLoaderCallbacks } from '../webcodecs/mp4DemuxLoader';
 import { WebCodecsPlayerBase, webCodecsPlayerLog } from './playerBase';
 
 export abstract class WebCodecsPlayerLoading extends WebCodecsPlayerBase {
@@ -7,7 +8,20 @@ export abstract class WebCodecsPlayerLoading extends WebCodecsPlayerBase {
   protected abstract resetDecodeQueueTracking(): void;
 
   async loadArrayBuffer(buffer: ArrayBuffer): Promise<void> {
-    return loadMp4ForWebCodecs(buffer, {
+    return loadMp4ForWebCodecs(buffer, this.demuxCallbacks());
+  }
+
+  /**
+   * Export-only: parses the file's metadata and reads sample bytes on demand, so sources too
+   * large for one ArrayBuffer still decode. Only the export decoder pump requests the bytes
+   * (ensureSampleData); playback and scrubbing need loadArrayBuffer().
+   */
+  async loadFileOnDemand(file: Blob, options?: FileSampleDataOptions): Promise<void> {
+    this.sampleData = await loadMp4FileOnDemand(file, this.demuxCallbacks(), options);
+  }
+
+  private demuxCallbacks(): Mp4DemuxLoaderCallbacks {
+    return {
       log: webCodecsPlayerLog,
       hardwareAcceleration: this.hardwareAcceleration,
       onMp4FileCreated: (mp4File) => {
@@ -43,7 +57,7 @@ export abstract class WebCodecsPlayerLoading extends WebCodecsPlayerBase {
       onError: (error) => {
         this.onError?.(error);
       },
-    });
+    };
   }
 
   protected initDecoder(): void {

@@ -10,6 +10,8 @@ export interface Sample {
   duration: number;
   is_sync: boolean;
   timescale: number;
+  /** Byte position in the source file; samples read on demand need it (fileSampleData.ts). */
+  offset?: number;
 }
 
 export interface MP4VideoTrack {
@@ -36,4 +38,5 @@ export interface MP4File {
   start: () => void;
   flush: () => void;
   setExtractionOptions: (trackId: number, user: unknown, options: { nbSamples: number }) => void;
+  getTrackSamplesInfo?: (trackId: number) => Sample[] | undefined;
 }
