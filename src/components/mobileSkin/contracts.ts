@@ -171,7 +171,7 @@ export interface PhoneUiState {
 // ---------------------------------------------------------------------------
 
 /** Sheet ids known to sheets/phoneSheetRegistry.tsx. */
-export type PhoneSheetId = 'projects' | 'media' | 'title' | 'export';
+export type PhoneSheetId = 'projects' | 'media' | 'title' | 'export' | 'assistant';
 
 export interface PhoneSheetProps {
   title: string;

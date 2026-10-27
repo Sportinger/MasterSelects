@@ -234,10 +234,10 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
           type="button"
           className="phone-home__wide"
           aria-disabled="true"
-          onClick={() => setNote('The assistant arrives with milestone M5 of the phone editor.')}
+          onClick={() => setNote('Open a project, then tap the assistant button in the top bar (beta).')}
         >
           <span className="phone-home__wide-title">Assistant</span>
-          <span className="phone-home__wide-meta">Arrives with M5</span>
+          <span className="phone-home__wide-meta">Beta inside a project</span>
         </button>
 
         <button

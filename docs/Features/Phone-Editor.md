@@ -72,11 +72,19 @@ downloads it; phones without file sharing offer Save.
 **Tip:** a greyed-out tool is not hidden on purpose. Tap it: it tells you why it does not work on
 the phone yet. Until then, the same project opens in the full editor at /editor.
 
+## Assistant (beta)
+
+The speech-bubble button in the top bar opens the assistant: the same MasterSelects chat as on the
+desktop, in a tall sheet with the preview above it. Ask for an edit in your own words ("cut the
+pauses", "add a title that says Berlin"). The assistant uses the same tools as on the desktop, and
+every change is a normal step on the timeline that you can undo. It needs an account with AI access,
+like the desktop chat. **Close** keeps the conversation; it continues on the desktop too.
+
 ## What works today
 
 The phone editor grows in milestones. **M0** proved touch and speed. **M1** (this version) is the
 story cutter: projects, gallery import, trim, split, move, delete, delete and close gap, duplicate,
-titles, undo, export with share, and reopening. Effects, colour, transitions, speed and audio come
+titles, undo, export with share, and reopening, plus the assistant as a beta. Effects, colour, transitions, speed and audio come
 with **M2**; everything else follows. Every tool already has its place in the toolbar and shows its
 milestone when tapped.
 
@@ -115,6 +123,9 @@ milestone when tapped.
 - Toolbar: `actions/phoneActionCatalog.ts` lists every root and clip action with its milestone;
   `PHONE_SHIPPED_MILESTONE` in `contracts.ts` (now `M1`) decides which ones work. Unavailable actions
   are focusable, `aria-disabled` and explain themselves on tap.
+- Assistant beta: `assistant/PhoneAssistantSheet.tsx` mounts the existing `FlashBoardComposer` in chat mode
+  (cloud service) with the story workflow provider the desktop dock normally supplies, and activates the
+  primary chat workspace like `/medium`. No prompt, tool or kernel code changes.
 - Tests: `tests/unit/phoneTimelineGeometry.test.ts`, `phoneCutActions.test.ts`, `phoneActionCatalog.test.ts`,
   `entryExperience.test.ts`; Playwright journeys in `tests/playwright/mobile/` (`npm run test:e2e:phone`,
   Pixel-7 and iPhone viewports with touch). The phone emulation does not spoof an Android user agent:

@@ -146,11 +146,11 @@ export function PhoneTopBar() {
           {projectName || 'Untitled Project'}
         </button>
         <PhoneStorageStatus />
-        <GreyedButton
+        <TopBarButton
           actionId="assistant"
-          label="Assistant"
+          label="Assistant (beta)"
           icon="assistant"
-          reason={`The assistant arrives with milestone M5 of the phone editor. ${FULL_EDITOR_HINT}`}
+          onPress={() => openSheet('assistant')}
         />
         <TopBarButton
           actionId="export"

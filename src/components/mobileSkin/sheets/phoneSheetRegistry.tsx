@@ -8,6 +8,7 @@ export const PHONE_SHEET_REGISTRY: Readonly<Record<PhoneSheetId, LazyExoticCompo
   media: lazy(() => import('../media/PhoneMediaSheet').then((m) => ({ default: m.PhoneMediaSheet }))),
   title: lazy(() => import('../text/PhoneTitleSheet').then((m) => ({ default: m.PhoneTitleSheet }))),
   export: lazy(() => import('../export/PhoneExportSheet').then((m) => ({ default: m.PhoneExportSheet }))),
+  assistant: lazy(() => import('../assistant/PhoneAssistantSheet').then((m) => ({ default: m.PhoneAssistantSheet }))),
 };
 
 export function isPhoneSheetId(value: string | null): value is PhoneSheetId {

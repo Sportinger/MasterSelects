@@ -65,7 +65,7 @@ describe('phone action catalog', () => {
     expect(PHONE_SHIPPED_MILESTONE).toBe('M1');
     const m1 = PHONE_ACTIONS.filter((action) => action.milestone === 'M1');
     expect(m1.map((action) => action.id).toSorted()).toEqual(
-      ['delete', 'duplicate', 'edit', 'media', 'reorder', 'ripple-delete', 'text'],
+      ['assistant', 'delete', 'duplicate', 'edit', 'media', 'reorder', 'ripple-delete', 'text'],
     );
     for (const action of m1) {
       expect(resolvePhoneActionState(action, baseContext)).toEqual({ kind: 'available' });
@@ -85,7 +85,8 @@ describe('phone action catalog', () => {
 
   it('makes shipped actions available once their milestone ships', () => {
     expect(resolvePhoneActionState(byId('delete'), baseContext, 'M1')).toEqual({ kind: 'available' });
-    expect(resolvePhoneActionState(byId('assistant'), baseContext, 'M4').kind).toBe('unavailable');
+    expect(resolvePhoneActionState(byId('captions'), baseContext, 'M2').kind).toBe('unavailable');
+    expect(resolvePhoneActionState(byId('assistant'), baseContext, 'M1')).toEqual({ kind: 'available' });
   });
 
   it('offers Delete and Delete & close gap as separate commands on the same icon', () => {

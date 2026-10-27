@@ -90,7 +90,10 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('filters-root', 'Filters', 'filters', 'root', 'M2'),
   def('adjust-root', 'Adjust', 'adjust', 'root', 'M2'),
   def('format', 'Format', 'format', 'root', 'M2'),
-  def('assistant', 'Assistant', 'assistant', 'root', 'M5'),
+  // Beta ahead of M5: the desktop chat in a sheet (owner decision pending, PLAN.md section 11).
+  def('assistant', 'Assistant', 'assistant', 'root', 'M1', {
+    run: () => openPhoneSheet('assistant'),
+  }),
   def('media', 'Media', 'media', 'root', 'M1', {
     run: () => openPhoneSheet('media'),
   }),
