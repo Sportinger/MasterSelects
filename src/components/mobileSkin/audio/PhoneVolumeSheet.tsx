@@ -3,7 +3,7 @@
 // Every change is live (preview and playback hear it) inside one phone edit session: Done commits
 // ONE undo step, Cancel rolls back to the exact state before the sheet opened.
 
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
@@ -56,7 +56,8 @@ export const PhoneVolumeSheet: PhoneSheetComponent = () => {
   const showToast = usePhoneUiStore((state) => state.showToast);
   const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
   const session = usePhoneEditSession('Adjust volume');
-  const initial = useMemo(initialState, []);
+  // Read once when the sheet opens; the sheet edits from this snapshot.
+  const [initial] = useState(initialState);
   const { targets, summary, names } = initial;
   const [levels, setLevels] = useState<PhoneAudioLevels>(summary.levels);
   const [notes, setNotes] = useState<{ clamped: boolean; reEnabled: boolean; percentClamped: boolean }>({ clamped: false, reEnabled: false, percentClamped: false });
