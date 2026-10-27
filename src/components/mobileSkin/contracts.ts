@@ -3,6 +3,8 @@
 // together with all consumers. The skin reuses the editor's engine, stores, history, project
 // format and export: nothing here describes a second timeline model.
 
+import type { PanelType } from '../../types/dock';
+
 /** Root class; all phone CSS is scoped beneath it. */
 export const PHONE_SKIN_ROOT_CLASS = 'mobile-skin';
 
@@ -44,7 +46,7 @@ export type PhoneMilestone = 'M0' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6';
 /** Where an unavailable tool points meanwhile: the full editor, reached from the project sheet. */
 export const PHONE_FULL_EDITOR_HINT = 'Use the full editor meanwhile: tap the project name, then Full editor.';
 
-export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M2';
+export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M3';
 
 const MILESTONE_ORDER: readonly PhoneMilestone[] = ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
 
@@ -160,12 +162,16 @@ export interface PhoneUiState {
   toast: PhoneToastMessage | null;
   /** Id of the open bottom sheet (M1+), null when none. */
   activeSheet: string | null;
+  /** The desktop panel the 'panel' sheet shows (M3), null otherwise. */
+  panelSheet: { type: PanelType; title: string } | null;
   setTimelineZoom: (zoom: number) => void;
   showUnavailable: (notice: PhoneUnavailableNotice) => void;
   dismissUnavailable: () => void;
   showToast: (message: string, tone?: PhoneToastMessage['tone']) => void;
   dismissToast: () => void;
   openSheet: (sheetId: string) => void;
+  /** Opens the 'panel' sheet with a desktop panel inside (M3). */
+  openPanelSheet: (type: PanelType, title: string) => void;
   closeSheet: () => void;
 }
 
@@ -178,7 +184,10 @@ export type PhoneSheetId =
   | 'projects' | 'media' | 'title' | 'export' | 'assistant'
   // M2 design sheets.
   | 'effects' | 'filters' | 'adjust' | 'transition' | 'speed' | 'volume' | 'audio' | 'animation'
-  | 'keyframe' | 'mask' | 'crop' | 'overlay' | 'format';
+  | 'keyframe' | 'mask' | 'crop' | 'overlay' | 'format'
+  // M3 pro sheets.
+  | 'panel' | 'allTools' | 'compositions' | 'tracks' | 'markers' | 'edits' | 'replace' | 'captions'
+  | 'audioFx' | 'library' | 'settings';
 
 export interface PhoneSheetProps {
   title: string;

@@ -1,0 +1,39 @@
+/* A desktop panel inside the phone: fill the space, scroll inside, and give the dense desktop
+   controls finger-sized hit areas without changing their layout logic. */
+.mobile-skin .phone-panel-host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-primary, var(--phone-bg));
+  color: var(--text-primary, var(--phone-text));
+  touch-action: pan-x pan-y;
+}
+
+.mobile-skin .phone-panel-host > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.mobile-skin .phone-panel-host button,
+.mobile-skin .phone-panel-host [role='button'],
+.mobile-skin .phone-panel-host [role='tab'],
+.mobile-skin .phone-panel-host select,
+.mobile-skin .phone-panel-host input:not([type='range']):not([type='checkbox']):not([type='radio']) {
+  min-height: 32px;
+  touch-action: manipulation;
+}
+
+.mobile-skin .phone-panel-host input[type='range'] {
+  min-height: 28px;
+}
+
+.mobile-skin .phone-panel-host__loading {
+  margin: 0;
+  padding: 16px;
+  color: var(--phone-text-dim);
+}

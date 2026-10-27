@@ -86,7 +86,7 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   }),
   def('effects-root', 'Effects', 'effects', 'root', 'M2', { run: () => openPhoneSheet('effects') }),
   def('overlay', 'Overlay', 'overlay', 'root', 'M2', { run: () => openPhoneSheet('overlay') }),
-  def('captions', 'Captions', 'captions', 'root', 'M3'),
+  def('captions', 'Captions', 'captions', 'root', 'M3', { run: () => openPhoneSheet('captions') }),
   def('filters-root', 'Filters', 'filters', 'root', 'M2', { run: () => openPhoneSheet('filters') }),
   def('adjust-root', 'Adjust', 'adjust', 'root', 'M2', { run: () => openPhoneSheet('adjust') }),
   def('format', 'Format', 'format', 'root', 'M2', { run: () => openPhoneSheet('format') }),
@@ -97,6 +97,10 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('media', 'Media', 'media', 'root', 'M1', {
     run: () => openPhoneSheet('media'),
   }),
+  def('tracks', 'Tracks', 'reorder', 'root', 'M3', { run: () => openPhoneSheet('tracks') }),
+  def('markers', 'Markers', 'keyframe', 'root', 'M3', { run: () => openPhoneSheet('markers') }),
+  def('library', 'Library', 'media', 'root', 'M3', { run: () => openPhoneSheet('library') }),
+  def('all-tools', 'All tools', 'more', 'root', 'M3', { run: () => openPhoneSheet('allTools') }),
 
   // Clip scope: at least one clip selected.
   def('split', 'Split', 'split', 'clip', 'M0', {
@@ -122,7 +126,15 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('crop', 'Crop', 'crop', 'clip', 'M2', { run: () => openPhoneSheet('crop') }),
   def('transition', 'Transition', 'transition', 'clip', 'M2', { run: () => openPhoneSheet('transition') }),
   def('keyframe', 'Keyframe', 'keyframe', 'clip', 'M2', { run: () => openPhoneSheet('keyframe') }),
-  def('replace', 'Replace', 'replace', 'clip', 'M3'),
+  def('replace', 'Replace', 'replace', 'clip', 'M3', { run: () => openPhoneSheet('replace') }),
+  def('edits', 'Trim modes', 'trim', 'clip', 'M3', { run: () => openPhoneSheet('edits') }),
+  def('audio-fx', 'Audio effects', 'audio', 'clip', 'M3', { run: () => openPhoneSheet('audioFx') }),
+  def('properties', 'All settings', 'more', 'clip', 'M3', {
+    run: () => {
+      usePhoneUiStore.getState().openPanelSheet('clip-properties', 'Properties');
+      return { ok: true };
+    },
+  }),
   def('reorder', 'Reorder', 'reorder', 'clip', 'M1', {
     run: () => ({ ok: true, message: 'Long-press a clip and drag it' }),
   }),

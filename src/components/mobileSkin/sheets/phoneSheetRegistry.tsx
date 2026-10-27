@@ -23,6 +23,18 @@ export const PHONE_SHEET_REGISTRY: Readonly<Record<PhoneSheetId, LazyExoticCompo
   crop: lazy(() => import('../crop/PhoneCropSheet').then((m) => ({ default: m.PhoneCropSheet }))),
   overlay: lazy(() => import('../overlay/PhoneOverlaySheet').then((m) => ({ default: m.PhoneOverlaySheet }))),
   format: lazy(() => import('../format/PhoneFormatSheet').then((m) => ({ default: m.PhoneFormatSheet }))),
+  // M3 pro sheets.
+  panel: lazy(() => import('../panels/PhonePanelSheet').then((m) => ({ default: m.PhonePanelSheet }))),
+  allTools: lazy(() => import('../panels/PhoneAllToolsSheet').then((m) => ({ default: m.PhoneAllToolsSheet }))),
+  compositions: lazy(() => import('../compositions/PhoneCompositionsSheet').then((m) => ({ default: m.PhoneCompositionsSheet }))),
+  tracks: lazy(() => import('../tracks/PhoneTracksSheet').then((m) => ({ default: m.PhoneTracksSheet }))),
+  markers: lazy(() => import('../markers/PhoneMarkersSheet').then((m) => ({ default: m.PhoneMarkersSheet }))),
+  edits: lazy(() => import('../edits/PhoneEditsSheet').then((m) => ({ default: m.PhoneEditsSheet }))),
+  replace: lazy(() => import('../replace/PhoneReplaceSheet').then((m) => ({ default: m.PhoneReplaceSheet }))),
+  captions: lazy(() => import('../captions/PhoneCaptionsSheet').then((m) => ({ default: m.PhoneCaptionsSheet }))),
+  audioFx: lazy(() => import('../audiofx/PhoneAudioFxSheet').then((m) => ({ default: m.PhoneAudioFxSheet }))),
+  library: lazy(() => import('../library/PhoneLibrarySheet').then((m) => ({ default: m.PhoneLibrarySheet }))),
+  settings: lazy(() => import('../settings/PhoneSettingsSheet').then((m) => ({ default: m.PhoneSettingsSheet }))),
 };
 
 export function isPhoneSheetId(value: string | null): value is PhoneSheetId {

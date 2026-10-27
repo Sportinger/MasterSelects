@@ -40,10 +40,11 @@ describe('phone action catalog', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(getPhoneActionsForScope('root').map((a) => a.label)).toEqual([
       'Edit', 'Audio', 'Text', 'Effects', 'Overlay', 'Captions', 'Filters', 'Adjust', 'Format', 'Assistant', 'Media',
+      'Tracks', 'Markers', 'Library', 'All tools',
     ]);
     expect(getPhoneActionsForScope('clip').map((a) => a.label)).toEqual([
       'Split', 'Delete', 'Delete & close gap', 'Duplicate', 'Edit text', 'Speed', 'Volume', 'Animation', 'Effects', 'Filters', 'Adjust', 'Mask',
-      'Crop', 'Transition', 'Keyframe', 'Replace', 'Reorder',
+      'Crop', 'Transition', 'Keyframe', 'Replace', 'Trim modes', 'Audio effects', 'All settings', 'Reorder',
     ]);
   });
 
@@ -61,8 +62,8 @@ describe('phone action catalog', () => {
     });
   });
 
-  it('ships M2 and resolves every M1 action as available', () => {
-    expect(PHONE_SHIPPED_MILESTONE).toBe('M2');
+  it('ships M3 and resolves every M1 action as available', () => {
+    expect(PHONE_SHIPPED_MILESTONE).toBe('M3');
     const m1 = PHONE_ACTIONS.filter((action) => action.milestone === 'M1');
     expect(m1.map((action) => action.id).toSorted()).toEqual(
       ['assistant', 'delete', 'duplicate', 'edit', 'media', 'reorder', 'ripple-delete', 'text'],
@@ -74,10 +75,11 @@ describe('phone action catalog', () => {
   });
 
   it('keeps actions of later milestones unavailable with a reason', () => {
-    const later = PHONE_ACTIONS.filter((action) => !isMilestoneShipped(action.milestone));
+    // Every action has shipped by M3; checked against M2 so the M3 tools must explain themselves.
+    const later = PHONE_ACTIONS.filter((action) => !isMilestoneShipped(action.milestone, 'M2'));
     expect(later.length).toBeGreaterThan(0);
     for (const action of later) {
-      const state = resolvePhoneActionState(action, baseContext);
+      const state = resolvePhoneActionState(action, baseContext, 'M2');
       expect(state.kind).toBe('unavailable');
       if (state.kind === 'unavailable') expect(state.reason).toContain(`milestone ${action.milestone}`);
     }

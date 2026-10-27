@@ -1,4 +1,5 @@
-// Serializable phone view state: zoom, notices, toast and the open sheet id. Never clips,
+// Serializable phone view state: zoom, notices, toast, the open sheet id and the desktop panel type
+// a panel sheet shows. Never clips,
 // tracks, files or media elements (those stay in the shared editor stores).
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
@@ -22,6 +23,7 @@ export const usePhoneUiStore = create<PhoneUiState>()(
     unavailableNotice: null,
     toast: null,
     activeSheet: null,
+    panelSheet: null,
     setTimelineZoom: (zoom) => set({ timelineZoom: clampPhoneTimelineZoom(zoom) }),
     showUnavailable: (notice) => set({ unavailableNotice: notice }),
     dismissUnavailable: () => set({ unavailableNotice: null }),
@@ -30,7 +32,8 @@ export const usePhoneUiStore = create<PhoneUiState>()(
       set({ toast: { id: toastCounter, message, tone } });
     },
     dismissToast: () => set({ toast: null }),
-    openSheet: (sheetId) => set({ activeSheet: sheetId }),
-    closeSheet: () => set({ activeSheet: null }),
+    openSheet: (sheetId) => set({ activeSheet: sheetId, panelSheet: null }),
+    openPanelSheet: (type, title) => set({ activeSheet: 'panel', panelSheet: { type, title } }),
+    closeSheet: () => set({ activeSheet: null, panelSheet: null }),
   })),
 );
