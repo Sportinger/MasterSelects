@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-27",
+    "type": "fix",
+    "title": "MasterSelects 3.3.2",
+    "description": "MP3 and other audio files dragged from the desktop are recognized over audio tracks and imported reliably when dropped on the timeline. Create Comp now works with audio files, 3D models and Gaussian splats as well as videos and images, placing each source at time zero on the matching track.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-26",
     "type": "fix",
     "title": "MasterSelects 3.3.1",
