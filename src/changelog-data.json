@@ -2,6 +2,13 @@
   {
     "date": "2026-10-27",
     "type": "new",
+    "title": "MasterSelects 3.3.5",
+    "description": "The phone editor is complete. Pro sheets for compositions and nesting, tracks, markers, trim modes, replace, captions, audio effects, the library, settings and advanced export; every desktop panel through All tools; landscape editors for nodes, mixer, piano roll, colour, multicam, 3D, curves and the Output Manager with collapsible side panels; timeline snapping, in/out, tempo and metronome; copy and paste of effects, colour and keyframes; a transform gizmo, the mask pen and motion paths on the preview; sound ranges, punch recording and notation; a source monitor and the assistant with model choice and tool-call list. Things a phone cannot do stay visible and explain why. Undo is more reliable everywhere: a slider drag is one step, an assistant request is one step, and background work after an import no longer takes an Undo. Android opens your project before the graphics engine is ready.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-27",
+    "type": "new",
     "title": "MasterSelects 3.3.4",
     "description": "The phone editor gets its design tools: effects, filters and colour adjustments, transitions at every cut, speed with curves, volume, fades, music, voiceover and extracted audio, styled titles, In/Out animations, a keyframe diamond, masks, crop and transform, picture-in-picture overlays and canvas formats. Every tool shows its change live, Cancel leaves the project exactly as it was, and Done is one step you can undo. Undo and Redo now skip the editor's own background work, such as verifying a freshly imported file, so one Undo always takes back your last edit, also on the desktop.",
     "section": "Release"
