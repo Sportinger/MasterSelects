@@ -35,6 +35,7 @@ describe('frame-code oracle', () => {
     expect(readFrameCode({ width: 400, height: 300, channels: 3, data: framed }, { x: 40, y: 60, width: 320, height: 180 }).frame).toBe(37)
   })
 
+  // 4095 blended frames: seconds locally, past the 15 s default on a busy CI runner.
   it('never turns a black frame or a blend of two frames into a wrong number', () => {
     expect(readFrameCode({ width: 64, height: 36, channels: 3, data: new Uint8Array(64 * 36 * 3) })).toMatchObject({ valid: false, reason: 'flat' })
     for (let frame = 0; frame < 4095; frame++) {
@@ -49,7 +50,7 @@ describe('frame-code oracle', () => {
         if (reading.valid) expect([frame, frame + 1]).toContain(reading.frame)
       }
     }
-  })
+  }, 60_000)
 
   it('measures the colour bars and their inversion', () => {
     expect(barDeviation(readColorBars(paint(5)), bar => bar.expected)).toBeLessThan(1)

@@ -10,7 +10,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 
 import { Logger } from '../../../services/logger';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { TimelineClip, TimelineTrack } from '../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import type { PhoneActionResult } from '../contracts';
 import { commitPhoneClipDrop, commitPhoneClipTrim, computePhoneTrimTiming } from '../actions/phoneClipEditActions';
 import { selectPhoneClip } from '../actions/phoneCutActions';

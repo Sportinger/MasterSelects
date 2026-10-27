@@ -18,7 +18,7 @@ import {
 import { cancelHistoryBatch, endBatch, startBatch } from '../../../stores/historyStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { DEFAULT_TEXT_DURATION } from '../../../stores/timeline/constants';
-import type { TimelineClip, TimelineTrack } from '../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import type { PhoneActionResult } from '../contracts';
 
 const log = Logger.create('PhoneTitle');

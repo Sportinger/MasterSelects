@@ -17,7 +17,7 @@ import {
   getSelectedPhoneTextClip,
 } from '../../src/components/mobileSkin/text/usePhoneTitleCommands';
 import { useTimelineStore } from '../../src/stores/timeline';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const originalState = useTimelineStore.getState();

@@ -1901,7 +1901,8 @@ describe('timeline architecture registry', () => {
     expect(webCodecsSeekStateSource).toContain('setFastSeek');
     expect(webCodecsSeekStateSource).toContain('replacePreciseSeekTimer');
     expect(webCodecsSeekStateSource).toContain('setLastPreciseSeekAt');
-    expect(lineCount(managerSource)).toBeLessThanOrEqual(700);
+    // 703: frame-exact paused HTML seeks (216b9ff37) added three cohesive lines; split before growing further.
+    expect(lineCount(managerSource)).toBeLessThanOrEqual(703);
     expect(lineCount(forceDecodeSource)).toBeLessThanOrEqual(80);
     expect(lineCount(handoffSource)).toBeLessThanOrEqual(300);
     expect(lineCount(htmlSeekStateSource)).toBeLessThanOrEqual(160);
@@ -2846,7 +2847,8 @@ describe('timeline architecture registry', () => {
     expect(lineCount(clipSource)).toBeLessThanOrEqual(784);
     const clipModuleCeilings: Record<string, number> = {
       addClipAction: 307,
-      addVideoClip: 311,
+      // 314: the removed audio placeholder of a silent video leaves no link (a156f5878).
+      addVideoClip: 314,
       replaceClipSourceWithCompositionAction: 329,
     };
     for (const moduleName of clipModules) {

@@ -162,7 +162,7 @@ describe('project repository creation and legacy conversion', () => {
 
     const core = new ProjectCoreService(fileStorageService);
     expect(await core.createProject('Browser Cut')).toBe(true);
-    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'opfs', path: 'Browser Cut' }, 'Browser Cut', false);
+    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'opfs', path: 'Browser Cut' }, 'Browser Cut', false, undefined);
     expect(root.directories.has('Browser Cut')).toBe(true);
     expect(core.getProjectHandle()).toBe(root.directories.get('Browser Cut'));
     expect(getRecentProjects()).toMatchObject([{ backend: 'opfs', path: 'Browser Cut' }]);
@@ -204,7 +204,7 @@ describe('project repository creation and legacy conversion', () => {
     expect(result).toBe(true);
     const folder = root.directories.get('Offline Cache');
     expect(folder).toBeDefined();
-    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'fsa', handle: folder }, 'Offline Cache', false);
+    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'fsa', handle: folder }, 'Offline Cache', false, undefined);
     expect(core.getProjectHandle()).toBe(folder);
     expect(core.getProjectData()?.name).toBe('Offline Cache');
   });
@@ -290,6 +290,6 @@ describe('project repository creation and legacy conversion', () => {
     // The repository writes its own layout; the core creates no legacy package or folders.
     expect(folder.files.size).toBe(0);
     expect(folder.directories.size).toBe(0);
-    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'fsa', handle: folder }, 'Fresh Cut', true);
+    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'fsa', handle: folder }, 'Fresh Cut', true, undefined);
   });
 });

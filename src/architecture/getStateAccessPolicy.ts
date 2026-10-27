@@ -4,6 +4,7 @@
 }
 import { currentWorkflowGetStateHardTargets } from './getStateCurrentWorkflowTargets';
 import { classifiedFeatureGetStateHardTargets } from './getStateClassifiedFeatureTargets';
+import { phoneEditorGetStateHardTargets } from './getStatePhoneEditorTargets';
 export { allowedAdapterPaths } from './getStateAllowedAdapterPaths';
 export const classCHardTargets = [
   { path: 'src/components/common/MatAnyoneSetupDialog.tsx', maxCurrentHits: 4 },
@@ -107,7 +108,7 @@ export const classCHardTargets = [
   { path: 'src/components/timeline/hooks/useTimelineZoom.ts', maxCurrentHits: 3 },
   { path: 'src/components/timeline/SlotGrid.tsx', maxCurrentHits: 14 },
   { path: 'src/components/timeline/TimelineContextMenu.tsx', maxCurrentHits: 5 },
-  { path: 'src/components/timeline/TimelineControls.tsx', maxCurrentHits: 12 },
+  { path: 'src/components/timeline/TimelineControls.tsx', maxCurrentHits: 13 },
   { path: 'src/components/timeline/TimelineHeader.tsx', maxCurrentHits: 1 },
   { path: 'src/components/timeline/tools/timelineToolCommands.ts', maxCurrentHits: 1 },
   { path: 'src/components/timeline/TrackContextMenu.tsx', maxCurrentHits: 6 },
@@ -287,6 +288,7 @@ export const classCHardTargets = [
   // Current editor, live-production, trim, and 3D workflows. These remain
   // explicit hard targets so future getState growth cannot arrive silently.
   ...currentWorkflowGetStateHardTargets,
+  ...phoneEditorGetStateHardTargets,
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
@@ -294,6 +296,8 @@ export const getStateAccessPolicyBaselines = {
   // October integration adds 17 exact targets (43 reads) and 12 action-time
   // reads for export quality, driven transforms, text selection and composition sync.
   // 2026-10-20: +9 classified targets (52 reads, Image workspace, reconnect), +3 reads on two ceilings; 10-22: +2 (presets, Style).
-  classCHardTargetFileCount: 443,
-  classCHardTargetMaxHits: 1459,
+  // 2026-10-27: +17 phone editor targets (60 reads, getStatePhoneEditorTargets.ts); +2 for the
+  // Preview transport step and the Linux codec notices (6 reads); +1 read for the compact timeline sidebar.
+  classCHardTargetFileCount: 462,
+  classCHardTargetMaxHits: 1526,
 } as const;

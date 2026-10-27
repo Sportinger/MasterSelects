@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { TimelineClip, TimelineTrack } from '../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { sanitizeTimelineFrameRate } from '../../../utils/timelineFrameQuantization';
 import { PHONE_TEST_IDS } from '../contracts';
 import { PhoneClipStrip, type PhoneLane, type PhoneLaneKind } from './PhoneClipStrip';

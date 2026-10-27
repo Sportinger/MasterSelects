@@ -9,7 +9,7 @@
 import { memo, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 import { useTimelineStore } from '../../../stores/timeline';
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip } from '../../../types/timeline';
 import { PHONE_TEST_IDS } from '../contracts';
 import { selectPhoneClip } from '../actions/phoneCutActions';
 import type { PhoneLaneLayout, PhoneTimeWindow } from './phoneTimelineGeometry';

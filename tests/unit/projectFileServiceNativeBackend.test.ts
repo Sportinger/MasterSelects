@@ -105,6 +105,7 @@ describe('ProjectFileService native backend', () => {
       'C:/Projects',
       'Firefox Project',
       false,
+      undefined,
     );
     expect(mocks.nativeClient.grantPath).toHaveBeenCalledWith('C:/Projects');
     expect(projectFileService.activeBackend).toBe('native');

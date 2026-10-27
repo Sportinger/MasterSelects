@@ -8,7 +8,7 @@ import { finishEditorGesture, runEditorGesture } from '../../../services/project
 import { cancelHistoryBatch, endBatch, startBatch } from '../../../stores/historyStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineEditResult, TimelineClipMove } from '../../../stores/timeline/editOperations/types';
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip } from '../../../types/timeline';
 import {
   clampTrimExtensionToNextClip, computeTrimTiming, trimOriginalsFromClip, type TrimTimingResult,
 } from '../../timeline/utils/clipTrimTiming';

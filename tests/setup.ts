@@ -208,6 +208,7 @@ vi.mock('../src/stores/mediaStore', () => ({
       getOrCreateCameraFolder: vi.fn().mockReturnValue('camera-folder-1'),
       createCameraItem: vi.fn().mockReturnValue('camera-item-1'),
       newProject: vi.fn(),
+      setProjectName: vi.fn(),
     })),
     setState: vi.fn(),
     subscribe: vi.fn(),

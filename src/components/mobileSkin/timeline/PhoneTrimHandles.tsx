@@ -7,7 +7,7 @@ import type { KeyboardEvent } from 'react';
 
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip } from '../../../types/timeline';
 import { sanitizeTimelineFrameRate } from '../../../utils/timelineFrameQuantization';
 import { PHONE_M1_TEST_IDS } from '../contracts';
 import { commitPhoneClipTrim, computePhoneTrimTiming } from '../actions/phoneClipEditActions';

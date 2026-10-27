@@ -120,4 +120,6 @@ export const currentWorkflowGetStateHardTargets = [
   { path: 'src/services/scenes/sceneDocuments.ts', maxCurrentHits: 5 },
   { path: 'src/services/scenes/sceneStreamExecutor.ts', maxCurrentHits: 9 },
   { path: 'src/stores/timeline/helpers/activeCompositionSize.ts', maxCurrentHits: 1 },
+  { path: 'src/components/preview/PreviewTransport.tsx', maxCurrentHits: 1 },
+  { path: 'src/services/codecNotices/linuxCodecNotices.ts', maxCurrentHits: 5 },
 ] as const;

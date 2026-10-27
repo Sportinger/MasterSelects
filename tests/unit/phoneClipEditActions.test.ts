@@ -10,7 +10,7 @@ import {
 } from '../../src/components/mobileSkin/actions/phoneClipEditActions';
 import { initHistoryStoreRefs, useHistoryStore } from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 import { installFakeMediaStore } from '../helpers/fakeMediaStore';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 

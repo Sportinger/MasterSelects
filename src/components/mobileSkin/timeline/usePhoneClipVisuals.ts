@@ -19,7 +19,7 @@ import {
   warmTimelineWaveformArtifacts,
 } from '../../../services/timeline/timelineWaveformArtifactWarmup';
 import { useMediaStore } from '../../../stores/mediaStore';
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip } from '../../../types/timeline';
 import { prepareTimelineClipCanvasMainThreadSurface } from '../../timeline/utils/timelineClipCanvasMainThreadSurface';
 import { getTimelineClipCanvasVisibleSourceRange } from '../../timeline/utils/timelineClipCanvasVisibleSourceRange';
 import { getTimelineClipCanvasWaveformPyramidForClip } from '../../timeline/utils/timelineClipCanvasWaveformResource';
