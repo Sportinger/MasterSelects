@@ -53,6 +53,7 @@ import {
   pickNativeFolder,
 } from './fileService/nativeBackend';
 import { isAndroidAutoRestoreProjectHandle } from './androidProjectAutoRestore';
+import type { NewProjectComposition } from './repository/lifecycle/defaultProject';
 export type {
   DeleteMediaFileArtifactsOptions,
   DeleteMediaFileArtifactsResult,
@@ -240,7 +241,7 @@ class ProjectFileService {
     return this.core.requestPendingPermission();
   }
 
-  async createProject(name: string, preserveCurrent = false): Promise<boolean> {
+  async createProject(name: string, preserveCurrent = false, composition?: NewProjectComposition): Promise<boolean> {
     if (this.backends.backend === 'native' || !this.isFsaAvailable) {
       const nativeCore = await this.backends.selectReadyNative();
       if (nativeCore) {
@@ -251,11 +252,11 @@ class ProjectFileService {
         );
 
         if (!parentPath) return false;
-        return nativeCore.createProjectAtPath(parentPath, name, preserveCurrent);
+        return nativeCore.createProjectAtPath(parentPath, name, preserveCurrent, composition);
       }
     }
 
-    return this.core.createProject(name, preserveCurrent);
+    return this.core.createProject(name, preserveCurrent, composition);
   }
 
   async createProjectInFolder(handle: FileSystemDirectoryHandle, name: string): Promise<boolean> {

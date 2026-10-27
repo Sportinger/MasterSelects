@@ -41,7 +41,7 @@ export function phoneActionTestId(actionId: string): string {
 export type PhoneMilestone = 'M0' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6';
 
 /** The milestone currently shipped by the skin; later actions render greyed out with a reason. */
-export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M0';
+export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M1';
 
 const MILESTONE_ORDER: readonly PhoneMilestone[] = ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
 
@@ -165,3 +165,65 @@ export interface PhoneUiState {
   openSheet: (sheetId: string) => void;
   closeSheet: () => void;
 }
+
+// ---------------------------------------------------------------------------
+// Bottom sheets (M1): one modal sheet at a time, Cancel discards, Done commits once.
+// ---------------------------------------------------------------------------
+
+/** Sheet ids known to sheets/phoneSheetRegistry.tsx. */
+export type PhoneSheetId = 'projects' | 'media' | 'title' | 'export';
+
+export interface PhoneSheetProps {
+  title: string;
+  /** 'half' keeps the preview large; 'tall' for forms and lists. The preview never unmounts. */
+  height?: 'half' | 'tall';
+  onCancel: () => void;
+  /** Omit for sheets that only have Close (e.g. export result). */
+  onDone?: () => void;
+  doneLabel?: string;
+  doneDisabled?: boolean;
+  cancelLabel?: string;
+  children: import('react').ReactNode;
+}
+
+/** Every sheet component takes no props and closes itself through usePhoneUiStore().closeSheet. */
+export type PhoneSheetComponent = () => import('react').ReactElement | null;
+
+/** M1 selectors (home, sheets, import, title, export, trim). */
+export const PHONE_M1_TEST_IDS = {
+  home: 'phone-home',
+  newProject: 'phone-new-project',
+  /** One chip per format; suffix is the format id ('9:16', '16:9', '1:1', '4:5'). */
+  formatChip: 'phone-format-chip',
+  createProject: 'phone-create-project',
+  projectNameInput: 'phone-project-name-input',
+  projectRow: 'phone-project-row',
+  importArchive: 'phone-import-archive',
+  storageStatus: 'phone-storage-status',
+  mediaPickVisual: 'phone-media-pick-visual',
+  mediaPickAudio: 'phone-media-pick-audio',
+  /** The hidden <input type=file> elements behind the two pick buttons (for setInputFiles). */
+  mediaInputVisual: 'phone-media-input-visual',
+  mediaInputAudio: 'phone-media-input-audio',
+  mediaPickedItem: 'phone-media-picked-item',
+  mediaProgress: 'phone-media-progress',
+  titleInput: 'phone-title-input',
+  trimHandleStart: 'phone-trim-start',
+  trimHandleEnd: 'phone-trim-end',
+  exportStart: 'phone-export-start',
+  exportProgress: 'phone-export-progress',
+  exportCancel: 'phone-export-cancel',
+  exportShare: 'phone-export-share',
+  exportSave: 'phone-export-save',
+  exportSummary: 'phone-export-summary',
+} as const;
+
+export type PhoneProjectFormatId = '9:16' | '16:9' | '1:1' | '4:5';
+
+/** Composition size per format for a new phone project (30 fps). */
+export const PHONE_PROJECT_FORMATS: Readonly<Record<PhoneProjectFormatId, { width: number; height: number }>> = {
+  '9:16': { width: 1080, height: 1920 },
+  '16:9': { width: 1920, height: 1080 },
+  '1:1': { width: 1080, height: 1080 },
+  '4:5': { width: 1080, height: 1350 },
+};

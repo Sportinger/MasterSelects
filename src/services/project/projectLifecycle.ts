@@ -12,6 +12,7 @@ import { preserveUnsavedProjectOnChunkFailure } from '../../runtime/chunkReloadG
 import { saveProjectBeforeDevFullReload } from '../../runtime/devFullReloadSave';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
 import type { MediaState } from '../../stores/mediaStore/types';
+import type { NewProjectComposition } from './repository/lifecycle/defaultProject';
 import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -243,8 +244,14 @@ export type BlankProjectCreationResult = 'created' | 'not-created' | 'save-faile
  * The current editor state is only cleared after the project folder exists, so
  * cancelling the system folder picker leaves the current project untouched.
  */
-export async function createBlankProject(name: string): Promise<BlankProjectCreationResult> {
-  return createBlankProjectWith(name, () => projectFileService.createProject(name));
+export async function createBlankProject(
+  name: string,
+  options: { composition?: NewProjectComposition } = {},
+): Promise<BlankProjectCreationResult> {
+  const { composition } = options;
+  return createBlankProjectWith(name, () => (
+    composition ? projectFileService.createProject(name, false, composition) : projectFileService.createProject(name)
+  ));
 }
 
 /**
@@ -259,7 +266,7 @@ export async function createBlankProjectInFolder(
 }
 
 async function createBlankProjectWith(
-  _name: string,
+  name: string,
   createFolder: () => Promise<boolean>,
 ): Promise<BlankProjectCreationResult> {
   const startedAt = Date.now();
@@ -272,6 +279,9 @@ async function createBlankProjectWith(
       return 'not-created';
     }
 
+    // Every reader of the media store (phone top bar, AI audit, agent control) sees the new name,
+    // not only the desktop toolbar that tracks it locally.
+    useMediaStore.getState().setProjectName(name);
     failureStage = 'save'; trace.stage('save');
     const saved = await projectFileService.saveProject();
     if (saved) {

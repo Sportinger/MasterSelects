@@ -315,3 +315,7 @@
 }
 @keyframes phone-toast-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes phone-sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* The timeline's own layers (playhead, drag ghost, hints) stay inside its band: they must never
+   paint over the preview or an open sheet. */
+.mobile-skin .phone-shell__timeline { isolation: isolate; }

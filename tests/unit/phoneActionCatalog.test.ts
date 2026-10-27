@@ -3,9 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../../src/components/mobileSkin/actions/phoneCutActions', () => ({
   splitSelectedAtPlayhead: vi.fn(() => ({ ok: true })),
 }));
+vi.mock('../../src/components/mobileSkin/actions/phoneClipEditActions', () => ({
+  deleteSelectedClips: vi.fn(() => ({ ok: true, message: 'deleted' })),
+  rippleDeleteSelectedClips: vi.fn(() => ({ ok: true, message: 'rippled' })),
+  duplicateSelectedClips: vi.fn(() => ({ ok: true, message: 'duplicated' })),
+}));
 
 import type { PhoneActionContext } from '../../src/components/mobileSkin/contracts';
-import { isMilestoneShipped } from '../../src/components/mobileSkin/contracts';
+import { PHONE_SHIPPED_MILESTONE, isMilestoneShipped } from '../../src/components/mobileSkin/contracts';
+import * as clipEdits from '../../src/components/mobileSkin/actions/phoneClipEditActions';
 import {
   PHONE_ACTIONS,
   getPhoneActionsForScope,
@@ -36,7 +42,7 @@ describe('phone action catalog', () => {
       'Edit', 'Audio', 'Text', 'Effects', 'Overlay', 'Captions', 'Filters', 'Adjust', 'Format', 'Assistant', 'Media',
     ]);
     expect(getPhoneActionsForScope('clip').map((a) => a.label)).toEqual([
-      'Split', 'Delete', 'Duplicate', 'Speed', 'Volume', 'Animation', 'Effects', 'Filters', 'Adjust', 'Mask',
+      'Split', 'Delete', 'Delete & close gap', 'Duplicate', 'Speed', 'Volume', 'Animation', 'Effects', 'Filters', 'Adjust', 'Mask',
       'Crop', 'Transition', 'Keyframe', 'Replace', 'Reorder',
     ]);
   });
@@ -55,9 +61,53 @@ describe('phone action catalog', () => {
     });
   });
 
+  it('ships M1 and resolves every M1 action as available', () => {
+    expect(PHONE_SHIPPED_MILESTONE).toBe('M1');
+    const m1 = PHONE_ACTIONS.filter((action) => action.milestone === 'M1');
+    expect(m1.map((action) => action.id).toSorted()).toEqual(
+      ['delete', 'duplicate', 'edit', 'media', 'reorder', 'ripple-delete', 'text'],
+    );
+    for (const action of m1) {
+      expect(resolvePhoneActionState(action, baseContext)).toEqual({ kind: 'available' });
+      expect(action.run).toBeTypeOf('function');
+    }
+  });
+
+  it('keeps M2 and later actions unavailable with a reason', () => {
+    const later = PHONE_ACTIONS.filter((action) => !isMilestoneShipped(action.milestone));
+    expect(later.length).toBeGreaterThan(10);
+    for (const action of later) {
+      const state = resolvePhoneActionState(action, baseContext);
+      expect(state.kind).toBe('unavailable');
+      if (state.kind === 'unavailable') expect(state.reason).toContain(`milestone ${action.milestone}`);
+    }
+  });
+
   it('makes shipped actions available once their milestone ships', () => {
     expect(resolvePhoneActionState(byId('delete'), baseContext, 'M1')).toEqual({ kind: 'available' });
     expect(resolvePhoneActionState(byId('assistant'), baseContext, 'M4').kind).toBe('unavailable');
+  });
+
+  it('offers Delete and Delete & close gap as separate commands on the same icon', () => {
+    const del = byId('delete');
+    const ripple = byId('ripple-delete');
+    expect(ripple).toMatchObject({ label: 'Delete & close gap', icon: 'delete', scope: 'clip', milestone: 'M1' });
+    expect(del.run?.(baseContext)).toEqual({ ok: true, message: 'deleted' });
+    expect(ripple.run?.(baseContext)).toEqual({ ok: true, message: 'rippled' });
+    expect(clipEdits.deleteSelectedClips).toHaveBeenCalledTimes(1);
+    expect(clipEdits.rippleDeleteSelectedClips).toHaveBeenCalledTimes(1);
+    expect(byId('duplicate').run?.(baseContext)).toEqual({ ok: true, message: 'duplicated' });
+  });
+
+  it('opens sheets for Media and Text and hints for Edit and Reorder', async () => {
+    const { usePhoneUiStore } = await import('../../src/components/mobileSkin/state/phoneUiStore');
+    expect(byId('media').run?.(baseContext)).toEqual({ ok: true });
+    expect(usePhoneUiStore.getState().activeSheet).toBe('media');
+    expect(byId('text').run?.(baseContext)).toEqual({ ok: true });
+    expect(usePhoneUiStore.getState().activeSheet).toBe('title');
+    usePhoneUiStore.getState().closeSheet();
+    expect(byId('edit').run?.(baseContext)).toEqual({ ok: true, message: 'Tap a clip to edit it' });
+    expect(byId('reorder').run?.(baseContext)).toEqual({ ok: true, message: 'Long-press a clip and drag it' });
   });
 
   it('allows split only strictly inside a selected clip', () => {

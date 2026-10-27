@@ -6,11 +6,19 @@ import {
   type PhoneActionContext,
   type PhoneActionDefinition,
   type PhoneIconName,
+  type PhoneActionResult,
   type PhoneMilestone,
+  type PhoneSheetId,
   type PhoneToolbarScope,
 } from '../contracts';
 import { useTimelineStore } from '../../../stores/timeline';
+import { usePhoneUiStore } from '../state/phoneUiStore';
 import { splitSelectedAtPlayhead } from './phoneCutActions';
+import {
+  deleteSelectedClips,
+  duplicateSelectedClips,
+  rippleDeleteSelectedClips,
+} from './phoneClipEditActions';
 
 const FULL_EDITOR_HINT = 'Use the full editor at /editor meanwhile.';
 
@@ -51,6 +59,11 @@ export function resolveSplitAvailability(
   return { kind: 'available' };
 }
 
+function openPhoneSheet(sheetId: PhoneSheetId): PhoneActionResult {
+  usePhoneUiStore.getState().openSheet(sheetId);
+  return { ok: true };
+}
+
 function def(
   id: string,
   label: string,
@@ -65,11 +78,12 @@ function def(
 export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   // Root scope: nothing selected.
   def('edit', 'Edit', 'trim', 'root', 'M1', {
-    pendingReason: `Edit arrives with milestone M1 of the phone editor. ${FULL_EDITOR_HINT}`,
-    run: () => ({ ok: true, message: 'Tap a clip in the timeline to edit it.' }),
+    run: () => ({ ok: true, message: 'Tap a clip to edit it' }),
   }),
   def('audio', 'Audio', 'audio', 'root', 'M2'),
-  def('text', 'Text', 'text', 'root', 'M1'),
+  def('text', 'Text', 'text', 'root', 'M1', {
+    run: () => openPhoneSheet('title'),
+  }),
   def('effects-root', 'Effects', 'effects', 'root', 'M2'),
   def('overlay', 'Overlay', 'overlay', 'root', 'M2'),
   def('captions', 'Captions', 'captions', 'root', 'M3'),
@@ -77,15 +91,18 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('adjust-root', 'Adjust', 'adjust', 'root', 'M2'),
   def('format', 'Format', 'format', 'root', 'M2'),
   def('assistant', 'Assistant', 'assistant', 'root', 'M5'),
-  def('media', 'Media', 'media', 'root', 'M1'),
+  def('media', 'Media', 'media', 'root', 'M1', {
+    run: () => openPhoneSheet('media'),
+  }),
 
   // Clip scope: at least one clip selected.
   def('split', 'Split', 'split', 'clip', 'M0', {
     availability: (context) => resolveSplitAvailability(context, useTimelineStore.getState().clips),
     run: () => splitSelectedAtPlayhead(),
   }),
-  def('delete', 'Delete', 'delete', 'clip', 'M1'),
-  def('duplicate', 'Duplicate', 'duplicate', 'clip', 'M1'),
+  def('delete', 'Delete', 'delete', 'clip', 'M1', { run: () => deleteSelectedClips() }),
+  def('ripple-delete', 'Delete & close gap', 'delete', 'clip', 'M1', { run: () => rippleDeleteSelectedClips() }),
+  def('duplicate', 'Duplicate', 'duplicate', 'clip', 'M1', { run: () => duplicateSelectedClips() }),
   def('speed', 'Speed', 'speed', 'clip', 'M2'),
   def('volume', 'Volume', 'volume', 'clip', 'M2'),
   def('animation', 'Animation', 'animation', 'clip', 'M2'),
@@ -97,7 +114,9 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('transition', 'Transition', 'transition', 'clip', 'M2'),
   def('keyframe', 'Keyframe', 'keyframe', 'clip', 'M2'),
   def('replace', 'Replace', 'replace', 'clip', 'M3'),
-  def('reorder', 'Reorder', 'reorder', 'clip', 'M1'),
+  def('reorder', 'Reorder', 'reorder', 'clip', 'M1', {
+    run: () => ({ ok: true, message: 'Long-press a clip and drag it' }),
+  }),
 ];
 
 export function getPhoneActionsForScope(scope: PhoneToolbarScope): readonly PhoneActionDefinition[] {

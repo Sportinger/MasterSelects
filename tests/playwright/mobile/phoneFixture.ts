@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { expect, test as base, type Browser, type BrowserContext, type Locator, type Page, type TestInfo, type WorkerInfo } from '@playwright/test'
-import { PHONE_TEST_IDS } from '../../../src/components/mobileSkin/contracts'
+import { PHONE_M1_TEST_IDS, PHONE_TEST_IDS } from '../../../src/components/mobileSkin/contracts'
 import { BridgeClient, DEFAULT_REPO_ROOT } from '../fixtures/bridgeClient'
 import { frameCodeClip } from '../fixtures/frameCodeMedia'
 import { warmGpu } from '../fixtures/frameCodeProject'
@@ -112,17 +112,15 @@ async function openPhoneProject(browser: Browser, workerInfo: WorkerInfo): Promi
   await installDeterministicStorage(page, tabId)
   await page.goto(new URL('/m', baseURL).toString(), { waitUntil: 'domcontentloaded', timeout: 60_000 })
 
-  // A fresh context has no project: the phone skin mounts the editor's own project chooser (M0).
-  const chooser = page.getByRole('dialog', { name: 'Choose project' })
-  const root = page.getByTestId(IDS.root)
-  await expect(chooser.or(root).first(), 'neither the project chooser nor the phone root appeared on /m').toBeVisible({ timeout: 90_000 })
+  // A fresh context has no project: the phone home shows (M1). Setup, not under test, so plain clicks.
+  const home = page.getByTestId(PHONE_M1_TEST_IDS.home)
+  await expect(home, 'the phone home did not appear on a fresh /m').toBeVisible({ timeout: 90_000 })
   const projectName = `Phone ${tabId}`
-  if (await chooser.isVisible()) {
-    await chooser.getByRole('button', { name: 'New project Empty timeline' }).click()
-    await chooser.getByRole('textbox', { name: 'Project name' }).fill(projectName)
-    await chooser.getByRole('button', { name: 'Continue', exact: true }).click()
-    await chooser.waitFor({ state: 'hidden', timeout: 30_000 })
-  }
+  const create = page.getByTestId(PHONE_M1_TEST_IDS.createProject)
+  if (!await create.isVisible()) await page.getByTestId(PHONE_M1_TEST_IDS.newProject).click()
+  await page.getByTestId(PHONE_M1_TEST_IDS.projectNameInput).fill(projectName)
+  await create.click()
+  await expect(home, 'the home stays on top of the editor').toHaveCount(0, { timeout: 60_000 })
   await expect(page.getByTestId(IDS.timeline)).toBeVisible({ timeout: 60_000 })
 
   const bridge = new BridgeClient({ baseURL, targetTabId: tabId })

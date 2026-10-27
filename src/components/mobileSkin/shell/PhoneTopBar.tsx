@@ -2,6 +2,9 @@ import { useMemo } from 'react';
 import { PHONE_TEST_IDS, type PhoneIconName } from '../contracts';
 import { Logger } from '../../../services/logger';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { useTimelineStore } from '../../../stores/timeline';
+import { requestPhoneHome } from '../project/PhoneProjectSheet';
+import { PhoneStorageStatus } from '../project/PhoneStorageStatus';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from './phoneIcons';
 
@@ -28,6 +31,33 @@ function GreyedButton({ actionId, label, icon, reason, showLabel, className }: G
       aria-disabled="true"
       data-testid={`phone-topbar-${actionId}`}
       onClick={() => showUnavailable({ actionId, label, reason })}
+    >
+      <PhoneIcon name={icon} size={22} />
+      {showLabel ? <span className="phone-icon-button__label">{label}</span> : null}
+    </button>
+  );
+}
+
+interface TopBarButtonProps {
+  actionId: string;
+  label: string;
+  icon: PhoneIconName;
+  onPress: () => void;
+  disabled?: boolean;
+  showLabel?: boolean;
+  className?: string;
+}
+
+/** A working top bar button; `disabled` greys it out but keeps it focusable (onPress explains why). */
+function TopBarButton({ actionId, label, icon, onPress, disabled, showLabel, className }: TopBarButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`phone-icon-button ${className ?? ''}`.trim()}
+      aria-label={label}
+      aria-disabled={disabled ? 'true' : undefined}
+      data-testid={`phone-topbar-${actionId}`}
+      onClick={onPress}
     >
       <PhoneIcon name={icon} size={22} />
       {showLabel ? <span className="phone-icon-button__label">{label}</span> : null}
@@ -89,32 +119,47 @@ function CompositionTabs() {
 
 export function PhoneTopBar() {
   const projectName = useMediaStore((state) => state.currentProjectName);
+  const hasClips = useTimelineStore((state) => state.clips.length > 0);
+  const openSheet = usePhoneUiStore((state) => state.openSheet);
+  const showToast = usePhoneUiStore((state) => state.showToast);
+
+  const exportProject = () => {
+    // Re-read at tap time: a clip may have been added or removed since the last render.
+    if (useTimelineStore.getState().clips.length === 0) {
+      showToast('Add a clip first', 'info');
+      return;
+    }
+    openSheet('export');
+  };
 
   return (
     <header className="phone-top-bar" data-testid={PHONE_TEST_IDS.topBar}>
       <div className="phone-top-bar__row">
-        <GreyedButton
-          actionId="projects"
-          label="Projects"
-          icon="back"
-          reason={`The project list on the phone arrives with milestone M1 of the phone editor. ${FULL_EDITOR_HINT}`}
-        />
-        <div className="phone-top-bar__title" data-testid={PHONE_TEST_IDS.projectName}>
+        <TopBarButton actionId="projects" label="Projects" icon="back" onPress={requestPhoneHome} />
+        <button
+          type="button"
+          className="phone-top-bar__title"
+          aria-label="Project: open the project list"
+          data-testid={PHONE_TEST_IDS.projectName}
+          onClick={() => openSheet('projects')}
+        >
           {projectName || 'Untitled Project'}
-        </div>
+        </button>
+        <PhoneStorageStatus />
         <GreyedButton
           actionId="assistant"
           label="Assistant"
           icon="assistant"
           reason={`The assistant arrives with milestone M5 of the phone editor. ${FULL_EDITOR_HINT}`}
         />
-        <GreyedButton
+        <TopBarButton
           actionId="export"
           label="Export"
           icon="export"
           showLabel
+          disabled={!hasClips}
           className="phone-icon-button--primary"
-          reason={`Export arrives with milestone M1 of the phone editor. ${FULL_EDITOR_HINT}`}
+          onPress={exportProject}
         />
       </div>
       <CompositionTabs />

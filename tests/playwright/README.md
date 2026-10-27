@@ -222,6 +222,35 @@ real-device gate.
   50 ms limit as soft on hosts without a GPU; set `MASTERSELECTS_PHONE_PERF=strict`
   to fail on any long task.
 
+- `mobile/m1Fixture.ts` + `mobile/m1-edit.spec.ts`: the M1 "Schneiden" acceptance
+  (PLAN.md section 5, 12 cases plus an image/audio import case), the first suite
+  that builds its project through the phone UI instead of the bridge. A
+  worker-scoped phone context opens plain `/m` on the home. Case 1 creates the
+  project through the home (format chip 9:16, name, Create) and checks the
+  1080x1920 composition. Clips come in through the media sheet: `setInputFiles` on
+  the hidden file inputs (`phone-media-input-visual` / `-audio`), one call per
+  pick, so the call order is the pick order; generated frame-code clips (A 4 s,
+  B 3 s, a 1 s clip), a PNG and a WAV tone, all 360x640 / 30 fps, cached next to
+  the other frame-code media. Every action under test is real touch
+  (`phoneTouch.ts`; the long-press reorder holds a counted number of animation
+  frames, not a timer). The bridge only inspects (`getTimelineState`,
+  `getMediaItems`) and arranges what is not under test (playhead, the export
+  case's edit). **Per-test reset:** a UI-built project has no base revision to undo
+  to, so each test opens a new empty 1080x1920 composition of the same phone
+  project (`createComposition`), playhead 0, nothing selected, no sheet open;
+  `ensureEditor` reopens the project from the home if a case left the page there.
+  The export cases (8, 9) click Save/Share in the export sheet, capture the
+  download (headless Chromium has no file share) and decode it in Node with
+  `readVideoFrameCodes` (size and duration via ffprobe); case 9 stubs
+  `navigator.share`/`canShare` in the page to see the `File`, then removes the
+  stubs to prove the download fallback. Export cases need `ffmpeg`/`ffprobe` and a
+  headless Chromium that can encode (H.264 or the VP9 fallback). Run:
+
+```text
+MASTERSELECTS_E2E_HEADLESS=1 MASTERSELECTS_E2E_PORT=5180 \
+  npx playwright test -c playwright.phone.config.ts tests/playwright/mobile/m1-edit.spec.ts --project=pixel-7
+```
+
 ```text
 # against a Vite you started yourself (the token file must match the one Vite got)
 MASTERSELECTS_E2E_HEADLESS=1 MASTERSELECTS_E2E_PORT=5180 MASTERSELECTS_E2E_SKIP_WEB_SERVER=1 \

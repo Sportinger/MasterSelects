@@ -1,0 +1,136 @@
+/* Export sheet content. Scoped beneath .mobile-skin; the sheet frame lives in sheets/PhoneSheet.css. */
+.mobile-skin .phone-export {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 8px;
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--phone-text, #eef0f4);
+}
+
+.mobile-skin .phone-export__summary {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.mobile-skin .phone-export__notice,
+.mobile-skin .phone-export__hint,
+.mobile-skin .phone-export__result {
+  margin: 0;
+  color: var(--phone-text-dim, #98a0ad);
+  overflow-wrap: anywhere;
+}
+
+.mobile-skin .phone-export__result {
+  color: var(--phone-text, #eef0f4);
+}
+
+.mobile-skin .phone-export__problem {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--phone-danger, #f0626b);
+  border-radius: 10px;
+  color: var(--phone-text, #eef0f4);
+  overflow-wrap: anywhere;
+}
+
+.mobile-skin .phone-export__button {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--phone-border, #2b2f39);
+  border-radius: 12px;
+  background: var(--phone-surface-3, #262a33);
+  color: var(--phone-text, #eef0f4);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mobile-skin .phone-export__button--primary {
+  border-color: transparent;
+  background: var(--phone-accent, #5b8def);
+  color: #fff;
+}
+
+.mobile-skin .phone-export__button--danger {
+  border-color: var(--phone-danger, #f0626b);
+}
+
+.mobile-skin .phone-export__button[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.mobile-skin .phone-export__delivery {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mobile-skin .phone-export__running {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-skin .phone-export__bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--phone-surface-3, #262a33);
+}
+
+.mobile-skin .phone-export__bar-fill {
+  height: 100%;
+  background: var(--phone-accent, #5b8def);
+  transition: width 120ms linear;
+}
+
+.mobile-skin .phone-export__running-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobile-skin .phone-export__percent {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.mobile-skin .phone-export__link {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--phone-text-dim, #98a0ad);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mobile-skin .phone-export__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--phone-border, #2b2f39);
+  border-radius: 12px;
+  background: var(--phone-surface-2, #1c1f26);
+}
+
+.mobile-skin .phone-export__confirm p {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-skin .phone-export__bar-fill {
+    transition: none;
+  }
+}

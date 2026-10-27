@@ -1,0 +1,151 @@
+/* Phone home screen. Full-screen layer above the shell; scoped beneath .mobile-skin. */
+.mobile-skin .phone-home {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background: var(--phone-bg);
+  color: var(--phone-text);
+  font: 14px/1.3 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  padding: var(--phone-safe-top) var(--phone-safe-right) var(--phone-safe-bottom) var(--phone-safe-left);
+  touch-action: pan-y;
+}
+.mobile-skin .phone-home__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 24px 16px 32px;
+}
+.mobile-skin .phone-home__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.mobile-skin .phone-home__title { margin: 0; font-size: 28px; font-weight: 700; }
+.mobile-skin .phone-home__subtitle { margin: 4px 0 0; color: var(--phone-text-dim); }
+.mobile-skin .phone-home__back {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  background: var(--phone-surface-2);
+}
+
+.mobile-skin .phone-home__error,
+.mobile-skin .phone-home__note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--phone-border);
+  background: var(--phone-surface-2);
+  overflow-wrap: anywhere;
+}
+.mobile-skin .phone-home__error { border-color: var(--phone-danger); color: #ffd7da; }
+
+.mobile-skin .phone-home__card {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--phone-surface-2);
+}
+.mobile-skin .phone-home__new {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.mobile-skin .phone-home__form { display: flex; flex-direction: column; gap: 10px; }
+.mobile-skin .phone-home__label { color: var(--phone-text-dim); font-size: 13px; }
+.mobile-skin .phone-home__input {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--phone-border);
+  background: var(--phone-bg);
+  color: var(--phone-text);
+  font: inherit;
+  font-size: 16px; /* 16px keeps iOS from zooming the page on focus */
+  user-select: text;
+  -webkit-user-select: text;
+}
+.mobile-skin .phone-home__input:focus { outline: none; border-color: var(--phone-accent); }
+
+.mobile-skin .phone-home__formats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.mobile-skin .phone-home__format {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 64px;
+  border-radius: 10px;
+  background: var(--phone-surface-3);
+  font-weight: 600;
+  font-size: 13px;
+}
+.mobile-skin .phone-home__format-glyph {
+  display: block;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+}
+.mobile-skin .phone-home__format[aria-checked='true'] { background: #e9ebf0; color: #14161b; }
+
+.mobile-skin .phone-home__form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.mobile-skin .phone-home__button {
+  min-width: 96px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  background: var(--phone-surface-3);
+  font-weight: 600;
+}
+.mobile-skin .phone-home__button--primary { background: var(--phone-accent); color: #0b0c0f; }
+.mobile-skin .phone-home__button[aria-disabled='true'],
+.mobile-skin .phone-home__row[aria-disabled='true'],
+.mobile-skin .phone-home__wide--import[aria-disabled='true'] { opacity: 0.6; }
+
+.mobile-skin .phone-home__section { margin: 6px 0 8px; font-size: 17px; font-weight: 600; }
+.mobile-skin .phone-home__empty { margin: 0; color: var(--phone-text-dim); }
+.mobile-skin .phone-home__list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.mobile-skin .phone-home__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--phone-surface);
+  border: 1px solid var(--phone-border);
+  text-align: left;
+}
+.mobile-skin .phone-home__row:active { background: var(--phone-surface-3); }
+.mobile-skin .phone-home__row-name { max-width: 100%; font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-skin .phone-home__row-meta { max-width: 100%; color: var(--phone-text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mobile-skin .phone-home__wide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--phone-surface-2);
+  text-align: left;
+  font-weight: 600;
+}
+.mobile-skin .phone-home__wide[aria-disabled='true']:not(.phone-home__wide--import) { color: var(--phone-text-off); }
+.mobile-skin .phone-home__wide-meta { color: var(--phone-text-off); font-size: 12px; font-weight: 400; }
+.mobile-skin .phone-home__wide--import { align-items: center; justify-content: center; background: var(--phone-surface-3); }
+.mobile-skin .phone-home button:focus-visible,
+.mobile-skin .phone-home__input:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }

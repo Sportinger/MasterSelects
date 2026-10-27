@@ -15,6 +15,7 @@ import { directoryForOpfs, isLegacyProjectLocation, opfsLocationExists } from '.
 import { requestLegacyImportTarget } from '../legacyImportTarget';
 import type { RepositoryLocation } from '../repository/storageWorkerProtocol';
 import { RepositoryError } from '../repository/contracts';
+import type { NewProjectComposition } from '../repository/lifecycle/defaultProject';
 
 const log = Logger.create('ProjectCore');
 export class ProjectCoreService {
@@ -37,17 +38,17 @@ export class ProjectCoreService {
     await requestMediaFileAccess(await getRecentFsaProjectMediaFileIds(handle));
     const opened = await this.loadProject(handle); if (opened) this.pendingHandle = null; return opened;
   }
-  async createProject(name: string, preserveCurrent = false): Promise<boolean> {
+  async createProject(name: string, preserveCurrent = false, composition?: NewProjectComposition): Promise<boolean> {
     this.assertWritableProjects();
     const root = await acquireProjectRoot(resolveProjectRootMode(), { throwOnFailure: true }); if (!root) return false;
-    return this.createProjectInFolder(root, name, preserveCurrent);
+    return this.createProjectInFolder(root, name, preserveCurrent, composition);
   }
-  async createProjectInFolder(parent: FileSystemDirectoryHandle, name: string, preserveCurrent = false): Promise<boolean> {
+  async createProjectInFolder(parent: FileSystemDirectoryHandle, name: string, preserveCurrent = false, composition?: NewProjectComposition): Promise<boolean> {
     this.assertWritableProjects();
     await rememberProjectParent(parent);
     const handle = await parent.getDirectoryHandle(name, { create: true });
     const location: RepositoryLocation = resolveProjectRootMode() === 'opfs' ? { kind: 'opfs', path: name } : { kind: 'fsa', handle };
-    await createRepositoryAt(location, name, preserveCurrent);
+    await createRepositoryAt(location, name, preserveCurrent, composition);
     await this.adoptSession(handle); return true;
   }
   /** Read-only OPFS (no writable streams) must fail before any folder or repository is created. */

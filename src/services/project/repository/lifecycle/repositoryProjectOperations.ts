@@ -1,7 +1,7 @@
 import type { RepositoryLocation } from '../storageWorkerProtocol';
 import { RepositoryError } from '../contracts';
 import { encodeProjectDomains, PROJECT_ENTITY_KEY } from '../domains/projectDomains';
-import { createRepositoryProject } from './defaultProject';
+import { createRepositoryProject, type NewProjectComposition } from './defaultProject';
 import { prepareNewRepository, prepareRepositoryOpen, backendForLocation, type RepositoryOpenOptions } from './repositoryLocations';
 import { openEditorRepository, getActiveRepositorySession, repositoryWorkspaceId, flushEditorRepository } from './editorRepositoryLifecycle';
 import { splitProjectWorkspace } from './workspaceProjection';
@@ -22,7 +22,7 @@ export async function openRepositoryProject(location: RepositoryLocation, option
   }
   return openEditorRepository(onProgress => prepareRepositoryOpen(location, repositoryWorkspaceId, onProgress, options));
 }
-export async function createRepositoryAt(location: RepositoryLocation, name: string, preserveCurrent = false) {
+export async function createRepositoryAt(location: RepositoryLocation, name: string, preserveCurrent = false, composition?: NewProjectComposition) {
   const previous = getActiveRepositorySession();
   const session = await openEditorRepository(async () => {
     const prepared = await prepareNewRepository(location, repositoryWorkspaceId);
@@ -40,7 +40,7 @@ export async function createRepositoryAt(location: RepositoryLocation, name: str
         }); } finally { await owner.release(); }
       };
     } else {
-      const project = createRepositoryProject(name); const encoded = encodeProjectDomains(project);
+      const project = createRepositoryProject(name, composition); const encoded = encodeProjectDomains(project);
       prepared.initialize = { entities: encoded.entities, workspace: Object.fromEntries(splitProjectWorkspace(encoded.workspace).map(part => [part.key, part.value])), journals: encoded.journals };
     }
     return prepared;

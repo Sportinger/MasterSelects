@@ -6,6 +6,7 @@ import { addRecentNativeProject, addRecentOpfsProject } from '../recentProjects'
 import { getTabNativeLastProjectPathKey, LEGACY_NATIVE_LAST_PROJECT_PATH_KEY } from '../tabProjectPersistence';
 import { createRepositoryAt, openRepositoryProject, renameRepositoryProject, createIndependentProjectBackup, repositoryHasUnsavedChanges } from '../repository/lifecycle/repositoryProjectOperations';
 import { closeEditorRepository, flushEditorRepository, getActiveRepositorySession, readEditorRepositoryProject, isScratchRepository } from '../repository/lifecycle/editorRepositoryLifecycle';
+import type { NewProjectComposition } from '../repository/lifecycle/defaultProject';
 
 export class NativeProjectCoreService {
   private projectPath: string | null = null;
@@ -19,16 +20,16 @@ export class NativeProjectCoreService {
   needsPermission(): boolean { return false; }
   getPendingProjectName(): null { return null; }
   async requestPendingPermission(): Promise<boolean> { return false; }
-  async createProject(name: string, preserveCurrent = false): Promise<boolean> {
+  async createProject(name: string, preserveCurrent = false, composition?: NewProjectComposition): Promise<boolean> {
     const root = await NativeHelperClient.getProjectRoot();
     if (!root) throw new RepositoryError('io', 'Native project root is unavailable');
-    return this.createProjectAtPath(root, name, preserveCurrent);
+    return this.createProjectAtPath(root, name, preserveCurrent, composition);
   }
-  async createProjectAtPath(parent: string, name: string, preserveCurrent = false): Promise<boolean> {
+  async createProjectAtPath(parent: string, name: string, preserveCurrent = false, composition?: NewProjectComposition): Promise<boolean> {
     const path = parent.replace(/[\\/]$/, '') + '/' + name;
     await NativeHelperClient.grantPath(parent);
     if (!await NativeHelperClient.createDir(path)) throw new RepositoryError('io', 'Native project directory could not be created');
-    await createRepositoryAt({ kind: 'native', path }, name, preserveCurrent); await this.adoptSession(); return true;
+    await createRepositoryAt({ kind: 'native', path }, name, preserveCurrent, composition); await this.adoptSession(); return true;
   }
   async loadProject(path: string): Promise<boolean> {
     await NativeHelperClient.grantPath(path); await openRepositoryProject({ kind: 'native', path }); await this.adoptSession(); return true;

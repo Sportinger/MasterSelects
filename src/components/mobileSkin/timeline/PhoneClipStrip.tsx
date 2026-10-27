@@ -2,13 +2,19 @@
 // coordinates (t * zoom); the navigation hook moves the whole layer, so panning never re-renders
 // tiles. Only the portion of a clip inside the rendered time window is laid out, which bounds
 // filmstrip images and waveform canvases to viewport + overscan.
+// During a clip edit gesture the strip draws the phone-local preview geometry: the trimmed tile,
+// a dimmed drag source and the dragged ghost in its target lane. The primary selected clip gets
+// trim handles (PhoneTrimHandles).
 
 import { memo, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
+import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../types';
 import { PHONE_TEST_IDS } from '../contracts';
 import { selectPhoneClip } from '../actions/phoneCutActions';
 import type { PhoneLaneLayout, PhoneTimeWindow } from './phoneTimelineGeometry';
+import { PhoneTrimHandles } from './PhoneTrimHandles';
+import { usePhoneClipEditPreviewStore, type PhoneClipEditPreview } from './usePhoneClipEditGesture';
 import {
   PHONE_RASTER_MAX_CSS_WIDTH,
   drawPhoneClipWaveform,
@@ -37,30 +43,83 @@ interface PhoneClipStripProps {
 
 const TILE_INSET_Y = 2;
 
+function withPreview(clip: TimelineClip, preview: PhoneClipEditPreview): TimelineClip {
+  return {
+    ...clip,
+    trackId: preview.trackId,
+    startTime: preview.startTime,
+    duration: preview.duration,
+    inPoint: preview.inPoint,
+    outPoint: preview.outPoint,
+  };
+}
+
 export function PhoneClipStrip({ lane, clips, selectedClipIds, zoom, timeWindow, visualsVersion, thumbnailAspect }: PhoneClipStripProps) {
+  const preview = usePhoneClipEditPreviewStore((state) => state.preview);
+  const primaryId = useTimelineStore((state) => state.primarySelectedClipId);
+  const ghostSource = useTimelineStore((state) => (preview?.kind === 'move' && preview.trackId === lane.trackId
+    ? state.clips.find((clip) => clip.id === preview.clipId)
+    : undefined));
+  const ghost = ghostSource && preview ? withPreview(ghostSource, preview) : null;
+  const ghostVisible = ghost !== null && ghost.startTime < timeWindow.end && ghost.startTime + ghost.duration > timeWindow.start;
+
+  const displayClips = clips.map((clip) => (preview?.kind === 'trim' && preview.clipId === clip.id ? withPreview(clip, preview) : clip));
+  const handleClip = preview?.kind === 'move'
+    ? undefined
+    : displayClips.find((clip) => clip.id === primaryId && selectedClipIds.has(clip.id));
+
   return (
-    <div
-      className={`phone-clip-strip phone-clip-strip--${lane.kind}${lane.main ? ' phone-clip-strip--main' : ''}`}
-      role="listbox"
-      aria-label={lane.main ? `${lane.name} (main track)` : lane.name}
-      aria-multiselectable="true"
-      data-track-id={lane.trackId}
-      style={{ top: lane.top, height: lane.height }}
-    >
-      {clips.map((clip) => (
-        <PhoneClipTile
-          key={clip.id}
-          clip={clip}
-          lane={lane}
-          selected={selectedClipIds.has(clip.id)}
-          zoom={zoom}
-          windowStart={timeWindow.start}
-          windowEnd={timeWindow.end}
-          visualsVersion={visualsVersion}
-          thumbnailAspect={thumbnailAspect}
-        />
-      ))}
-    </div>
+    <>
+      <div
+        className={`phone-clip-strip phone-clip-strip--${lane.kind}${lane.main ? ' phone-clip-strip--main' : ''}`}
+        role="listbox"
+        aria-label={lane.main ? `${lane.name} (main track)` : lane.name}
+        aria-multiselectable="true"
+        data-track-id={lane.trackId}
+        style={{ top: lane.top, height: lane.height }}
+      >
+        {displayClips.map((clip) => (
+          <PhoneClipTile
+            key={clip.id}
+            clip={clip}
+            lane={lane}
+            selected={selectedClipIds.has(clip.id)}
+            dragSource={preview?.kind === 'move' && preview.clipId === clip.id}
+            zoom={zoom}
+            windowStart={timeWindow.start}
+            windowEnd={timeWindow.end}
+            visualsVersion={visualsVersion}
+            thumbnailAspect={thumbnailAspect}
+          />
+        ))}
+        {ghost && ghostVisible && (
+          <PhoneClipTile
+            key={`ghost-${ghost.id}`}
+            clip={ghost}
+            lane={lane}
+            selected
+            ghost
+            zoom={zoom}
+            windowStart={timeWindow.start}
+            windowEnd={timeWindow.end}
+            visualsVersion={visualsVersion}
+            thumbnailAspect={thumbnailAspect}
+          />
+        )}
+      </div>
+      {handleClip && (
+        <div className="phone-trim-layer" style={{ top: lane.top, height: lane.height }}>
+          <PhoneTrimHandles
+            clip={handleClip}
+            zoom={zoom}
+            laneHeight={lane.height}
+            windowStart={timeWindow.start}
+            windowEnd={timeWindow.end}
+            activeEdge={preview?.kind === 'trim' && preview.clipId === handleClip.id ? preview.edge : undefined}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -68,6 +127,10 @@ interface PhoneClipTileProps {
   clip: TimelineClip;
   lane: PhoneLane;
   selected: boolean;
+  /** Original position of a clip that is being dragged (drawn dimmed). */
+  dragSource?: boolean;
+  /** The dragged clip at its preview position: not focusable, not hit-testable. */
+  ghost?: boolean;
   zoom: number;
   windowStart: number;
   windowEnd: number;
@@ -76,7 +139,7 @@ interface PhoneClipTileProps {
 }
 
 const PhoneClipTile = memo(function PhoneClipTile({
-  clip, lane, selected, zoom, windowStart, windowEnd, visualsVersion, thumbnailAspect,
+  clip, lane, selected, dragSource = false, ghost = false, zoom, windowStart, windowEnd, visualsVersion, thumbnailAspect,
 }: PhoneClipTileProps) {
   const clipEnd = clip.startTime + clip.duration;
   const portionStart = Math.max(clip.startTime, windowStart);
@@ -105,16 +168,19 @@ const PhoneClipTile = memo(function PhoneClipTile({
         selected ? 'phone-clip--selected' : '',
         cutLeft ? 'phone-clip--cut-left' : '',
         cutRight ? 'phone-clip--cut-right' : '',
+        dragSource ? 'phone-clip--drag-source' : '',
+        ghost ? 'phone-clip--ghost' : '',
       ].filter(Boolean).join(' ')}
-      role="option"
-      tabIndex={0}
-      aria-selected={selected}
-      aria-label={clip.name}
-      data-testid={PHONE_TEST_IDS.clip}
+      role={ghost ? undefined : 'option'}
+      tabIndex={ghost ? undefined : 0}
+      aria-selected={ghost ? undefined : selected}
+      aria-hidden={ghost ? true : undefined}
+      aria-label={ghost ? undefined : clip.name}
+      data-testid={ghost ? 'phone-clip-ghost' : PHONE_TEST_IDS.clip}
       data-clip-id={clip.id}
       data-track-id={clip.trackId}
       style={{ left, width, top: TILE_INSET_Y, height }}
-      onKeyDown={onKeyDown}
+      onKeyDown={ghost ? undefined : onKeyDown}
     >
       {lane.kind === 'video' && (
         <PhoneFilmstrip

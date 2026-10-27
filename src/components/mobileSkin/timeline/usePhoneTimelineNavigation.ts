@@ -3,6 +3,8 @@
 // one finger vertical = lane scroll, two fingers = pinch zoom, short tap = select/deselect.
 // While playing, the content follows the live playhead under the fixed centre marker without
 // seeking. The phone scroll is derived from the centre time and never written to the desktop.
+// Clip edit gestures (trim handles, long-press move) run in usePhoneClipEditGesture; pointers they
+// own are yielded here so they never pan, pinch or tap.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
@@ -12,6 +14,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { stepTimeByFrames } from '../../../utils/timelineFrameQuantization';
 import { selectPhoneClip } from '../actions/phoneCutActions';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { usePhoneClipEditGesture } from './usePhoneClipEditGesture';
 import {
   alignTimeToFrame, clampPhoneZoom, clampTime, hitTestClip, overscanWindow, pinchScroll,
   scrollForTime, windowNeedsRefresh,
@@ -83,6 +86,17 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
   const gestureRef = useRef({ x: 0, y: 0, t0: 0, centre: 0, vScroll: 0, zoom: 0, dist: 1, midX: 0, dragging: false });
   const seekRef = useRef<{ time: number | null; raf: number | null }>({ time: null, raf: null });
   const zoomRafRef = useRef<{ zoom: number | null; raf: number | null }>({ zoom: null, raf: null });
+
+  const editArbiter = usePhoneClipEditGesture({
+    surfaceRef,
+    lanesViewportRef: options.layers.lanesViewport,
+    getContext: () => ({
+      zoom: zoomRef.current,
+      frameRate: optsRef.current.frameRate,
+      vScroll: vScrollRef.current,
+      lanes: optsRef.current.lanes,
+    }),
+  });
 
   const view = useCallback((): PhoneTimelineView => ({
     width: optsRef.current.width,
@@ -188,6 +202,8 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
     };
     const onDown = (event: PointerEvent) => {
       if (event.pointerType === 'mouse' && event.button !== 0) return;
+      // Trim handles and running edit gestures own their pointers (a second finger cancels them).
+      if (editArbiter.claimsPointerDown(event) || editArbiter.isActive()) return;
       try { surface.setPointerCapture(event.pointerId); } catch { /* pointer already gone */ }
       const point = local(event);
       pointersRef.current.set(event.pointerId, point);
@@ -202,6 +218,11 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
     };
     const onMove = (event: PointerEvent) => {
       if (!pointersRef.current.has(event.pointerId)) return;
+      if (editArbiter.consumedPointer(event.pointerId)) {
+        // A long-press turned this pointer into a clip drag: stop treating it as pan or tap.
+        if (modeRef.current === 'pending') modeRef.current = 'ignored';
+        return;
+      }
       const point = local(event);
       pointersRef.current.set(event.pointerId, point);
       const g = gestureRef.current;
@@ -251,7 +272,7 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
         modeRef.current = 'idle';
       }
       if (pointersRef.current.size > 0) return;
-      if (mode === 'pending' && !cancelled && performance.now() - g.t0 <= TAP_MAX_MS) {
+      if (mode === 'pending' && !cancelled && !editArbiter.consumedPointer(event.pointerId) && performance.now() - g.t0 <= TAP_MAX_MS) {
         handleTap(event.clientX, event.clientY);
       }
       if (g.dragging) {
@@ -274,6 +295,8 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
       scheduleSeek(alignTimeToFrame(centreRef.current, optsRef.current.frameRate));
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      // Trim handles use the arrow keys to trim by a frame.
+      if (event.target instanceof Element && event.target.closest('[data-phone-trim-edge]')) return;
       if (event.key === 'Escape') { selectPhoneClip(null); return; }
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
@@ -302,7 +325,7 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
         storeState().setDraggingPlayhead(false);
       }
     };
-  }, [applyTransform, beginDrag, commitSeek, handleTap, scheduleSeek, scheduleZoom, surfaceRef]);
+  }, [applyTransform, beginDrag, commitSeek, editArbiter, handleTap, scheduleSeek, scheduleZoom, surfaceRef]);
 
   // Zoom from the store (pinch commit, other controls) and width changes re-layout the window.
   useLayoutEffect(() => {
@@ -313,7 +336,8 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
   // Follow the playhead: per animation frame while playing, on store changes while paused.
   useEffect(() => {
     let raf: number | null = null;
-    const userGesture = () => modeRef.current === 'pan' || modeRef.current === 'pinch';
+    // Trim previews seek the playhead to the dragged edge; the content must not follow those seeks.
+    const userGesture = () => modeRef.current === 'pan' || modeRef.current === 'pinch' || editArbiter.isActive();
     const follow = (time: number) => {
       if (userGesture()) return;
       const end = Math.max(optsRef.current.contentEnd, storeState().duration);
@@ -346,7 +370,7 @@ export function usePhoneTimelineNavigation(options: UsePhoneTimelineNavigationOp
       unsubPlaying();
       unsubPosition();
     };
-  }, [applyTransform]);
+  }, [applyTransform, editArbiter]);
 
   useEffect(() => () => {
     if (seekRef.current.raf !== null) cancelAnimationFrame(seekRef.current.raf);

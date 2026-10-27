@@ -1,0 +1,83 @@
+/* Project sheet and storage indicator of the phone skin (scoped beneath .mobile-skin). */
+.mobile-skin .phone-storage-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  color: var(--phone-text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.mobile-skin .phone-storage-status:active { background: var(--phone-surface-3); }
+.mobile-skin .phone-storage-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4cc38a;
+  flex: none;
+}
+.mobile-skin .phone-storage-status[data-phase='saving'] .phone-storage-status__dot { background: var(--phone-accent); }
+.mobile-skin .phone-storage-status[data-phase='pending'] .phone-storage-status__dot { background: #e5b454; }
+.mobile-skin .phone-storage-status[data-phase='failed'] { color: var(--phone-danger); }
+.mobile-skin .phone-storage-status[data-phase='failed'] .phone-storage-status__dot { background: var(--phone-danger); }
+
+.mobile-skin .phone-project-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mobile-skin .phone-project-sheet__label {
+  color: var(--phone-text-dim);
+  font-size: 13px;
+}
+.mobile-skin .phone-project-sheet__input {
+  min-height: 44px;
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--phone-border);
+  border-radius: 10px;
+  background: var(--phone-surface-2);
+  color: var(--phone-text);
+  font: inherit;
+  font-size: 16px; /* 16px keeps iOS from zooming into the field */
+}
+.mobile-skin .phone-project-sheet__input:focus { outline: none; }
+.mobile-skin .phone-project-sheet__input:focus-visible,
+.mobile-skin .phone-project-sheet__input:focus {
+  border-color: var(--phone-accent);
+}
+.mobile-skin .phone-project-sheet__input[aria-invalid='true'] { border-color: var(--phone-danger); }
+.mobile-skin .phone-project-sheet__error {
+  min-height: 18px;
+  margin: 0;
+  color: var(--phone-danger);
+  font-size: 13px;
+}
+.mobile-skin .phone-project-sheet__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mobile-skin .phone-project-sheet__meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+}
+.mobile-skin .phone-project-sheet__button {
+  min-height: 48px;
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 12px;
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
+  font-weight: 600;
+}
+.mobile-skin .phone-project-sheet__button:active { background: var(--phone-border); }
+.mobile-skin .phone-project-sheet__button[aria-disabled='true'] { color: var(--phone-text-off); }
