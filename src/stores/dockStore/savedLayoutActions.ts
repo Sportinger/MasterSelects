@@ -33,6 +33,7 @@ import {
   preserveTimelinePanelHeightRatio,
 } from './timelinePanelHeight';
 import { isWorkspaceOverLayoutId } from './overLayoutMode';
+import { isLegacyMobileDockLayoutEnabled, isLegacyMobileLayoutTree } from './legacyMobileLayout';
 
 const log = Logger.create('DockStore');
 const LEGACY_DEFAULT_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default';
@@ -341,7 +342,11 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
     if (currentLayoutIsStart || currentLayoutIsOverLayout) return;
 
     const browserWindowPanels = get().browserWindowPanels;
-    const projectLayoutIsStart = nodeContainsPanelType(layout.root, 'start');
+    // A project saved while the legacy Mobile layout was on stores its Mobile tree; with the legacy
+    // layout switched off, such a tree opens as the normal video layout instead of bringing it back.
+    const projectLayoutIsLegacyMobile = !isLegacyMobileDockLayoutEnabled() && isLegacyMobileLayoutTree(layout);
+    if (projectLayoutIsLegacyMobile) log.info('Project dock layout is the legacy Mobile layout; opening the video layout instead');
+    const projectLayoutIsStart = nodeContainsPanelType(layout.root, 'start') || projectLayoutIsLegacyMobile;
     const cleanedLayout = removeBrowserWindowPanelsFromLayout(
       cleanupPersistedLayout(projectLayoutIsStart ? cloneDockLayout(getCurrentThemeVideoEditLayout()) : layout),
       browserWindowPanels,

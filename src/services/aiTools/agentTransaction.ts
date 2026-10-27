@@ -1,5 +1,5 @@
 import { getEditorRepositorySession, beginEditorTransaction, commitEditorTransaction, cancelEditorTransaction,
-  ownsEditorTransaction, runEditorTransaction, captureEditorTransactionAcrossAwaits } from '../project/repository/transaction/editorMutationRuntime';
+  ownsEditorTransaction, runEditorTransaction } from '../project/repository/transaction/editorMutationRuntime';
 import type { TransactionToken } from '../project/repository/transaction/ProjectTransactionCoordinator';
 import { agentRequestRevisionSource } from '../project/repository/transaction/historyNavigationPlan';
 import {
@@ -332,9 +332,22 @@ export function isAgentTransactionOpen(): boolean {
   return openTransactionIds.size > 0;
 }
 
-/** Multi-step tools (executeBatch) also capture awaited store mutations into their transaction. */
-export function captureAgentTransactionAcrossAwaits<T>(transaction: AgentTransaction | null, action: () => Promise<T>): Promise<T> {
-  return transaction?.repositoryToken ? captureEditorTransactionAcrossAwaits(transaction.repositoryToken, action) : action();
+/**
+ * Editor writes of a request that are no tool call (stream bookkeeping such as removing a replaced scene run or
+ * storing the scene document) as a transaction of that request, so they join its Undo step instead of forming
+ * their own steps. Synchronous on purpose: only `action`'s writes join, nothing that runs meanwhile.
+ */
+export function runAgentRequestWrites<T>(label: string, requestId: string | null | undefined, action: () => T): T {
+  const transaction = beginAgentTransaction(label, { requestId });
+  let value: T;
+  try {
+    value = runWithAgentTransaction(transaction, action);
+  } catch (error) {
+    abortAgentTransaction(transaction);
+    throw error;
+  }
+  commitAgentTransaction(transaction);
+  return value;
 }
 
 /** Atomic tool execution must enter only the transaction that initiated it. */

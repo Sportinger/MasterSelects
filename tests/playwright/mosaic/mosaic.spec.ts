@@ -16,36 +16,41 @@ import { describeFailures, type MosaicSource, type MosaicTile, type TileResult }
  * Catalog cases (`@case:`) are given where the catalog already has one with this
  * oracle; the other cases are new.
  *
- * Known product defects found by this spec (2026-10-27), each kept visible on its case:
+ * Product defects found by this spec (2026-10-27), fixed; the cases are normal tests again:
+ * - REVERSE_PAUSED_BEFORE_KEYFRAME: the paused preview showed nothing for a reversed
+ *   clip whose selected source frame is the last one before a keyframe (T11b at frame
+ *   60, source frame 59 of a 1-s GOP). The frame-exact HTML seek sat 5 µs before the
+ *   keyframe, the demuxer rounded it onto the keyframe and Chromium presented frame 60,
+ *   which the paused guard rightly refused; htmlVideoFrameSeekTime
+ *   (src/services/layerBuilder/videoSyncFrameSelection.ts) now keeps 1 ms clear of the
+ *   next frame (tests/unit/pausedFrameExactSeek.test.ts).
  * - NESTED_SMALL_COMP_PREVIEW: a composition smaller than its parent, nested right
- *   after it was filled, shows only its leftmost column stretched across the layer in
- *   the paused preview; the export renders it correctly (T09a).
- * - REVERSE_PAUSED_BEFORE_KEYFRAME: the paused preview shows nothing for a reversed
- *   clip whose selected source frame is the last one before a keyframe (T11b at
- *   frame 60 shows source frame 59 of a 1-s GOP; stays empty for more than 12 s).
- * - EXPORT_REVERSE_OFF_BY_ONE: the Fast export shows source frame 120 − N instead of
- *   119 − N for a reversed clip, i.e. the frame starting at the boundary instead of
- *   the one left of it (contract: src/services/timeline/retime/clipRetime.ts:173-180).
- * - EXPORT_STALE_LAYER_FRAMES: with about a dozen video layers the Fast export shows
- *   a neighbouring (mostly previous) source frame on some layers for one to four
- *   frames, without counting a previous-frame fallback. The video clock shows 59 at
- *   frames 60-62 in every run; other layers are hit at varying frames.
+ *   after it was filled, showed only its leftmost column stretched in the paused preview
+ *   (T09a). The new nested element found scrub frames cached by the inner composition's
+ *   element before it had metadata and reported them as 0×0; the compositor's 0/0 aspect
+ *   (NaN) was uploaded once and never replaced, because the uniform change check missed
+ *   NaN (src/engine/pipeline/compositor/uniforms.ts, src/engine/render/compositeSourceSize.ts,
+ *   src/engine/render/nestedComp/htmlVideoPreview.ts).
+ * - EXPORT_REVERSE_OFF_BY_ONE: the Fast export showed source frame 120 − N instead of
+ *   119 − N for a reversed clip. Frame selection picked the nearest timestamp instead
+ *   of the frame whose half-open interval contains the time
+ *   (src/engine/parallelDecode/presentationFrame.ts).
+ * - EXPORT_STALE_LAYER_FRAMES: with about a dozen video layers the Fast export showed a
+ *   neighbouring source frame on some layers (clock 59 at frames 60-62). Parallel
+ *   decode counted a neighbour within three frames as ready and returned it; it now
+ *   waits for the exact frame and counts any substitution as a previous-frame fallback.
  */
 const DEFECT = {
-  nestedSmallCompPreview: 'NESTED_SMALL_COMP_PREVIEW: a nested composition smaller than its parent shows only its leftmost column, stretched, in the paused preview',
-  reversePausedBeforeKeyframe: 'REVERSE_PAUSED_BEFORE_KEYFRAME: paused preview is empty for a reversed clip on the last source frame before a keyframe',
-  exportReverseOffByOne: 'EXPORT_REVERSE_OFF_BY_ONE: Fast export shows source frame 120-N instead of 119-N for a reversed clip',
   exportStaleLayerFrames: 'EXPORT_STALE_LAYER_FRAMES: Fast export shows a neighbouring source frame on some video layers without counting a fallback',
 } as const
 
 /**
- * While EXPORT_STALE_LAYER_FRAMES is open, a tile's export case tolerates its
- * isolated stale frames (at most this many frames, each within ±10 source frames
- * of the expected one, i.e. up to five composition frames on a 60 fps source) and
- * lists them as an annotation. The strict per-frame check
- * stays on the video clock (marked with the defect). Set to 0 when the defect is fixed.
+ * Stale frames (each within ±10 source frames of the expected one) a tile's export
+ * case would tolerate and annotate as EXPORT_STALE_LAYER_FRAMES. The defect is fixed,
+ * so the budget is 0 and every stale frame fails its tile; raise it only together
+ * with a newly found, named defect.
  */
-const KNOWN_STALE_FRAME_BUDGET = 16
+const KNOWN_STALE_FRAME_BUDGET = 0
 
 const test = base.extend<object, { mosaic: MosaicResults }>({
   mosaic: [async ({ browser }, provide, workerInfo) => {
@@ -92,8 +97,6 @@ test('mosaic clocks in the paused preview: C1 shows each checkpoint frame and th
 })
 
 test('mosaic clocks in the export: every frame 0-119 exactly once in order, ruler on its keys, no repeated previous frame @module:export @tier:nightly @case:export.fast.lim-frame-sequence', async ({ mosaic }, testInfo) => {
-  // 2026-10-27: C1 shows frame 59 at frames 60-62 in every run (see EXPORT_STALE_LAYER_FRAMES above).
-  test.fail(true, DEFECT.exportStaleLayerFrames)
   await testInfo.attach('export-info.json', { body: JSON.stringify(mosaic.exportInfo ?? null, null, 1), contentType: 'application/json' })
   expect(mosaic.exportInfo?.previousFrameFallbacks ?? 0, 'the exporter repeated a previous frame instead of rendering it').toBe(0)
   await judge(mosaic, testInfo, 'clock', 'export', { strictFrames: true })
@@ -142,8 +145,6 @@ test('T06 rectangle mask with feather in the export @module:masks @tier:nightly 
 })
 
 test('T09a nested 352x224 composition at 60 fps in the paused preview: inner frame 2N+60 and the outer strip N @module:nested-compositions @tier:nightly', async ({ mosaic }, testInfo) => {
-  // 2026-10-27: the inner composition shows its leftmost column stretched at every checkpoint; the export is right.
-  test.fail(true, DEFECT.nestedSmallCompPreview)
   await judge(mosaic, testInfo, 'T09a', 'preview')
 })
 
@@ -168,13 +169,9 @@ test('T11a speed 2 in the export: every second source frame, none doubled @modul
 })
 
 test('T11b reverse in the paused preview: source frame 119-N @module:timeline-editing @tier:nightly', async ({ mosaic }, testInfo) => {
-  // 2026-10-27: empty at checkpoint 60 (source frame 59, the last before the keyframe at 60).
-  test.fail(true, DEFECT.reversePausedBeforeKeyframe)
   await judge(mosaic, testInfo, 'T11b', 'preview')
 })
 
 test('T11b reverse in the export: source frame 119-N @module:export @tier:nightly', async ({ mosaic }, testInfo) => {
-  // 2026-10-27: 119 of 120 frames show 120-N.
-  test.fail(true, DEFECT.exportReverseOffByOne)
   await judge(mosaic, testInfo, 'T11b', 'export')
 })

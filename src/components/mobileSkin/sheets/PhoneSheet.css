@@ -1,12 +1,17 @@
 /* Bottom sheets. Rendered inside .phone-shell (portal), below the unavailable notice and toast. */
 
-/* Backdrop: transparent on purpose, the preview above the sheet must stay clearly visible. */
+/* Backdrop: transparent on purpose, the preview above the sheet must stay clearly visible. It catches
+   touches on the top bar (close) and on the preview (ignored, PhoneSheet.tsx); the docked transport
+   sits above it. */
 .mobile-skin .phone-sheet-backdrop {
   position: absolute;
   inset: 0;
   z-index: 40;
 }
 
+/* Content-fit: height follows the content up to the cap of the sheet's detent. The cap is set inline as
+   max-height (and as height for 'fill' sheets) by usePhoneSheetDetent from PHONE_SHEET_SIZES; the
+   fallback below holds until that first layout effect ran. */
 .mobile-skin .phone-sheet {
   position: absolute;
   z-index: 41;
@@ -18,7 +23,8 @@
   width: 100%;
   max-width: 560px;
   margin: 0 auto;
-  height: calc(var(--phone-vh, 100dvh) * 0.45);
+  height: auto;
+  max-height: calc(var(--phone-vh, 100dvh) * 0.45);
   background: var(--phone-surface-2);
   border: 1px solid var(--phone-border);
   border-bottom: 0;
@@ -29,9 +35,37 @@
   touch-action: manipulation;
   outline: none;
 }
-.mobile-skin .phone-sheet[data-height='tall'] {
-  height: calc(var(--phone-vh, 100dvh) * 0.75);
+
+/* Grab handle: a 36x5 bar in a full-width 20 px strip; its hit area reaches 12 px above the sheet. Tap
+   toggles the size, drag moves between detents (down past the smallest closes), arrow keys step. */
+.mobile-skin .phone-sheet__grabber {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 20px;
+  border-radius: 16px 16px 0 0;
+  touch-action: none;
+  cursor: grab;
 }
+.mobile-skin .phone-sheet__grabber::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -12px;
+  height: 12px;
+}
+.mobile-skin .phone-sheet__grabber-bar {
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--phone-text-off);
+}
+.mobile-skin .phone-sheet__grabber:active .phone-sheet__grabber-bar { background: var(--phone-text-dim); }
+.mobile-skin .phone-sheet__grabber:focus-visible { outline-offset: -2px; border-radius: 16px 16px 0 0; }
 
 .mobile-skin .phone-sheet__header {
   flex: 0 0 auto;
@@ -39,9 +73,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 52px;
+  min-height: 48px;
   padding: 0 6px;
   border-bottom: 1px solid var(--phone-border);
+  touch-action: none;
 }
 .mobile-skin .phone-sheet__title {
   flex: 1 1 auto;
@@ -85,13 +120,13 @@
   -webkit-user-select: text;
 }
 
-/* Shrink, never hide: while a sheet is open the preview takes the room above it. */
+/* Shrink, never hide: while a sheet is open the transport docks on top of the sheet and the preview
+   takes the room between the top strips and the transport. --phone-sheet-h is the settled sheet height,
+   --phone-sheet-live-h follows a handle drag (usePhoneSheetDetent). The caps keep the preview at least
+   30 % of the visual viewport (phoneSheetSizing.ts). Not while the home covers the strips. */
 .mobile-skin .phone-shell:has(.phone-sheet) {
-  --phone-sheet-h: calc(var(--phone-vh, 100dvh) * 0.45);
   --phone-sheet-top-strips: calc(var(--phone-safe-top) + var(--phone-top-h) + var(--phone-tabs-h) + 1px);
-}
-.mobile-skin .phone-shell:has(.phone-sheet[data-height='tall']) {
-  --phone-sheet-h: calc(var(--phone-vh, 100dvh) * 0.75);
+  --phone-sheet-bottom: calc(var(--phone-keyboard-inset, 0px) + var(--phone-sheet-h, calc(var(--phone-vh, 100dvh) * 0.45)));
 }
 .mobile-skin .phone-shell:has(.phone-sheet) .phone-shell__preview {
   position: fixed;
@@ -99,8 +134,16 @@
   top: var(--phone-sheet-top-strips);
   left: var(--phone-safe-left);
   right: var(--phone-safe-right);
-  height: max(96px, calc(var(--phone-vh, 100dvh) - var(--phone-sheet-h) - var(--phone-sheet-top-strips)));
+  height: max(0px, calc(var(--phone-vh, 100dvh) - var(--phone-sheet-bottom) - var(--phone-transport-h) - var(--phone-sheet-top-strips)));
   min-height: 0;
+}
+.mobile-skin .phone-shell:not(:has(.phone-home)):has(.phone-sheet) .phone-transport {
+  position: fixed;
+  z-index: 42;
+  left: var(--phone-safe-left);
+  right: var(--phone-safe-right);
+  top: calc(var(--phone-vh, 100dvh) - var(--phone-keyboard-inset, 0px) - var(--phone-sheet-live-h, var(--phone-sheet-h, calc(var(--phone-vh, 100dvh) * 0.45))) - var(--phone-transport-h));
+  border-bottom: 0;
 }
 
 /* Top bar entries that open sheets (project name, export) need a full touch target. */

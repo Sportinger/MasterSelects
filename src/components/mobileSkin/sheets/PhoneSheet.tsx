@@ -1,25 +1,50 @@
-// Frame of every bottom sheet: backdrop, header (Cancel, title, Done) and a scrolling body.
-// Cancel and Escape and a backdrop tap all call onCancel; Done calls onDone. The sheet owns focus:
-// it moves in on open and returns to the opener on close. The preview above stays visible.
+// Frame of every bottom sheet: backdrop, grab handle, header (Cancel, title, Done) and a scrolling body.
+// Cancel, Escape, a tap on the top bar area and a drag of the handle down past the smallest detent call
+// onCancel; Done calls onDone. A touch on the preview never closes a sheet (that would throw its edits
+// away). The sheet sizes to its content up to the cap from PHONE_SHEET_SIZES (phoneSheetSizing.ts);
+// the transport stays docked above it and the preview takes the room above that.
+// The sheet owns focus: it moves in on open and returns to the opener on close.
 
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, type KeyboardEvent, type PointerEvent } from 'react';
 import { PHONE_TEST_IDS, type PhoneSheetProps } from '../contracts';
+import { usePhoneSheetId } from './phoneSheetContext';
+import { PHONE_SHEET_DETENT_LABELS, PHONE_SHEET_FRAME_TEST_IDS, phoneSheetSizeFor, type PhoneSheetSize } from './phoneSheetSizing';
+import { usePhoneSheetDetent } from './usePhoneSheetDetent';
 import './PhoneSheet.css';
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+interface PhoneSheetFrameProps extends PhoneSheetProps {
+  /**
+   * Overrides the PHONE_SHEET_SIZES entry while the sheet shows this content, for a sheet whose
+   * content changes kind (Notation: a small empty state, then a full-height score editor).
+   */
+  size?: PhoneSheetSize;
+  /**
+   * The placeholder frame while a sheet's code loads. It is not the sheet yet, so it carries its own
+   * test id: waiting for the sheet waits for the real one, whose box then stays put.
+   */
+  loading?: boolean;
+}
+
 export function PhoneSheet({
   title,
   height = 'half',
+  size: sizeOverride,
+  loading = false,
   onCancel,
   onDone,
   doneLabel = 'Done',
   doneDisabled = false,
   cancelLabel = 'Cancel',
   children,
-}: PhoneSheetProps) {
+}: PhoneSheetFrameProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const sheetId = usePhoneSheetId();
+  const size = sizeOverride ?? phoneSheetSizeFor(sheetId, height);
+  const sizing = usePhoneSheetDetent(panelRef, bodyRef, sheetId, size, onCancel);
   const cancelRef = useRef(onCancel);
   cancelRef.current = onCancel;
   const titleId = useId();
@@ -64,8 +89,17 @@ export function PhoneSheet({
     }
   };
 
+  // Outside taps close the sheet only above the preview (top bar, composition tabs) or over the home.
+  const onBackdropPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const shell = event.currentTarget.closest('.phone-shell');
+    const preview = shell?.querySelector<HTMLElement>('.phone-shell__preview');
+    const overHome = Boolean(shell?.querySelector('.phone-home'));
+    if (overHome || !preview || event.clientY < preview.getBoundingClientRect().top) onCancel();
+  };
+
+  const sizeLabel = PHONE_SHEET_DETENT_LABELS[sizing.detent];
   return (
-    <div className="phone-sheet-backdrop" onPointerDown={onCancel}>
+    <div className="phone-sheet-backdrop" onPointerDown={onBackdropPointerDown}>
       <div
         ref={panelRef}
         className="phone-sheet"
@@ -73,12 +107,26 @@ export function PhoneSheet({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        data-height={height}
-        data-testid={PHONE_TEST_IDS.sheet}
+        data-height={size}
+        data-detent={sizing.detent}
+        data-sheet-id={sheetId ?? undefined}
+        aria-busy={loading || undefined}
+        data-testid={loading ? PHONE_SHEET_FRAME_TEST_IDS.loading : PHONE_TEST_IDS.sheet}
         onPointerDown={(event) => event.stopPropagation()}
         onKeyDown={onPanelKeyDown}
       >
-        <header className="phone-sheet__header">
+        <button
+          type="button"
+          className="phone-sheet__grabber"
+          aria-label={`Sheet size: ${sizeLabel}. Tap to resize, or use the up and down arrow keys`}
+          aria-keyshortcuts="ArrowUp ArrowDown"
+          data-testid={PHONE_SHEET_FRAME_TEST_IDS.grabber}
+          data-detent={sizing.detent}
+          {...sizing.grabberProps}
+        >
+          <span className="phone-sheet__grabber-bar" aria-hidden="true" />
+        </button>
+        <header className="phone-sheet__header" {...sizing.headerDragProps}>
           <button
             type="button"
             className="phone-sheet__action"
@@ -104,7 +152,7 @@ export function PhoneSheet({
             <span className="phone-sheet__action-spacer" aria-hidden="true" />
           )}
         </header>
-        <div className="phone-sheet__body">{children}</div>
+        <div ref={bodyRef} className="phone-sheet__body">{children}</div>
       </div>
     </div>
   );

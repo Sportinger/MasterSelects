@@ -61,6 +61,8 @@ export const PHONE_TIMELINE_TOOLS_TEST_IDS = {
 
 export const PHONE_CLIP_DETAILS_TEST_IDS = {
   root: 'phone-clipdetails',
+  /** Empty state: selects the clip under the playhead. */
+  selectAtPlayhead: 'phone-clipdetails-select-at-playhead',
   message: 'phone-clipdetails-message',
   name: 'phone-clipdetails-name',
   rename: 'phone-clipdetails-rename',

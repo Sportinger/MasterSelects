@@ -1,4 +1,5 @@
 import { useMediaStore } from '../../../stores/mediaStore';
+import { captureToolTransaction } from '../toolTransaction';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getTimelineRevision } from '../../../stores/timeline/revisionMiddleware';
 import type { TimelineClip, TimelineTrack } from '../../../types';
@@ -205,6 +206,8 @@ export async function handleCreateEditableTitleStack(
     : finiteInRange(args.duration, 'duration', Number.EPSILON, Number.MAX_SAFE_INTEGER);
   if (duration instanceof Error) return failure(duration.message);
 
+  // Rows are created one after another across awaits: each step enters this tool's transaction explicitly.
+  const transaction = captureToolTransaction('createEditableTitleStack');
   const composition = useMediaStore.getState().getActiveComposition();
   const compositionWidth = composition?.width ?? 1920;
   const compositionHeight = composition?.height ?? 1080;
@@ -238,7 +241,7 @@ export async function handleCreateEditableTitleStack(
   for (const [index, row] of rows.entries()) {
     const shapeX = row.box.x + row.box.width / 2 - compositionWidth / 2;
     const shapeY = row.box.y + row.box.height / 2 - compositionHeight / 2;
-    const backplateResult = await handleCreateMotionShapeClip({
+    const backplateResult = await transaction.run(() => handleCreateMotionShapeClip({
       trackId: backplateTracks[index].id,
       name: `${row.name ?? row.text} Backplate`,
       primitive: 'rectangle',
@@ -250,10 +253,10 @@ export async function handleCreateEditableTitleStack(
       height: row.box.height + row.backplate.paddingY * 2,
       cornerRadius: row.backplate.cornerRadius,
       fill: { color: row.backplate.color, opacity: row.backplate.opacity },
-    }, useTimelineStore.getState());
+    }, transaction.bindStore(useTimelineStore.getState())));
     if (!backplateResult.success) return backplateResult;
 
-    const textResult = await handleCreateTextClip({
+    const textResult = await transaction.run(() => handleCreateTextClip({
       trackId: textTracks[index].id,
       startTime,
       duration,
@@ -270,7 +273,7 @@ export async function handleCreateEditableTitleStack(
       boxWidth: row.box.width,
       boxHeight: row.box.height,
       ...row.textStyle,
-    }, useTimelineStore.getState());
+    }, transaction.bindStore(useTimelineStore.getState())));
     if (!textResult.success) return textResult;
 
     createdRows.push({

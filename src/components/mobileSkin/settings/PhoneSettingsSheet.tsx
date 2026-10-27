@@ -8,6 +8,7 @@ import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { isLegacyMobileDockLayoutEnabled } from '../../../stores/dockStore/legacyMobileLayout';
 import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
 import { projectFileService } from '../../../services/projectFileService';
 import { saveCurrentProject } from '../../../services/projectSync';
@@ -142,15 +143,17 @@ export const PhoneSettingsSheet: PhoneSheetComponent = () => {
         <div className="phone-settings__group" role="radiogroup" aria-label="Transcription provider">
           {PHONE_TRANSCRIPTION_PROVIDERS.map((provider) => {
             const availability = phoneTranscriptionAvailability(provider.id, hosted);
+            // One radio mark, on the engine that actually runs: a stored hosted engine without an account falls back to local.
+            const effective = phoneTranscriptionAvailability(draft.transcriptionProvider, hosted).ok ? draft.transcriptionProvider : 'local';
             return (
-              <button key={provider.id} type="button" role="radio" className="phone-settings__toggle" data-testid={IDS.transcription}
-                data-provider={provider.id} aria-checked={draft.transcriptionProvider === provider.id} aria-disabled={!availability.ok}
+              <button key={provider.id} type="button" role="radio" className="phone-settings__toggle phone-settings__radio" data-testid={IDS.transcription}
+                data-provider={provider.id} aria-checked={effective === provider.id} aria-disabled={!availability.ok}
                 onClick={() => {
                   if (!availability.ok) { report({ ok: false, message: availability.reason }); return; }
                   set('transcriptionProvider', provider.id);
                 }}>
                 <span>{provider.label}<small>{provider.description}</small></span>
-                <span className="phone-settings__state">{draft.transcriptionProvider === provider.id ? '●' : ''}</span>
+                <span className="phone-settings__radio-mark" aria-hidden="true" />
               </button>
             );
           })}
@@ -162,8 +165,11 @@ export const PhoneSettingsSheet: PhoneSheetComponent = () => {
           checked={draft.deselectClipOnRepeatClick} onChange={(next) => set('deselectClipOnRepeatClick', next)} />
         <Toggle testId={IDS.zoomAnchor} label="Zoom around the playhead" hint="Full editor; off zooms around the pointer"
           checked={draft.timelineZoomAnchor === 'playhead'} onChange={(next) => set('timelineZoomAnchor', next ? 'playhead' : 'mouse')} />
-        <Toggle testId={IDS.autoMobileLayout} label="Compact layout on small windows" hint="Full editor"
-          checked={draft.automaticMobileLayoutEnabled} onChange={(next) => set('automaticMobileLayoutEnabled', next)} />
+        {/* The legacy Mobile dock layout is switched off (dockStore/legacyMobileLayout.ts): its toggle would do nothing. */}
+        {isLegacyMobileDockLayoutEnabled() && (
+          <Toggle testId={IDS.autoMobileLayout} label="Compact layout on small windows" hint="Full editor"
+            checked={draft.automaticMobileLayoutEnabled} onChange={(next) => set('automaticMobileLayoutEnabled', next)} />
+        )}
         <button type="button" className="phone-settings__toggle" data-testid={IDS.shortcuts} aria-disabled="true"
           onClick={() => showUnavailable({ actionId: 'settings-shortcuts', label: 'Keyboard shortcuts', reason: 'Keyboard shortcuts need a keyboard. Set them in the full editor on a computer.' })}>
           <span>Keyboard shortcuts<small>Needs a keyboard</small></span>

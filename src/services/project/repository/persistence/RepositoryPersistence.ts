@@ -1,5 +1,5 @@
 import { Logger } from '../../../logger';
-import { readStartupCache, writeStartupCache } from './startupCache';
+import { hasStartupCache, readStartupCache, writeStartupCache } from './startupCache';
 import { iterateRevisionChanges } from './revisionChanges';
 import { REPOSITORY_LIMITS, RepositoryError, type BlobReference, type CommitReference, type OperationReceipt, type RecordReference, type RepositoryBackend, type RepositoryDescriptor, type RepositoryMetadataIndex, type RepositoryOwner, type RevisionPayload } from '../contracts';
 import { canonicalBytes, frozenJson, hashRecord, hashBytes } from '../segments/canonical';
@@ -12,7 +12,23 @@ import { storeBlob } from './blobStorage';
 export type { PublicationBatch, PublicationResult, PublicationPointer } from './publication';
 export type { RecoveryResult } from './recovery';
 export { checkpointRecords } from './projection';
-export interface PersistenceOptions { sessionEpoch: string; index?: RepositoryMetadataIndex; onIndexError?: (error: unknown) => void; onIndexProgress?: () => void; }
+export interface PersistenceOptions {
+  sessionEpoch: string; index?: RepositoryMetadataIndex; onIndexError?: (error: unknown) => void; onIndexProgress?: () => void;
+  /** Shorter confirmed histories skip the startup cache (default STARTUP_CACHE_MIN_OPERATIONS). */
+  startupCacheMinOperations?: number;
+}
+/**
+ * Validating a short history in full costs about as much as validating its startup cache (which stats
+ * every history file too), so a new or small project does not pay for writing one: on phones every save
+ * point and every open of such a project spent extra file writes, read-backs and an IndexedDB put on it.
+ *
+ * The threshold only skips CREATING a cache. A short project that already has one (written before this
+ * threshold existed) keeps refreshing it like any other: otherwise every open would read the stale cache,
+ * stat its files and then validate the history beyond it, forever. Refreshing is the safer choice than
+ * deleting it, because it reuses the proven write path (atomic slot replace, read-back, attestation last)
+ * and adds no new code that removes files from a project location.
+ */
+export const STARTUP_CACHE_MIN_OPERATIONS = 16;
 interface QueuedPublication { batch: PublicationBatch; bytes: number; }
 
 export class RepositoryPersistence {
@@ -34,6 +50,8 @@ export class RepositoryPersistence {
   private readonly proofs = createRecoveryProofs();
   private startupCacheHealthy = true;
   private startupCacheSequence = -1;
+  /** A startup cache was already attested for this location; it is refreshed even below the threshold. */
+  private startupCacheExists = false;
   constructor(backend: RepositoryBackend, descriptor: RepositoryDescriptor, owner: RepositoryOwner, options: PersistenceOptions) {
     this.backend = backend; this.descriptor = frozenJson(descriptor); this.owner = owner; this.options = options;
     if (!backend.capabilities.immutableWrites || !backend.capabilities.ownership) throw new RepositoryError('unsupported', 'Backend cannot safely publish repository commits');
@@ -49,18 +67,24 @@ export class RepositoryPersistence {
     }, cached?.recovery, this.proofs, cached?.knownCommits);
     this.confirmedRecovery = result;
     this.startupCacheSequence = cached?.recovery.operationSequence ?? -1;
+    // Only a short history needs to know whether an (unusable) cache exists; longer ones refresh anyway.
+    this.startupCacheExists = cached !== null || (!!this.options.index && result.operationSequence < this.startupCacheMinimum()
+      && await hasStartupCache(this.options.index));
     this.head = result.head; this.operationSequence = result.operationSequence; this.checkpoints = result.checkpoints;
     this.recovered = true; return result;
   }
+  private startupCacheMinimum(): number { return this.options.startupCacheMinOperations ?? STARTUP_CACHE_MIN_OPERATIONS; }
   /** Explicit save/checkpoint only; dragging and individual publications never write a startup snapshot. */
   async saveStartupCache(): Promise<void> {
     const index = this.options.index;
     if (!index || !this.startupCacheHealthy) return;
     const save = async () => {
       if (!this.confirmedRecovery || this.startupCacheSequence === this.operationSequence) return;
+      if (!this.startupCacheExists && this.operationSequence < this.startupCacheMinimum()) return;
       try {
-        if (await writeStartupCache(this.backend, this.descriptor, this.owner, index, this.confirmedRecovery, this.proofs))
-          this.startupCacheSequence = this.operationSequence;
+        if (await writeStartupCache(this.backend, this.descriptor, this.owner, index, this.confirmedRecovery, this.proofs)) {
+          this.startupCacheSequence = this.operationSequence; this.startupCacheExists = true;
+        }
       } catch (error) { Logger.create('RepositoryStartupCache').warn('Startup cache unavailable; project remains saved', error); }
     };
     const job = this.tail.then(save, () => {}); this.tail = job; await job;
@@ -115,8 +139,15 @@ export class RepositoryPersistence {
     await this.owner.assertOwned();
     if (this.pending && this.pending.commit.batchId !== batch.batchId) throw new RepositoryError('io', 'Previous publication needs retry before later operations');
     if (!this.pending) {
-      const actual = await recoverRepository(this.backend, this.descriptor, signal, undefined, this.confirmedRecovery, this.proofs);
-      if (actual.head?.hash !== this.head?.hash || actual.head?.commitId !== this.head?.commitId) throw new RepositoryError('conflict', 'Repository head changed outside this writer');
+      // Backends with publishCommit repeat exactly this head check inside their serialized write queue, right
+      // before the commit pointer is written (predecessor bytes re-hashed, every commit listed), and the
+      // re-discovery after the write below confirms the unique head again. Discovering here as well only
+      // cost a commit listing per save; a foreign head is still refused before it can be extended (at worst
+      // after an unreferenced segment was written, which no commit names and recovery ignores).
+      if (!this.backend.publishCommit) {
+        const actual = await recoverRepository(this.backend, this.descriptor, signal, undefined, this.confirmedRecovery, this.proofs);
+        if (actual.head?.hash !== this.head?.hash || actual.head?.commitId !== this.head?.commitId) throw new RepositoryError('conflict', 'Repository head changed outside this writer');
+      }
       if (batch.lastOperation <= this.operationSequence) {
         const retry = await this.findPublishedBatch(batch, signal);
         if (retry) return retry;

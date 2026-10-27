@@ -55,4 +55,16 @@
   font-size: 15px;
 }
 .mobile-skin .phone-transition-sheet__apply-all[aria-pressed='true'] { border-color: var(--phone-accent); color: var(--phone-accent); }
-.mobile-skin .phone-transition-sheet__apply-all[aria-disabled='true'] { color: var(--phone-text-off); }
+.mobile-skin .phone-transition-sheet__apply-all[aria-disabled='true'] { opacity: 0.45; }
+
+/* Tiles show the desktop's animated transition previews (AnimatedTransitionPreview), never initials. */
+.mobile-skin .phone-transition-sheet__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mobile-skin .phone-transition-sheet .phone-choice__media { background: #1a1a1a; }
+.mobile-skin .phone-transition-sheet .transition-preview-animated,
+.mobile-skin .phone-transition-sheet .transition-preview-animated * { --transition-preview-play-state: running; }
+.mobile-skin .phone-transition-sheet__none {
+  width: 40%;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--phone-text-dim);
+}

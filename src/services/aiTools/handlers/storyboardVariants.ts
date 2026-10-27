@@ -1,4 +1,6 @@
 import { useMediaStore } from '../../../stores/mediaStore';
+import { captureToolTransaction } from '../toolTransaction';
+import { runEditorBackgroundWrite } from '../../project/repository/transaction/editorTransactionBinding';
 import { useStoryboardStore } from '../../../stores/storyboardStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import {
@@ -60,10 +62,11 @@ async function assertCurrentVariantBase(
     || fingerprints.boundary.algorithm !== variantSet.boundaryFingerprint.algorithm
     || fingerprints.boundary.value !== variantSet.boundaryFingerprint.value
   ) {
-    useStoryboardStore.getState().putVariantSet({
+    // A detected stale base stays recorded although the tool fails: a status fact, not an Undo step.
+    runEditorBackgroundWrite('Mark variant set stale', () => useStoryboardStore.getState().putVariantSet({
       ...variantSet,
       status: 'stale',
-    });
+    }));
     throw new Error(
       `Variant set ${variantSet.id} is stale because its base range or boundary changed.`,
     );
@@ -112,6 +115,8 @@ export async function handleCreateTimelineVariantSet(
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
   try {
+    // The set is stored after fingerprinting (an await), in this tool's transaction, carried explicitly.
+    const transaction = captureToolTransaction('createTimelineVariantSet');
     const timeline = useTimelineStore.getState();
     const media = useMediaStore.getState();
     const selection = timeline.timelineRangeSelection;
@@ -155,7 +160,7 @@ export async function handleCreateTimelineVariantSet(
     if (useStoryboardStore.getState().variantSets[variantSet.id]) {
       throw new Error(`Timeline variant set already exists: ${variantSet.id}`);
     }
-    useStoryboardStore.getState().putVariantSet(variantSet);
+    transaction.run(() => useStoryboardStore.getState().putVariantSet(variantSet));
     return { success: true, data: variantSet };
   } catch (error) {
     return failure(error);
@@ -208,12 +213,13 @@ export async function handleMaterializeTimelineVariantOption(
     if (variantSet.optionIds.length !== 3) {
       throw new Error('Materialization requires exactly three registered options.');
     }
+    const transaction = captureToolTransaction('materializeTimelineVariantOption');
     const rangeSnapshot = await assertCurrentVariantBase(variantSet);
-    const result = installMaterializedTimelineVariantOption({
+    const result = transaction.run(() => installMaterializedTimelineVariantOption({
       variantSet,
       option,
       rangeSnapshot,
-    });
+    }));
     return {
       success: true,
       data: {

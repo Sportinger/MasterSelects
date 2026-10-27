@@ -73,7 +73,7 @@
   font-size: 14px;
 }
 .mobile-skin .phone-region-cmd[data-danger] { color: var(--phone-danger-text); }
-.mobile-skin .phone-region-cmd[aria-disabled='true'] { color: var(--phone-text-off); background: var(--phone-surface-2); }
+.mobile-skin .phone-region-cmd[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-region-cmd:active { filter: brightness(1.1); }
 .mobile-skin .phone-region-cmd:focus,
 .mobile-skin .phone-region-stack__name:focus,

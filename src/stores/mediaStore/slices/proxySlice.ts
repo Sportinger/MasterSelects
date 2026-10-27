@@ -19,6 +19,7 @@ import {
   type ProxyJobController,
 } from './proxy/jobRegistry';
 import { isExternalProxySourceActive } from '../../../services/mediaRuntime/linkedMediaSourceRuntime';
+import { runEditorBackgroundWrite } from '../../../services/project/repository/transaction/editorTransactionBinding';
 
 const log = Logger.create('Proxy');
 
@@ -45,7 +46,12 @@ export interface ProxyActions {
   getNextFileNeedingProxy: () => MediaFile | undefined;
 }
 
-export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => ({
+export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => {
+  // Proxy, audio proxy and scene-cut job state (status, progress, results) is system state written as jobs
+  // run: each write is its own background revision, never an Undo step, and never part of a user's or an
+  // assistant's transaction that happens to be open when a job reports.
+  const jobSet: typeof set = (...args) => runEditorBackgroundWrite('Proxy job', () => set(...args));
+  return ({
   proxyEnabled: false,
 
   toggleProxyEnabled: () => {
@@ -108,7 +114,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
   },
 
   updateProxyProgress: (mediaFileId: string, progress: number) => {
-    set((state) => ({
+    jobSet((state) => ({
       files: state.files.map((f) =>
         f.id === mediaFileId ? { ...f, proxyProgress: progress } : f
       ),
@@ -118,7 +124,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
   setProxyStatus: async (mediaFileId: string, status: ProxyStatus) => {
     const { proxyEnabled } = get();
 
-    set((state) => ({
+    jobSet((state) => ({
       files: state.files.map((f) =>
         f.id === mediaFileId ? { ...f, proxyStatus: status } : f
       ),
@@ -187,7 +193,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       kind: 'proxy',
     };
     activeProxyGenerations.set(mediaFileId, controller);
-    set({ currentlyGeneratingProxyId: mediaFileId });
+    jobSet({ currentlyGeneratingProxyId: mediaFileId });
     log.info(`Starting generation for ${mediaFile.name}...`);
 
     const storageKey = mediaFile.fileHash || mediaFileId;
@@ -210,7 +216,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       ) {
         const frameCount = existingFrameIndices.size;
         log.debug('Already complete:', mediaFile.name);
-        set((s) => ({
+        jobSet((s) => ({
           files: s.files.map((f) =>
             f.id === mediaFileId
               ? {
@@ -234,7 +240,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       }
 
       // Inline setProxyStatus and updateProxyProgress
-      set((state) => ({
+      jobSet((state) => ({
         files: state.files.map((f) =>
           f.id === mediaFileId
             ? {
@@ -252,7 +258,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
 
       // Progress updater function
       const updateProgress = (progress: number) => {
-        set((state) => ({
+        jobSet((state) => ({
           files: state.files.map((f) =>
             f.id === mediaFileId
               ? {
@@ -274,7 +280,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
         shouldAnalyzeSceneCuts,
         (progress) => {
           if (!shouldAnalyzeSceneCuts) return;
-          set((state) => ({
+          jobSet((state) => ({
             files: state.files.map((file) =>
               file.id === mediaFileId
                 ? { ...file, sceneCutProgress: progress }
@@ -286,7 +292,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
 
       if (result && !controller.cancelled) {
         if (shouldAnalyzeSceneCuts) {
-          set((state) => ({
+          jobSet((state) => ({
             files: state.files.map((file) => {
               if (file.id !== mediaFileId) return file;
               if (result.sceneCutAnalysis) {
@@ -317,7 +323,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
             expected: getExpectedProxyFrameCount(mediaFile.duration, result?.fps ?? proxyFps),
             fps: result?.fps ?? proxyFps,
           });
-          set((state) => ({
+          jobSet((state) => ({
             files: state.files.map((f) =>
               f.id === mediaFileId ? { ...f, proxyStatus: 'error' as ProxyStatus } : f
             ),
@@ -329,7 +335,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
 
         // Update status to 'ready' IMMEDIATELY after frames complete
         // Don't wait for audio extraction - it's optional and can happen in background
-        set((s) => ({
+        jobSet((s) => ({
           files: s.files.map((f) =>
             f.id === mediaFileId
               ? {
@@ -355,7 +361,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
 
         // Extract audio proxy in background (non-blocking)
         if (mediaFile.hasAudio === true || mediaFile.audioCodec) {
-          set((s) => ({
+          jobSet((s) => ({
             files: s.files.map((f) =>
               f.id === mediaFileId
                 ? {
@@ -370,7 +376,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
           extractAudioProxy(mediaFile, storageKey).then(async () => {
             const hasAudioProxy = await projectFileService.hasProxyAudio(storageKey);
             if (hasAudioProxy) {
-              set((s) => ({
+              jobSet((s) => ({
                 files: s.files.map((f) =>
                   f.id === mediaFileId
                     ? {
@@ -385,7 +391,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
               }));
               log.debug(`Audio proxy ready for ${mediaFile.name}`);
             } else {
-              set((s) => ({
+              jobSet((s) => ({
                 files: s.files.map((f) =>
                   f.id === mediaFileId
                     ? {
@@ -400,7 +406,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
             }
           }).catch(() => {
             // Audio extraction errors are non-fatal
-            set((s) => ({
+            jobSet((s) => ({
               files: s.files.map((f) =>
                 f.id === mediaFileId
                   ? {
@@ -418,7 +424,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
         }
       } else if (!controller.cancelled) {
         // Set error status inline
-        set((state) => ({
+        jobSet((state) => ({
           files: state.files.map((f) =>
             f.id === mediaFileId ? { ...f, proxyStatus: 'error' as ProxyStatus } : f
           ),
@@ -427,7 +433,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
     } catch (e) {
       if (controller.cancelled) return;
       log.error('Generation failed:', e);
-      set((state) => ({
+      jobSet((state) => ({
         files: state.files.map((f) =>
           f.id === mediaFileId
             ? {
@@ -443,7 +449,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       if (activeProxyGenerations.get(mediaFileId) === controller) {
         activeProxyGenerations.delete(mediaFileId);
         if (get().currentlyGeneratingProxyId === mediaFileId) {
-          set({ currentlyGeneratingProxyId: null });
+          jobSet({ currentlyGeneratingProxyId: null });
         }
         queueMicrotask(() => {
           (get() as MediaState & ProxyActions).startProxyGenerationQueue();
@@ -459,7 +465,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
     controller.cancelled = true;
     log.info('Cancelled:', mediaFileId);
 
-    set((state) => ({
+    jobSet((state) => ({
       files: state.files.map((file) => {
         if (file.id !== mediaFileId) return file;
         const hasCurrentSceneCuts = isCurrentSceneCutAnalysis(
@@ -488,7 +494,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
     }));
   },
 
-  analyzeSceneCuts: createSceneCutAnalysisAction(set, get),
+  analyzeSceneCuts: createSceneCutAnalysisAction(jobSet, get),
 
   generateAudioProxy: async (mediaFileId: string, options: { force?: boolean } = {}) => {
     const mediaFile = get().files.find((f) => f.id === mediaFileId);
@@ -528,7 +534,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
         {
           force: options.force,
           onUpdate: (update) => {
-            set((state) => ({
+            jobSet((state) => ({
               files: state.files.map((file) => {
                 if (file.id !== mediaFileId) return file;
 
@@ -567,7 +573,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       }
     } catch (error) {
       log.warn('Audio proxy generation failed:', error);
-      set((state) => ({
+      jobSet((state) => ({
         files: state.files.map((file) =>
           file.id === mediaFileId
             ? {
@@ -582,6 +588,7 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
     }
   },
 });
+};
 
 async function generateImageProxy(
   mediaFile: MediaFile,

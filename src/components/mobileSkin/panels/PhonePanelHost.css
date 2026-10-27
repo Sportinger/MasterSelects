@@ -67,3 +67,56 @@
   color: var(--phone-danger);
   line-height: 1.45;
 }
+
+/* Phone density for desktop panels shown in a sheet (Properties, Media, Layers, History, Stats, ...):
+   the sheet surface colour, side gutters, 14 px type and 44 px touch rows. Canvas layers (node graph,
+   scopes) keep their own geometry. The landscape editors keep the denser desktop rows above. */
+.mobile-skin .phone-sheet .phone-panel-host {
+  background: var(--phone-surface-2, var(--phone-surface));
+  font-size: 14px;
+  scroll-padding-inline: 16px;
+}
+.mobile-skin .phone-sheet .phone-panel-host > * { padding-inline: 12px; }
+.mobile-skin .phone-sheet .phone-panel-host :is(button, [role='button'], [role='tab'], select, label, li, td, th, p, span):not(:where([class*='canvas']) *) {
+  font-size: max(13px, 1em);
+}
+.mobile-skin .phone-sheet .phone-panel-host :is(button, [role='button'], [role='tab'], select):not(:where([class*='canvas']) *),
+.mobile-skin .phone-sheet .phone-panel-host input:not([type='range']):not([type='checkbox']):not([type='radio']):not(:where([class*='canvas']) *) {
+  min-height: 44px;
+  font-size: 14px;
+}
+.mobile-skin .phone-sheet .phone-panel-host :is(button, [role='button']):not(:where([class*='canvas']) *) { min-width: 44px; }
+.mobile-skin .phone-sheet .phone-panel-host input:is([type='checkbox'], [type='radio']) { width: 20px; height: 20px; }
+.mobile-skin .phone-sheet .phone-panel-host .resolve-inspector-section,
+.mobile-skin .phone-sheet .phone-panel-host .effect-params { --resolve-inspector-row-height: 44px; }
+
+/* Tab strips (Properties, 3D Scan mode, Colour toolbars, media view modes) read as the shared chip
+   row: gaps between the labels, a 16 px gutter, horizontal scroll with a fading edge. */
+.mobile-skin .phone-panel-host :is(.properties-tabs, [role='tablist']) {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 4px;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.mobile-skin .phone-panel-host :is(.properties-tabs, [role='tablist']) > :is(button, [role='tab']) {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--phone-border);
+  border-radius: 999px;
+  background: var(--phone-surface);
+  color: var(--phone-text);
+  white-space: nowrap;
+}
+.mobile-skin .phone-panel-host :is(.properties-tabs, [role='tablist']) > :is(button, [role='tab']):is([aria-selected='true'], .active) {
+  border-color: transparent;
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
+}
+/* Groups of action buttons that desktop CSS packs edge to edge (3D Scan, Capture, Mixer strips). */
+.mobile-skin .phone-panel-host :is(.scan-mode-switch, [class*='actions'], [class*='toolbar']) { gap: 6px; }

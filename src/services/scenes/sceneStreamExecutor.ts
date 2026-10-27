@@ -21,6 +21,13 @@ export interface SceneRunSummary {
 }
 
 type Execute = (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
+/**
+ * Runs the executor's own synchronous editor writes (removing a replaced run, storing the scene) in the
+ * caller's transaction. They happen after awaits, so the caller binds them explicitly; by default they are
+ * plain edits.
+ */
+export type SceneWriteRunner = <T>(label: string, action: () => T) => T;
+const plainWrites: SceneWriteRunner = (_label, action) => action();
 type ToolRecord = Extract<SceneStreamRecord, { op: 'tool' }>;
 
 const emptyEntities = (): SceneEntities => ({ tracks: [], clips: [], markers: [] });
@@ -80,8 +87,11 @@ export class SceneStreamExecutor {
     entries: SceneRegistryEntry[]; results: Map<string, unknown>; summary: SceneRunSummary } | null = null;
   private readonly execute: Execute;
   private readonly signal?: AbortSignal;
+  private readonly runWrites: SceneWriteRunner;
   private stopped = false;
-  constructor(execute: Execute, signal?: AbortSignal) { this.execute = execute; this.signal = signal; }
+  constructor(execute: Execute, signal?: AbortSignal, options: { runWrites?: SceneWriteRunner } = {}) {
+    this.execute = execute; this.signal = signal; this.runWrites = options.runWrites ?? plainWrites;
+  }
   stop(): void { this.stopped = true; }
 
   /** Records run so far in the scene that has not reached its end record yet. */
@@ -106,7 +116,7 @@ export class SceneStreamExecutor {
       const opened = await this.execute('openComposition', { compositionId });
       if (!opened.success) throw new Error(`Scene "${begin.scene}": ${opened.error ?? 'could not open its composition.'}`);
     }
-    const removed = previous && begin.replace ? removeSceneEntities(previous) : emptyEntities();
+    const removed = previous && begin.replace ? this.runWrites(`Replace scene ${begin.scene}`, () => removeSceneEntities(previous)) : emptyEntities();
     // Without replace, the previous run's entities stay owned so the next replacing run removes them too.
     const kept = previous && !begin.replace ? previous.entries : [];
     this.current = { begin, records: [begin], entries: [...kept], results: new Map(),
@@ -157,7 +167,7 @@ export class SceneStreamExecutor {
     if (scene.records.at(-1)?.op !== 'end') scene.records.push({ op: 'end', lastSeq: scene.records.filter(r => r.op === 'tool').length });
     const registry: SceneRegistry = { msSceneRegistry: 1, scene: scene.begin.scene, compositionId: scene.summary.compositionId,
       updatedAt: Date.now(), entries: scene.entries };
-    scene.summary.documentId = saveScene(scene.begin.scene, formatSceneStream(scene.records), registry);
+    scene.summary.documentId = this.runWrites(`Store scene ${scene.begin.scene}`, () => saveScene(scene.begin.scene, formatSceneStream(scene.records), registry));
     this.summaries.push(scene.summary);
   }
 }

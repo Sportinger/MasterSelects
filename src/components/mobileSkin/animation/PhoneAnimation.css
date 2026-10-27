@@ -6,10 +6,7 @@
 }
 .mobile-skin .phone-animation-sheet__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
   gap: 8px;
 }
-.mobile-skin .phone-animation-sheet__grid .phone-design-chip {
-  padding: 0 8px;
-  font-size: 13px;
-}
+.mobile-skin .phone-animation-sheet__grid .phone-design-chip--tile { min-height: 72px; white-space: normal; text-align: center; }

@@ -139,10 +139,11 @@ test('browser-codecs-and-containers: 720p WebM VP9 at 24 fps decodes with that s
     .toEqual({ codec: 'vp9', width: 720, height: 1280, frames: 24 })
   expect(video.formatName).toMatch(/webm|matroska/)
   const frames = (await readVideoFrameCodes(file)).readings.map(reading => reading.frame)
-  // Frame i of a 24 fps export shows the 30 fps source frame nearest to i/24 s (i * 1.25, ties either way).
-  const wrong = frames.flatMap((frame, index) => frame !== null && Math.abs(frame - index * (FPS / 24)) <= 0.5 && (index === 0 || frame > (frames[index - 1] ?? -1))
+  // Frame i of a 24 fps export shows the 30 fps source frame whose interval contains i/24 s, the frame the
+  // paused preview shows at that time (sample and hold; parallelDecode/presentationFrame.ts grid rule).
+  const wrong = frames.flatMap((frame, index) => frame !== null && frame === Math.floor(index * (FPS / 24) + 1e-6) && (index === 0 || frame > (frames[index - 1] ?? -1))
     ? [] : [`#${index}: ${frame ?? 'unreadable'} (source time ${(index / 24).toFixed(3)} s)`])
-  expect(wrong, 'frame codes of the 24 fps export: the nearest source frame, rising').toEqual([])
+  expect(wrong, 'frame codes of the 24 fps export: the source frame on screen at each export time, rising').toEqual([])
 })
 
 test('still-image-export: a PNG of the playhead frame at 720p @phone', async ({ m1 }, testInfo) => {

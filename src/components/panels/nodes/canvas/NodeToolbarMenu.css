@@ -1,0 +1,64 @@
+/* Phone skin: secondary node toolbar actions in a menu (NodeToolbarMenu.tsx). Only rendered there. */
+.node-workspace-toolbar-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.node-workspace-toolbar-more[aria-expanded='true'] { color: var(--phone-accent, var(--accent)); }
+.node-workspace-toolbar-more:focus:not(:focus-visible) { outline: none; }
+
+.node-workspace-toolbar-menu {
+  position: fixed;
+  /* Above the landscape editor (48) and sheets (40/41), below toasts (60). */
+  z-index: 49;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 72px);
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--phone-border, var(--border-color));
+  border-radius: 12px;
+  background: var(--phone-surface-2, var(--bg-tertiary));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  overscroll-behavior: contain;
+}
+.node-workspace-toolbar-menu > button,
+.node-workspace-toolbar-menu .node-workspace-toolbar-button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 44px;
+  height: auto;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--phone-text, var(--text-primary));
+  font-size: 15px;
+  text-align: left;
+  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.node-workspace-toolbar-menu .node-workspace-toolbar-button[aria-pressed='true'] {
+  color: var(--phone-accent, var(--accent));
+}
+.node-workspace-toolbar-menu .node-workspace-toolbar-button[aria-pressed='true']::after {
+  content: 'On';
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--phone-text-dim, var(--text-secondary));
+  font-size: 13px;
+}
+.node-workspace-toolbar-menu .node-workspace-toolbar-button:disabled { opacity: 0.45; }
+.node-workspace-toolbar-menu .node-workspace-toolbar-button:active { background: var(--phone-border, var(--bg-hover)); }
+.node-workspace-toolbar-menu .node-workspace-toolbar-button:focus:not(:focus-visible) { outline: none; }
+.node-workspace-toolbar-menu .node-workspace-toolbar-button:focus-visible {
+  outline: 2px solid var(--phone-accent, var(--accent));
+  outline-offset: -2px;
+}

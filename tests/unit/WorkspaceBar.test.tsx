@@ -15,6 +15,7 @@ import { WorkspaceBar } from '../../src/components/common/WorkspaceBar';
 import {
   FACTORY_COLOR_LAYOUT_ID,
   FACTORY_MEDIUM_EDIT_LAYOUT_ID,
+  FACTORY_START_LAYOUT_ID,
   FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   getFactoryDockLayouts,
@@ -60,18 +61,47 @@ describe('WorkspaceBar', () => {
     expect(screen.getByRole('navigation', { name: 'Workspaces' })).toBeInTheDocument();
     expect(screen.queryByTitle('Load Mobile')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Load Medium')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Mobile mode' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Mobile mode' })).not.toHaveAttribute('aria-pressed');
     expect(screen.getByTitle('Load Color')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTitle('Load Video')).not.toHaveAttribute('aria-current');
   });
 
-  it('enables Mobile mode from the global toggle', () => {
+  it('opens the phone editor from Mobile on a desktop', () => {
+    render(<WorkspaceBar />);
+    const mobile = screen.getByRole('button', { name: 'Mobile mode' });
+
+    expect(mobile).toHaveAttribute('title', 'Open the phone editor');
+    expect(mobile).not.toHaveAttribute('aria-pressed');
+    fireEvent.click(mobile);
+
+    expect(openPhoneEditor).toHaveBeenCalledTimes(1);
+    expect(useDockStore.getState().setMobileLayoutOverride).not.toHaveBeenCalled();
+  });
+
+  it('disables Mobile while the phone editor opens', async () => {
+    let finish: (value: { ok: true }) => void = () => undefined;
+    openPhoneEditor.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    render(<WorkspaceBar />);
+    const mobile = screen.getByRole('button', { name: 'Mobile mode' });
+
+    fireEvent.click(mobile);
+    expect(mobile).toBeDisabled();
+    fireEvent.click(mobile);
+    expect(openPhoneEditor).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ ok: true }));
+  });
+
+  it('shows why Mobile did not open the phone editor', async () => {
+    openPhoneEditor.mockResolvedValue({ ok: false, message: 'The project could not be saved, so the phone editor did not open.' });
     render(<WorkspaceBar />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Mobile mode' }));
 
-    expect(useDockStore.getState().setMobileLayoutOverride).toHaveBeenCalledWith(true);
-    expect(openPhoneEditor).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be saved');
+    expect(screen.getByRole('button', { name: 'Mobile mode' })).toHaveAttribute(
+      'title',
+      'The project could not be saved, so the phone editor did not open.',
+    );
   });
 
   it('opens the phone editor from the Layouts menu', () => {
@@ -84,7 +114,7 @@ describe('WorkspaceBar', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  it('on a phone, Mobile always opens the phone editor', () => {
+  it('on a phone, Mobile opens the phone editor too', () => {
     phoneDevice.value = true;
     act(() => {
       useDockStore.setState({ activeSavedLayoutId: FACTORY_VERTICAL_MOBILE_LAYOUT_ID, overLayoutBaseId: FACTORY_VIDEO_EDIT_LAYOUT_ID });
@@ -117,20 +147,20 @@ describe('WorkspaceBar', () => {
     expect(screen.queryByTitle('Load Medium')).not.toBeInTheDocument();
   });
 
-  it('can re-enable Mobile from an exact unsaved desktop layout', () => {
+  it('keeps Mobile available from an unsaved desktop layout and the Start page', () => {
     act(() => {
-      useDockStore.setState({
-        activeSavedLayoutId: null,
-        mobileLayoutOverride: false,
-      });
+      useDockStore.setState({ activeSavedLayoutId: null });
+    });
+    const { unmount } = render(<WorkspaceBar />);
+    expect(screen.getByRole('button', { name: 'Mobile mode' })).not.toBeDisabled();
+    unmount();
+
+    act(() => {
+      useDockStore.setState({ activeSavedLayoutId: FACTORY_START_LAYOUT_ID });
     });
     render(<WorkspaceBar />);
-    const mobileToggle = screen.getByRole('button', { name: 'Mobile mode' });
-
-    expect(mobileToggle).not.toBeDisabled();
-    fireEvent.click(mobileToggle);
-
-    expect(useDockStore.getState().setMobileLayoutOverride).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Mobile mode' }));
+    expect(openPhoneEditor).toHaveBeenCalledTimes(1);
   });
 
   it('releases pointer focus from the Mobile toggle after a touch or click', () => {
@@ -154,21 +184,6 @@ describe('WorkspaceBar', () => {
     videoButton.focus();
     fireEvent.keyDown(videoButton, { key: 'Enter' });
     expect(videoButton).toHaveFocus();
-  });
-
-  it('disables Mobile mode without changing the selected base layout directly', () => {
-    act(() => {
-      useDockStore.setState({
-        activeSavedLayoutId: FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
-        overLayoutBaseId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
-      });
-    });
-    render(<WorkspaceBar />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Mobile mode' }));
-
-    expect(useDockStore.getState().setMobileLayoutOverride).toHaveBeenCalledWith(false);
-    expect(useDockStore.getState().loadSavedLayout).not.toHaveBeenCalled();
   });
 
   it('opens the factory color workspace from the bottom bar', () => {
@@ -216,7 +231,7 @@ describe('WorkspaceBar', () => {
     expect(screen.getByTitle('Load Video')).toHaveAttribute('aria-current', 'page');
   });
 
-  it('keeps Medium and Mobile pressed at the same time', () => {
+  it('toggles Medium without touching the Mobile layout override', () => {
     act(() => {
       useDockStore.setState({
         activeSavedLayoutId: FACTORY_VERTICAL_MOBILE_LAYOUT_ID,
@@ -228,7 +243,6 @@ describe('WorkspaceBar', () => {
     render(<WorkspaceBar />);
 
     expect(screen.getByRole('button', { name: 'Medium mode' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Mobile mode' })).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.click(screen.getByRole('button', { name: 'Medium mode' }));
     expect(useDockStore.getState().setMediumLayoutOverride).toHaveBeenCalledWith(false);

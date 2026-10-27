@@ -1,6 +1,7 @@
 ﻿// Local file import tool handlers: importLocalFiles (with optional timeline
 // placement) and listLocalFiles, gated by the file access broker.
 
+import { captureToolTransaction } from '../../toolTransaction';
 import { useMediaStore } from '../../../../stores/mediaStore';
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { ToolResult } from '../../types';
@@ -99,6 +100,10 @@ export async function handleImportLocalFiles(
 ): Promise<ToolResult> {
   const paths = args.paths as string[];
   const addToTimeline = (args.addToTimeline as boolean) || false;
+  // Every write below follows an await: imports go through the bound `mediaStore`, timeline placement
+  // through this tool's transaction, carried explicitly.
+  const transaction = captureToolTransaction('importLocalFiles');
+  const timeline = () => transaction.bindStore(useTimelineStore.getState());
   const mediaItemIdsBefore = new Set([
     ...(mediaStore.files ?? []).map((file) => file.id),
     ...(mediaStore.signalAssets ?? []).map((item) => item.id),
@@ -222,7 +227,7 @@ export async function handleImportLocalFiles(
       }
     }
 
-    const timelineStore = useTimelineStore.getState();
+    const timelineStore = timeline();
     const requestedTrackId = args.trackId as string | undefined;
     const createTrack = (args.createTrack as boolean) || false;
     // Audio-only imports go to an audio track unless a track or type is requested explicitly.
@@ -256,7 +261,7 @@ export async function handleImportLocalFiles(
 
     // 4. Last resort: create one
     if (!targetTrackId) {
-      targetTrackId = useTimelineStore.getState().addTrack(trackType);
+      targetTrackId = timeline().addTrack(trackType);
       log.info(`Auto-created ${trackType} track: ${targetTrackId}`);
     }
 
@@ -280,7 +285,7 @@ export async function handleImportLocalFiles(
           continue;
         }
 
-        const placement = await placeSignalAssetOnTimeline(signalAsset, targetTrackId!, currentTime, useTimelineStore.getState());
+        const placement = await placeSignalAssetOnTimeline(signalAsset, targetTrackId!, currentTime, timeline());
         if (placement.clipId) {
           placedClips.push({
             name: result.name,
@@ -299,7 +304,7 @@ export async function handleImportLocalFiles(
       const mediaFile = mediaState.files.find(f => f.id === result.id);
       if (mediaFile && mediaFile.file) {
         const before = new Set(useTimelineStore.getState().clips.map(clip => clip.id));
-        await useTimelineStore.getState().addClip(targetTrackId!, mediaFile.file, currentTime, mediaFile.duration, mediaFile.id);
+        await timeline().addClip(targetTrackId!, mediaFile.file, currentTime, mediaFile.duration, mediaFile.id);
         // Report only clips that were actually created (e.g. audio is refused on a video track).
         const created = useTimelineStore.getState().clips.filter(clip => !before.has(clip.id));
         if (!created.length) {

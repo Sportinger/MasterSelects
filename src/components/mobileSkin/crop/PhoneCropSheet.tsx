@@ -13,6 +13,7 @@ import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { PhoneRatioGlyph } from './phoneChoiceGlyphs';
 import { resolvePhoneClipTarget } from './phoneClipTarget';
 import { phoneNodeDrivenTransformKeys, readPhoneCrop, writePhoneCrop, writePhoneTransform } from './phoneCropCommands';
 import {
@@ -137,7 +138,8 @@ export const PhoneCropSheet: PhoneSheetComponent = () => {
         {tab === 'crop' ? (
           <>
             <PhoneChipGroup<PhoneCropRatioId> label="Crop ratio" value={ratio} testId={IDS.ratios} disabled={blocked}
-              options={PHONE_CROP_RATIOS.map(({ id, label }) => ({ value: id, label }))} onChange={pickRatio} />
+              options={PHONE_CROP_RATIOS.map(({ id, label, ratio: value }) => ({ value: id, label, icon: <PhoneRatioGlyph ratio={value} /> }))}
+              onChange={pickRatio} layout="tile-row" />
             {EDGES.map(([edge, label, testId]) => (
               <PhoneSliderRow key={edge} label={label} testId={testId} unit="%" min={0} max={95} value={percentOf(edge)} decimals={0}
                 resetValue={0} unavailable={blocked}

@@ -6,7 +6,7 @@
 
 import type { PanelType } from '../../../types/dock';
 import type { PhoneMilestone } from '../contracts';
-import type { PhoneWorkspaceId } from '../workspace/phoneWorkspaceCatalog';
+import type { PhoneWorkspaceId, PhoneWorkspaceSide } from '../workspace/phoneWorkspaceCatalog';
 
 export type PhonePanelPresentation = 'sheet' | 'workspace';
 
@@ -18,6 +18,8 @@ export interface PhonePanelEntry {
   milestone: PhoneMilestone;
   /** The landscape editor a workspace panel opens in; without one it opens in the panel sheet. */
   workspace?: PhoneWorkspaceId;
+  /** The side pane of that editor this panel lives in; it opens expanded so the person sees what they tapped. */
+  workspaceSide?: PhoneWorkspaceSide;
   /** Why the panel stays greyed on a phone even when its milestone has shipped (absolute exceptions). */
   phoneLimit?: string;
 }
@@ -40,9 +42,9 @@ export const PHONE_PANELS: readonly PhonePanelEntry[] = [
   { type: 'stats', title: 'Stats', group: 'Media & project', presentation: 'sheet', milestone: 'M3' },
   { type: '3d-scan', title: '3D Scan', group: 'Media & project', presentation: 'workspace', milestone: 'M4' },
   { type: 'color-controls', title: 'Color Controls', group: 'Colour', presentation: 'workspace', milestone: 'M4', workspace: 'color' },
-  { type: 'color-nodes', title: 'Color Nodes', group: 'Colour', presentation: 'workspace', milestone: 'M4', workspace: 'color' },
+  { type: 'color-nodes', title: 'Color Nodes', group: 'Colour', presentation: 'workspace', milestone: 'M4', workspace: 'color', workspaceSide: 'right' },
   { type: 'color-keyframes', title: 'Color Keyframes', group: 'Colour', presentation: 'workspace', milestone: 'M4' },
-  { type: 'color-scopes', title: 'Scopes', group: 'Colour', presentation: 'workspace', milestone: 'M4', workspace: 'color' },
+  { type: 'color-scopes', title: 'Scopes', group: 'Colour', presentation: 'workspace', milestone: 'M4', workspace: 'color', workspaceSide: 'left' },
   { type: 'scope-waveform', title: 'Waveform', group: 'Colour', presentation: 'workspace', milestone: 'M4' },
   { type: 'scope-histogram', title: 'Histogram', group: 'Colour', presentation: 'workspace', milestone: 'M4' },
   { type: 'scope-vectorscope', title: 'Vectorscope', group: 'Colour', presentation: 'workspace', milestone: 'M4' },

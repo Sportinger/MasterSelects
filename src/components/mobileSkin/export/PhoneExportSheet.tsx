@@ -177,7 +177,7 @@ export const PhoneExportSheet: PhoneSheetComponent = () => {
           <button
             type="button"
             onPointerUp={releasePointerFocus}
-            className="phone-export__button phone-export__button--primary"
+            className="phone-export__button"
             aria-disabled={!done}
             onClick={onShare}
             data-testid={PHONE_M1_TEST_IDS.exportShare}
@@ -195,6 +195,7 @@ export const PhoneExportSheet: PhoneSheetComponent = () => {
             Save
           </button>
         </div>
+        {!done && !busy ? <p className="phone-export__hint">Share and Save work once the export is ready.</p> : null}
         {done ? (
           <button type="button" className="phone-export__link" onClick={reset}>
             Discard and export again

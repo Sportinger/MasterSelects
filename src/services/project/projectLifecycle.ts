@@ -2,6 +2,7 @@ import { beginOperationTrace, type OperationTrace } from '../productAnalytics/op
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
 import { installEditorWriterHandover } from './repository/lifecycle/editorWriterHandover';
 import { isBrowserStorageUnavailableError } from './core/browserStorageFailure';
+import { withBrowserStorageProjectRoot, type ProjectStorageTarget } from './core/projectRootAccess';
 import { RepositoryError } from './repository/contracts';
 import { discardStoredProjectArchive, releaseRestoredProjectArchive, storeProjectArchiveInBrowser } from './browserProjectArchive';
 import { isRepositoryHydrating } from './repository/transaction/storeMutationBoundary';
@@ -196,13 +197,13 @@ function trackProjectActionFailure(
 /**
  * Create a new project
  */
-export async function createNewProject(name: string): Promise<boolean> {
+export async function createNewProject(name: string, options: { storage?: ProjectStorageTarget } = {}): Promise<boolean> {
   const startedAt = Date.now();
   const trace = beginOperationTrace('project_create', 'create');
   let failureStage: ProductAnalyticsProjectFailureStage = 'create';
   try {
     // Create project folder on filesystem first
-    const success = await projectFileService.createProject(name, true);
+    const success = await inStorage(options.storage, () => projectFileService.createProject(name, true));
     if (!success) {
       trackProjectActionFailure('create', startedAt, trace, 'cancelled', 'cancelled', 'selection');
       return false;
@@ -246,12 +247,17 @@ export type BlankProjectCreationResult = 'created' | 'not-created' | 'save-faile
  */
 export async function createBlankProject(
   name: string,
-  options: { composition?: NewProjectComposition } = {},
+  options: { composition?: NewProjectComposition; storage?: ProjectStorageTarget } = {},
 ): Promise<BlankProjectCreationResult> {
   const { composition } = options;
-  return createBlankProjectWith(name, () => (
+  return createBlankProjectWith(name, () => inStorage(options.storage, () => (
     composition ? projectFileService.createProject(name, false, composition) : projectFileService.createProject(name)
-  ));
+  )));
+}
+
+/** `storage: 'browser'` creates in browser storage without a folder dialog, even where a picker exists. */
+function inStorage<T>(storage: ProjectStorageTarget | undefined, create: () => Promise<T>): Promise<T> {
+  return storage === 'browser' ? withBrowserStorageProjectRoot(create) : create();
 }
 
 /**

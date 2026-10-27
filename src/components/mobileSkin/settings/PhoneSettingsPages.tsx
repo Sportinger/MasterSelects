@@ -12,6 +12,9 @@ import { clearAllCacheAndReloadConfirmed } from '../../common/toolbar/cacheActio
 import { blurTappedControl, PhoneStatusLine, usePhoneStatus } from '../library/phoneListUi';
 import { collectPhoneDiagnostics, formatPhoneDiagnostics, type PhoneDiagnostics } from './phoneAppInfo';
 import { PHONE_SETTINGS_TEST_IDS as IDS } from './phoneSettingsTestIds';
+import { formatPhoneProjectLoads } from './phoneProjectLoads';
+import { PhoneRecentLoads } from './PhoneRecentLoads';
+import { usePhoneProjectLoads } from './usePhoneProjectLoads';
 import '../../common/settings/SettingsDialog.css';
 
 const log = Logger.create('PhoneSettings');
@@ -61,6 +64,7 @@ export function PhoneDiagnosticsPage({ onBack }: PageProps) {
   const { status: runtime } = usePhoneRuntime();
   const [diagnostics, setDiagnostics] = useState<PhoneDiagnostics | null>(null);
   const { status, report } = usePhoneStatus();
+  const loads = usePhoneProjectLoads();
   useEffect(() => {
     let alive = true;
     void collectPhoneDiagnostics(runtime).then((next) => { if (alive) setDiagnostics(next); });
@@ -69,7 +73,7 @@ export function PhoneDiagnosticsPage({ onBack }: PageProps) {
   const copy = async () => {
     if (!diagnostics) return;
     try {
-      await navigator.clipboard.writeText(formatPhoneDiagnostics(diagnostics));
+      await navigator.clipboard.writeText([formatPhoneDiagnostics(diagnostics), ...formatPhoneProjectLoads(loads)].join('\n'));
       report({ ok: true, message: 'Copied. Paste it into your note or issue.' });
     } catch {
       report({ ok: false, message: 'Copying is not allowed here. Select the text and copy it by hand.' });
@@ -91,6 +95,7 @@ export function PhoneDiagnosticsPage({ onBack }: PageProps) {
             <ul className="phone-lib__usage">{diagnostics.errors.map((line, index) => <li key={index}>{line}</li>)}</ul>
           </>
         )}
+        <PhoneRecentLoads rows={loads} />
         <p className="phone-lib__note">Addresses, keys and long ids are removed. Nothing leaves your phone unless you share it.</p>
         <PhoneStatusLine status={status} testId={IDS.status} />
         <button type="button" className="phone-lib__button phone-lib__button--wide" data-testid={IDS.diagnosticsCopy} onClick={() => void copy()}>

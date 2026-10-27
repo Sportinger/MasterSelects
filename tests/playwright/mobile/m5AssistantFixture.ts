@@ -33,6 +33,14 @@ interface AssistantNet {
   credits: number
   /** Refuse the Direct socket upgrade (relay or kernel down): the page sees a close without open. */
   refuseSocket: boolean
+  /**
+   * Model providers this fake server has no configuration for: thread/start and thread/resume with one
+   * of them fail the way the production app-server does ("failed to load configuration: Model provider
+   * `deepseek` not found").
+   */
+  unknownModelProviders: string[]
+  /** modelProvider (or 'default') of every thread/start and thread/resume, in order. */
+  threadProviders: string[]
   /** Plans for the next turns, consumed in order. */
   turns: FakeTurnPlan[]
   connections: number
@@ -103,6 +111,14 @@ function serveFakeCodex(ws: WebSocketRoute, net: AssistantNet): void {
     }
     if (message.id === undefined) return
     const params = message.params ?? {}
+    if (message.method === 'thread/start' || message.method === 'thread/resume') {
+      const provider = typeof params.modelProvider === 'string' ? params.modelProvider : 'default'
+      net.threadProviders.push(provider)
+      if (net.unknownModelProviders.includes(provider)) {
+        send({ id: message.id, error: { code: -32603, message: `failed to load configuration: Model provider \`${provider}\` not found` } })
+        return
+      }
+    }
     switch (message.method) {
       case 'thread/start':
         send({ id: message.id, result: { thread: { id: `phone-e2e-thread-${net.connections}` } } })
@@ -136,7 +152,7 @@ function serveFakeCodex(ws: WebSocketRoute, net: AssistantNet): void {
 export async function installAssistantNet(page: Page): Promise<boolean> {
   if (nets.has(page)) return false
   {
-    const created: AssistantNet = { active: false, signedIn: false, credits: 25, refuseSocket: false, turns: [], connections: 0, prompts: [], interrupts: 0, toolResults: [], frames: [] }
+    const created: AssistantNet = { active: false, signedIn: false, credits: 25, refuseSocket: false, unknownModelProviders: [], threadProviders: [], turns: [], connections: 0, prompts: [], interrupts: 0, toolResults: [], frames: [] }
     nets.set(page, created)
     const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) })
     await page.route('**/api/me', async (route) => {
@@ -185,7 +201,7 @@ export async function installAssistantNet(page: Page): Promise<boolean> {
 export function startAssistantCase(page: Page): AssistantNet {
   const net = nets.get(page)
   if (!net) throw new Error('installAssistantNet(page) must run (with a reload) before the first assistant case')
-  Object.assign(net, { active: true, refuseSocket: false, turns: [], connections: 0, prompts: [], interrupts: 0, toolResults: [], frames: [] })
+  Object.assign(net, { active: true, refuseSocket: false, unknownModelProviders: [], threadProviders: [], turns: [], connections: 0, prompts: [], interrupts: 0, toolResults: [], frames: [] })
   return net
 }
 

@@ -28,21 +28,20 @@ import {
   timelineToSourceTime,
   type ParallelDecodeClipInfo as ClipInfo,
 } from './parallelDecode/clipWindow';
-import { type ParallelDecodeFrameLookupOptions } from './parallelDecode/frameLookup';
+import { type ParallelDecodeFrameLookupOptions, type ParallelDecodeNeighbourFallback } from './parallelDecode/frameLookup';
+import { exportDiagnostics } from '../services/export/exportDiagnostics';
 import { getNormalizedSampleSourceTime, getPresentationOffsetSeconds } from './parallelDecode/sampleTiming';
 import {
-  BUFFER_AHEAD_FRAMES,
   MAX_BUFFER_SIZE,
   UPCOMING_CLIP_PREFETCH_SECONDS,
   collectPresentationKeyframeCandidates,
   createDecodeSchedulingPlan,
-  findKeyframeAtOrBeforeSample,
   findSampleIndexForSourceTime,
   getDecodeBatchSize,
   getDecodeSeekState,
   getSeekTargetSampleIndex,
   hasDecodeSeekDistance,
-  hasUsableBufferedFrame,
+  planDecodeBatch,
 } from './parallelDecode/scheduling';
 import {
   createParallelDecodeRuntimeSnapshot,
@@ -52,14 +51,18 @@ import { createEncodedChunkForSample, parseMP4TrackInfo } from './parallelDecode
 import {
   buildClipRuntimeSnapshot,
   clearFrameBufferState,
+  getResumeSampleIndexAfterReset,
+  hasExpectedBufferedFrame,
   refreshBufferedTimestampBounds,
   removeBufferedTimestamp,
+  selectEvictionTimestamp,
   storeDecodedFrame,
   type ClipDecoder,
   type DecodedFrame,
 } from './parallelDecode/clipDecoderState';
 import {
   prefetchFramesForTime as runPrefetchFramesForTime,
+  waitForExactBufferedFrame,
   type ParallelDecodePrefetchDeps,
 } from './parallelDecode/prefetchCoordinator';
 import {
@@ -81,6 +84,11 @@ export type {
 } from './parallelDecode/runtimeSnapshot';
 
 export const MAX_PARALLEL_DECODE_POOL_SIZE = 8;
+
+/** A neighbour frame stood in for the right one: never silent, counted like a previous-frame fallback. */
+function recordNeighbourFallback(fallback: ParallelDecodeNeighbourFallback): void {
+  exportDiagnostics.recordNeighbourFrameFallback(fallback);
+}
 
 export class ParallelDecodeManager {
   private clipDecoders: Map<string, ClipDecoder> = new Map();
@@ -220,8 +228,9 @@ export class ParallelDecodeManager {
       throw error;
     }
     clipDecoder.decoder = decoder;
+    // sampleIndex stays where releaseDecoderHandle() left it; decodeAhead()
+    // rewinds it to a keyframe because the fresh decoder needs one.
     clipDecoder.needsKeyframe = true;
-    clipDecoder.sampleIndex = 0;
     this.touchDecoder(clipDecoder);
     log.info(
       `Decoder leased to "${clipDecoder.clipName}" ` +
@@ -254,7 +263,7 @@ export class ParallelDecodeManager {
     }
     clipDecoder.decoder = null;
     clipDecoder.needsKeyframe = true;
-    clipDecoder.sampleIndex = 0;
+    clipDecoder.sampleIndex = getResumeSampleIndexAfterReset(clipDecoder);
   }
 
   private async ensureDecoder(clipDecoder: ClipDecoder): Promise<VideoDecoder> {
@@ -331,13 +340,16 @@ export class ParallelDecodeManager {
     // Store frame by its timestamp and maintain sorted index + bounds
     storeDecodedFrame(clipDecoder, frame, timestamp, sourceTime);
 
-    // Cleanup if buffer too large - remove oldest (no sorting needed)
+    // Cleanup if buffer too large (selectEvictionTimestamp: oldest forward, the end
+    // farthest from the target for a clip walking backward).
     while (clipDecoder.frameBuffer.size > MAX_BUFFER_SIZE && clipDecoder.sortedTimestamps.length > 0) {
-      const oldestTs = clipDecoder.sortedTimestamps.shift()!;
-      const oldFrame = clipDecoder.frameBuffer.get(oldestTs);
+      const evictTs = selectEvictionTimestamp(clipDecoder) === clipDecoder.sortedTimestamps[0]
+        ? clipDecoder.sortedTimestamps.shift()!
+        : clipDecoder.sortedTimestamps.pop()!;
+      const oldFrame = clipDecoder.frameBuffer.get(evictTs);
       if (oldFrame) {
         this.closeDecodedFrame(oldFrame);
-        clipDecoder.frameBuffer.delete(oldestTs);
+        clipDecoder.frameBuffer.delete(evictTs);
       }
     }
 
@@ -386,19 +398,12 @@ export class ParallelDecodeManager {
       clipDecoder.clipInfo.inPoint,
       Math.min(sourceTime, clipDecoder.clipInfo.outPoint - 0.001)
     );
-    const targetTimestamp = clampedSourceTime * 1_000_000;
     const targetSampleIndex = findSampleIndexForSourceTime(
       clipDecoder.samples,
       clampedSourceTime,
       clipDecoder.presentationOffsetSeconds
     );
-    const frameInBuffer = hasUsableBufferedFrame(
-      clipDecoder.sortedTimestamps,
-      clipDecoder.oldestTimestamp,
-      clipDecoder.newestTimestamp,
-      targetTimestamp,
-      this.frameTolerance * 2
-    );
+    const frameInBuffer = hasExpectedBufferedFrame(clipDecoder, clampedSourceTime);
 
     if (!frameInBuffer && !clipDecoder.isDecoding) {
       const decodePlan = createDecodeSchedulingPlan({
@@ -416,33 +421,12 @@ export class ParallelDecodeManager {
       );
     }
 
-    for (let attempt = 0; attempt < 10; attempt++) {
-      if (!this.isActive) return;
-      if (clipDecoder.pendingDecode) {
-        await clipDecoder.pendingDecode;
-      }
-      const frameFound = hasUsableBufferedFrame(
-        clipDecoder.sortedTimestamps,
-        clipDecoder.oldestTimestamp,
-        clipDecoder.newestTimestamp,
-        targetTimestamp,
-        this.frameTolerance * 3
-      );
-      if (frameFound) return;
-
-      if (attempt < 2) {
-        await new Promise(r => setTimeout(r, 8));
-      } else if ((clipDecoder.decoder?.decodeQueueSize ?? 0) > 0) {
-        const decoder = await this.ensureDecoder(clipDecoder);
-        await decoder.flush();
-        clipDecoder.needsKeyframe = true;
-      } else if (!clipDecoder.isDecoding) {
-        const decodeTarget = Math.max(targetSampleIndex + BUFFER_AHEAD_FRAMES, BUFFER_AHEAD_FRAMES);
-        await this.decodeAhead(clipDecoder, decodeTarget, true, 0, targetSampleIndex);
-      } else {
-        await new Promise(r => setTimeout(r, 10));
-      }
-    }
+    // Same escalating wait as the per-time prefetch (held-frame flush included). A
+    // sample that never decodes (corrupt frame) leaves a buffered neighbour, which
+    // the export layer lookup uses and counts as a neighbour-frame fallback; the
+    // export fails only when nothing is buffered nearby.
+    const wait = await waitForExactBufferedFrame(this.prefetchDeps(), clipDecoder, clampedSourceTime, targetSampleIndex);
+    if (wait.aborted || wait.exactFound || wait.neighbourFound) return;
 
     throw new Error(`FAST export failed: "${clipDecoder.clipName}" has no decoded frame at ${clampedSourceTime.toFixed(3)}s after source-time prefetch.`);
   }
@@ -538,6 +522,11 @@ export class ParallelDecodeManager {
       log.debug(`${clipDecoder.clipName}: Already decoding, skipping`);
       return; // Let current decode continue, don't wait
     }
+    // Nothing to queue and no seek allowed: do not lease a pool decoder, which
+    // would recycle (reset) another clip's decoder and drop its queued frames.
+    if (!forceFlush && Math.min(targetSampleIndex, clipDecoder.samples.length) <= clipDecoder.sampleIndex) {
+      return;
+    }
 
     clipDecoder.isDecoding = true;
 
@@ -628,36 +617,35 @@ export class ParallelDecodeManager {
           clearFrameBufferState(clipDecoder);
         }
 
-        // Calculate frames to decode AFTER potential seek (sampleIndex may have changed)
-        const endIndex = Math.min(targetSampleIndex, clipDecoder.samples.length);
-        let framesToDecode = endIndex - clipDecoder.sampleIndex;
+        // Count frames AFTER a potential seek and AFTER the keyframe rewind below:
+        // counting before the rewind stopped the pass short of the target by the
+        // rewind distance (resume after a pool reset).
+        const batchSize = getDecodeBatchSize(needsSeek);
+        const batch = planDecodeBatch(
+          clipDecoder.samples,
+          clipDecoder.sampleIndex,
+          targetSampleIndex,
+          clipDecoder.needsKeyframe && !needsSeek,
+          batchSize,
+        );
 
-        if (framesToDecode <= 0) {
+        if (batch.framesToDecode <= 0) {
           log.debug(`${clipDecoder.clipName}: No frames to decode (sampleIndex=${clipDecoder.sampleIndex}, target=${targetSampleIndex})`);
           return;
         }
 
-        // Decode in larger batches for throughput
-        // Use much larger batch for seeks to reach target in one go
-        const batchSize = getDecodeBatchSize(needsSeek);
-        framesToDecode = Math.min(framesToDecode, batchSize);
-
-        log.debug(`${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}, needsSeek=${needsSeek} (ahead=${isTooFarAhead}, behind=${isTooFarBehind}), batchSize=${batchSize}`);
-
         // After flush/configure, decoder requires next chunk to be a keyframe.
         // Reset decoder and start from nearest keyframe (same approach as seek path).
-        if (clipDecoder.needsKeyframe && !needsSeek) {
-          const keyframeIndex = findKeyframeAtOrBeforeSample(
-            clipDecoder.samples,
-            clipDecoder.sampleIndex
-          );
-          // Reset decoder to clean state and start from keyframe
+        if (batch.resetToKeyframe) {
           decoder.reset();
           decoder.configure(clipDecoder.codecConfig);
-          clipDecoder.sampleIndex = keyframeIndex;
+          clipDecoder.sampleIndex = batch.startSampleIndex;
           clipDecoder.needsKeyframe = false;
-          log.debug(`${clipDecoder.clipName}: needsKeyframe - reset decoder, starting from keyframe at sample ${keyframeIndex}`);
+          log.debug(`${clipDecoder.clipName}: needsKeyframe - reset decoder, starting from keyframe at sample ${batch.startSampleIndex}`);
         }
+        const framesToDecode = batch.framesToDecode;
+
+        log.debug(`${clipDecoder.clipName}: Decoding ${framesToDecode} frames (from sample ${clipDecoder.sampleIndex} to ${clipDecoder.sampleIndex + framesToDecode}), forceFlush=${forceFlush}, needsSeek=${needsSeek} (ahead=${isTooFarAhead}, behind=${isTooFarBehind}), batchSize=${batchSize}`);
 
         // Queue frames for decode (non-blocking - output callback handles results)
         let decodedCount = 0;
@@ -751,7 +739,7 @@ export class ParallelDecodeManager {
     const clipDecoder = this.clipDecoders.get(clipId);
     if (!clipDecoder) return null;
 
-    const frame = getBufferedFrameForClip(clipDecoder, timelineTime, this.frameTolerance, options);
+    const frame = getBufferedFrameForClip(clipDecoder, timelineTime, this.frameTolerance, options, recordNeighbourFallback);
     if (frame) this.touchDecoder(clipDecoder);
     return frame;
   }
@@ -773,6 +761,7 @@ export class ParallelDecodeManager {
       clampedSourceTime,
       this.frameTolerance,
       options,
+      recordNeighbourFallback,
     );
     if (frame) this.touchDecoder(clipDecoder);
     return frame;
@@ -828,11 +817,18 @@ export class ParallelDecodeManager {
 
       const sourceTime = sourceTimeOverrides?.get(clipDecoder.clipId) ?? timelineToSourceTime(clipInfo, timelineTime);
       const currentTimestamp = sourceTime * 1_000_000;  // Convert to microseconds
+      // A reversed clip walks the source backward: its upcoming frames lie below the
+      // current time, so prune the side it has already passed, not the side it needs.
+      if (clipDecoder.lastAdvanceSourceTime !== undefined && sourceTime !== clipDecoder.lastAdvanceSourceTime) {
+        clipDecoder.advancingBackward = sourceTime < clipDecoder.lastAdvanceSourceTime;
+      }
+      clipDecoder.lastAdvanceSourceTime = sourceTime;
+      const movingBackward = clipDecoder.advancingBackward === true;
 
       // Clean up frames that are significantly behind current position (> 200ms behind)
       const timestampsToRemove: number[] = [];
       for (const [timestamp, decodedFrame] of clipDecoder.frameBuffer) {
-        if (timestamp < currentTimestamp - 200_000) {  // 200ms behind
+        if (movingBackward ? timestamp > currentTimestamp + 200_000 : timestamp < currentTimestamp - 200_000) {
           decodedFrame.frame.close();
           timestampsToRemove.push(timestamp);
         }

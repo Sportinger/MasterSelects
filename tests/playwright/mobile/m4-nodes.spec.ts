@@ -101,8 +101,18 @@ async function openNodes(m1: M1Session): Promise<NodesView> {
   await tapOn(m1, page.getByTestId(`${WS.editorRow}-nodes`))
   const root = page.getByTestId(WS.root)
   await expect(root).toHaveAttribute('data-workspace', 'nodes')
-  await tapOn(m1, page.getByTestId(WS.toggleLeft))
-  await tapOn(m1, page.getByTestId(WS.toggleRight))
+  // Both sides are collapsed by touch, so the collapse is the user's stored choice. An untouched
+  // Properties side already starts collapsed while nothing is selected and would open by itself on the
+  // first node tap (PhoneWorkspace, owner rule 3), moving the canvas under the finger: such a side is
+  // opened and collapsed again. An open side is collapsed with one tap.
+  for (const [attr, toggle] of [['data-left', WS.toggleLeft], ['data-right', WS.toggleRight]] as const) {
+    await expect(root).toHaveAttribute(attr, /^(open|collapsed)$/)
+    if ((await root.getAttribute(attr)) === 'collapsed') {
+      await tapOn(m1, page.getByTestId(toggle))
+      await expect(root).toHaveAttribute(attr, 'open')
+    }
+    await tapOn(m1, page.getByTestId(toggle))
+  }
   await expect(root).toHaveAttribute('data-left', 'collapsed')
   await expect(root).toHaveAttribute('data-right', 'collapsed')
   const main = page.getByTestId(WS.main)

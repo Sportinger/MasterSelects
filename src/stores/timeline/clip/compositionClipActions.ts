@@ -16,6 +16,7 @@ import { beginNestedCompositionLoad, releaseStaleNestedCompositionClips } from '
 import { getCompositionContentDependents } from './nestedCompositionContentHash';
 import type { ClipActionContext } from './clipActionContext';
 import { findCompositionInsertionCycle } from '../compositionCycleGuard';
+import { captureEditorTransactionBinding } from '../../../services/project/repository/transaction/editorTransactionBinding';
 
 const log = Logger.create('CompositionClipActions');
 
@@ -41,12 +42,18 @@ export async function applyAddCompClipAction(
   composition: Composition,
   startTime: number,
 ): Promise<void> {
-  const { get, set } = context;
-  const { clips, tracks, updateDuration, findNonOverlappingPosition, thumbnailsEnabled, invalidateCache } = get();
+  const { get } = context;
+  const { tracks, updateDuration, findNonOverlappingPosition, thumbnailsEnabled, invalidateCache } = get();
   if (tracks.find(track => track.id === trackId)?.locked) {
     log.warn('Cannot add composition clip to locked track', { trackId, composition: composition.name });
     return;
   }
+  // Every write follows an await. The clip, its linked audio and its nested content join the caller's
+  // transaction (an assistant tool, a user drop), carried explicitly; without one they form one revision of
+  // their own. Delayed segment builds join while it is open, later as background revisions.
+  const transaction = captureEditorTransactionBinding('Add composition clip', { fallbackSource: 'timeline' });
+  const set: typeof context.set = (patch) => transaction.run(() => context.set(patch));
+  const setLate: typeof context.set = (patch) => transaction.runLate(() => context.set(patch));
   const { useMediaStore } = await import('../../mediaStore');
   const mediaState = useMediaStore.getState();
   const parentCompositionId = mediaState.activeCompositionId;
@@ -70,8 +77,10 @@ export async function applyAddCompClipAction(
   const compClip = createCompClipPlaceholder({
     trackId, composition, compositions: mediaState.compositions, startTime, findNonOverlappingPosition,
   });
-  set({ clips: [...clips, compClip] });
-  updateDuration();
+  transaction.run(() => {
+    context.set({ clips: [...get().clips, compClip] });
+    updateDuration();
+  });
   const isLatestLoad = beginNestedCompositionLoad(get, compClip.id);
   const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId
     && isLatestLoad() && get().clips.some(clip => clip.id === compClip.id && clip.compositionId === composition.id);
@@ -119,7 +128,7 @@ export async function applyAddCompClipAction(
       nestedClips,
       thumbnailsEnabled,
       get,
-      set,
+      set: setLate,
       isCurrentTimelineSession,
       delayMs: 500,
       logLabel: 'Set clip segments for nested comp',

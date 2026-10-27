@@ -108,6 +108,14 @@
   font-size: 13px;
   text-align: center;
   pointer-events: none;
+  /* Above the centre playhead line, on a pill, so the line never crosses the words. */
+  z-index: 4;
+}
+.mobile-skin .phone-timeline__empty > span {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--phone-surface, var(--phone-bg));
+  line-height: 1.4;
 }
 
 /* ---- Fixed centre playhead ---- */

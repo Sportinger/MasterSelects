@@ -226,6 +226,12 @@ const durationBucket = choice([
   '15m_plus',
 ] as const);
 
+/** Millisecond fields of project_load_phases (rounded by the client, capped at 10 minutes). */
+export const PROJECT_LOAD_TIMING_FIELDS = [
+  'total_ms', 'queue_ms', 'prepare_ms', 'handoff_ms', 'target_ms', 'storage_open_ms', 'session_read_ms',
+  'initialize_ms', 'views_ms', 'workspace_ms', 'activation_ms', 'close_previous_ms', 'sync_ms', 'publish_ms',
+  'long_task_ms', 'long_task_max_ms', 'frame_gap_max_ms', 'first_frame_ms',
+] as const;
 export const OPERATION_STAGES = ['selection', 'create', 'load', 'sync', 'save', 'preparing', 'rendering', 'video', 'audio', 'muxing', 'encoding', 'download', 'unknown'] as const;
 export const OPERATION_CONTEXT_EVENTS = ['app_opened', 'project_created', 'project_opened', 'project_action_failed', 'project_action_cancelled', 'media_import_completed', 'media_import_failed', 'playback_started', 'playback_stopped', 'export_started', 'export_completed', 'export_failed', 'export_cancelled'] as const;
 const operationProperties = {
@@ -387,6 +393,22 @@ export const PRODUCT_ANALYTICS_EVENT_DEFINITIONS = {
       backend: choice(['fsa', 'native'] as const),
       runtime_bucket: durationBucket,
       source: choice(['picker', 'browser_storage'] as const),
+    },
+  },
+  // Phase timings of one project open, create, duplicate (Save As), scratch recovery open or explicit
+  // save, in rounded milliseconds, plus what the main thread did meanwhile. No project names or IDs.
+  project_load_phases: {
+    properties: {
+      kind: choice(['open', 'create', 'duplicate', 'scratch', 'save'] as const),
+      outcome: choice(['ready', 'failed', 'cancelled', 'superseded'] as const),
+      storage: choice(['opfs', 'indexeddb', 'fsa', 'native', 'unknown'] as const),
+      platform: choice(['windows', 'macos', 'linux', 'ios', 'android', 'other'] as const),
+      device_class: choice(['desktop', 'tablet', 'mobile'] as const),
+      writable: { kind: 'boolean' },
+      page_hidden: { kind: 'boolean' },
+      recovered_records: count(100_000_000),
+      long_task_count: count(100_000),
+      ...Object.fromEntries(PROJECT_LOAD_TIMING_FIELDS.map(field => [field, count(600_000)])),
     },
   },
   project_closed: {

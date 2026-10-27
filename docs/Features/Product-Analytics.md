@@ -129,7 +129,7 @@ The allowlist in `src/services/productAnalytics/catalog.ts` currently covers:
 | Privacy | analytics preference enabled |
 | Setup | setup started, background selected, completed, cancelled |
 | Tutorial | started, step viewed, completed, skipped, cancelled |
-| Projects | created, opened, closed, action failed |
+| Projects | created, opened, closed, action failed, load phase timings |
 | Media | import started, completed, failed, cancelled |
 | Editing | semantic edit committed, control committed, properties surface viewed, undo, redo, history restore |
 | Playback | started, paused/stopped/ended |
@@ -151,6 +151,26 @@ client hints), platform, device class and startup time in ms. Unlike error repor
 it also counts successes, so it gives the real startup failure rate per browser,
 OS and GPU family. GPU model names and driver versions are not sent here; they
 stay in the error-report context (`context.webgpu.startup`).
+
+`project_load_phases` is sent when a project open, create, Save As
+(`duplicate`), scratch recovery open or explicit save ends
+(`src/services/project/load/projectLoadTelemetry.ts`). It carries the kind, the
+outcome (`ready`, `failed`, `cancelled`, `superseded` for a scratch open that gave
+way to a project open), the storage (`opfs`, `indexeddb`, `fsa`, `native`),
+platform, device class, whether the project opened writable, the number of
+recovered history records, and rounded milliseconds per phase (`queue_ms`,
+`prepare_ms`, `handoff_ms`, `target_ms`, `storage_open_ms`, `session_read_ms`,
+`initialize_ms`, `views_ms`, `workspace_ms`, `activation_ms`,
+`close_previous_ms`, `sync_ms`, `publish_ms`, `total_ms`) plus main-thread long
+tasks (`long_task_ms`, `long_task_max_ms`, `long_task_count`), the longest gap
+between animation frames (`frame_gap_max_ms`) and whether the page was hidden.
+After a ready open, create, duplicate or scratch open, `first_frame_ms` is the
+time from the end of the storage work to the first painted frame after it (sent
+only when a frame came within 60 s; saves have none), and long tasks and frame
+gaps of that render count too.
+Durations are rounded to 10 ms below 1 s, 100 ms below 10 s and whole seconds
+above, capped at 10 minutes. No project name, path or ID is sent. The phases
+are described in [Project Repository](./Project-Repository.md#saving-and-recovery).
 
 Committed timeline edits carry fixed `action`, `operation`, `origin`, and `target` dimensions. This distinguishes, for example, a user moving a clip from an agent trimming a clip, without retaining the free-form history label.
 

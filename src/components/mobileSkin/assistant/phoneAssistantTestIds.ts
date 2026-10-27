@@ -9,6 +9,8 @@ export const PHONE_ASSISTANT_TEST_IDS = {
   serviceRetry: 'phone-assistant-service-retry',
   /** One per model choice; carries data-mode and aria-pressed. */
   model: 'phone-assistant-model',
+  /** Why a greyed model choice cannot be used on this server (one line per greyed choice). */
+  modelUnavailable: 'phone-assistant-model-unavailable',
   newChat: 'phone-assistant-new-chat',
   messages: 'phone-assistant-messages',
   /** One per message; carries data-role, data-message-id and data-pending. */

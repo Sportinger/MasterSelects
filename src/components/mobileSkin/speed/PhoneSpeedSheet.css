@@ -22,16 +22,19 @@
 }
 .mobile-skin .phone-speed-sheet__value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .mobile-skin .phone-speed-sheet__duration { color: var(--phone-text-dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* Preset speeds: a short fixed set, so one evenly spaced grid row instead of a cut-off scroller. */
 .mobile-skin .phone-speed-sheet__chips {
-  display: flex;
-  gap: 8px;
-  margin: 0 -16px;
-  padding: 0 16px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
 }
-.mobile-skin .phone-speed-sheet__chips::-webkit-scrollbar { display: none; }
+.mobile-skin .phone-speed-sheet__chips .phone-choice {
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
 .mobile-skin .phone-speed-sheet__curves {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

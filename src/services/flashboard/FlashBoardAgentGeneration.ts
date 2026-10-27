@@ -1,4 +1,5 @@
 import { useMediaStore } from '../../stores/mediaStore';
+import { captureEditorTransactionBinding } from '../project/repository/transaction/editorTransactionBinding';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import {
   failFlashBoardActiveGenerationRecord,
@@ -627,11 +628,23 @@ export async function startAgentMediaGeneration(
   input: AgentMediaGenerationRequestInput,
 ): Promise<Record<string, unknown>> {
   ensureAgentGenerationRuntime();
+  // The request is normalized first (an await); the workspace and job record are then created in the caller's
+  // transaction (the startMediaGeneration tool), carried explicitly.
+  const transaction = captureEditorTransactionBinding('Start media generation');
   const request = await normalizedGenerationRequest(input);
   if (!request.idempotencyKey?.startsWith(AGENT_GENERATION_KEY_PREFIX)) {
     throw new Error(`idempotencyKey must start with ${AGENT_GENERATION_KEY_PREFIX}`);
   }
-  const existing = getFlashBoardActiveGenerationRecordByRequestKey(request.idempotencyKey);
+  const idempotencyKey = request.idempotencyKey;
+  return transaction.run(() => startNormalizedAgentMediaGeneration(input, request, idempotencyKey));
+}
+
+function startNormalizedAgentMediaGeneration(
+  input: AgentMediaGenerationRequestInput,
+  request: Awaited<ReturnType<typeof normalizedGenerationRequest>>,
+  idempotencyKey: string,
+): Record<string, unknown> {
+  const existing = getFlashBoardActiveGenerationRecordByRequestKey(idempotencyKey);
   if (existing) return publicRecord(startFlashBoardActiveGenerationRecord(existing.id));
 
   const workspaceState = useFlashBoardStore.getState();

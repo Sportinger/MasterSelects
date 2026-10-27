@@ -1,4 +1,5 @@
 import { useTimelineStore } from '../../../stores/timeline';
+import { captureToolTransaction } from '../toolTransaction';
 import { collectFaceReviewCandidates } from '../../faceAnalysis/faceReviewCandidates';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import type { ToolResult } from '../types';
@@ -34,8 +35,10 @@ export async function handleMergeClipFacePeople(
     useTimelineStore.getState().clips,
   );
   selectClipAndOpenTab(clipId, 'analysis');
+  const transaction = captureToolTransaction('mergeFacePeople');
   const { mergeFacePeople } = await import('../../faceAnalysis/faceIdentityCorrections');
-  await mergeFacePeople(clipId, sourcePersonId, targetPersonId);
+  // The correction writes the clip analysis before it persists: after the import await, so bound explicitly.
+  await transaction.run(() => mergeFacePeople(clipId, sourcePersonId, targetPersonId));
   const updated = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
   const target = updated?.analysis?.faceAnalysis?.people.find(person => person.id === targetPersonId);
   return {
@@ -85,8 +88,10 @@ export async function handleMoveClipFaceAppearance(
     useTimelineStore.getState().clips,
   );
   selectClipAndOpenTab(clipId, 'analysis');
+  const transaction = captureToolTransaction('moveFaceAppearance');
   const { moveFaceAppearance } = await import('../../faceAnalysis/faceIdentityCorrections');
-  await moveFaceAppearance(clipId, sourcePersonId, targetPersonId, sourceTime);
+  // The correction writes the clip analysis before it persists: after the import await, so bound explicitly.
+  await transaction.run(() => moveFaceAppearance(clipId, sourcePersonId, targetPersonId, sourceTime));
   return {
     success: true,
     data: {
@@ -125,8 +130,10 @@ export async function handleAssignClipFaceReviewCandidate(
     useTimelineStore.getState().clips,
   );
   selectClipAndOpenTab(clipId, 'analysis');
+  const transaction = captureToolTransaction('assignReviewFaces');
   const { assignReviewFaces } = await import('../../faceAnalysis/faceIdentityCorrections');
-  await assignReviewFaces(clipId, candidate.id, candidate.faceIds, targetPersonId);
+  // The correction writes the clip analysis before it persists: after the import await, so bound explicitly.
+  await transaction.run(() => assignReviewFaces(clipId, candidate.id, candidate.faceIds, targetPersonId));
   const updated = useTimelineStore.getState().clips.find(item => item.id === clipId);
   const remainingCandidates = collectFaceReviewCandidates(updated?.analysis?.frames ?? []).length;
   return {

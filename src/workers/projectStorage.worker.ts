@@ -30,6 +30,8 @@ let persistence: RepositoryPersistence | null = null;
 let index: IndexedDBMetadataIndex | null = null;
 let views: WorkspaceViewStore | null = null;
 let recovery: StorageOpenResult['recovery'] | null = null;
+/** Background startup cache refresh (see view-flush); close() waits for it before releasing the writer. */
+let startupCacheJob: Promise<void> = Promise.resolve();
 // Opening a project looks up one journal per entity; the index turns each lookup into a map read.
 const journalIndex = createJournalIndexCache();
 let hashingSources = 0;
@@ -79,6 +81,7 @@ async function close(): Promise<void> {
   for (const transfer of transfers.values()) transfer.stream.abort(new RepositoryError('cancelled', 'Project storage session closed'));
   await Promise.allSettled([...transfers.values()].map(value => value.done)); transfers.clear();
   if (views) await views.stop();
+  await startupCacheJob; startupCacheJob = Promise.resolve();
   if (owner) await owner.release();
   index?.close(); index = null; owner = null; views = null; persistence = null; backend = null; recovery = null;
   journalIndex.head = null; journalIndex.entries = null;
@@ -94,6 +97,10 @@ async function open(request: Extract<StorageRequest, { type: 'open' }>, signal: 
   backend = request.location.kind === 'fsa' ? await createFsaRepositoryBackend(request.location.handle)
     : request.location.kind === 'opfs' ? await createOpfsRepositoryBackend(request.location.path, request.location.store)
     : await createNativeRepositoryBackend(request.location.path, { repositoryCommand: nativeCommand, readRepositoryBlob: nativeBlob });
+  // Folders this session reads first (history) and writes first (segments, commits, this workspace's
+  // views): resolved concurrently while the descriptor is checked, instead of one lookup each later.
+  const sessionFolders = ['.masterselects/commits/', '.masterselects/segments/', `.masterselects/views/${encodeURIComponent(request.workspaceId)}/`];
+  void backend.prepareDirectories?.(sessionFolders, false);
   try {
 
     const existing = await backend.stat('project.msrepo.json');
@@ -114,6 +121,14 @@ async function open(request: Extract<StorageRequest, { type: 'open' }>, signal: 
       const attestation = await attestWritableRepositoryLocation(descriptor.repositoryId, backend.locationId);
 
       if (attestation !== 'same-location') { ownershipReason = attestation; await owner.release(); owner = null; }
+    }
+    let ownedViews: WorkspaceViewStore | null = null;
+    if (owner) {
+      // The writer creates the folders its first save writes into anyway (a no-op lookup when they exist),
+      // and starts the workspace view listing beside recovery (see WorkspaceViewStore.prefetch).
+      void backend.prepareDirectories?.(sessionFolders, true);
+      ownedViews = new WorkspaceViewStore(backend, owner, descriptor.repositoryId, request.workspaceId);
+      ownedViews.prefetch();
     }
     if (!existing) {
       if (!owner) throw new RepositoryError('ownership', 'Creating a repository requires an exclusive writer');
@@ -146,8 +161,8 @@ async function open(request: Extract<StorageRequest, { type: 'open' }>, signal: 
       indexPhase = indexedReady ? 'ready' : 'fallback';
       // Pay a full history validation once: snapshot the confirmed state now instead of at the next
       // explicit save, so an unsaved close does not make every later open slow. No-op when current.
-      void persistence.saveStartupCache();
-      views = new WorkspaceViewStore(backend, owner, descriptor.repositoryId, request.workspaceId);
+      startupCacheJob = persistence.saveStartupCache().catch(() => {});
+      views = ownedViews ?? new WorkspaceViewStore(backend, owner, descriptor.repositoryId, request.workspaceId);
     } else {
       indexedReady = false; indexPhase = 'fallback';
 
@@ -238,7 +253,11 @@ async function execute(request: StorageRequest, signal: AbortSignal): Promise<un
       return views.update(request.key, request.value);
     }
     case 'view-flush': {
-      if (owner) { await views?.flush(request.views); await persistence?.saveStartupCache(); }
+      // The startup cache is a disposable, locally attested shortcut for the next open, never part of what
+      // a save confirms: the save point is reached once the commits and views above are durable. Writing
+      // it (a stat per history file plus a slot write) therefore runs after the save has returned, still
+      // serialized with publications by RepositoryPersistence; close() waits for it.
+      if (owner) { await views?.flush(request.views); if (persistence) startupCacheJob = persistence.saveStartupCache().catch(() => {}); }
       return;
     }
     case 'hash-source': {

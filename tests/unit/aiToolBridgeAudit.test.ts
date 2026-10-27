@@ -42,6 +42,24 @@ describe('AI tool bridge audit sanitization', () => {
     });
   });
 
+  it('compacts the trace file to its newest whole lines once it grows past the budget', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-trace-compact-'));
+    const tracePath = path.join(directory, 'history.jsonl');
+    try {
+      const line = (index: number) => `${JSON.stringify({ callId: `call-${index}`, tool: 'getStats', startedAt: index, padding: 'x'.repeat(200) })}\n`;
+      fs.writeFileSync(tracePath, Array.from({ length: 100 }, (_, index) => line(index)).join(''));
+      const sizeBefore = fs.statSync(tracePath).size;
+      new BridgeTraceStore(tracePath, 20, 4_000);
+      const text = fs.readFileSync(tracePath, 'utf8');
+      expect(text.length).toBeLessThanOrEqual(2_000);
+      expect(text.length).toBeLessThan(sizeBefore);
+      expect(text.endsWith(line(99))).toBe(true);
+      for (const kept of text.trim().split('\n')) expect(() => JSON.parse(kept)).not.toThrow();
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('persists completed bridge calls and resolves idempotency keys after restart', () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'masterselects-bridge-audit-'));
     const tracePath = path.join(tempRoot, 'history.jsonl');

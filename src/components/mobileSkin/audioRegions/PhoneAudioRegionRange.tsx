@@ -5,12 +5,13 @@ import { useEffect, useState } from 'react';
 
 import type { TimelineAudioRegionSelection } from '../../../stores/timeline/types';
 import type { TimelineClip } from '../../../types/timeline';
-import { blurAfterPointer } from '../audio/PhoneAudioControls';
+import { blurAfterPointer, parsePhoneDecimal } from '../audio/PhoneAudioControls';
 import type { PhoneRegionMode } from './PhoneAudioRegionWaveform';
 import {
   formatPhoneRegionTime, phoneRegionAll, phoneRegionFromTimes, type PhoneRegionChannel,
 } from './phoneAudioRegionModel';
 import { PHONE_AUDIO_REGION_TEST_IDS as IDS } from './phoneAudioRegionTestIds';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 
 interface Props {
   clip: TimelineClip;
@@ -43,7 +44,7 @@ function SecondsField({ testId, label, value, max, disabled, onDisabledTap, onCo
   useEffect(() => { if (!editing) setDraft(shown); }, [editing, shown]);
   const commit = () => {
     setEditing(false);
-    const parsed = Number.parseFloat(draft);
+    const parsed = parsePhoneDecimal(draft);
     if (Number.isFinite(parsed)) onCommit(Math.max(0, Math.min(max, parsed)));
     else setDraft(shown);
   };
@@ -51,7 +52,7 @@ function SecondsField({ testId, label, value, max, disabled, onDisabledTap, onCo
     <label className="phone-region-field">
       <span>{label}</span>
       <input
-        className="phone-audio-row__field" type="number" inputMode="decimal" step={0.01} min={0} max={max}
+        className="phone-audio-row__field" type="text" inputMode="decimal" autoComplete="off" spellCheck={false}
         value={draft} readOnly={disabled} aria-disabled={disabled || undefined} data-testid={testId}
         onFocus={() => { if (disabled) onDisabledTap(); else setEditing(true); }}
         onChange={(event) => setDraft(event.target.value)}
@@ -80,9 +81,9 @@ export function PhoneAudioRegionRange({ clip, selection, mode, channel, disabled
 
   return (
     <div className="phone-region-range">
-      <div className="phone-audio-beats__chips" role="radiogroup" aria-label="Waveform gesture">
+      <PhoneChipRow role="radiogroup" label="Waveform gesture">
         {MODES.map((item) => chip(`${IDS.modePrefix}${item.id}`, mode === item.id, item.label, () => onMode(item.id)))}
-      </div>
+      </PhoneChipRow>
       <div className="phone-region-row">
         <SecondsField testId={IDS.startInput} label="Start" value={startOffset} max={length} disabled={disabled} onDisabledTap={onDisabledTap} onCommit={setStart} />
         <SecondsField testId={IDS.endInput} label="End" value={endOffset} max={length} disabled={disabled} onDisabledTap={onDisabledTap} onCommit={setEnd} />
@@ -97,9 +98,9 @@ export function PhoneAudioRegionRange({ clip, selection, mode, channel, disabled
           Clear range
         </button>
       </div>
-      <div className="phone-audio-beats__chips" role="radiogroup" aria-label="Channels">
+      <PhoneChipRow role="radiogroup" label="Channels">
         {CHANNELS.map((item) => chip(`${IDS.channelPrefix}${item.id}`, channel === item.id, item.label, () => onChannel(item.id)))}
-      </div>
+      </PhoneChipRow>
       <p className="phone-audio-sheet__hint" data-testid={IDS.readout}
         data-start={selection ? selection.startTime.toFixed(4) : ''} data-end={selection ? selection.endTime.toFixed(4) : ''}>
         {selection

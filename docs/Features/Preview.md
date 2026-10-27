@@ -85,6 +85,7 @@ Current preview-related overlays and modes include:
 - Reusing the same child composition more than once in a parent keeps every visual instance on the normal nested render path during playback; paused preview may use the matching composited passthrough frame without turning the child's audio companion into a visual layer.
 - Pausing preserves the complete final ping-pong accumulator, including the last composited layer.
 - Adding, removing, replacing, or converting a layer in the active nested composition rebinds its runtime sources and invalidates dependent parents automatically. Transform, effect, text, and keyframe edits remain on the lightweight live-evaluation path.
+- A composition nested right after its clip played inside it gets a new video element that can find scrub frames cached under the same source before it has loaded metadata. Such a cached frame is reported with the element's real size, otherwise the layer's known intrinsic size, otherwise the cached texture's own size. It is dropped only when none of these is positive (`resolveCachedScrubFrameSize`). A layer that still has a texture but no valid source size is skipped for that frame with a `Compositor` warning (an export frame fails instead), and the compositor's uniform change check also replaces a previously uploaded NaN value. Before this, a 0×0 size gave a NaN aspect that stayed in the layer's uniforms, so a smaller nested composition showed its leftmost column stretched across the layer (`src/engine/render/compositeSourceSize.ts`, `src/engine/pipeline/compositor/uniforms.ts`; mosaic case T09a).
 - Each target can toggle its own transparency grid state.
 - During edit-mode scrubbing, independent previews keep their last visible frame while the video decoder seeks instead of flashing black.
 - Edit mode is panel-local: the Edit button only affects that preview, and the global `Tab` shortcut targets the focused preview or, with no focused preview, the first editable preview.
@@ -143,7 +144,11 @@ judged by frame index, never by a time distance that also admits a neighbour:
   k/fps presented frame k-1 for every third frame at 30 fps. Every HTML seek therefore goes to
   `htmlVideoFrameSeekTime`: up to 1 ms into the target's source frame, never past the middle of what
   remains of it (`src/services/layerBuilder/videoSyncFrameSelection.ts`, applied by
-  `VideoSyncManager.safeSeekTime`). The background scrub-cache fill seeks each 1/30 s slot the same
+  `VideoSyncManager.safeSeekTime`). The position also stays at least 1 ms before the next frame:
+  the demuxer rounds a seek to the container time base (±33 µs for MP4 at 1/15360 s) and starts
+  at a keyframe it rounds onto, so a reversed clip's target, which sits 10 µs before a frame
+  boundary, used to present the following keyframe and leave the paused preview empty on the
+  last frame of every GOP. The background scrub-cache fill seeks each 1/30 s slot the same
   way (`SLOT_SEEK_LEAD_SECONDS`), so a slot no longer holds the frame before its own.
 - **The previous frame is never the target frame.** A presented frame (its
   `requestVideoFrameCallback` timestamp) matches the target by its source frame bin; the

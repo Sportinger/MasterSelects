@@ -46,7 +46,7 @@ export function PhoneProjectStorageTools({ projectOpen }: { projectOpen: boolean
 
   const backup = async () => {
     if (!pickFolders) {
-      showUnavailable({ actionId: 'project-folder-backup', label: 'Back up to a folder', reason: PHONE_FOLDER_BACKUP_REASON });
+      showUnavailable({ actionId: 'project-folder-backup', label: 'Save to a folder', reason: PHONE_FOLDER_BACKUP_REASON });
       return;
     }
     if (!projectOpen) { report({ ok: false, message: 'Open a project first.' }); return; }
@@ -54,7 +54,7 @@ export function PhoneProjectStorageTools({ projectOpen }: { projectOpen: boolean
     setBusy('backup');
     try {
       const made = await projectFileService.createBackup();
-      report(made ? { ok: true, message: 'Backup written. It opens on its own in any MasterSelects.' } : { ok: true, message: 'No folder picked; nothing was written.' });
+      report(made ? { ok: true, message: 'Saved to the folder. That copy opens on its own in any MasterSelects.' } : { ok: true, message: 'No folder picked; nothing was written.' });
     } catch (error) {
       log.warn('Folder backup failed', error);
       report({ ok: false, message: `The backup failed: ${reason(error)}` });
@@ -80,9 +80,9 @@ export function PhoneProjectStorageTools({ projectOpen }: { projectOpen: boolean
       <button type="button" className="phone-lib__button phone-lib__button--wide" data-testid={IDS.backup}
         aria-disabled={!pickFolders || busy !== null} data-available={pickFolders}
         onClick={() => void backup()}>
-        {busy === 'backup' ? 'Backing up…' : pickFolders ? 'Back up to a folder' : 'Back up to a folder · needs a folder picker'}
+        {busy === 'backup' ? 'Saving to the folder…' : pickFolders ? 'Save to a folder' : 'Save to a folder · needs a folder picker'}
       </button>
-      <p className="phone-lib__note">A folder backup is a complete project with its media. Picking the same folder again adds only what changed since the last backup.</p>
+      <p className="phone-lib__note">Phone projects live in this browser. Save to a folder writes a complete copy with its media into a folder you pick (picking it again adds only what changed); Export .msproj above makes one file to share.</p>
     </div>
   );
 }

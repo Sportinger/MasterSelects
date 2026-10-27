@@ -1,4 +1,4 @@
-// Small touch controls of the transition and speed sheets: a choice tile/chip, an on/off switch,
+// Small touch controls of the phone tool sheets (transition, speed and others): a choice tile/chip, an on/off switch,
 // a segmented tab row and a greyed option that explains itself (owner rule: grey out, never hide).
 // Every control is at least 44 px tall, drops pointer focus after a tap (no stuck ring) and keeps a
 // styled :focus-visible ring for the keyboard (phoneChoiceControls.css).
@@ -28,21 +28,24 @@ export interface PhoneChoiceProps {
   /** 'tile' for the grid of looks, 'chip' for the compact row. */
   variant?: 'tile' | 'chip';
   glyph?: ReactNode;
+  /** A picture above the label (tile variant): the look of the choice instead of letters. */
+  media?: ReactNode;
 }
 
-export function PhoneChoice({ label, selected, onSelect, testId, unavailableReason, variant = 'chip', glyph }: PhoneChoiceProps) {
+export function PhoneChoice({ label, selected, onSelect, testId, unavailableReason, variant = 'chip', glyph, media }: PhoneChoiceProps) {
   const unavailable = Boolean(unavailableReason);
   return (
     <button
       type="button"
-      className={`phone-choice phone-choice--${variant}`}
+      className={`phone-choice phone-choice--${variant}${media ? ' phone-choice--media' : ''}`}
       aria-pressed={selected}
       aria-disabled={unavailable || undefined}
       data-testid={testId}
       onPointerUp={blurAfterPointer}
       onClick={() => (unavailable ? explain(testId, label, unavailableReason!) : onSelect())}
     >
-      {glyph && <span className="phone-choice__glyph" aria-hidden="true">{glyph}</span>}
+      {media ? <span className="phone-choice__media" aria-hidden="true">{media}</span> : null}
+      {!media && glyph && <span className="phone-choice__glyph" aria-hidden="true">{glyph}</span>}
       <span className="phone-choice__label">{label}</span>
     </button>
   );

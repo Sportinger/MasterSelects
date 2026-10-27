@@ -148,7 +148,7 @@ export function preflightBatchToolAccess(
 export async function handleExecuteBatch(
   args: Record<string, unknown>,
   callerContext: CallerContext = 'internal',
-  options: AIToolExecutionOptions = {},
+  options: Omit<ExecuteBatchCoreOptions, 'callerContext'> = {},
 ): Promise<ToolResult> {
   return executeBatchCore(args, {
     ...options,

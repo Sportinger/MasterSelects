@@ -42,6 +42,9 @@ export async function buildMainComposition(
     tilt: 86,
     yaw: 0,
     perspective: 0.46,
+    // Authored before Distance existed, i.e. at Distance 1 (saved effects keep it the same way);
+    // the newer default 0.8 crops the near-black centre of this tiny native-scale frame.
+    distance: 1,
     heightContrast: 1.2,
     ambient: 0.54,
     lightStrength: 0.62,
@@ -76,6 +79,7 @@ export async function buildMainComposition(
     tilt: 85,
     yaw: -4,
     perspective: 0.38,
+    distance: 1,
     heightContrast: 1.34,
     ambient: 0.5,
     lightStrength: 0.64,

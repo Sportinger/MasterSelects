@@ -39,7 +39,12 @@ export interface PhoneSliderRowProps {
   valueText?: string;
 }
 
+/** Every typed value uses a decimal point, whatever the browser locale (a number input would show '0,50'). */
 const format = (value: number, decimals: number) => (Number.isFinite(value) ? value.toFixed(decimals) : '');
+/** Accepts a point or a comma as the decimal separator. */
+export function parsePhoneDecimal(text: string): number {
+  return Number.parseFloat(text.trim().replace(',', '.'));
+}
 
 export function PhoneSliderRow(props: PhoneSliderRowProps) {
   const { disabled = false } = props;
@@ -64,11 +69,12 @@ export function PhoneSliderRow(props: PhoneSliderRowProps) {
           <input
             id={`${props.id}-field`}
             className="phone-audio-row__field"
-            type="number"
+            type="text"
             inputMode="decimal"
-            min={props.fieldMin}
-            max={props.fieldMax}
-            step={props.fieldStep}
+            autoComplete="off"
+            spellCheck={false}
+            aria-valuemin={props.fieldMin}
+            aria-valuemax={props.fieldMax}
             value={draft}
             readOnly={disabled}
             aria-disabled={disabled || undefined}
@@ -78,7 +84,7 @@ export function PhoneSliderRow(props: PhoneSliderRowProps) {
             onChange={(event) => {
               if (disabled) return;
               setDraft(event.target.value);
-              const parsed = Number.parseFloat(event.target.value);
+              const parsed = parsePhoneDecimal(event.target.value);
               if (Number.isFinite(parsed)) props.onField(parsed);
             }}
             onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}

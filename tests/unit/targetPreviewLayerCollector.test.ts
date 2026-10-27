@@ -97,4 +97,40 @@ describe('TargetPreviewLayerCollector', () => {
       previewPath: 'not-ready-scrub-cache',
     })]);
   });
+
+  it('places a cached scrub frame with the layer intrinsic size while a fresh element still reports 0x0', () => {
+    // The scrub cache is keyed by src: a recreated element (split clip, pool eviction) finds
+    // frames another element cached before it has loaded metadata itself.
+    useTimelineStore.setState({ isDraggingPlayhead: false, isPlaying: false });
+    const cachedFrame = { view: { label: 'cached-frame' }, mediaTime: 2, width: 960, height: 540 };
+    const scrubbingCache = {
+      preloadAroundTime: vi.fn(),
+      getLastPresentedTime: vi.fn(() => undefined),
+      getLastPresentedOwner: vi.fn(() => undefined),
+      getLastFrame: vi.fn(() => null),
+      getLastFrameNearTime: vi.fn(() => null),
+      getCachedFrameEntry: vi.fn(() => cachedFrame),
+      getNearestCachedFrameEntry: vi.fn(() => null),
+    };
+    const collector = new TargetPreviewLayerCollector({
+      cacheManager: { getScrubbingCache: () => scrubbingCache },
+      exportCanvasManager: { getIsExporting: () => false },
+      renderLoop: { getIsPlaying: () => false },
+    } as unknown as RenderDeps);
+    const video = {
+      readyState: 0, currentTime: 0, seeking: false, paused: true,
+      src: 'blob:video', videoWidth: 0, videoHeight: 0,
+    } as HTMLVideoElement;
+    const layer = {
+      id: 'video-layer', sourceClipId: 'video-clip', visible: true, opacity: 1,
+      source: { type: 'video', videoElement: video, mediaTime: 2, intrinsicWidth: 1280, intrinsicHeight: 720 },
+    } as Layer;
+
+    expect(collector.collect([layer])).toEqual([expect.objectContaining({
+      textureView: cachedFrame.view,
+      sourceWidth: 1280,
+      sourceHeight: 720,
+      previewPath: 'not-ready-scrub-cache',
+    })]);
+  });
 });

@@ -74,13 +74,17 @@ export class RepositorySession {
       openSessions.add(session); return session;
     } catch (error) { await client.close().catch(() => {}); throw error; }
   }
-  async initialize(entities: ReadonlyMap<string, EntityDTO>, label = 'Project imported'): Promise<void> {
+  /**
+   * Commits the first revision. `flush: false` leaves the confirmation to the caller, who writes the
+   * workspace views meanwhile and confirms both with one flush (a new project needs one save point, not two).
+   */
+  async initialize(entities: ReadonlyMap<string, EntityDTO>, label = 'Project imported', options: { flush?: boolean } = {}): Promise<void> {
     if (this.coordinator.getProjection().revisionId !== null) throw new RepositoryError('conflict', 'Repository already contains project history');
     const token = this.coordinator.begin(label, 'import');
     try {
       for (const [key, entity] of entities) this.coordinator.write(token, key, entity);
       const committed = this.coordinator.commit(token);
-      await this.coordinator.flush(committed.receipt);
+      if (options.flush !== false) await this.coordinator.flush(committed.receipt);
     } catch (error) {
       // Logical commit must remain visible after disk failure; only an open token may cancel.
       try { this.coordinator.cancel(token); } catch { /* Already committed. */ }

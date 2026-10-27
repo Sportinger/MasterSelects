@@ -16,7 +16,7 @@
         "params": {
           "tilt": 70,
           "yaw": -18,
-          "distance": 1.05,
+          "distance": 0.93,
           "columns": 120,
           "height": 0.35,
           "heightContrast": 2

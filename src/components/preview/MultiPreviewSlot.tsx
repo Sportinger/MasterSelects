@@ -25,6 +25,8 @@ interface MultiPreviewSlotProps {
   onAir?: boolean;
   // Touch tap on a multicam camera (cut to it); mouse and pen keep the keyboard 1..n workflow.
   onAngleTap?: (angleIndex: number) => void;
+  // Phone skin: every tile is labelled with its number and source name (no hover there).
+  phoneSkin?: boolean;
 }
 
 const TAP_MOVE_TOLERANCE_PX = 10;
@@ -40,6 +42,7 @@ export function MultiPreviewSlot({
   multicamAngle = null,
   onAir = false,
   onAngleTap,
+  phoneSkin = false,
 }: MultiPreviewSlotProps) {
   const tapStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const isEngineReady = useEngineStore((state) => state.isEngineReady);
@@ -210,7 +213,7 @@ export function MultiPreviewSlot({
         </div>
       ) : autoSource ? (
         <div className="multi-preview-slot-dropdown-wrapper">
-          <span className="multi-preview-slot-label">Layer {autoSource.layerIndex + 1}</span>
+          <span className="multi-preview-slot-label">{phoneSkin ? `${slotIndex + 1} · ` : ''}Layer {autoSource.layerIndex + 1}</span>
         </div>
       ) : (
         <div className="multi-preview-slot-dropdown-wrapper" ref={dropdownRef}>
@@ -220,7 +223,9 @@ export function MultiPreviewSlot({
             title="Select composition"
           >
             <span className="multi-preview-slot-comp-name">
-              {compositionId === null ? 'Active' : displayedComp?.name || 'None'}
+              {phoneSkin
+                ? `${slotIndex + 1} · ${displayedComp?.name || (compositionId === null ? 'Active' : 'None')}`
+                : compositionId === null ? 'Active' : displayedComp?.name || 'None'}
             </span>
             <span className="preview-comp-arrow">▼</span>
           </button>

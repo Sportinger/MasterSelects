@@ -4,9 +4,11 @@
 // the editor admits for them, SUPPORTED_ADJUSTMENT_EFFECT_TYPES). No store access here.
 
 import { getCategoriesWithEffects, getEffect, type EffectDefinition, type EffectParam } from '../../../effects';
+import type { LookDefinition } from '../../../effects/looks/types';
 import {
   isSupportedAdjustmentEffectType, SUPPORTED_ADJUSTMENT_EFFECT_TYPES,
 } from '../../../services/motionDesign/adjustment/supportedEffects';
+import { phoneEffectPreviewParams } from './phoneEffectPreviewParams';
 
 export interface PhoneEffectGroup {
   id: string;
@@ -27,6 +29,24 @@ export function filterPhoneEffects(groups: readonly PhoneEffectGroup[], groupId:
     .flatMap((group) => group.effects.filter((effect) => (
       !needle || `${effect.name} ${effect.id} ${group.label}`.toLocaleLowerCase().includes(needle)
     )));
+}
+
+/**
+ * The one-effect Look a card preview renders (as the desktop effect picker builds it): the effect at
+ * its default parameters, so the thumbnail runtime shows what adding it does. Effects that are neutral
+ * at their defaults render at a fixed demonstrative strength (phoneEffectPreviewParams.ts).
+ */
+export function phoneEffectPreviewLook(effect: EffectDefinition): LookDefinition {
+  const { params, demo } = phoneEffectPreviewParams(effect.id);
+  return {
+    id: `effect-preview-${effect.id}${demo ? '-demo' : ''}`,
+    name: effect.name,
+    category: 'digital',
+    thumbnail: { kind: 'generated' },
+    stack: [{ effectId: effect.id, params, enabled: true }],
+    tags: [effect.id],
+    builtIn: true,
+  };
 }
 
 /** Parameter names tried in this order for the one main slider of an effect. */

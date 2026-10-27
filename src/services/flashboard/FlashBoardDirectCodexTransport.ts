@@ -45,7 +45,7 @@ import {
 } from './FlashBoardDirectCodexThreadSession';
 import { resolveDirectModelProfile } from './FlashBoardDirectModelProfile';
 import { directCodexUnavailableMessage } from './FlashBoardDirectCodexAvailability';
-import { getActiveAgentRequestId } from '../aiTools/agentTransaction';
+import { getActiveAgentRequestId, runAgentRequestWrites } from '../aiTools/agentTransaction';
 import { Logger } from '../logger';
 
 const log = Logger.create('DirectCodex');
@@ -347,6 +347,8 @@ async function runDirectCodexChat(
     const result = guarded ?? await runDirectCodexToolWithRecovery(toolName,
       signal => executeAITool(toolName, args, caller, {
         auditProviderToolCallId: callId, executionMode: request.toolExecutionMode ?? (request.intent === 'plan' ? 'plan' : 'normal'), guidedReplay: false, legacyFeedback: 'off', signal,
+        // Explicit request attribution: one Undo step for the request even while other requests run.
+        ...(requestGroupId ? { agentRequestId: requestGroupId } : {}),
       }), request.signal);
     if (!guarded) turnToolPolicy.afterTool(toolName, args, result);
     const call = { modelContent: '', result, toolCall: { arguments: JSON.stringify(args), id: callId, name: toolName } };
@@ -357,7 +359,10 @@ async function runDirectCodexChat(
   };
   const nodeStream = new FlashBoardNodeGraphStream((toolName, args, sequence) => runStreamTool(toolName, args, `${turnId}:${sequence}`), request.signal);
   let sceneOperations = 0;
-  const sceneStream = new SceneStreamExecutor((toolName, args) => runStreamTool(toolName, args, `${turnId}:scene-stream:${++sceneOperations}`), request.signal);
+  // Scene bookkeeping (removing a replaced run, storing the scene document) is no tool call: it runs explicitly
+  // as a transaction of this request and joins the request's Undo step.
+  const sceneStream = new SceneStreamExecutor((toolName, args) => runStreamTool(toolName, args, `${turnId}:scene-stream:${++sceneOperations}`), request.signal,
+    { runWrites: (label, action) => runAgentRequestWrites(`AI: ${label}`, requestGroupId, action) });
   const streamFeedback = new NodeStreamFeedback(nodeStream.failures);
   const sceneFeedback = new NodeStreamFeedback(sceneStream.failures, { label: 'Scene stream',
     hint: 'References to a failed step fail as well. Fix the records and stream the same scene name again (it replaces what the scene created), then tell the user about anything that remains incomplete.' });
@@ -492,6 +497,7 @@ async function runDirectCodexChat(
           },
           executionMode: 'normal',
           guidedReplay: false,
+          ...(requestGroupId ? { agentRequestId: requestGroupId } : {}),
           signal,
         }),
         request.signal,

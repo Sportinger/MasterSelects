@@ -14,6 +14,18 @@ type ScrubbingTextureEntry = {
   bytes: number;
 };
 
+/**
+ * A cached scrub frame. width/height are the uploaded texture's size (possibly
+ * downscaled to maxDimension, same aspect as the source): the only size a cached
+ * frame has when the element showing it has not loaded its metadata yet.
+ */
+export interface ScrubCachedFrameEntry {
+  view: GPUTextureView;
+  mediaTime: number;
+  width?: number;
+  height?: number;
+}
+
 export interface ScrubTextureCacheSnapshot {
   count: number;
   maxFrames: number;
@@ -225,7 +237,7 @@ export class ScrubTextureCache {
   getCachedFrameEntry(
     videoSrc: string,
     time: number
-  ): { view: GPUTextureView; mediaTime: number } | null {
+  ): ScrubCachedFrameEntry | null {
     const key = getScrubbingKey(videoSrc, time);
     const entry = this.cache.get(key);
     if (entry) {
@@ -248,7 +260,7 @@ export class ScrubTextureCache {
     videoSrc: string,
     time: number,
     maxDistanceFrames: number = 6
-  ): { view: GPUTextureView; mediaTime: number } | null {
+  ): ScrubCachedFrameEntry | null {
     const exact = this.getCachedFrameEntry(videoSrc, time);
     if (exact) {
       return exact;
@@ -376,13 +388,15 @@ export class ScrubTextureCache {
   private touchEntry(
     key: string,
     entry: ScrubbingTextureEntry
-  ): { view: GPUTextureView; mediaTime: number } {
+  ): ScrubCachedFrameEntry {
     this.cache.delete(key);
     this.cache.set(key, entry);
     this.reuses += 1;
     return {
       view: entry.view,
       mediaTime: getScrubbingKeyTime(key),
+      width: entry.texture.width,
+      height: entry.texture.height,
     };
   }
 

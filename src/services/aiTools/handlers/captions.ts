@@ -1,4 +1,5 @@
 import { createTextBoundsFromRect } from '../../textLayout';
+import { captureToolTransaction } from '../toolTransaction';
 import {
   getCaptionSourceCandidates,
   resolveCaptionSourceWords,
@@ -440,6 +441,8 @@ async function applyCaptionUpdate(
   clipId: string,
   update: ParsedCaptionUpdate,
 ): Promise<ToolResult | null> {
+  // The layout patch follows the text style update (an await): it joins the caller's tool transaction explicitly.
+  const transaction = captureToolTransaction('applyCaptionUpdate');
   if (Object.keys(update.captionPatch).length > 0) {
     useTimelineStore.getState().updateCaptionProperties(clipId, update.captionPatch);
   }
@@ -450,16 +453,18 @@ async function applyCaptionUpdate(
     );
     if (!textResult.success) return textResult;
   }
-  if (update.hasLayoutPatch) {
-    const current = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
-    if (!current?.captionProperties || !current.textProperties) {
-      return failure(`Caption clip disappeared: ${clipId}`);
+  return transaction.run(() => {
+    if (update.hasLayoutPatch) {
+      const current = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
+      if (!current?.captionProperties || !current.textProperties) {
+        return failure(`Caption clip disappeared: ${clipId}`);
+      }
+      useTimelineStore.getState().updateTextProperties(clipId, captionLayoutTextPatch(current));
     }
-    useTimelineStore.getState().updateTextProperties(clipId, captionLayoutTextPatch(current));
-  }
-  useTimelineStore.getState().invalidateCache();
-  selectClipAndOpenTab(clipId, 'captions');
-  return null;
+    useTimelineStore.getState().invalidateCache();
+    selectClipAndOpenTab(clipId, 'captions');
+    return null;
+  });
 }
 
 function describeCaptionClip(clip: TimelineClip, store: TimelineStore): Record<string, unknown> {
@@ -540,6 +545,7 @@ export async function handleCreateCaptionClip(
   }
   if (!track) return failure('The editor could not allocate a collision-free caption layer');
 
+  const transaction = captureToolTransaction('createCaptionClip');
   const clipId = await useTimelineStore.getState().addCaptionClip(
     track.id,
     rawStart,
@@ -547,7 +553,7 @@ export async function handleCreateCaptionClip(
     parsedUpdate.captionPatch.sourceClipId ?? null,
   );
   if (!clipId) return failure('The editor could not create the caption clip');
-  const updateFailure = await applyCaptionUpdate(clipId, parsedUpdate);
+  const updateFailure = await transaction.run(() => applyCaptionUpdate(clipId, parsedUpdate));
   if (updateFailure) return updateFailure;
 
   const current = useTimelineStore.getState();
@@ -586,9 +592,10 @@ export async function handleUpdateCaptionProperties(
   }
 
   const mutationSnapshot = captureMutationEntitySnapshot('clip', [initialClip]);
+  const transaction = captureToolTransaction('updateCaptionProperties');
   const migrated = await useTimelineStore.getState().ensureCaptionTextClip(initialClip.id);
   if (!migrated) return failure(`Caption clip could not be made editable: ${initialClip.id}`);
-  const updateFailure = await applyCaptionUpdate(initialClip.id, parsedUpdate);
+  const updateFailure = await transaction.run(() => applyCaptionUpdate(initialClip.id, parsedUpdate));
   if (updateFailure) return updateFailure;
   const current = useTimelineStore.getState();
   const updatedClip = current.clips.find((clip) => clip.id === initialClip.id);

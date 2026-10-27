@@ -2,14 +2,14 @@
 // DockContainer or Preview. It boots the shared editor runtime and composes the phone shell.
 
 import { useEffect, useState } from 'react';
-import { EditorProjectSelectionOverlay } from '../common/EditorProjectSelectionOverlay';
 import { PHONE_SKIN_ROOT_CLASS, PHONE_TEST_IDS } from './contracts';
 import { PhoneHome } from './home/PhoneHome';
 import { PhonePreview } from './preview/PhonePreview';
 import { subscribePhoneHomeRequests } from './shell/phoneHomeRequests';
 import { PhoneBootStatus } from './runtime/PhoneBootStatus';
+import { PhoneProjectLoadingView } from './runtime/PhoneProjectLoadingView';
 import { usePhoneColorScheme } from './runtime/phoneColorScheme';
-import { usePhoneProjectSelection, usePhoneRuntime } from './runtime/PhoneRuntimeContext';
+import { usePhoneRuntime } from './runtime/PhoneRuntimeContext';
 import { PhoneRuntimeHost } from './runtime/PhoneRuntimeHost';
 import { PhoneShell } from './shell/PhoneShell';
 import { PhoneSheetHost } from './sheets/PhoneSheetHost';
@@ -19,7 +19,6 @@ import './PhoneApp.css';
 
 function PhoneWorkspace() {
   const { status } = usePhoneRuntime();
-  const { markProjectSelected } = usePhoneProjectSelection();
   const [homeRequested, setHomeRequested] = useState(false);
 
   // The top bar and the project sheet ask for the home screen; any open sheet closes first.
@@ -41,10 +40,9 @@ function PhoneWorkspace() {
   // Restore runs first; the home screen appears only once it has resolved.
   if (status.bootPending) return <PhoneBootStatus />;
 
-  // A stored project that only needs its folder access again is resumed by the editor's chooser:
-  // the phone home has no resume command.
-  const resumeNeeded = !status.projectOpen && status.permissionPending;
-  const showHome = !resumeNeeded && (!status.projectOpen || homeRequested);
+  // A stored folder project that only needs its folder access again is reopened from the phone home
+  // (its "Reopen … allow folder access" card); nothing translucent is laid over the editor.
+  const showHome = !status.projectOpen || homeRequested;
 
   return (
     <>
@@ -54,7 +52,7 @@ function PhoneWorkspace() {
         home={showHome ? <PhoneHome showBack={status.projectOpen} onClose={() => setHomeRequested(false)} /> : null}
       />
       <PhoneSheetHost />
-      {resumeNeeded && <EditorProjectSelectionOverlay onProjectSelected={markProjectSelected} />}
+      <PhoneProjectLoadingView booting={false} coverOtherLoads={!showHome} />
       <PhoneBootStatus />
     </>
   );

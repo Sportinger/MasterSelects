@@ -1,6 +1,17 @@
 export interface SamplePresentationTiming {
   cts: number;
   timescale: number;
+  /** Sample duration in timescale units, when the container provides it. */
+  duration?: number;
+}
+
+/** Sample duration in microseconds, or undefined when unknown or invalid. */
+export function getSampleDurationMicroseconds(sample: SamplePresentationTiming): number | undefined {
+  if (sample.duration === undefined || !Number.isFinite(sample.duration) || sample.duration <= 0
+    || !Number.isFinite(sample.timescale) || sample.timescale <= 0) {
+    return undefined;
+  }
+  return (sample.duration * 1_000_000) / sample.timescale;
 }
 
 export function getPresentationOffsetSeconds(samples: readonly SamplePresentationTiming[]): number {

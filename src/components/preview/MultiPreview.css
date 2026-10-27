@@ -246,3 +246,71 @@
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+/* ---------- Phone skin (/m Multicam editor) ---------- */
+
+/* The shared controls get their own bar instead of floating over the first tile (they collided with
+   its label), and the grid fills the rest. MultiPreviewPhoneGrid picks the tile arrangement. */
+.mobile-skin .multi-preview-controls {
+  position: static;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--phone-border, var(--border-color));
+  background: var(--phone-surface, var(--bg-secondary));
+}
+
+.mobile-skin .multi-preview-grid-wrapper {
+  padding: 4px;
+}
+
+.mobile-skin .multi-preview-grid,
+.mobile-skin .multi-preview-grid-wrapper .multi-preview-grid {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  gap: 4px;
+  background: transparent;
+}
+
+.mobile-skin .multi-preview-slot {
+  border-radius: 6px;
+  background: #000;
+}
+
+/* Number and source name on every tile, readable and never hover-only. */
+.mobile-skin .multi-preview-slot-dropdown-wrapper {
+  top: 6px;
+  left: 6px;
+  max-width: calc(100% - 12px);
+  opacity: 1;
+}
+
+.mobile-skin .multi-preview-slot-dropdown-btn,
+.mobile-skin .multi-preview-slot-label {
+  max-width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 62%);
+  color: var(--phone-text, var(--text-primary));
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 32px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-skin .multi-preview-slot-comp-name {
+  max-width: 160px;
+}
+
+.mobile-skin .multi-preview-slot-dropdown-btn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.mobile-skin .multi-preview-slot-dropdown-btn:focus-visible {
+  outline: 2px solid var(--phone-accent, var(--accent));
+  outline-offset: 1px;
+}

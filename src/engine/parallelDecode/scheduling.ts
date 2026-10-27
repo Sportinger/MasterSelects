@@ -1,4 +1,10 @@
-import { getNormalizedSampleSourceTime, type SamplePresentationTiming } from './sampleTiming';
+import {
+  getNormalizedSampleSourceTime,
+  getNormalizedSampleTimestampMicroseconds,
+  getSampleDurationMicroseconds,
+  type SamplePresentationTiming,
+} from './sampleTiming';
+import { findContainingPresentationIndex, getSamplePresentationGrid, presentationFrameRule } from './presentationFrame';
 
 export const BUFFER_AHEAD_FRAMES = 60;
 export const BACKGROUND_DECODE_MARGIN_FRAMES = 180;
@@ -149,30 +155,71 @@ export function getDecodeBatchSize(needsSeek: boolean): number {
   return needsSeek ? DECODE_BATCH_SIZE * SEEK_BATCH_MULTIPLIER : DECODE_BATCH_SIZE;
 }
 
+export interface DecodeBatchPlan {
+  /** Decode-order index the pass starts at (the keyframe when resetToKeyframe). */
+  startSampleIndex: number;
+  /** Samples to queue from startSampleIndex; 0 means nothing to decode. */
+  framesToDecode: number;
+  /** The decoder needs a keyframe first: reset it and start at startSampleIndex. */
+  resetToKeyframe: boolean;
+}
+
+/**
+ * Where one decodeAhead() pass starts and how many samples it queues. After a
+ * flush or a decoder reset (pool recycling) the decoder needs a keyframe first,
+ * so the start rewinds to the keyframe at or before sampleIndex and the count is
+ * taken from that rewound start. Counting before the rewind stopped the pass
+ * short of the target by the rewind distance. When sampleIndex already reached
+ * the target there is nothing to do, and no rewind re-decodes buffered frames.
+ */
+export function planDecodeBatch(
+  samples: readonly ParallelDecodeSamplePlan[],
+  sampleIndex: number,
+  targetSampleIndex: number,
+  needsKeyframe: boolean,
+  batchSize: number,
+): DecodeBatchPlan {
+  const endIndex = Math.min(targetSampleIndex, samples.length);
+  if (endIndex <= sampleIndex) return { startSampleIndex: sampleIndex, framesToDecode: 0, resetToKeyframe: false };
+  const startSampleIndex = needsKeyframe ? findKeyframeAtOrBeforeSample(samples, sampleIndex) : sampleIndex;
+  return {
+    startSampleIndex,
+    framesToDecode: Math.min(endIndex - startSampleIndex, batchSize),
+    resetToKeyframe: needsKeyframe,
+  };
+}
+
 export function hasDecodeSeekDistance(sampleIndex: number, targetSampleIndex: number): boolean {
   return targetSampleIndex > sampleIndex + 30 || sampleIndex > targetSampleIndex + 30;
 }
 
+/**
+ * Decode-order index of the sample shown at sourceTime (presentationFrame.ts):
+ * constant-rate media, also jittery phone footage, is matched on its nominal
+ * frame grid, so coarse container timescales (1/1000, 1/600) and per-frame
+ * jitter do not shift frames; VFR media takes the nearest sample unless the
+ * request sits just before a sample (a reversed clip's boundary request). A
+ * plain nearest pick made a reversed clip seek to the keyframe at the boundary
+ * and never decode the frame left of it.
+ */
 export function findSampleIndexForSourceTime(
   samples: readonly SamplePresentationTiming[],
   sourceTime: number,
   presentationOffsetSeconds: number
 ): number {
   if (samples.length === 0) return 0;
-
-  let targetIndex = 0;
-  let closestDiff = Infinity;
-
-  for (let i = 0; i < samples.length; i++) {
-    const sampleSourceTime = getNormalizedSampleSourceTime(samples[i], presentationOffsetSeconds);
-    const diff = Math.abs(sampleSourceTime - sourceTime);
-    if (diff < closestDiff) {
-      closestDiff = diff;
-      targetIndex = i;
-    }
-  }
-
-  return targetIndex;
+  const timestampUsOf = (sample: SamplePresentationTiming) =>
+    getNormalizedSampleTimestampMicroseconds(sample, presentationOffsetSeconds);
+  return findContainingPresentationIndex(
+    samples.length,
+    index => timestampUsOf(samples[index]),
+    sourceTime * 1_000_000,
+    index => getSampleDurationMicroseconds(samples[index]) ?? 0,
+    presentationFrameRule(
+      getSamplePresentationGrid(samples, presentationOffsetSeconds, timestampUsOf, samples[0].timescale),
+      samples[0].timescale,
+    ),
+  );
 }
 
 export function getSeekTargetSampleIndex(

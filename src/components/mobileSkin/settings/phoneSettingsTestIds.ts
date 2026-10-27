@@ -25,6 +25,9 @@ export const PHONE_SETTINGS_TEST_IDS = {
   diagnostics: 'phone-settings-diagnostics',
   diagnosticsRows: 'phone-settings-diagnostics-rows',
   diagnosticsCopy: 'phone-settings-diagnostics-copy',
+  /** data-count is the number of kept load reports; one recentLoad per report (data-outcome). */
+  recentLoads: 'phone-settings-recent-loads',
+  recentLoad: 'phone-settings-recent-load',
   cacheReset: 'phone-settings-cache-reset',
   cacheResetConfirm: 'phone-settings-cache-reset-confirm',
   cacheResetKeep: 'phone-settings-cache-reset-keep',

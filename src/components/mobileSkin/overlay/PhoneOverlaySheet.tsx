@@ -15,11 +15,14 @@ import { usePhoneUiStore } from '../state/phoneUiStore';
 import { usePhoneMediaImport } from '../media/usePhoneMediaImport';
 import { placePhoneMedia } from '../media/phoneMediaPlacement';
 import { getPhoneActiveCompSize, getPhoneClipSourceSize } from '../crop/phoneClipTarget';
-import { blurAfterPointer, PhoneChipGroup, PhoneSheetNote } from '../crop/phoneDesignControls';
+import { blurAfterPointer, PhoneSheetNote } from '../crop/phoneDesignControls';
+import { PhoneIcon } from '../shell/phoneIcons';
+import { middleTruncate } from '../transition/phoneMiddleTruncate';
+import '../transition/phoneSheetPrimitives.css';
 import {
-  listPhoneOverlaysAtPlayhead, PHONE_OVERLAY_PLACES, PHONE_OVERLAY_SIZES, phoneOverlayTransform,
-  type PhoneOverlayPlace, type PhoneOverlaySize,
+  listPhoneOverlaysAtPlayhead, phoneOverlayTransform, type PhoneOverlayPlace, type PhoneOverlaySize,
 } from './phoneOverlayPlan';
+import { PhoneOverlayPlaceGrid, PhoneOverlaySizeControl } from './PhoneOverlayControls';
 import { PHONE_OVERLAY_TEST_IDS as IDS } from './phoneOverlayTestIds';
 
 const log = Logger.create('PhoneOverlaySheet');
@@ -114,28 +117,26 @@ export const PhoneOverlaySheet: PhoneSheetComponent = () => {
   };
 
   return (
-    <PhoneSheet title="Overlay" height="tall" onCancel={cancel} onDone={() => { void add(); }}
+    <PhoneSheet title="Overlay" onCancel={cancel} onDone={() => { void add(); }}
       doneLabel={busy ? 'Adding…' : 'Add'} doneDisabled={busy || !picked}>
       <div className="phone-design-sheet" data-testid={IDS.sheet}>
         <section className="phone-design-section">
-          <h3 className="phone-design-section__title">New overlay at the playhead</h3>
-          <div className="phone-design-row">
-            <button type="button" className="phone-design-chip phone-design-chip--action" data-testid={IDS.pick}
-              aria-disabled={busy} onPointerUp={blurAfterPointer}
-              onClick={() => { if (!busy) inputRef.current?.click(); }}>
-              {picked ? 'Pick another' : 'Photo or video'}
-            </button>
-            <input ref={inputRef} type="file" accept={ACCEPT} hidden tabIndex={-1} data-testid={IDS.input} onChange={onChosen} />
-          </div>
+          <button type="button" className="phone-primary-button" data-testid={IDS.pick}
+            aria-disabled={busy} onPointerUp={blurAfterPointer}
+            onClick={() => { if (!busy) inputRef.current?.click(); }}>
+            <PhoneIcon name="media" size={20} />
+            {picked ? 'Pick another photo or video' : 'Photo or video'}
+          </button>
+          <input ref={inputRef} type="file" accept={ACCEPT} hidden tabIndex={-1} data-testid={IDS.input} onChange={onChosen} />
           {picked ? (
-            <PhoneSheetNote testId={IDS.picked}>{picked.name}</PhoneSheetNote>
+            <PhoneSheetNote testId={IDS.picked}>{middleTruncate(picked.name, 40)} · tap Add to place it</PhoneSheetNote>
           ) : (
-            <PhoneSheetNote>Pick a photo or video. It goes on a track above the main picture, copied into the project.</PhoneSheetNote>
+            <PhoneSheetNote>Goes on a track above the main picture at the playhead.</PhoneSheetNote>
           )}
-          <PhoneChipGroup<PhoneOverlaySize> label="Overlay size" value={size} testId={IDS.size}
-            options={PHONE_OVERLAY_SIZES.map(({ value, label }) => ({ value, label }))} onChange={setSize} />
-          <PhoneChipGroup<PhoneOverlayPlace> label="Overlay place" value={place} testId={IDS.place}
-            options={PHONE_OVERLAY_PLACES} onChange={setPlace} />
+          <div className="phone-overlay-layout">
+            <PhoneOverlayPlaceGrid value={place} testId={IDS.place} onChange={setPlace} />
+            <PhoneOverlaySizeControl value={size} testId={IDS.size} onChange={setSize} />
+          </div>
           {busy ? (
             <p className="phone-design-note" role="status" aria-live="polite" data-testid={IDS.progress}>
               {progress ? `Importing ${progress.name}…` : 'Placing the overlay…'}
@@ -146,7 +147,7 @@ export const PhoneOverlaySheet: PhoneSheetComponent = () => {
         <section className="phone-design-section">
           <h3 className="phone-design-section__title">Overlays at the playhead</h3>
           {existing.length === 0 ? (
-            <PhoneSheetNote>None here. Overlays are clips on tracks above the main picture.</PhoneSheetNote>
+            <PhoneSheetNote>None here yet.</PhoneSheetNote>
           ) : (
             <ul className="phone-design-list">
               {existing.map((entry) => (

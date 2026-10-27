@@ -13,6 +13,7 @@ import {
   UnsupportedAdjustmentEffectError,
 } from '../../services/motionDesign/adjustment/supportedEffects';
 import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
+import { resolveCompositeSourceSize } from './compositeSourceSize';
 import type { SplitCompareSettings } from '../../stores/splitCompareStore';
 import { getVideoFrameEffectSourceRotation } from './externalEffectSourceOrientation';
 import { resolveSurfaceFrameEffects } from '../../services/planarTracking/surfaceEffects';
@@ -104,6 +105,8 @@ export class Compositor {
   private terrainAnchorConnector?: TerrainAnchorConnectorPipeline;
   private planarTrackingProjection?: PlanarTrackingProjectionPipeline;
   private lastRenderWasPing = false;
+  /** Layers already warned about a texture without a valid source size (one warning per episode). */
+  private readonly invalidSourceSizeWarned = new Set<string>();
 
   constructor(
     compositorPipeline: CompositorPipeline,
@@ -224,25 +227,26 @@ export class Compositor {
       const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(resourceLayerId);
 
       // Calculate aspect ratios
-      const intrinsicWidth = layer.source?.intrinsicWidth;
-      const intrinsicHeight = layer.source?.intrinsicHeight;
-      // Canvas-backed sources can resize without rebuilding the durable layer
-      // metadata (notably an iPad live camera after an orientation change).
-      // The collected dimensions describe the texture being composited now;
-      // stale intrinsic metadata would squeeze that texture into the old ratio.
-      const useRenderedSourceDimensions = Boolean(layer.source?.canvasElement);
-      const sourceWidth = isAdjustmentLayer
-        ? referenceWidth
-        : !useRenderedSourceDimensions
-          && typeof intrinsicWidth === 'number' && Number.isFinite(intrinsicWidth) && intrinsicWidth > 0
-          ? intrinsicWidth
-          : data.sourceWidth;
-      const sourceHeight = isAdjustmentLayer
-        ? referenceHeight
-        : !useRenderedSourceDimensions
-          && typeof intrinsicHeight === 'number' && Number.isFinite(intrinsicHeight) && intrinsicHeight > 0
-          ? intrinsicHeight
-          : data.sourceHeight;
+      const sourceSize = resolveCompositeSourceSize(
+        { ...data, layer },
+        { width: referenceWidth, height: referenceHeight },
+        isAdjustmentLayer,
+      );
+      if (!sourceSize && (data.textureView || data.externalTexture)) {
+        // A texture without a size cannot be placed: skip this frame of the layer and say so.
+        const reason = `Layer ${layer.id} has a texture but no valid source size (${data.sourceWidth}x${data.sourceHeight})`;
+        if (state.particleQuality === 'export') throw new Error(reason);
+        if (this.invalidSourceSizeWarned.size > 256) this.invalidSourceSizeWarned.clear();
+        if (!this.invalidSourceSizeWarned.has(resourceLayerId)) {
+          this.invalidSourceSizeWarned.add(resourceLayerId);
+          log.warn('Skipping layer frame without a valid source size', { layerId: layer.id, sourceWidth: data.sourceWidth, sourceHeight: data.sourceHeight });
+        }
+        continue;
+      }
+      if (sourceSize) this.invalidSourceSizeWarned.delete(resourceLayerId);
+      // Texture-less placeholders (3D scene members) keep their collected size as before.
+      const sourceWidth = sourceSize?.width ?? data.sourceWidth;
+      const sourceHeight = sourceSize?.height ?? data.sourceHeight;
       const sourceAspect = sourceWidth / sourceHeight;
       const outputAspect = state.outputWidth / state.outputHeight;
       const sourcePixelScale = calculateSourcePixelScale(

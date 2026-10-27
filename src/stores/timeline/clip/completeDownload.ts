@@ -14,6 +14,7 @@ import { generateClipId } from '../helpers/idGenerator';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { Logger } from '../../../services/logger';
 import { isUndecodableAudioSourceError } from '../../../services/audio/decode/errors';
+import { captureEditorTransactionBinding } from '../../../services/project/repository/transaction/editorTransactionBinding';
 import {
   SOURCE_WAVEFORM_MAX_PREVIEW_SAMPLES,
   SOURCE_WAVEFORM_PREVIEW_SAMPLES_PER_SECOND,
@@ -23,6 +24,8 @@ import {
 } from '../../../services/audio/timelineWaveformPyramidCache';
 
 const log = Logger.create('CompleteDownload');
+
+type WriteRunner = (action: () => void) => void;
 
 function getUsableDuration(duration: number | undefined): number | undefined {
   return typeof duration === 'number' && Number.isFinite(duration) && duration > 0
@@ -65,6 +68,10 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
   }
 
   log.debug('Completing download', { clipId });
+  // The clip is converted after the import awaits: in the caller's transaction (the download tool), carried
+  // explicitly. Later waveform results join it while it is open, else they are a background revision.
+  const transaction = captureEditorTransactionBinding('Complete download', { fallbackSource: 'timeline' });
+  const runLate: WriteRunner = action => transaction.runLate(action);
 
   // Import to media store in YouTube folder
   const mediaStore = useMediaStore.getState();
@@ -97,8 +104,8 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
   const audioTrackId = findAvailableAudioTrack(clip.startTime, naturalDuration);
   const audioClipId = audioTrackId ? generateClipId('clip-audio-yt') : undefined;
 
-  // Update video clip
-  const updatedClips = clips.map(c => {
+  // Update video clip (from the current clips: other edits may have landed during the import)
+  const updatedClips = get().clips.map(c => {
     if (c.id !== clipId) return c;
     return {
       ...c,
@@ -143,16 +150,18 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
     log.debug('Created linked audio clip', { audioClipId });
   }
 
-  set({ clips: updatedClips });
-  updateDuration();
-  invalidateCache();
+  transaction.run(() => {
+    set({ clips: updatedClips });
+    updateDuration();
+    invalidateCache();
+  });
 
   log.debug('Download complete', { clipId, duration: naturalDuration });
 
   // Generate waveform in background for the linked audio clip.
   if (audioTrackId && audioClipId) {
     if (waveformsEnabled) {
-      generateWaveformAsync(audioClipId, file, mediaFile.id, get, set);
+      generateWaveformAsync(audioClipId, file, mediaFile.id, get, set, runLate);
     }
   }
 
@@ -180,8 +189,10 @@ async function generateWaveformAsync(
   file: File,
   mediaFileId: string,
   get: () => { clips: TimelineClip[] },
-  set: (state: { clips: TimelineClip[] }) => void
+  writeClips: (state: { clips: TimelineClip[] }) => void,
+  runWrite: WriteRunner,
 ): Promise<void> {
+  const set = (state: { clips: TimelineClip[] }) => runWrite(() => writeClips(state));
   set({ clips: updateClipById(get().clips, audioClipId, { waveformGenerating: true, waveformProgress: 0 }) });
 
   try {

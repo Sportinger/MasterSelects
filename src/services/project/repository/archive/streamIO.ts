@@ -45,7 +45,10 @@ export async function writeJson(backend: RepositoryBackend, path: string, value:
   const bytes = canonicalBytes(value);
   if (bytes.length > TRANSPORT_LIMITS.jsonBytes) throw new RepositoryError('budget', 'Transport JSON budget exceeded');
   async function* chunks() { yield bytes; }
-  if (!await backend.stat(path)) await backend.writeNew(path, chunks(), signal);
+  // writeNew refuses an existing non-empty file itself, so the existence stat is only paid when it fails;
+  // an existing file then goes through the same identity check below.
+  try { await backend.writeNew(path, chunks(), signal); }
+  catch (error) { if (!await backend.stat(path)) throw error; }
   const actual = await backend.read(path, 0, bytes.length, signal);
   if ((await backend.stat(path))?.length !== bytes.length || await hashBytes(actual) !== await hashBytes(bytes)) throw new RepositoryError('conflict', 'Transport journal identity conflict');
 }

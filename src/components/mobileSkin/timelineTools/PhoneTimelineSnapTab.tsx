@@ -48,6 +48,7 @@ export function PhoneTimelineSnapTab({ change }: { change: (apply: () => void) =
             />
           ))}
         </div>
+        {grid ? null : <p className="phone-tltools__summary">{GRID_OFF_REASON}</p>}
       </ProSection>
     </>
   );

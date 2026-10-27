@@ -48,6 +48,8 @@ import { useNodeGrowthViewport } from './canvas/useNodeGrowthViewport';
 import { useNodeConnectionDrag } from './canvas/useNodeConnectionDrag';
 import { useNodeTouchPinch } from './canvas/useNodeTouchPinch';
 import { NodeTouchActions } from './canvas/NodeTouchActions';
+import { NodeToolbarMenu } from './canvas/NodeToolbarMenu';
+import { useNodeCanvasInPhoneSkin, useNodePhoneAutoFit } from './canvas/useNodePhoneAutoFit';
 import { getConnectionPlugs } from './canvas/connectionPlugs';
 import { NodeGraphPlugs } from './canvas/NodeGraphPlugs';
 import { useNodePortHover } from './canvas/useNodePortHover';
@@ -291,6 +293,8 @@ export function NodeGraphCanvas({
       if (group) focusGroup(group.id); else fitGraph();
     }
   }, [graph.id, graph.groups, initialGroupId, focusGroup, fitGraph]);
+  const phoneSkin = useNodeCanvasInPhoneSkin(canvasRef);
+  useNodePhoneAutoFit({ enabled: phoneSkin, canvasRef, graphId: graph.id, bounds: graphBounds, viewport, setViewport, skipInitial: !!initialGroupId });
 
   useNodeGrowthViewport(canvasRef, graph, graphBounds, animating, fitBounds, foldViewport.following, followGraphGrowth);
   useRequestedGroupFocus(canvasRef, graph, animating, focusGroupRequest, focusGroup);
@@ -469,30 +473,40 @@ export function NodeGraphCanvas({
           </span>
         </div>
         <div className="node-workspace-toolbar-actions">
-          {(clipOwnerId || sourceGraph.workspace) && <button type="button" className="node-workspace-toolbar-button" aria-pressed={sourceGraph.workspace ? sourceGraph.nodes.some(node => node.preview?.requested) : preferences.enabled}
-            title="Toggle all node previews" onClick={event => {
-              if (sourceGraph.workspace) toggleWorkspacePreviews(sourceGraph);
-              else if (clipOwnerId) toggleGlobal(sourceGraph.nodes.map(node => nodePreviewPreferenceKey(clipOwnerId, node)));
-              if (event.detail > 0) event.currentTarget.blur();
-            }}>Previews</button>}
-          <NodePlaybackSignalsButton /><NodeCableStyleButton /><NodeCableAvoidButton />
-          {(clipOwnerId || sourceGraph.workspace) && <NodeCompactLayoutButton enabled={placement.compactEffects !== false} onToggle={toggleCompact} />}
-          {selectedEdge && !selectedEdge.readOnly && <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>Disconnect</button>}
-          <NodeTouchActions canvasRef={canvasRef} getGraphPoint={getGraphPointFromClient} selectedNodeId={selectedNodeId} selectionSize={multiSelection.size}
-            onOpenAddMenu={onOpenAddMenu} onDelete={onDeleteNode || onDeleteNodes ? deleteSelectedNode : undefined} />
-          <button type="button" className="node-workspace-toolbar-button" onClick={event => { fitGraph(); if (event.detail > 0) event.currentTarget.blur(); }}>Fit</button>
-          {!!targetGraph.groups?.length && onSetAllGroupsCollapsed && <button type="button" className="node-workspace-toolbar-button"
-            title="Expand or collapse every group, including nested groups" onClick={event => {
-              const collapsed = !targetGraph.groups?.some(group => group.collapsed);
-              foldViewport.request(collapsed);
-              onSetAllGroupsCollapsed(collapsed);
-              if (event.detail > 0) event.currentTarget.blur();
-            }}>{targetGraph.groups.some(group => group.collapsed) ? 'Expand all' : 'Collapse all'}</button>}
-          {(sourceGraph.owner.kind === 'composition' || targetGraph.groups?.some(group => group.layoutMode === 'flow')) && <button type="button" className="node-workspace-toolbar-button"
-            title="Arrange groups and their connected outer nodes by data flow" onClick={event => {
-              arrange(); if (event.detail > 0) event.currentTarget.blur();
-            }}>Arrange</button>}
-          <button type="button" className="node-workspace-toolbar-button" onClick={event => { resetView(); if (event.detail > 0) event.currentTarget.blur(); }}>Reset</button>
+          {(() => {
+            const secondaryStart = <>
+            {(clipOwnerId || sourceGraph.workspace) && <button type="button" className="node-workspace-toolbar-button" aria-pressed={sourceGraph.workspace ? sourceGraph.nodes.some(node => node.preview?.requested) : preferences.enabled}
+              title="Toggle all node previews" onClick={event => {
+                if (sourceGraph.workspace) toggleWorkspacePreviews(sourceGraph);
+                else if (clipOwnerId) toggleGlobal(sourceGraph.nodes.map(node => nodePreviewPreferenceKey(clipOwnerId, node)));
+                if (event.detail > 0) event.currentTarget.blur();
+              }}>Previews</button>}
+            <NodePlaybackSignalsButton /><NodeCableStyleButton /><NodeCableAvoidButton />
+            {(clipOwnerId || sourceGraph.workspace) && <NodeCompactLayoutButton enabled={placement.compactEffects !== false} onToggle={toggleCompact} />}
+            {selectedEdge && !selectedEdge.readOnly && <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>Disconnect</button>}
+            </>;
+            const secondaryEnd = <>
+            {!!targetGraph.groups?.length && onSetAllGroupsCollapsed && <button type="button" className="node-workspace-toolbar-button"
+              title="Expand or collapse every group, including nested groups" onClick={event => {
+                const collapsed = !targetGraph.groups?.some(group => group.collapsed);
+                foldViewport.request(collapsed);
+                onSetAllGroupsCollapsed(collapsed);
+                if (event.detail > 0) event.currentTarget.blur();
+              }}>{targetGraph.groups.some(group => group.collapsed) ? 'Expand all' : 'Collapse all'}</button>}
+            {(sourceGraph.owner.kind === 'composition' || targetGraph.groups?.some(group => group.layoutMode === 'flow')) && <button type="button" className="node-workspace-toolbar-button"
+              title="Arrange groups and their connected outer nodes by data flow" onClick={event => {
+                arrange(); if (event.detail > 0) event.currentTarget.blur();
+              }}>Arrange</button>}
+            <button type="button" className="node-workspace-toolbar-button" onClick={event => { resetView(); if (event.detail > 0) event.currentTarget.blur(); }}>Reset</button>
+            </>;
+            const primary = <>
+            <NodeTouchActions canvasRef={canvasRef} getGraphPoint={getGraphPointFromClient} selectedNodeId={selectedNodeId} selectionSize={multiSelection.size}
+              onOpenAddMenu={onOpenAddMenu} onDelete={onDeleteNode || onDeleteNodes ? deleteSelectedNode : undefined} />
+            <button type="button" className="node-workspace-toolbar-button" onClick={event => { fitGraph(); if (event.detail > 0) event.currentTarget.blur(); }}>Fit</button>
+            </>;
+            // Phone skin: Add, Delete and Fit stay in the toolbar, the rest moves into a More menu.
+            return phoneSkin ? <>{primary}<NodeToolbarMenu>{secondaryStart}{secondaryEnd}</NodeToolbarMenu></> : <>{secondaryStart}{primary}{secondaryEnd}</>;
+          })()}
           <span className="node-workspace-zoom">{Math.round(viewport.zoom * 100)}%</span>
         </div>
       </div>

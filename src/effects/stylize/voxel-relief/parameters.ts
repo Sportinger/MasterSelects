@@ -245,6 +245,19 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
       // Set to 'legacy' by the load migration for effects saved before the hue-keeping shading.
       hidden: true,
     },
+    framing: {
+      type: 'select',
+      label: 'Framing',
+      default: 'fixed',
+      // Effects saved before 2026-10-27 let the camera follow the relief height (framing.ts).
+      legacyDefault: 'height',
+      options: [
+        { value: 'fixed', label: 'Steady (Height never zooms)' },
+        { value: 'height', label: 'Follows Height (saved before 2026-10-27)' },
+      ],
+      animatable: false,
+      hidden: true,
+    },
     reset: {
       type: 'boolean',
       label: 'Reset Smoothing',

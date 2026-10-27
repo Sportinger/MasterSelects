@@ -1,5 +1,6 @@
 ﻿// YouTube AI Tool Handlers
 
+import { captureToolTransaction } from '../toolTransaction';
 import { Logger } from '../../logger';
 import { NativeHelperClient } from '../../nativeHelper';
 import { downloadVideo } from '../../youtubeDownloader';
@@ -353,6 +354,9 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
     'clip',
     useTimelineStore.getState().clips,
   );
+  // The pending clip, its progress, the completed clip and an error mark all follow awaits: they join this
+  // tool's transaction explicitly (the pending clip is this tool's own entity until it finishes).
+  const transaction = captureToolTransaction('downloadAndImportVideo');
   const mediaStateBefore = useMediaStore.getState();
   const mediaFileIdsBefore = new Set(mediaStateBefore.files.map((file) => file.id));
   const mediaFolderIdsBefore = new Set(mediaStateBefore.folders.map((folder) => folder.id));
@@ -373,7 +377,7 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
   const videoIdMatch = url.match(/(?:v=|\/)([\w-]{11})(?:\?|&|$)/);
   const videoId = videoIdMatch ? videoIdMatch[1] : url.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
 
-  const timelineStore = useTimelineStore.getState();
+  const timelineStore = transaction.bindStore(useTimelineStore.getState());
 
   // Find or create a video track
   let videoTrack = timelineStore.tracks.find(t => t.type === 'video');
@@ -415,7 +419,7 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
       formatId,
       (progress) => {
         // Update pending clip progress
-        const store = useTimelineStore.getState();
+        const store = transaction.bindStore(useTimelineStore.getState());
         if (progress.status === 'downloading' || progress.status === 'processing') {
           store.updateDownloadProgress(clipId, progress.progress, progress.speed);
         } else if (progress.status === 'error') {
@@ -425,7 +429,7 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
     );
 
     // Complete the download â€” convert pending clip to real clip
-    await useTimelineStore.getState().completeDownload(clipId, file);
+    await transaction.bindStore(useTimelineStore.getState()).completeDownload(clipId, file);
 
     log.info(`Download complete: ${title}, file size: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
 
@@ -448,7 +452,7 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
   } catch (error) {
     log.error('Download failed', error);
     // Mark clip as errored
-    useTimelineStore.getState().setDownloadError(clipId, (error as Error).message);
+    transaction.bindStore(useTimelineStore.getState()).setDownloadError(clipId, (error as Error).message);
     return {
       success: false,
       error: `Download failed: ${(error as Error).message}`,

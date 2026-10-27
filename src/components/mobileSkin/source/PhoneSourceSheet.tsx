@@ -7,6 +7,7 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
+import { ProEmptyState } from '../compositions/phoneProControls';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { blurTappedControl, PhoneStatusLine, usePhoneStatus } from '../library/phoneListUi';
 import { closePhoneSource, isPhoneSourceFile, placePhoneSource } from './phoneSourceCommands';
@@ -23,8 +24,10 @@ function SourcePicker() {
   const playable = files.filter(isPhoneSourceFile);
   return (
     <>
-      <p className="phone-lib__note">Pick a file to view it and place a part of it.</p>
-      {playable.length === 0 && <p className="phone-lib__note">The library has no video, image or audio yet. Add some with Media.</p>}
+      {playable.length === 0 ? (
+        <ProEmptyState icon="source" testId={IDS.empty} title="Nothing to view yet" body="Add a video, photo or sound, then view it here and place part of it."
+          action={{ label: 'Pick a file', testId: IDS.addMedia, onPress: () => usePhoneUiStore.getState().openSheet('media') }} />
+      ) : <p className="phone-lib__note">Pick a file to view it and place part of it.</p>}
       {playable.map((file) => (
         <button key={file.id} type="button" className="phone-lib__button phone-lib__button--wide phone-lib__target" data-testid={IDS.pick}
           data-item-id={file.id} onClick={() => useMediaStore.getState().setSourceMonitorFile(file.id)}>

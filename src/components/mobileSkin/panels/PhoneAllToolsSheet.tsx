@@ -13,12 +13,15 @@ import { PHONE_ACTIONS, resolvePhoneActionState } from '../actions/phoneActionCa
 import { openPhoneAssistantWithPrompt } from '../assistant/phoneAssistantPrefill';
 import { usePhonePreviewModeStore } from '../preview/phonePreviewMode';
 import { usePhoneRuntime } from '../runtime/PhoneRuntimeContext';
+import { ProGlyph } from '../compositions/phoneProGlyphs';
+import { PhoneIcon } from '../shell/phoneIcons';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import {
   buildPhoneAllToolsEntries, filterPhoneAllTools, groupPhoneAllTools, phoneAllToolsBadge, PHONE_ALL_TOOLS_BADGE_TEST_ID, type PhoneAllToolsEntry,
 } from './phoneAllToolsCatalog';
 import { getPhonePanel } from './phonePanelCatalog';
+import { setPhoneWorkspaceSideCollapsed } from '../workspace/phoneWorkspaceCatalog';
 import { PHONE_PANELS_TEST_IDS as IDS } from './phonePanelsTestIds';
 import './PhoneAllTools.css';
 
@@ -95,7 +98,11 @@ export const PhoneAllToolsSheet: PhoneSheetComponent = () => {
         return;
       case 'panel': {
         const panel = getPhonePanel(target as PanelType);
-        if (panel?.workspace) usePhoneUiStore.getState().openWorkspace(panel.workspace);
+        if (panel?.workspace) {
+          // Colour nodes and scopes live in a side pane of the Colour editor: open it expanded.
+          if (panel.workspaceSide) setPhoneWorkspaceSideCollapsed(panel.workspace, panel.workspaceSide, false);
+          usePhoneUiStore.getState().openWorkspace(panel.workspace);
+        }
         else usePhoneUiStore.getState().openPanelSheet(target as PanelType, panel?.title ?? fresh.label);
         return;
       }
@@ -172,9 +179,15 @@ export const PhoneAllToolsSheet: PhoneSheetComponent = () => {
                       onPointerUp={blurAfterPointer}
                       onClick={() => open(entry)}
                     >
+                      <span className="phone-alltools__icon" aria-hidden="true">
+                        {entry.icon ? <PhoneIcon name={entry.icon} size={20} /> : <ProGlyph name={entry.kind === 'panel' ? 'panel-left' : 'tools'} />}
+                      </span>
                       <span className="phone-alltools__label">{entry.label}</span>
-                      <span className="phone-alltools__detail">{entry.detail}</span>
-                      {badge ? <span className="phone-alltools__badge" data-testid={PHONE_ALL_TOOLS_BADGE_TEST_ID}>{badge}</span> : null}
+                      {entry.detail ? <span className="phone-alltools__detail">{entry.detail}</span> : null}
+                      {badge ? (
+                        <span className="phone-alltools__badge" data-testid={PHONE_ALL_TOOLS_BADGE_TEST_ID}
+                          data-reason={badge === 'Not now' ? 'not-on-phone' : 'needs-step'}>{badge}</span>
+                      ) : null}
                     </button>
                   </li>
                 );

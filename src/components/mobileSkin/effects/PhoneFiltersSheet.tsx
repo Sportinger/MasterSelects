@@ -13,6 +13,7 @@ import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 import { PHONE_ADJUSTMENT_SUPPORT_NOTE } from './phoneEffectCatalog';
 import { PHONE_EFFECTS_TEST_IDS as IDS } from './phoneEffectsTestIds';
 import { readPhoneVisualSelection } from './phoneEffectTargets';
@@ -20,7 +21,9 @@ import {
   applyPhoneFilter, detectPhoneFilter, phoneUnscaledEffectNames, removePhoneFilter, setPhoneFilterStrength,
   type PhoneAppliedFilter,
 } from './phoneLookFilters';
+import { PhoneEffectThumb } from './PhoneEffectThumb';
 import { blurPointerButton, PhoneValueSlider } from './PhoneValueSlider';
+import { usePhonePreviewSource } from './usePhonePreviewSource';
 import './PhoneEffects.css';
 
 const CATEGORIES: ReadonlyArray<{ id: LookCategory | 'all'; label: string }> = [
@@ -29,6 +32,13 @@ const CATEGORIES: ReadonlyArray<{ id: LookCategory | 'all'; label: string }> = [
   { id: 'custom', label: 'Saved' },
 ];
 
+/** The None card shows the source picture itself: a Look without effects renders the unprocessed frame. */
+const ORIGINAL_LOOK: LookDefinition = {
+  id: 'phone-filter-none', name: 'None', category: 'custom', thumbnail: { kind: 'generated' }, stack: [], tags: [], builtIn: true,
+};
+
+/** The one status line with nothing selected; the tap-for-reason notice carries the full reason. */
+const ROOT_LINE = 'Select a clip to apply a filter';
 const ROOT_REASON = `Select a clip first: a filter changes that clip. Filters combine effects that adjustment layers cannot render yet. ${PHONE_ADJUSTMENT_SUPPORT_NOTE}`;
 
 export const PhoneFiltersSheet: PhoneSheetComponent = () => {
@@ -63,6 +73,7 @@ export const PhoneFiltersSheet: PhoneSheetComponent = () => {
   const [strength, setStrength] = useState(initial.current.strength);
   const [strengthTouched, setStrengthTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const previewSource = usePhonePreviewSource();
   // Re-render when the store changes so the strength note follows removed effects.
   useTimelineStore((state) => (primaryId ? state.clips.find((clip) => clip.id === primaryId)?.effects.length ?? 0 : 0));
 
@@ -118,13 +129,13 @@ export const PhoneFiltersSheet: PhoneSheetComponent = () => {
 
   const activeName = allLooks.find((look) => look.id === activeLookId)?.name;
   const status = blocked
-    ? blockedReason
+    ? (selection.nothingSelected ? ROOT_LINE : blockedReason)
     : `${activeName ? `Filter: ${activeName}` : 'No filter'} · ${selection.primary?.name ?? ''}${selection.clips.length > 1 ? ` and ${selection.clips.length - 1} more` : ''}`;
 
   return (
     <PhoneSheet title="Filters" height="half" onCancel={cancel} onDone={() => { void done(); }} doneDisabled={busy}>
       <div className="phone-fx" onPointerUp={blurPointerButton}>
-        <p className="phone-fx__target" data-testid={IDS.filtersStatus}>{status}</p>
+        <p className="phone-fx__target" data-testid={IDS.filtersStatus} title={status}>{status}</p>
         {!blocked && selection.note && <p className="phone-fx__note">{selection.note}</p>}
         {activeFilter && (
           <PhoneValueSlider
@@ -144,7 +155,7 @@ export const PhoneFiltersSheet: PhoneSheetComponent = () => {
             Strength leaves {unscaled.join(', ')} as {unscaled.length > 1 ? 'they are' : 'it is'}: no mix control.
           </p>
         )}
-        <div className="phone-fx__chips" role="group" aria-label="Filter groups">
+        <PhoneChipRow label="Filter groups" className="phone-fx__chips">
           {CATEGORIES.map((entry) => (
             <button
               key={entry.id}
@@ -158,17 +169,17 @@ export const PhoneFiltersSheet: PhoneSheetComponent = () => {
               {entry.label}
             </button>
           ))}
-        </div>
-        <div className="phone-fx__grid">
+        </PhoneChipRow>
+        <div className="phone-fx__grid" data-preview-source={previewSource.kind}>
           <button
             type="button"
             className="phone-fx__card"
-            aria-pressed={activeLookId === null}
+            aria-pressed={!blocked && activeLookId === null}
             aria-disabled={blocked}
             data-testid={IDS.filtersNone}
             onClick={() => pick(null)}
           >
-            <span className="phone-fx__card-badge" aria-hidden="true">∅</span>
+            <PhoneEffectThumb look={ORIGINAL_LOOK} sourceId={previewSource.id} original />
             <span className="phone-fx__card-name">None</span>
           </button>
           {looks.map((look) => (
@@ -182,7 +193,7 @@ export const PhoneFiltersSheet: PhoneSheetComponent = () => {
               data-look-id={look.id}
               onClick={() => pick(look)}
             >
-              <span className="phone-fx__card-badge" aria-hidden="true">{look.name.slice(0, 2)}</span>
+              <PhoneEffectThumb look={look} sourceId={previewSource.id} />
               <span className="phone-fx__card-name">{look.name}</span>
             </button>
           ))}

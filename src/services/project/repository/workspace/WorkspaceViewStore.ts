@@ -24,6 +24,8 @@ export class WorkspaceViewStore {
   private error: unknown = null;
   private stopped = false;
   private listed: Promise<{ own: Set<string>; others: Map<string, string[]> }> | null = null;
+  /** The current listing was started by prefetch() and has not been handed to keys() yet. */
+  private prefetched = false;
   /** Keys read from another workspace, by source workspace, until this workspace writes them itself. */
   private inherited = new Map<string, string>();
   private lastStamp = 0;
@@ -61,9 +63,22 @@ export class WorkspaceViewStore {
       return { own, others };
     })().catch(error => { this.listed = null; throw error; });
   }
+  /**
+   * Starts the one listing while the repository is still opening (the owner calls this right after it
+   * acquired the writer locks), so activation does not wait for a folder walk afterwards; the walk also
+   * leaves every slot handle with the backend. The first keys() uses it instead of listing again. That is
+   * exact: while this writer holds the locks no other same-origin workspace can write view slots, and this
+   * store's own writes are in `states`, which keys() merges anyway.
+   */
+  prefetch(): void {
+    if (this.listed) return;
+    this.prefetched = true;
+    void this.listing().catch(() => { this.prefetched = false; });
+  }
   /** Keys with a stored slot (here or inherited) or a pending write: one listing instead of probing every candidate. */
   async keys(): Promise<string[]> {
-    this.listed = null;
+    if (!this.prefetched) this.listed = null;
+    this.prefetched = false;
     const { own, others } = await this.listing();
     return [...new Set([...this.states.keys(), ...own, ...others.keys()])];
   }
@@ -71,16 +86,17 @@ export class WorkspaceViewStore {
     const candidates = await Promise.all((['a', 'b'] as const).map(async slot => {
       try {
         const path = this.path(key, slot, workspaceId);
-        const stat = await this.backend.stat(path);
-        if (!stat || stat.length > REPOSITORY_LIMITS.recordBytes) return null;
-        const bytes = await this.backend.read(path, 0, stat.length);
+        // One whole-file read instead of a stat and then a read (two provider round trips on phones). A
+        // missing slot fails the read and counts as absent, exactly like a missing stat did before.
+        const bytes = await this.backend.read(path);
+        if (!bytes.length || bytes.length > REPOSITORY_LIMITS.recordBytes) return null;
         const record = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as ViewSlot;
         if (record.format !== 'masterselects-view' || record.schemaVersion !== 1 || record.repositoryId !== this.repositoryId
           || record.workspaceId !== workspaceId || record.viewKey !== key || !Number.isSafeInteger(record.sequence) || record.sequence < 0) return null;
         const { checksum, ...body } = record;
         if (await hashBytes(canonicalEncode(body)) !== checksum) return null;
         // Records written before updatedAt existed fall back to the file time (0 where the backend has none).
-        const updatedAt = Number.isSafeInteger(record.updatedAt) && record.updatedAt! > 0 ? record.updatedAt! : stat.modifiedTime ?? 0;
+        const updatedAt = Number.isSafeInteger(record.updatedAt) && record.updatedAt! > 0 ? record.updatedAt! : (await this.backend.stat(path))?.modifiedTime ?? 0;
         return { record, slot, updatedAt };
       } catch (error) {
         if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'SecurityError')) throw error;
@@ -154,9 +170,12 @@ export class WorkspaceViewStore {
       .toSorted((a, b) => Number(a.key === 'project') - Number(b.key === 'project'));
     for (const write of writes) this.states.get(write.key)!.pending = false;
     this.chain = this.chain.then(async () => {
-      for (const write of writes) {
+      // Folders of new keys are created together up front (one round instead of one per key); known ones
+      // are already resolved. Only a hint: a failure resurfaces at the slot write that needs the folder.
+      if (writes.length) await this.backend.prepareDirectories?.(writes.map(write => this.path(write.key, 'a').slice(0, -'a.json'.length)), true).catch(() => {});
+      const writeOne = async (write: typeof writes[number]): Promise<boolean> => {
         const current = this.states.get(write.key)!;
-        if (current.confirmed >= write.sequence) continue;
+        if (current.confirmed >= write.sequence) return true;
         try {
           await this.owner.assertOwned();
           const slot = current.slot === 'a' ? 'b' : 'a';
@@ -169,14 +188,25 @@ export class WorkspaceViewStore {
           if (await hashBytes(written) !== await hashBytes(encoded)) throw new RepositoryError('corrupt', 'Workspace slot verification failed');
           const latest = this.states.get(write.key)!;
           latest.slot = slot; latest.confirmed = Math.max(latest.confirmed, write.sequence);
-          this.error = null;
+          return true;
         } catch (error) {
           this.states.get(write.key)!.pending = true; this.error = error;
-          // Preserve the previous confirmed slot; a later explicit flush can retry.
-          for (const remaining of writes) if (remaining.sequence > this.states.get(remaining.key)!.confirmed) this.states.get(remaining.key)!.pending = true;
-          break;
+          return false;
         }
-      }
+      };
+      // Every key except the project shape is independent: write those concurrently (a few at a time, each
+      // is several provider round trips on phones). The shape publishes its part references, so it is only
+      // written after every part succeeded, as before; a failed part keeps it and the rest pending.
+      const parts = writes.filter(write => write.key !== 'project');
+      const shape = writes.filter(write => write.key === 'project');
+      let next = 0; let failed = false;
+      await Promise.all(Array.from({ length: Math.min(4, parts.length) }, async () => {
+        while (next < parts.length && !failed) { if (!await writeOne(parts[next++]!)) failed = true; }
+      }));
+      if (!failed) for (const write of shape) if (!await writeOne(write)) failed = true;
+      if (!failed) { this.error = null; return; }
+      // Preserve the previous confirmed slot; a later explicit flush can retry.
+      for (const remaining of writes) if (remaining.sequence > this.states.get(remaining.key)!.confirmed) this.states.get(remaining.key)!.pending = true;
     });
   }
   /** Non-decreasing per store, so a backwards clock step never makes a later write look older than this workspace's earlier one. */

@@ -43,21 +43,95 @@ would stay open and block Undo (`transaction/editorGestureOwnership.ts`,
 
 Consecutive revisions from one AI assistant request (source `agent-request:<id>`) form a single
 Undo/Redo step, however many tool calls the request makes; a user revision in between splits the
-step (`transaction/historyNavigationPlan.ts`). A track's record arm, input monitoring, input device
+step (`transaction/historyNavigationPlan.ts`).
+
+A tool call is one transaction of its request, also when it writes after an await (a text clip is
+added after its canvas is rendered, an import places clips after decoding). A transaction covers
+only synchronous work, so such work carries it explicitly: the tool captures it before its first
+await (`captureToolTransaction`, `transaction/editorTransactionBinding.ts`) and runs each later write
+phase through it; async store actions such as `addTextClip`, `addCompClip`, `addCaptionClip` or media
+deletion capture their caller's transaction the same way and commit after preparing. Nothing else joins
+a tool's transaction: a background result, a timer or a user edit during the await (also from drop,
+paste or double-click) keeps its own revision, and a second tool running meanwhile (the dev bridge next
+to a chat) keeps its own step. Late job results (proxy generation, clip analysis, scene descriptions)
+are background revisions that never form an Undo step, also when they arrive inside a store action
+that started during a sheet's or a batch's await: the innermost transaction entered decides, not the
+enclosing action. A failing tool, a cancelled phone sheet or a cancelled drag takes back only its own
+writes: the runtime keeps one rollback entry per run of its own writes to a field (a write after another
+transaction changed that field starts a new entry), reverts the items each entry changed and keeps what
+other transactions changed in the same store fields meanwhile, so store and repository stay identical
+(`transaction/editorRollbackMerge.ts`). Lists of `{ id }` items, Maps, Sets, lists of unique values and
+plain records are reverted per item or key; where that is ambiguous (repeated values, a pure reorder, a key
+another transaction changed too) the later value stays and the conflict is logged (`EditorRollback`). A Codex Direct request passes its request
+id with every tool call, and its scene-stream bookkeeping (removing a replaced run, storing the scene
+document) runs as explicit writes of that request, so the whole request is one Undo step.
+
+A track's record arm, input monitoring, input device
 and meter mode are workspace fields, not content: undoing an edit of that track keeps their live
 values, and reopening the project restores them (`TRACK_AUDIO_WORKSPACE_FIELDS`).
 
-Filesystem head checks discover the commit folder freshly before and after a
-publication. Each discovery enumerates that folder once and pages through a
+Filesystem head checks discover the commit folder freshly right before the commit
+file is written (inside the folder backend's write queue) and again after the
+publication. Backends without that built-in check also discover it before
+preparing the publication. Each discovery enumerates that folder once and pages through a
 bounded filename snapshot, rather than rescanning it for every page. Independent
 checks do not reuse an earlier discovery, so external commits remain detectable.
 Snapshots expire, and folders exceeding the memory budget use bounded rescans.
+
+### Folder projects on phones
+
+On Android a project folder is a SAF document provider: every handle call
+(look up, take a file snapshot, read, open a stream, close) is a round trip of
+20-100+ ms instead of about 1 ms. What counts is the number of calls that must
+run one after another. `tests/unit/folderBackendOperationBudget.test.ts` runs the
+real main-thread preparation, lifecycle and storage worker against a counting
+in-memory folder and fails when these numbers grow (sequential calls, empty
+project):
+
+| | before | after |
+|---|---|---|
+| create | 93 | 38 |
+| edit + save | 74 | 19 |
+| open | 178 (214 with 3 clips) | 19 (19 with 3 clips) |
+
+How (`backends/directoryFileCache.ts` documents each safety argument):
+
+- **Session caches in the folder backend.** File and folder handles are resolved
+  once per session; listings hand over the handles they walk. Segment, commit and
+  descriptor files are write-once (writes refuse to replace them), so their bytes
+  are read once and records are sliced from memory; readers still verify every
+  record and segment hash. Empty files (an interrupted write) are never cached.
+  This workspace's view slots are served from memory only from its own write and
+  only while it holds the writer locks.
+- **Writes verify by size, not by read-back.** After `close()` the backend checks
+  the stored length through the same handle and keeps the written bytes for later
+  reads. Crash safety is unchanged: the commit file is written last, and on the
+  next open recovery hashes every segment against its commit and every commit
+  against its successor before it becomes a head.
+- **Torn commit files are cleaned up.** A paused Android folder can fail a write
+  and its cleanup, leaving an empty commit file (or, from this session's own
+  failed write, one that does not parse). No valid chain references it, because
+  a successor is written only after its predecessor was verified. Recovery skips
+  it without a warning (`TornCommitFileError`, `persistence/publication.ts`), and
+  the next head check of the writer removes it inside the write queue; a failed
+  removal is logged and retried at the next save, never blocking it.
+- **No duplicate work.** One head discovery per publication less (see above), no
+  existence stat before an immutable write (the write refuses an existing file
+  itself), no size probe for a commit file the head check listing proved absent,
+  and the descriptor of a new project is written once, by the worker.
+- **Concurrency where order does not matter.** Recovery reads the segments it is
+  about to validate ahead (bounded by the cache budget); folder probes when
+  opening, sibling folders of a listing, the folders a session uses and the view
+  listing run together; view parts are written concurrently and the project
+  shape only after all of them; view slot writes do not wait behind content writes.
+- **Off the save path.** The startup cache refresh runs after the save returned
+  (still serialized with publications); closing the project waits for it.
 
 Rapid edit series (AI agents, scripts, fast slider commits) are group-committed.
 While a publication is in flight, later revisions wait in order; the next write
 takes the whole backlog of consecutive revisions (up to 32 or about 4 MB) into
 one publication. Every revision keeps its own record, parent link and Undo step;
-only the per-publication cost (segment write and read-back, validation and both
+only the per-publication cost (segment write and its size check, validation and both
 head checks) is shared. A batch ends after a revision that writes a checkpoint.
 A failed batch is retried as the identical batch.
 
@@ -140,7 +214,37 @@ It is refreshed at save/flush boundaries, never for intermediate drag samples;
 unchanged saves do not rewrite it. A writable open that had to validate history
 beyond the cache also writes it right after opening, so a project closed without
 saving is slow to open at most once, not on every later open. No project archive
-must be selected manually.
+must be selected manually. Histories shorter than 16 operations
+(`STARTUP_CACHE_MIN_OPERATIONS`) get no startup cache: validating them in full
+costs about as much as validating a cache, which stats every history file too,
+so a new or small project does not spend extra writes, read-backs and an
+IndexedDB put at every save point and every open. The threshold only skips
+creating a cache: a short project that already has one keeps refreshing it, so
+it never reads a stale cache and then validates the history beyond it on every open.
+
+A new project gets one save point, not two: its first revision, journals and
+workspace views are handed to the storage worker together and confirmed by a
+single flush, and the editor activates the workspace it just wrote instead of
+reading the views back.
+
+The per-browser scratch workspace (`repository-scratch/<workspace id>`) is
+background recovery for edits made while no project is open. A project open,
+create or Save As cancels a scratch open that is still queued or reading,
+instead of waiting behind it while "Reading saved project" is on screen. A
+scratch open that is creating its repository or activating the editor finishes
+first. If the project open then fails, the scratch workspace opens again.
+
+Every open, create, Save As, scratch open and explicit save measures its phases
+(`repositoryLoadTimings.ts`): queue, prepare, handoff, target, storage_open,
+session_read, initialize, views, workspace, activation, close_previous, and for
+saves sync and publish. After a ready open (not a save) the measurement runs on to
+the first painted frame and records that time as `first_frame_ms`, so a screen that
+stays frozen after the storage work shows up. The report, together with long tasks
+and the longest frame gap on the main thread meanwhile, is logged (a warning above 5 s), kept on
+`window.__MS_PROJECT_LOAD__` for remote debugging and sent as the
+`project_load_phases` analytics event (see [Product Analytics](./Product-Analytics.md)).
+Long phases point at storage or the editor; short phases with a long frame gap
+point at a screen that did not repaint while the work itself was quick.
 
 Opening automatically uses this cache when the same browser/location retains its
 attestation and every previously validated history file still has the same size

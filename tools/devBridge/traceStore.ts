@@ -6,6 +6,10 @@ import { devBridgeRoot } from './auth.ts'
 
 const DEFAULT_TRACE_LIMIT = 2_000
 const MAX_LOADED_TRACE_BYTES = 32 * 1024 * 1024
+// Only the last MAX_LOADED_TRACE_BYTES are ever read back, so the file is compacted to that tail once
+// it grows past twice the size (Playwright journeys append thousands of calls; it reached 1 GB).
+const MAX_PERSISTED_TRACE_BYTES = 2 * MAX_LOADED_TRACE_BYTES
+const COMPACT_CHECK_EVERY_APPENDS = 200
 const MAX_TRACE_STRING_LENGTH = 20_000
 const MAX_TRACE_ARRAY_LENGTH = 200
 const MAX_TRACE_OBJECT_KEYS = 200
@@ -62,14 +66,19 @@ export class BridgeTraceStore {
   private readonly orderedCallIds: string[] = []
   private readonly traceFilePath: string
   private readonly traceLimit: number
+  private readonly maxPersistedBytes: number
+  private appendsSinceSizeCheck = 0
 
   constructor(
     traceFilePath = path.resolve(devBridgeRoot, '.ai-bridge-tool-history.jsonl'),
     traceLimit = DEFAULT_TRACE_LIMIT,
+    maxPersistedBytes = MAX_PERSISTED_TRACE_BYTES,
   ) {
     this.traceFilePath = traceFilePath
     this.traceLimit = traceLimit
+    this.maxPersistedBytes = maxPersistedBytes
     this.loadPersistedTraces()
+    this.compactIfTooLarge()
   }
 
   begin(input: BeginBridgeTraceInput): BridgeToolTrace {
@@ -203,6 +212,35 @@ export class BridgeTraceStore {
       fs.appendFileSync(this.traceFilePath, `${JSON.stringify(trace)}\n`, 'utf8')
     } catch {
       // Keep in-memory history available even when the durable trace file is not writable.
+    }
+    this.appendsSinceSizeCheck += 1
+    if (this.appendsSinceSizeCheck >= COMPACT_CHECK_EVERY_APPENDS) this.compactIfTooLarge()
+  }
+
+  /** Keeps the newest half of the size budget (whole lines) once the file grows past the budget. */
+  private compactIfTooLarge(): void {
+    this.appendsSinceSizeCheck = 0
+    try {
+      if (!fs.existsSync(this.traceFilePath)) return
+      const size = fs.statSync(this.traceFilePath).size
+      if (size <= this.maxPersistedBytes) return
+      const keep = Math.floor(this.maxPersistedBytes / 2)
+      const buffer = Buffer.alloc(keep)
+      const handle = fs.openSync(this.traceFilePath, 'r')
+      try {
+        fs.readSync(handle, buffer, 0, keep, size - keep)
+      } finally {
+        fs.closeSync(handle)
+      }
+      const firstNewline = buffer.indexOf(0x0a)
+      const tail = firstNewline >= 0 ? buffer.subarray(firstNewline + 1) : Buffer.alloc(0)
+      // Write beside and rename: other dev servers append by path, so they continue in the new file.
+      const temporary = `${this.traceFilePath}.${process.pid}.compact`
+      fs.writeFileSync(temporary, tail)
+      fs.renameSync(temporary, this.traceFilePath)
+      console.info(`[devBridge] Compacted ${path.basename(this.traceFilePath)} from ${size} to ${tail.length} bytes`)
+    } catch (error) {
+      console.warn('[devBridge] Could not compact the bridge trace history', error)
     }
   }
 }

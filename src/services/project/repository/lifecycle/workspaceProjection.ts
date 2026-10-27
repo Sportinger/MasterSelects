@@ -20,21 +20,29 @@ export function splitProjectWorkspace(workspace: JsonValue): WorkspacePart[] {
   if (canonicalBytes(shape).length > REPOSITORY_LIMITS.recordBytes - 4096) throw new RepositoryError('budget', 'Workspace shape exceeds view slot budget');
   parts.push({ key: 'project', value: { $workspaceShape: shape } }); return parts;
 }
+type ReadWorkspacePart = (key: string) => Promise<JsonValue | null>;
+async function restoreWorkspaceShape(value: JsonValue, read: ReadWorkspacePart): Promise<JsonValue> {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return Promise.all(value.map(child => restoreWorkspaceShape(child, read)));
+  if (typeof value.$workspacePart === 'string') {
+    const part = await read(value.$workspacePart);
+    if (part === null) throw new MissingWorkspacePartError('corrupt', `Required project workspace part is missing: ${value.$workspacePart}`);
+    return part;
+  }
+  const result: Record<string, JsonValue> = {};
+  for (const [key, child] of Object.entries(value)) result[key] = await restoreWorkspaceShape(child, read);
+  return result;
+}
+/** The workspace a new project has just written from these split parts, without reading the views back. */
+export async function assembleProjectWorkspace(parts: Readonly<Record<string, JsonValue>>): Promise<JsonValue | null> {
+  const root = parts.project ?? null;
+  if (!root || typeof root !== 'object' || Array.isArray(root) || !('$workspaceShape' in root)) return root;
+  return restoreWorkspaceShape(root.$workspaceShape, async key => parts[key] ?? null);
+}
 export async function readProjectWorkspace(session: RepositorySession): Promise<JsonValue | null> {
   const root = await session.readView('project');
   if (!root || typeof root !== 'object' || Array.isArray(root) || !('$workspaceShape' in root)) return root;
-  async function restore(value: JsonValue): Promise<JsonValue> {
-    if (!value || typeof value !== 'object') return value;
-    if (Array.isArray(value)) return Promise.all(value.map(restore));
-    if (typeof value.$workspacePart === 'string') {
-      const part = await session.readView(value.$workspacePart);
-      if (part === null) throw new MissingWorkspacePartError('corrupt', `Required project workspace part is missing: ${value.$workspacePart}`);
-      return part;
-    }
-    const result: Record<string, JsonValue> = {};
-    for (const [key, child] of Object.entries(value)) result[key] = await restore(child);
-    return result;
-  }
+  const restore = (value: JsonValue) => restoreWorkspaceShape(value, key => session.readView(key));
   try { return await restore(root.$workspaceShape); }
   catch (error) {
     if (!(error instanceof MissingWorkspacePartError)) throw error;

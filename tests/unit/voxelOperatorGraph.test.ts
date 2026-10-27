@@ -123,9 +123,9 @@ describe('Executable Voxel Relief operator group', () => {
     const graph = createDefaultVoxelGraph(), params = paramsFor(graph, { height: 0.6, voxel_uv_offsetU: 0.2, voxel_material_red: 0.3 });
     const uniforms = voxelRelief.packUniforms(params, 320, 180)!;
     expect(uniforms.byteLength).toBe(voxelRelief.uniformSize);
-    expect(uniforms[1]).toBeCloseTo(0.6); expect(uniforms[30]).toBeCloseTo(0.2); expect(uniforms[36]).toBeCloseTo(0.3); expect(uniforms[40]).toBe(1);
+    expect(uniforms[1]).toBeCloseTo(0.6); expect(uniforms[34]).toBeCloseTo(0.2); expect(uniforms[40]).toBeCloseTo(0.3); expect(uniforms[44]).toBe(1);
     graph.nodes.find(node => node.id === 'render')!.bypassed = true;
-    expect(voxelRelief.packUniforms(paramsFor(graph), 320, 180)![40]).toBe(0);
+    expect(voxelRelief.packUniforms(paramsFor(graph), 320, 180)![44]).toBe(0);
   });
   it('routes existing graph actions and animation owners to Voxel instead of the cable compiler', () => {
     const clip = createMockClip({ id: 'clip', effects: [{ id: 'relief', name: 'Voxel Relief', type: 'voxel-relief', enabled: true, params: { height: 0.8 } }] });

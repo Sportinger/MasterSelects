@@ -1,12 +1,12 @@
-// Boot and problem status of the phone skin. While booting it fills the screen with progress;
+// Boot and problem status of the phone skin. While booting it shows the opaque loading view;
 // afterwards it shows storage, folder-permission and renderer problems as an actionable banner.
 // It never leaves the page blank and never hides a failure silently.
 
 import { useState } from 'react';
 import { useEngineStore } from '../../../stores/engineStore';
-import { useMediaStore } from '../../../stores/mediaStore';
 import { PHONE_TEST_IDS } from '../contracts';
 import { usePhoneRuntime } from './PhoneRuntimeContext';
+import { PhoneProjectLoadingView } from './PhoneProjectLoadingView';
 
 interface PhoneProblem {
   key: string;
@@ -40,37 +40,10 @@ function usePhoneProblems(): PhoneProblem[] {
     problems.push({
       key: 'permission',
       title: 'Folder access needed',
-      message: 'Your last project is still waiting for folder access. Reload and choose Resume in the project list.',
+      message: 'Your last project is still waiting for folder access. Open the projects home and tap Reopen to allow it.',
     });
   }
   return problems;
-}
-
-function PhoneBootProgress() {
-  const progress = useMediaStore((s) => s.projectLoadProgress);
-  const percent = progress.active ? Math.max(0, Math.min(100, progress.percent)) : null;
-  const message = progress.active && progress.message ? progress.message : 'Starting MasterSelects';
-  return (
-    <div className="phone-boot-status phone-boot-status--booting" data-testid={PHONE_TEST_IDS.bootStatus} role="status" aria-live="polite" data-state="booting">
-      <div className="phone-boot-status__card">
-        <p className="phone-boot-status__title">{message}</p>
-        {progress.active && progress.detail && <p className="phone-boot-status__detail">{progress.detail}</p>}
-        <div
-          className="phone-boot-status__bar"
-          role="progressbar"
-          aria-label="Startup progress"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent ?? undefined}
-        >
-          <div
-            className={percent === null ? 'phone-boot-status__fill is-indeterminate' : 'phone-boot-status__fill'}
-            style={percent === null ? undefined : { width: `${percent}%` }}
-          />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export function PhoneBootStatus() {
@@ -78,7 +51,8 @@ export function PhoneBootStatus() {
   const problems = usePhoneProblems();
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
 
-  if (status.bootPending) return <PhoneBootProgress />;
+  // While booting, the opaque loading view shows the restore progress instead.
+  if (status.bootPending) return <PhoneProjectLoadingView booting />;
 
   const visible = problems.filter((problem) => !dismissed.has(problem.key));
   if (visible.length === 0) return null;

@@ -70,11 +70,21 @@ class LookThumbnailRuntime {
   private cache = new Map<string, ImageBitmap>();
   private info = new Map<string, LookThumbnailInfo>();
   private lastCaptureFailure: string | null = null;
+  /** Source ids that use a supplied picture instead of the rendered output (defineSampleSource). */
+  private samples = new Map<string, () => LookRaster | null>();
 
   private captureFailed(reason: string): false {
     if (this.lastCaptureFailure !== reason) log.warn(reason);
     this.lastCaptureFailure = reason;
     return false;
+  }
+
+  /**
+   * Makes `id` a source that renders tiles on a supplied picture (a neutral sample frame when the
+   * output shows nothing) instead of the rendered output. Tiles keep calling renderLook with `id`.
+   */
+  defineSampleSource(id: string, sample: () => LookRaster | null): void {
+    this.samples.set(id, sample);
   }
 
   async prepareSource(id: string): Promise<boolean> {
@@ -90,6 +100,18 @@ class LookThumbnailRuntime {
   private async captureSource(id: string): Promise<boolean> {
     const device = await this.resolveDevice();
     if (!device) return this.captureFailed('Look preview GPU device is unavailable');
+    const sample = this.samples.get(id);
+    if (sample) {
+      const picture = sample();
+      if (!picture || picture.width <= 0 || picture.height <= 0 || picture.data.byteLength !== picture.width * picture.height * 4) {
+        return this.captureFailed('Look preview sample frame is invalid');
+      }
+      const { width, height } = lookThumbnailWorkSize(picture.width, picture.height);
+      const full = { x: 0, y: 0, width: picture.width, height: picture.height };
+      const data = width === picture.width && height === picture.height
+        ? picture.data.slice() : downscaleLookRaster(picture, full, width, height, false);
+      return this.installSource(id, device, data, width, height);
+    }
     renderHostPort.requestRender();
     await nextPaint();
     await nextPaint();
@@ -111,7 +133,11 @@ class LookThumbnailRuntime {
       ? (width === sourceWidth && height === sourceHeight ? pixels.slice() : downscaleLookRaster({ data: pixels, width: sourceWidth, height: sourceHeight }, full, width, height, false))
       : canvasPixels(captureCanvas!, width, height);
     if (!data) return this.captureFailed('Look preview source frame could not be read');
+    return this.installSource(id, device, data, width, height);
+  }
 
+  /** Uploads the working-size source pixels and builds the views tiles are compared with. */
+  private async installSource(id: string, device: GPUDevice, data: Uint8ClampedArray, width: number, height: number): Promise<boolean> {
     this.releaseSource();
     if (this.device !== device) {
       this.pipeline?.destroy();

@@ -20,6 +20,7 @@ import {
   type StrokeAppearance,
   type TextureFillAppearance,
 } from '../../../types/motionDesign';
+import { captureToolTransaction, type ToolTransaction } from '../toolTransaction';
 import {
   MOTION_MAX_APPEARANCES,
   MOTION_MAX_GRADIENT_STOPS,
@@ -1045,9 +1046,10 @@ export async function handleApplyMotionTemplate(
     if (!plan.ok) return failure(plan.failures.map((item) => item.message).join(' '));
 
     const beforeRevision = getTimelineRevision();
+    const transaction = captureToolTransaction('applyMotionTemplate');
     const batch = startBatch('Apply Motion Template');
     try {
-      const created = await replayMotionTemplatePlan(plan.plan.batch.operations, trackResult.track.id);
+      const created = await replayMotionTemplatePlan(plan.plan.batch.operations, trackResult.track.id, transaction);
       if (created.clipIds.length === 0) throw new Error('Motion template did not create a motion clip');
       return {
         success: true,
@@ -1720,7 +1722,10 @@ function captureMotionTemplateEnvelope(
 async function replayMotionTemplatePlan(
   operations: readonly MotionTemplateInstantiateOperation[],
   trackId: string,
+  transaction: ToolTransaction,
 ): Promise<{ clipIds: string[]; createdTrackIds: string[] }> {
+  // Replay awaits between its steps: every step enters the apply tool's transaction explicitly.
+  const store = () => transaction.bindStore(useTimelineStore.getState());
   const entityOperations = operations.filter((operation): operation is Extract<MotionTemplateInstantiateOperation, { type: 'create-entity' }> => operation.type === 'create-entity');
   const clipOperations = entityOperations
     .map((operation, envelopeOrder) => ({ operation, envelopeOrder }))
@@ -1730,11 +1735,11 @@ async function replayMotionTemplatePlan(
   const createdClipIdByEntityId = new Map<string, string>();
   const createdTrackIds: string[] = [];
   for (const [index, item] of clipOperations.entries()) {
-    const targetTrackId = index === 0 ? trackId : useTimelineStore.getState().addTrack('video');
+    const targetTrackId = index === 0 ? trackId : store().addTrack('video');
     if (index > 0) createdTrackIds.push(targetTrackId);
     createdClipIdByEntityId.set(
       item.operation.targetEntityId,
-      await replayMotionClipEntity(item.operation, targetTrackId),
+      await replayMotionClipEntity(item.operation, targetTrackId, transaction),
     );
   }
   const ownerEntityIdByOpEntityId = new Map<string, string>();
@@ -1766,27 +1771,27 @@ async function replayMotionTemplatePlan(
     if (operation.entityKind === 'appearance-op') {
       // Awaiting keeps every mutation inside the open history batch and in
       // template order, and lets domain-level rejections fail the apply.
-      const result = await handleUpdateMotionAppearances({
+      const result = await transaction.run(() => handleUpdateMotionAppearances({
         clipId,
         operations: [{ operation: 'add', ...operation.payload }],
-      }, useTimelineStore.getState());
+      }, store()));
       if (!result.success) {
         throw new Error(result.error ?? 'Motion template appearance operation was rejected');
       }
     } else if (operation.entityKind === 'modifier-op') {
-      await replayModifierEntity(clipId, operation.payload);
+      await replayModifierEntity(clipId, operation.payload, transaction);
     } else if (operation.entityKind === 'keyframes') {
-      replayKeyframesEntity(clipId, operation.payload);
+      transaction.run(() => replayKeyframesEntity(clipId, operation.payload));
     } else if (operation.entityKind === 'expression-op') {
       const payload = operation.payload as Record<string, unknown>;
-      const result = await handleSetMotionExpression({
+      const result = await transaction.run(() => handleSetMotionExpression({
         clipId,
         operation: 'set',
         path: payload.path,
         source: payload.source,
         fallback: payload.fallback,
         enabled: payload.enabled,
-      }, useTimelineStore.getState());
+      }, store()));
       if (!result.success) throw new Error(result.error ?? 'Motion template expression operation was rejected');
     } else {
       throw new Error(`Unsupported motion template entity kind: ${operation.entityKind}`);
@@ -1796,7 +1801,7 @@ async function replayMotionTemplatePlan(
     const childClipId = createdClipIdByEntityId.get(childEntityId);
     const parentClipId = createdClipIdByEntityId.get(parentEntityId);
     if (!childClipId || !parentClipId) throw new Error('Motion template parent relationship references an unknown created clip');
-    useTimelineStore.getState().setClipParent(childClipId, parentClipId);
+    store().setClipParent(childClipId, parentClipId);
     if (useTimelineStore.getState().clips.find((clip) => clip.id === childClipId)?.parentClipId !== parentClipId) {
       throw new Error('Motion template parent relationship was rejected by the timeline graph');
     }
@@ -1804,27 +1809,28 @@ async function replayMotionTemplatePlan(
   return { clipIds: clipOperations.map((item) => createdClipIdByEntityId.get(item.operation.targetEntityId)!), createdTrackIds };
 }
 
-async function replayMotionClipEntity(operation: Extract<MotionTemplateInstantiateOperation, { type: 'create-entity' }>, trackId: string): Promise<string> {
+async function replayMotionClipEntity(operation: Extract<MotionTemplateInstantiateOperation, { type: 'create-entity' }>, trackId: string, transaction: ToolTransaction): Promise<string> {
+  const store = () => transaction.bindStore(useTimelineStore.getState());
   const payload = operation.payload as Record<string, unknown>;
   const shape = payload.shape as MotionLayerDefinition['shape'];
   if (!shape || typeof shape !== 'object') throw new Error('Motion template clip payload is missing shape settings');
-  const clipId = useTimelineStore.getState().addMotionShapeClip(trackId, operation.startTime, {
+  const clipId = store().addMotionShapeClip(trackId, operation.startTime, {
     primitive: shape.primitive,
     size: shape.size,
     duration: operation.duration,
     name: typeof payload.name === 'string' ? payload.name : 'Motion Shape',
   });
   if (!clipId) throw new Error('The editor could not create the motion template shape clip');
-  useTimelineStore.getState().updateMotionLayer(clipId, (motion) => ({
+  store().updateMotionLayer(clipId, (motion) => ({
     ...motion,
     shape: structuredClone(shape),
   }));
-  replayReplicatorSettings(clipId, payload.replicator);
+  transaction.run(() => replayReplicatorSettings(clipId, payload.replicator));
   // The native shape constructor creates a default fill. Remove it before the
   // ordered appearance-op entities are replayed.
   const defaultItems = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.motion?.appearance?.items ?? [];
   for (const item of defaultItems) {
-    const removed = await handleUpdateMotionAppearances({ clipId, operations: [{ operation: 'remove', itemId: item.id }] }, useTimelineStore.getState());
+    const removed = await transaction.run(() => handleUpdateMotionAppearances({ clipId, operations: [{ operation: 'remove', itemId: item.id }] }, store()));
     if (!removed.success) {
       throw new Error(removed.error ?? 'Motion template could not clear the default appearance');
     }
@@ -1847,7 +1853,8 @@ function replayReplicatorSettings(clipId: string, value: unknown): void {
   useTimelineStore.getState().updateMotionLayer(clipId, (motion) => ({ ...motion, replicator: current }));
 }
 
-async function replayModifierEntity(clipId: string, payload: unknown): Promise<void> {
+async function replayModifierEntity(clipId: string, payload: unknown, transaction: ToolTransaction): Promise<void> {
+  const store = () => transaction.bindStore(useTimelineStore.getState());
   if (!isRecord(payload) || typeof payload.kind !== 'string' || !isRecord(payload.target)) {
     throw new Error('Motion template modifier payload is malformed');
   }
@@ -1867,15 +1874,15 @@ async function replayModifierEntity(clipId: string, payload: unknown): Promise<v
   // modifier so replay never reuses the source session's common `modifier-1-0`
   // identifier; the final stack still consists solely of replayed entities.
   if (!useTimelineStore.getState().clips.find((candidate) => candidate.id === clipId)?.motion?.modifierStack) {
-    const scratch = await handleEditMotionModifier(addArgs, useTimelineStore.getState());
+    const scratch = await transaction.run(() => handleEditMotionModifier(addArgs, store()));
     if (!scratch.success) throw new Error(scratch.error ?? 'Motion modifier namespace setup was rejected');
     const scratchId = useTimelineStore.getState().clips.find((candidate) => candidate.id === clipId)
       ?.motion?.modifierStack?.modifiers[0]?.id;
     if (!scratchId) throw new Error('Motion modifier namespace setup did not create a modifier');
-    const removed = await handleEditMotionModifier({ clipId, operation: 'remove', modifierId: scratchId }, useTimelineStore.getState());
+    const removed = await transaction.run(() => handleEditMotionModifier({ clipId, operation: 'remove', modifierId: scratchId }, store()));
     if (!removed.success) throw new Error(removed.error ?? 'Motion modifier namespace setup could not remove its modifier');
   }
-  const result = await handleEditMotionModifier(addArgs, useTimelineStore.getState());
+  const result = await transaction.run(() => handleEditMotionModifier(addArgs, store()));
   if (!result.success) throw new Error(result.error ?? 'Motion template modifier operation was rejected');
 }
 

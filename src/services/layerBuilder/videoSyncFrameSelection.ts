@@ -10,6 +10,12 @@ const presentedFrames = new WeakMap<HTMLVideoElement, { seekTime: number; pts: n
 // k/fps lies just below the frame's rounded timestamp (at 30 fps e.g. frames 2, 5, 8). A frame-exact
 // seek therefore goes slightly into the target's frame, never past the middle of what remains of it.
 const FRAME_SEEK_LEAD_SECONDS = 0.001;
+// The demuxer converts the seek position to the container's time base with rounding (MP4 from
+// ffmpeg: 1/15360 s, so ±33 µs), and a position that rounds onto a keyframe starts decoding there:
+// a seek 10 µs before keyframe k presents frame k, not k-1 (REVERSE_PAUSED_BEFORE_KEYFRAME). Reverse
+// samples sit 1e-5 s before a frame boundary (BACKWARD_FRAME_EPSILON), so a frame-exact seek also
+// keeps this distance from the next frame's start; it is the same bound safeSeekTime keeps from EOF.
+const FRAME_SEEK_END_GUARD_SECONDS = 0.001;
 // Without a known source rate only the microsecond truncation can be absorbed safely.
 const UNKNOWN_RATE_FRAME_SEEK_LEAD_SECONDS = 0.000002;
 // Container timestamps are rounded to microseconds (MP4) or milliseconds (WebM). A presented frame
@@ -30,8 +36,14 @@ export function htmlVideoFrameSeekTime(video: object, target: number): number {
   if (!Number.isFinite(target)) return target;
   const fps = getVideoSourceFrameRate(video);
   if (!fps) return target + UNKNOWN_RATE_FRAME_SEEK_LEAD_SECONDS;
-  const frameEnd = (Math.floor(target * fps + 1e-9) + 1) / fps;
-  return target + Math.min(FRAME_SEEK_LEAD_SECONDS, Math.max(0, (frameEnd - target) / 2));
+  const frameIndex = Math.floor(target * fps + 1e-9);
+  const frameStart = frameIndex / fps;
+  const frameEnd = (frameIndex + 1) / fps;
+  const ahead = target + Math.min(FRAME_SEEK_LEAD_SECONDS, Math.max(0, (frameEnd - target) / 2));
+  // Near the end of its frame (a reverse sample) the position moves back towards the frame's
+  // middle until it is clear of the next frame's start; it never leaves the target's frame.
+  const guard = Math.min(FRAME_SEEK_END_GUARD_SECONDS, (frameEnd - frameStart) / 2);
+  return Math.max(Math.min(target, frameStart + guard), Math.min(ahead, frameEnd - guard));
 }
 
 /** The element sits exactly where a frame-exact seek for `target` put it. */

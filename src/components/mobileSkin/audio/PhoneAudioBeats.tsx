@@ -16,6 +16,7 @@ import { usePhoneUiStore } from '../state/phoneUiStore';
 import { blurAfterPointer } from './PhoneAudioControls';
 import { PHONE_BEAT_STEPS, phoneBeatClipIds, phoneBeatTargetTracks, phoneDefaultBeatSource } from './phoneAudioBeatPlan';
 import { PHONE_AUDIO_TEST_IDS as IDS } from './phoneAudioTestIds';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 
 const log = Logger.create('PhoneAudioBeats');
 
@@ -121,14 +122,14 @@ export function PhoneAudioBeats({ session, busy, onBeatRules }: Props) {
   return (
     <div className="phone-audio-section" role="tabpanel" aria-label="Beats">
       <span className="phone-audio-more__heading">Beats from</span>
-      <div className="phone-audio-beats__chips" role="radiogroup" aria-label="Beats from">
+      <PhoneChipRow role="radiogroup" label="Beats from">
         {options.map((candidate) => (
           <button key={candidate.value} type="button" role="radio" className="phone-audio-beats__chip" aria-checked={candidate.value === option?.value}
             data-testid={IDS.beatsSource} data-value={candidate.value} onPointerUp={blurAfterPointer} onClick={() => setSourceValue(candidate.value)}>
             {candidate.source?.kind === 'tempo-map' ? 'Tempo map' : candidate.label}
           </button>
         ))}
-      </div>
+      </PhoneChipRow>
       {option?.analysisClipId ? (
         <button type="button" className="phone-audio-big" data-testid={IDS.beatsDetect}
           aria-disabled={busy || Boolean(detecting) || session.changed || undefined}
@@ -138,23 +139,23 @@ export function PhoneAudioBeats({ session, busy, onBeatRules }: Props) {
       ) : null}
 
       <span className="phone-audio-more__heading">Clips of</span>
-      <div className="phone-audio-beats__chips" role="radiogroup" aria-label="Clips of">
+      <PhoneChipRow role="radiogroup" label="Clips of">
         {targets.map((track) => (
           <button key={track.id} type="button" role="radio" className="phone-audio-beats__chip" aria-checked={track.id === target?.id}
             data-testid={IDS.beatsTrack} data-track-id={track.id} onPointerUp={blurAfterPointer} onClick={() => setTrackId(track.id)}>
             {track.name}
           </button>
         ))}
-      </div>
+      </PhoneChipRow>
       <span className="phone-audio-more__heading">One clip per</span>
-      <div className="phone-audio-beats__chips" role="radiogroup" aria-label="One clip per">
+      <PhoneChipRow role="radiogroup" label="One clip per">
         {PHONE_BEAT_STEPS.map((value) => (
           <button key={value} type="button" role="radio" className="phone-audio-beats__chip" aria-checked={value === step}
             data-testid={IDS.beatsStep} data-step={value} onPointerUp={blurAfterPointer} onClick={() => setStep(value)}>
             {value === 1 ? 'Beat' : `${value} beats`}
           </button>
         ))}
-      </div>
+      </PhoneChipRow>
       <button type="button" className="phone-audio-big" data-testid={IDS.beatsPlace} aria-disabled={Boolean(placeReason) || busy || placing || undefined}
         onPointerUp={blurAfterPointer}
         onClick={() => {

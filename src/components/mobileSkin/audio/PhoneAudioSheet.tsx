@@ -26,6 +26,7 @@ import { PhoneAudioBeats } from './PhoneAudioBeats';
 import { openPhoneEditor } from '../audiofx/phoneOpenEditor';
 import { PHONE_AUDIO_TEST_IDS as IDS } from './phoneAudioTestIds';
 import './PhoneAudioSheets.css';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 
 const log = Logger.create('PhoneAudioSheet');
 
@@ -175,7 +176,7 @@ export const PhoneAudioSheet: PhoneSheetComponent = () => {
   return (
     <PhoneSheet title="Audio" height="tall" onCancel={cancel} onDone={() => { void done(); }} doneDisabled={busy}>
       <div className="phone-audio-sheet">
-        <div className="phone-audio-tabs" role="tablist" aria-label="Audio tools">
+        <PhoneChipRow role="tablist" label="Audio tools" className="phone-audio-tabs">
           {SECTIONS.map((item) => (
             <button
               key={item.id}
@@ -190,7 +191,7 @@ export const PhoneAudioSheet: PhoneSheetComponent = () => {
               {item.label}
             </button>
           ))}
-        </div>
+        </PhoneChipRow>
         <p className="phone-audio-sheet__status" data-testid={IDS.status}>{status}</p>
 
         {section === 'music' ? (

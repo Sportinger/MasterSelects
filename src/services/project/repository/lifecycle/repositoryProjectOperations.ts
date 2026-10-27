@@ -44,7 +44,7 @@ export async function createRepositoryAt(location: RepositoryLocation, name: str
       prepared.initialize = { entities: encoded.entities, workspace: Object.fromEntries(splitProjectWorkspace(encoded.workspace).map(part => [part.key, part.value])), journals: encoded.journals };
     }
     return prepared;
-  });
+  }, preserveCurrent && previous ? 'duplicate' : 'create');
   if (preserveCurrent && previous) await renameRepositoryProject(name);
   return session;
 }

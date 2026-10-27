@@ -17,7 +17,15 @@
 
 /* Phone skin: node inspectors open as a drawer over the canvas instead of squeezing it. */
 .mobile-skin .node-workspace-panel { position: relative; }
-.mobile-skin .node-workspace-panel > .node-workspace-inspector-handle { flex-basis: 32px; padding-top: 12px; font-size: 18px; }
+/* The handle floats over the canvas edge as a tab instead of taking a full-height strip of width. */
+.mobile-skin .node-workspace-panel > .node-workspace-inspector-handle {
+  position: absolute; top: 50%; right: 0; z-index: 21;
+  width: 32px; height: 64px; padding: 0;
+  border: 1px solid var(--border-color); border-right: 0; border-radius: 10px 0 0 10px;
+  font-size: 18px; transform: translateY(-50%);
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .node-workspace-panel > .node-workspace-inspector-handle:focus:not(:focus-visible) { outline: none; }
 .mobile-skin .node-workspace-panel > .node-workspace-inspector {
   position: absolute; top: 0; right: 32px; bottom: 0; z-index: 20;
   width: min(300px, calc(100% - 64px)); min-width: 0; max-width: none;

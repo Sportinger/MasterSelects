@@ -14,6 +14,8 @@ export const PHONE_WORKSPACE_TEST_IDS = {
   /** Grip at the inner edge of an open side; swipe outward (or tap) closes it. */
   gripLeft: 'phone-workspace-grip-left',
   gripRight: 'phone-workspace-grip-right',
+  /** Portrait only: a rotate icon that explains the landscape layout (replaces the wrapped hint text). */
+  rotateHint: 'phone-workspace-rotate-hint',
   /** One row per editor in the 'editors' sheet; suffix is the workspace id. */
   editorRow: 'phone-editors-row',
 } as const;

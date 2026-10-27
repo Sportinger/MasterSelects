@@ -1,4 +1,6 @@
 import type { CompositionTimelineData, SerializableClip, TimelineClip, TimelineTrack } from '../types';
+import { captureEditorTransactionBinding } from './project/repository/transaction/editorTransactionBinding';
+import type { Composition } from '../stores/mediaStore/types';
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { Logger } from './logger';
@@ -120,6 +122,9 @@ export async function createSubcompositionFromClipIds(
   clipIds: readonly string[],
   options: CreateSubcompositionOptions = {},
 ): Promise<CreateSubcompositionResult> {
+  // The composition clip is inserted after an await; the rest of the edit joins the caller's transaction (a user
+  // gesture, an assistant tool) explicitly, or one revision of its own when that closed meanwhile.
+  const transaction = captureEditorTransactionBinding('Create subcomposition', { fallbackSource: 'timeline' });
   const timelineStore = useTimelineStore.getState();
   const mediaStore = useMediaStore.getState();
   const { clips, tracks } = timelineStore;
@@ -186,6 +191,18 @@ export async function createSubcompositionFromClipIds(
   const beforeIds = new Set(timelineBeforeInsert.clips.map(clip => clip.id));
   const beforeTrackIds = new Set(timelineBeforeInsert.tracks.map(track => track.id));
   await timelineBeforeInsert.addCompClip(insertionTrackId, subcomposition, selectionStart);
+  return transaction.run(() => finishSubcompositionInsert(subcomposition, beforeIds, beforeTrackIds, options, selectedClips.length, selectionDuration));
+}
+
+/** The synchronous commit after the composition clip was inserted. */
+function finishSubcompositionInsert(
+  subcomposition: Composition,
+  beforeIds: ReadonlySet<string>,
+  beforeTrackIds: ReadonlySet<string>,
+  options: CreateSubcompositionOptions,
+  selectedClipCount: number,
+  selectionDuration: number,
+): CreateSubcompositionResult {
   let nextTimelineStore = useTimelineStore.getState();
   let compClip = nextTimelineStore.clips.find(
     clip => !beforeIds.has(clip.id) && clip.isComposition && clip.compositionId === subcomposition.id
@@ -227,7 +244,7 @@ export async function createSubcompositionFromClipIds(
 
   log.info('Created subcomposition from timeline selection', {
     compositionId: subcomposition.id,
-    selectedClips: selectedClips.length,
+    selectedClips: selectedClipCount,
     duration: selectionDuration,
   });
 

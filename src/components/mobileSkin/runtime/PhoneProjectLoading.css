@@ -1,0 +1,122 @@
+/* Opaque project loading view (PhoneProjectLoadingView). Covers shell, home and sheets; desktop
+   dialogs a load may raise (legacy import target, media reconnect) stay above it at --z-modal. */
+.mobile-skin .phone-loading {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-overlay, 1000) + 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(16px + var(--phone-safe-top)) calc(16px + var(--phone-safe-right))
+    calc(16px + var(--phone-safe-bottom)) calc(16px + var(--phone-safe-left));
+  background: var(--phone-bg, #0b0c0f);
+  color: var(--phone-text, #eef0f4);
+  font: 15px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.mobile-skin .phone-loading__inner {
+  width: 100%;
+  max-width: 360px;
+}
+
+.mobile-skin .phone-loading__brand {
+  margin: 0 0 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--phone-text-dim, #98a0ad);
+}
+
+.mobile-skin .phone-loading__title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.mobile-skin .phone-loading__step {
+  margin: 0;
+  color: var(--phone-text-dim, #98a0ad);
+}
+
+.mobile-skin .phone-loading__bar {
+  height: 6px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--phone-surface-3, #262a33);
+}
+
+.mobile-skin .phone-loading__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--phone-accent, #5b8def);
+  transition: width 200ms ease;
+}
+
+.mobile-skin .phone-loading__fill.is-indeterminate {
+  width: 35%;
+  animation: phone-loading-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes phone-loading-indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-skin .phone-loading__fill.is-indeterminate { animation: none; width: 100%; opacity: 0.5; }
+}
+
+.mobile-skin .phone-loading__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 20px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--phone-text-dim, #98a0ad);
+  font-variant-numeric: tabular-nums;
+}
+
+.mobile-skin .phone-loading__detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Background load steps and a failed load (PhoneBackgroundLoadStatus): opaque card above the toolbar. */
+.mobile-skin .phone-load-status {
+  position: fixed;
+  left: calc(16px + var(--phone-safe-left));
+  right: calc(16px + var(--phone-safe-right));
+  bottom: calc(80px + var(--phone-safe-bottom));
+  /* Above the home (30), below every sheet (40+): it never covers a sheet control. */
+  z-index: 35;
+  padding: 10px 12px;
+  border: 1px solid var(--phone-border, #2b2f39);
+  border-radius: 12px;
+  background: var(--phone-surface-2, #1c1f26);
+  color: var(--phone-text, #eef0f4);
+  font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  pointer-events: none;
+}
+.mobile-skin .phone-load-status.is-error { border-color: var(--phone-danger, #f0626b); pointer-events: auto; }
+.mobile-skin .phone-load-status__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.mobile-skin .phone-load-status__message { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.mobile-skin .phone-load-status__detail { margin: 4px 0 0; color: var(--phone-text-dim, #98a0ad); overflow-wrap: anywhere; }
+.mobile-skin .phone-load-status__dismiss {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--phone-border, #2b2f39);
+  border-radius: 10px;
+  background: var(--phone-surface, #14161b);
+  color: var(--phone-text, #eef0f4);
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-load-status__dismiss:focus:not(:focus-visible) { outline: none; }
+.mobile-skin .phone-load-status__dismiss:focus-visible { outline: 2px solid var(--phone-accent, #5b8def); outline-offset: 2px; }

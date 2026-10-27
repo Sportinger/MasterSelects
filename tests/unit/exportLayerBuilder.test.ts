@@ -865,7 +865,7 @@ describe('ExportLayerBuilder', () => {
     expect(parallelDecoder.getFrameForClipSourceTime).toHaveBeenCalledWith(
       'clip-1',
       0.5,
-      { toleranceMultiplier: 3 },
+      { toleranceMultiplier: 3, allowNeighbourFallback: true },
     );
   });
 

@@ -9,7 +9,7 @@ Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](..
 
 ![The dancer twice: on the left the photo; on the right the stage turned into a wall of small blocks seen from a slight angle, with the bright dancer standing out from it as a relief of taller blocks](../assets/effects/voxel-relief.webp)
 
-<figcaption>Left: original. Right: Voxel Relief seen from the side (Tilt 70°, Yaw −18°, Distance 1.05, Columns 120, Height 0.35, Height Contrast 2). The defaults (Height 1.2, Height Contrast 3) look almost straight on and make bright parts rise much taller; from the side they become long pillars.</figcaption>
+<figcaption>Left: original. Right: Voxel Relief seen from the side (Tilt 70°, Yaw −18°, Distance 0.93, Columns 120, Height 0.35, Height Contrast 2). The defaults (Height 1.2, Height Contrast 3) look almost straight on and make bright parts rise much taller; from the side they become long pillars.</figcaption>
 </figure>
 
 **Use it for:** a pin-art or city-model look · a slow camera move over a still picture · a graphic,
@@ -86,9 +86,13 @@ turns into beads or round pillars. The effect card shows the same Shape under Pr
   [Voxel Relief as a true 3D scene object](../Effect-System.md#voxel-relief-as-a-true-3d-scene-object).
 - **Look.** Block sides keep at least 55 % of the column colour. The default Distance 0.8 fills the
   layer at the default Tilt.
+- **Framing.** Height does not move the camera: a low or keyframed relief keeps the framing of the
+  default relief, and only a relief taller than the default makes the camera step back. Distance
+  alone sets how close it is.
 - **Warnings.** Values its shader clamps are named in the effect card and the tool result.
-- **Saved projects.** A Voxel Relief saved earlier keeps its darker sides, and Distance 1 if it was
-  saved before Distance existed.
+- **Saved projects.** A Voxel Relief saved earlier keeps its darker sides, Distance 1 if it was
+  saved before Distance existed, and a camera that moves closer as Height drops if it was saved
+  before 27 October 2026.
 - Nodes and camera: [Editable Voxel Relief nodes](../Effect-System.md#editable-voxel-relief-nodes),
   [camera and orbit mode](../Effect-System.md#voxel-relief-camera--orbit-mode); blocks:
   [Node Catalog](../Node-Catalog.md).

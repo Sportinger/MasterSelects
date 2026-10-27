@@ -1,5 +1,22 @@
 export interface ParallelDecodeFrameLookupOptions {
+  /** Widens the neighbour-frame window (only used with allowNeighbourFallback). */
   toleranceMultiplier?: number;
+  /**
+   * When the frame shown at the requested time is not buffered, return the nearest
+   * buffered frame within the tolerance instead of null. Every such substitution is
+   * reported through onNeighbourFallback (export diagnostics count it as a
+   * previous-frame fallback); without this flag the lookup is exact.
+   */
+  allowNeighbourFallback?: boolean;
+}
+
+/** A buffered neighbour stood in for the frame that should show at the target. */
+export interface ParallelDecodeNeighbourFallback {
+  clipId: string;
+  clipName: string;
+  sourceTime: number;
+  expectedFrameTime: number | null;
+  usedFrameTime: number;
 }
 
 export type ParallelDecodeFrameLookupResult =

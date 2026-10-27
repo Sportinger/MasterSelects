@@ -5,6 +5,7 @@ import { scrubSettleState } from '../../../services/scrubSettleState';
 import { getCanvasSourceSize } from '../../../services/text/textCanvasFrameRegistry';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from '../htmlVideoPreviewFallback';
+import { resolveCachedScrubFrameSize } from '../compositeSourceSize';
 import {
   filterPausedHtmlTargetFrame,
   pausedHtmlTargetFrameRate,
@@ -325,14 +326,18 @@ export class TargetPreviewLayerCollector {
           shouldGuardPausedTargetFrames,
           pausedFrameRate
         );
-        if (notReadyCachedFrame) {
+        // A not-ready element can still report 0×0: use the layer's intrinsic or the cached texture's size.
+        const notReadyCachedSize = notReadyCachedFrame
+          ? resolveCachedScrubFrameSize(video, layer, notReadyCachedFrame)
+          : null;
+        if (notReadyCachedFrame && notReadyCachedSize) {
           layerData.push({
             layer,
             isVideo: false,
             externalTexture: null,
             textureView: notReadyCachedFrame.view,
-            sourceWidth: video.videoWidth,
-            sourceHeight: video.videoHeight,
+            sourceWidth: notReadyCachedSize.width,
+            sourceHeight: notReadyCachedSize.height,
             displayedMediaTime: notReadyCachedFrame.mediaTime,
             targetMediaTime: targetTime,
             previewPath: 'not-ready-scrub-cache',

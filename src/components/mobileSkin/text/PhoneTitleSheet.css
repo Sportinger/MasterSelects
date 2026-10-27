@@ -2,15 +2,13 @@
 .mobile-skin .phone-title-sheet .phone-title-sheet__tab {
   color: var(--phone-text);
 }
+/* Segmented style: a surface-3 thumb with full-contrast text (choice chips use the accent tint). */
 .mobile-skin .phone-title-sheet .phone-title-sheet__tab[aria-selected='true'] {
-  border-color: var(--phone-accent);
-  background: color-mix(in srgb, var(--phone-accent) 22%, transparent);
+  border-color: var(--phone-surface-3);
+  background: var(--phone-surface-3);
   font-weight: 600;
 }
-.mobile-skin .phone-title-sheet .phone-title-sheet__tab[aria-disabled='true'] {
-  color: var(--phone-text-off);
-  border-style: dashed;
-}
+.mobile-skin .phone-title-sheet .phone-title-sheet__tab[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-title-sheet .phone-title-sheet__tab:focus-visible {
   outline: 2px solid var(--phone-accent);
   outline-offset: -2px;
@@ -21,3 +19,16 @@
   gap: 8px;
   padding: 2px 0 4px;
 }
+
+/* The text field comes first, directly under the header (the main action), style tabs below it; the
+   sheet is only as tall as its content so the preview stays large while the keyboard is open. */
+.mobile-skin .phone-title-sheet { min-height: 0; }
+.mobile-skin .phone-title-sheet .phone-title-sheet__input-row {
+  position: static;
+  margin-top: 0;
+  align-items: stretch;
+}
+.mobile-skin .phone-title-sheet .phone-title-sheet__input { min-height: 48px; font-size: 16px; }
+.mobile-skin .phone-title-sheet .phone-title-sheet__toggle,
+.mobile-skin .phone-title-sheet .phone-title-sheet__commit { height: 48px; align-self: flex-end; }
+.mobile-skin .phone-title-sheet .phone-title-sheet__tabs { gap: 8px; }

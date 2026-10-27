@@ -16,6 +16,7 @@ import { getProgramAngleIndex } from '../../services/multicam/multicamPlan';
 import { Logger } from '../../services/logger';
 import { StatsOverlay } from './StatsOverlay';
 import { MultiPreviewSlot } from './MultiPreviewSlot';
+import { useMultiPreviewPhoneGrid, usePhoneSkinAncestor } from './MultiPreviewPhoneGrid';
 import type { MultiPreviewPanelData } from '../../types/dock';
 import './MultiPreview.css';
 
@@ -65,6 +66,9 @@ export function MultiPreviewPanel({ panelId, data: dockData }: MultiPreviewPanel
   const [sourceOpen, setSourceOpen] = useState(false);
   const sourceDropdownRef = useRef<HTMLDivElement>(null);
   const [highlightedSlot, setHighlightedSlot] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const gridWrapperRef = useRef<HTMLDivElement>(null);
+  const phoneSkin = usePhoneSkinAncestor(containerRef);
 
   const sourceComp = useMemo(
     () => visibleCompositions.find((c) => c.id === data.sourceCompositionId),
@@ -83,6 +87,10 @@ export function MultiPreviewPanel({ panelId, data: dockData }: MultiPreviewPanel
   const onAirAngle = useTimelineStore((s) => (
     multicamOn && activeMulticam ? getProgramAngleIndex(activeMulticam, s.clips, s.playheadPosition) : -1
   ));
+  // Phone: the tiles fill the area in the arrangement that suits the picture's shape.
+  const gridSize = sourceComp ?? compositions.find((c) => c.id === activeCompositionId) ?? outputResolution;
+  const gridAspect = gridSize.width / gridSize.height;
+  const phoneGridStyle = useMultiPreviewPhoneGrid(gridWrapperRef, phoneSkin, data.slots.length, gridAspect);
   // Camera labels follow track renames.
   const angleLabels = useTimelineStore(useShallow((s) => (activeMulticam?.angles ?? []).map((angle) => (
     s.tracks.find((track) => track.id === angle.trackId)?.name ?? angle.label
@@ -209,6 +217,7 @@ export function MultiPreviewPanel({ panelId, data: dockData }: MultiPreviewPanel
 
   return (
     <div
+      ref={containerRef}
       className="multi-preview-container"
       onPointerUp={(event) => {
         // Pointer focus hygiene: a tapped or clicked control does not keep a focus ring.
@@ -321,8 +330,8 @@ export function MultiPreviewPanel({ panelId, data: dockData }: MultiPreviewPanel
       </div>
 
       {/* 2x2 grid — wrapper centers the 16:9 block, grid scales uniformly */}
-      <div className="multi-preview-grid-wrapper">
-        <div className="multi-preview-grid">
+      <div className="multi-preview-grid-wrapper" ref={gridWrapperRef}>
+        <div className="multi-preview-grid" style={phoneGridStyle}>
           {data.slots.map((slot, index) => (
             <MultiPreviewSlot
               key={index}
@@ -332,6 +341,7 @@ export function MultiPreviewPanel({ panelId, data: dockData }: MultiPreviewPanel
               showTransparencyGrid={data.showTransparencyGrid}
               onCompositionChange={(compId) => handleSlotCompositionChange(index, compId)}
               highlighted={highlightedSlot === index}
+              phoneSkin={phoneSkin}
               multicamAngle={multicamOn && activeCompositionId && activeMulticam?.angles[index]
                 ? { compositionId: activeCompositionId, angleIndex: index, label: angleLabels[index] ?? activeMulticam.angles[index].label }
                 : null}

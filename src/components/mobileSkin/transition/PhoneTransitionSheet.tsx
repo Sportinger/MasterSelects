@@ -23,7 +23,10 @@ import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { openPhoneProperties } from '../panels/phonePanelNavigation';
 import { PhoneProRow } from '../panels/PhoneProRows';
+import { AnimatedTransitionPreview } from '../../panels/transitions/AnimatedTransitionPreview';
+import '../../panels/TransitionsPanel.css';
 import { PhoneChoice, blurAfterPointer } from './phoneChoiceControls';
+import { PhoneChipRow } from './phoneSheetPrimitives';
 import {
   applyPhoneTransition, phoneTransitionCatalog, phoneTransitionScopeCuts, phoneTransitionTiming,
   phoneTransitionUnavailableReason, type PhoneTransitionChoice, type PhoneTransitionDesired,
@@ -40,6 +43,7 @@ export const PHONE_TRANSITION_MAX_DURATION = 5;
 const DEFAULT_DURATION = 1;
 const log = Logger.create('PhoneTransitionSheet');
 const CONTENT_NONE_REASON = 'Pick a transition first: its content is a composition of the two clips at this cut, which you can then edit layer by layer.';
+const NO_CUT_REASON = 'This clip touches no other clip on its track. Move two clips together, or tap the square at a cut on the timeline, then pick a transition.';
 const SETTINGS_NONE_REASON = 'Pick a transition first: direction, colour, softness and its offset belong to a transition at this cut.';
 
 /** The cut this sheet edits: the remembered target, else the cut of the selected clip. */
@@ -51,10 +55,6 @@ function initialCut(): PhoneCut | null {
     ? timeline.primarySelectedClipId
     : [...timeline.selectedClipIds][0];
   return primary ? phoneCutForClip(timeline.clips, primary) : null;
-}
-
-function glyphOf(name: string): string {
-  return name.split(/[\s-]+/).filter(Boolean).slice(0, 2).map((word) => word[0]?.toUpperCase() ?? '').join('');
 }
 
 function formatSeconds(value: number): string {
@@ -200,12 +200,28 @@ export const PhoneTransitionSheet: PhoneSheetComponent = () => {
   };
 
   if (!cut || !target) {
+    // Grey out, never hide: the looks stay visible (45 %) under the one-line reason, and a tap explains.
+    const preview = catalog.find((entry) => entry.category === category) ?? catalog[0];
     return (
       <PhoneSheet title="Transition" onCancel={cancel} onDone={() => undefined} doneDisabled>
-        <p className="phone-transition-sheet__empty" data-testid={IDS.empty}>
-          This clip touches no other clip on its track. A transition goes between two clips that meet at a cut:
-          move them together, or tap the square at a cut on the timeline.
-        </p>
+        <div className="phone-transition-sheet">
+          <p className="phone-transition-sheet__empty" data-testid={IDS.empty}>
+            Pick a cut first: a transition goes between two clips that meet on a track.
+          </p>
+          <PhoneChipRow label="Transition families">
+            {catalog.map((entry) => (
+              <PhoneChoice key={entry.category} label={entry.label} selected={entry.category === category}
+                testId={phoneTransitionCategoryTestId(entry.category)} onSelect={() => setCategory(entry.category)} />
+            ))}
+          </PhoneChipRow>
+          <div className="phone-transition-sheet__grid" role="group" aria-label={`${preview?.label ?? ''} transitions`}>
+            {preview?.transitions.map((definition) => (
+              <PhoneChoice key={definition.id} variant="tile" label={definition.name}
+                media={<AnimatedTransitionPreview type={definition.id} />} selected={false}
+                testId={phoneTransitionChoiceTestId(definition.id)} unavailableReason={NO_CUT_REASON} onSelect={() => undefined} />
+            ))}
+          </div>
+        </div>
       </PhoneSheet>
     );
   }
@@ -221,7 +237,7 @@ export const PhoneTransitionSheet: PhoneSheetComponent = () => {
           {status}
           {liveCut?.transition ? ` · ${liveCut.transition.type}, ${formatSeconds(liveCut.transition.duration)}` : ' · no transition'}
         </p>
-        <div className="phone-transition-sheet__categories" role="group" aria-label="Transition families">
+        <PhoneChipRow label="Transition families">
           {catalog.map((entry) => (
             <PhoneChoice
               key={entry.category}
@@ -231,12 +247,12 @@ export const PhoneTransitionSheet: PhoneSheetComponent = () => {
               onSelect={() => setCategory(entry.category)}
             />
           ))}
-        </div>
+        </PhoneChipRow>
         <div className="phone-transition-sheet__grid" role="group" aria-label={`${group?.label ?? ''} transitions`}>
           <PhoneChoice
             variant="tile"
             label="None"
-            glyph="–"
+            media={<span className="phone-transition-sheet__none" />}
             selected={choice === 'none'}
             testId={phoneTransitionChoiceTestId('none')}
             onSelect={() => pick('none')}
@@ -246,7 +262,7 @@ export const PhoneTransitionSheet: PhoneSheetComponent = () => {
               key={definition.id}
               variant="tile"
               label={definition.name}
-              glyph={glyphOf(definition.name)}
+              media={<AnimatedTransitionPreview type={definition.id} />}
               selected={choice === definition.id}
               testId={phoneTransitionChoiceTestId(definition.id)}
               unavailableReason={phoneTransitionUnavailableReason(clips, cut, definition.id)}

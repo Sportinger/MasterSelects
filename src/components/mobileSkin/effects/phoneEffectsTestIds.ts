@@ -8,6 +8,8 @@ export const PHONE_EFFECTS_TEST_IDS = {
   effectsCategory: 'phone-effects-category',
   /** One card per effect; data-effect-type carries the effect id, aria-disabled when it cannot be added. */
   effectsCard: 'phone-effects-card',
+  /** The rendered picture inside an Effects or Filters card; data-preview-state idle|loading|ready|unchanged|failed. */
+  cardPreview: 'phone-fx-card-preview',
   /** One row per applied effect; data-effect-id / data-effect-type, aria-selected for the focused row. */
   effectsStackRow: 'phone-effects-stack-row',
   effectsToggle: 'phone-effects-toggle',

@@ -13,7 +13,6 @@ import type { SavedDockLayout } from '../../types/dock';
 import { APP_VERSION } from '../../version';
 import { WorkspacePageIcon } from './WorkspacePageIcon';
 import { openPhoneEditor } from './openPhoneEditor';
-import { isPhoneSizedTouchDevice, readPhoneEntryEnvironment } from '../../routing/phoneEntry';
 import './WorkspaceBar.css';
 
 function getVisibleLayouts(layouts: SavedDockLayout[]): SavedDockLayout[] {
@@ -48,20 +47,16 @@ export function WorkspaceBar() {
     activeSavedLayoutId,
     loadSavedLayout,
     mediumLayoutOverride,
-    mobileLayoutOverride,
     overLayoutBaseId,
     savedLayouts,
     setMediumLayoutOverride,
-    setMobileLayoutOverride,
   } = useDockStore(useShallow((state) => ({
     activeSavedLayoutId: state.activeSavedLayoutId,
     loadSavedLayout: state.loadSavedLayout,
     mediumLayoutOverride: state.mediumLayoutOverride,
-    mobileLayoutOverride: state.mobileLayoutOverride,
     overLayoutBaseId: state.overLayoutBaseId,
     savedLayouts: state.savedLayouts,
     setMediumLayoutOverride: state.setMediumLayoutOverride,
-    setMobileLayoutOverride: state.setMobileLayoutOverride,
   })));
   const [menuOpen, setMenuOpen] = useState(false);
   const [phoneEditorOpening, setPhoneEditorOpening] = useState(false);
@@ -69,7 +64,6 @@ export function WorkspaceBar() {
   const menuRootRef = useRef<HTMLDivElement>(null);
   const activeOverLayout = getWorkspaceOverLayout(activeSavedLayoutId);
   const mediumLayoutEnabled = mediumLayoutOverride ?? (activeOverLayout === 'medium');
-  const mobileLayoutEnabled = mobileLayoutOverride ?? (activeOverLayout === 'mobile');
   const overLayoutsAvailable = activeSavedLayoutId !== FACTORY_START_LAYOUT_ID;
   const visibleActiveLayoutId = getVisibleSubLayoutId(activeSavedLayoutId, overLayoutBaseId);
   const visibleLayouts = useMemo(() => getVisibleLayouts(savedLayouts), [savedLayouts]);
@@ -108,17 +102,6 @@ export function WorkspaceBar() {
     if (!result.ok) setPhoneEditorError(result.message);
     // Normally the page is gone by now; if the user stayed (a cancelled leave prompt), the controls work again.
     window.setTimeout(() => setPhoneEditorOpening(false), result.ok ? 4000 : 0);
-  };
-
-  // On a phone, Mobile is the phone editor. Elsewhere it keeps switching the Mobile dock layout on and
-  // off, and the Layouts menu opens the phone editor.
-  const mobileOpensPhoneEditor = isPhoneSizedTouchDevice(readPhoneEntryEnvironment());
-  const toggleMobile = () => {
-    if (mobileOpensPhoneEditor) {
-      void openPhone();
-      return;
-    }
-    setMobileLayoutOverride(!mobileLayoutEnabled);
   };
 
   const selectLayout = (layoutId: string) => {
@@ -161,16 +144,15 @@ export function WorkspaceBar() {
           <span>Medium</span>
         </button>
 
+        {/* Mobile is the phone editor at /m on every device (owner decision 2026-10-27). It navigates,
+            so it is not a pressed toggle; the legacy Mobile dock layout is off (legacyMobileLayout.ts). */}
         <button
           aria-label="Mobile mode"
-          aria-pressed={mobileLayoutEnabled}
           className="workspace-bar-over-layout-toggle workspace-bar-mobile-toggle"
-          disabled={mobileOpensPhoneEditor ? phoneEditorOpening : !overLayoutsAvailable}
-          onClick={toggleMobile}
+          disabled={phoneEditorOpening}
+          onClick={() => void openPhone()}
           onPointerUp={(event) => event.currentTarget.blur()}
-          title={mobileOpensPhoneEditor
-            ? (phoneEditorError ?? 'Open the phone editor')
-            : mobileLayoutEnabled ? 'Disable Mobile design' : 'Enable Mobile design'}
+          title={phoneEditorError ?? 'Open the phone editor'}
           type="button"
         >
           <IconDeviceMobile aria-hidden="true" size={17} stroke={1.7} />

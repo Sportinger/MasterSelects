@@ -3,6 +3,38 @@
 .mobile-skin .phone-tracks { display: flex; flex-direction: column; gap: 10px; }
 .mobile-skin .phone-tracks__add { display: flex; gap: 6px; }
 .mobile-skin .phone-tracks__add > .phone-pro-button { flex: 1 1 0; padding: 0 8px; }
+/* Leading track-type icon tinted with the track colour, then the name, then four 44 px icon toggles. */
+.mobile-skin .phone-tracks__type {
+  display: inline-flex;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--phone-surface-2);
+  color: var(--phone-text-dim);
+}
+.mobile-skin .phone-tracks__toggles { display: flex; flex: 0 0 auto; gap: 4px; }
+.mobile-skin .phone-tracks__toggles > .phone-pro-button { width: 44px; padding: 0; }
+.mobile-skin .phone-tracks__toggles > .phone-pro-button[aria-pressed='true'] {
+  border-color: var(--phone-accent);
+  background: var(--phone-accent);
+  color: var(--phone-on-accent);
+}
+.mobile-skin .phone-tracks__toggles > .phone-pro-button[data-toggle='solo'][aria-pressed='true'] {
+  border-color: var(--phone-warning, #e8b931);
+  background: var(--phone-warning, #e8b931);
+  color: #1a1a1a;
+}
+.mobile-skin .phone-tracks__toggles > .phone-pro-button[data-toggle='mute'][aria-pressed='true'] {
+  border-color: var(--phone-danger);
+  background: var(--phone-danger);
+  color: #fff;
+}
+.mobile-skin .phone-tracks__toggles > .phone-pro-button[data-toggle='more'][aria-pressed='true'] {
+  background: color-mix(in srgb, var(--phone-accent) 18%, var(--phone-surface));
+  color: var(--phone-text);
+}
 .mobile-skin .phone-tracks__row { border-left-width: 4px; }
 .mobile-skin .phone-tracks__more { display: flex; flex-direction: column; gap: 10px; }
 .mobile-skin .phone-tracks__rename { display: flex; align-items: flex-end; gap: 8px; }

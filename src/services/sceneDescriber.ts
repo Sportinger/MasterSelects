@@ -7,6 +7,7 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import type { SceneSegment, SceneDescriptionStatus } from '../types';
 import { projectFileService } from './projectFileService';
+import { runEditorBackgroundWrite } from './project/repository/transaction/editorTransactionBinding';
 import {
   getMediaSourceArtifactProjection,
   hydrateAndProjectMediaSourceArtifacts,
@@ -105,20 +106,23 @@ function updateClipSceneDescription(
       sceneDescriptionMessage: data.message,
     };
   });
-  useTimelineStore.setState({ clips });
-  if (mediaFileId) {
-    useMediaStore.setState(state => ({
-      files: state.files.map(file => file.id === mediaFileId
-        ? {
-            ...file,
-            sceneDescriptionStatus: data.status ?? file.sceneDescriptionStatus,
-            sceneDescriptionProgress: data.progress ?? file.sceneDescriptionProgress,
-            sceneDescriptions: hasSegments ? data.segments ?? undefined : file.sceneDescriptions,
-            sceneDescriptionMessage: data.message,
-          }
-        : file),
-    }));
-  }
+  // Job status and results are a background revision: no Undo step, never inside another open transaction.
+  runEditorBackgroundWrite('Scene description', () => {
+    useTimelineStore.setState({ clips });
+    if (mediaFileId) {
+      useMediaStore.setState(state => ({
+        files: state.files.map(file => file.id === mediaFileId
+          ? {
+              ...file,
+              sceneDescriptionStatus: data.status ?? file.sceneDescriptionStatus,
+              sceneDescriptionProgress: data.progress ?? file.sceneDescriptionProgress,
+              sceneDescriptions: hasSegments ? data.segments ?? undefined : file.sceneDescriptions,
+              sceneDescriptionMessage: data.message,
+            }
+          : file),
+      }));
+    }
+  });
   return mediaFileId;
 }
 
@@ -306,11 +310,11 @@ export async function describeClip(clipId: string): Promise<void> {
             analysisCoverage = Math.min(1, merged.reduce((sum, [s, e]) => sum + (e - s), 0) / file.duration);
           }
 
-          useMediaStore.setState({
-            files: mediaState.files.map(f =>
+          runEditorBackgroundWrite('Scene description coverage', () => useMediaStore.setState({
+            files: useMediaStore.getState().files.map(f =>
               f.id === mediaFileId ? { ...f, analysisStatus: 'ready' as const, analysisCoverage } : f
             ),
-          });
+          }));
         }
       } catch { /* ignore */ }
     }

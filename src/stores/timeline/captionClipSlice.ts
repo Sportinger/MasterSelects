@@ -11,6 +11,7 @@ import type { CaptionClipProperties } from '../../types/caption';
 import type { TextClipProperties } from '../../types/text';
 import type { TimelineClip } from '../../types/timeline';
 import { useMediaStore } from '../mediaStore';
+import { captureEditorTransactionBinding } from '../../services/project/repository/transaction/editorTransactionBinding';
 import { DEFAULT_TEXT_DURATION } from './constants';
 import type { CaptionClipActions, CaptionPropertiesPatch, SliceCreator } from './types';
 
@@ -111,19 +112,21 @@ export const createCaptionClipSlice: SliceCreator<CaptionClipActions> = (set, ge
       0.1,
       duration ?? resolveDefaultDuration(initialState.clips, startTime),
     );
+    // The text clip is created after an await; turning it into a caption joins the caller's transaction explicitly.
+    const transaction = captureEditorTransactionBinding('Add caption clip', { fallbackSource: 'timeline' });
     const clipId = await get().addTextClip(trackId, startTime, resolvedDuration, true);
     if (!clipId) return null;
-
-    const captionProperties = cloneDefaultCaptionProperties();
-    captionProperties.sourceClipId = sourceClipId;
-    const state = get();
-    const textClip = state.clips.find(clip => clip.id === clipId);
-    if (!textClip?.textProperties) return null;
-    const resolution = getActiveCompositionResolution();
-    const textProperties = createCaptionTextProperties({
-      caption: captionProperties,
-      base: textClip.textProperties,
-      ...resolution,
+    return transaction.run(() => {
+      const captionProperties = cloneDefaultCaptionProperties();
+      captionProperties.sourceClipId = sourceClipId;
+      const state = get();
+      const textClip = state.clips.find(clip => clip.id === clipId);
+      if (!textClip?.textProperties) return null;
+      const resolution = getActiveCompositionResolution();
+      const textProperties = createCaptionTextProperties({
+        caption: captionProperties,
+        base: textClip.textProperties,
+        ...resolution,
     });
     state.updateTextProperties(clipId, textProperties);
     const styledState = get();
@@ -161,6 +164,7 @@ export const createCaptionClipSlice: SliceCreator<CaptionClipActions> = (set, ge
     layerBuilder.invalidateCache();
     renderHostPort.requestNewFrameRender();
     return clipId;
+    });
   },
 
   ensureCaptionTextClip: async (clipId) => {
@@ -199,48 +203,51 @@ export const createCaptionClipSlice: SliceCreator<CaptionClipActions> = (set, ge
       base: fallbackBase,
       ...resolution,
     });
+    const transaction = captureEditorTransactionBinding('Make caption editable', { fallbackSource: 'timeline' });
     const { canvas, textProperties: restoredProperties } = await createTimelineTextCanvasRuntime({
       textProperties,
       dimensions: resolution,
     });
+    // Prepared above (the canvas render awaits); the migration commits in the caller's transaction, carried explicitly.
+    return transaction.run(() => {
+      const refreshed = get();
+      const currentClip = refreshed.clips.find(candidate => candidate.id === clipId);
+      if (!currentClip?.captionProperties) return false;
+      const migratedClip: TimelineClip = {
+        ...currentClip,
+        name: 'Captions',
+        file: new File([], 'caption-clip.txt', { type: 'text/plain' }),
+        source: { type: 'text', textCanvas: canvas, naturalDuration: currentClip.duration },
+        textProperties: restoredProperties,
+        captionLayerBinding: undefined,
+        isComposition: false,
+        compositionId: undefined,
+        nestedClips: undefined,
+        nestedTracks: undefined,
+        nestedContentHash: undefined,
+        isLoading: false,
+      };
+      const nextClips = refreshed.clips.map(candidate => candidate.id === clipId ? migratedClip : candidate);
+      set({ clips: nextClips });
 
-    const refreshed = get();
-    const currentClip = refreshed.clips.find(candidate => candidate.id === clipId);
-    if (!currentClip?.captionProperties) return false;
-    const migratedClip: TimelineClip = {
-      ...currentClip,
-      name: 'Captions',
-      file: new File([], 'caption-clip.txt', { type: 'text/plain' }),
-      source: { type: 'text', textCanvas: canvas, naturalDuration: currentClip.duration },
-      textProperties: restoredProperties,
-      captionLayerBinding: undefined,
-      isComposition: false,
-      compositionId: undefined,
-      nestedClips: undefined,
-      nestedTracks: undefined,
-      nestedContentHash: undefined,
-      isLoading: false,
-    };
-    const nextClips = refreshed.clips.map(candidate => candidate.id === clipId ? migratedClip : candidate);
-    set({ clips: nextClips });
-
-    if (oldCompositionId && !nextClips.some(candidate => candidate.compositionId === oldCompositionId)) {
-      const mediaState = useMediaStore.getState();
-      const oldComposition = mediaState.compositions.find(candidate => candidate.id === oldCompositionId);
-      if (oldComposition?.captionComp?.kind === 'caption-comp') {
-        mediaState.removeComposition(oldCompositionId);
+      if (oldCompositionId && !nextClips.some(candidate => candidate.compositionId === oldCompositionId)) {
+        const mediaState = useMediaStore.getState();
+        const oldComposition = mediaState.compositions.find(candidate => candidate.id === oldCompositionId);
+        if (oldComposition?.captionComp?.kind === 'caption-comp') {
+          mediaState.removeComposition(oldCompositionId);
+        }
       }
-    }
-    renderCaptionTextClipFrame({
-      captionClip: migratedClip,
-      clips: nextClips,
-      tracks: refreshed.tracks,
-      timelineTime: refreshed.playheadPosition,
+      renderCaptionTextClipFrame({
+        captionClip: migratedClip,
+        clips: nextClips,
+        tracks: refreshed.tracks,
+        timelineTime: refreshed.playheadPosition,
     });
     refreshed.invalidateCache();
     layerBuilder.invalidateCache();
     renderHostPort.requestNewFrameRender();
     return true;
+    });
   },
 
   updateCaptionProperties: (clipId, patch) => {
@@ -248,8 +255,9 @@ export const createCaptionClipSlice: SliceCreator<CaptionClipActions> = (set, ge
     const clip = state.clips.find(candidate => candidate.id === clipId);
     if (!clip?.captionProperties) return;
     if (clip.isComposition || clip.source?.type !== 'text' || !clip.textProperties) {
+      const transaction = captureEditorTransactionBinding('Update caption', { fallbackSource: 'timeline' });
       void state.ensureCaptionTextClip(clipId).then(migrated => {
-        if (migrated) get().updateCaptionProperties(clipId, patch);
+        if (migrated) transaction.run(() => get().updateCaptionProperties(clipId, patch));
       });
       return;
     }

@@ -13,6 +13,7 @@ import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { PhoneRatioGlyph } from '../crop/phoneChoiceGlyphs';
 import { PhoneChipGroup, PhoneSheetNote, type PhoneUnavailable } from '../crop/phoneDesignControls';
 import {
   PHONE_FORMAT_PRESETS, phoneAspectLabel, phoneFormatPresetFor, type PhoneFormatLayout, type PhoneFormatPresetId,
@@ -80,7 +81,8 @@ export const PhoneFormatSheet: PhoneSheetComponent = () => {
           {custom ? ` · started as ${start.size.width} × ${start.size.height}` : ''}
         </PhoneSheetNote>
         <PhoneChipGroup<PhoneFormatPresetId> label="Canvas format" value={preset} testId={IDS.presets} disabled={blocked}
-          options={PHONE_FORMAT_PRESETS.map(({ id, label }) => ({ value: id, label }))} onChange={pickPreset} />
+          options={PHONE_FORMAT_PRESETS.map(({ id, label, width, height }) => ({ value: id, label, icon: <PhoneRatioGlyph ratio={width / height} /> }))}
+          onChange={pickPreset} layout="tile-row" />
         <section className="phone-design-section">
           <h3 className="phone-design-section__title">Clips</h3>
           <PhoneChipGroup<PhoneFormatLayout> label="How clips follow the new format" value={layout} testId={IDS.layout} disabled={blocked}

@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { blurAfterPointer } from './phoneProFocus';
+import { ProGlyph, type ProGlyphName } from './phoneProGlyphs';
 import './phoneProControls.css';
 
 export interface ProButtonProps {
@@ -132,5 +133,28 @@ export function ProMessage({ text, tone = 'info', testId }: { text: string | nul
     <p className={`phone-pro-message phone-pro-message--${tone}`} role={tone === 'error' ? 'alert' : 'status'} data-testid={testId}>
       {text}
     </p>
+  );
+}
+
+export interface ProEmptyStateProps {
+  icon?: ProGlyphName;
+  title: string;
+  /** At most two short lines. */
+  body?: string;
+  action?: { label: string; onPress: () => void; testId: string; unavailableReason?: string | null };
+  testId?: string;
+}
+
+/** Shared empty state of the phone sheets: line icon, title, a short body and one next step. */
+export function ProEmptyState({ icon = 'empty', title, body, action, testId }: ProEmptyStateProps) {
+  return (
+    <div className="phone-pro-empty" data-testid={testId}>
+      <span className="phone-pro-empty__icon"><ProGlyph name={icon} size={32} /></span>
+      <p className="phone-pro-empty__title">{title}</p>
+      {body ? <p className="phone-pro-empty__body">{body}</p> : null}
+      {action ? (
+        <ProButton label={action.label} tone="primary" testId={action.testId} unavailableReason={action.unavailableReason} onPress={action.onPress} />
+      ) : null}
+    </div>
   );
 }

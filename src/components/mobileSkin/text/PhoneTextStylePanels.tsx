@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 
 import { googleFontsService } from '../../../services/googleFontsService';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 import { PhoneChip, PhoneColorRow, PhoneSliderRow, PhoneSwitchRow, normalizePhoneHex } from './phoneControls';
 import {
   DEFAULT_PHONE_TEXT_STYLE, PHONE_TEXT_RANGES, getPhoneTextFonts, nearestFontWeight, toggledBoldWeight,
@@ -58,7 +59,7 @@ export function PhoneTextFontPanel({ style, onChange }: PhoneTextPanelProps) {
   const canBold = !googleFontsService.isManagedFont(style.fontFamily) || weights.some((weight) => weight >= 600);
   return (
     <div className="phone-design-section">
-      <div className="phone-design-chips phone-design-chips--scroll" role="group" aria-label="Font">
+      <PhoneChipRow label="Font">
         {getPhoneTextFonts().map((font) => (
           <PhoneChip
             key={font.family}
@@ -69,7 +70,7 @@ export function PhoneTextFontPanel({ style, onChange }: PhoneTextPanelProps) {
             onSelect={() => onChange({ ...style, fontFamily: font.family, fontWeight: nearestFontWeight(font.family, style.fontWeight) })}
           />
         ))}
-      </div>
+      </PhoneChipRow>
       {note && <p className="phone-design-note phone-design-note--warn" data-testid={IDS.fontNote}>{note}</p>}
       <div className="phone-design-chips" role="group" aria-label="Font style">
         <PhoneChip

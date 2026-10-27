@@ -14,6 +14,7 @@ import {
 } from '../../src/engine/render/layerCollector/htmlVideoPausedFrameGuard';
 import { frameIndexAtTime, stepTimeByFrames } from '../../src/utils/timelineFrameQuantization';
 import { SLOT_SEEK_LEAD_SECONDS } from '../../src/engine/texture/scrubbingCache/cacheKeys';
+import { resolveClipSourceTime, videoFrameSourceTime } from '../../src/services/timeline/retime/clipRetime';
 
 /**
  * The paused preview repaint defect (found by tests/playwright/foundation/preview-truth.spec.ts):
@@ -56,6 +57,29 @@ describe('frame-exact paused HTML seeks', () => {
         if (offset === 0) expect(presentedFrame(seek, fps, 1000), `frame ${frame} (ms timestamps)`).toBe(frame);
         expect(frameIndexAtTime(seek, fps)).toBe(frame);
       }
+    }
+  });
+
+  it.each(RATES)('keeps a reversed clip\'s seek clear of the next keyframe at %f fps (REVERSE_PAUSED_BEFORE_KEYFRAME)', (fps) => {
+    // The demuxer rounds the seek position to the container time base and starts decoding at a
+    // keyframe it rounds onto: Chromium presented frame 60 for a seek to 1.999995 s (keyframe 60 at
+    // 2.0 s, MP4 time base 1/15360) and the preview stayed empty on the reversed mosaic tile T11b.
+    const video = videoAt(0, fps);
+    const reversed = { startTime: 0, duration: 20, inPoint: 0, outPoint: 20, reversed: true, speed: 1 } as Parameters<typeof resolveClipSourceTime>[0];
+    for (let frame = 0; frame < Math.floor(20 * fps) - 1; frame++) {
+      // Local time at which the reverse clip's sample sits exactly on the end of source frame `frame`.
+      const target = videoFrameSourceTime(resolveClipSourceTime(reversed, 20 - (frame + 1) / fps));
+      expect(target).toBeLessThan((frame + 1) / fps);
+      const seek = htmlVideoFrameSeekTime(video, target);
+      expect(frameIndexAtTime(seek, fps), `frame ${frame}`).toBe(frame);
+      expect(presentedFrame(seek, fps, 1), `frame ${frame} (us timestamps)`).toBe(frame);
+      for (const timescale of [15360, 90000, 1000]) {
+        const tick = (seconds: number) => Math.round(seconds * timescale);
+        expect(tick(seek), `frame ${frame} rounds onto frame ${frame + 1} at 1/${timescale}`).toBeLessThan(tick((frame + 1) / fps));
+      }
+      // The seek position is what the seeked event reports as presented: it settles the target.
+      expect(isPausedHtmlTargetMediaTimeUsable(seek, target, pausedHtmlTargetFrameRate(video)), `guard ${frame}`).toBe(true);
+      expect(samePresentedSourceFrame(video, seek, target), `settle ${frame}`).toBe(true);
     }
   });
 

@@ -7,6 +7,7 @@ import type { EffectDefinition } from '../../types';
 import { voxelReliefParamWarnings } from './warnings';
 import { VOXEL_RELIEF_PARAMS } from './parameters';
 import { compileVoxelGraph } from '../../../services/operators/voxelGraph';
+import { voxelCameraRadius } from './framing';
 
 import { finiteUniform as finite } from '../../_shared/effectUniformParams';
 
@@ -17,7 +18,7 @@ export const voxelRelief: EffectDefinition = {
 
   shader: scalarFieldShader('voxelEvaluateField', 'params.graphField') + '\n' + shader,
   entryPoint: 'voxelReliefFragment',
-  uniformSize: 704,
+  uniformSize: 720,
   usesFeedback: true,
 
   cameraInteraction: {
@@ -37,6 +38,15 @@ export const voxelRelief: EffectDefinition = {
     const graph = compileVoxelGraph(params);
     params = graph.params;
     const reset = params.reset === true ? 1 : 0;
+    // Same relief height the shader's voxelMaximumHeight() uses: the graph's field bound or Base + Height.
+    const reliefHeight = graph.field.operations.length > 0
+      ? graph.maxHeight : finite(params.baseHeight, 0.015) + finite(params.height, 1.2);
+    const cameraRadius = voxelCameraRadius({
+      perspective: finite(params.perspective, 0.22),
+      distance: finite(params.distance, 0.8),
+      reliefHeight,
+      framing: params.framing === 'height' ? 'height' : 'fixed',
+    });
 
     return new Float32Array([
       finite(params.columns, 107.4),
@@ -68,6 +78,7 @@ export const voxelRelief: EffectDefinition = {
       graph.primitiveShape === 'sphere' ? 1 : graph.primitiveShape === 'cylinder' ? 2 : 0,
       // Effects saved before 2026-10 keep the darker, greying side shading (load migration).
       params.shading === 'legacy' ? 1 : 0,
+      cameraRadius, 0, 0, 0,
       ...graph.heightUV,
       ...graph.colorUV,
       ...graph.tint, graph.opacity,

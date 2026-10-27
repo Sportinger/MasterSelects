@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PHONE_TEST_IDS, phoneActionTestId, type PhoneActionContext, type PhoneActionDefinition } from '../contracts';
 import { Logger } from '../../../services/logger';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -6,6 +6,7 @@ import { getPhoneActionsForScope, resolvePhoneActionState } from '../actions/pho
 import { usePhoneRuntime } from '../runtime/PhoneRuntimeContext';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from './phoneIcons';
+import { usePhoneScrollEdges } from './usePhoneScrollEdges';
 
 const log = Logger.create('PhoneToolbar');
 
@@ -34,6 +35,13 @@ export function PhoneContextToolbar() {
     [selected, playheadTime, status.projectOpen, status.engineReady],
   );
   const actions = useMemo(() => getPhoneActionsForScope(scope), [scope]);
+  // Root and clip tools share one scroller: switching scope starts at the first tool, so the first
+  // label is never left half scrolled under the back button. Hidden tools beyond an edge fade there.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  usePhoneScrollEdges(scrollerRef, [scope, actions.length]);
+  useLayoutEffect(() => {
+    scrollerRef.current?.scrollTo({ left: 0 });
+  }, [scope]);
   const states = useMemo(
     () => actions.map((action) => resolvePhoneActionState(action, context)),
     // clips: resolvePhoneActionState reads clip spans from the timeline store.
@@ -81,7 +89,7 @@ export function PhoneContextToolbar() {
           <PhoneIcon name="back" size={24} />
         </button>
       ) : null}
-      <div className="phone-toolbar__scroller">
+      <div ref={scrollerRef} className="phone-toolbar__scroller phone-scroll-edges">
         {actions.map((action, index) => {
           const state = states[index];
           const disabled = state.kind === 'unavailable';

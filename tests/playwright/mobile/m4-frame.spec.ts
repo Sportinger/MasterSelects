@@ -84,8 +84,11 @@ test('side panels collapse and expand by toggle, rail and swipe, and keep that a
   try {
     await openEditor(m1, 'nodes')
     const root = page.getByTestId(WS.root)
-    // Landscape on a phone has room: both sides start open, the editor keeps its width.
+    // Landscape on a phone has room: the preview starts open. Properties has nothing to show without a
+    // selected clip, so it starts collapsed to its rail (owner rule 3); tapping the rail opens it.
     await expect(root).toHaveAttribute('data-left', 'open')
+    await expect(root, 'Properties opened although no clip is selected').toHaveAttribute('data-right', 'collapsed')
+    await tapOn(m1, page.getByTestId(WS.railRight))
     await expect(root).toHaveAttribute('data-right', 'open')
     const mainOpen = (await page.getByTestId(WS.main).boundingBox())!.width
     expect(mainOpen, 'the editor in the middle is too narrow next to both side panels').toBeGreaterThanOrEqual(300)
@@ -115,11 +118,12 @@ test('side panels collapse and expand by toggle, rail and swipe, and keep that a
     await expect(root, 'the collapsed left side opened again after the reload').toHaveAttribute('data-left', 'collapsed')
     await expect(root, 'the open right side closed after the reload').toHaveAttribute('data-right', 'open')
 
-    // The choice is per editor: the mixer was never touched and opens with both sides.
+    // The choice is per editor: the mixer was never touched and opens with its preview, Properties
+    // stays on its rail while nothing is selected.
     await tapOn(m1, page.getByTestId(WS.back))
     await openEditor(m1, 'mixer')
     await expect(root).toHaveAttribute('data-left', 'open')
-    await expect(root).toHaveAttribute('data-right', 'open')
+    await expect(root).toHaveAttribute('data-right', 'collapsed')
 
     // Rotating while open: an untouched editor follows the room, a stored choice stays.
     await restore()

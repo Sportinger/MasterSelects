@@ -1,5 +1,6 @@
 // Browse view of the Library sheet: folder path, import, new folder, multi-select (move, duplicate,
 // delete), relink of missing media, the proxy switch and one row per item with its thumbnail.
+import { ProGlyph, type ProGlyphName } from '../compositions/phoneProGlyphs';
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { getLabelHex } from '../../panels/media/labelColors';
@@ -19,9 +20,10 @@ export interface PhoneLibraryBrowseProps {
   report: (result: PhoneActionResult) => PhoneActionResult;
 }
 
-const KIND_BADGE: Record<PhoneLibraryEntry['kind'], string> = {
-  folder: 'DIR', video: 'VID', image: 'IMG', audio: 'AUD', composition: 'COMP', text: 'TXT', solid: 'SOL',
-  signal: 'DATA', model: '3D', other: 'ITEM',
+/** Line glyph of an item without a thumbnail (never a text badge). */
+const KIND_GLYPH: Record<PhoneLibraryEntry['kind'], ProGlyphName> = {
+  folder: 'folder', video: 'film', image: 'image', audio: 'track-audio', composition: 'variants', text: 'text', solid: 'solid',
+  signal: 'data', model: 'cube', other: 'empty',
 };
 
 function entryMeta(entry: PhoneLibraryEntry): string {
@@ -168,7 +170,7 @@ export function PhoneLibraryBrowse({ folderId, onFolder, onOpenItem, onDelete, o
                   else onOpenItem(entry.id);
                 }}>
                 <span className="phone-lib__thumb" aria-hidden="true">
-                  {entry.thumbnailUrl ? <img src={entry.thumbnailUrl} alt="" draggable={false} /> : KIND_BADGE[entry.kind]}
+                  {entry.thumbnailUrl ? <img src={entry.thumbnailUrl} alt="" draggable={false} /> : <ProGlyph name={KIND_GLYPH[entry.kind]} />}
                   {entry.labelColor !== 'none' && <span className="phone-lib__label-dot" style={{ background: getLabelHex(entry.labelColor) }} />}
                 </span>
                 <span className="phone-lib__text">

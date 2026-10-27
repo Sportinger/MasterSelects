@@ -8,7 +8,6 @@ import { PHONE_M1_TEST_IDS, type PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { renamePhoneProject } from './usePhoneProjectCommands';
-import { PhoneStorageStatus } from './PhoneStorageStatus';
 import { saveAndOpenFullEditor } from './phoneFullEditor';
 import { PhoneProjectTools } from './PhoneProjectTools';
 import { PhoneProjectStorageTools } from './PhoneProjectStorageTools';
@@ -156,8 +155,8 @@ export const PhoneProjectSheet: PhoneSheetComponent = () => {
           {error ?? validation ?? ''}
         </p>
         <div className="phone-project-sheet__row">
+          {/* The save status sits once, in the top bar above this sheet. */}
           <span className="phone-project-sheet__meta">{compositionSummary}</span>
-          <PhoneStorageStatus />
         </div>
         <button
           type="button"

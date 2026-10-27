@@ -16,6 +16,7 @@ import type { PhoneSheetComponent } from '../contracts';
 import { openPhoneEditor } from '../audiofx/phoneOpenEditor';
 import { ProButton, ProMessage, ProSection, ProTextField } from '../compositions/phoneProControls';
 import { blurAfterPointer } from '../compositions/phoneProFocus';
+import { ProGlyph, type ProGlyphName } from '../compositions/phoneProGlyphs';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
@@ -25,6 +26,10 @@ import {
 import { PhoneTrackAudioRows } from './PhoneTrackAudioRows';
 import { PHONE_TRACKS_TEST_IDS as IDS } from './phoneTracksTestIds';
 import './PhoneTracksSheet.css';
+
+const TRACK_GLYPH: Record<TimelineTrack['type'], ProGlyphName> = {
+  video: 'track-video', audio: 'track-audio', midi: 'track-midi', score: 'track-midi',
+};
 
 
 function trackMeta(track: TimelineTrack, clipCount: number): string {
@@ -123,11 +128,6 @@ export const PhoneTracksSheet: PhoneSheetComponent = () => {
   return (
     <PhoneSheet title="Tracks" height="tall" onCancel={cancel} onDone={() => void done()} doneDisabled={busy}>
       <div className="phone-tracks">
-        <div className="phone-tracks__add">
-          <ProButton label="+ Video track" testId={IDS.addVideo} onPress={() => addTrack('video')} />
-          <ProButton label="+ Audio track" testId={IDS.addAudio} onPress={() => addTrack('audio')} />
-          <ProButton label="+ MIDI" testId={IDS.addMidi} onPress={() => addTrack('midi')} />
-        </div>
         <ProMessage text={message} testId={IDS.message} />
         <ul className="phone-pro-list" data-testid={IDS.list}>
           {tracks.map((track) => {
@@ -152,6 +152,10 @@ export const PhoneTracksSheet: PhoneSheetComponent = () => {
                 style={{ borderLeftColor: color && color.key !== 'none' ? color.hex : undefined }}
               >
                 <div className="phone-pro-row__main">
+                  <span className="phone-tracks__type" aria-hidden="true"
+                    style={{ color: color && color.key !== 'none' ? color.hex : undefined }}>
+                    <ProGlyph name={TRACK_GLYPH[track.type]} />
+                  </span>
                   <button
                     type="button"
                     className="phone-pro-row__title"
@@ -164,14 +168,31 @@ export const PhoneTracksSheet: PhoneSheetComponent = () => {
                     <span className="phone-pro-row__name">{track.name}</span>
                     <span className="phone-pro-row__meta">{trackMeta(track, clipCount)}</span>
                   </button>
-                  {isVideo ? (
-                    <ProButton compact label={hidden ? 'Show' : 'Hide'} ariaLabel={`${hidden ? 'Show' : 'Hide'} ${track.name}`} pressed={hidden} testId={IDS.visible} onPress={() => change((store) => store.setTrackVisible(track.id, hidden))} />
-                  ) : (
-                    <ProButton compact label="Mute" ariaLabel={`Mute ${track.name}`} pressed={Boolean(track.muted)} testId={IDS.mute} onPress={() => change((store) => store.setTrackMuted(track.id, !track.muted))} />
-                  )}
-                  <ProButton compact label="Solo" ariaLabel={`Solo ${track.name}`} pressed={Boolean(track.solo)} testId={IDS.solo} onPress={() => change((store) => store.setTrackSolo(track.id, !track.solo))} />
-                  <ProButton compact label="Lock" ariaLabel={`Lock ${track.name}`} pressed={Boolean(track.locked)} testId={IDS.lock} onPress={() => change((store) => store.setTrackLocked(track.id, !track.locked))} />
-                  <ProButton compact label="More" ariaLabel={`More for ${track.name}`} pressed={expanded} testId={IDS.more} onPress={() => expand(track)} />
+                  <span className="phone-tracks__toggles">
+                    {isVideo ? (
+                      <ProButton compact label={hidden ? 'Show' : 'Hide'} ariaLabel={`${hidden ? 'Show' : 'Hide'} ${track.name}`} pressed={hidden} testId={IDS.visible}
+                        data={{ toggle: 'visible' }} onPress={() => change((store) => store.setTrackVisible(track.id, hidden))}>
+                        <ProGlyph name={hidden ? 'eye-off' : 'eye'} />
+                      </ProButton>
+                    ) : (
+                      <ProButton compact label="Mute" ariaLabel={`Mute ${track.name}`} pressed={Boolean(track.muted)} testId={IDS.mute}
+                        data={{ toggle: 'mute' }} onPress={() => change((store) => store.setTrackMuted(track.id, !track.muted))}>
+                        <ProGlyph name="mute" />
+                      </ProButton>
+                    )}
+                    <ProButton compact label="Solo" ariaLabel={`Solo ${track.name}`} pressed={Boolean(track.solo)} testId={IDS.solo}
+                      data={{ toggle: 'solo' }} onPress={() => change((store) => store.setTrackSolo(track.id, !track.solo))}>
+                      <ProGlyph name="solo" />
+                    </ProButton>
+                    <ProButton compact label="Lock" ariaLabel={`Lock ${track.name}`} pressed={Boolean(track.locked)} testId={IDS.lock}
+                      data={{ toggle: 'lock' }} onPress={() => change((store) => store.setTrackLocked(track.id, !track.locked))}>
+                      <ProGlyph name={track.locked ? 'lock' : 'unlock'} />
+                    </ProButton>
+                    <ProButton compact label="More" ariaLabel={`More for ${track.name}`} pressed={expanded} testId={IDS.more}
+                      data={{ toggle: 'more' }} onPress={() => expand(track)}>
+                      <ProGlyph name="more" />
+                    </ProButton>
+                  </span>
                 </div>
                 {expanded ? (
                   <div className="phone-tracks__more">
@@ -239,6 +260,19 @@ export const PhoneTracksSheet: PhoneSheetComponent = () => {
             );
           })}
         </ul>
+        <ProSection title="Add track">
+          <div className="phone-tracks__add">
+            <ProButton label="Video" testId={IDS.addVideo} ariaLabel="Add video track" onPress={() => addTrack('video')}>
+              <ProGlyph name="track-video" /> Video
+            </ProButton>
+            <ProButton label="Audio" testId={IDS.addAudio} ariaLabel="Add audio track" onPress={() => addTrack('audio')}>
+              <ProGlyph name="track-audio" /> Audio
+            </ProButton>
+            <ProButton label="MIDI" testId={IDS.addMidi} ariaLabel="Add MIDI track" onPress={() => addTrack('midi')}>
+              <ProGlyph name="track-midi" /> MIDI
+            </ProButton>
+          </div>
+        </ProSection>
         <ProButton label="Mixer: sends, track effects, master" testId={IDS.mixer} onPress={() => { void leaveTo(() => { openPhoneEditor('mixer'); }); }} />
       </div>
     </PhoneSheet>

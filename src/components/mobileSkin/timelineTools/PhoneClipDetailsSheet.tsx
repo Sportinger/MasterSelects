@@ -13,7 +13,7 @@ import type { LabelColor } from '../../../stores/mediaStore/types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getActiveCompositionFrameRate } from '../../../stores/timeline/editOperations/activeCompositionFrameRate';
 import { PHONE_FULL_EDITOR_HINT, type PhoneSheetComponent } from '../contracts';
-import { ProButton, ProMessage, ProSection, ProTextField } from '../compositions/phoneProControls';
+import { ProButton, ProEmptyState, ProMessage, ProSection, ProTextField } from '../compositions/phoneProControls';
 import { blurAfterPointer } from '../compositions/phoneProFocus';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
@@ -24,6 +24,7 @@ import {
   phoneTrackParentCandidates, renamePhoneClip, setPhoneClipLabelColor, setPhoneClipParent, setPhoneTrackParent,
 } from './phoneClipDetailsCommands';
 import { formatPhoneRangeTime } from './phoneTimelinePrefs';
+import { phoneClipAtPlayhead, PHONE_NO_CLIP_AT_PLAYHEAD, selectPhoneClipAtPlayhead } from './phoneSelectAtPlayhead';
 import { PHONE_CLIP_DETAILS_TEST_IDS as IDS } from './phoneTimelineToolsTestIds';
 import './PhoneTimelineTools.css';
 
@@ -50,6 +51,7 @@ export const PhoneClipDetailsSheet: PhoneSheetComponent = () => {
     const fileId = clip?.mediaFileId ?? clip?.source?.mediaFileId;
     return fileId ? state.files.find((file) => file.id === fileId)?.name ?? null : null;
   });
+  const clipAtPlayhead = useTimelineStore(() => phoneClipAtPlayhead());
   const fps = getActiveCompositionFrameRate();
   const [name, setName] = useState(clip?.name ?? '');
   const [message, setMessage] = useState<{ text: string; tone: 'info' | 'error' } | null>(null);
@@ -79,7 +81,10 @@ export const PhoneClipDetailsSheet: PhoneSheetComponent = () => {
   if (!clip) {
     return (
       <PhoneSheet title="Details" height="tall" onCancel={cancel}>
-        <p className="phone-tltools__summary" data-testid={IDS.root}>Select a clip on the timeline first: Details shows its name, colour and parent.</p>
+        <div data-testid={IDS.root}>
+          <ProEmptyState icon="details" title="No clip selected" body="Details shows the name, colour and parent of the selected clip."
+            action={{ label: 'Select clip at playhead', testId: IDS.selectAtPlayhead, unavailableReason: clipAtPlayhead ? null : PHONE_NO_CLIP_AT_PLAYHEAD, onPress: selectPhoneClipAtPlayhead }} />
+        </div>
       </PhoneSheet>
     );
   }

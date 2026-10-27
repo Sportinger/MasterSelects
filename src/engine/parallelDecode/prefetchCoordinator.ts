@@ -26,7 +26,7 @@ import {
   getBufferedTimeRangeForLog,
   hasUsableBufferedFrame,
 } from './scheduling';
-import type { ClipDecoder } from './clipDecoderState';
+import { hasExpectedBufferedFrame, type ClipDecoder } from './clipDecoderState';
 
 /**
  * Host surface the manager exposes to the coordinator. Handles (decoders,
@@ -131,23 +131,16 @@ export async function prefetchFramesForTime(
       clipDecoder.presentationOffsetSeconds
     );
 
-    // Check if frame is already in buffer (fast path)
-    const targetTimestamp = sourceTime * 1_000_000;
-    const checkTolerance = deps.frameToleranceUs * 2; // Double tolerance for buffer check
-
-    // Get buffer time range for logging
+    // Fast path only when exactly the frame shown at sourceTime is buffered. A
+    // neighbour within a tolerance used to count as ready, so a frame still held in
+    // the decoder (or dropped by a pool reset) was replaced by the previous one
+    // without any fallback being counted (EXPORT_STALE_LAYER_FRAMES).
     const { start: bufferStart, end: bufferEnd } = getBufferedTimeRangeForLog(
       clipDecoder.sortedTimestamps
     );
-    const frameInBuffer = hasUsableBufferedFrame(
-      clipDecoder.sortedTimestamps,
-      clipDecoder.oldestTimestamp,
-      clipDecoder.newestTimestamp,
-      targetTimestamp,
-      checkTolerance
-    );
+    const frameInBuffer = hasExpectedBufferedFrame(clipDecoder, sourceTime);
 
-    log.debug(`"${clipInfo.clipName}": Frame check - target=${(targetTimestamp/1_000_000).toFixed(3)}s, buffer=${clipDecoder.frameBuffer.size} frames [${bufferStart}s-${bufferEnd}s], frameInBuffer=${frameInBuffer}, tolerance=${(checkTolerance/1000).toFixed(1)}ms`);
+    log.debug(`"${clipInfo.clipName}": Frame check - target=${sourceTime.toFixed(3)}s, buffer=${clipDecoder.frameBuffer.size} frames [${bufferStart}s-${bufferEnd}s], frameInBuffer=${frameInBuffer}`);
 
     // Trigger decode ahead - ALWAYS await if we're behind the target sample
     // Also need to decode if frame is not in buffer (we might be too far ahead and need to seek back)
@@ -237,62 +230,15 @@ export async function prefetchFramesForTime(
       clipDecoder.presentationOffsetSeconds
     );
     const blockingStart = performance.now();
-    let attemptsUsed = 0;
+    const wait = await waitForExactBufferedFrame(deps, clipDecoder, sourceTime, targetSampleIndex);
+    if (wait.aborted) return;
+    const attemptsUsed = wait.attempts;
 
-    for (let attempt = 0; attempt < 10; attempt++) {
-      if (!deps.isActive()) return;
-      attemptsUsed = attempt + 1;
-      // Wait for pending decode to complete
-      if (clipDecoder.pendingDecode) {
-        await clipDecoder.pendingDecode;
-      }
-
-      // Check if frame is now in buffer
-      const frameFound = hasUsableBufferedFrame(
-        clipDecoder.sortedTimestamps,
-        clipDecoder.oldestTimestamp,
-        clipDecoder.newestTimestamp,
-        targetTimestamp,
-        deps.frameToleranceUs * 2
-      );
-
-      if (frameFound) {
-        if (attempt > 0) {
-          log.debug(`"${clipDecoder.clipName}": Frame found after ${attempt + 1} attempts`);
-        }
-        break;
-      }
-
-      // Escalating strategy
-      if (attempt < 2) {
-        // First 2 attempts: just wait briefly for async output callback
-        await new Promise(r => setTimeout(r, 8));
-      } else if ((clipDecoder.decoder?.decodeQueueSize ?? 0) > 0) {
-        // Flush decoder queue to force output
-        const decoder = await deps.ensureDecoder(clipDecoder);
-        log.debug(`"${clipDecoder.clipName}": Flushing decoder (attempt ${attempt + 1}, queue=${decoder.decodeQueueSize})`);
-        await decoder.flush();
-        clipDecoder.needsKeyframe = true;
-      } else if (!clipDecoder.isDecoding) {
-        // Queue is empty but frame not found — re-decode with forceFlush
-        log.debug(`"${clipDecoder.clipName}": Re-decode with flush (attempt ${attempt + 1}, queue empty)`);
-        const decodeTarget = Math.max(targetSampleIndex + BUFFER_AHEAD_FRAMES, BUFFER_AHEAD_FRAMES);
-        await deps.decodeAhead(clipDecoder, decodeTarget, true, 0, targetSampleIndex);
-      } else {
-        // Decoder is busy, wait for it
-        await new Promise(r => setTimeout(r, 10));
-      }
-    }
-
-    // Final check - strict export should fail instead of using a nearby frame.
-    const finalTolerance = deps.frameToleranceUs * 3; // 3x tolerance for final check
-    const finalCheck = hasUsableBufferedFrame(
-      clipDecoder.sortedTimestamps,
-      clipDecoder.oldestTimestamp,
-      clipDecoder.newestTimestamp,
-      targetTimestamp,
-      finalTolerance
-    );
+    // Final check: without the exact frame, a neighbour within 3x tolerance still
+    // lets the export continue, but the frame lookup reports that substitution as a
+    // previous-frame fallback (frameAccess.ts). Nothing nearby fails the export.
+    const exactFound = wait.exactFound;
+    const finalCheck = exactFound || wait.neighbourFound;
     const blockingMs = performance.now() - blockingStart;
     if (blockingMs >= SLOW_BLOCKING_PREFETCH_WARN_MS) {
       log.warn(`${clipDecoder.clipName}: slow blocking prefetch`, {
@@ -310,6 +256,7 @@ export async function prefetchFramesForTime(
         bufferedEnd: Number.isFinite(clipDecoder.newestTimestamp)
           ? Number((clipDecoder.newestTimestamp / 1_000_000).toFixed(3))
           : null,
+        exactFound,
         finalCheck,
       });
     }
@@ -323,4 +270,81 @@ export async function prefetchFramesForTime(
       throw new Error(`FAST export failed: "${clipDecoder.clipName}" has no decoded frame at ${(targetTimestamp/1_000_000).toFixed(3)}s after all attempts (buffer: ${clipDecoder.frameBuffer.size} frames, decoderState: ${clipDecoder.decoder?.state ?? 'dormant'}, nearby: [${availableFrames}...]).`);
     }
   }
+}
+
+export interface ExactFrameWaitResult {
+  /** The active export stopped while waiting. */
+  aborted: boolean;
+  exactFound: boolean;
+  /** No exact frame, but a neighbour within NEIGHBOUR_FALLBACK_TOLERANCE_MULTIPLIER × frame tolerance is buffered. */
+  neighbourFound: boolean;
+  attempts: number;
+}
+
+/** Same window as the export layer lookup (videoLayers.ts FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER). */
+export const NEIGHBOUR_FALLBACK_TOLERANCE_MULTIPLIER = 3;
+export const EXACT_FRAME_WAIT_ATTEMPTS = 10;
+
+/**
+ * Blocking wait for exactly the frame shown at sourceTime, with an escalating
+ * strategy: wait for the async output callback, flush (queued chunks, and once
+ * frames the decoder holds back for reordering even with an empty queue), then
+ * re-decode from the keyframe. Shared by the per-time prefetch and the per-clip
+ * source-time prefetch so both treat a sample that never decodes the same way:
+ * after the attempts a buffered neighbour lets the export continue (the export
+ * layer lookup logs and counts that substitution through
+ * recordNeighbourFrameFallback); only when nothing is nearby does the caller fail.
+ */
+export async function waitForExactBufferedFrame(
+  deps: ParallelDecodePrefetchDeps,
+  clipDecoder: ClipDecoder,
+  sourceTime: number,
+  targetSampleIndex: number,
+): Promise<ExactFrameWaitResult> {
+  let flushedHeldFrames = false;
+  let attempts = 0;
+  for (let attempt = 0; attempt < EXACT_FRAME_WAIT_ATTEMPTS; attempt++) {
+    if (!deps.isActive()) return { aborted: true, exactFound: false, neighbourFound: false, attempts };
+    attempts = attempt + 1;
+    if (clipDecoder.pendingDecode) {
+      await clipDecoder.pendingDecode;
+    }
+    if (hasExpectedBufferedFrame(clipDecoder, sourceTime)) {
+      if (attempt > 0) log.debug(`"${clipDecoder.clipName}": Frame found after ${attempt + 1} attempts`);
+      return { aborted: false, exactFound: true, neighbourFound: false, attempts };
+    }
+    if (attempt < 2) {
+      // First 2 attempts: just wait briefly for async output callback
+      await new Promise(r => setTimeout(r, 8));
+    } else if (
+      (clipDecoder.decoder?.decodeQueueSize ?? 0) > 0
+      || (!flushedHeldFrames && !clipDecoder.isDecoding && clipDecoder.decoder?.state === 'configured')
+    ) {
+      const decoder = await deps.ensureDecoder(clipDecoder);
+      log.debug(`"${clipDecoder.clipName}": Flushing decoder (attempt ${attempt + 1}, queue=${decoder.decodeQueueSize})`);
+      flushedHeldFrames = true;
+      await decoder.flush();
+      clipDecoder.needsKeyframe = true;
+    } else if (!clipDecoder.isDecoding) {
+      log.debug(`"${clipDecoder.clipName}": Re-decode with flush (attempt ${attempt + 1}, queue empty)`);
+      const decodeTarget = Math.max(targetSampleIndex + BUFFER_AHEAD_FRAMES, BUFFER_AHEAD_FRAMES);
+      await deps.decodeAhead(clipDecoder, decodeTarget, true, 0, targetSampleIndex);
+    } else {
+      await new Promise(r => setTimeout(r, 10));
+    }
+  }
+  if (hasExpectedBufferedFrame(clipDecoder, sourceTime)) {
+    return { aborted: false, exactFound: true, neighbourFound: false, attempts };
+  }
+  const neighbourFound = hasUsableBufferedFrame(
+    clipDecoder.sortedTimestamps,
+    clipDecoder.oldestTimestamp,
+    clipDecoder.newestTimestamp,
+    sourceTime * 1_000_000,
+    deps.frameToleranceUs * NEIGHBOUR_FALLBACK_TOLERANCE_MULTIPLIER,
+  );
+  if (neighbourFound) {
+    log.warn(`"${clipDecoder.clipName}": frame at ${sourceTime.toFixed(4)}s did not decode after ${attempts} attempts; a buffered neighbour stands in (counted as a neighbour-frame fallback)`);
+  }
+  return { aborted: false, exactFound: false, neighbourFound, attempts };
 }

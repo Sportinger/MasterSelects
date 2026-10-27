@@ -34,7 +34,8 @@ export async function isLegacyProjectBackend(backend: RepositoryBackend): Promis
   return Boolean(await backend.stat('project.json') || await findLegacyPackage(backend));
 }
 
-async function importBindings(target: RepositoryBackend): Promise<Array<{ importId: string; sourceId: string; complete: boolean }>> {
+export type ImportBindings = Array<{ importId: string; sourceId: string; complete: boolean }>;
+export async function importBindings(target: RepositoryBackend): Promise<ImportBindings> {
   const ids = new Set<string>(); let cursor: string | undefined;
   do {
     const page = await target.list(IMPORTS, cursor, 1024);
@@ -54,15 +55,15 @@ async function importBindings(target: RepositoryBackend): Promise<Array<{ import
 const unfinished = (bindings: Awaited<ReturnType<typeof importBindings>>) => bindings.length > 0 && !bindings.some(binding => binding.complete);
 
 /** A converted folder whose import stopped midway must be resumed from the original, not opened empty. */
-export async function assertLegacyImportComplete(target: RepositoryBackend): Promise<void> {
-  if (unfinished(await importBindings(target))) {
+export async function assertLegacyImportComplete(target: RepositoryBackend, bindings?: ImportBindings): Promise<void> {
+  if (unfinished(bindings ?? await importBindings(target))) {
     throw new RepositoryError('conflict', 'Project conversion did not finish. Open the original project again and choose this folder to resume.');
   }
 }
 
 /** An in-place conversion that stopped midway: the old project files sit next to an unfinished repository. */
-export async function hasResumableInPlaceImport(backend: RepositoryBackend): Promise<boolean> {
-  if (!unfinished(await importBindings(backend))) return false;
+export async function hasResumableInPlaceImport(backend: RepositoryBackend, bindings?: ImportBindings): Promise<boolean> {
+  if (!unfinished(bindings ?? await importBindings(backend))) return false;
   return Boolean(await backend.stat('project.json') || await findLegacyPackage(backend));
 }
 

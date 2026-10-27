@@ -11,6 +11,9 @@ import {
 } from '../liveInputExport';
 
 const log = Logger.create('ExportLayerBuilder');
+// The parallel decoder returns exactly the frame that shows at the source time.
+// Only when prefetch could not decode it does a neighbour within this window stand
+// in, and the decoder counts that as a previous-frame fallback in export diagnostics.
 const FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER = 3;
 
 function getExportSourceClipId(clip: TimelineClip): string {
@@ -57,9 +60,11 @@ export function buildVideoLayer(
       const videoFrame = sourceMediaTime !== undefined
         ? parallelDecoder.getFrameForClipSourceTime(clip.id, sourceMediaTime, {
             toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+            allowNeighbourFallback: true,
           })
         : parallelDecoder.getFrameForClip(clip.id, time, {
             toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+            allowNeighbourFallback: true,
           });
       if (videoFrame) {
         return {
@@ -161,9 +166,11 @@ export function buildNestedVideoLayer(
       const videoFrame = sourceMediaTime !== undefined
         ? parallelDecoder.getFrameForClipSourceTime(sourceClipId, sourceMediaTime, {
             toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+            allowNeighbourFallback: true,
           })
         : parallelDecoder.getFrameForClip(sourceClipId, mainTimelineTime, {
             toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+            allowNeighbourFallback: true,
           });
       if (videoFrame) {
         return {

@@ -131,9 +131,13 @@ export async function openRootSheet(m1: M1Session, actionId: string): Promise<vo
 export async function expectPreviewAboveSheet(m1: M1Session): Promise<void> {
   const canvas = m1.page.getByTestId(IDS.previewRegion).getByTestId(IDS.previewCanvas)
   await expect(canvas).toBeVisible()
-  const [box, sheet] = await Promise.all([canvas.boundingBox(), m1.sheet.boundingBox()])
-  expect(box && box.height > 120, `preview height with the sheet open: ${box?.height}`).toBe(true)
-  expect(box && sheet && box.y + box.height <= sheet.y + 1, 'the preview sits above the sheet').toBe(true)
+  // Polled: the sheet rises in over 160 ms and a content-fit sheet settles its height while it opens.
+  await expect.poll(async () => {
+    const [box, sheet] = await Promise.all([canvas.boundingBox(), m1.sheet.boundingBox()])
+    if (!box || !sheet) return `no box (preview ${Boolean(box)}, sheet ${Boolean(sheet)})`
+    if (box.height <= 120) return `preview height with the sheet open: ${box.height}`
+    return box.y + box.height <= sheet.y + 1 ? 'ok' : `the preview (bottom ${box.y + box.height}) reaches into the sheet (top ${sheet.y})`
+  }, { message: 'the preview stays above the open sheet', timeout: 5_000 }).toBe('ok')
 }
 
 export async function tapDone(m1: M1Session): Promise<void> {

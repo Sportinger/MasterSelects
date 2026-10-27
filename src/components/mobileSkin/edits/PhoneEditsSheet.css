@@ -4,7 +4,7 @@
 .mobile-skin .phone-edits__status { margin: 0; overflow: hidden; color: var(--phone-text-dim); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-skin .phone-edits__panel { display: flex; flex-direction: column; gap: 10px; }
 .mobile-skin .phone-edits__hint { margin: 0; color: var(--phone-text-dim); font-size: 13px; line-height: 1.35; }
+.mobile-skin .phone-edits__reason { margin: 0; color: var(--phone-text-dim); font-size: 13px; line-height: 1.35; }
 .mobile-skin .phone-edits__row { display: flex; gap: 8px; }
 .mobile-skin .phone-edits__row > .phone-pro-button { flex: 1 1 0; }
-.mobile-skin .phone-edits__empty { margin: 0; color: var(--phone-text-dim); }
 .mobile-skin .phone-edits .phone-tabs__tab { padding: 0 2px; font-size: 13px; }

@@ -10,8 +10,10 @@ import { useState } from 'react';
 
 import { isAudioClip } from '../../../stores/timeline/audioEdit/audioEditHelpers';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { PhoneSheetComponent } from '../contracts';
+import type { PhoneIconName, PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
+import { PhoneIcon } from '../shell/phoneIcons';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { resolvePhoneAudioTargets } from '../audio/phoneAudioLevels';
 import { blurAfterPointer, PhoneUnavailableList, type PhoneUnavailableItem } from '../audio/PhoneAudioControls';
@@ -47,6 +49,14 @@ function initialTarget() {
       : 'This clip has no sound. Select an audio clip or a video clip with sound.';
   const extra = targets.clipIds.length > 1 ? `Effects go to ${clip?.name ?? 'the first clip'}; select one clip at a time to change another.` : null;
   return { clipId, name: clip?.name ?? '', isAudioFile: clip ? isAudioClip(clip) : false, reason, extra };
+}
+
+const AUDIO_FX_ICONS: Partial<Record<string, PhoneIconName>> = {
+  level: 'volume', eq: 'adjust', dynamics: 'speed', repair: 'trim', space: 'audio', character: 'effects',
+};
+
+function audioFxIcon(category: string | undefined): PhoneIconName {
+  return (category && AUDIO_FX_ICONS[category]) || 'audio';
 }
 
 export const PhoneAudioFxSheet: PhoneSheetComponent = () => {
@@ -113,25 +123,44 @@ export const PhoneAudioFxSheet: PhoneSheetComponent = () => {
   return (
     <PhoneSheet title="Audio effects" height="tall" onCancel={cancel} onDone={() => { void done(); }} doneDisabled={busy}>
       <div className="phone-audio-sheet phone-audiofx">
-        <p className="phone-audio-sheet__target" data-testid={IDS.target}>
-          {target.clipId ? `Sound of ${target.name}` : target.reason}
-        </p>
+        {target.clipId ? (
+          <p className="phone-audio-sheet__target" data-testid={IDS.target}>{`Sound of ${target.name}`}</p>
+        ) : (
+          <p className="phone-audio-sheet__blocked" role="note" data-testid={IDS.target}>{target.reason}</p>
+        )}
         {target.extra ? <p className="phone-audio-sheet__hint">{target.extra}</p> : null}
 
-        <div className="phone-audio-tabs" role="tablist" aria-label="Audio effect tools">
+        <PhoneChipRow role="tablist" label="Audio effect tools" className="phone-audio-tabs">
           {SECTIONS.map((item) => (
             <button key={item.id} type="button" role="tab" className="phone-audio-tabs__tab" aria-selected={section === item.id}
               data-testid={`${IDS.sectionPrefix}${item.id}`} onPointerUp={blurAfterPointer} onClick={() => setSection(item.id)}>
               {item.label}
             </button>
           ))}
-        </div>
+        </PhoneChipRow>
 
         {section === 'effects' ? (
           <div className="phone-audio-section" role="tabpanel" aria-label="Effects">
             {target.clipId ? (
               <PhoneAudioFxStack clipId={target.clipId} stack={stack} focusedId={focusedId} onFocus={setFocusedId} commands={commands} />
             ) : null}
+            <PhoneChipRow label="Effect groups">
+              {[{ id: 'all', label: 'All' }, ...groups].map((group) => (
+                <button key={group.id} type="button" className="phone-audiofx__chip" aria-pressed={groupId === group.id}
+                  data-testid={IDS.category} data-group={group.id} onPointerUp={blurAfterPointer} onClick={() => setGroupId(group.id)}>
+                  {group.label}
+                </button>
+              ))}
+            </PhoneChipRow>
+            <div className="phone-audiofx__grid">
+              {cards.map((effect) => (
+                <button key={effect.id} type="button" className="phone-audiofx__card" aria-disabled={!target.clipId || undefined}
+                  data-testid={IDS.card} data-descriptor={effect.id} onPointerUp={blurAfterPointer} onClick={() => { void add(effect.id); }}>
+                  <span className="phone-audiofx__card-icon" aria-hidden="true"><PhoneIcon name={audioFxIcon(effect.category)} size={22} /></span>
+                  <span className="phone-audiofx__card-label">{effect.name}</span>
+                </button>
+              ))}
+            </div>
             <button type="button" className="phone-audio-toggle" data-testid={IDS.allParameters} aria-disabled={!target.clipId || undefined}
               onPointerUp={blurAfterPointer}
               onClick={() => {
@@ -140,22 +169,6 @@ export const PhoneAudioFxSheet: PhoneSheetComponent = () => {
               }}>
               All parameters…
             </button>
-            <div className="phone-audiofx__chips" role="group" aria-label="Effect groups">
-              {[{ id: 'all', label: 'All' }, ...groups].map((group) => (
-                <button key={group.id} type="button" className="phone-audiofx__chip" aria-pressed={groupId === group.id}
-                  data-testid={IDS.category} data-group={group.id} onPointerUp={blurAfterPointer} onClick={() => setGroupId(group.id)}>
-                  {group.label}
-                </button>
-              ))}
-            </div>
-            <div className="phone-audiofx__grid">
-              {cards.map((effect) => (
-                <button key={effect.id} type="button" className="phone-audiofx__card" aria-disabled={!target.clipId || undefined}
-                  data-testid={IDS.card} data-descriptor={effect.id} onPointerUp={blurAfterPointer} onClick={() => { void add(effect.id); }}>
-                  {effect.name}
-                </button>
-              ))}
-            </div>
           </div>
         ) : null}
 

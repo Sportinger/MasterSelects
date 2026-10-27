@@ -52,6 +52,25 @@ function positive(value: number | undefined): number | undefined {
 }
 
 /** Every library item of the project as an entry, regardless of folder. */
+/**
+ * Poster frame of a composition: the stored thumbnail of its earliest picture clip (video or image
+ * media). Null when the composition has no picture clip with a thumbnail yet.
+ */
+export function phoneCompositionPosterUrl(
+  composition: Pick<Composition, 'timelineData'>,
+  files: ReadonlyArray<Pick<MediaFile, 'id' | 'type' | 'thumbnailUrl'>>,
+): string | undefined {
+  const clips = composition.timelineData?.clips ?? [];
+  const byId = new Map(files.map((file) => [file.id, file]));
+  let best: { start: number; url: string } | null = null;
+  for (const clip of clips) {
+    const file = clip.mediaFileId ? byId.get(clip.mediaFileId) : undefined;
+    if (!file?.thumbnailUrl || (file.type !== 'video' && file.type !== 'image')) continue;
+    if (!best || clip.startTime < best.start) best = { start: clip.startTime, url: file.thumbnailUrl };
+  }
+  return best?.url;
+}
+
 export function collectPhoneLibraryEntries(source: PhoneLibrarySource): PhoneLibraryEntry[] {
   const entries: PhoneLibraryEntry[] = [];
   const childCounts = new Map<string, number>();
@@ -72,6 +91,7 @@ export function collectPhoneLibraryEntries(source: PhoneLibrarySource): PhoneLib
       id: composition.id, name: composition.name, kind: 'composition',
       typeLabel: `Composition · ${composition.width}×${composition.height}`, parentId: composition.parentId,
       labelColor: composition.labelColor ?? 'none', duration: positive(composition.duration), missing: false,
+      thumbnailUrl: phoneCompositionPosterUrl(composition, source.files),
     });
   }
   const others: NamedItem[] = [

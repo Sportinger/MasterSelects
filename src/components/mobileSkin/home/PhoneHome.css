@@ -54,14 +54,21 @@
   background: var(--phone-surface-2);
 }
 .mobile-skin .phone-home__new {
+  /* The primary action of the home: a 56 px filled button at the top. */
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   width: 100%;
-  min-height: 52px;
-  font-size: 18px;
+  min-height: 56px;
+  border-radius: 14px;
+  background: var(--phone-accent);
+  color: var(--phone-on-accent);
+  font-size: 17px;
   font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
 }
+.mobile-skin .phone-home__new:active { filter: brightness(0.92); }
 .mobile-skin .phone-home__form { display: flex; flex-direction: column; gap: 10px; }
 .mobile-skin .phone-home__label { color: var(--phone-text-dim); font-size: 13px; }
 .mobile-skin .phone-home__input {
@@ -156,3 +163,70 @@
 .mobile-skin .phone-home__welcome-title { margin: 0; font-size: 17px; }
 .mobile-skin .phone-home__welcome-steps { margin: 0; padding-left: 20px; line-height: 1.5; font-size: 14px; }
 .mobile-skin .phone-home__welcome-note { margin: 0; color: var(--phone-text-dim); font-size: 13px; line-height: 1.4; }
+
+/* First-run tip: one dismissible line under New project; the steps open on "Show me". */
+.mobile-skin .phone-home__tip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 6px 10px 14px;
+  border: 1px solid var(--phone-border);
+  border-radius: 14px;
+  background: var(--phone-surface-2);
+}
+.mobile-skin .phone-home__tip-text { margin: 0; font-size: 14px; }
+.mobile-skin .phone-home__tip-actions { display: flex; align-items: center; gap: 4px; }
+.mobile-skin .phone-home__tip-link {
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  color: var(--phone-accent);
+  font-size: 14px;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-home__tip-link:first-child { margin-left: -10px; }
+.mobile-skin .phone-home__tip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: auto;
+  border-radius: 10px;
+  color: var(--phone-text-dim);
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-home__tip-link:active,
+.mobile-skin .phone-home__tip-close:active { background: var(--phone-surface-3); }
+.mobile-skin .phone-home__tip :is(button):focus:not(:focus-visible),
+.mobile-skin .phone-home__new:focus:not(:focus-visible) { outline: none; }
+.mobile-skin .phone-home__tip :is(button):focus-visible,
+.mobile-skin .phone-home__new:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
+
+/* Reopen card: the last folder project waits for folder access again (PhoneHomeResumeCard). */
+.mobile-skin .phone-home__resume {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--phone-accent);
+  border-radius: 16px;
+  background: var(--phone-surface-2);
+}
+.mobile-skin .phone-home__resume-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--phone-text-dim);
+}
+.mobile-skin .phone-home__resume-name { margin: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.mobile-skin .phone-home__resume-text { margin: 0 0 4px; color: var(--phone-text-dim); }
+.mobile-skin .phone-home__resume-button { width: 100%; min-height: 48px; overflow-wrap: anywhere; }
+/* Pointer-focus hygiene for every home button (rows, wide entries, form, reopen): no ring after a tap. */
+.mobile-skin .phone-home button { -webkit-tap-highlight-color: transparent; }
+.mobile-skin .phone-home button:focus:not(:focus-visible) { outline: none; }
+/* While the reopen card is the primary action, New project steps back to an outlined button. */
+.mobile-skin .phone-home__new--secondary { background: var(--phone-surface-2); color: var(--phone-text); border: 1px solid var(--phone-border); }

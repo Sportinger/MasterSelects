@@ -43,7 +43,37 @@ export function isOpfsAvailable(): boolean {
     && typeof navigator.storage?.getDirectory === 'function';
 }
 
+/** Where a new project goes: the default root (a picked folder where possible) or browser storage. */
+export type ProjectStorageTarget = 'default' | 'browser';
+
+let browserStorageScopes = 0;
+
+/** True while a creation that explicitly targets browser storage runs (see withBrowserStorageProjectRoot). */
+export function isBrowserStorageProjectRootForced(): boolean {
+  return browserStorageScopes > 0;
+}
+
+/**
+ * Runs `create` with browser storage (OPFS, or its IndexedDB fallback) as the project root even
+ * where a folder picker exists, so no folder dialog appears. The phone editor creates its projects
+ * this way: Android Chrome has a picker, but its system folders are slow. Only creation is scoped;
+ * opening and saving keep following each project's own location, so folder projects keep opening.
+ */
+export async function withBrowserStorageProjectRoot<T>(create: () => Promise<T>): Promise<T> {
+  if (!isOpfsAvailable() && !isBrowserStorageFallbackActive()) {
+    throw new RepositoryError('unsupported', BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
+  }
+  browserStorageScopes += 1;
+  if (isFsaPickerAvailable()) log.info('Creating in browser storage although a folder picker exists');
+  try {
+    return await create();
+  } finally {
+    browserStorageScopes -= 1;
+  }
+}
+
 export function resolveProjectRootMode(): ProjectRootMode {
+  if (browserStorageScopes > 0) return 'opfs';
   if (isFsaPickerAvailable()) return 'fsa';
   if (isOpfsAvailable()) return 'opfs';
   return 'none';

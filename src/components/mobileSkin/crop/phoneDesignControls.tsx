@@ -115,14 +115,17 @@ export interface PhoneChipGroupProps<T extends string> {
   testId: string;
   onChange: (value: T) => void;
   disabled?: PhoneUnavailable;
+  /** 'chips' (wrapping text chips), 'tiles' (a grid of pictogram tiles) or 'tile-row' (one scrolling row of 64 px tiles). */
+  layout?: 'chips' | 'tiles' | 'tile-row';
 }
 
 export { phoneChipTestId };
 
-export function PhoneChipGroup<T extends string>({ label, value, options, testId, onChange, disabled }: PhoneChipGroupProps<T>) {
+export function PhoneChipGroup<T extends string>({ label, value, options, testId, onChange, disabled, layout = 'chips' }: PhoneChipGroupProps<T>) {
   const explain = useExplain();
+  const groupClass = layout === 'chips' ? 'phone-design-chips' : `phone-design-tiles phone-design-tiles--${layout === 'tiles' ? 'grid' : 'row'}`;
   return (
-    <div className="phone-design-chips" role="radiogroup" aria-label={label} data-testid={testId}>
+    <div className={groupClass} role="radiogroup" aria-label={label} data-testid={testId}>
       {options.map((option) => {
         const unavailable = option.unavailable ?? disabled;
         const chipId = phoneChipTestId(testId, option.value);
@@ -131,7 +134,7 @@ export function PhoneChipGroup<T extends string>({ label, value, options, testId
             key={option.value}
             type="button"
             role="radio"
-            className="phone-design-chip"
+            className={layout === 'chips' ? 'phone-design-chip' : 'phone-design-chip phone-design-chip--tile'}
             aria-checked={value === option.value}
             aria-disabled={Boolean(unavailable)}
             data-testid={chipId}
@@ -142,7 +145,7 @@ export function PhoneChipGroup<T extends string>({ label, value, options, testId
               else onChange(option.value);
             }}
           >
-            {option.icon}
+            {layout === 'chips' ? option.icon : <span className="phone-design-chip__picture" aria-hidden="true">{option.icon}</span>}
             <span>{option.label}</span>
           </button>
         );

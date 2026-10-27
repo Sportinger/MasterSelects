@@ -121,6 +121,12 @@ export interface RepositoryBackend {
   writeNew(path: string, chunks: AsyncIterable<Uint8Array>, signal?: AbortSignal): Promise<void>;
   replaceViewSlot(path: string, chunks: AsyncIterable<Uint8Array>, signal?: AbortSignal): Promise<void>;
   removeUnpublished(path: string): Promise<void>;
+  /**
+   * Optional hint: resolve these folder prefixes (and, with `create` while owning, create them) concurrently
+   * ahead of use, so a session does not pay one sequential lookup per folder later. Never needed for
+   * correctness; failures are ignored and reappear at the operation that needs the folder.
+   */
+  prepareDirectories?(prefixes: readonly string[], create: boolean): Promise<void>;
   /** Native adds an OS-lease/expected-head barrier to the browser owner. */
   publishCommit?(path: string, bytes: Uint8Array, expectedPrevious: CommitReference | null, owner: RepositoryOwner, signal?: AbortSignal): Promise<void>;
 }

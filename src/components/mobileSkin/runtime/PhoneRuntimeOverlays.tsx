@@ -4,7 +4,9 @@
 
 import { EditRejectedToast } from '../../common/EditRejectedToast';
 import { HistoryActionToast } from '../../common/HistoryActionToast';
-import { ProjectLoadProgressOverlay } from '../../common/ProjectLoadProgressOverlay';
+import { LiveInputReconnectPrompt } from '../../common/LiveInputReconnectPrompt';
+import { PremiereSequenceImportDialog } from '../../common/PremiereSequenceImportDialog';
+import { PhoneBackgroundLoadStatus } from './PhoneBackgroundLoadStatus';
 import { ProjectMediaCopyToast } from '../../common/ProjectMediaCopyToast';
 import { SourceFitDialogHost } from '../../common/SourceFitDialog';
 import { LegacyImportTargetHost } from '../../common/toolbar/LegacyImportDialog';
@@ -30,7 +32,10 @@ export function PhoneRuntimeOverlays({
       <LegacyImportTargetHost />
       <MediaReconnectHost />
       <SourceFitDialogHost />
-      {!bootPending && <ProjectLoadProgressOverlay />}
+      {/* The desktop load toast is translucent; blocking loads show PhoneProjectLoadingView instead. */}
+      {!bootPending && <PhoneBackgroundLoadStatus />}
+      <LiveInputReconnectPrompt />
+      <PremiereSequenceImportDialog />
       <HistoryActionToast notice={historyNotice} onDone={onHistoryNoticeDone} />
       <EditRejectedToast />
       <ProjectMediaCopyToast />

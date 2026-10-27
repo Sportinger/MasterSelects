@@ -139,6 +139,8 @@ The history response keeps three sources distinct:
 - `audit`: central browser-side records for in-app and bridge-triggered AI tool execution;
 - `bridgeCalls`: durable JSONL traces created by HTTP/MCP bridge requests.
 
+The bridge traces live in `.ai-bridge-tool-history.jsonl` in the repository root. Only its newest 32 MB are read back, so once the file grows past 64 MB it is compacted to its newest 32 MB of whole lines (checked at start and every 200 appends; `tools/devBridge/traceStore.ts`). Other dev servers keep appending to the compacted file.
+
 FlashBoard chat runs are stored separately in browser IndexedDB (`masterselects-ai-chat-runs`). They contain source, session/project, provider/model, prompt version, system prompt, request prompt, response, tool calls/results, execution mode, status, and timing.
 
 Audit and bridge records include source, caller context, session, timing, policy snapshot, arguments, status, result, replay origin, and idempotency key where applicable. Secret-like fields are redacted, and embedded base64 images are omitted from durable traces. MCP returns a discovered image as image content instead of duplicating its data in structured output.

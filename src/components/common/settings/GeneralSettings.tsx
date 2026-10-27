@@ -13,6 +13,7 @@ import { AIFeaturesSettings } from './AIFeaturesSettings';
 import { ProductAnalyticsSettings } from './ProductAnalyticsSettings';
 import { ScrubCacheSettings } from './ScrubCacheSettings';
 import { UndurableMediaCopySetting } from './UndurableMediaCopySetting';
+import { isLegacyMobileDockLayoutEnabled } from '../../../stores/dockStore/legacyMobileLayout';
 
 export function GeneralSettings() {
   const {
@@ -109,24 +110,26 @@ export function GeneralSettings() {
         </p>
       </div>
 
-      {/* Layout */}
-      <div className="settings-group">
-        <div className="settings-group-title">Layout</div>
+      {/* Layout: hidden while the legacy Mobile dock layout is off (legacyMobileLayout.ts). */}
+      {isLegacyMobileDockLayoutEnabled() && (
+        <div className="settings-group">
+          <div className="settings-group-title">Layout</div>
 
-        <label className="settings-row">
-          <span className="settings-label">Automatically use Mobile layout when space is limited</span>
-          <input
-            type="checkbox"
-            checked={automaticMobileLayoutEnabled}
-            onChange={(event) => setAutomaticMobileLayoutEnabled(event.target.checked)}
-            className="settings-checkbox"
-          />
-        </label>
-        <p className="settings-hint">
-          Switches to H/V Mobile below 900 px. Detected mobile devices always use Mobile;
-          your previous desktop layout returns when the mobile condition ends.
-        </p>
-      </div>
+          <label className="settings-row">
+            <span className="settings-label">Automatically use Mobile layout when space is limited</span>
+            <input
+              type="checkbox"
+              checked={automaticMobileLayoutEnabled}
+              onChange={(event) => setAutomaticMobileLayoutEnabled(event.target.checked)}
+              className="settings-checkbox"
+            />
+          </label>
+          <p className="settings-hint">
+            Switches to H/V Mobile below 900 px. Detected mobile devices always use Mobile;
+            your previous desktop layout returns when the mobile condition ends.
+          </p>
+        </div>
+      )}
 
       {/* Input Display */}
       <div className="settings-group">

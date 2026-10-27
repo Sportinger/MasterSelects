@@ -1,0 +1,89 @@
+/* Shared sheet primitives (phoneSheetPrimitives.tsx): chip row, empty state, primary button. */
+
+/* A scrolling chip row: 16 px inline scroll padding and a 24 px fade on each edge that hides more. */
+.mobile-skin .phone-chip-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 0 16px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.mobile-skin .phone-chip-row::-webkit-scrollbar { display: none; }
+.mobile-skin .phone-chip-row > * { flex: 0 0 auto; }
+.mobile-skin .phone-chip-row[data-fade-end] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.mobile-skin .phone-chip-row[data-fade-start] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+}
+.mobile-skin .phone-chip-row[data-fade-start][data-fade-end] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+}
+
+/* One empty state for every sheet. */
+.mobile-skin .phone-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+}
+.mobile-skin .phone-empty-state__icon { display: flex; color: var(--phone-text-dim); }
+.mobile-skin .phone-empty-state__title { margin: 4px 0 0; font-size: 15px; font-weight: 600; color: var(--phone-text); }
+.mobile-skin .phone-empty-state__body {
+  max-width: 320px;
+  margin: 0;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mobile-skin .phone-empty-state .phone-primary-button { margin-top: 10px; width: auto; padding: 0 20px; }
+
+/* Primary action of a sheet: full width, 48 px, accent fill. */
+.mobile-skin .phone-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: var(--phone-accent);
+  color: var(--phone-on-accent);
+  font-size: 15px;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-primary-button:active { filter: brightness(1.1); }
+.mobile-skin .phone-primary-button[aria-disabled='true'] { opacity: 0.45; }
+.mobile-skin .phone-primary-button:focus:not(:focus-visible) { outline: none; }
+.mobile-skin .phone-primary-button:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
+
+/* Text link inside a notice line (e.g. "Sign in"). */
+.mobile-skin .phone-inline-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  color: var(--phone-accent);
+  font-size: inherit;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-inline-link:focus:not(:focus-visible) { outline: none; }
+.mobile-skin .phone-inline-link:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; border-radius: 6px; }

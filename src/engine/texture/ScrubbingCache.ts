@@ -13,7 +13,7 @@ import type { BackgroundPreloadSession } from './scrubbingCache/backgroundSessio
 import { quantizeTime } from './scrubbingCache/cacheKeys';
 import { LastFrameCache } from './scrubbingCache/lastFrameCache';
 import { RamPreviewCache } from './scrubbingCache/ramPreviewCache';
-import { ScrubTextureCache } from './scrubbingCache/scrubTextureCache';
+import { ScrubTextureCache, type ScrubCachedFrameEntry } from './scrubbingCache/scrubTextureCache';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { GIB, normalizeScrubRamGB } from '../../services/scrubCacheMemory';
 import { onPrimaryMediaObjectUrlRetired } from '../../services/project/mediaObjectUrlManager';
@@ -122,7 +122,7 @@ export class ScrubbingCache {
   getCachedFrameEntry(
     videoSrc: string,
     time: number
-  ): { view: GPUTextureView; mediaTime: number } | null {
+  ): ScrubCachedFrameEntry | null {
     return this.scrubTextureCache.getCachedFrameEntry(videoSrc, time);
   }
 
@@ -138,7 +138,7 @@ export class ScrubbingCache {
     videoSrc: string,
     time: number,
     maxDistanceFrames: number = 6
-  ): { view: GPUTextureView; mediaTime: number } | null {
+  ): ScrubCachedFrameEntry | null {
     return this.scrubTextureCache.getNearestCachedFrameEntry(videoSrc, time, maxDistanceFrames);
   }
 

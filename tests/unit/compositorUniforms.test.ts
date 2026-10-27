@@ -87,6 +87,23 @@ describe('compositor uniforms', () => {
     expect(shouldUpdateLayerUniforms(floats, u32, snapshot)).toBe(true);
   });
 
+  it('replaces an uploaded NaN source aspect once a valid aspect arrives (NESTED_SMALL_COMP_PREVIEW)', () => {
+    const floats = new Float32Array(COMPOSITOR_UNIFORM_FLOAT_COUNT);
+    const u32 = new Uint32Array(floats.buffer);
+    const layer = createLayer();
+    // First frame of a nested video: 0x0 source size, aspect 0/0.
+    writeLayerUniformData(layer, 0 / 0, 352 / 224, false, floats, u32);
+    expect(Number.isNaN(floats[7])).toBe(true);
+    const snapshot = { float: new Float32Array(floats), u32: new Uint32Array(u32) };
+    // Same NaN again: nothing to upload.
+    expect(shouldUpdateLayerUniforms(floats, u32, snapshot)).toBe(false);
+    // The real frame arrives: the NaN must be replaced, or the shader keeps stretching one column.
+    writeLayerUniformData(layer, 352 / 224, 352 / 224, false, floats, u32);
+    expect(shouldUpdateLayerUniforms(floats, u32, snapshot)).toBe(true);
+    snapshot.float.set(floats); snapshot.u32.set(u32);
+    expect(shouldUpdateLayerUniforms(floats, u32, snapshot)).toBe(false);
+  });
+
   it('keeps normal and external video transition shader branches in parity', () => {
     const normalShader = readRepoText('src/shaders/composite.wgsl');
     const externalShader = readRepoText('src/engine/pipeline/compositor/externalCompositeShader.ts');

@@ -39,6 +39,13 @@ async function parallel<T>(items: T[], visit: (item: T) => Promise<void>): Promi
     while (next < items.length) await visit(items[next++]);
   }));
 }
+/** Whether this browser attested a startup cache for the location at all, valid or not. */
+export async function hasStartupCache(index: RepositoryMetadataIndex): Promise<boolean> {
+  for (const slot of ['a', 'b'] as const) {
+    try { if (await index.getMetadata(marker(slot))) return true; } catch { /* An unreadable index counts as no cache. */ }
+  }
+  return false;
+}
 /** A browser-local attestation of a compact disk snapshot, never an alternative project authority.
  * Immutable history file size/mtime must still match; current records retain SHA-256 checks on read.
  * A changed/missing file, lost local attestation, or an older-history fork falls back to full recovery.

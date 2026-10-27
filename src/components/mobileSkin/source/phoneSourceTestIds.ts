@@ -1,6 +1,9 @@
 // Stable selectors of the phone source monitor ('source' sheet).
 export const PHONE_SOURCE_TEST_IDS = {
   root: 'phone-source',
+  /** Empty state when the library has nothing to view; its button opens Add media. */
+  empty: 'phone-source-empty',
+  addMedia: 'phone-source-add-media',
   /** One per library media file while no source is chosen; data-item-id. */
   pick: 'phone-source-pick',
   /** The <video>/<img>/<audio> of the source; data-frame is the shown frame. */

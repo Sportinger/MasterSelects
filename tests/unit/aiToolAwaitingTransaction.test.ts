@@ -6,19 +6,24 @@ vi.unmock('../../src/services/fileSystemService');
 vi.mock('../../src/stores/mediaStore/init', () => ({
   triggerTimelineSave: vi.fn(), establishTimelineCompositionSaveBaseline: vi.fn(),
 }));
-// A multi-step tool like manageEditableHook: one store edit, an await, then more edits.
+// A multi-step tool like manageEditableHook: one store edit, an await, then more edits. It captures its own
+// transaction before the await and runs the later edits through it (explicit binding, no ambient capture).
 vi.mock('../../src/services/aiTools/handlers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/services/aiTools/handlers')>();
+  const { useTimelineStore } = await import('../../src/stores/timeline');
+  const { captureToolTransaction } = await import('../../src/services/aiTools/toolTransaction');
   return { ...actual, executeToolInternal: vi.fn(async (toolName: string, ...rest: unknown[]) => {
     if (!['manageEditableHook', 'executeBatch'].includes(toolName)) {
       return (actual.executeToolInternal as (...args: unknown[]) => Promise<unknown>)(toolName, ...rest);
     }
-    const { useTimelineStore } = await import('../../src/stores/timeline');
+    const transaction = captureToolTransaction(toolName);
     const trackId = useTimelineStore.getState().addTrack('video');
     await new Promise(resolve => setTimeout(resolve, 0));
     // Later steps edit what the first step created, as hooks do with their composition.
-    useTimelineStore.getState().renameTrack(trackId, 'Hook');
-    useTimelineStore.getState().addTrack('video');
+    transaction.run(() => {
+      useTimelineStore.getState().renameTrack(trackId, 'Hook');
+      useTimelineStore.getState().addTrack('video');
+    });
     return { success: true };
   }) };
 });
@@ -89,6 +94,9 @@ afterEach(() => {
 describe('AI tools that await between edits', () => {
   for (const [label, run] of [
     ['standalone call', () => executeAITool('manageEditableHook', { requestJson: '{}' }, 'kernel', { guidedReplay: false })],
+    // Batch steps start after awaits: each step enters the batch's transaction explicitly.
+    ['executeBatch step', () => executeAITool('executeBatch', { actions: [{ tool: 'manageEditableHook', args: { requestJson: '{}' } }] },
+      'devBridge', { guidedReplay: false })],
     ['grouped kernel call', async () => (await import('../../src/services/aiTools')).executeAIToolCalls(
       [{ id: 'one', tool: 'manageEditableHook', args: { requestJson: '{}' } }], 'kernel', { guidedReplay: false })],
   ] as const) {

@@ -26,6 +26,7 @@ import { isPhoneRegionOf, resolvePhoneRegionTarget, type PhoneRegionChannel } fr
 import { PHONE_AUDIO_REGION_TEST_IDS as IDS } from './phoneAudioRegionTestIds';
 import '../audio/PhoneAudioSheets.css';
 import './PhoneAudioRegions.css';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 
 type Section = 'edit' | 'level' | 'time' | 'fx' | 'repair' | 'stack';
 
@@ -141,7 +142,7 @@ export const PhoneAudioRegionSheet: PhoneSheetComponent = () => {
   const silence = commands.model.groups.flatMap((group) => group.commands).find((command) => command.key === 'silence');
 
   return (
-    <PhoneSheet title="Sound range" height="tall" onCancel={() => { void finish(false); }} onDone={() => { void finish(true); }} doneDisabled={closing}>
+    <PhoneSheet title="Sound range" height={clip ? 'tall' : 'half'} onCancel={() => { void finish(false); }} onDone={() => { void finish(true); }} doneDisabled={closing}>
       <div className="phone-audio-sheet phone-region" data-testid={IDS.root} data-clip-id={clip?.id ?? ''}>
         {blockedReason ? <p className="phone-audio-sheet__blocked" data-testid={IDS.blocked}>{blockedReason}</p> : null}
         {clip ? (
@@ -154,14 +155,14 @@ export const PhoneAudioRegionSheet: PhoneSheetComponent = () => {
           </>
         ) : null}
 
-        <div className="phone-audio-tabs" role="tablist" aria-label="Range tools">
+        <PhoneChipRow role="tablist" label="Range tools" className="phone-audio-tabs">
           {SECTIONS.map((item) => (
             <button key={item.id} type="button" role="tab" className="phone-audio-tabs__tab" aria-selected={section === item.id}
               data-testid={`${IDS.sectionPrefix}${item.id}`} onPointerUp={blurAfterPointer} onClick={() => setSection(item.id)}>
               {item.label}
             </button>
           ))}
-        </div>
+        </PhoneChipRow>
 
         {section === 'edit' ? (
           <div className="phone-audio-section" role="tabpanel" aria-label="Edit">

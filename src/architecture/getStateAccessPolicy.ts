@@ -216,7 +216,7 @@ export const classCHardTargets = [
   { path: 'src/services/proxyFrame/audioProxyLoader.ts', maxCurrentHits: 1 },
   { path: 'src/services/proxyFrame/proxyStorageSources.ts', maxCurrentHits: 2 },
   { path: 'src/services/renderScheduler.ts', maxCurrentHits: 16 },
-  { path: 'src/services/sceneDescriber.ts', maxCurrentHits: 5 },
+  { path: 'src/services/sceneDescriber.ts', maxCurrentHits: 6 },
   { path: 'src/services/shortcutRegistry.ts', maxCurrentHits: 1 },
   { path: 'src/services/slotDeckManager.ts', maxCurrentHits: 6 },
   { path: 'src/services/thumbnailRender/sampling.ts', maxCurrentHits: 1 },
@@ -294,6 +294,6 @@ export const getStateAccessPolicyBaselines = {
   // October integration adds 17 exact targets (43 reads) and 12 action-time
   // reads for export quality, driven transforms, text selection and composition sync.
   // 2026-10-20: +9 classified targets (52 reads, Image workspace, reconnect), +3 reads on two ceilings; 10-22: +2 (presets, Style).
-  classCHardTargetFileCount: 570,
-  classCHardTargetMaxHits: 1981,
+  classCHardTargetFileCount: 573,
+  classCHardTargetMaxHits: 1989,
 } as const;

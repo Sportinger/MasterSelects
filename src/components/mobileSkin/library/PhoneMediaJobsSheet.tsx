@@ -12,6 +12,7 @@ import { regeneratePhoneWaveform, togglePhoneProxyGeneration } from './phoneLibr
 import { phoneMediaJobs, type PhoneMediaJob, type PhoneMediaJobAction } from './phoneMediaJobs';
 import { blurTappedControl, PhoneStatusLine, usePhoneStatus } from './phoneListUi';
 import { PHONE_MEDIA_JOBS_TEST_IDS } from './phoneLibraryTestIds';
+import { ProEmptyState } from '../compositions/phoneProControls';
 import './PhoneLibrary.css';
 
 const IDS = PHONE_MEDIA_JOBS_TEST_IDS;
@@ -34,20 +35,26 @@ export const PhoneMediaJobsSheet: PhoneSheetComponent = () => {
   const files = useMediaStore((state) => state.files);
   const [hideDone, setHideDone] = useState(false);
   const jobs = useMemo(() => phoneMediaJobs(files, { hideDone }), [files, hideDone]);
+  const anyJob = useMemo(() => phoneMediaJobs(files, { hideDone: false }).length > 0, [files]);
   const { status, report } = usePhoneStatus();
 
   return (
     <PhoneSheet title="Media jobs" height="tall" onCancel={closeSheet} cancelLabel="Close">
       <div className="phone-lib" data-testid={IDS.root} onPointerUpCapture={blurTappedControl}>
         <PhoneStatusLine status={status} testId={IDS.status} />
-        <button type="button" role="switch" className="phone-lib__chip" data-testid={IDS.hideDone} aria-checked={hideDone}
-          aria-pressed={hideDone} onClick={() => setHideDone((value) => !value)}>
-          Hide finished
-        </button>
+        {anyJob ? (
+          <button type="button" role="switch" className="phone-lib__chip phone-jobs__filter" data-testid={IDS.hideDone} aria-checked={hideDone}
+            aria-pressed={hideDone} onClick={() => setHideDone((value) => !value)}>
+            Hide finished
+          </button>
+        ) : null}
         {jobs.length === 0 ? (
-          <p className="phone-lib__note" data-testid={IDS.empty}>
-            {hideDone ? 'No job is running, waiting or failed.' : 'No media job yet. Imports, proxies, waveforms and analyses show up here.'}
-          </p>
+          hideDone && anyJob ? (
+            <ProEmptyState icon="jobs" testId={IDS.empty} title="Nothing running" body="No job is running, waiting or failed." />
+          ) : (
+            <ProEmptyState icon="jobs" testId={IDS.empty} title="No media jobs"
+              body="Imports, proxies, waveforms and analyses show up here while they run." />
+          )
         ) : (
           <ul className="phone-lib__list phone-jobs">
             {jobs.map((job) => (

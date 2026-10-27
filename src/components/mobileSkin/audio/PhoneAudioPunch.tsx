@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 
 import { useTimelineStore } from '../../../stores/timeline';
-import { blurAfterPointer } from './PhoneAudioControls';
+import { blurAfterPointer, parsePhoneDecimal } from './PhoneAudioControls';
 import { formatPhoneAudioTime } from './phoneAudioTimeline';
 import { PHONE_AUDIO_TEST_IDS as IDS } from './phoneAudioTestIds';
 import { PHONE_PUNCH_PREROLL_SECONDS, type PhonePunchRecording } from './usePhonePunchRecording';
@@ -15,13 +15,13 @@ function SecondsInput({ testId, value, onCommit, disabled }: { testId: string; v
   const [editing, setEditing] = useState(false);
   useEffect(() => { if (!editing) setDraft(shown); }, [editing, shown]);
   return (
-    <input className="phone-audio-row__field" type="number" inputMode="decimal" min={0} step={0.1} value={draft} readOnly={disabled}
+    <input className="phone-audio-row__field" type="text" inputMode="decimal" autoComplete="off" spellCheck={false} value={draft} readOnly={disabled}
       aria-disabled={disabled || undefined} data-testid={testId}
       onFocus={() => setEditing(true)}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={() => {
         setEditing(false);
-        const parsed = Number.parseFloat(draft);
+        const parsed = parsePhoneDecimal(draft);
         if (Number.isFinite(parsed) && !disabled) onCommit(Math.max(0, parsed));
       }}
       onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />

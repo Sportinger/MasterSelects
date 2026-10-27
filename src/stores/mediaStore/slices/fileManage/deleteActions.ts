@@ -18,6 +18,7 @@ import {
   revokeMediaFileUrls,
 } from './deleteRuntimeCleanup';
 import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
+import { captureEditorTransactionBinding } from '../../../../services/project/repository/transaction/editorTransactionBinding';
 
 export interface DeleteMediaFilesEverywhereResult {
   deletedMediaFileIds: string[];
@@ -55,6 +56,8 @@ export const createFileDeleteActions: MediaSliceCreator<Pick<
   },
 
   deleteMediaFilesEverywhere: async (ids: string[]) => {
+    // The files leave the list after the cache cleanup awaits: in the caller's transaction, carried explicitly.
+    const transaction = captureEditorTransactionBinding('Delete media', { fallbackSource: 'media' });
     const uniqueIds = [...new Set(ids)];
     const mediaFileIds = new Set(uniqueIds);
     const state = get();
@@ -117,7 +120,7 @@ export const createFileDeleteActions: MediaSliceCreator<Pick<
       revokeMediaFileUrls(file);
     }
 
-    set((current) => ({
+    transaction.run(() => set((current) => ({
       files: current.files.filter(file => !deletedIds.has(file.id)),
       selectedIds: current.selectedIds.filter(id => !deletedIds.has(id)),
       sourceMonitorFileId: current.sourceMonitorFileId && deletedIds.has(current.sourceMonitorFileId)
@@ -132,7 +135,7 @@ export const createFileDeleteActions: MediaSliceCreator<Pick<
       sourceMonitorPlaybackRequestId: current.sourceMonitorFileId && deletedIds.has(current.sourceMonitorFileId)
         ? current.sourceMonitorPlaybackRequestId + 1
         : current.sourceMonitorPlaybackRequestId,
-    }));
+    })));
 
     return {
       deletedMediaFileIds: [...deletedIds],

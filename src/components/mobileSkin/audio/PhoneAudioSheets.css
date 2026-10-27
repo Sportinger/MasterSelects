@@ -97,10 +97,7 @@
 .mobile-skin .phone-audio-row__slider:focus { outline: none; }
 .mobile-skin .phone-audio-row__slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--phone-accent); }
 .mobile-skin .phone-audio-row__slider:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--phone-accent); }
-.mobile-skin .phone-audio-row[data-disabled] .phone-audio-row__label,
-.mobile-skin .phone-audio-row[data-disabled] .phone-audio-row__field,
-.mobile-skin .phone-audio-row[data-disabled] .phone-audio-row__reset { color: var(--phone-text-off); }
-.mobile-skin .phone-audio-row[data-disabled] .phone-audio-row__slider { opacity: 0.4; }
+.mobile-skin .phone-audio-row[data-disabled] { opacity: 0.45; }
 
 /* Toggle (mute) and big actions. */
 .mobile-skin .phone-audio-toggle,
@@ -119,28 +116,27 @@
 .mobile-skin .phone-audio-big__timer { font-variant-numeric: tabular-nums; font-weight: 500; }
 .mobile-skin .phone-audio-toggle:active,
 .mobile-skin .phone-audio-big:active { filter: brightness(1.15); }
+/* Disabled keeps the button shape (45 %); a tap explains why (owner rule: grey out, never hide). */
 .mobile-skin .phone-audio-toggle[aria-disabled='true'],
-.mobile-skin .phone-audio-big[aria-disabled='true'] { color: var(--phone-text-off); background: var(--phone-surface-2); }
+.mobile-skin .phone-audio-big[aria-disabled='true'] { opacity: 0.45; }
+.mobile-skin .phone-audio-toggle,
+.mobile-skin .phone-audio-big { border: 1px solid var(--phone-border); }
 
 /* Section tabs of the Audio sheet. */
-.mobile-skin .phone-audio-tabs {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.mobile-skin .phone-audio-tabs::-webkit-scrollbar { display: none; }
+/* Segmented style: a surface-3 thumb with full-contrast text; the row scrolls with an edge fade
+   (PhoneChipRow). */
+.mobile-skin .phone-audio-tabs { gap: 4px; }
 .mobile-skin .phone-audio-tabs__tab {
   flex: 0 0 auto;
   min-height: 44px;
   padding: 0 14px;
-  border-radius: 22px;
-  background: var(--phone-surface-3);
+  border-radius: 10px;
   color: var(--phone-text-dim);
   font-size: 14px;
+  font-weight: 600;
 }
-.mobile-skin .phone-audio-tabs__tab[aria-selected='true'] { background: var(--phone-text); color: var(--phone-bg); font-weight: 600; }
-.mobile-skin .phone-audio-tabs__tab[aria-disabled='true'] { color: var(--phone-text-off); }
+.mobile-skin .phone-audio-tabs__tab[aria-selected='true'] { background: var(--phone-surface-3); color: var(--phone-text); }
+.mobile-skin .phone-audio-tabs__tab[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-audio-section { display: flex; flex-direction: column; gap: 10px; }
 
 .mobile-skin .phone-audio-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -165,27 +161,31 @@
   padding: 0 12px;
   border-radius: 10px;
   border: 1px dashed var(--phone-border);
-  color: var(--phone-text-off);
+  color: var(--phone-text-dim);
   font-size: 13px;
 }
 
 /* Beats tab: source, track and step chips (one choice each). */
-.mobile-skin .phone-audio-beats__chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-.mobile-skin .phone-audio-beats__chips::-webkit-scrollbar { display: none; }
 .mobile-skin .phone-audio-beats__chip {
   flex: 0 0 auto;
   min-height: 44px;
   max-width: 220px;
   padding: 0 12px;
-  border-radius: 22px;
+  border-radius: 10px;
   border: 1px solid var(--phone-border);
-  color: var(--phone-text-dim);
-  font-size: 13px;
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
+  font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mobile-skin .phone-audio-beats__chip[aria-checked='true'] { background: var(--phone-text); color: var(--phone-bg); border-color: var(--phone-text); }
+.mobile-skin .phone-audio-beats__chip[aria-checked='true'] {
+  border-color: var(--phone-accent);
+  box-shadow: inset 0 0 0 0.5px var(--phone-accent);
+  background: color-mix(in srgb, var(--phone-accent) 22%, var(--phone-surface-3));
+}
+.mobile-skin .phone-audio-beats__chip[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-audio-beats__chip:focus { outline: none; }
 .mobile-skin .phone-audio-beats__chip:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
 

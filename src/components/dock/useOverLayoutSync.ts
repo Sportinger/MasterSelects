@@ -4,9 +4,11 @@ import {
   FACTORY_MEDIUM_EDIT_LAYOUT_ID,
   FACTORY_START_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
+  getVisibleSubLayoutId,
   getWorkspaceOverLayout,
   useDockStore,
 } from '../../stores/dockStore';
+import { isLegacyMobileDockLayoutEnabled } from '../../stores/dockStore/legacyMobileLayout';
 import { cloneDockLayout } from '../../stores/dockStore/layoutPersistence';
 import { requestDockLayoutTransition } from '../../stores/dockStore/layoutTransition';
 import {
@@ -55,6 +57,10 @@ function restorePreviousEditorLayout(snapshot: PreviousEditorLayout): void {
  * over-layout trees today, so other selections retain their identity while
  * using that fallback; when both modifiers are active, Mobile supplies the
  * spatial tree and Medium supplies the simplified visual treatment.
+ *
+ * While the legacy Mobile layout is switched off (`legacyMobileLayout.ts`),
+ * Mobile is never requested, and a persisted Mobile layout or override from an
+ * earlier session is left once for the layout underneath it.
  */
 export function useOverLayoutSync(enabled = true): void {
   const automaticMobileLayoutEnvironment = useAutomaticMobileLayoutEnvironment();
@@ -91,7 +97,25 @@ export function useOverLayoutSync(enabled = true): void {
     }
 
     const activeOverLayout = getWorkspaceOverLayout(activeLayoutId);
-    const automaticMobileRequested = (
+    const legacyMobileLayoutEnabled = isLegacyMobileDockLayoutEnabled();
+
+    if (!legacyMobileLayoutEnabled) {
+      // Forget a Mobile choice persisted by an earlier session; the effect reruns.
+      if (mobileLayoutOverride !== null) {
+        setMobileLayoutOverride(null);
+        return;
+      }
+      // A persisted Mobile tree: return to its base layout (or Medium, if that is on).
+      if (activeOverLayout === 'mobile' && mediumLayoutOverride !== true) {
+        enteredManagedOverLayoutRef.current = false;
+        previousEditorLayoutRef.current = null;
+        if (overLayoutBaseId !== null) setOverLayoutBaseId(null);
+        loadSavedLayout(getVisibleSubLayoutId(activeLayoutId, overLayoutBaseId) ?? FACTORY_VIDEO_EDIT_LAYOUT_ID);
+        return;
+      }
+    }
+
+    const automaticMobileRequested = legacyMobileLayoutEnabled && (
       detectedMobileDevice
       || (automaticMobileLayoutEnabled && automaticMobileLayoutEnvironment)
     );
@@ -108,7 +132,8 @@ export function useOverLayoutSync(enabled = true): void {
       return;
     }
     if (
-      activeOverLayout === 'mobile'
+      legacyMobileLayoutEnabled
+      && activeOverLayout === 'mobile'
       && mobileLayoutOverride === null
       && !automaticMobileRequested
       && !enteredManagedOverLayoutRef.current
@@ -119,7 +144,8 @@ export function useOverLayoutSync(enabled = true): void {
     }
 
     const mediumLayoutRequested = mediumLayoutOverride ?? (activeOverLayout === 'medium');
-    const mobileLayoutRequested = mobileLayoutOverride ?? automaticMobileRequested;
+    const mobileLayoutRequested = legacyMobileLayoutEnabled
+      && (mobileLayoutOverride ?? automaticMobileRequested);
     const requestedOverLayout = mobileLayoutRequested
       ? 'mobile'
       : mediumLayoutRequested

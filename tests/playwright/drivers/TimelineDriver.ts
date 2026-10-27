@@ -21,12 +21,13 @@ export class TimelineDriver {
   }
 
   async setLoopPlayback(enabled: boolean): Promise<void> {
-    const button = this.transportControls.getByRole('button', { name: /^Loop (On|Off) \(L\)$/ });
-    const title = enabled ? 'Loop On (L)' : 'Loop Off (L)';
-    if (await button.getAttribute('title') !== title) {
+    // The tooltip names the active shortcut preset's binding (Shift+L by default), so match any hint.
+    const button = this.transportControls.getByRole('button', { name: /^Loop (On|Off)( \(.+\))?$/ });
+    const state = enabled ? /^Loop On( \(.+\))?$/ : /^Loop Off( \(.+\))?$/;
+    if (!state.test(await button.getAttribute('title') ?? '')) {
       await button.click();
     }
-    await expect(button).toHaveAttribute('title', title);
+    await expect(button).toHaveAttribute('title', state);
   }
 
   async play(): Promise<void> {

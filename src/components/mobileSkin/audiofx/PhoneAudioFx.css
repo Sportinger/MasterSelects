@@ -70,31 +70,44 @@
 .mobile-skin .phone-audiofx__switch[aria-checked='true'] .phone-audiofx__switch-knob { transform: translateX(18px); }
 .mobile-skin .phone-audiofx__main { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
 
-.mobile-skin .phone-audiofx__chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-.mobile-skin .phone-audiofx__chips::-webkit-scrollbar { display: none; }
 .mobile-skin .phone-audiofx__chip {
   flex: 0 0 auto;
   min-height: 44px;
-  padding: 0 12px;
-  border-radius: 22px;
-  border: 1px solid var(--phone-border);
-  color: var(--phone-text-dim);
-  font-size: 13px;
-}
-.mobile-skin .phone-audiofx__chip[aria-pressed='true'] { background: var(--phone-text); color: var(--phone-bg); border-color: var(--phone-text); }
-.mobile-skin .phone-audiofx__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
-.mobile-skin .phone-audiofx__card {
-  min-height: 52px;
-  padding: 6px 8px;
+  padding: 0 14px;
   border-radius: 10px;
+  border: 1px solid var(--phone-border);
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.mobile-skin .phone-audiofx__chip[aria-pressed='true'] {
+  border-color: var(--phone-accent);
+  box-shadow: inset 0 0 0 0.5px var(--phone-accent);
+  background: color-mix(in srgb, var(--phone-accent) 22%, var(--phone-surface-3));
+}
+/* Effect cards: three columns, icon above the label, a bordered card; 45 % when there is no sound. */
+.mobile-skin .phone-audiofx__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mobile-skin .phone-audiofx__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 76px;
+  padding: 8px 6px;
+  border: 1px solid var(--phone-border);
+  border-radius: 12px;
   background: var(--phone-surface-3);
   color: var(--phone-text);
   font-size: 13px;
   line-height: 1.2;
+  text-align: center;
   overflow-wrap: anywhere;
 }
+.mobile-skin .phone-audiofx__card-icon { display: flex; color: var(--phone-text-dim); }
 .mobile-skin .phone-audiofx__card:active { filter: brightness(1.15); }
-.mobile-skin .phone-audiofx__card[aria-disabled='true'] { color: var(--phone-text-off); background: var(--phone-surface-2); }
+.mobile-skin .phone-audiofx__card[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-audiofx__group {
   display: flex;
   flex-direction: column;
@@ -114,4 +127,4 @@
   color: var(--phone-text);
   background: var(--phone-surface-2);
 }
-.mobile-skin .phone-audio-more__item.phone-audiofx__editor[aria-disabled='true'] { color: var(--phone-text-off); }
+.mobile-skin .phone-audio-more__item.phone-audiofx__editor[aria-disabled='true'] { opacity: 0.45; }

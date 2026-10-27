@@ -48,8 +48,7 @@
 .mobile-skin .phone-source__mode small { color: var(--phone-text-dim); font-size: 11px; line-height: 1.3; }
 .mobile-skin .phone-source__mode-label { font-weight: 600; }
 .mobile-skin .phone-source__mode[aria-checked='true'] { border-color: var(--phone-accent); background: var(--phone-veil-2); }
-.mobile-skin .phone-source__mode[aria-disabled='true'] { color: var(--phone-text-off); }
-.mobile-skin .phone-source__mode[aria-disabled='true'] small { color: var(--phone-text-off); }
+.mobile-skin .phone-source__mode[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-source__mode:focus { outline: none; }
 .mobile-skin .phone-source__mode:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
 .mobile-skin .phone-source__mark-field input:focus { outline: none; }

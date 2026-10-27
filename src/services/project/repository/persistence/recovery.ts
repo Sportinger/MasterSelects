@@ -4,8 +4,9 @@ import { readNavigationPreferences } from './navigationPreferences';
 import type { NavigationPayload } from '../contracts';
 import { iterateRevisionChanges } from './revisionChanges';
 import { REPOSITORY_LIMITS, RepositoryError, type CommitManifest, type CommitReference, type RecordReference, type RepositoryBackend, type RepositoryDescriptor, type RepositoryRecord, type RevisionPayload, type SegmentDescriptor } from '../contracts';
-import { readRecord, segmentRecords } from '../segments/recordSegment';
-import { readCommit } from './publication';
+import { readRecord, segmentPath, segmentRecords } from '../segments/recordSegment';
+import { readCommit, TornCommitFileError } from './publication';
+import { Logger } from '../../../logger';
 import { commitPath } from './publication';
 import { verifyBlob } from './blobStorage';
 
@@ -173,6 +174,32 @@ export async function validateCommit(backend: RepositoryBackend, commit: CommitM
   }
 }
 
+/**
+ * Validation below walks the chain one commit at a time and reads each commit's segments in turn, which
+ * on a phone's folder provider is one strictly sequential round trip chain per segment. The segments it
+ * is about to validate are known from the manifests already, so read them ahead, a few at a time, oldest
+ * first and within the read cache budget. This only warms caches (a read of immutable bytes); errors are
+ * ignored here and reported by validation exactly as before, which still hashes every segment.
+ */
+async function prefetchSegments(backend: RepositoryBackend, commits: CommitManifest[], proofs: RecoveryProofs, signal?: AbortSignal): Promise<void> {
+  const segments: SegmentDescriptor[] = []; const seen = new Set<string>(); let bytes = 0;
+  for (const commit of commits.toSorted((a, b) => a.firstOperation - b.firstOperation)) {
+    for (const segment of commit.segments) {
+      if (seen.has(segment.segmentId) || proofs.segments.has(segment.segmentId) || !Number.isSafeInteger(segment.length) || segment.length > REPOSITORY_LIMITS.segmentBytes) continue;
+      if (bytes + segment.length > REPOSITORY_LIMITS.objectCacheBytes) break;
+      seen.add(segment.segmentId); segments.push(segment); bytes += segment.length;
+    }
+  }
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(8, segments.length) }, async () => {
+    while (next < segments.length) {
+      const segment = segments[next++]!;
+      signal?.throwIfAborted();
+      try { await backend.read(segmentPath(segment.segmentId), 0, segment.length, signal); }
+      catch (error) { if (signal?.aborted) throw error; }
+    }
+  }));
+}
 /** Discovery uses one paged scan per recovery, retaining only paths and immutable manifests. */
 export async function recoverRepository(backend: RepositoryBackend, descriptor: RepositoryDescriptor, signal?: AbortSignal, visit?: (commit: CommitManifest) => Promise<void>, confirmed?: RecoveryResult, sessionProofs?: RecoveryProofs, knownCommits?: ReadonlySet<string>): Promise<RecoveryResult> {
   const authoritativeBackend = backend;
@@ -194,9 +221,16 @@ export async function recoverRepository(backend: RepositoryBackend, descriptor: 
       const path = discovered[nextManifest++]; signal?.throwIfAborted();
       if (manifests.has(path) || knownCommits?.has(path)) continue;
       try { manifests.set(path, await readCommit(backend, path, signal)); }
-      catch (error) { if (signal?.aborted) throw error; warn(`Damaged publication retained: ${path}`); }
+      catch (error) {
+        if (signal?.aborted) throw error;
+        // A torn (empty) commit is no publication: it names nothing, so it neither selects a head nor
+        // blocks artifact cleanup. Anything else unreadable is retained and reported.
+        if (error instanceof TornCommitFileError) Logger.create('RepositoryRecovery').info(error.message);
+        else warn(`Damaged publication retained: ${path}`);
+      }
     }
   }));
+  await prefetchSegments(backend, discovered.map(path => manifests.get(path)?.commit).filter(commit => commit !== undefined), proofs, signal);
   for (;;) {
     let candidate: Awaited<ReturnType<typeof readCommit>> | null = null;
     for (const path of discovered) {

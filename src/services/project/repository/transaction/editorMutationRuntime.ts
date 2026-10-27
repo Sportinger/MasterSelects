@@ -20,8 +20,10 @@ import { projectTimelineMutationToComposition } from './editorCompositionProject
 import { refreshEditorHistoryAvailability } from './editorHistory';
 import { playheadState } from '../../../layerBuilder/PlayheadState';
 import { TimelineGesturePreview } from './TimelineGesturePreview';
+import { revertFieldWrite } from './editorRollbackMerge';
 
-interface RollbackMutation { domain: string; patch: Record<string, unknown>; }
+/** One write of a transaction: the field values before it (`patch`) and after it, for a per-item rollback. */
+interface RollbackMutation { domain: string; patch: Record<string, unknown>; after: Record<string, unknown>; }
 interface ActionScope { token: TransactionToken | null; owns: boolean; label: string; domain: string; }
 interface PreparedMutation { prepared: PreparedDomainMutation | null; scope: ActionScope; direct: boolean; plan: import('./domainMutationAdapter').DomainMutationPlan; }
 interface EditorRuntime {
@@ -100,17 +102,36 @@ export function ownsEditorTransaction(token: TransactionToken): boolean { return
 /** Authorization is deliberately synchronous. Awaited callbacks must re-enter with their pinned token. */
 export function runEditorTransaction<T>(token: TransactionToken, action: () => T): T {
   if (!ownsEditorTransaction(token)) throw new RepositoryError('ownership', 'Editor transaction belongs to a stale project session');
+  // The innermost context decides: entering a transaction inside a store action (a background job result written
+  // by a proxy action that started during a sheet's await, a captured tool binding) must not fall back to the
+  // enclosing action's token. The marker sits on the same stack as the action scopes.
   const prior = runtime.explicit; runtime.explicit = token;
-  try { return action(); } finally { runtime.explicit = prior; }
+  const marker: ActionScope = { token, owns: false, label: 'explicit transaction', domain: '' };
+  runtime.scopes.push(marker);
+  try { return action(); } finally {
+    runtime.explicit = prior;
+    const index = runtime.scopes.lastIndexOf(marker);
+    if (index >= 0) runtime.scopes.splice(index, 1);
+  }
 }
-function rememberRollback(token: TransactionToken, domain: string, patch: Record<string, unknown>): void {
+/**
+ * Records one write (field values before and after it). A write that continues this transaction's previous
+ * write of the same domain (nobody else wrote those fields in between) extends that entry, so a long drag or
+ * sheet stays one entry per field. A write after another transaction changed the field starts a new entry: the
+ * cancel then reverts each of this transaction's writes on its own, per item, and keeps the other's committed
+ * change instead of restoring the whole field from before this transaction's first write.
+ */
+function rememberRollback(token: TransactionToken, domain: string, patch: Record<string, unknown>, after: Record<string, unknown>): void {
   if (!Object.keys(patch).length) return;
   const rollbacks = runtime.rollbacks.get(token.owner);
-  const first = runtime.gestureTokens!.has(token.owner) && rollbacks?.find(item => item.domain === domain);
-  if (first) for (const [key, value] of Object.entries(patch)) {
-    if (!(key in first.patch)) first.patch[key] = value;
+  if (!rollbacks) return;
+  const last = rollbacks.findLast(item => item.domain === domain);
+  const continues = last && Object.keys(patch).every(key => !(key in last.after) || Object.is(last.after[key], patch[key]));
+  if (!last || !continues) { rollbacks.push({ domain, patch, after }); return; }
+  for (const [key, value] of Object.entries(patch)) {
+    if (!(key in last.patch)) last.patch[key] = value;
+    last.after[key] = after[key];
   }
-  else rollbacks?.push({ domain, patch });
 }
 function flushGesturePreview(token: TransactionToken): void {
   const timeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
@@ -123,7 +144,8 @@ function flushGesturePreview(token: TransactionToken): void {
     });
     finishDomainMutation(coordinator, prepareDomainMutation(coordinator, token, plan));
     projectTimelineMutationToComposition(baseline, timeline);
-    rememberRollback(token, 'timeline', { clips: baseline.clips, clipKeyframes: baseline.clipKeyframes });
+    rememberRollback(token, 'timeline', { clips: baseline.clips, clipKeyframes: baseline.clipKeyframes },
+      { clips: timeline.clips, clipKeyframes: timeline.clipKeyframes });
     runtime.gesturePreviews!.delete(token);
   }
 }
@@ -166,7 +188,14 @@ export function cancelEditorTransaction(token: TransactionToken): void {
   const mutations = runtime.rollbacks.get(token.owner) ?? [];
   const timelineBefore = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
   withRepositoryHydration(() => {
-    for (const mutation of mutations.toReversed()) getRepositoryStore(mutation.domain)?.setState(mutation.patch);
+    // Per item: what other transactions changed in the same fields meanwhile (committed revisions) stays.
+    for (const mutation of mutations.toReversed()) {
+      const store = getRepositoryStore(mutation.domain);
+      const state = store?.getState() as Record<string, unknown> | undefined;
+      if (!store || !state) continue;
+      store.setState(Object.fromEntries(Object.entries(mutation.patch).map(([key, before]) => [key,
+        revertFieldWrite(state[key], before, mutation.after[key], `${mutation.domain}.${key}`)])));
+    }
     const current = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
     const media = getRepositoryStore('media')?.getState() as MediaState | undefined;
     const baseline = current && runtime.gesturePreviews!.baseline(token, current, media?.activeCompositionId);
@@ -241,10 +270,11 @@ const boundary: StoreMutationBoundary = {
       }
       throw error;
     }
-    // Shallow field ownership is enough for runtime rollback: immutable setters retain old handles.
+    // Field values before and after the write (immutable setters retain old handles); a cancel reverts per item.
     const old = before as Record<string, unknown>, changed = patch as Record<string, unknown>;
     const rollback = Object.fromEntries(Object.keys(changed).filter(key => old[key] !== changed[key]).map(key => [key, old[key]]));
-    if (scope.token) rememberRollback(scope.token, domain, rollback);
+    const written = Object.fromEntries(Object.keys(rollback).map(key => [key, changed[key]]));
+    if (scope.token) rememberRollback(scope.token, domain, rollback, written);
     return { prepared, scope, direct: !existing, plan, before };
   },
   finish(_domain, value, after) {

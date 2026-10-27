@@ -53,6 +53,7 @@ import {
   getFactoryDockLayouts,
   useDockStore,
 } from '../../src/stores/dockStore';
+import { setLegacyMobileDockLayoutEnabledForTests } from '../../src/stores/dockStore/legacyMobileLayout';
 import { DEFAULT_COMPOSITION } from '../../src/stores/mediaStore/constants';
 import { useMediaStore } from '../../src/stores/mediaStore';
 
@@ -98,6 +99,8 @@ function installMediaQueryMatches(initialMatches: Record<string, boolean>): {
 
 describe('Mobile layout portrait policy', () => {
   beforeEach(() => {
+    // The legacy Mobile dock layout ships switched off; these tests cover its behaviour when on.
+    setLegacyMobileDockLayoutEnabledForTests(true);
     settingsStoreMock.state.automaticMobileLayoutEnabled = true;
     useDockStore.setState({
       savedLayouts: getFactoryDockLayouts(),
@@ -113,6 +116,7 @@ describe('Mobile layout portrait policy', () => {
   });
 
   afterEach(() => {
+    setLegacyMobileDockLayoutEnabledForTests(null);
     settingsStoreMock.state.automaticMobileLayoutEnabled = true;
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
@@ -419,6 +423,128 @@ describe('Mobile layout portrait policy', () => {
     await waitFor(() => {
       expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_MEDIUM_EDIT_LAYOUT_ID);
       expect(useDockStore.getState().overLayoutBaseId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    });
+    unmount();
+  });
+});
+
+describe('Legacy Mobile dock layout switched off', () => {
+  beforeEach(() => {
+    setLegacyMobileDockLayoutEnabledForTests(false);
+    settingsStoreMock.state.automaticMobileLayoutEnabled = true;
+    useDockStore.setState({
+      savedLayouts: getFactoryDockLayouts(),
+      activeSavedLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
+      overLayoutBaseId: null,
+      mediumLayoutOverride: null,
+      mobileLayoutOverride: null,
+    });
+    useMediaStore.setState({
+      activeCompositionId: DEFAULT_COMPOSITION.id,
+      compositions: [{ ...DEFAULT_COMPOSITION, width: 1080, height: 1920 }],
+    });
+  });
+
+  afterEach(() => {
+    setLegacyMobileDockLayoutEnabledForTests(null);
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: originalMatchMedia,
+    });
+  });
+
+  it('ships switched off', async () => {
+    setLegacyMobileDockLayoutEnabledForTests(null);
+    const { isLegacyMobileDockLayoutEnabled, LEGACY_MOBILE_DOCK_LAYOUT_ENABLED } = await import(
+      '../../src/stores/dockStore/legacyMobileLayout'
+    );
+    expect(LEGACY_MOBILE_DOCK_LAYOUT_ENABLED).toBe(false);
+    expect(isLegacyMobileDockLayoutEnabled()).toBe(false);
+  });
+
+  it('never enters Mobile on a detected mobile device or a narrow window', () => {
+    const mediaQueries = installMediaQueryMatches({
+      '(pointer: coarse)': true,
+      '(max-width: 900px)': true,
+    });
+
+    const { unmount } = renderHook(() => useOverLayoutSync());
+    expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+
+    act(() => mediaQueries.setMatches('(max-width: 900px)', false));
+    act(() => mediaQueries.setMatches('(max-width: 900px)', true));
+    expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    expect(useDockStore.getState().overLayoutBaseId).toBeNull();
+    unmount();
+  });
+
+  it('ignores a Mobile override request and clears it', async () => {
+    installMediaQueryMatches({ '(pointer: coarse)': false, '(max-width: 900px)': false });
+
+    const { unmount } = renderHook(() => useOverLayoutSync());
+    act(() => useDockStore.getState().setMobileLayoutOverride(true));
+    await waitFor(() => {
+      expect(useDockStore.getState().mobileLayoutOverride).toBeNull();
+    });
+    expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    unmount();
+  });
+
+  it('leaves a persisted Mobile layout once for its base layout', async () => {
+    installMediaQueryMatches({ '(pointer: coarse)': true, '(max-width: 900px)': true });
+    useDockStore.getState().loadSavedLayout(FACTORY_VERTICAL_MOBILE_LAYOUT_ID, { transitionDurationMs: 0 });
+    useDockStore.setState({
+      overLayoutBaseId: FACTORY_COLOR_LAYOUT_ID,
+      mobileLayoutOverride: true,
+    });
+
+    const { unmount } = renderHook(() => useOverLayoutSync());
+    await waitFor(() => {
+      expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_COLOR_LAYOUT_ID);
+      expect(useDockStore.getState().overLayoutBaseId).toBeNull();
+      expect(useDockStore.getState().mobileLayoutOverride).toBeNull();
+    });
+
+    // Another layout choice afterwards sticks.
+    act(() => {
+      useDockStore.getState().loadSavedLayout(FACTORY_VIDEO_EDIT_LAYOUT_ID, { transitionDurationMs: 0 });
+    });
+    await waitFor(() => {
+      expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    });
+    unmount();
+  });
+
+  it('keeps Medium when a persisted Mobile layout was stacked with it', async () => {
+    installMediaQueryMatches({ '(pointer: coarse)': false, '(max-width: 900px)': false });
+    useDockStore.getState().loadSavedLayout(FACTORY_MOBILE_LAYOUT_ID, { transitionDurationMs: 0 });
+    useDockStore.setState({
+      overLayoutBaseId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
+      mediumLayoutOverride: true,
+      mobileLayoutOverride: true,
+    });
+
+    const { unmount } = renderHook(() => useOverLayoutSync());
+    await waitFor(() => {
+      expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_MEDIUM_EDIT_LAYOUT_ID);
+      expect(useDockStore.getState().overLayoutBaseId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+      expect(useDockStore.getState().mobileLayoutOverride).toBeNull();
+    });
+    unmount();
+  });
+
+  it('keeps the Medium over-layout working', async () => {
+    installMediaQueryMatches({ '(pointer: coarse)': false, '(max-width: 900px)': false });
+
+    const { unmount } = renderHook(() => useOverLayoutSync());
+    act(() => useDockStore.getState().setMediumLayoutOverride(true));
+    await waitFor(() => {
+      expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_MEDIUM_EDIT_LAYOUT_ID);
+    });
+    act(() => useDockStore.getState().setMediumLayoutOverride(false));
+    await waitFor(() => {
+      expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
     });
     unmount();
   });

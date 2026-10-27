@@ -17,7 +17,9 @@ import {
   useDockStore,
 } from '../../src/stores/dockStore';
 import { resolveMobileLayoutForComposition } from '../../src/components/dock/mobileLayoutOrientation';
-import { cleanupPersistedLayout, mergeFactoryDockLayouts } from '../../src/stores/dockStore/layoutPersistence';
+import { MOBILE_LAYOUT, VERTICAL_MOBILE_LAYOUT } from '../../src/stores/dockStore/layoutDefaults';
+import { isLegacyMobileLayoutTree } from '../../src/stores/dockStore/legacyMobileLayout';
+import { cleanupPersistedLayout, cloneDockLayout, mergeFactoryDockLayouts } from '../../src/stores/dockStore/layoutPersistence';
 import { DEFAULT_TRACKS, useTimelineStore } from '../../src/stores/timeline';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import type { DockLayout, DockNode, DockTabGroup, PanelType } from '../../src/types/dock';
@@ -442,6 +444,15 @@ describe('dock store saved layouts', () => {
     expect(state.activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
     expect(findTabGroup(state.layout.root, 'left-group')).not.toBeNull();
     expect(panelTypes(findTabGroup(state.layout.root, 'start-group'))).toEqual([]);
+  });
+
+  it('opens a project saved in the switched-off legacy Mobile layout in the video layout', () => {
+    for (const legacy of [MOBILE_LAYOUT, VERTICAL_MOBILE_LAYOUT]) {
+      useDockStore.getState().setLayoutFromProject(cloneDockLayout(legacy));
+      const state = useDockStore.getState();
+      expect(state.activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+      expect(isLegacyMobileLayoutTree(state.layout)).toBe(false);
+    }
   });
 
   it('does not restore the optional Start layout from browser persistence', async () => {

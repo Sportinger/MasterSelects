@@ -189,6 +189,50 @@ test('assistant-request-undo-whole: one Undo takes back every change of a reques
   await closeAssistant(m1)
 })
 
+/** Text clips with their text, from the timeline store. */
+async function titleTexts(m1: M1Session): Promise<string[]> {
+  return m1.page.evaluate(async () => {
+    const storeModule = '/src/stores/timeline/index.ts'
+    const mod = await import(/* @vite-ignore */ storeModule) as { useTimelineStore: { getState: () => { clips: Array<{ source?: { type?: string }; textProperties?: { text?: string } }> } } }
+    return mod.useTimelineStore.getState().clips.filter(clip => clip.source?.type === 'text').map(clip => clip.textProperties?.text ?? '')
+  })
+}
+
+test('assistant-request-undo-title: a title the Direct model writes (scene stream plus tool calls) is one Undo, and Redo brings it back whole @phone', async ({ m1 }) => {
+  // Production 3.3.5: this request left about six Undo steps (the text clip lands after an await,
+  // the scene document is written in four more steps); the request's Undo seemed to do nothing.
+  const net = startAssistantCase(m1.page)
+  await importClipA(m1)
+  await signIn(m1, net)
+  expect(await titleTexts(m1)).toEqual([])
+  const scene = [
+    '{"op":"begin","schemaVersion":1,"scene":"Hallo Titel"}',
+    '{"op":"tool","seq":1,"ref":"title","tool":"createTextClip","args":{"text":"Hallo Berlin","startTime":0,"duration":5}}',
+    '{"op":"end","lastSeq":1}',
+  ]
+  net.turns.push({
+    calls: [
+      { tool: 'getTimelineState', arguments: {} },
+      { tool: 'getStreamProtocol', arguments: { format: 'ms-scene-v1' } },
+      { tool: 'getTimelineState', arguments: {} },
+    ],
+    answer: `Adding the title.\n\`\`\`ms-scene-v1\n${scene.join('\n')}\n\`\`\`\nDone: "Hallo Berlin" at 0 s.`,
+  })
+  await sendRequest(m1, 'Add a title that says "Hallo Berlin" at the start of the timeline.')
+  await expect(send(m1), 'the request finished').toHaveAttribute('data-state', 'send', { timeout: 60_000 })
+  await expect.poll(() => titleTexts(m1), { message: 'the title did not land' }).toEqual(['Hallo Berlin'])
+  const undo = m1.page.getByTestId(AS.undo)
+  await expect(undo, 'a request that changed the project offers Undo').toBeVisible({ timeout: 30_000 })
+  await tapOn(m1, undo)
+  await expect.poll(() => titleTexts(m1), { message: 'one Undo did not take the whole title back' }).toEqual([])
+  await closeAssistant(m1)
+  const redo = m1.page.getByTestId(IDS.redo)
+  await expect(redo, 'Redo is offered after the request Undo').not.toHaveAttribute('aria-disabled', 'true')
+  await tapOn(m1, redo)
+  await expect.poll(() => titleTexts(m1), { message: 'one Redo did not bring the whole title back' }).toEqual(['Hallo Berlin'])
+  await expect(redo, 'nothing of the request is left to redo').toHaveAttribute('aria-disabled', 'true')
+})
+
 test('assistant-stop: a running request shows a live progress line, and Stop ends it @phone', async ({ m1 }) => {
   const net = startAssistantCase(m1.page)
   await signIn(m1, net)

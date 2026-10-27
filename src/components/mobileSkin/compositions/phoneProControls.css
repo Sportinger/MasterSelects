@@ -20,10 +20,13 @@
 .mobile-skin .phone-pro-button--primary { border-color: var(--phone-accent); background: var(--phone-accent); color: #fff; }
 .mobile-skin .phone-pro-button--danger { border-color: color-mix(in srgb, var(--phone-danger) 60%, transparent); color: var(--phone-danger); }
 .mobile-skin .phone-pro-button[aria-pressed='true'] {
-  border-color: var(--phone-accent);
-  background: color-mix(in srgb, var(--phone-accent) 22%, var(--phone-surface));
+  /* Choice-chip token: accent tint plus a 1.5 px accent border (never a white fill). */
+  border: 1.5px solid var(--phone-accent);
+  background: color-mix(in srgb, var(--phone-accent) 18%, var(--phone-surface));
 }
-.mobile-skin .phone-pro-button[aria-disabled='true'] { color: var(--phone-text-off); border-style: dashed; background: var(--phone-surface); }
+/* Disabled token: the normal shape at 45 % opacity; a tap explains why. The dashed border is reserved
+   for "not on the phone yet" rows. */
+.mobile-skin .phone-pro-button[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-pro-button:active { background: var(--phone-surface-3); }
 
 .mobile-skin .phone-pro-field { display: flex; flex-direction: column; gap: 6px; }
@@ -46,11 +49,12 @@
 
 .mobile-skin .phone-pro-section { display: flex; flex-direction: column; gap: 8px; }
 .mobile-skin .phone-pro-section__title {
-  margin: 4px 0 0;
+  /* Section-header token shared by every phone sheet. */
+  margin: 16px 0 0;
   color: var(--phone-text-dim);
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -102,3 +106,30 @@
   outline: 2px solid var(--phone-accent);
   outline-offset: 2px;
 }
+
+.mobile-skin .phone-pro-section:first-child > .phone-pro-section__title { margin-top: 4px; }
+.mobile-skin .phone-pro-glyph { flex: 0 0 auto; }
+
+/* Shared empty state (ProEmptyState). */
+.mobile-skin .phone-pro-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+.mobile-skin .phone-pro-empty__icon { display: inline-flex; color: var(--phone-text-dim); }
+.mobile-skin .phone-pro-empty__title { margin: 0; color: var(--phone-text); font-size: 15px; font-weight: 600; }
+.mobile-skin .phone-pro-empty__body {
+  display: -webkit-box;
+  max-width: 34ch;
+  margin: 0;
+  overflow: hidden;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.mobile-skin .phone-pro-empty > .phone-pro-button { margin-top: 4px; }

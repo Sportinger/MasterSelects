@@ -47,9 +47,9 @@ export function assertSequence(frames: SequenceFrame[], clips: { background: Cou
       const clip = clips[layer], localTime = frame.time - clip.startTime
       const active = localTime >= -0.000001 && localTime < clip.duration - 0.000001
       if (!active) continue
-      // FAST uses nearest presentation timestamp for sub-frame clip offsets
-      // (exportSamplePlanning.findClosestSampleIndex). Do not allow drift or
-      // a per-frame +/-1 tolerance: the expected sequence remains exact.
+      // Clips start on frame boundaries here, so the frame containing the time
+      // (exportSamplePlanning.findClosestSampleIndex, half-open) is the rounded
+      // index. Do not allow drift or a per-frame +/-1 tolerance.
       const expected = Math.round(localTime * 30)
       if (frame[layer] !== expected) {
         throw new Error(`${layer} frame ${index}: expected source frame ${expected}, decoded ${frame[layer]}`)

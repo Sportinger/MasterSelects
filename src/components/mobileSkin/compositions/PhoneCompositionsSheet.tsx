@@ -27,7 +27,19 @@ import {
 import { PHONE_COMPOSITIONS_TEST_IDS as IDS } from './phoneCompositionsTestIds';
 import { ProButton, ProMessage, ProSection, ProTextField } from './phoneProControls';
 import { blurAfterPointer } from './phoneProFocus';
+import { ProGlyph } from './phoneProGlyphs';
+import { phoneCompositionPosterUrl } from '../library/phoneLibraryModel';
 import './PhoneCompositionsSheet.css';
+
+/** Poster frame of a composition row at its own aspect (first picture clip), a glyph without one. */
+function CompositionPoster({ url, width, height }: { url: string | undefined; width: number; height: number }) {
+  const aspect = Math.min(16 / 9, Math.max(9 / 16, width / Math.max(1, height)));
+  return (
+    <span className="phone-compositions__poster" aria-hidden="true" style={{ aspectRatio: String(aspect) }}>
+      {url ? <img src={url} alt="" draggable={false} /> : <ProGlyph name="variants" />}
+    </span>
+  );
+}
 
 type View =
   | { kind: 'list' }
@@ -46,6 +58,7 @@ export const PhoneCompositionsSheet: PhoneSheetComponent = () => {
   const closeSheet = usePhoneUiStore((state) => state.closeSheet);
   const allCompositions = useMediaStore((state) => state.compositions);
   const activeId = useMediaStore((state) => state.activeCompositionId);
+  const mediaFiles = useMediaStore((state) => state.files);
   const clips = useTimelineStore((state) => state.clips);
   const selectedClipIds = useTimelineStore((state) => state.selectedClipIds);
   const compositions = useMemo(() => phoneUserCompositions(allCompositions), [allCompositions]);
@@ -227,6 +240,7 @@ export const PhoneCompositionsSheet: PhoneSheetComponent = () => {
               return (
                 <li key={composition.id} className="phone-pro-row" data-testid={IDS.row} data-composition-id={composition.id} data-active={active ? 'true' : 'false'}>
                   <div className="phone-pro-row__main">
+                    <CompositionPoster url={phoneCompositionPosterUrl(composition, mediaFiles)} width={composition.width} height={composition.height} />
                     <button
                       type="button"
                       className="phone-pro-row__title"

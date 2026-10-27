@@ -173,7 +173,7 @@ export function PhoneTimeline() {
             />
           </div>
           {laneClips.length === 0 && (
-            <p className="phone-timeline__empty">No clips in this composition yet. Add media to start editing.</p>
+            <p className="phone-timeline__empty"><span>No clips in this composition yet. Add media to start editing.</span></p>
           )}
         </div>
         <div className="phone-timeline__playhead" data-testid={PHONE_TEST_IDS.playhead} aria-hidden="true" />

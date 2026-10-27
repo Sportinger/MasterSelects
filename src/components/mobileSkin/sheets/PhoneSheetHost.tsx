@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { Logger } from '../../../services/logger';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneSheet } from './PhoneSheet';
+import { PhoneSheetIdContext } from './phoneSheetContext';
 import { PHONE_SHEET_REGISTRY, isPhoneSheetId } from './phoneSheetRegistry';
 
 const log = Logger.create('PhoneSheetHost');
@@ -61,17 +62,19 @@ export function PhoneSheetHost() {
       <span ref={anchorRef} hidden />
       {shell && Sheet && activeSheet
         ? createPortal(
-            <SheetErrorBoundary key={activeSheet} onError={handleError}>
-              <Suspense
-                fallback={
-                  <PhoneSheet title="Loading" onCancel={closeSheet}>
-                    <p className="phone-sheet__loading">Loading…</p>
-                  </PhoneSheet>
-                }
-              >
-                <Sheet />
-              </Suspense>
-            </SheetErrorBoundary>,
+            <PhoneSheetIdContext.Provider value={activeSheet}>
+              <SheetErrorBoundary key={activeSheet} onError={handleError}>
+                <Suspense
+                  fallback={
+                    <PhoneSheet title="Loading" onCancel={closeSheet} loading>
+                      <p className="phone-sheet__loading">Loading…</p>
+                    </PhoneSheet>
+                  }
+                >
+                  <Sheet />
+                </Suspense>
+              </SheetErrorBoundary>
+            </PhoneSheetIdContext.Provider>,
             shell,
           )
         : null}

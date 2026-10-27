@@ -36,7 +36,6 @@ import type { CallerContext } from './policy';
 import { beginAIToolAudit, completeAIToolAudit } from './audit';
 import {
   abortAgentTransaction, attachGroupedPartialFailure, beginAgentTransaction, pinAgentTransactionOptions, getPinnedAgentTransaction, bindAgentTransactionStore, runWithAgentTransaction,
-  captureAgentTransactionAcrossAwaits,
   commitAgentTransaction, completeAgentToolAudit, completeOrDeferAgentToolAudit,
   createAgentTransactionRollbackReason, createGroupedPartialFailureInfo, createGroupedRollbackReason, type AgentToolAuditCompletion,
 } from './agentTransaction';
@@ -51,21 +50,9 @@ const SELF_MANAGED_HISTORY_TOOLS = new Set([
 // These handlers rebuild the whole project through many awaited store actions
 // (reset, imports, composition switches). A repository agent transaction only
 // authorizes synchronous work, so each step commits as its own revision instead.
+// (addCompositionClip left this list: addCompClip carries its caller's transaction explicitly.)
 const PROJECT_REBUILD_TOOLS = new Set([
   'createStressTestProjectFixture',
-  // Nested composition loading awaits the media store before it inserts the clip.
-  'addCompositionClip',
-]);
-
-// Multi-step tools that await between their store mutations (batches, editable hooks
-// built from shape, text and composition steps). Their transaction captures awaited
-// mutations too; otherwise later steps open a second transaction and collide with it.
-const AWAITING_TRANSACTION_TOOLS = new Set([
-  'executeBatch',
-  'runEditorStream',
-  'manageEditableHook',
-  'refineEditableHook',
-  'createEditableTitleStack',
 ]);
 
 /**
@@ -204,11 +191,10 @@ async function executeAIToolWithDeferredAudit(
     const run = () => useGuidedExecution
       ? executeGuidedAITool(toolName, args, callerContext, options)
       : _executeAIToolInternal(toolName, args, callerContext, options);
-    // A batch or hook is one undo step and one saved revision, including mutations made after awaits,
-    // also when an outer (grouped or kernel) agent transaction is pinned.
-    const result = AWAITING_TRANSACTION_TOOLS.has(toolName)
-      ? await captureAgentTransactionAcrossAwaits(standaloneTransaction ?? getPinnedAgentTransaction(options), run)
-      : await run();
+    // A tool call is one undo step and one saved revision. Its synchronous start runs in its transaction;
+    // writes after an await join only through the tool's explicit binding (captureToolTransaction), so a
+    // background result or a user edit during the await never joins it and never rolls back with it.
+    const result = await run();
     if (standaloneTransaction) {
       // executeBatch and runEditorStream are non-transactional: successful steps stay applied.
       if (result.success || keepsPartialMutations(toolName, result)) commitAgentTransaction(standaloneTransaction); else abortAgentTransaction(standaloneTransaction);
@@ -354,8 +340,15 @@ async function _executeAIToolInternal(
       ? null
       : startOwnedHistoryBatch('AI: batch');
     let batchSucceeded = false;
+    const batchTransaction = getPinnedAgentTransaction(options);
     try {
-      const result = await handleExecuteBatch(args, callerContext, options);
+      // Each step runs in the batch's transaction explicitly (steps start after awaits), with stores bound to it.
+      const result = await handleExecuteBatch(args, callerContext, batchTransaction ? {
+        ...options,
+        executeTool: (tool, toolArgs, stepCallerContext) => runWithAgentTransaction(batchTransaction, () => executeToolInternal(tool, toolArgs,
+          bindAgentTransactionStore(useTimelineStore.getState(), batchTransaction), bindAgentTransactionStore(useMediaStore.getState(), batchTransaction),
+          stepCallerContext)),
+      } : options);
       batchSucceeded = result.success;
       return result;
     } catch (error) {

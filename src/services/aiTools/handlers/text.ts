@@ -15,6 +15,7 @@ import { getTimelineGeneratedCanvasRuntimeDimensions } from '../../timeline/time
 import { propertyRegistry } from '../../properties';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import type { ToolResult } from '../types';
+import { captureToolTransaction } from '../toolTransaction';
 import {
   captureMutationEntitySnapshot,
   describeMutationEntities,
@@ -117,6 +118,8 @@ export async function handleCreateTextClip(
   }
 
   const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
+  // addTextClip adds the clip after rendering its canvas; it and the updates below join this tool's transaction explicitly.
+  const transaction = captureToolTransaction('createTextClip');
   const { addTextClip } = useTimelineStore.getState();
   const clipId = await addTextClip(track.id, startTime, duration, true);
   if (!clipId) {
@@ -129,11 +132,13 @@ export async function handleCreateTextClip(
   }
 
   const updates = buildTextPropertyUpdates(args, created);
-  if (Object.keys(updates).length > 0) {
-    useTimelineStore.getState().updateTextProperties(clipId, updates);
-  }
-  useTimelineStore.getState().invalidateCache();
-  selectClipAndOpenTab(clipId, 'text');
+  transaction.run(() => {
+    if (Object.keys(updates).length > 0) {
+      useTimelineStore.getState().updateTextProperties(clipId, updates);
+    }
+    useTimelineStore.getState().invalidateCache();
+    selectClipAndOpenTab(clipId, 'text');
+  });
 
   const finalClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
   if (!finalClip?.textProperties) {

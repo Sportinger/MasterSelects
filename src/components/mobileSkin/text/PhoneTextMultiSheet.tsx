@@ -10,6 +10,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { PhoneSheetComponent } from '../contracts';
 import { PhoneClipPickList } from '../clipboard/PhoneClipPickList';
 import '../clipboard/PhoneClipboard.css';
+import { PhoneEmptyState } from '../transition/phoneSheetPrimitives';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
@@ -90,7 +91,9 @@ export const PhoneTextMultiSheet: PhoneSheetComponent = () => {
   if (opened.candidates.length === 0) {
     return (
       <PhoneSheet title="Style titles" onCancel={cancel} cancelLabel="Close">
-        <p className="phone-clipboard__note" data-testid={IDS.empty}>This composition has no titles yet. Add one with Text, then style several together here.</p>
+        <PhoneEmptyState icon="text" testId={IDS.empty} title="No titles yet"
+          body="Add a title, then style several together here."
+          actionLabel="Add title" onAction={() => { session.cancel(); usePhoneUiStore.getState().openSheet('title'); }} />
       </PhoneSheet>
     );
   }

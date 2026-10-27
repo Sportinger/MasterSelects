@@ -53,20 +53,23 @@ export async function preparePublication(batch: PublicationBatch, descriptor: Re
   if (bytes.length > REPOSITORY_LIMITS.recordBytes) throw new RepositoryError('budget', 'Commit descriptor block exceeds bounded manifest size');
   return { commit, reference: { commitId: commit.commitId, hash: await hashBytes(bytes) }, records, segments: builder.segments, bytes };
 }
-async function writeVerified(backend: RepositoryBackend, path: string, bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
-  // Zero length is an interrupted write (see directoryBackend), not published content: finish it.
-  const existing = await backend.stat(path).then(stat => stat?.length ? stat : null);
-  if (existing && existing.length !== bytes.length) throw new RepositoryError('corrupt', `Immutable path has conflicting length: ${path}`);
-  if (!existing) {
-    try { await backend.writeNew(path, oneChunk(bytes), signal); }
-    catch (cause) {
-      // Lost completion acknowledgement is resolved from immutable bytes, never overwritten.
-      const stat = await backend.stat(path);
-      if (!stat || stat.length !== bytes.length) throw cause;
-    }
-  }
+/** Read-back of a just written immutable file. On folder backends it is served from the bytes the write
+ * itself verified (see directoryFileCache.ts), so it costs no folder round trips there. */
+async function verifyWritten(backend: RepositoryBackend, path: string, bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
   const read = await backend.read(path, 0, bytes.length, signal);
   if ((await backend.stat(path))?.length !== bytes.length || read.length !== bytes.length || await hashBytes(read) !== await hashBytes(bytes)) throw new RepositoryError('corrupt', `Immutable write verification failed: ${path}`);
+}
+async function writeVerified(backend: RepositoryBackend, path: string, bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
+  // No existence stat first: writeNew itself refuses a non-empty immutable file (and finishes an empty,
+  // interrupted one), so the stat is only needed when it fails. That saves one round trip per file.
+  try { await backend.writeNew(path, oneChunk(bytes), signal); }
+  catch (cause) {
+    // Lost completion acknowledgement (or an earlier attempt's file) is resolved from immutable bytes, never overwritten.
+    const stat = await backend.stat(path);
+    if (stat?.length && stat.length !== bytes.length) throw new RepositoryError('corrupt', `Immutable path has conflicting length: ${path}`);
+    if (!stat || stat.length !== bytes.length) throw cause;
+  }
+  await verifyWritten(backend, path, bytes, signal);
 }
 export async function writePublication(backend: RepositoryBackend, owner: RepositoryOwner, publication: PreparedPublication, signal?: AbortSignal, proofs?: RecoveryProofs): Promise<void> {
   await owner.assertOwned();
@@ -75,14 +78,26 @@ export async function writePublication(backend: RepositoryBackend, owner: Reposi
   await validateCommit(backend, publication.commit, { repositoryId: publication.commit.repositoryId }, signal, proofs);
   await owner.assertOwned();
   const path = commitPath(publication.commit.commitId);
-  if (backend.publishCommit && !(await backend.stat(path))?.length) {
+  if (backend.publishCommit) {
+    // The commit pointer is written last, after every segment it names was written and verified above.
+    // A retry whose commit already exists fails the head check inside publishCommit and is then resolved
+    // from the existing immutable bytes, exactly like a lost acknowledgement.
     try { await backend.publishCommit(path, publication.bytes, publication.commit.previous, owner, signal); }
     catch (cause) { if (!(await backend.stat(path))?.length) throw cause; }
-  }
-  await writeVerified(backend, path, publication.bytes, signal);
+    await verifyWritten(backend, path, publication.bytes, signal);
+  } else await writeVerified(backend, path, publication.bytes, signal);
+}
+/**
+ * An empty commit file: created, then the write failed before any byte landed and its cleanup failed too
+ * (a paused Android SAF folder fails both). A commit is never empty, so this is a torn write, not damage:
+ * recovery ignores it without a warning and the next head check of a writer removes it.
+ */
+export class TornCommitFileError extends RepositoryError {
+  constructor(path: string) { super('corrupt', `Interrupted (empty) commit file: ${path}`); }
 }
 export async function readCommit(backend: RepositoryBackend, path: string, signal?: AbortSignal): Promise<{ commit: CommitManifest; reference: CommitReference }> {
   const stat = await backend.stat(path);
+  if (stat && stat.length === 0) throw new TornCommitFileError(path);
   if (!stat || stat.length > REPOSITORY_LIMITS.recordBytes) throw new RepositoryError('corrupt', 'Invalid commit manifest length');
   const bytes = await backend.read(path, 0, stat.length, signal);
   if (bytes.length !== stat.length) throw new RepositoryError('corrupt', 'Truncated commit manifest');

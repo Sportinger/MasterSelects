@@ -8,6 +8,7 @@ import type {
 } from '../../types/clipMetadata';
 import type { TimelineClip } from '../../types/timeline';
 import { applySharedClipAnalysisState } from './sourceAnalysisSharing';
+import { runEditorBackgroundWrite } from '../project/repository/transaction/editorTransactionBinding';
 import {
   findTimelineAnalysisMediaFile,
   readTimelineAnalysisClips,
@@ -97,14 +98,17 @@ export function updateClipAnalysis(
     clip => applyAnalysisUpdate(clip, data),
   );
 
-  updateTimelineAnalysisClips(() => updatedClips);
   const mediaFileId = originalClip?.source?.mediaFileId || originalClip?.mediaFileId;
-  if (mediaFileId) {
-    updateTimelineAnalysisMediaFiles(files => files.map(file => {
-      if (file.id !== mediaFileId) return file;
-      return applyAnalysisUpdate(file, data);
-    }));
-  }
+  // Analysis job state and results: a background revision, never an Undo step or part of another transaction.
+  runEditorBackgroundWrite('Clip analysis', () => {
+    updateTimelineAnalysisClips(() => updatedClips);
+    if (mediaFileId) {
+      updateTimelineAnalysisMediaFiles(files => files.map(file => {
+        if (file.id !== mediaFileId) return file;
+        return applyAnalysisUpdate(file, data);
+      }));
+    }
+  });
   return originalClip;
 }
 
@@ -113,18 +117,20 @@ export function updateMediaFileAnalysis(
   mediaFileId: string,
   data: ClipAnalysisStateUpdate,
 ): void {
-  updateTimelineAnalysisMediaFiles(files => files.map(file => (
-    file.id === mediaFileId ? applyAnalysisUpdate(file, data) : file
-  )));
-  const clips = readTimelineAnalysisClips();
-  const hasTimelineOccurrence = clips.some(clip => (
-    (clip.source?.mediaFileId || clip.mediaFileId) === mediaFileId
-  ));
-  if (!hasTimelineOccurrence) return;
-  updateTimelineAnalysisClips(currentClips => currentClips.map(clip => {
-    const clipMediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
-    return clipMediaFileId === mediaFileId ? applyAnalysisUpdate(clip, data) : clip;
-  }));
+  runEditorBackgroundWrite('Source analysis', () => {
+    updateTimelineAnalysisMediaFiles(files => files.map(file => (
+      file.id === mediaFileId ? applyAnalysisUpdate(file, data) : file
+    )));
+    const clips = readTimelineAnalysisClips();
+    const hasTimelineOccurrence = clips.some(clip => (
+      (clip.source?.mediaFileId || clip.mediaFileId) === mediaFileId
+    ));
+    if (!hasTimelineOccurrence) return;
+    updateTimelineAnalysisClips(currentClips => currentClips.map(clip => {
+      const clipMediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
+      return clipMediaFileId === mediaFileId ? applyAnalysisUpdate(clip, data) : clip;
+    }));
+  });
 }
 
 function calculateCoverage(ranges: [number, number][], totalDuration: number): number {
@@ -175,13 +181,13 @@ export async function propagateAnalysisToMediaFile(mediaFileId: string): Promise
     }
 
     const analysisCoverage = calculateCoverage(ranges, file.duration);
-    updateTimelineAnalysisMediaFiles(files =>
+    runEditorBackgroundWrite('Analysis coverage', () => updateTimelineAnalysisMediaFiles(files =>
       files.map(candidate =>
         candidate.id === mediaFileId
           ? { ...candidate, analysisStatus: 'ready' as const, analysisCoverage }
           : candidate
       )
-    );
+    ));
     log.debug('Propagated analysis status to MediaFile', {
       mediaFileId,
       analysisCoverage: analysisCoverage.toFixed(2),
@@ -210,7 +216,7 @@ export async function clearClipAnalysis(clipId: string): Promise<void> {
     }
   }
   if (mediaFileId) {
-    updateTimelineAnalysisMediaFiles(files =>
+    runEditorBackgroundWrite('Clear analysis', () => updateTimelineAnalysisMediaFiles(files =>
       files.map(file => (
         file.id === mediaFileId
           ? {
@@ -225,7 +231,7 @@ export async function clearClipAnalysis(clipId: string): Promise<void> {
             }
           : file
       ))
-    );
+    ));
   }
   triggerTimelineSave();
 }

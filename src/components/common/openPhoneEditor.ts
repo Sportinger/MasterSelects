@@ -1,4 +1,4 @@
-// The Layouts menu, and the Mobile toggle on a phone, open the phone editor (/m) with the same project.
+// The Mobile button and the Layouts menu open the phone editor (/m) with the same project, on every device.
 // The project is saved first so the page change never loses work; a failed save keeps this editor open.
 
 import { PHONE_EDITOR_PATH, rememberFullEditorPreference } from '../../routing/phoneEntry';

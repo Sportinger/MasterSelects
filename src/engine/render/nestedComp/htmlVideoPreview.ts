@@ -6,6 +6,7 @@ import { scrubSettleState } from '../../../services/scrubSettleState';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from '../htmlVideoPreviewFallback';
 import { collectSurfaceVideoFrame } from '../surfaceVideoFrame';
+import { resolveCachedScrubFrameSize } from '../compositeSourceSize';
 
 const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
 const MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
@@ -397,14 +398,20 @@ function collectHtmlVideoPreviewFallback(params: TryCollectHtmlVideoPreviewParam
   }
 
   if ((video.seeking || awaitingPausedTargetFrame) && scrubbingCache) {
-    const cachedView =
-      scrubbingCache.getCachedFrame(video.src, targetTime) ??
-      scrubbingCache.getNearestCachedFrame(video.src, targetTime, cacheSearchDistanceFrames);
-    if (cachedView) {
+    // A cached scrub frame is keyed by src, so a fresh element (e.g. a composition
+    // nested right after its clip played inside it) can hit frames cached by another
+    // element before it has loaded metadata. The view carries no size of its own;
+    // reporting the element's 0×0 would place the layer with a NaN aspect. Report the
+    // layer's intrinsic or the cached texture's size instead; skip only without any size.
+    const cachedEntry =
+      scrubbingCache.getCachedFrameEntry(video.src, targetTime) ??
+      scrubbingCache.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
+    const cachedSize = cachedEntry ? resolveCachedScrubFrameSize(video, layer, cachedEntry) : null;
+    if (cachedEntry && cachedSize) {
       armHtmlHold(htmlHoldUntil, layerReuseKey);
       return {
-        layer, isVideo: false, externalTexture: null, textureView: cachedView,
-        sourceWidth: video.videoWidth, sourceHeight: video.videoHeight,
+        layer, isVideo: false, externalTexture: null, textureView: cachedEntry.view,
+        sourceWidth: cachedSize.width, sourceHeight: cachedSize.height,
       };
     }
     if (!allowLiveVideoImport) {

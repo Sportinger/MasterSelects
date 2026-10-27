@@ -89,6 +89,13 @@ import {
   resolveFlashBoardChatAgentMode,
   storeFlashBoardChatAgentMode,
 } from './FlashBoardChatAgentMode';
+import {
+  availableFlashBoardChatAgentMode,
+  isDirectModelProviderMissingError,
+  markFlashBoardChatAgentModeUnavailable,
+  recordFlashBoardChatAgentModeWorked,
+  useFlashBoardChatAgentUnavailability,
+} from './FlashBoardChatAgentAvailability';
 import { createStreamingTextThrottle } from './nodeStreamDisplay';
 
 interface UseFlashBoardChatControllerInput {
@@ -141,8 +148,9 @@ export function useFlashBoardChatController({
   const [chatPrompt, setChatPrompt] = useState(initialChatPrompt ?? storedDraftPrompt ?? '');
   const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>('kie');
   const [chatAgentMode, setChatAgentMode] = useState<FlashBoardChatAgentMode>(
-    () => loadStoredFlashBoardChatAgentMode() ?? DEFAULT_FLASHBOARD_CHAT_AGENT_MODE,
+    () => availableFlashBoardChatAgentMode(loadStoredFlashBoardChatAgentMode() ?? DEFAULT_FLASHBOARD_CHAT_AGENT_MODE),
   );
+  const chatAgentUnavailability = useFlashBoardChatAgentUnavailability();
   const [chatModelClass, setChatModelClass] = useState<FlashBoardChatModelClass>('fast');
   const [availableChatAgentModes, setAvailableChatAgentModes] = useState<
     readonly FlashBoardChatAgentMode[]
@@ -232,11 +240,11 @@ export function useFlashBoardChatController({
       ({ agentModes, modelClasses }) => {
         if (cancelled) return;
         setAvailableChatAgentModes(agentModes);
-        setChatAgentMode((currentAgentMode) => resolveFlashBoardChatAgentMode({
+        setChatAgentMode((currentAgentMode) => availableFlashBoardChatAgentMode(resolveFlashBoardChatAgentMode({
           availableAgentModes: agentModes,
           currentAgentMode,
           explicitlySelected: chatAgentModeExplicitlySelectedRef.current,
-        }));
+        })));
         setAvailableChatModelClasses(modelClasses);
         setChatModelClassAvailabilityStatus(modelClasses.length > 0 ? 'ready' : 'unavailable');
         setChatModelClass((modelClass) => (
@@ -313,11 +321,28 @@ export function useFlashBoardChatController({
 
   const handleChatAgentModeSelect = useCallback((agentMode: FlashBoardChatAgentMode) => {
     if (isChatting) return;
+    const unavailableReason = chatAgentUnavailability[agentMode];
+    if (unavailableReason !== undefined) {
+      // A greyed choice explains itself instead of being selected.
+      setChatError(unavailableReason);
+      return;
+    }
     chatAgentModeExplicitlySelectedRef.current = true;
     storeFlashBoardChatAgentMode(agentMode);
     setChatAgentMode(agentMode);
     setChatError(null);
-  }, [isChatting]);
+  }, [chatAgentUnavailability, isChatting]);
+
+  useEffect(() => {
+    // A choice that just turned out to be unavailable (in this view or another chat surface) gives way
+    // to the last working one, or Slow. Nothing is resent; the fallback becomes the remembered choice
+    // so a reload does not start on the failing model again.
+    if (chatAgentUnavailability[chatAgentMode] === undefined) return;
+    const fallback = availableFlashBoardChatAgentMode(chatAgentMode);
+    chatAgentModeExplicitlySelectedRef.current = true;
+    storeFlashBoardChatAgentMode(fallback);
+    setChatAgentMode(fallback);
+  }, [chatAgentMode, chatAgentUnavailability]);
 
   const handleDecisionPolicyChange = useCallback((policy: DecisionPolicy) => {
     if (isChatting) return;
@@ -570,6 +595,7 @@ export function useFlashBoardChatController({
         kernelReport,
         decisionId,
       ));
+      if (isDirectChatAgentMode(effectiveChatAgentMode)) recordFlashBoardChatAgentModeWorked(effectiveChatAgentMode);
       return {
         assistantMessageId,
         ...(kernelReport?.outcome === undefined ? {} : { kernelOutcome: kernelReport.outcome }),
@@ -602,9 +628,15 @@ export function useFlashBoardChatController({
       if (isDirectChatAgentMode(effectiveChatAgentMode)) {
         clearDirectCodexReloadSnapshot(assistantMessageId);
       }
-      const errorMessage = abortController.signal.aborted
+      const rawErrorMessage = abortController.signal.aborted
         ? 'Chat stopped.'
         : error instanceof Error ? error.message : 'Chat request failed.';
+      // The server lacks this model's provider: say so plainly and grey the choice for the session.
+      const errorMessage = !abortController.signal.aborted
+        && isDirectChatAgentMode(effectiveChatAgentMode)
+        && isDirectModelProviderMissingError(rawErrorMessage)
+        ? markFlashBoardChatAgentModeUnavailable(effectiveChatAgentMode, rawErrorMessage)
+        : rawErrorMessage;
       setChatMessages((current) => buildFlashBoardChatErrorMessages(current, assistantMessageId, errorMessage));
       return {
         assistantMessageId,
@@ -939,6 +971,7 @@ export function useFlashBoardChatController({
     availableChatAgentModes,
     chatError,
     chatAgentMode,
+    chatAgentUnavailability,
     chatModelClass,
     chatModelClassAvailabilityStatus,
     chatMessages,

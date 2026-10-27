@@ -1,13 +1,23 @@
 /* Notation sheet: the desktop score editor inline, restyled with the phone tokens. */
-.mobile-skin .phone-score { display: flex; flex-direction: column; gap: 10px; }
+/* With a clip the sheet is 'fill' (PhoneScoreSheet): body, root and editor form one flex column, so the
+   editor takes exactly the room left under the hint and its staff area (the ScoreEditor's flex: 1
+   scroller) gets what the toolbars leave, instead of a fixed height that pushed the staff out of view. */
+.mobile-skin .phone-score { display: flex; flex-direction: column; gap: 8px; }
+.mobile-skin .phone-sheet__body:has(> .phone-score--editing) { display: flex; flex-direction: column; padding-top: 8px; padding-bottom: 8px; }
+.mobile-skin .phone-score--editing { flex: 1 1 auto; min-height: 0; }
+.mobile-skin .phone-score__hint { margin: 0; font-size: 13px; line-height: 1.3; }
 .mobile-skin .phone-score__editor {
-  height: min(62vh, 560px);
+  flex: 1 1 auto;
+  min-height: 240px;
   border-radius: 10px;
   border: 1px solid var(--phone-border);
   background: var(--phone-surface);
   color: var(--phone-text);
   overflow: hidden;
 }
+/* The desktop editor's first row (clip name and keyboard hints) is for the desktop window; the sheet
+   title names the tool and the touch bar replaces the keys. */
+.mobile-skin .phone-score__editor > div > div:first-child:not(.se-toolbar) { display: none; }
 .mobile-skin .phone-score__editor .se-toolbar { border-bottom-color: var(--phone-border); overflow-x: auto; flex-wrap: nowrap; }
 .mobile-skin .phone-score__editor .se-group { background: var(--phone-surface-3); flex: 0 0 auto; }
 .mobile-skin .phone-score__editor .se-btn { min-width: 40px; height: 40px; color: var(--phone-text); }

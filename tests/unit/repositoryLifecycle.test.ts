@@ -3,7 +3,7 @@ import { RepositoryLifecycle, newRepositoryDescriptor } from '../../src/services
 import { RepositorySession } from '../../src/services/project/repository/RepositorySession';
 import type { RepositorySessionOptions } from '../../src/services/project/repository/RepositorySession';
 
-vi.mock('../../src/services/project/repository/lifecycle/workspaceProjection', () => ({ readProjectWorkspace: async () => ({}) }));
+vi.mock('../../src/services/project/repository/lifecycle/workspaceProjection', () => ({ readProjectWorkspace: async () => ({}), assembleProjectWorkspace: async () => ({}) }));
 afterEach(() => vi.restoreAllMocks());
 function fakeSession(id: string) {
   return { descriptor: newRepositoryDescriptor(id), opening: { writable: true },

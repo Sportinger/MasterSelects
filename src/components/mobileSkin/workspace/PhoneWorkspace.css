@@ -45,13 +45,8 @@
   font-weight: 600;
 }
 
-.mobile-skin .phone-workspace__hint {
-  flex: 1;
-  margin: 0;
-  color: var(--phone-text-dim);
-  font-size: 12px;
-  text-align: center;
-}
+.mobile-skin .phone-workspace__spacer { flex: 1 1 auto; min-width: 0; }
+.mobile-skin .phone-workspace__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .mobile-skin .phone-workspace__body {
   display: flex;
@@ -115,7 +110,9 @@
 /* A collapsed side leaves a thin rail with its name; tap or swipe inward opens it. */
 .mobile-skin .phone-workspace__rail {
   display: flex;
-  flex: 0 0 28px;
+  flex: 0 0 44px;
+  flex-direction: column;
+  gap: 6px;
   align-items: center;
   justify-content: center;
   min-width: 0;
@@ -125,7 +122,7 @@
   border: 0 solid var(--phone-border);
   background: transparent;
   color: var(--phone-text-dim);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
@@ -133,6 +130,7 @@
 .mobile-skin .phone-workspace__rail--left { border-right-width: 1px; }
 .mobile-skin .phone-workspace__rail--right { border-left-width: 1px; }
 .mobile-skin .phone-workspace__rail-label { writing-mode: vertical-rl; white-space: nowrap; }
+.mobile-skin .phone-workspace__rail-chevron { display: inline-flex; }
 .mobile-skin .phone-workspace__rail--left .phone-workspace__rail-label { transform: rotate(180deg); }
 .mobile-skin .phone-workspace__rail:active,
 .mobile-skin .phone-workspace__grip:active { background: var(--phone-border); }
@@ -150,7 +148,7 @@
 
 /* Landscape: the hint is not needed. Portrait: stack the side panels above and below the editor. */
 @media (orientation: landscape) {
-  .mobile-skin .phone-workspace__hint { visibility: hidden; }
+  .mobile-skin .phone-workspace__rotate { display: none; }
   /* Short landscape screens: a slimmer bar leaves the height to the editor. */
   @media (max-height: 480px) {
     .mobile-skin .phone-workspace__bar { min-height: 40px; }
@@ -165,7 +163,8 @@
   .mobile-skin .phone-workspace__side--right { border-left-width: 0; border-top-width: 1px; flex-direction: column-reverse; }
   .mobile-skin .phone-workspace__grip { flex: 0 0 14px; }
   .mobile-skin .phone-workspace__grip::after { width: 36px; height: 4px; }
-  .mobile-skin .phone-workspace__rail { flex: 0 0 28px; }
+  .mobile-skin .phone-workspace__rail { flex: 0 0 44px; flex-direction: row; }
+  .mobile-skin .phone-workspace__rail-chevron { transform: rotate(90deg); }
   .mobile-skin .phone-workspace__rail--left { border-right-width: 0; border-bottom-width: 1px; }
   .mobile-skin .phone-workspace__rail--right { border-left-width: 0; border-top-width: 1px; }
   .mobile-skin .phone-workspace__rail-label { writing-mode: horizontal-tb; transform: none !important; }
@@ -174,9 +173,8 @@
 .mobile-skin .phone-editors { margin: 0; padding: 4px 8px 16px; list-style: none; }
 .mobile-skin .phone-editors__row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  gap: 12px;
   width: 100%;
   min-height: 56px;
   padding: 8px 12px;
@@ -189,6 +187,19 @@
 }
 .mobile-skin .phone-editors__row:active { background: var(--phone-border); }
 .mobile-skin .phone-editors__row:focus-visible { outline: 2px solid var(--phone-accent, #7aa2ff); outline-offset: -2px; }
+.mobile-skin .phone-editors__icon {
+  display: inline-flex;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--phone-surface-2);
+  color: var(--phone-text);
+}
+.mobile-skin .phone-editors__text { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.mobile-skin .phone-editors__rotate { display: inline-flex; flex: 0 0 auto; color: var(--phone-text-dim); }
+.mobile-skin .phone-editors__row:focus:not(:focus-visible) { outline: none; }
 .mobile-skin .phone-editors__title { font-size: 15px; font-weight: 600; }
 .mobile-skin .phone-editors__summary { color: var(--phone-text-dim); font-size: 13px; }
 .mobile-skin .phone-workspace__button[aria-disabled='true'] { opacity: 0.4; }

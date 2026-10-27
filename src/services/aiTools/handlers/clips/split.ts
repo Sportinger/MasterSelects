@@ -1,4 +1,5 @@
 import { useTimelineStore } from '../../../../stores/timeline';
+import { captureToolTransaction } from '../../toolTransaction';
 import { isExclusiveTimelineMutationLeaseActive } from '../../../../stores/timeline/exclusiveMutationLease';
 import type { TimelineClip } from '../../../../types/timeline';
 import { audioExtractor } from '../../../../engine/audio/AudioExtractor';
@@ -327,6 +328,8 @@ export async function handleSplitClipAtTimes(
     return { success: false, error: `No valid split times within clip range (${clipStart}s - ${clipEnd}s)` };
   }
 
+  // The speech-safe boundary lookup awaits audio; the split after it joins this tool's transaction explicitly.
+  const transaction = captureToolTransaction('splitClipAtTimes');
   const boundaryResolution = args.snapToAudioZeroCrossing === true
     ? isExclusiveTimelineMutationLeaseActive()
       ? resolveSpeechSafeSplitTimesFromCache(clip, validTimes)
@@ -349,7 +352,7 @@ export async function handleSplitClipAtTimes(
     'clip',
     useTimelineStore.getState().clips,
   );
-  if (isAIExecutionActive()) {
+  transaction.run(() => { if (isAIExecutionActive()) {
     logSplitCheckpoint('split-at-times:start', clip, resolvedTimes.length, withLinked);
     const trackId = clip.trackId;
     // Bulk split: single state update for all cuts at once
@@ -367,7 +370,7 @@ export async function handleSplitClipAtTimes(
     logSplitCheckpoint('split-at-times:after-overlays', clip, resolvedTimes.length, withLinked);
   } else {
     splitClipBatch(clip, resolvedTimes, withLinked);
-  }
+  } });
 
   const clipsAfter = useTimelineStore.getState().clips;
   const videoSegments = clipsAfter

@@ -11,6 +11,13 @@ import type { ParallelDecodeClipInfo as ClipInfo } from './clipWindow';
 import type { MP4VideoTrack } from './decoderConfig';
 import type { ParallelDecodeSample } from './mp4Parsing';
 import { binarySearchInsertPosition } from './scheduling';
+import { getNormalizedSampleTimestampMicroseconds, getSampleDurationMicroseconds } from './sampleTiming';
+import {
+  derivePresentationGrid,
+  findContainingSortedTimestamp,
+  presentationFrameRule,
+  type PresentationGrid,
+} from './presentationFrame';
 import {
   estimateDecodedFrameBytes,
   secondsFromTimestamp,
@@ -47,6 +54,77 @@ export interface ClipDecoder {
   isDecoding: boolean;
   pendingDecode: Promise<void> | null;
   needsKeyframe: boolean;                  // True after flush - must start from keyframe
+  /** Ascending, de-duplicated sample presentation timestamps (us), built lazily from samples. */
+  presentationTimestampsUs?: number[];
+  presentationTimestampsSampleCount?: number;
+  /** Duration (us) per presentation timestamp; locates VFR gaps (presentationFrame.ts). */
+  presentationDurationsUs?: Map<number, number>;
+  /** First decode-order sample index per presentation timestamp (us). */
+  presentationSampleIndexUs?: Map<number, number>;
+  /** Nominal frame grid of constant-rate or jittery media, null for VFR, which uses the nearest rule (presentationFrame.ts). */
+  presentationGrid?: PresentationGrid | null;
+  /** Source time of the last advanceToTime(); its direction decides which buffered side is stale. */
+  lastAdvanceSourceTime?: number;
+  /** The export walks this clip's source backward (reversed clip): prune and evict the high end. */
+  advancingBackward?: boolean;
+}
+
+/** Sample presentation timestamps (us, rounded exactly like the decoded chunks), ascending. */
+export function getPresentationTimestampsUs(clipDecoder: ClipDecoder): number[] {
+  if (clipDecoder.presentationTimestampsUs && clipDecoder.presentationTimestampsSampleCount === clipDecoder.samples.length) {
+    return clipDecoder.presentationTimestampsUs;
+  }
+  const durations = new Map<number, number>();
+  const firstIndex = new Map<number, number>();
+  clipDecoder.samples.forEach((sample, index) => {
+    const timestamp = getNormalizedSampleTimestampMicroseconds(sample, clipDecoder.presentationOffsetSeconds);
+    if (durations.has(timestamp)) return;
+    durations.set(timestamp, getSampleDurationMicroseconds(sample) ?? 0);
+    firstIndex.set(timestamp, index);
+  });
+  clipDecoder.presentationSampleIndexUs = firstIndex;
+  clipDecoder.presentationTimestampsUs = [...durations.keys()].toSorted((a, b) => a - b);
+  clipDecoder.presentationDurationsUs = durations;
+  clipDecoder.presentationGrid = derivePresentationGrid(clipDecoder.presentationTimestampsUs, clipDecoder.samples[0]?.timescale ?? 0);
+  clipDecoder.presentationTimestampsSampleCount = clipDecoder.samples.length;
+  return clipDecoder.presentationTimestampsUs;
+}
+
+/** Timestamp (us) of the decoded frame that must be shown at sourceTime, or undefined without samples. */
+export function getExpectedFrameTimestampUs(clipDecoder: ClipDecoder, sourceTime: number): number | undefined {
+  const timestamps = getPresentationTimestampsUs(clipDecoder);
+  return findContainingSortedTimestamp(timestamps, sourceTime * 1_000_000,
+    timestamp => clipDecoder.presentationDurationsUs?.get(timestamp),
+    presentationFrameRule(clipDecoder.presentationGrid, clipDecoder.samples[0]?.timescale ?? 0));
+}
+
+/** True when exactly the frame shown at sourceTime is buffered (no neighbour stands in for it). */
+export function hasExpectedBufferedFrame(clipDecoder: ClipDecoder, sourceTime: number): boolean {
+  const expected = getExpectedFrameTimestampUs(clipDecoder, sourceTime);
+  return expected !== undefined && clipDecoder.frameBuffer.has(expected);
+}
+
+/**
+ * Decode-order index to resume from after the decoder handle was reset (pool
+ * recycling). reset() drops every chunk that was queued but not yet output, so
+ * resuming at the old sampleIndex silently skipped those frames, while resuming
+ * at 0 re-decoded the whole clip. Resume at the first sample presented after the
+ * newest buffered frame; decodeAhead() rewinds that to its keyframe.
+ */
+export function getResumeSampleIndexAfterReset(clipDecoder: ClipDecoder): number {
+  if (!Number.isFinite(clipDecoder.newestTimestamp) || clipDecoder.samples.length === 0) return 0;
+  // Binary search over the cached ascending timestamps: this runs on every pool
+  // recycle, several times per exported frame in large mosaics.
+  const timestamps = getPresentationTimestampsUs(clipDecoder);
+  let left = 0;
+  let right = timestamps.length;
+  while (left < right) {
+    const mid = (left + right) >>> 1;
+    if (timestamps[mid] <= clipDecoder.newestTimestamp) left = mid + 1;
+    else right = mid;
+  }
+  if (left >= timestamps.length) return clipDecoder.samples.length;
+  return clipDecoder.presentationSampleIndexUs?.get(timestamps[left]) ?? clipDecoder.samples.length;
 }
 
 export function refreshBufferedTimestampBounds(clipDecoder: ClipDecoder): void {
@@ -92,6 +170,24 @@ export function storeDecodedFrame(
   }
 
   clipDecoder.lastDecodedTimestamp = timestamp;
+}
+
+/**
+ * Buffered timestamp to evict when the frame buffer is over MAX_BUFFER_SIZE.
+ * Forward: the oldest frame (already passed). A reversed clip walks the source
+ * backward but still decodes forward from a keyframe, so the newest frame is
+ * usually the one that just arrived and the one the export needs now; popping it
+ * blindly lost the target whenever the keyframe-to-target span exceeded the
+ * buffer. Evict the end farthest from the current target time instead.
+ */
+export function selectEvictionTimestamp(clipDecoder: ClipDecoder): number | undefined {
+  const timestamps = clipDecoder.sortedTimestamps;
+  if (timestamps.length === 0) return undefined;
+  const oldest = timestamps[0];
+  const newest = timestamps[timestamps.length - 1];
+  if (!clipDecoder.advancingBackward || clipDecoder.lastAdvanceSourceTime === undefined) return oldest;
+  const targetUs = clipDecoder.lastAdvanceSourceTime * 1_000_000;
+  return Math.abs(oldest - targetUs) >= Math.abs(newest - targetUs) ? oldest : newest;
 }
 
 /**

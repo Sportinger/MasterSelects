@@ -1,4 +1,5 @@
 import { useMediaStore } from '../../../stores/mediaStore';
+import { captureToolTransaction } from '../toolTransaction';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getTimelineRevision } from '../../../stores/timeline/revisionMiddleware';
 import type { TimelineClip } from '../../../types';
@@ -211,6 +212,8 @@ async function createHook(
   if (editableHookExistsInProject(request.hookId)) {
     return failure(`Hook already exists: ${request.hookId}`);
   }
+  // Steps after the title stack follow awaits: each enters the tool's transaction explicitly.
+  const transaction = captureToolTransaction('createEditableHook');
   const composition = useMediaStore.getState().getActiveComposition();
   const compositionWidth = composition?.width ?? 1920;
   const compositionHeight = composition?.height ?? 1080;
@@ -263,25 +266,25 @@ async function createHook(
   }, store);
   if (!result.success || !isRecord(result.data) || !Array.isArray(result.data.rows)) return result;
   const createdRows = result.data.rows as Array<{ backplateClipId: string; textClipId: string }>;
-  tagCreatedHookRows(request.hookId, createdRows, rows);
+  transaction.run(() => tagCreatedHookRows(request.hookId, createdRows, rows));
   const motionResult = request.motion
-    ? await authorEditableHookMotion({
+    ? await transaction.run(() => authorEditableHookMotion({
         clipIds: createdRows.flatMap((row) => [row.backplateClipId, row.textClipId]),
         compositionHeight,
         compositionWidth,
         duration: request.duration ?? 4,
-        motion: request.motion,
-        store: useTimelineStore.getState(),
-      })
+        motion: request.motion!,
+        store: transaction.bindStore(useTimelineStore.getState()),
+      }))
     : undefined;
   if (motionResult && !motionResult.success) return motionResult;
   const compositionName = `${request.preset === 'lower-third' ? 'Lower Third' : 'Hook'} — ${rows[0]!.text}`;
   const subcompositionResult = nestInSubcomposition
-    ? await wrapEditableHookInSubcomposition({
+    ? await transaction.run(() => wrapEditableHookInSubcomposition({
         clipIds: createdRows.flatMap((row) => [row.backplateClipId, row.textClipId]),
         hookId: request.hookId,
         name: compositionName,
-      })
+      }))
     : undefined;
   if (subcompositionResult && !subcompositionResult.success) return subcompositionResult;
   return {
@@ -351,6 +354,9 @@ async function updateExistingRows(
   request: EditableHookRequest,
   rows: ExistingHookRow[],
 ): Promise<ToolResult> {
+  // Row edits run one after another across awaits: each enters the tool's transaction explicitly.
+  const transaction = captureToolTransaction('updateEditableHookRows');
+  const bound = () => transaction.bindStore(useTimelineStore.getState());
   const store = useTimelineStore.getState();
   const composition = useMediaStore.getState().getActiveComposition();
   const compositionWidth = composition?.width ?? 1920;
@@ -404,17 +410,17 @@ async function updateExistingRows(
       textUpdates.color = rowPatch?.textColor ?? style.textColor;
     }
     if (Object.keys(textUpdates).length > 1) {
-      const textResult = await handleUpdateTextProperties(textUpdates, useTimelineStore.getState());
+      const textResult = await transaction.run(() => handleUpdateTextProperties(textUpdates, bound()));
       if (!textResult.success) return textResult;
     }
 
     const box = boxes[row.index]!;
     if (geometryChanged) {
-      const boxResult = await handleSetTextBox({
+      const boxResult = await transaction.run(() => handleSetTextBox({
         clipId: row.textClip.id,
         enabled: true,
         ...box,
-      }, useTimelineStore.getState());
+      }, bound()));
       if (!boxResult.success) return boxResult;
     }
 
@@ -441,28 +447,28 @@ async function updateExistingRows(
           value: resolvePixelMeasure(style.cornerRadius)!,
         });
       }
-      const motionResult = await handleUpdateMotionProperties({
+      const motionResult = await transaction.run(() => handleUpdateMotionProperties({
         clipId: row.backplateClip.id,
         updates,
-      }, useTimelineStore.getState());
+      }, bound()));
       if (!motionResult.success) return motionResult;
     }
 
     const backgroundColor = rowPatch?.backgroundColor ?? style.backgroundColor;
     const backgroundOpacity = rowPatch?.backgroundOpacity ?? style.backgroundOpacity;
     if (backgroundColor !== undefined || backgroundOpacity !== undefined) {
-      const appearanceResult = await handleUpdateMotionAppearances({
+      const appearanceResult = await transaction.run(() => handleUpdateMotionAppearances({
         clipId: row.backplateClip.id,
         fill: {
           ...(backgroundColor === undefined ? {} : { color: backgroundColor }),
           ...(backgroundOpacity === undefined ? {} : { opacity: backgroundOpacity }),
         },
-      }, useTimelineStore.getState());
+      }, bound()));
       if (!appearanceResult.success) return appearanceResult;
     }
   }
 
-  for (const row of rows) {
+  transaction.run(() => { for (const row of rows) {
     const text = request.rows?.[row.index]?.text ?? row.textClip.textProperties?.text ?? 'Text';
     useTimelineStore.getState().updateClip(row.textClip.id, {
       startTime: nextStartTime,
@@ -475,7 +481,7 @@ async function updateExistingRows(
       duration: nextDuration,
       outPoint: row.backplateClip.inPoint + nextDuration,
     });
-  }
+  } });
 
   return {
     success: true,
@@ -500,6 +506,7 @@ async function replaceHookRows(
 ): Promise<ToolResult> {
   const originalIds = existingRows.flatMap((row) => [row.textClip.id, row.backplateClip.id]);
   const replacementId = `${request.hookId}-replacement`;
+  const transaction = captureToolTransaction('replaceEditableHookRows');
   const createResult = await createHook({
     ...request,
     action: 'create',
@@ -510,7 +517,7 @@ async function replaceHookRows(
   if (!createResult.success) return createResult;
 
   const replacementClips = hookClips(useTimelineStore.getState(), replacementId);
-  const deleteResult = useTimelineStore.getState().applyTimelineEditOperation({
+  const deleteResult = transaction.run(() => useTimelineStore.getState().applyTimelineEditOperation({
     id: `replace-editable-hook:${request.hookId}`,
     type: 'delete-clips',
     clipIds: originalIds,
@@ -518,16 +525,16 @@ async function replaceHookRows(
   }, {
     source: 'ai-tool',
     historyLabel: 'AI: replace editable hook rows',
-  });
+  }));
   if (!deleteResult.success) return failure('Could not replace the previous hook rows');
-  for (const clip of replacementClips) {
+  transaction.run(() => { for (const clip of replacementClips) {
     useTimelineStore.getState().updateClip(clip.id, {
       linkedGroupId: request.hookId,
       editableHook: clip.editableHook
         ? { ...clip.editableHook, id: request.hookId }
         : undefined,
     });
-  }
+  } });
   const finalRows = collectExistingRows(useTimelineStore.getState(), request.hookId);
   if (finalRows instanceof Error) return failure(finalRows.message);
   return {
@@ -563,18 +570,19 @@ export async function handleManageEditableHook(
   if (request instanceof Error) return failure(request.message);
   if (request.action === 'create') return createHook(request, timelineStore);
 
+  const transaction = captureToolTransaction('manageEditableHook');
   const execution = await executeInEditableHookComposition(request.hookId, async (context) => {
     const nestedRequest = context.isNested && request.startTime !== undefined
       ? { ...request, startTime: 0 }
       : request;
     const result = await updateHookInActiveComposition(nestedRequest);
     if (result.success && context.isNested && request.duration !== undefined) {
-      useTimelineStore.setState({ duration: request.duration, durationLocked: true });
+      transaction.run(() => useTimelineStore.setState({ duration: request.duration, durationLocked: true }));
     }
     return result;
   });
   if (!execution.result.success) return execution.result;
-  const wrapperError = updateNestedHookWrapper(execution.context, request);
+  const wrapperError = transaction.run(() => updateNestedHookWrapper(execution.context, request));
   if (wrapperError) return wrapperError;
   const data = isRecord(execution.result.data) ? execution.result.data : {};
   return {
@@ -597,6 +605,8 @@ export async function handleManageEditableHook(
 async function refineEditableHookInActiveComposition(
   request: EditableHookRefinementRequest,
 ): Promise<ToolResult> {
+  // Refinements run one after another across awaits: each enters the tool's transaction explicitly.
+  const transaction = captureToolTransaction('refineEditableHook');
   const rows = collectExistingRows(useTimelineStore.getState(), request.hookId);
   if (rows instanceof Error) return failure(rows.message);
   persistHookRowIdentity(request.hookId, rows);
@@ -745,7 +755,7 @@ async function refineEditableHookInActiveComposition(
   }
 
   for (const entry of pending) {
-    const result = await entry.run();
+    const result = await transaction.run(() => entry.run());
     if (!result.success) {
       return failure(`${entry.label} failed: ${result.error ?? 'unknown error'}`);
     }

@@ -87,14 +87,14 @@ describe('phone project commands', () => {
     const result = await createPhoneProject('  Rehearsal ', '9:16');
 
     expect(result).toEqual({ ok: true });
-    expect(mocks.createBlankProject).toHaveBeenCalledWith('Rehearsal', { composition: { width: 1080, height: 1920, frameRate: 30 } });
+    expect(mocks.createBlankProject).toHaveBeenCalledWith('Rehearsal', { composition: { width: 1080, height: 1920, frameRate: 30 }, storage: 'browser' });
     expect(mocks.updateComposition).not.toHaveBeenCalled();
     expect(mocks.saveCurrentProject).not.toHaveBeenCalled();
   });
 
   it('passes the other formats too', async () => {
     await createPhoneProject('Square', '1:1');
-    expect(mocks.createBlankProject).toHaveBeenCalledWith('Square', { composition: { width: 1080, height: 1080, frameRate: 30 } });
+    expect(mocks.createBlankProject).toHaveBeenCalledWith('Square', { composition: { width: 1080, height: 1080, frameRate: 30 }, storage: 'browser' });
   });
 
   it('falls back to an edit and saves when a storage path ignored the initial canvas', async () => {
@@ -119,10 +119,12 @@ describe('phone project commands', () => {
     expect(mocks.saveCurrentProject).not.toHaveBeenCalled();
   });
 
-  it('says that no folder was picked on the folder backend', async () => {
+  it('creates in browser storage even where a folder picker exists, so no folder is ever asked for', async () => {
     mocks.createBlankProject.mockResolvedValue('not-created');
     mocks.resolveProjectRootMode.mockReturnValue('fsa');
-    expect(await createPhoneProject('Rehearsal', '9:16')).toEqual({ ok: false, message: 'No project folder was selected.' });
+    const result = await createPhoneProject('Rehearsal', '9:16');
+    expect(mocks.createBlankProject).toHaveBeenCalledWith('Rehearsal', expect.objectContaining({ storage: 'browser' }));
+    expect(result).toEqual({ ok: false, message: 'The project could not be created in this browser’s storage.' });
   });
 
   it('maps save-failed to a failure without changing the format', async () => {

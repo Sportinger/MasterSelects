@@ -3,6 +3,7 @@ import type {
   FlashBoardChatAgentMode,
 } from '../../../services/flashboard/FlashBoardChatService';
 import { FLASHBOARD_CHAT_AGENT_OPTIONS, flashBoardChatAgentModeLabel } from './flashBoardChatAgentOptions';
+import { useFlashBoardChatAgentUnavailability } from './FlashBoardChatAgentAvailability';
 
 type ChatControlsPopover = 'chatModelClass';
 type RenderedPopover = string | null;
@@ -40,6 +41,7 @@ export function FlashBoardChatControls({
   onOpenPromptBook,
   onOpenPopover,
 }: FlashBoardChatControlsProps) {
+  const unavailability = useFlashBoardChatAgentUnavailability();
   return (
     <div className="fb-control-stack fb-chat-control-stack">
       <div className={popoverHostClassName} ref={popoverRef}>
@@ -78,19 +80,23 @@ export function FlashBoardChatControls({
             <div className="fb-popover-title">Model</div>
             <div className="fb-popover-pills">
               {FLASHBOARD_CHAT_AGENT_OPTIONS.map((option) => {
+                // A greyed choice stays clickable: the click shows why it cannot be used.
+                const unavailableReason = unavailability[option.id];
                 return (
                   <button
                     key={option.id}
-                    className={`fb-popover-pill ${chatAgentMode === option.id ? 'active' : ''}`}
+                    className={`fb-popover-pill ${chatAgentMode === option.id ? 'active' : ''} ${unavailableReason === undefined ? '' : 'is-disabled'}`}
                     type="button"
                     role="menuitemradio"
                     aria-checked={chatAgentMode === option.id}
+                    aria-disabled={unavailableReason === undefined ? undefined : true}
+                    data-mode={option.id}
                     onClick={() => {
                       onChatAgentModeSelect(option.id);
                       onClosePopover('chatModelClass');
                     }}
                     disabled={isChatting}
-                    title={option.title}
+                    title={unavailableReason ?? option.title}
                   >
                     <span className="fb-popover-pill-label">{option.label}</span>
                   </button>

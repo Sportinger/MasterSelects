@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import '../crop/PhoneDesignSheets.css';
 import './PhoneDesignControls.css';
 
 /** Pointer-focus hygiene: a tapped control lets go of focus; keyboard focus stays. */
@@ -69,13 +70,13 @@ export function PhoneSliderRow({ label, value, min, max, step, format, onChange,
     else if (event.key === 'End') { event.preventDefault(); emit(max); }
   };
   return (
-    <div className="phone-design-slider" data-disabled={disabled ? 'true' : undefined}>
-      <span className="phone-design-slider__label">{label}</span>
+    <div className="phone-slider-row" data-disabled={disabled ? 'true' : undefined}>
+      <span className="phone-slider-row__label">{label}</span>
       <div
         ref={trackRef}
         role="slider"
         tabIndex={disabled ? -1 : 0}
-        className="phone-design-slider__range"
+        className="phone-slider-row__range"
         aria-label={label}
         aria-valuemin={min}
         aria-valuemax={max}
@@ -88,16 +89,16 @@ export function PhoneSliderRow({ label, value, min, max, step, format, onChange,
         onPointerUp={blurAfterPointer}
         onKeyDown={onKeyDown}
       >
-        <span className="phone-design-slider__track" aria-hidden="true">
-          <span className="phone-design-slider__fill" style={{ width: `${fraction * 100}%` }} />
+        <span className="phone-slider-row__track" aria-hidden="true">
+          <span className="phone-slider-row__fill" style={{ width: `${fraction * 100}%` }} />
         </span>
-        <span className="phone-design-slider__thumb" aria-hidden="true" style={{ left: `${fraction * 100}%` }} />
+        <span className="phone-slider-row__thumb" aria-hidden="true" style={{ left: `${fraction * 100}%` }} />
       </div>
-      <span className="phone-design-slider__value" data-testid={testId ? `${testId}-value` : undefined}>{shown}</span>
+      <span className="phone-slider-row__value" data-testid={testId ? `${testId}-value` : undefined}>{shown}</span>
       {defaultValue !== undefined && (
         <button
           type="button"
-          className="phone-design-slider__reset"
+          className="phone-slider-row__reset"
           aria-label={`Reset ${label}`}
           aria-disabled={disabled || Math.abs(value - defaultValue) < 1e-9}
           onPointerUp={blurAfterPointer}

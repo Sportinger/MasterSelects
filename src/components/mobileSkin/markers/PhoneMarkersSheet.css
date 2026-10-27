@@ -5,7 +5,6 @@
 .mobile-skin .phone-markers__more { display: flex; flex-direction: column; gap: 10px; }
 .mobile-skin .phone-markers__rename { display: flex; align-items: flex-end; gap: 8px; }
 .mobile-skin .phone-markers__rename > .phone-pro-field { flex: 1 1 auto; }
-.mobile-skin .phone-markers__empty { margin: 0; color: var(--phone-text-dim); font-size: 13px; }
 .mobile-skin .phone-markers__swatch {
   width: 44px;
   height: 44px;

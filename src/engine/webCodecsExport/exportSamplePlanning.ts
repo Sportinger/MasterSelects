@@ -4,6 +4,11 @@
 // No decoder, VideoFrame, or other runtime handles live here.
 
 import type { Sample } from '../webCodecsTypes';
+import {
+  findContainingPresentationIndex,
+  getSamplePresentationGrid,
+  presentationFrameRule,
+} from '../parallelDecode/presentationFrame';
 
 /** Earliest valid presentation timestamp (us) across all samples, or 0. */
 export function computePresentationOffsetUs(samples: readonly Sample[]): number {
@@ -34,7 +39,17 @@ export function frameToleranceUs(frameRate: number, multiplier = 1.5): number {
   return (1_000_000 / safeRate) * multiplier;
 }
 
-/** Index of the sample whose normalized timestamp is closest to the target time. */
+/**
+ * Index of the sample shown at the target time (parallelDecode/presentationFrame.ts).
+ * Constant-rate media, also jittery phone footage, is matched on its nominal
+ * frame grid, so a coarse container timescale (1/1000, 1/600) does not shift
+ * every third frame and a reversed clip, whose request sits 10 us left of the
+ * boundary, shows source frame 119-N instead of 120-N
+ * (EXPORT_REVERSE_OFF_BY_ONE). VFR media without a grid takes the nearest
+ * sample, or the one before it when the nearest starts 2-20 us after the
+ * request (beyond the container's rounding). WebCodecsExportMode (owned by the Fast-export work) matches the
+ * resulting CTS exactly, so it inherits the rule.
+ */
 export function findClosestSampleIndex(
   samples: readonly Sample[],
   targetTimeSeconds: number,
@@ -43,20 +58,17 @@ export function findClosestSampleIndex(
   if (samples.length === 0) {
     return 0;
   }
-
-  const targetUs = targetTimeSeconds * 1_000_000;
-  let targetSampleIndex = 0;
-  let closestDiff = Infinity;
-
-  for (let i = 0; i < samples.length; i++) {
-    const diff = Math.abs(normalizedSampleTimestampUs(samples[i], presentationOffsetUs) - targetUs);
-    if (diff < closestDiff) {
-      closestDiff = diff;
-      targetSampleIndex = i;
-    }
-  }
-
-  return targetSampleIndex;
+  const timestampUsOf = (sample: Sample) => normalizedSampleTimestampUs(sample, presentationOffsetUs);
+  return findContainingPresentationIndex(
+    samples.length,
+    index => timestampUsOf(samples[index]),
+    targetTimeSeconds * 1_000_000,
+    index => (samples[index].timescale > 0 ? (samples[index].duration * 1_000_000) / samples[index].timescale : 0),
+    presentationFrameRule(
+      getSamplePresentationGrid(samples, presentationOffsetUs, timestampUsOf, samples[0].timescale),
+      samples[0].timescale,
+    ),
+  );
 }
 
 /** Nearest keyframe index at or before the target sample index. */

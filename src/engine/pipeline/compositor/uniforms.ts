@@ -165,7 +165,10 @@ export function shouldUpdateLayerUniforms(
   for (let i = 0; i < COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT; i++) {
     // Skip indices that are u32 - compare them separately
     if (COMPOSITOR_U32_INDICES.includes(i)) continue;
-    if (Math.abs(uniformData[i] - lastFloat[i]) > 0.00001) {
+    // `!(delta <= epsilon)` also flags a change to or from NaN. `delta > epsilon` is false
+    // for NaN, so one NaN upload (e.g. a source aspect of 0/0) was never replaced and the
+    // layer kept sampling one texture column (NESTED_SMALL_COMP_PREVIEW, 2026-10-27).
+    if (!Object.is(uniformData[i], lastFloat[i]) && !(Math.abs(uniformData[i] - lastFloat[i]) <= 0.00001)) {
       return true;
     }
   }
@@ -173,7 +176,7 @@ export function shouldUpdateLayerUniforms(
   // Program values are already stored as f32 and may be meaningfully smaller than the
   // transform epsilon (thresholds and exposure keyframes in particular).
   for (let i = COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT; i < COMPOSITOR_UNIFORM_FLOAT_COUNT; i++) {
-    if (uniformData[i] !== lastFloat[i]) return true;
+    if (!Object.is(uniformData[i], lastFloat[i])) return true;
   }
 
   // Check u32 values (blendMode, hasMask, maskInvert, maskFeatherQuality, inlineInvert)

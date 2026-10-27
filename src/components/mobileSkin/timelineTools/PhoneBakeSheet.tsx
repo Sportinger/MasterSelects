@@ -11,7 +11,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { getActiveCompositionFrameRate } from '../../../stores/timeline/editOperations/activeCompositionFrameRate';
 import type { VideoBakeRegion } from '../../../types/clipMetadata';
 import { PHONE_FULL_EDITOR_HINT, type PhoneSheetComponent } from '../contracts';
-import { ProButton, ProMessage, ProSection } from '../compositions/phoneProControls';
+import { ProButton, ProEmptyState, ProMessage, ProSection } from '../compositions/phoneProControls';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneGreyedOption } from '../transition/phoneChoiceControls';
@@ -99,7 +99,10 @@ export const PhoneBakeSheet: PhoneSheetComponent = () => {
             unavailableReason={selected ? null : 'Select a clip on the timeline first to mark the whole clip.'} onPress={markClip} />
         </ProSection>
         <ProSection title={`Regions (${rows.length})`}>
-          {rows.length === 0 ? <p className="phone-tltools__summary" data-testid={IDS.empty}>No bake regions yet.</p> : (
+          {rows.length === 0 ? (
+            <ProEmptyState icon="bake" testId={IDS.empty} title="No bake regions yet"
+              body="Mark a composition range or a whole clip above, then Bake it for smooth playback." />
+          ) : (
             <ul className="phone-pro-list">
               {rows.map((row) => {
                 const status = row.region.status ?? 'marked';

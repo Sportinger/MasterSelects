@@ -1,4 +1,5 @@
 import type { ToolResult } from '../../types';
+import { captureToolTransaction } from '../../toolTransaction';
 import { Logger } from '../../../logger';
 import {
   isProjectStoreSyncInProgress,
@@ -77,6 +78,8 @@ export async function handleDuplicateComposition(
   const parsed = parseArgs(args);
   if (!parsed.ok) return { success: false, error: parsed.error };
   const { compositionId, name, open } = parsed;
+  // Captured before the store-sync wait: the copy and the opened tab join this tool's transaction explicitly.
+  const transaction = captureToolTransaction('duplicateComposition');
 
   // A restore holding the store-sync guard may have loaded the live timeline
   // only partially; copying it then would silently lose clips.
@@ -96,7 +99,7 @@ export async function handleDuplicateComposition(
   const sourceWasActive = before.activeCompositionId === compositionId;
   const sourceCounts = timelineCounts(sourceWasActive ? useTimelineStore.getState() : source.timelineData);
 
-  const duplicate = before.duplicateComposition(compositionId, name === undefined ? undefined : { name });
+  const duplicate = transaction.run(() => before.duplicateComposition(compositionId, name === undefined ? undefined : { name }));
   if (!duplicate) {
     return {
       success: false,
@@ -127,7 +130,7 @@ export async function handleDuplicateComposition(
   if (open) {
     const trackSnapshot = captureMutationEntitySnapshot('track', useTimelineStore.getState().tracks);
     const clipSnapshot = captureMutationEntitySnapshot('clip', useTimelineStore.getState().clips);
-    await afterDuplicate.openCompositionTab(duplicate.id);
+    await transaction.run(() => afterDuplicate.openCompositionTab(duplicate.id));
     opened = await waitForCompositionReady(duplicate.id);
     if (!opened) {
       log.warn(`Timed out waiting for duplicated composition ${duplicate.id} to become active`);

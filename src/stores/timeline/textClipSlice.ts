@@ -23,6 +23,7 @@ import {
   renderTimelineTextCanvasRuntime,
 } from '../../services/timeline/timelineGeneratedCanvasRuntime';
 import { subscribeTextFontRefresh } from '../../services/text/textFontRefresh';
+import { captureEditorTransactionBinding } from '../../services/project/repository/transaction/editorTransactionBinding';
 
 const log = Logger.create('TextClipSlice');
 
@@ -166,6 +167,9 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
 
     const clipId = generateTextClipId();
     const resolution = getActiveCompositionResolution();
+    // Prepare (render the text canvas), then commit: the clip is added after the await, in the caller's
+    // transaction (an assistant tool, a phone title session), carried explicitly; without one as one revision.
+    const transaction = captureEditorTransactionBinding('Add text clip', { fallbackSource: 'timeline' });
     const { canvas, textProperties } = await createTimelineTextCanvasRuntime({
       textProperties: {
         ...getInitialTextProperties(resolution.width, resolution.height),
@@ -197,17 +201,19 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
       isLoading: false,
     };
 
-    if (!skipMediaItem && !mediaItem) {
-      const mediaStore = useMediaStore.getState();
-      const textFolderId = mediaStore.getOrCreateTextFolder();
-      const mediaItemId = mediaStore.createTextItem('Text', textFolderId);
-      textClip.mediaFileId = mediaItemId;
-      textClip.source = { ...textClip.source!, mediaFileId: mediaItemId };
-    }
+    transaction.run(() => {
+      if (!skipMediaItem && !mediaItem) {
+        const mediaStore = useMediaStore.getState();
+        const textFolderId = mediaStore.getOrCreateTextFolder();
+        const mediaItemId = mediaStore.createTextItem('Text', textFolderId);
+        textClip.mediaFileId = mediaItemId;
+        textClip.source = { ...textClip.source!, mediaFileId: mediaItemId };
+      }
 
-    set(state => ({ clips: [...state.clips, textClip] }));
-    updateDuration();
-    invalidateCache();
+      set(state => ({ clips: [...state.clips, textClip] }));
+      updateDuration();
+      invalidateCache();
+    });
 
     log.debug('Created text clip', { clipId });
     return clipId;

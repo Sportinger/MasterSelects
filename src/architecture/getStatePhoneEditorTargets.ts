@@ -103,11 +103,11 @@ export const phoneEditorGetStateHardTargets = [
   { path: 'src/components/mobileSkin/settings/PhoneSettingsSheet.tsx', maxCurrentHits: 1 },
   { path: 'src/components/mobileSkin/settings/phoneSettingsModel.ts', maxCurrentHits: 2 },
   { path: 'src/components/mobileSkin/shell/PhoneShell.tsx', maxCurrentHits: 1 },
-  { path: 'src/components/mobileSkin/source/PhoneSourceSheet.tsx', maxCurrentHits: 2 },
+  { path: 'src/components/mobileSkin/source/PhoneSourceSheet.tsx', maxCurrentHits: 3 },
   { path: 'src/components/mobileSkin/source/PhoneSourceViewer.tsx', maxCurrentHits: 2 },
   { path: 'src/components/mobileSkin/source/phoneSourceCommands.ts', maxCurrentHits: 7 },
   { path: 'src/components/mobileSkin/speed/PhoneSpeedSheet.tsx', maxCurrentHits: 4 },
-  { path: 'src/components/mobileSkin/text/PhoneTextMultiSheet.tsx', maxCurrentHits: 2 },
+  { path: 'src/components/mobileSkin/text/PhoneTextMultiSheet.tsx', maxCurrentHits: 3 },
   { path: 'src/components/mobileSkin/text/phoneTextMulti.ts', maxCurrentHits: 4 },
   { path: 'src/components/mobileSkin/timeline/PhoneTimelineControls.tsx', maxCurrentHits: 4 },
   { path: 'src/components/mobileSkin/timelineTools/PhoneBakeSheet.tsx', maxCurrentHits: 5 },
@@ -124,4 +124,8 @@ export const phoneEditorGetStateHardTargets = [
   { path: 'src/components/mobileSkin/tracks/PhoneTracksSheet.tsx', maxCurrentHits: 5 },
   { path: 'src/components/mobileSkin/effects/PhoneAdjustSheet.tsx', maxCurrentHits: 1 },
   { path: 'src/components/mobileSkin/sheets/phoneEditSession.ts', maxCurrentHits: 1 },
+  // Visual passes and folder-free project start.
+  { path: 'src/components/mobileSkin/effects/usePhonePreviewSource.ts', maxCurrentHits: 2 },
+  { path: 'src/components/mobileSkin/runtime/phoneProjectOperation.ts', maxCurrentHits: 1 },
+  { path: 'src/components/mobileSkin/timelineTools/phoneSelectAtPlayhead.ts', maxCurrentHits: 2 },
 ] as const;

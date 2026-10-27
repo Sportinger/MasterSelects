@@ -171,7 +171,7 @@ export const PhoneVolumeSheet: PhoneSheetComponent = () => {
           }}
           valueText={`${gainToPercent(levels.volume)} percent`}
           onReset={() => apply({ volume: 1 })}
-          resetLabel="100%"
+          resetLabel="Reset"
           disabled={disabled}
           onDisabledTap={explain}
           sliderTestId={IDS.levelSlider}

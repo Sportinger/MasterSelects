@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RepositoryBackend, RepositoryDescriptor, RepositoryMetadataIndex, RepositoryOwner, RevisionPayload } from '../../src/services/project/repository/contracts';
-import { RepositoryPersistence, type PublicationBatch } from '../../src/services/project/repository/persistence/RepositoryPersistence';
+import { RepositoryPersistence, STARTUP_CACHE_MIN_OPERATIONS, type PublicationBatch } from '../../src/services/project/repository/persistence/RepositoryPersistence';
 import { readStartupCache, startupCachePath } from '../../src/services/project/repository/persistence/startupCache';
 import { commitPath } from '../../src/services/project/repository/persistence/publication';
 
@@ -15,7 +15,8 @@ function fixture(){
   async list(prefix,cursor,limit=128){const paths=[...files.keys()].filter(p=>p.startsWith(prefix)&&(!cursor||p>cursor)).toSorted();return {paths:paths.slice(0,limit),nextCursor:paths.length>limit?paths[limit-1]:null}},
   writeNew:write,replaceViewSlot:write,async removeUnpublished(path){files.delete(path)} };
  const index={async getMetadata(key:string){return metadata.get(key)??null},async putMetadata(key:string,value:unknown){metadata.set(key,value)},async removeMetadata(key:string){metadata.delete(key)},async putRevision(){}} as unknown as RepositoryMetadataIndex;
- const writer=()=>new RepositoryPersistence(backend,descriptor,owner,{sessionEpoch:'session',index});
+ // Every history length writes a cache here; the short-history skip has its own case below.
+ const writer=(minimum=0)=>new RepositoryPersistence(backend,descriptor,owner,{sessionEpoch:'session',index,startupCacheMinOperations:minimum});
  return {files,modified,metadata,backend,index,writer,reads:()=>reads};
 }
 function batch(sequence:number,parent: {reference: import('../../src/services/project/repository/contracts').RecordReference; id:string}|null=null):PublicationBatch{
@@ -55,6 +56,31 @@ describe('automatic project startup cache',()=>{
   await writer.publish(batch(2,{reference:one.records.get('revision')!,id:'revision-1'}));await writer.saveStartupCache();
   f.files.set(startupCachePath('b'),Uint8Array.of(0));
   expect((await f.writer().recover()).operationSequence).toBe(2);
+ });
+ it('skips the cache for a short history, where full validation is as cheap, and writes it once the history grows',async()=>{
+  const f=fixture(),writer=f.writer(STARTUP_CACHE_MIN_OPERATIONS);await writer.recover();let previous=null;
+  for(let i=1;i<STARTUP_CACHE_MIN_OPERATIONS;i++){const last=await writer.publish(batch(i,previous));previous={reference:last.records.get('revision')!,id:'revision-'+i};}
+  const writes=f.files.size;await writer.saveStartupCache();
+  expect(f.files.has(startupCachePath('a'))).toBe(false);expect(f.files.size).toBe(writes);expect(f.metadata.has('startup-cache-v1:a')).toBe(false);
+  await writer.publish(batch(STARTUP_CACHE_MIN_OPERATIONS,previous));await writer.saveStartupCache();
+  expect(f.files.has(startupCachePath('a'))).toBe(true);
+ });
+ it('keeps refreshing a cache that a short history already has, so it never goes stale below the threshold',async()=>{
+  // A project written before the threshold existed: its cache stands at operation 2.
+  const f=fixture(),old=f.writer();await old.recover();const one=await old.publish(batch(1));
+  let previous={reference:(await old.publish(batch(2,{reference:one.records.get('revision')!,id:'revision-1'}))).records.get('revision')!,id:'revision-2'};
+  await old.saveStartupCache();expect(f.metadata.get('startup-cache-v1:a')).toMatchObject({sequence:2});
+  const reopened=f.writer(STARTUP_CACHE_MIN_OPERATIONS);await reopened.recover();
+  const three=await reopened.publish(batch(3,previous));previous={reference:three.records.get('revision')!,id:'revision-3'};
+  await reopened.saveStartupCache();
+  const sequences=()=>['a','b'].map(slot=>(f.metadata.get('startup-cache-v1:'+slot) as {sequence?:number}|undefined)?.sequence??-1);
+  expect(Math.max(...sequences())).toBe(3);
+  // A cache that no longer matches (changed history file) is refreshed too instead of failing every open.
+  f.modified.set(commitPath(three.commit.commitId),999);
+  const stale=f.writer(STARTUP_CACHE_MIN_OPERATIONS);await stale.recover();
+  await stale.publish(batch(4,previous));await stale.saveStartupCache();
+  expect(Math.max(...sequences())).toBe(4);
+  expect((await readStartupCache(f.backend,descriptor,f.index))?.recovery.operationSequence).toBe(4);
  });
  it('falls back to full recovery for a new fork at old ancestry',async()=>{
   const f=fixture(),writer=f.writer();await writer.recover();const one=await writer.publish(batch(1));

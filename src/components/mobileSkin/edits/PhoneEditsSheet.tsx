@@ -10,7 +10,8 @@ import { useRef, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getActiveCompositionFrameRate } from '../../../stores/timeline/editOperations/activeCompositionFrameRate';
 import { PHONE_FULL_EDITOR_HINT, type PhoneActionResult, type PhoneSheetComponent } from '../contracts';
-import { ProButton, ProMessage, ProStepper } from '../compositions/phoneProControls';
+import { ProButton, ProEmptyState, ProMessage, ProStepper } from '../compositions/phoneProControls';
+import { phoneClipAtPlayhead, PHONE_NO_CLIP_AT_PLAYHEAD, selectPhoneClipAtPlayhead } from '../timelineTools/phoneSelectAtPlayhead';
 import { formatPhoneMarkerTime } from '../markers/phoneMarkerFormat';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
@@ -84,7 +85,8 @@ export const PhoneEditsSheet: PhoneSheetComponent = () => {
   if (!clip) {
     return (
       <PhoneSheet title="Trim modes" onCancel={cancel} onDone={() => undefined} doneDisabled>
-        <p className="phone-edits__empty" data-testid={IDS.empty}>Select a clip first, then open Trim modes.</p>
+        <ProEmptyState icon="film" testId={IDS.empty} title="No clip selected" body="Trim modes ripple, roll, slip and slide the selected clip."
+          action={{ label: 'Select clip at playhead', testId: IDS.selectAtPlayhead, unavailableReason: phoneClipAtPlayhead() ? null : PHONE_NO_CLIP_AT_PLAYHEAD, onPress: selectPhoneClipAtPlayhead }} />
       </PhoneSheet>
     );
   }
@@ -150,6 +152,7 @@ export const PhoneEditsSheet: PhoneSheetComponent = () => {
               <ProButton label="Trim start here" testId={IDS.rippleStart} unavailableReason={rippleReason} onPress={() => run(() => phoneRippleTrim(clip.id, 'start'), 'Start trimmed; the gap is closed.')} />
               <ProButton label="Trim end here" testId={IDS.rippleEnd} unavailableReason={rippleReason} onPress={() => run(() => phoneRippleTrim(clip.id, 'end'), 'End trimmed; the gap is closed.')} />
             </div>
+            {rippleReason ? <p className="phone-edits__reason" data-testid={IDS.rippleReason}>{rippleReason}</p> : null}
           </div>
         ) : null}
         {mode === 'roll' ? (

@@ -10,7 +10,7 @@ import { getActiveCompositionFrameRate } from '../../../stores/timeline/editOper
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineMarker } from '../../../stores/timeline/types';
 import { PHONE_FULL_EDITOR_HINT, type PhoneSheetComponent } from '../contracts';
-import { ProButton, ProMessage, ProSection, ProTextField } from '../compositions/phoneProControls';
+import { ProButton, ProEmptyState, ProMessage, ProSection, ProTextField } from '../compositions/phoneProControls';
 import { blurAfterPointer } from '../compositions/phoneProFocus';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
@@ -112,7 +112,7 @@ export const PhoneMarkersSheet: PhoneSheetComponent = () => {
         <ProMessage text={message} testId={IDS.message} />
         <ProSection title={`Markers (${markers.length})`}>
           {markers.length === 0 ? (
-            <p className="phone-markers__empty" data-testid={IDS.empty}>No markers yet. Move the playhead, then Add.</p>
+            <ProEmptyState icon="markers" testId={IDS.empty} title="No markers yet" body="Move the playhead to a moment, then tap Add above." />
           ) : (
             <ul className="phone-pro-list" data-testid={IDS.list}>
               {markers.map((marker) => {

@@ -29,6 +29,11 @@ struct VoxelReliefParams {
   limitToVideo: f32,
   pad1: f32,
   pad2: f32,
+  // Eye distance from the focus point, computed on the CPU (framing.ts) so Height never zooms.
+  cameraRadius: f32,
+  pad3: f32,
+  pad4: f32,
+  pad5: f32,
   graphHeightUV: vec4f,
   graphColorUV: vec4f,
   graphTintOpacity: vec4f,
@@ -324,8 +329,9 @@ fn voxelCameraRay(uv: vec2f) -> VoxelRay {
   let perspective = clamp(params.perspective, 0.15, 1.6);
   let fov = voxelRadians(mix(12.0, 42.0, (perspective - 0.15) / 1.45));
   let focal = 1.0 / tan(fov * 0.5);
-  let radius = max(0.9, focal * 0.5 + voxelMaximumHeight() * 0.7) *
-    clamp(params.distance, 0.15, 8.0);
+  // framing.ts: max(0.9, focal * 0.5 + relief margin * 0.7) * Distance; the margin is the
+  // default relief (or a taller one), or the current relief for effects saved before 2026-10-27.
+  let radius = max(params.cameraRadius, 0.135);
   let cosPitch = cos(pitch);
   let sinPitch = sin(pitch);
   let eyeDir = vec3f(sin(yaw) * cosPitch, sinPitch, cos(yaw) * cosPitch);

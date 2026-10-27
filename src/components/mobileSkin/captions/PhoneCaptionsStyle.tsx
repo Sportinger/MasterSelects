@@ -13,6 +13,7 @@ import {
   readPhoneCaptionStyle, type PhoneCaptionUpdate,
 } from './phoneCaptionStyles';
 import { PHONE_CAPTIONS_TEST_IDS as IDS } from './phoneCaptionsTestIds';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 
 type Apply = (update: PhoneCaptionUpdate) => void;
 
@@ -73,7 +74,7 @@ export function PhoneCaptionsStyle({ clip, apply, onAllStyle }: { clip: Timeline
       </PhoneToggleButton>
       {style.highlight ? (
         <>
-          <div className="phone-captions__chips" role="radiogroup" aria-label="Highlight what">
+          <PhoneChipRow role="radiogroup" label="Highlight what">
             {PHONE_HIGHLIGHT_MODES.map((mode) => (
               <button key={mode.value} type="button" role="radio" className="phone-captions__chip" aria-checked={style.highlightMode === mode.value}
                 aria-pressed={style.highlightMode === mode.value} data-testid={IDS.highlightMode} data-value={mode.value}
@@ -81,8 +82,8 @@ export function PhoneCaptionsStyle({ clip, apply, onAllStyle }: { clip: Timeline
                 {mode.label}
               </button>
             ))}
-          </div>
-          <div className="phone-captions__chips" role="radiogroup" aria-label="Highlight look">
+          </PhoneChipRow>
+          <PhoneChipRow role="radiogroup" label="Highlight look">
             {PHONE_HIGHLIGHT_STYLES.map((entry) => (
               <button key={entry.value} type="button" role="radio" className="phone-captions__chip" aria-checked={style.highlightStyle === entry.value}
                 aria-pressed={style.highlightStyle === entry.value} data-testid={IDS.highlightStyle} data-value={entry.value}
@@ -90,7 +91,7 @@ export function PhoneCaptionsStyle({ clip, apply, onAllStyle }: { clip: Timeline
                 {entry.label}
               </button>
             ))}
-          </div>
+          </PhoneChipRow>
           <Swatches target="highlight" value={style.highlightColor}
             onPick={(color) => apply({ highlight: { [highlightColorKey(style.highlightStyle)]: color } })} />
         </>
@@ -158,7 +159,7 @@ export function PhoneCaptionsTiming({ clip, apply }: { clip: TimelineClip; apply
         sliderTestId={IDS.linesSlider} fieldTestId={IDS.lines}
       />
       <span className="phone-captions__label">Words come from</span>
-      <div className="phone-captions__chips" role="radiogroup" aria-label="Transcript source">
+      <PhoneChipRow role="radiogroup" label="Transcript source">
         {[{ id: 'auto', name: 'Automatic' }, ...sources.map((source) => ({ id: source.clip.id, name: source.clip.name }))].map((entry) => (
           <button key={entry.id} type="button" role="radio" className="phone-captions__chip" aria-checked={current === entry.id}
             aria-pressed={current === entry.id} data-testid={IDS.sourceChoice} data-source={entry.id}
@@ -166,7 +167,7 @@ export function PhoneCaptionsTiming({ clip, apply }: { clip: TimelineClip; apply
             {entry.name}
           </button>
         ))}
-      </div>
+      </PhoneChipRow>
       <p className="phone-audio-sheet__hint">Automatic follows whichever spoken clip plays at each moment. Trim or move the caption clip on the timeline to change where captions start and end.</p>
     </div>
   );

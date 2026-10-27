@@ -14,6 +14,7 @@ import { usePhoneUiStore } from '../state/phoneUiStore';
 import {
   PhoneActionButton, PhoneChipGroup, PhoneSheetNote, PhoneSliderRow, PhoneToggleChip, type PhoneChipOption, type PhoneUnavailable,
 } from '../crop/phoneDesignControls';
+import { PhoneShapeGlyph } from '../crop/phoneChoiceGlyphs';
 import { resolvePhoneClipTarget } from '../crop/phoneClipTarget';
 import { readPhoneMaskInventory, writePhoneMaskDraft, writePhonePenDraft, type PhoneMaskDraft } from './phoneMaskCommands';
 import {
@@ -157,9 +158,9 @@ export const PhoneMaskSheet: PhoneSheetComponent = () => {
   };
 
   const shapeOptions = useMemo<PhoneChipOption<ShapeChoice>[]>(() => [
-    { value: 'none', label: 'None' },
-    ...PHONE_MASK_SHAPES.map(({ value, label }) => ({ value, label })),
-    { value: 'pen', label: 'Pen' },
+    { value: 'none', label: 'None', icon: <PhoneShapeGlyph shape="none" /> },
+    ...PHONE_MASK_SHAPES.map(({ value, label }) => ({ value, label, icon: <PhoneShapeGlyph shape={value} /> })),
+    { value: 'pen', label: 'Pen', icon: <PhoneShapeGlyph shape="pen" /> },
   ], []);
 
   const pen = shape === 'pen';
@@ -191,7 +192,7 @@ export const PhoneMaskSheet: PhoneSheetComponent = () => {
             {inventory.editable || inventory.pen ? '.' : '; a mask you make here is added on top.'}
           </PhoneSheetNote>
         ) : null}
-        <PhoneChipGroup<ShapeChoice> label="Mask shape" value={shape} options={shapeOptions} testId={IDS.shapes} onChange={pickShape} disabled={blocked} />
+        <PhoneChipGroup<ShapeChoice> label="Mask shape" value={shape} options={shapeOptions} testId={IDS.shapes} onChange={pickShape} disabled={blocked} layout="tile-row" />
         {pen && !blocked ? (
           <>
             <PhoneSheetNote testId={IDS.penStatus} tone={penNote ? 'warn' : 'info'}>{penNote ?? describePhonePenPath(penPath)}</PhoneSheetNote>

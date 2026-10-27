@@ -192,10 +192,19 @@ export function PhoneAssistantSheet() {
       setNote('The model can change once this request has finished or been stopped.');
       return;
     }
+    const unavailableReason = chat.chatAgentUnavailability[mode];
+    if (unavailableReason !== undefined) {
+      setNote(unavailableReason);
+      return;
+    }
     chat.handleChatAgentModeSelect(mode);
   };
 
   const selectedOption = FLASHBOARD_CHAT_AGENT_OPTIONS.find((option) => option.id === chat.chatAgentMode);
+  /** Greyed choices say why on screen; a title alone is never seen on a phone. */
+  const unavailableReasons = FLASHBOARD_CHAT_AGENT_OPTIONS
+    .map((option) => chat.chatAgentUnavailability[option.id])
+    .filter((reason): reason is string => reason !== undefined);
   const hasConversation = messages.length > 0 || Boolean(chat.chatPrompt) || Boolean(chat.chatError);
 
   return (
@@ -211,8 +220,9 @@ export function PhoneAssistantSheet() {
                 data-testid={IDS.model}
                 data-mode={option.id}
                 aria-pressed={chat.chatAgentMode === option.id}
-                aria-disabled={isChatting}
-                title={option.title}
+                aria-disabled={isChatting || chat.chatAgentUnavailability[option.id] !== undefined}
+                data-unavailable={chat.chatAgentUnavailability[option.id] === undefined ? undefined : 'true'}
+                title={chat.chatAgentUnavailability[option.id] ?? option.title}
                 onPointerUp={blurAfterPointer}
                 onClick={() => selectMode(option.id)}
               >
@@ -240,6 +250,9 @@ export function PhoneAssistantSheet() {
           </button>
         </div>
         {selectedOption ? <p className="phone-assistant__model-detail">{selectedOption.title}</p> : null}
+        {unavailableReasons.map((reason) => (
+          <p key={reason} className="phone-assistant__model-detail" data-testid={IDS.modelUnavailable} role="status">{reason}</p>
+        ))}
 
         <div className="phone-assistant__access" data-testid={IDS.access} data-access-kind={accessState.kind} role="status">
           <span>{accessState.message}</span>

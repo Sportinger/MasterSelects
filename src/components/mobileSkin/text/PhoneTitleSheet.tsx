@@ -12,6 +12,7 @@ import { PHONE_M1_TEST_IDS, type PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { PhoneIcon } from '../shell/phoneIcons';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 import { blurAfterPointer } from './phoneControls';
 import type { PhoneTextStyle } from './phoneTextStyle';
 import {
@@ -88,7 +89,7 @@ export const PhoneTitleSheet: PhoneSheetComponent = () => {
     }
   };
 
-  const status = session.mode === 'edit' ? 'Editing the selected title' : 'New title at the playhead';
+  const placeholder = session.mode === 'edit' ? 'Title text' : 'Type your title';
 
   return (
     <PhoneSheet
@@ -98,42 +99,12 @@ export const PhoneTitleSheet: PhoneSheetComponent = () => {
       doneDisabled={empty || busy}
     >
       <div className="phone-title-sheet">
-        <p className="phone-title-sheet__status">{status} · the preview updates while you type.</p>
-        <div className="phone-title-sheet__tabs" role="tablist" aria-label="Text style">
-          {PHONE_TEXT_STYLE_TABS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              className="phone-title-sheet__tab"
-              aria-selected={tab === id}
-              aria-disabled={UNAVAILABLE_TABS[id] ? 'true' : undefined}
-              data-testid={phoneTextTabTestId(id)}
-              onPointerUp={blurAfterPointer}
-              onClick={() => onTab(id)}
-            >
-              {TAB_LABELS[id]}
-            </button>
-          ))}
-        </div>
-        {tab && (
-          <div className="phone-title-sheet__panel" role="tabpanel" aria-label={TAB_LABELS[tab]} data-testid={`${PHONE_TEXT_TEST_IDS.panel}-${tab}`}>
-            {tab === 'font' && <PhoneTextFontPanel style={style} onChange={onStyle} />}
-            {tab === 'color' && <PhoneTextColorPanel style={style} onChange={onStyle} />}
-            {tab === 'outline' && <PhoneTextOutlinePanel style={style} onChange={onStyle} />}
-            {tab === 'shadow' && <PhoneTextShadowPanel style={style} onChange={onStyle} />}
-            {tab === 'align' && <PhoneTextAlignPanel style={style} onChange={onStyle} />}
-            {session.mode === 'create' && empty && (
-              <p className="phone-design-note">Type the title below to see the style in the preview.</p>
-            )}
-          </div>
-        )}
         <div className="phone-title-sheet__input-row">
           <textarea
             className="phone-title-sheet__input"
             data-testid={PHONE_M1_TEST_IDS.titleInput}
             aria-label="Title text"
-            placeholder="Type your title"
+            placeholder={placeholder}
             rows={multiline ? 3 : 1}
             value={text}
             autoFocus
@@ -161,6 +132,35 @@ export const PhoneTitleSheet: PhoneSheetComponent = () => {
             <PhoneIcon name="check" />
           </button>
         </div>
+        <PhoneChipRow role="tablist" label="Text style" className="phone-title-sheet__tabs">
+          {PHONE_TEXT_STYLE_TABS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              className="phone-title-sheet__tab"
+              aria-selected={tab === id}
+              aria-disabled={UNAVAILABLE_TABS[id] ? 'true' : undefined}
+              data-testid={phoneTextTabTestId(id)}
+              onPointerUp={blurAfterPointer}
+              onClick={() => onTab(id)}
+            >
+              {TAB_LABELS[id]}
+            </button>
+          ))}
+        </PhoneChipRow>
+        {tab && (
+          <div className="phone-title-sheet__panel" role="tabpanel" aria-label={TAB_LABELS[tab]} data-testid={`${PHONE_TEXT_TEST_IDS.panel}-${tab}`}>
+            {tab === 'font' && <PhoneTextFontPanel style={style} onChange={onStyle} />}
+            {tab === 'color' && <PhoneTextColorPanel style={style} onChange={onStyle} />}
+            {tab === 'outline' && <PhoneTextOutlinePanel style={style} onChange={onStyle} />}
+            {tab === 'shadow' && <PhoneTextShadowPanel style={style} onChange={onStyle} />}
+            {tab === 'align' && <PhoneTextAlignPanel style={style} onChange={onStyle} />}
+            {session.mode === 'create' && empty && (
+              <p className="phone-design-note">Type the title above to see the style in the preview.</p>
+            )}
+          </div>
+        )}
       </div>
     </PhoneSheet>
   );

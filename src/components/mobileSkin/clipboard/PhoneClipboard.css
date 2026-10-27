@@ -41,10 +41,7 @@
   font-weight: 600;
   -webkit-tap-highlight-color: transparent;
 }
-.mobile-skin .phone-clipboard__button[aria-disabled='true'] {
-  background: var(--phone-surface-3);
-  color: var(--phone-text-off);
-}
+.mobile-skin .phone-clipboard__button[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-clipboard__button:focus { outline: none; }
 .mobile-skin .phone-clipboard__button:focus-visible,
 .mobile-skin .phone-pick__row:focus-visible {
@@ -94,10 +91,7 @@
 }
 .mobile-skin .phone-pick__row:focus { outline: none; }
 .mobile-skin .phone-pick__row[aria-checked='true'] { border-color: var(--phone-accent); }
-.mobile-skin .phone-pick__row[aria-disabled='true'] {
-  color: var(--phone-text-off);
-  border-style: dashed;
-}
+.mobile-skin .phone-pick__row[aria-disabled='true'] { opacity: 0.45; }
 .mobile-skin .phone-pick__box {
   display: inline-flex;
   flex: none;

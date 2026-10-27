@@ -9,6 +9,8 @@ import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStor
 import { useTimelineStore } from '../../../stores/timeline';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { blurAfterPointer } from '../audio/PhoneAudioControls';
+import { middleTruncate } from '../transition/phoneMiddleTruncate';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 import { formatPhoneCaptionTime, listPhoneSpeechSources, type PhoneSpeechSource } from './phoneCaptionModel';
 import {
   cancelPhoneTranscription, PHONE_TRANSCRIPTION_PROVIDERS, phoneTranscribeBlocker, startPhoneTranscription, usePhoneTranscriptionReadiness,
@@ -90,15 +92,26 @@ export function PhoneCaptionsGenerate({ onCreate, onSettings }: {
     <div className="phone-audio-section" role="tabpanel" aria-label="Generate captions">
       <div className="phone-captions__group" role="group" aria-label="Transcription">
         <span className="phone-captions__group-title">Speech to text</span>
-        <p className="phone-audio-sheet__hint" data-testid={IDS.account} data-signed-in={signedIn} data-provider={provider} data-ready={readiness.kind === 'ready'}>
-          {signedIn ? 'Signed in: hosted transcription uses your credits.' : 'Not signed in: only "On this phone" works without an account.'}
+        <p className="phone-audio-sheet__hint phone-captions__notice" data-testid={IDS.account} data-signed-in={signedIn} data-provider={provider} data-ready={readiness.kind === 'ready'}>
+          {signedIn ? 'Signed in: hosted transcription uses your credits.' : (
+            <>
+              <span>Not signed in: only “On this phone” works.</span>
+              <button type="button" className="phone-inline-link" data-testid={IDS.openSettings} onPointerUp={blurAfterPointer} onClick={onSettings}>
+                Sign in
+              </button>
+            </>
+          )}
         </p>
-        <div className="phone-captions__chips" role="radiogroup" aria-label="Transcription provider">
+        <PhoneChipRow role="radiogroup" label="Transcription provider">
           {PHONE_TRANSCRIPTION_PROVIDERS.map((entry) => {
+            // A provider that cannot run (hosted, signed out) is greyed and never shown selected, even
+            // when it is the stored editor setting; the notice and "Transcribe on this phone" say why.
             const locked = entry.hosted && !signedIn;
+            const selected = provider === entry.id && !locked;
             return (
-              <button key={entry.id} type="button" role="radio" className="phone-captions__chip" aria-checked={provider === entry.id}
-                aria-pressed={provider === entry.id} aria-disabled={locked || undefined} data-testid={IDS.provider} data-provider={entry.id}
+              <button key={entry.id} type="button" role="radio" className="phone-captions__chip" aria-checked={selected}
+                aria-pressed={selected} aria-disabled={locked || undefined} data-testid={IDS.provider} data-provider={entry.id}
+                data-stored={provider === entry.id || undefined}
                 onPointerUp={blurAfterPointer}
                 onClick={() => {
                   if (locked) {
@@ -111,19 +124,15 @@ export function PhoneCaptionsGenerate({ onCreate, onSettings }: {
               </button>
             );
           })}
-        </div>
-        <p className="phone-audio-sheet__hint">{PHONE_TRANSCRIPTION_PROVIDERS.find((entry) => entry.id === provider)?.note}</p>
+        </PhoneChipRow>
         {readiness.kind === 'needs-account' ? (
-          <div className="phone-captions__setup" role="note">
-            <p className="phone-audio-sheet__blocked">{readiness.reason}</p>
-            <button type="button" className="phone-audio-toggle" data-testid={IDS.useLocal} onPointerUp={blurAfterPointer} onClick={() => setProvider('local')}>
-              Transcribe on this phone
-            </button>
-            <button type="button" className="phone-audio-toggle" data-testid={IDS.openSettings} onPointerUp={blurAfterPointer} onClick={onSettings}>
-              Open settings to sign in
-            </button>
-          </div>
-        ) : null}
+          <button type="button" className="phone-primary-button" data-testid={IDS.useLocal} title={readiness.reason}
+            onPointerUp={blurAfterPointer} onClick={() => setProvider('local')}>
+            Transcribe on this phone
+          </button>
+        ) : (
+          <p className="phone-audio-sheet__hint">{PHONE_TRANSCRIPTION_PROVIDERS.find((entry) => entry.id === provider)?.note}</p>
+        )}
       </div>
 
       {sources.length === 0 ? (
@@ -133,15 +142,15 @@ export function PhoneCaptionsGenerate({ onCreate, onSettings }: {
           {sources.map((source) => (
             <li key={source.clipId} className="phone-captions__source" data-testid={IDS.source} data-clip-id={source.clipId} data-transcript={source.status}>
               <span className="phone-captions__source-text">
-                <span className="phone-audio-list__name">{source.name}</span>
+                <span className="phone-audio-list__name" title={source.name}>{middleTruncate(source.name, 20)}</span>
                 <span className="phone-audio-list__meta" data-testid={IDS.sourceState}>at {formatPhoneCaptionTime(source.startTime)} · {sourceStateText(source)}</span>
               </span>
-              <button type="button" className="phone-captions__small" data-testid={IDS.sourceTranscribe}
+              <button type="button" className={`phone-captions__small${source.wordCount === 0 && !running && readiness.kind === 'ready' ? ' phone-captions__small--primary' : ''}`} data-testid={IDS.sourceTranscribe}
                 aria-disabled={running || readiness.kind === 'needs-account' || undefined} onPointerUp={blurAfterPointer}
                 onClick={() => { if (!running) void transcribe(source); }}>
                 {source.wordCount > 0 ? 'Again' : 'Transcribe'}
               </button>
-              <button type="button" className="phone-captions__small phone-captions__small--primary" data-testid={IDS.sourceCreate}
+              <button type="button" className={`phone-captions__small${source.wordCount > 0 ? ' phone-captions__small--primary' : ''}`} data-testid={IDS.sourceCreate}
                 aria-disabled={source.wordCount === 0 || undefined} onPointerUp={blurAfterPointer} onClick={() => createFor(source)}>
                 Add captions
               </button>

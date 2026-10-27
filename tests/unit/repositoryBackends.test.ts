@@ -23,20 +23,48 @@ describe('repository browser backends', () => {
     expect(await backend.acquireOwner('repo')).toBeNull();
     expect([...await backend.read('data.bin')]).toEqual([7]);
   });
-  it('reuses directory handles during recovery while reading file contents freshly', async () => {
+  it('reuses directory handles during recovery while reading replaceable file contents freshly', async () => {
     vi.stubGlobal('navigator', {});
-    const files = { 'a.msseg': new Uint8Array([1, 2]) };
-    const segments = directory(files);
-    const segmentsLookup = vi.fn(async () => segments);
-    const metadata = { getDirectoryHandle: segmentsLookup } as unknown as FileSystemDirectoryHandle;
+    const files = { 'a.blob': new Uint8Array([1, 2]) };
+    const artifacts = directory(files);
+    const artifactsLookup = vi.fn(async () => artifacts);
+    const metadata = { getDirectoryHandle: artifactsLookup } as unknown as FileSystemDirectoryHandle;
     const rootLookup = vi.fn(async () => metadata);
     const root = { getDirectoryHandle: rootLookup } as unknown as FileSystemDirectoryHandle;
     const backend = directoryBackend(root, 'fixture');
-    expect(await backend.stat('.masterselects/segments/a.msseg')).toMatchObject({ length: 2, modifiedTime: expect.any(Number) });
-    expect([...await backend.read('.masterselects/segments/a.msseg')]).toEqual([1, 2]);
-    files['a.msseg'] = new Uint8Array([3, 4]);
-    expect([...await backend.read('.masterselects/segments/a.msseg')]).toEqual([3, 4]);
-    expect(rootLookup).toHaveBeenCalledTimes(1); expect(segmentsLookup).toHaveBeenCalledTimes(1);
+    expect(await backend.stat('.masterselects/artifacts/a.blob')).toMatchObject({ length: 2, modifiedTime: expect.any(Number) });
+    expect([...await backend.read('.masterselects/artifacts/a.blob')]).toEqual([1, 2]);
+    files['a.blob'] = new Uint8Array([3, 4]);
+    expect([...await backend.read('.masterselects/artifacts/a.blob')]).toEqual([3, 4]);
+    expect(rootLookup).toHaveBeenCalledTimes(1); expect(artifactsLookup).toHaveBeenCalledTimes(1);
+  });
+  it('reads a write-once segment from the folder once per session (folder round trips on phones)', async () => {
+    vi.stubGlobal('navigator', {});
+    const files = { 'a.msseg': new Uint8Array([1, 2, 3, 4]) };
+    const segments = directory(files);
+    const fileLookup = vi.spyOn(segments, 'getFileHandle');
+    const root = { getDirectoryHandle: vi.fn(async () => ({ getDirectoryHandle: vi.fn(async () => segments) })) } as unknown as FileSystemDirectoryHandle;
+    const backend = directoryBackend(root, 'fixture');
+    expect([...await backend.read('.masterselects/segments/a.msseg', 0, 2)]).toEqual([1, 2]);
+    expect([...await backend.read('.masterselects/segments/a.msseg', 2, 2)]).toEqual([3, 4]);
+    expect(await backend.stat('.masterselects/segments/a.msseg')).toMatchObject({ length: 4 });
+    expect(fileLookup).toHaveBeenCalledTimes(1);
+    // A non-empty segment is final (writes refuse to replace it), so its bytes are served from the session.
+    files['a.msseg'] = new Uint8Array([9, 9, 9, 9]);
+    expect([...await backend.read('.masterselects/segments/a.msseg')]).toEqual([1, 2, 3, 4]);
+    // A fresh backend (next session) reads the folder again.
+    expect([...await directoryBackend(root, 'fixture').read('.masterselects/segments/a.msseg')]).toEqual([9, 9, 9, 9]);
+  });
+  it('never caches an empty write-once file, which an interrupted write may still finish', async () => {
+    vi.stubGlobal('navigator', {});
+    const files: Record<string, Uint8Array> = { 'c.json': new Uint8Array() };
+    const commits = directory(files);
+    const root = { getDirectoryHandle: vi.fn(async () => ({ getDirectoryHandle: vi.fn(async () => commits) })) } as unknown as FileSystemDirectoryHandle;
+    const backend = directoryBackend(root, 'fixture');
+    expect(await backend.stat('.masterselects/commits/c.json')).toMatchObject({ length: 0 });
+    expect([...await backend.read('.masterselects/commits/c.json')]).toEqual([]);
+    files['c.json'] = new Uint8Array([7, 8]);
+    expect([...await backend.read('.masterselects/commits/c.json')]).toEqual([7, 8]);
   });
   it('stays read-only when Web Locks or permission is unavailable', async () => {
     vi.stubGlobal('navigator', {});

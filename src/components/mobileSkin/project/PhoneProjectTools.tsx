@@ -9,6 +9,7 @@ import { projectFileService } from '../../../services/projectFileService';
 import { blurTappedControl, PhoneStatusLine, usePhoneStatus } from '../library/phoneListUi';
 import type { PhoneActionResult } from '../contracts';
 import { duplicatePhoneProject } from './usePhoneProjectCommands';
+import { runPhoneProjectOperation } from '../runtime/phoneProjectOperation';
 import { buildPhoneProjectArchive, type PhoneProjectArchive } from './phoneProjectArchive';
 import {
   currentPhoneRevision, listPhoneProjectVersions, restorePhoneProjectVersion, savePhoneProjectVersion, type PhoneProjectVersion,
@@ -115,7 +116,7 @@ export function PhoneProjectTools({ projectOpen }: { projectOpen: boolean }) {
             autoComplete="off" onChange={(event) => setCopyName(event.target.value)} />
           <button type="button" className="phone-lib__button phone-lib__button--primary" data-testid={IDS.duplicateCreate} aria-disabled={disabled}
             onClick={async () => {
-              const result = await withBusy(() => duplicatePhoneProject(copyName));
+              const result = await withBusy(() => runPhoneProjectOperation('create', copyName.trim(), () => duplicatePhoneProject(copyName)));
               if (result?.ok && result.message) showToast(result.message);
             }}>
             {busy ? 'Copying…' : 'Create copy'}

@@ -7,6 +7,8 @@ import {
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   useDockStore,
 } from '../../../stores/dockStore';
+import { isLegacyMobileDockLayoutEnabled } from '../../../stores/dockStore/legacyMobileLayout';
+import { getWorkspaceOverLayout } from '../../../stores/dockStore/overLayoutMode';
 import type { ToolResult } from '../types';
 import { handleSearchNodeCatalog, handleGetNodeDefinitions } from './nodeCatalog';
 import { handleFocusNodeGraph } from './focusNodeGraph';
@@ -555,6 +557,16 @@ async function handleSwitchDockLayout(args: Record<string, unknown>): Promise<To
     return {
       success: false,
       error: 'Unknown dock layout',
+      data: collectDockLayoutDebugState(),
+    };
+  }
+
+  // The legacy Mobile dock layout is switched off (the phone editor at /m is the mobile view); loading
+  // it would flash and be reverted by the over-layout sync, so say so instead of reporting it active.
+  if (getWorkspaceOverLayout(layoutId) === 'mobile' && !isLegacyMobileDockLayoutEnabled()) {
+    return {
+      success: false,
+      error: 'The Mobile dock layout is switched off. The phone editor at /m is the mobile view; open it with the Mobile button.',
       data: collectDockLayoutDebugState(),
     };
   }

@@ -2,6 +2,7 @@ import type { LayerRenderData } from '../../core/types';
 import { scrubSettleState } from '../../../services/scrubSettleState';
 import { useTimelineStore } from '../../../stores/timeline';
 import { MAX_DRAG_FALLBACK_DRIFT_SECONDS } from './constants';
+import { resolveCachedScrubFrameSize } from '../compositeSourceSize';
 import {
   getTargetVideoTime,
   isFrameNearTarget,
@@ -88,7 +89,12 @@ export function collectNotReadyHtmlVideo(
     shouldGuardPausedTargetFrames,
     pausedFrameRate
   );
-  if (pausedTargetCachedFrame) {
+  // A not-ready element can still report 0×0 (no metadata yet) while frames of the same src
+  // are cached: report the layer's intrinsic or the cached texture's size instead.
+  const cachedFrameSize = pausedTargetCachedFrame
+    ? resolveCachedScrubFrameSize(video, layer, pausedTargetCachedFrame)
+    : null;
+  if (pausedTargetCachedFrame && cachedFrameSize) {
     controller.armHtmlHold(layerReuseKey);
     controller.traceScrubPath(layer, 'not-ready-scrub-cache', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
     return {
@@ -96,8 +102,8 @@ export function collectNotReadyHtmlVideo(
       isVideo: false,
       externalTexture: null,
       textureView: pausedTargetCachedFrame.view,
-      sourceWidth: video.videoWidth,
-      sourceHeight: video.videoHeight,
+      sourceWidth: cachedFrameSize.width,
+      sourceHeight: cachedFrameSize.height,
       displayedMediaTime: pausedTargetCachedFrame.mediaTime,
       targetMediaTime: targetTime,
       previewPath: 'not-ready-scrub-cache',

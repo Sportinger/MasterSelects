@@ -15,6 +15,8 @@ import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { PhoneIcon } from '../shell/phoneIcons';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { blurAfterPointer } from '../text/phoneControls';
+import { middleTruncate } from '../transition/phoneMiddleTruncate';
+import { PhoneEmptyState } from '../transition/phoneSheetPrimitives';
 import {
   adjacentPhoneKeyTime, listPhoneKeyedProperties, phoneClipLocalTime, phoneKeysAt, resolvePhoneKeyframeTarget,
   PHONE_KEYFRAME_TIME_TOLERANCE,
@@ -128,19 +130,20 @@ export const PhoneKeyframeSheet: PhoneSheetComponent = () => {
       : `Playhead at ${seconds(local)} in the clip, no keyframe here.`;
 
   return (
-    <PhoneSheet title={`Keyframes · ${clip.name}`} onCancel={cancel} onDone={() => { void done(); }} doneDisabled={busy}>
+    <PhoneSheet title="Keyframes" onCancel={cancel} onDone={() => { void done(); }} doneDisabled={busy}>
       <div className="phone-keyframe-sheet">
+        <p className="phone-keyframe-sheet__clip" title={clip.name}>{middleTruncate(clip.name, 40)}</p>
         <div className="phone-keyframe-sheet__nav">
-          <button type="button" className="phone-design-chip" data-testid={IDS.prev} aria-disabled={previous === null}
-            onPointerUp={blurAfterPointer}
+          <button type="button" className="phone-keyframe-sheet__step" data-testid={IDS.prev} aria-disabled={previous === null}
+            aria-label="Previous keyframe" onPointerUp={blurAfterPointer}
             onClick={() => (previous === null ? showToast('No earlier keyframe in this clip.') : jump(previous))}>
-            ◀ Previous
+            <PhoneIcon name="back" size={22} />
           </button>
           <span className="phone-keyframe-sheet__status" data-testid={IDS.status} role="status">{status}</span>
-          <button type="button" className="phone-design-chip" data-testid={IDS.next} aria-disabled={next === null}
-            onPointerUp={blurAfterPointer}
+          <button type="button" className="phone-keyframe-sheet__step phone-keyframe-sheet__step--next" data-testid={IDS.next} aria-disabled={next === null}
+            aria-label="Next keyframe" onPointerUp={blurAfterPointer}
             onClick={() => (next === null ? showToast('No later keyframe in this clip.') : jump(next))}>
-            Next ▶
+            <PhoneIcon name="back" size={22} />
           </button>
         </div>
         <div className="phone-keyframe-sheet__clipboard" role="group" aria-label="Keyframe clipboard">
@@ -163,9 +166,8 @@ export const PhoneKeyframeSheet: PhoneSheetComponent = () => {
           </button>
         </div>
         {groups.length === 0 && (
-          <p className="phone-design-note" data-testid={IDS.empty}>
-            No keyframes yet. Close this sheet, move the playhead and tap the diamond in the transport to key position, scale, rotation and opacity.
-          </p>
+          <PhoneEmptyState icon="keyframe" testId={IDS.empty} title="No keyframes yet"
+            body="Move the playhead and tap the diamond in the transport to key position, scale, rotation or opacity." />
         )}
         <ul className="phone-keyframe-sheet__list">
           {groups.map((group) => {

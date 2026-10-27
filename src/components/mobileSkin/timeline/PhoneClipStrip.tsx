@@ -216,7 +216,7 @@ const PhoneClipTile = memo(function PhoneClipTile({
       {lane.kind === 'audio' && waveforms && (
         <PhoneWaveform clip={clip} startRatio={startRatio} endRatio={endRatio} width={width} height={height} version={visualsVersion} />
       )}
-      {width >= 28 && <span className="phone-clip__label">{clip.name}</span>}
+      {width >= 60 && <span className="phone-clip__label">{clip.name}</span>}
     </div>
   );
 });

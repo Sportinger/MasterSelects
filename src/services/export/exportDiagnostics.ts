@@ -80,6 +80,10 @@ export interface ExportSeekTimeout {
   clipName?: string;
   /** The exported frame repeats the previously decoded frame of this clip. */
   usedPreviousFrame: boolean;
+  /** Why the frame fell back: a precise seek timeout (default) or a FAST neighbour frame. */
+  reason?: 'seek-timeout' | 'neighbour-frame';
+  /** Source time of the frame that was shown instead (neighbour-frame fallbacks). */
+  usedSourceTime?: number;
 }
 
 const MAX_SEEK_FALLBACK_SAMPLES = 20;
@@ -333,12 +337,33 @@ class ExportDiagnosticsService {
     if (this.currentRun.fallbackSamples.length < MAX_SEEK_FALLBACK_SAMPLES) this.currentRun.fallbackSamples.push(timeout);
   }
 
+  /**
+   * FAST parallel decode showed a buffered neighbour because the frame that belongs
+   * at this source time never arrived. Counted as a previous-frame fallback so the
+   * export result says the picture is not exact.
+   */
+  recordNeighbourFrameFallback(fallback: { clipId: string; clipName: string; sourceTime: number; usedFrameTime: number }): void {
+    if (!this.currentRun) return;
+    this.currentRun.previousFrameFallbacks += 1;
+    if (this.currentRun.fallbackSamples.length < MAX_SEEK_FALLBACK_SAMPLES) {
+      this.currentRun.fallbackSamples.push({
+        exportTime: this.currentRun.currentTime ?? Number.NaN,
+        sourceTime: fallback.sourceTime,
+        clipId: fallback.clipId,
+        clipName: fallback.clipName,
+        usedPreviousFrame: true,
+        reason: 'neighbour-frame',
+        usedSourceTime: fallback.usedFrameTime,
+      });
+    }
+  }
+
   finish(status: Exclude<ExportRunStatus, 'running'>, error?: unknown): void {
     if (!this.currentRun) {
       return;
     }
     if (this.currentRun.previousFrameFallbacks > 0) {
-      log.warn('Export frames repeat the previous frame after a seek timeout', {
+      log.warn('Export frames repeat a previous or neighbouring frame (seek timeout or missing FAST frame)', {
         runId: this.currentRun.runId,
         frames: this.currentRun.previousFrameFallbacks,
         samples: this.currentRun.fallbackSamples.slice(0, 5),

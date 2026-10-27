@@ -23,7 +23,7 @@ import {
 import { isProjectArchiveFileName } from '../../../services/project/browserProjectArchive';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import { isBrowserStorageFallbackActive } from '../../../services/project/core/browserStorageRoot';
-import { getProjectWriteSupportError, resolveProjectRootMode } from '../../../services/project/core/projectRootAccess';
+import { getProjectWriteSupportError } from '../../../services/project/core/projectRootAccess';
 import { isExpectedArchiveImportRejection } from '../../../services/project/projectBackendAvailability';
 import { recentProjectLocation } from '../../../services/project/recentProjectLocation';
 
@@ -91,16 +91,17 @@ export async function createPhoneProject(name: string, format: PhoneProjectForma
 
   let result: Awaited<ReturnType<typeof createBlankProject>>;
   try {
+    // Phone projects always start in browser storage: no folder dialog, even where a picker exists
+    // (Android Chrome has one, and its system folders are slow). "Save to a folder" exports later.
     result = await createBlankProject(trimmed, {
       composition: { width: size.width, height: size.height, frameRate: PHONE_PROJECT_FRAME_RATE },
+      storage: 'browser',
     });
   } catch (error) {
     return fail(describePhoneProjectError('creation', error, 'The project could not be created.'));
   }
   if (result === 'not-created') {
-    return fail(resolveProjectRootMode() === 'fsa'
-      ? 'No project folder was selected.'
-      : getProjectWriteSupportError() ?? 'The project could not be created in this browser’s storage.');
+    return fail(getProjectWriteSupportError() ?? 'The project could not be created in this browser’s storage.');
   }
   if (result === 'save-failed') {
     return fail('The project was created, but it could not be saved. Check the browser storage and try again.');
@@ -175,10 +176,9 @@ export async function duplicatePhoneProject(name: string): Promise<PhoneActionRe
     if (!await saveCurrentProject({ source: 'manual' })) {
       return fail('The original could not be saved first, so no copy was made.');
     }
-    if (!await createNewProject(trimmed)) {
-      return fail(resolveProjectRootMode() === 'fsa'
-        ? 'No folder was picked for the copy.'
-        : 'The copy could not be saved. The original is unchanged.');
+    // The copy stays in browser storage like every phone project; no folder dialog.
+    if (!await createNewProject(trimmed, { storage: 'browser' })) {
+      return fail('The copy could not be saved. The original is unchanged.');
     }
     useMediaStore.getState().setProjectName(trimmed);
     return { ok: true, message: `Now editing the copy "${trimmed}". "${data.name}" stays as it was.` };

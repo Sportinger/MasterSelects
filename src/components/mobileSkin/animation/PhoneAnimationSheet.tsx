@@ -11,7 +11,9 @@ import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { PhoneMotionGlyph } from '../crop/phoneChoiceGlyphs';
 import { blurAfterPointer, PhoneChip, PhoneSliderRow, PhoneSwitchRow } from '../text/phoneControls';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 import {
   PHONE_ANIMATION_DEFAULT_DURATION, PHONE_ANIMATION_MIN_DURATION, PHONE_COMBO_PRESETS, PHONE_IN_PRESETS,
   PHONE_OUT_PRESETS, PHONE_REVEAL_MODES, type PhoneAnimationChoice, type PhoneAnimationPart, type PhoneRevealMode,
@@ -28,6 +30,14 @@ function initialTab(choice: PhoneAnimationChoice): PhoneAnimationTab {
   if (!choice.in && choice.out) return 'out';
   if (!choice.in && !choice.out && choice.reveal) return 'reveal';
   return 'in';
+}
+
+/** A preset as a tile: a motion pictogram above its name. */
+function PresetTile({ id, label, selected, testId, onSelect }: { id: string; label: string; selected: boolean; testId: string; onSelect: () => void }) {
+  return (
+    <PhoneChip className="phone-design-chip--tile" ariaLabel={label} selected={selected} testId={testId} onSelect={onSelect}
+      label={<><span className="phone-design-chip__picture" aria-hidden="true"><PhoneMotionGlyph id={id} /></span><span>{label}</span></>} />
+  );
 }
 
 export const PhoneAnimationSheet: PhoneSheetComponent = () => {
@@ -122,9 +132,9 @@ export const PhoneAnimationSheet: PhoneSheetComponent = () => {
     const active = choice.combo ? null : choice[side]?.preset ?? 'none';
     return (
       <div className="phone-animation-sheet__grid" role="group" aria-label={`${TAB_LABELS[side]} animation`}>
-        <PhoneChip label="None" selected={active === 'none'} testId={phoneAnimationPresetTestId(side, 'none')} onSelect={() => pickSide(side, 'none')} />
+        <PresetTile id="none" label="None" selected={active === 'none'} testId={phoneAnimationPresetTestId(side, 'none')} onSelect={() => pickSide(side, 'none')} />
         {presets.map((preset) => (
-          <PhoneChip key={preset.id} label={preset.label} selected={active === preset.id}
+          <PresetTile key={preset.id} id={preset.id} label={preset.label} selected={active === preset.id}
             testId={phoneAnimationPresetTestId(side, preset.id)} onSelect={() => pickSide(side, preset.id)} />
         ))}
       </div>
@@ -146,7 +156,7 @@ export const PhoneAnimationSheet: PhoneSheetComponent = () => {
   return (
     <PhoneSheet title="Animation" onCancel={cancel} onDone={() => { void done(); }} doneDisabled={busy}>
       <div className="phone-animation-sheet">
-        <div className="phone-design-tabs" role="tablist" aria-label="Animation type">
+        <PhoneChipRow role="tablist" label="Animation type" className="phone-design-tabs">
           {PHONE_ANIMATION_TABS.map((id) => (
             <button key={id} type="button" role="tab" className="phone-design-tab" aria-selected={tab === id}
               aria-disabled={id === 'reveal' && !anyText ? 'true' : undefined}
@@ -154,16 +164,16 @@ export const PhoneAnimationSheet: PhoneSheetComponent = () => {
               {TAB_LABELS[id]}
             </button>
           ))}
-        </div>
+        </PhoneChipRow>
 
         {tab === 'in' && (<>{presetChips('in')}{durationRow(sideDuration('in'), max, (duration) => choice.in && update({ ...choice, in: { ...choice.in, duration } }, ['in']), !!choice.in && !choice.combo)}</>)}
         {tab === 'out' && (<>{presetChips('out')}{durationRow(sideDuration('out'), max, (duration) => choice.out && update({ ...choice, out: { ...choice.out, duration } }, ['out']), !!choice.out && !choice.combo)}</>)}
         {tab === 'combo' && (
           <>
             <div className="phone-animation-sheet__grid" role="group" aria-label="Combo animation">
-              <PhoneChip label="None" selected={!choice.combo} testId={phoneAnimationPresetTestId('combo', 'none')} onSelect={() => pickCombo('none')} />
+              <PresetTile id="none" label="None" selected={!choice.combo} testId={phoneAnimationPresetTestId('combo', 'none')} onSelect={() => pickCombo('none')} />
               {PHONE_COMBO_PRESETS.map((combo) => (
-                <PhoneChip key={combo.id} label={combo.label} selected={choice.combo === combo.id}
+                <PresetTile key={combo.id} id={combo.id} label={combo.label} selected={choice.combo === combo.id}
                   testId={phoneAnimationPresetTestId('combo', combo.id)} onSelect={() => pickCombo(combo.id)} />
               ))}
             </div>
@@ -175,9 +185,9 @@ export const PhoneAnimationSheet: PhoneSheetComponent = () => {
         {tab === 'reveal' && (
           <>
             <div className="phone-animation-sheet__grid" role="group" aria-label="Reveal">
-              <PhoneChip label="None" selected={!choice.reveal} testId={phoneAnimationPresetTestId('reveal', 'none')} onSelect={() => pickReveal('none')} />
+              <PresetTile id="none" label="None" selected={!choice.reveal} testId={phoneAnimationPresetTestId('reveal', 'none')} onSelect={() => pickReveal('none')} />
               {PHONE_REVEAL_MODES.map((mode) => (
-                <PhoneChip key={mode.id} label={mode.label} selected={choice.reveal?.mode === mode.id}
+                <PresetTile key={mode.id} id={mode.id} label={mode.label} selected={choice.reveal?.mode === mode.id}
                   testId={phoneAnimationPresetTestId('reveal', mode.id)} onSelect={() => pickReveal(mode.id)} />
               ))}
             </div>

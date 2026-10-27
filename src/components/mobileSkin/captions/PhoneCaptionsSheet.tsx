@@ -22,6 +22,7 @@ import { PhoneCaptionsStyle, PhoneCaptionsTiming } from './PhoneCaptionsStyle';
 import { PHONE_CAPTIONS_TEST_IDS as IDS } from './phoneCaptionsTestIds';
 import '../audio/PhoneAudioSheets.css';
 import './PhoneCaptions.css';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 
 type Section = 'generate' | 'words' | 'style' | 'timing';
 
@@ -116,7 +117,7 @@ export const PhoneCaptionsSheet: PhoneSheetComponent = () => {
       <div className="phone-audio-sheet phone-captions">
         <p className="phone-audio-sheet__target" data-testid={IDS.status} data-caption-clip-id={captionClip?.id ?? ''}>{status}</p>
         {captionClips.length > 1 ? (
-          <div className="phone-captions__chips" role="radiogroup" aria-label="Caption clips">
+          <PhoneChipRow role="radiogroup" label="Caption clips">
             {captionClips.map((clip, index) => (
               <button key={clip.id} type="button" role="radio" className="phone-captions__chip" aria-checked={clip.id === captionClip?.id}
                 aria-pressed={clip.id === captionClip?.id} data-testid={IDS.captionChip} data-clip-id={clip.id}
@@ -124,10 +125,10 @@ export const PhoneCaptionsSheet: PhoneSheetComponent = () => {
                 {`${index + 1} · ${formatPhoneCaptionTime(clip.startTime)}`}
               </button>
             ))}
-          </div>
+          </PhoneChipRow>
         ) : null}
 
-        <div className="phone-audio-tabs" role="tablist" aria-label="Caption tools">
+        <PhoneChipRow role="tablist" label="Caption tools" className="phone-audio-tabs">
           {SECTIONS.map((item) => (
             <button key={item.id} type="button" role="tab" className="phone-audio-tabs__tab" aria-selected={section === item.id}
               aria-disabled={(item.id !== 'generate' && !captionClip) || undefined} data-testid={`${IDS.sectionPrefix}${item.id}`}
@@ -135,7 +136,7 @@ export const PhoneCaptionsSheet: PhoneSheetComponent = () => {
               {item.label}
             </button>
           ))}
-        </div>
+        </PhoneChipRow>
 
         {section === 'generate' || !captionClip ? (
           <PhoneCaptionsGenerate onCreate={create} onSettings={() => { void leaveTo(() => openSheet('settings')); }} />

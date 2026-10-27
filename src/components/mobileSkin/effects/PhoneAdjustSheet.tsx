@@ -14,6 +14,7 @@ import { PHONE_FULL_EDITOR_HINT, type PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 import { openPhoneClipboard } from '../clipboard/phoneClipboardCommands';
 import {
   formatPhoneAdjustValue, PHONE_ADJUST_CONTROLS, phoneAdjustDrivenSkips, phoneAdjustProperty, setPhoneAdjustValues,
@@ -34,6 +35,8 @@ function describeSkips(skips: readonly PhoneAdjustSkip[]): string | null {
   return `${labels.join(', ')} ${labels.length === 1 ? 'is' : 'are'} driven by a node on ${clips} clip${clips === 1 ? '' : 's'} and stayed unchanged there. ${PHONE_FULL_EDITOR_HINT}`;
 }
 
+/** The one status line with nothing selected; the tap-for-reason notice carries the full reason. */
+const ROOT_LINE = 'Select a clip to adjust its colour';
 const ROOT_REASON = 'Select a clip first: Adjust changes the colour of the selected clips. For the whole picture, use Effects with nothing selected: it adds an adjustment layer with Brightness, Contrast or Saturation.';
 
 /** The values the primary clip shows at the playhead, keyframes included. */
@@ -148,14 +151,14 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
   const drivenSecondaries = blocked ? 0 : phoneAdjustDrivenSkips(clipIds.filter((id) => id !== primaryId), [active.key]).length;
   const following = clipIds.length - 1 - drivenSecondaries;
   const status = blocked
-    ? blockedReason
+    ? (selection.nothingSelected ? ROOT_LINE : blockedReason)
     : `${selection.primary?.name ?? ''}${following > 0 ? ` and ${following} more get the same values` : ''}${drivenSecondaries > 0
       ? ` (${active.label} is node-driven on ${drivenSecondaries} other clip${drivenSecondaries === 1 ? '' : 's'}, unchanged)` : ''}`;
 
   return (
     <PhoneSheet title="Adjust" height="half" onCancel={cancel} onDone={() => { void done(); }} doneDisabled={busy}>
       <div className="phone-fx" onPointerUp={blurPointerButton}>
-        <p className="phone-fx__target" data-testid={IDS.adjustStatus}>{status}</p>
+        <p className="phone-fx__target" data-testid={IDS.adjustStatus} title={status}>{status}</p>
         {!blocked && selection.note && <p className="phone-fx__note">{selection.note}</p>}
         {!blocked && skipNote && <p className="phone-fx__note" role="status" data-testid={IDS.adjustSkipNote}>{skipNote}</p>}
         <PhoneValueSlider
@@ -170,7 +173,7 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
           disabledReason={blocked ? blockedReason : driven ? `${active.label} is driven by a node, so it cannot be set here. ${PHONE_FULL_EDITOR_HINT}` : null}
           note={keyframed ? 'Keyframed: a change sets a key at the playhead.' : null}
         />
-        <div className="phone-adjust__tiles" role="group" aria-label="Colour controls">
+        <PhoneChipRow label="Colour controls" className="phone-adjust__tiles">
           {PHONE_ADJUST_CONTROLS.map((control) => (
             <button
               key={control.key}
@@ -198,7 +201,7 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
             <span>Wheels</span>
             <span className="phone-adjust__tile-value">Colour editor ›</span>
           </button>
-        </div>
+        </PhoneChipRow>
         <div className="phone-adjust__actions">
           <button type="button" className="phone-adjust__action" aria-disabled={blocked} data-testid={IDS.adjustResetAll} onClick={resetAll}>
             Reset all

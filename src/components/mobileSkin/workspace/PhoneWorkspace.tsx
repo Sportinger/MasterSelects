@@ -11,6 +11,8 @@ import { PhonePanelView } from '../panels/PhonePanelView';
 import { usePhoneRuntime } from '../runtime/PhoneRuntimeContext';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from '../shell/phoneIcons';
+import { useTimelineStore } from '../../../stores/timeline';
+import { ProGlyph } from '../compositions/phoneProGlyphs';
 import {
   defaultPhoneWorkspaceSidesOpen, getPhoneWorkspace, readPhoneWorkspaceSideChoice, setPhoneWorkspaceSideCollapsed,
   type PhoneWorkspaceContent, type PhoneWorkspaceDefinition, type PhoneWorkspaceId, type PhoneWorkspaceSide,
@@ -19,6 +21,7 @@ import { PHONE_WORKSPACE_TEST_IDS as IDS } from './phoneWorkspaceTestIds';
 import { renderPhoneWorkspaceCustom } from './phoneWorkspaceCustomViews';
 import { usePhoneWorkspaceBackGesture } from './usePhoneWorkspaceBackGesture';
 import './PhoneWorkspace.css';
+import './PhoneWorkspaceEditors.css';
 
 /** A swipe of at least this many CSS pixels along the inward/outward axis toggles a side. */
 const SWIPE_PX = 24;
@@ -50,9 +53,13 @@ function useViewportSize() {
   return size;
 }
 
-function useSideState(id: PhoneWorkspaceId, side: PhoneWorkspaceSide, roomy: boolean) {
+/**
+ * `idle`: the side has nothing to show right now (Properties without a selected clip). An untouched
+ * side then starts collapsed to its rail and opens on its own once a clip is selected (owner rule 3).
+ */
+function useSideState(id: PhoneWorkspaceId, side: PhoneWorkspaceSide, roomy: boolean, idle = false) {
   const [choice, setChoice] = useState(() => readPhoneWorkspaceSideChoice(id, side));
-  const collapsed = choice ?? !roomy;
+  const collapsed = choice ?? (!roomy || idle);
   const set = (next: boolean) => {
     setPhoneWorkspaceSideCollapsed(id, side, next);
     setChoice(next);
@@ -109,7 +116,9 @@ function SideRail({ side, title, state }: { side: PhoneWorkspaceSide; title: str
       onPointerCancel={swipe.onPointerCancel}
       onClick={() => { if (!swipe.shouldSwallowClick()) state.set(false); }}
     >
+      <ProGlyph name={side === 'left' ? 'panel-left' : 'panel-right'} size={18} />
       <span className="phone-workspace__rail-label">{title}</span>
+      <span className="phone-workspace__rail-chevron"><ProGlyph name={side === 'left' ? 'chevron-right' : 'chevron-left'} size={16} /></span>
     </button>
   );
 }
@@ -131,7 +140,6 @@ function SideGrip({ side, title, state }: { side: PhoneWorkspaceSide; title: str
 }
 
 function SideToggle({ side, title, state }: { side: PhoneWorkspaceSide; title: string; state: SideState }) {
-  const opensTowardsLeft = side === 'left' ? state.collapsed : !state.collapsed;
   return (
     <button
       type="button"
@@ -142,7 +150,7 @@ function SideToggle({ side, title, state }: { side: PhoneWorkspaceSide; title: s
       onClick={state.toggle}
       onPointerUp={(event) => { if (event.pointerType !== 'mouse') event.currentTarget.blur(); }}
     >
-      <span aria-hidden="true">{opensTowardsLeft ? '⟩' : '⟨'}</span>
+      <ProGlyph name={side === 'left' ? 'panel-left' : 'panel-right'} />
     </button>
   );
 }
@@ -201,8 +209,11 @@ export function PhoneWorkspace({ id }: { id: PhoneWorkspaceId }) {
   const definition = getPhoneWorkspace(id);
   const viewport = useViewportSize();
   const roomy = defaultPhoneWorkspaceSidesOpen(viewport.width, viewport.height, sideCount(definition));
-  const left = useSideState(id, 'left', roomy);
-  const right = useSideState(id, 'right', roomy);
+  const hasSelection = useTimelineStore((state) => state.selectedClipIds.size > 0);
+  const idle = (content: PhoneWorkspaceContent | undefined) => content?.kind === 'panel' && content.type === 'clip-properties' && !hasSelection;
+  const left = useSideState(id, 'left', roomy, idle(definition?.left));
+  const right = useSideState(id, 'right', roomy, idle(definition?.right));
+  const showToast = usePhoneUiStore((state) => state.showToast);
   const back = usePhoneWorkspaceBackGesture(id, closeWorkspace);
   if (!definition) return null;
 
@@ -229,7 +240,17 @@ export function PhoneWorkspace({ id }: { id: PhoneWorkspaceId }) {
         </button>
         {definition.left ? <SideToggle side="left" title={definition.left.title} state={left} /> : null}
         <h2 className="phone-workspace__title">{definition.title}</h2>
-        <p className="phone-workspace__hint">Turn your phone for more room</p>
+        <span className="phone-workspace__spacer" />
+        <button
+          type="button"
+          className="phone-workspace__button phone-workspace__rotate"
+          data-testid={IDS.rotateHint}
+          aria-label="Turn your phone for more room"
+          onClick={() => showToast('Turn your phone sideways: the editor gets the whole width.', 'info')}
+          onPointerUp={(event) => { if (event.pointerType !== 'mouse') event.currentTarget.blur(); }}
+        >
+          <ProGlyph name="rotate" />
+        </button>
         <HistoryButtons />
         {definition.right ? <SideToggle side="right" title={definition.right.title} state={right} /> : null}
       </header>

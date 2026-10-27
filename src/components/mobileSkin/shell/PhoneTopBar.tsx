@@ -1,4 +1,4 @@
-import { useMemo, type PointerEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, type PointerEvent } from 'react';
 import { PHONE_TEST_IDS, type PhoneIconName } from '../contracts';
 import { Logger } from '../../../services/logger';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -10,6 +10,7 @@ import { phoneCompositionBackStep, usePhoneCompositionTrail } from '../compositi
 import { PHONE_COMPOSITIONS_TEST_IDS } from '../compositions/phoneCompositionsTestIds';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from './phoneIcons';
+import { scrollChildIntoStrip, usePhoneScrollEdges } from './usePhoneScrollEdges';
 import './PhoneTopBar.css';
 
 const log = Logger.create('PhoneTopBar');
@@ -68,6 +69,17 @@ function CompositionTabs() {
     [compositions, openIds],
   );
 
+  // The active tab is always in view (also after switching from the list or opening a nested comp);
+  // hidden tabs beyond an edge show as a fade there.
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const tabKey = tabs.map((tab) => `${tab.id}:${tab.name}`).join('|');
+  usePhoneScrollEdges(tabsRef, [tabKey]);
+  useLayoutEffect(() => {
+    const strip = tabsRef.current;
+    const active = strip?.querySelector<HTMLElement>('[data-active="true"]');
+    if (strip && active) scrollChildIntoStrip(strip, active);
+  }, [activeId, tabKey]);
+
   const activate = async (id: string) => {
     if (id === activeId) return;
     try {
@@ -109,7 +121,7 @@ function CompositionTabs() {
           ‹ {backName}
         </button>
       ) : null}
-    <div className="phone-comp-tabs" role="tablist" aria-label="Compositions" data-testid={PHONE_TEST_IDS.compositionTabs}>
+    <div ref={tabsRef} className="phone-comp-tabs phone-scroll-edges" role="tablist" aria-label="Compositions" data-testid={PHONE_TEST_IDS.compositionTabs}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -119,6 +131,8 @@ function CompositionTabs() {
           aria-selected={tab.id === activeId}
           data-active={tab.id === activeId ? 'true' : 'false'}
           data-composition-id={tab.id}
+          title={tab.name}
+          onPointerUp={blurAfterPointer}
           onClick={() => void activate(tab.id)}
         >
           {tab.name}

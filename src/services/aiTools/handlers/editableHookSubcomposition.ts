@@ -1,4 +1,5 @@
 import { useMediaStore } from '../../../stores/mediaStore';
+import { captureToolTransaction } from '../toolTransaction';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../types/timeline';
 import { createSubcompositionFromClipIds } from '../../timelineSubcomposition';
@@ -60,6 +61,7 @@ export async function wrapEditableHookInSubcomposition(input: {
   hookId: string;
   name: string;
 }): Promise<ToolResult> {
+  const transaction = captureToolTransaction('wrapEditableHookInSubcomposition');
   const result = await createSubcompositionFromClipIds(input.clipIds, {
     includeLinkedAudio: false,
     name: input.name,
@@ -72,10 +74,10 @@ export async function wrapEditableHookInSubcomposition(input: {
   if (!wrapper) {
     return { success: false, error: 'Created graphic subcomposition has no parent timeline clip' };
   }
-  useTimelineStore.getState().updateClip(wrapper.id, {
+  transaction.run(() => useTimelineStore.getState().updateClip(wrapper.id, {
     linkedGroupId: input.hookId,
     name: input.name,
-  });
+  }));
   return {
     success: true,
     data: {
@@ -91,6 +93,8 @@ export async function executeInEditableHookComposition(
   hookId: string,
   execute: (context: EditableHookCompositionContext) => Promise<ToolResult>,
 ): Promise<EditableHookCompositionExecution> {
+  // The hook's edits run after composition switches (awaits): `execute` enters the tool's transaction explicitly.
+  const transaction = captureToolTransaction('executeInEditableHookComposition');
   const mediaBefore = useMediaStore.getState();
   const timelineBefore = useTimelineStore.getState();
   const originalCompositionId = mediaBefore.activeCompositionId;
@@ -103,7 +107,7 @@ export async function executeInEditableHookComposition(
       isNested: false,
       originalCompositionId,
     };
-    return { context, result: await execute(context) };
+    return { context, result: await transaction.run(() => execute(context)) };
   }
 
   const hookCompositionId = uniqueHookCompositionId(hookId);
@@ -126,17 +130,17 @@ export async function executeInEditableHookComposition(
         }),
   };
 
-  await mediaBefore.openCompositionTab(hookCompositionId, { skipAnimation: true });
+  await transaction.run(() => mediaBefore.openCompositionTab(hookCompositionId, { skipAnimation: true }));
   if (!await waitForCompositionReady(hookCompositionId)) {
     return { context, result: { success: false, error: `Could not open hook composition: ${hookCompositionId}` } };
   }
 
   let result: ToolResult;
   try {
-    result = await execute(context);
+    result = await transaction.run(() => execute(context));
   } finally {
     if (originalCompositionId) {
-      await useMediaStore.getState().openCompositionTab(originalCompositionId, { skipAnimation: true });
+      await transaction.run(() => useMediaStore.getState().openCompositionTab(originalCompositionId, { skipAnimation: true }));
       await waitForCompositionReady(originalCompositionId);
     }
   }

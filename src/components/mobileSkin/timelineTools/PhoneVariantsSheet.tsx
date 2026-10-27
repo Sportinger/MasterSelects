@@ -11,7 +11,7 @@ import { getActiveCompositionFrameRate } from '../../../stores/timeline/editOper
 import { StoryboardVariantComparisonTimelineDock } from '../../storyboard/variants';
 import { openPhoneAssistantWithPrompt } from '../assistant/phoneAssistantPrefill';
 import type { PhoneSheetComponent } from '../contracts';
-import { ProButton, ProSection } from '../compositions/phoneProControls';
+import { ProEmptyState } from '../compositions/phoneProControls';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { formatPhoneRangeTime, phoneRangeSpan } from './phoneTimelinePrefs';
@@ -37,18 +37,17 @@ export const PhoneVariantsSheet: PhoneSheetComponent = () => {
             <StoryboardVariantComparisonTimelineDock />
           </div>
         ) : (
-          <ProSection title="No alternatives yet">
-            <p className="phone-tltools__summary" data-testid={IDS.empty}>
-              Three versions (A, B, C) of a range are built by the assistant. Mark the range with In and Out, then ask it; the
-              versions appear here to play side by side, and Accept puts the chosen one into your timeline as one undo step.
-            </p>
-            <ProButton
-              label={`Ask for three versions of ${rangeText}`}
-              tone="primary"
-              testId={IDS.ask}
-              onPress={() => openPhoneAssistantWithPrompt(`Make three storyboard variants (A, B, C) of the timeline range ${rangeText} so I can compare them.`)}
-            />
-          </ProSection>
+          <ProEmptyState
+            icon="variants"
+            testId={IDS.empty}
+            title="No alternatives yet"
+            body={`The assistant builds versions A, B and C of ${rangeText}; play them here and accept one.`}
+            action={{
+              label: 'Ask for three versions',
+              testId: IDS.ask,
+              onPress: () => openPhoneAssistantWithPrompt(`Make three storyboard variants (A, B, C) of the timeline range ${rangeText} so I can compare them.`),
+            }}
+          />
         )}
       </div>
     </PhoneSheet>

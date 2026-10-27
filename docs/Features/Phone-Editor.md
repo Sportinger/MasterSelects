@@ -21,20 +21,29 @@ The home screen opens when no project is open, and any time you tap **Projects**
 - **New project** asks for a name and a canvas: **9:16** (preselected), 16:9, 1:1 or 4:5. It creates
   the project with its first composition at 1080 px on the short side (9:16 is 1080 × 1920), 30 fps.
   The canvas is part of the new project itself, so Undo never turns it back into 1920 × 1080.
-- **Recent projects** lists the projects stored on this device, most recent first. Tap one to open it.
+  It is stored in the browser, with no folder dialog (also on Android, whose browser has one).
+- **Recent projects** lists the projects stored in this browser, most recent first. Tap one to open it.
+- **Open a project folder** (where the browser can pick folders) opens a project saved in a folder.
 - **Import project file** opens a `.msproj` archive from your phone.
 - Tap the **project name** in the top bar for the project sheet; the small status next to it tells you
   where the project is stored and warns when the browser may delete it.
 
+While a project starts, opens or imports, a full-screen loading view names it, says the current step
+(Waiting for folder access, Opening, Creating, Reading project, Preparing editor), shows a progress
+bar and, after 5 s, the time so far. Nothing of the editor shows through it.
+
 Closing the browser does not lose anything: reopen /m and the last project comes back with the same
-timeline. If the browser asks for access to the project folder again, one tap resumes it.
+timeline. When the browser asks for access to the project folder again after a restart, a **Last
+project** card at the top of the home screen reopens it with one tap.
 
 ## Switch to the full editor
 
 **Full editor** on the home screen and in the project sheet saves the project and opens it in the
 full editor with every tool. The phone remembers that choice. To come back, tap **Mobile** in the
-bottom bar of the full editor. On a computer or tablet, **Layouts → Phone editor** opens the phone
-editor too. While an export is running, both wait and tell you why.
+bottom bar of the full editor. **Mobile** opens the phone editor on every device, computers and
+tablets too; **Layouts → Phone editor** does the same. Both save the project first. While an export
+is running, both wait and tell you why. The full editor's old Mobile dock layout is switched off, so
+it no longer turns itself on in narrow windows or on tablets.
 
 MasterSelects installed as an app (from the browser's install button) stays in the full editor on a
 phone, because the installed app covers only the full editor's address.
@@ -72,6 +81,12 @@ tap empty space (or the clip again) to deselect.
 
 Sheets (media, text, export, projects) rise from the bottom with **Cancel** and **Done**. Cancel
 throws the draft away and never changes your project; **Done** commits it as one undo step.
+A sheet is only as tall as its content, and the transport (play, time, keyframe, Undo, Redo) stays
+docked right above it, so the preview keeps the rest of the screen. Drag the **grab handle** (or the
+sheet's header) to make it smaller or taller, tap it to switch sizes, or drag it down to close; the
+sheet keeps that size until the page reloads. A tap on the top bar also closes it, a touch on the
+preview never does. Rows of choices that do not fit scroll sideways: the cut edge fades out, and the
+selected choice is always scrolled into view.
 
 ## Design your video
 
@@ -79,7 +94,10 @@ Every design tool opens as a sheet under the preview, so you see each change liv
 the change away and leaves your project exactly as it was; **Done** keeps it as one step you can undo.
 
 **Effects, filters and colour:** select a clip and tap **Effects** to browse every effect of the
-editor by group, or search for one, and tap a card to add it. Your clip's effects are listed above the
+editor by group, or search for one, and tap a card to add it. Each Effects and Filters card shows the
+effect on your current frame (on a colourful sample picture when no clip is under the playhead).
+Effects that change nothing at their defaults, such as Brightness or Saturation, show a clear
+example strength on the card; adding one still starts at its defaults. Your clip's effects are listed above the
 cards: switch one off, move it up or down, remove it, or drag its slider to set its main value. With
 nothing selected, **Effects** adds an adjustment layer at the playhead that changes everything below
 it (Brightness, Contrast, Saturation, Invert and Gaussian Blur so far). **Filters** puts one look on
@@ -176,7 +194,8 @@ opens its own composition for every phone tool and **Edit in Nodes** its node gr
 
 **Captions:** with nothing selected, tap **Captions**. **Generate** lists every clip with speech;
 **Transcribe** runs on your phone for free (**On this phone**) or with an online provider for an
-account with credits. **Words** fixes a typo or cuts a word from picture and sound; **Style** and
+account with credits. Signed out, the online providers are greyed and never shown as chosen; a **Sign
+in** link and **Transcribe on this phone** sit right there. **Words** fixes a typo or cuts a word from picture and sound; **Style** and
 **Timing** set the look, how many words a caption shows and how long it holds.
 
 **Audio effects:** select a clip with sound and tap **Audio effects**. Add an effect, drag its main
@@ -194,13 +213,16 @@ tap relinks them. **Web sources** searches YouTube, Instagram or TikTok, and **S
 imports numbered 3D model or splat files as one item. Tap the project name, then **Settings**, for the
 theme, the transcription provider, **Touch and input** (a ring under every finger for screen
 recordings), **Assistant**, **Integrations**, your account, the version and a cache reset that says
-exactly what it clears. **Help** installs MasterSelects as an app, opens the legal pages and the chat
+exactly what it clears. **Diagnostics** also lists the **Recent project loads** since the page
+loaded: each open, create or save with its time per step in seconds, the first frame after loading and
+the longest screen freeze, slow ones (5 s and more) highlighted, ready for a screenshot. **Help** installs MasterSelects as an app, opens the legal pages and the chat
 with the developer, and shows the welcome again.
 
 **Project tools:** the project sheet can **Duplicate** the project and keep working in the copy, save
 and restore named **Versions**, and **Export .msproj** to share or save the whole project. **Storage**
-moves other temporary projects into permanent storage. A folder backup needs a folder picker, which
-phone browsers do not have, so it stays greyed with that reason.
+moves other temporary projects into permanent storage. **Save to a folder** writes a complete copy with
+its media into a folder you pick (picking it again adds only what changed); in a browser without a
+folder picker it stays greyed with that reason.
 
 **Speed, effects and transitions, in depth:** **Freeze frame** holds the frame under the playhead and
 **Fit to a length** sets the speed from the seconds you type. **All parameters** in the effects sheet
@@ -230,8 +252,8 @@ reverse it, swap or fold channels, add a filter, compressor or gate, and repair 
 or fill the range with the clip's room tone. **Stack** lets you listen to the edited or original range
 and bypass each edit. In **Audio → Voiceover**, **Record a range** records only between a punch-in and
 a punch-out time, and **Rescue recordings** brings back an interrupted take. **Notation** opens the
-score editor with touch keys for notes, chords, rests and stems; score clips do not sound in the
-timeline or export yet.
+score editor with touch keys for notes, chords, rests and stems; with a score clip it fills the sheet,
+without one it offers **Add a score clip**. Score clips do not sound in the timeline or export yet.
 
 ## All tools and desktop panels
 
@@ -244,17 +266,25 @@ next to Undo shows your edit on the whole screen; tap the picture or use the bac
 ## Landscape editors
 
 Tap **Editors** in the main toolbar and pick **Nodes**, **Mixer**, **Multicam**, **Piano roll**,
-**3D scene**, **Curves**, **Colour** or **Output**. The editor opens full screen; turn the phone sideways for room.
+**3D scene**, **Curves**, **Colour** or **Output**; each entry has its icon and a rotate mark. The editor
+opens full screen; turn the phone sideways for room (the rotate button in its top bar reminds you).
 **Back** in its top bar, or your phone's back gesture, returns to the timeline, and Undo and Redo sit
 in the same bar. Each side panel folds away with the arrows in the bar or a swipe on its edge grip and
 leaves a thin rail with its name; tap it or swipe inward to bring it back. The editor remembers your
-choice, also after a reload.
+choice, also after a reload. A Properties side you have not touched stays folded while no clip is
+selected and opens once you select one. A Preview side panel shows its source and Edit controls in a row above
+the picture, and on a narrow panel its transport keeps Play, the frame steps and the time; In, Out,
+Loop and the edit jumps stay in the timeline's transport.
 
-- **Nodes:** drag empty canvas to move, pinch to zoom, drag a node to move it, drag between ports to
-  connect. **Add** inserts nodes and effects, **Delete** removes the selection, and a tap on a clip
-  node opens its lane.
+- **Nodes:** the graph opens zoomed to fit and centred, and fits again after a rotation or a
+  side panel change, until you move the view yourself. Drag empty canvas to move, pinch to zoom, drag
+  a node to move it, drag between ports to connect. **Add** inserts nodes and effects, **Delete**
+  removes the selection, **Fit** shows the whole graph, and **⋯** holds the other tools (Previews,
+  Signals, Lines, Avoid, Compact, Arrange, Reset). A tap on a clip node opens its lane; the inspector
+  opens from the tab on the right edge.
 - **Mixer:** drag any fader with a finger (you need not hit the cap), drag Pan, tap Mute, Solo, R, In,
-  FX or Send, and swipe the strips sideways; the master stays in place.
+  FX or Send, and swipe the strips sideways; the master stays in place and shows LUFS, true peak and
+  the loudness verdict on two lines.
 - **Piano roll:** edits the selected MIDI clip, or lists the composition's MIDI clips and creates one.
   Draw, move and resize notes with the Pointer, remove them with the Eraser, frame them with Select.
   Two fingers zoom time sideways and pitch up and down. Each drag is one undo step.
@@ -262,6 +292,8 @@ choice, also after a reload.
   on the left and the colour node graph on the right. Each drag, reset or node change is one undo step.
 - **Multicam:** tap **Multicam** to turn a composition with one camera per video track into a
   multicam edit, then tap a camera to cut to it at the playhead. If nothing happens, a note says why.
+  Every tile is labelled with its number and source, and the tiles fill the screen in the row or
+  grid that shows each picture largest (four portrait angles side by side in landscape).
 - **3D scene:** tap an object or its layer, drag the Move, Rotate and Scale handles with a finger,
   drag the empty scene to orbit, pinch to zoom and move two fingers together to pan.
 - **Curves:** tap near a keyframe to select it, drag it or its Bezier handles, drag the empty graph
@@ -325,8 +357,8 @@ added the pro sheets, All tools and the desktop panels, **M4** the landscape edi
 assistant out of beta and **M6** completeness. Every feature of the plan's catalog now has a place on
 the phone, with no open gap left. Whatever does not work on a phone stays visible, greyed, and explains
 itself on tap: downloading from a link (it needs the desktop helper), a second screen, the OptiX
-renderer, local Python models, showing a file in the file manager, the folder backup (no folder picker
-in phone browsers) and reading text in pictures (MasterSelects has no OCR engine yet).
+renderer, local Python models, showing a file in the file manager, saving to a folder where the browser
+has no folder picker, and reading text in pictures (MasterSelects has no OCR engine yet).
 
 ## Technical details
 
@@ -335,11 +367,11 @@ in phone browsers) and reading text in pictures (MasterSelects has no OCR engine
   the desktop `App`. Before the first render, `src/main.tsx` sends phones from `/` and `/editor` to
   `/m` (`src/routing/phoneEntry.ts`): a phone is a device whose primary pointer is coarse and whose
   screen has a short side below 600 CSS px, so tablets and unfolded foldables stay in the desktop
-  editor with its automatic Mobile dock layout. `?test`, `?entry=editor`, `/medium`, `/chat` and
+  editor (its legacy Mobile dock layout is switched off in `stores/dockStore/legacyMobileLayout.ts`). `?test`, `?entry=editor`, `/medium`, `/chat` and
   deep links below `/editor/` never move, and neither does the installed app (display mode
   standalone, fullscreen or minimal-ui), whose manifest scope is `/editor`. **Full editor**
   (`project/phoneFullEditor.ts`) saves and stores `ms.phoneEditor.preferFullEditor` in
-  localStorage; the desktop **Mobile** toggle and **Layouts → Phone editor**
+  localStorage; the desktop **Mobile** button (on every device) and **Layouts → Phone editor**
   (`src/components/common/openPhoneEditor.ts`) save, clear that choice and open `/m`. Both refuse
   while an export runs (`services/project/editorSwitchGuard.ts`). The Android app serves `/m` as an
   editor entry (`EditorUrlPolicy.java`).
@@ -349,9 +381,27 @@ in phone browsers) and reading text in pictures (MasterSelects has no OCR engine
   Android device whose adapter request stalled before; the adapter order and deadline come from
   `ms.gpu.androidAdapter` (`src/engine/core/androidAdapterMemory.ts`, see
   [Debugging](./Debugging.md#android-adapter-memory)). `runtime/phoneBootTimeline.ts` keeps the boot
-  marks on `window.__MS_PHONE_BOOT__`.
-- Sheets: `sheets/PhoneSheet.tsx` is the frame (`half` 45 %, `tall` 75 % of the visual viewport,
-  lifted by `--phone-keyboard-inset`). `sheets/PhoneSheetHost.tsx` renders
+  marks on `window.__MS_PHONE_BOOT__`. `runtime/PhoneProjectLoadingView.tsx` is the opaque loading
+  view for the operation in `runtime/phoneProjectOperation.ts`; background load steps and a failed
+  load show as `runtime/PhoneBackgroundLoadStatus.tsx`.
+- Projects: `project/usePhoneProjectCommands.ts` creates new projects and copies with
+  `storage: 'browser'` (OPFS or the browser storage fallback, `withBrowserStorageProjectRoot`), never with the folder dialog; `project/phoneFolderProjects.ts` opens
+  project folders and resumes the pending one (`home/PhoneHomeResumeCard.tsx`).
+- Effect cards: `effects/PhoneEffectThumb.tsx` renders through the desktop look thumbnail runtime on
+  the source from `effects/usePhonePreviewSource.ts` (the composition frame, or the sample picture of
+  `effects/phoneSampleFrame.ts`); `effects/phoneEffectPreviewParams.ts` lists the demonstration
+  values for effects that are neutral at their defaults.
+- Diagnostics: `settings/phoneProjectLoads.ts` formats the sanitized reports on
+  `window.__MS_PROJECT_LOAD__` (see [Project Repository](./Project-Repository.md)).
+- Sheets: `sheets/PhoneSheet.tsx` is the frame, lifted by `--phone-keyboard-inset`. Each sheet
+  sizes to its content up to the cap of its kind in `sheets/phoneSheetSizing.ts` (`tool`: the preview
+  keeps 40 % of the visual viewport; `list`: up to the full cap; `fill`: always the whole cap). The
+  grab handle moves it between the `peek` (176 px), `fit` and `full` detents
+  (`usePhoneSheetDetent.ts`, remembered per sheet for the session, arrow keys step); even `full`
+  leaves the preview 30 % (at least 200 px). The settled and live heights are published as
+  `--phone-sheet-h` and `--phone-sheet-live-h`, and the 48 px transport docks above the sheet.
+  `transition/phoneSheetPrimitives.tsx` holds the shared `PhoneChipRow` (edge fade, selected chip
+  kept in view) and `PhoneEmptyState`. `sheets/PhoneSheetHost.tsx` renders
   `usePhoneUiStore().activeSheet` from the lazy `sheets/phoneSheetRegistry.tsx`: `projects`, `media`,
   `title`, `export`, `assistant`, the M2 ids (`effects` … `format`), `editors`, `panel`, `allTools`,
   `compositions`, `tracks`, `markers`, `edits`, `replace`, `captions`, `audioFx`, `library`,

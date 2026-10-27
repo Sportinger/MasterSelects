@@ -15,6 +15,7 @@ import { FlashBoardNodeGraphStream } from '../../flashboard/FlashBoardNodeGraphS
 import { SCENE_STREAM_PROTOCOL, SceneStreamParser, type SceneStreamRecord } from '../../scenes/sceneStream';
 import { SceneStreamExecutor, type SceneRunSummary } from '../../scenes/sceneStreamExecutor';
 import { listScenes, readSceneStream } from '../../scenes/sceneDocuments';
+import { captureToolTransaction, type ToolTransaction } from '../toolTransaction';
 
 type QueuedRecord = { kind: 'scene'; record: SceneStreamRecord } | { kind: 'node'; record: NodeGraphStreamRecord };
 type Execute = (tool: string, args: Record<string, unknown>) => Promise<ToolResult>;
@@ -33,8 +34,8 @@ class EditorStreamRun {
   stopped: string | undefined;
   private readonly parsers: Array<{ fence: string; dead: boolean; parser: FencedRecordStreamParser<SceneStreamRecord> | FencedRecordStreamParser<NodeGraphStreamRecord> }>;
 
-  constructor(execute: Execute, signal?: AbortSignal) {
-    this.scenes = new SceneStreamExecutor(execute, signal);
+  constructor(execute: Execute, signal?: AbortSignal, transaction?: ToolTransaction) {
+    this.scenes = new SceneStreamExecutor(execute, signal, transaction ? { runWrites: (_label, action) => transaction.run(action) } : {});
     this.nodes = new FlashBoardNodeGraphStream((tool, args) => execute(tool, args), signal);
     this.parsers = [
       { fence: 'ms-scene-v1', dead: false, parser: new SceneStreamParser(record => this.queue.push({ kind: 'scene', record }),
@@ -98,11 +99,13 @@ class EditorStreamRun {
   }
 }
 
-function executorFor(callerContext: CallerContext, signal?: AbortSignal): Execute {
+/** Records run after awaits: each step enters the stream tool's own transaction explicitly. */
+function executorFor(callerContext: CallerContext, transaction: ToolTransaction, signal?: AbortSignal): Execute {
   return (tool, args) => {
     const access = checkToolAccess(tool, callerContext);
     if (!access.allowed) return Promise.resolve<ToolResult>({ success: false, error: access.reason });
-    return executeToolInternal(tool, args, useTimelineStore.getState(), useMediaStore.getState(), callerContext, signal);
+    return transaction.run(() => executeToolInternal(tool, args, transaction.bindStore(useTimelineStore.getState()),
+      transaction.bindStore(useMediaStore.getState()), callerContext, signal));
   };
 }
 
@@ -117,6 +120,7 @@ export function parseEditorStream(text: string): { records: QueuedRecord[]; prob
 // ── Tool entry points ───────────────────────────────────────────────────────
 
 export async function handleRunEditorStream(args: Record<string, unknown>, callerContext: CallerContext = 'internal', signal?: AbortSignal): Promise<ToolResult> {
+  const transaction = captureToolTransaction('runEditorStream');
   if (useTimelineStore.getState().isExporting) return { success: false, error: 'Editor streams cannot run while exporting.' };
   let text = typeof args.text === 'string' ? args.text : '';
   if (!text && typeof args.scene === 'string') {
@@ -126,7 +130,7 @@ export async function handleRunEditorStream(args: Record<string, unknown>, calle
   if (!text.trim()) return { success: false, error: 'text (stream blocks) or scene (a stored scene name) is required.' };
   if (text.length > 2_000_000) return { success: false, error: 'Stream text is larger than 2 MB; split it into several runs.' };
 
-  const run = new EditorStreamRun(executorFor(callerContext, signal), signal);
+  const run = new EditorStreamRun(executorFor(callerContext, transaction, signal), signal, transaction);
   run.feed(text);
   run.end();
   const problems = [...run.problems];

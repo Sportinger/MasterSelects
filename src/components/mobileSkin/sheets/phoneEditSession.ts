@@ -1,7 +1,8 @@
 // One owned, cancellable transaction per editing sheet (effects, adjust, speed, volume, mask, …).
 // Live changes while the sheet is open land in that transaction (a repository gesture, or a legacy
-// history batch without a repository): Done commits everything as ONE undo step, Cancel rolls it back
-// to the exact state before the sheet opened, without calling undo.
+// history batch without a repository): Done commits everything as ONE undo step, Cancel rolls back
+// exactly the sheet's own changes, without calling undo (what an assistant request or a background job
+// committed while the sheet was open stays).
 //
 // The session owns its gesture as an explicit owner: an input gesture, a nested startBatch/endBatch
 // (e.g. applying a Look) or a window blur (file picker, app switch) cannot end it. Changes should still

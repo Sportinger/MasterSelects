@@ -172,7 +172,7 @@
 .mobile-skin .phone-comp-tab {
   flex: 0 0 auto;
   min-width: 44px;
-  max-width: 160px;
+  max-width: 120px;
   padding: 0 12px;
   color: var(--phone-text-dim);
   border-bottom: 2px solid transparent;
@@ -185,6 +185,23 @@
   border-bottom-color: var(--phone-accent);
   font-weight: 600;
 }
+.mobile-skin .phone-comp-tab:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.mobile-skin .phone-comp-tab:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: -2px; }
+
+/* Edge fades of the horizontal strips (usePhoneScrollEdges marks which edges hide more content). */
+.mobile-skin .phone-scroll-edges[data-more-start='true'] {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px);
+  mask-image: linear-gradient(to right, transparent 0, #000 24px);
+}
+.mobile-skin .phone-scroll-edges[data-more-end='true'] {
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 24px);
+  mask-image: linear-gradient(to left, transparent 0, #000 24px);
+}
+.mobile-skin .phone-scroll-edges[data-more-start='true'][data-more-end='true'] {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+}
+
 .mobile-skin .phone-comp-tabs__add {
   height: var(--phone-tabs-h);
   min-width: 44px;
@@ -259,7 +276,11 @@
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+  /* A fling stops on a whole tool: no label is left cut at the left edge (next to the back button). */
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 24px;
 }
+.mobile-skin .phone-toolbar__scroller > .phone-tool { scroll-snap-align: start; }
 .mobile-skin .phone-toolbar__scroller::-webkit-scrollbar { display: none; }
 .mobile-skin .phone-tool {
   flex: 0 0 auto;
@@ -336,6 +357,24 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   pointer-events: none;
   text-align: center;
+}
+/* With a sheet open the toast moves onto the composition tab row: it never covers a sheet control, the
+   docked transport (Undo) or the picture being judged, and it lets taps through (pointer-events: none). */
+.mobile-skin .phone-shell:has(.phone-sheet) .phone-toast {
+  top: calc(var(--phone-safe-top) + var(--phone-top-h) + 1px);
+  bottom: auto;
+  max-height: var(--phone-tabs-h);
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* An error must stay readable: it may wrap down over the top of the preview. */
+.mobile-skin .phone-shell:has(.phone-sheet) .phone-toast--error {
+  max-height: none;
+  white-space: normal;
 }
 .mobile-skin .phone-toast--error { border-color: var(--phone-danger); color: var(--phone-danger-text); }
 

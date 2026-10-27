@@ -6,7 +6,9 @@ import type { MediaState } from '../../../../stores/mediaStore/types';
 import type { TimelineStore } from '../../../../stores/timeline/types';
 import { scheduleMediaSourceArtifactProjectionForClips } from '../../../mediaArtifacts/mediaSourceArtifacts';
 import { setProjectLoadProgress, completeProjectLoadProgress, failProjectLoadProgress } from '../../load/loadProgress';
-import { editorRepositoryLifecycle as createLifecycle, type PrepareRepository } from './RepositoryLifecycle';
+import { editorRepositoryLifecycle as createLifecycle, isSupersededScratchOpen, type PreparedRepository, type PrepareRepository, type RepositoryOpenKind } from './RepositoryLifecycle';
+import { startProjectLoadMeasurement } from '../../load/projectLoadTelemetry';
+import { Logger } from '../../../logger';
 import { activateRepositoryProjection } from '../transaction/editorProjectionActivation';
 import { startScheduledLinkedMediaConnection } from '../transaction/editorLinkedMediaConnection';
 import { captureEditorProjectDomains, flushEditorRepositoryViews, readEditorRepositoryWorkspace, installEditorRepositorySession, getEditorRepositorySourceVersion, applyEditorRepositoryResult } from '../transaction/editorRepositorySession';
@@ -70,7 +72,11 @@ function publicationFor(session: RepositorySession) {
     },
   }); publications.set(session, host); return host;
 }
+const log = Logger.create('EditorRepositoryLifecycle');
+/** Set when a project open cancelled the background scratch open; a failed open brings it back. */
+let scratchSuperseded = false;
 const lifecycle = createLifecycle({
+  measure: startProjectLoadMeasurement,
   progress(progress) {
     withRepositoryHydration(() => {
       if (progress.phase === 'ready') {
@@ -123,11 +129,21 @@ export function getActiveRepositoryDirectory(): FileSystemDirectoryHandle | null
 export function getActiveRepositorySession(): RepositorySession | null { return lifecycle.getSession(); }
 export function subscribeRepositoryLifecycle(listener: () => void): () => void { return lifecycle.subscribe(listener); }
 export const getRepositoryLifecycleState = () => lifecycle.getState();
-export const openEditorRepository = (prepare: PrepareRepository) => lifecycle.open(prepare);
+export async function openEditorRepository(prepare: PrepareRepository, kind: RepositoryOpenKind = 'open'): Promise<RepositorySession> {
+  try { const session = await lifecycle.open(prepare, kind); scratchSuperseded = false; return session; }
+  catch (error) {
+    // The open cancelled the scratch workspace and then failed itself: edits made now need it again.
+    if (scratchSuperseded && !lifecycle.getSession()) {
+      scratchSuperseded = false;
+      void ensureEditorScratchRepository().catch(scratchError => log.warn('Scratch recovery could not be reopened after a failed project open', scratchError));
+    }
+    throw error;
+  }
+}
 export const closeEditorRepository = () => lifecycle.close();
 export async function flushEditorRepository(): Promise<boolean> {
   if (!getActiveRepositorySession()?.opening.writable) throw new RepositoryError('ownership', 'Read-only project cannot publish a save');
-  await lifecycle.flush({ retry: true }); return true;
+  await lifecycle.flush({ retry: true, measure: true }); return true;
 }
 export async function retryEditorRepository(): Promise<void> { await lifecycle.flush({ retry: true }); }
 export function readEditorRepositoryProject(): ProjectFile | null {
@@ -147,22 +163,27 @@ export function isScratchRepository(): boolean { const session = getActiveReposi
 export async function ensureEditorScratchRepository(): Promise<void> {
   if (getActiveRepositorySession()) return;
   // Open-or-create is idempotent (an existing descriptor reopens), so one retry is safe.
-  await retryTransientStorage(() => lifecycle.ensureScratch(async () => {
-    const unsupported = () => new RepositoryError('unsupported', 'Browser recovery is unavailable. Update your browser before creating or editing projects.');
-    if (typeof navigator.storage?.getDirectory !== 'function') throw unsupported();
-    const { backendForLocation, prepareNewRepository, prepareRepositoryOpen } = await import('./repositoryLocations');
-    const location = { kind: 'opfs' as const, path: 'repository-scratch/' + repositoryWorkspaceId };
-    // OPFS without writable streams stays read-only; the IndexedDB fallback can always write.
-    const backend = await backendForLocation(location);
-    if (!backend.capabilities.immutableWrites) throw unsupported();
-    if (await backend.stat('project.msrepo.json')) return prepareRepositoryOpen(location, repositoryWorkspaceId);
-    const prepared = await prepareNewRepository(location, repositoryWorkspaceId);
-    const { createRepositoryProject } = await import('./defaultProject');
-    const domains = captureEditorProjectDomains(createRepositoryProject('Untitled Project'));
-    prepared.initialize = { entities: domains.entities, journals: domains.journals,
-      workspace: Object.fromEntries(splitProjectWorkspace(domains.workspace).map(part => [part.key, part.value])) };
-    return prepared;
-  }), 'Opening scratch recovery');
+  await retryTransientStorage(() => lifecycle.ensureScratch(scratchPrepare), 'Opening scratch recovery').catch(error => {
+    if (!isSupersededScratchOpen(error)) throw error;
+    // The person opened or created a project meanwhile; it replaces the scratch workspace.
+    scratchSuperseded = true; log.info('Scratch recovery open gave way to a project open');
+  });
+}
+async function scratchPrepare(): Promise<PreparedRepository> {
+  const unsupported = () => new RepositoryError('unsupported', 'Browser recovery is unavailable. Update your browser before creating or editing projects.');
+  if (typeof navigator.storage?.getDirectory !== 'function') throw unsupported();
+  const { backendForLocation, prepareNewRepository, prepareRepositoryOpen } = await import('./repositoryLocations');
+  const location = { kind: 'opfs' as const, path: 'repository-scratch/' + repositoryWorkspaceId };
+  // OPFS without writable streams stays read-only; the IndexedDB fallback can always write.
+  const backend = await backendForLocation(location);
+  if (!backend.capabilities.immutableWrites) throw unsupported();
+  if (await backend.stat('project.msrepo.json')) return prepareRepositoryOpen(location, repositoryWorkspaceId);
+  const prepared = await prepareNewRepository(location, repositoryWorkspaceId);
+  const { createRepositoryProject } = await import('./defaultProject');
+  const domains = captureEditorProjectDomains(createRepositoryProject('Untitled Project'));
+  prepared.initialize = { entities: domains.entities, journals: domains.journals,
+    workspace: Object.fromEntries(splitProjectWorkspace(domains.workspace).map(part => [part.key, part.value])) };
+  return prepared;
 }
 if (import.meta.hot) {
   import.meta.hot.dispose(data => { data.repositoryInstalledCleanup = installedCleanup; data.repositoryWorkspace = projectWorkspace;

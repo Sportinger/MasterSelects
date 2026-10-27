@@ -1,4 +1,5 @@
 import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
+import { captureToolTransaction } from '../toolTransaction';
 import { useTimelineStore } from '../../../stores/timeline';
 import type {
   ClipCustomNodeConversationKind,
@@ -349,7 +350,9 @@ export async function handleSendAINodePrompt(args: Record<string, unknown>): Pro
     return { success: false, error: 'No AI provider configured.' };
   }
 
-  const timelineStore = useTimelineStore.getState();
+  // The node is updated after the provider answered: in this tool's transaction, carried explicitly.
+  const transaction = captureToolTransaction('sendAINodePrompt');
+  const timelineStore = transaction.bindStore(useTimelineStore.getState());
   const response = await generateAINodeResponse(
     match.clip,
     match.definition,

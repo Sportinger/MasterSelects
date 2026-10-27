@@ -19,4 +19,8 @@ export const PHONE_EDITS_TEST_IDS = {
   rangeEdits: 'phone-edits-range',
   message: 'phone-edits-message',
   empty: 'phone-edits-empty',
+  /** One-line reason under the greyed ripple buttons. */
+  rippleReason: 'phone-edits-ripple-reason',
+  /** Empty state: selects the clip under the playhead. */
+  selectAtPlayhead: 'phone-edits-select-at-playhead',
 } as const;

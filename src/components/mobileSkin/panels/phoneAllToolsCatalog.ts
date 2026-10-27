@@ -9,6 +9,7 @@ import {
   PHONE_SHIPPED_MILESTONE,
   type PhoneActionAvailability,
   type PhoneActionContext,
+  type PhoneIconName,
   type PhoneMilestone,
   type PhoneSheetId,
 } from '../contracts';
@@ -24,8 +25,10 @@ export interface PhoneAllToolsEntry {
   kind: PhoneAllToolsKind;
   label: string;
   group: string;
-  /** Short line under the label. */
+  /** Short line under the label; empty when the group header already says it. */
   detail: string;
+  /** Toolbar glyph of the row, when it has one. */
+  icon?: PhoneIconName;
   milestone: PhoneMilestone;
   state: PhoneActionAvailability;
   /** Extra words the search matches (lower case). */
@@ -80,6 +83,13 @@ export const PHONE_ALL_TOOLS_SHEETS: ReadonlyArray<{ id: PhoneSheetId; label: st
   { id: 'score', label: 'Notation', detail: 'Write notes on a staff and play them', keywords: 'score sheet music notes staff notation musicxml play' },
 ];
 
+/** Glyphs of the sheet rows that have a matching toolbar icon. */
+const SHEET_ICONS: Partial<Record<PhoneSheetId, PhoneIconName>> = {
+  compositions: 'compositions', tracks: 'reorder', captions: 'captions', audioFx: 'audio', library: 'media', edits: 'trim',
+  replace: 'replace', export: 'export', clipboard: 'duplicate', textMulti: 'text', source: 'media', 'shape-path': 'animation',
+  audioRegion: 'volume', score: 'audio', 'preview-view': 'fullscreen', bake: 'effects', variants: 'compositions',
+};
+
 /** Sheets that need a selected clip to do anything. */
 const CLIP_SHEETS = new Set<PhoneSheetId>(['edits', 'replace']);
 
@@ -103,7 +113,9 @@ export function buildPhoneAllToolsEntries(context: PhoneActionContext, shipped: 
       kind: 'action',
       label: action.label,
       group: action.scope === 'root' ? 'Main tools' : 'Clip tools',
-      detail: action.scope === 'root' ? 'Main toolbar' : 'Clip toolbar',
+      // The group header (Main tools / Clip tools) says where it lives; no repeated subtitle.
+      detail: '',
+      icon: action.icon,
       milestone: action.milestone,
       state,
       keywords: action.id.replace(/-/g, ' '),
@@ -115,14 +127,14 @@ export function buildPhoneAllToolsEntries(context: PhoneActionContext, shipped: 
       ? { kind: 'unavailable', reason: SELECT_CLIP_REASON }
       : { kind: 'available' };
     entries.push({
-      id: `sheet:${sheet.id}`, kind: 'sheet', label: sheet.label, group: 'Sheets', detail: sheet.detail,
+      id: `sheet:${sheet.id}`, kind: 'sheet', label: sheet.label, group: 'Sheets', detail: sheet.detail, icon: SHEET_ICONS[sheet.id],
       milestone: 'M3', state, keywords: sheet.keywords,
     });
   }
 
   entries.push({
     id: 'view:fullscreen', kind: 'view', label: 'Fullscreen preview', group: 'View',
-    detail: 'Watch the edit on the whole screen', milestone: 'M3',
+    detail: 'Watch the edit on the whole screen', milestone: 'M3', icon: 'fullscreen',
     state: context.engineReady ? { kind: 'available' } : { kind: 'unavailable', reason: 'The preview engine is still starting.' },
     keywords: 'play watch landscape full screen',
   });
@@ -131,7 +143,7 @@ export function buildPhoneAllToolsEntries(context: PhoneActionContext, shipped: 
   for (const task of PHONE_ASSISTANT_TASKS) {
     entries.push({
       id: `assistant:${task.catalogId}`, kind: 'assistant', label: `Ask the assistant: ${task.task}`, group: 'Assistant',
-      detail: task.prompt, milestone: 'M5',
+      detail: task.prompt, milestone: 'M5', icon: 'assistant',
       state: context.projectOpen ? { kind: 'available' } : { kind: 'unavailable', reason: OPEN_PROJECT_REASON },
       keywords: `ai chat ${task.keywords} ${task.catalogId.split('/')[1].replace(/-/g, ' ')}`, prompt: task.prompt,
     });

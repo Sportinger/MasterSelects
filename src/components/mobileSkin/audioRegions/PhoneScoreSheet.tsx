@@ -17,6 +17,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { Logger } from '../../../services/logger';
 import { blurAfterPointer } from '../audio/PhoneAudioControls';
 import { createPhoneScoreClip, findSelectedPhoneScoreClip } from './phoneScoreModel';
+import { PhoneEmptyState } from '../transition/phoneSheetPrimitives';
 import { PHONE_SCORE_TEST_IDS as IDS } from './phoneScoreTestIds';
 import '../audio/PhoneAudioSheets.css';
 import './PhoneScore.css';
@@ -84,12 +85,14 @@ export const PhoneScoreSheet: PhoneSheetComponent = () => {
   const trackName = (trackId: string) => tracks.find((track) => track.id === trackId)?.name ?? 'Score';
 
   return (
-    <PhoneSheet title="Notation" height="tall" onCancel={closeSheet} cancelLabel="Close">
-      <div className="phone-score" data-testid={IDS.root} data-clip-id={selected?.id ?? ''}>
+    // With a clip the editor takes the whole sheet ('fill', up to the list cap) and its staff area fills
+    // what the toolbars leave, so the staff is visible and tappable; the empty state stays content-sized.
+    <PhoneSheet title="Notation" height="tall" size={selected ? 'fill' : 'list'} onCancel={closeSheet} cancelLabel="Close">
+      <div className={selected ? 'phone-score phone-score--editing' : 'phone-score'} data-testid={IDS.root} data-clip-id={selected?.id ?? ''}>
         {selected ? (
           <>
-            <p className="phone-audio-sheet__hint" data-testid={IDS.limit}>
-              Tap the staff to place a note (Entry), or switch to Select and tap a note to change it. Play and tapped notes sound with the track instrument here; score clips do not sound in the timeline or the export yet (same as the full editor).
+            <p className="phone-audio-sheet__hint phone-score__hint" data-testid={IDS.limit}>
+              Tap the staff to add a note. Score clips do not sound in the timeline or the export yet.
             </p>
             <div className="phone-score__editor">
               <Suspense fallback={<p className="phone-audio-sheet__hint">Loading the score editor…</p>}>
@@ -99,7 +102,10 @@ export const PhoneScoreSheet: PhoneSheetComponent = () => {
           </>
         ) : (
           <div className="phone-audio-section">
-            <p className="phone-audio-sheet__target" data-testid={IDS.empty}>Select a score clip to write notes, or add one at the playhead.</p>
+            <PhoneEmptyState icon="audio" testId={IDS.empty} title={scoreClips.length > 0 ? 'Pick a score clip' : 'No score yet'}
+              body={scoreClips.length > 0 ? 'Select a score clip to write notes, or add one at the playhead.' : 'Add a score clip at the playhead to write notes.'}
+              actionLabel="Add a score clip" actionTestId={IDS.create}
+              onAction={() => { const result = createPhoneScoreClip(); setError(result.error ?? null); }} />
             {scoreClips.length > 0 ? (
               <ul className="phone-audio-list">
                 {scoreClips.map((clip) => (
@@ -113,10 +119,6 @@ export const PhoneScoreSheet: PhoneSheetComponent = () => {
                 ))}
               </ul>
             ) : null}
-            <button type="button" className="phone-audio-big" data-testid={IDS.create} onPointerUp={blurAfterPointer}
-              onClick={() => { const result = createPhoneScoreClip(); setError(result.error ?? null); }}>
-              Add a score clip at the playhead
-            </button>
             {error ? <p className="phone-audio-sheet__error" role="alert">{error}</p> : null}
           </div>
         )}
