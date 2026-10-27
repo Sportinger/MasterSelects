@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 import sharp from 'sharp'
-import { readColorBars, readFrameCode, type BarReading, type FrameCodeReading } from '../assertions/frameCodeOracle'
+import { readColorBars, readFrameCode, type BarReading, type FrameCodeReading, type FramePixels } from '../assertions/frameCodeOracle'
 
 /**
  * Reads what the preview really shows: a screenshot of the preview canvas as
@@ -40,14 +40,24 @@ export class PreviewProbe {
       await new Promise(resolve => setTimeout(resolve, 50))
       return { reading: { frame: null, valid: false, inverted: false, contrast: 0, bits: [], reason: 'flat' }, bars: [], observation }
     }
-    const png = await this.canvas.screenshot({ animations: 'allow', caret: 'initial', scale: 'css', timeout: 5_000 })
-    const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true })
-    const pixels = { width: info.width, height: info.height, channels: 3 as const, data }
+    const pixels = await this.capture()
     const reading = readFrameCode(pixels)
     const observation: PreviewObservation = { at: Date.now() - this.origin, frame: reading.frame, inverted: reading.inverted,
       reason: reading.reason, contrast: Math.round(reading.contrast) }
     this.observations.push(observation)
     return { reading, bars: readColorBars(pixels), observation }
+  }
+
+  /**
+   * The preview canvas as the compositor put it on screen, as raw RGB at css
+   * scale (one pixel per css pixel). Composition coordinates map to it by
+   * `width / compositionWidth`; callers that read regions (the mosaic) check
+   * that both axes scale alike.
+   */
+  async capture(): Promise<FramePixels> {
+    const png = await this.canvas.screenshot({ animations: 'allow', caret: 'initial', scale: 'css', timeout: 5_000 })
+    const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+    return { width: info.width, height: info.height, channels: 3, data }
   }
 
   /**
