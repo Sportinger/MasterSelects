@@ -9,6 +9,11 @@ public class EditorUrlPolicyTest {
         String callback = "https://www.masterselects.com/api/auth/callback?state=test&token=signed";
         assertEquals(callback, EditorUrlPolicy.launchUrl(callback));
     }
+    @Test public void servesThePhoneEditorEntry() {
+        assertTrue(EditorUrlPolicy.isEntry("/m"));
+        assertTrue(EditorUrlPolicy.isEntry("/m/"));
+        assertFalse(EditorUrlPolicy.isEntry("/mx"));
+    }
     @Test public void rejectsOtherOriginsCredentialsAndUnexpectedPaths() {
         String[] candidates = {null, "", "javascript:alert(1)", "http://www.masterselects.com/editor",
             "https://www.masterselects.com.evil.test/editor", "https://evil.test/editor",

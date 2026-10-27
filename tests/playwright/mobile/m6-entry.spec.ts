@@ -5,10 +5,12 @@ import { installDeterministicStorage } from './phoneFixture'
 
 /**
  * Phones open the phone editor instead of the desktop editor (src/routing/phoneEntry.ts). The full
- * editor stays one tap away and keeps that choice across reloads; the Mobile toggle comes back.
- * Own context: this journey leaves /m, so it must not share the Sammeltest page.
+ * editor stays one tap away with the same project and keeps that choice across reloads; the Mobile
+ * toggle comes back. Own context: this journey leaves /m, so it must not share the Sammeltest page.
  */
 test('a phone opening /editor lands in the phone editor, can switch to the full editor and back @phone', async ({ browser }, testInfo) => {
+  // Four editor boots (phone, full, full after reload, phone again) in one journey.
+  test.setTimeout(300_000)
   const use = testInfo.project.use
   if (!use.baseURL || !use.viewport) throw new Error('Playwright baseURL and a phone viewport must be configured')
   const context = await browser.newContext({
@@ -25,19 +27,31 @@ test('a phone opening /editor lands in the phone editor, can switch to the full 
     const home = page.getByTestId(PHONE_M1_TEST_IDS.home)
     await expect(home, 'the phone home did not appear after the redirect').toBeVisible({ timeout: 90_000 })
 
-    await home.getByTestId(PHONE_M1_TEST_IDS.fullEditor).tap()
+    // Setup, not under test: a project through the phone home.
+    const projectName = `Entry ${randomUUID().slice(0, 8)}`
+    const create = page.getByTestId(PHONE_M1_TEST_IDS.createProject)
+    if (!await create.isVisible()) await page.getByTestId(PHONE_M1_TEST_IDS.newProject).click()
+    await page.getByTestId(PHONE_M1_TEST_IDS.projectNameInput).fill(projectName)
+    await create.click()
+    await expect(page.getByTestId(PHONE_TEST_IDS.timeline), 'the new phone project did not open').toBeVisible({ timeout: 60_000 })
+
+    await page.getByTestId(PHONE_TEST_IDS.projectName).tap()
+    await page.getByTestId(PHONE_M1_TEST_IDS.fullEditor).tap()
     await expect(page, 'Full editor did not open /editor').toHaveURL(/\/editor$/, { timeout: 30_000 })
     const mobileToggle = page.getByRole('button', { name: 'Mobile mode' })
     await expect(mobileToggle, 'the desktop editor did not load').toBeVisible({ timeout: 90_000 })
     await expect(page.getByTestId(PHONE_TEST_IDS.root), 'the phone skin is still mounted in the full editor').toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Choose project' }), 'the full editor did not reopen the phone project').toHaveCount(0, { timeout: 60_000 })
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expect(mobileToggle, 'the full-editor choice was not kept across a reload').toBeVisible({ timeout: 90_000 })
     await expect(page).toHaveURL(/\/editor$/)
+    await expect(page.getByRole('heading', { name: 'Choose project' }), 'the project did not come back after the reload').toHaveCount(0, { timeout: 60_000 })
 
     await mobileToggle.tap()
     await expect(page, 'the Mobile toggle did not open the phone editor').toHaveURL(/\/m$/, { timeout: 30_000 })
-    await expect(home, 'the phone home did not appear after Mobile').toBeVisible({ timeout: 90_000 })
+    await expect(page.getByTestId(PHONE_TEST_IDS.timeline), 'the phone editor did not reopen the project').toBeVisible({ timeout: 90_000 })
+    await expect(page.getByTestId(PHONE_TEST_IDS.projectName)).toContainText(projectName)
 
     await page.goto(new URL('/editor', use.baseURL).toString(), { waitUntil: 'domcontentloaded' })
     await expect(page, 'Mobile did not end the full-editor choice').toHaveURL(/\/m$/)

@@ -1,6 +1,7 @@
 // Phones open the phone editor (/m) instead of the desktop editor. Tablets and desktops keep the
 // desktop editor with its automatic Mobile/Medium dock layouts. A phone user who chose the full
-// editor keeps it until they switch back with the Mobile toggle.
+// editor keeps it until they switch back with the Mobile toggle. The installed app (PWA) is scoped to
+// /editor and stays there.
 
 import { hasEditorOverride, isEditorPath, resolveEntryExperience } from './entryExperience';
 
@@ -17,6 +18,8 @@ export interface PhoneEntryEnvironment {
   screenHeight: number;
   /** The user chose the full editor on this phone. */
   prefersFullEditor: boolean;
+  /** Running as the installed app (PWA), whose scope is /editor; /m would leave the app window. */
+  installedApp: boolean;
 }
 
 interface PhoneEntryLocationLike {
@@ -39,7 +42,7 @@ export function resolvePhoneEntryRedirect(
   locationLike: PhoneEntryLocationLike,
   env: PhoneEntryEnvironment,
 ): string | null {
-  if (env.prefersFullEditor || !isPhoneSizedTouchDevice(env)) return null;
+  if (env.prefersFullEditor || env.installedApp || !isPhoneSizedTouchDevice(env)) return null;
   if (hasEditorOverride(locationLike.search)) return null;
   if (resolveEntryExperience(locationLike) !== 'editor') return null;
   // Deep links below /editor (/editor/…) keep their meaning; only the editor entry itself moves.
@@ -57,32 +60,35 @@ function readFullEditorPreference(): boolean {
   }
 }
 
-/** Remember (or forget) that this device wants the full editor instead of the phone editor. */
-export function rememberFullEditorPreference(prefersFullEditor: boolean): void {
+/** Remember (or forget) that this device wants the full editor; false when storage is unavailable. */
+export function rememberFullEditorPreference(prefersFullEditor: boolean): boolean {
   try {
     if (prefersFullEditor) {
       window.localStorage.setItem(FULL_EDITOR_PREFERENCE_KEY, '1');
     } else {
       window.localStorage.removeItem(FULL_EDITOR_PREFERENCE_KEY);
     }
+    return true;
   } catch {
-    // Without storage the choice lasts for this page only; the redirect then applies again next time.
+    return false;
   }
 }
 
 export function readPhoneEntryEnvironment(): PhoneEntryEnvironment {
-  const coarsePointer = typeof window.matchMedia === 'function'
-    && window.matchMedia('(pointer: coarse)').matches;
+  const matches = (query: string) => typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
   return {
-    coarsePointer,
+    coarsePointer: matches('(pointer: coarse)'),
     screenWidth: window.screen?.width ?? 0,
     screenHeight: window.screen?.height ?? 0,
     prefersFullEditor: readFullEditorPreference(),
+    installedApp: matches('(display-mode: standalone)') || matches('(display-mode: fullscreen)')
+      || matches('(display-mode: minimal-ui)'),
   };
 }
 
 /** Leave the phone editor for the desktop editor and keep that choice on this device. */
 export function openFullEditorFromPhone(): void {
-  rememberFullEditorPreference(true);
-  window.location.assign(FULL_EDITOR_PATH);
+  // Without storage the choice cannot be kept; the explicit override still opens the full editor.
+  const remembered = rememberFullEditorPreference(true);
+  window.location.assign(remembered ? FULL_EDITOR_PATH : `${FULL_EDITOR_PATH}?entry=editor`);
 }

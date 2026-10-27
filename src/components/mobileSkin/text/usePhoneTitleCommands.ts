@@ -95,6 +95,8 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
   const inGesture = <T,>(action: () => T): T => (gestureAlive() ? runEditorGesture(gesture!.id, action) : action());
 
   const open = () => {
+    // The editor ends open gestures on window blur; start a fresh one instead of writing outside any.
+    if (gesture && !gestureAlive()) gesture = null;
     if (gesture || legacyBatch) return;
     if (repository()) {
       const opened = beginEditorGesture(label);

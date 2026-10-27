@@ -295,7 +295,7 @@ export const PRODUCT_ANALYTICS_EVENT_DEFINITIONS = {
         'youtube',
       ] as const),
       device_class: choice(['desktop', 'tablet', 'mobile'] as const),
-      experience: choice(['editor', 'chat', 'medium'] as const),
+      experience: choice(['editor', 'chat', 'medium', 'phone'] as const),
       language: identifier(16),
       platform: choice(['windows', 'macos', 'linux', 'ios', 'android', 'other'] as const),
     },

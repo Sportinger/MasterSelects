@@ -5,6 +5,7 @@ import { openFullEditorFromPhone } from '../../../routing/phoneEntry';
 import { Logger } from '../../../services/logger';
 import { projectFileService } from '../../../services/projectFileService';
 import { saveCurrentProject } from '../../../services/projectSync';
+import { describeEditorSwitchBlocker } from '../../../services/project/editorSwitchGuard';
 import { getActiveRepositorySession } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 
 const log = Logger.create('PhoneFullEditor');
@@ -12,6 +13,8 @@ const log = Logger.create('PhoneFullEditor');
 export type PhoneFullEditorResult = { ok: true } | { ok: false; message: string };
 
 export async function saveAndOpenFullEditor(): Promise<PhoneFullEditorResult> {
+  const blocker = describeEditorSwitchBlocker();
+  if (blocker) return { ok: false, message: blocker };
   try {
     // A read-only tab has nothing of its own to save.
     const writable = getActiveRepositorySession()?.opening.writable !== false;

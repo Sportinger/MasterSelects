@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Logger } from '../../../services/logger';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { failProjectLoadProgress } from '../../../services/project/load/loadProgress';
 import {
   isExpectedArchiveImportRejection,
@@ -282,6 +283,8 @@ export function useToolbarProjectActions({
         }
 
         setProjectName(name);
+        // Store readers (phone top bar, AI audit, export names) follow the rename too.
+        useMediaStore.getState().setProjectName(name);
         setShowSavedToast(true);
         return null;
       }

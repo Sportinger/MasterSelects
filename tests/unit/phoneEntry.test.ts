@@ -8,9 +8,9 @@ import {
   type PhoneEntryEnvironment,
 } from '../../src/routing/phoneEntry';
 
-const PHONE: PhoneEntryEnvironment = { coarsePointer: true, screenWidth: 412, screenHeight: 915, prefersFullEditor: false };
-const TABLET: PhoneEntryEnvironment = { coarsePointer: true, screenWidth: 820, screenHeight: 1180, prefersFullEditor: false };
-const DESKTOP: PhoneEntryEnvironment = { coarsePointer: false, screenWidth: 1920, screenHeight: 1080, prefersFullEditor: false };
+const PHONE: PhoneEntryEnvironment = { coarsePointer: true, screenWidth: 412, screenHeight: 915, prefersFullEditor: false, installedApp: false };
+const TABLET: PhoneEntryEnvironment = { coarsePointer: true, screenWidth: 820, screenHeight: 1180, prefersFullEditor: false, installedApp: false };
+const DESKTOP: PhoneEntryEnvironment = { coarsePointer: false, screenWidth: 1920, screenHeight: 1080, prefersFullEditor: false, installedApp: false };
 
 function at(pathname: string, search = '', hash = '') {
   return { hostname: 'www.masterselects.com', pathname, search, hash };
@@ -44,6 +44,10 @@ describe('resolvePhoneEntryRedirect', () => {
     expect(resolvePhoneEntryRedirect(at('/editor'), DESKTOP)).toBeNull();
   });
 
+  it('keeps the installed app (scoped to /editor) in the desktop editor', () => {
+    expect(resolvePhoneEntryRedirect(at('/editor'), { ...PHONE, installedApp: true })).toBeNull();
+  });
+
   it('respects the full-editor choice and the explicit editor overrides', () => {
     expect(resolvePhoneEntryRedirect(at('/editor'), { ...PHONE, prefersFullEditor: true })).toBeNull();
     expect(resolvePhoneEntryRedirect(at('/editor', '?test'), PHONE)).toBeNull();
@@ -63,7 +67,7 @@ describe('full-editor preference', () => {
   });
 
   it('is remembered on the device and cleared again', () => {
-    rememberFullEditorPreference(true);
+    expect(rememberFullEditorPreference(true)).toBe(true);
     expect(readPhoneEntryEnvironment().prefersFullEditor).toBe(true);
     rememberFullEditorPreference(false);
     expect(readPhoneEntryEnvironment().prefersFullEditor).toBe(false);

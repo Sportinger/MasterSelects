@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   resolveProjectRootMode: vi.fn(),
   getProjectWriteSupportError: vi.fn(),
   updateComposition: vi.fn(),
+  setProjectName: vi.fn(),
   media: {
     activeCompositionId: 'old-comp' as string | null,
     compositions: [] as Array<{ id: string; width: number; height: number; frameRate: number }>,
@@ -50,6 +51,7 @@ vi.mock('../../src/stores/mediaStore', () => ({
       activeCompositionId: mocks.media.activeCompositionId,
       compositions: mocks.media.compositions,
       updateComposition: mocks.updateComposition,
+      setProjectName: mocks.setProjectName,
     }),
   },
 }));
@@ -167,6 +169,8 @@ describe('phone project commands', () => {
     mocks.renameProject.mockResolvedValue(true);
     expect((await renamePhoneProject('New')).ok).toBe(true);
     expect(mocks.renameProject).toHaveBeenCalledWith('New');
+    // The top bar, export name and share title read the store name.
+    expect(mocks.setProjectName).toHaveBeenCalledWith('New');
     expect((await renamePhoneProject('Old')).ok).toBe(true);
     expect(mocks.renameProject).toHaveBeenCalledTimes(1);
     expect((await renamePhoneProject('')).ok).toBe(false);

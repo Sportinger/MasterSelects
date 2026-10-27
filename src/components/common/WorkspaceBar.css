@@ -259,8 +259,8 @@
 
 .workspace-bar-mobile-error {
   position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  bottom: calc(100% + 6px);
+  right: 8px;
   z-index: 10;
   max-width: 280px;
   padding: 6px 10px;
@@ -362,6 +362,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-bar-layouts-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-subtle);
+}
+
+.workspace-bar-layouts-menu .workspace-bar-phone-editor[aria-disabled='true'] {
+  color: var(--text-muted);
+  cursor: default;
 }
 
 .workspace-bar-favorite {

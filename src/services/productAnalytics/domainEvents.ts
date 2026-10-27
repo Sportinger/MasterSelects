@@ -64,7 +64,9 @@ export function isEditorExperienceAnalyticsActive(
     || pathname === '/chat'
     || pathname.startsWith('/chat/')
     || pathname === '/medium'
-    || pathname.startsWith('/medium/');
+    || pathname.startsWith('/medium/')
+    || pathname === '/m'
+    || pathname.startsWith('/m/');
 }
 
 export function trackLandingOptionSelected(

@@ -285,7 +285,9 @@ MasterSelects is installable as an app in Chrome and Edge on Windows and Linux
 (`public/manifest.webmanifest`, linked from `index.html`: start URL `/editor`,
 scope `/editor`, standalone window, `#0f0f0f` theme and background from
 `--bg-primary`). The scope covers only the editor, so links to the website and
-the documentation keep opening in the browser instead of the app window. Chrome keeps File System Access grants of an installed web app
+the documentation keep opening in the browser instead of the app window. For the
+same reason the installed app stays in the full editor on a phone instead of
+moving to the [phone editor](./Phone-Editor.md) at `/m`. Chrome keeps File System Access grants of an installed web app
 across browser restarts, so projects opened in the app window do not ask for
 their folders again; a browser tab still loses them when the session ends.
 While the browser offers installation (`beforeinstallprompt`) and the editor is

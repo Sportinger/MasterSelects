@@ -100,22 +100,25 @@ export function WorkspaceBar() {
     };
   }, [menuOpen]);
 
-  // Mobile opens the phone editor. On a tablet the automatic Mobile dock layout still turns off here;
-  // on a phone one tap always goes back to the phone editor.
-  const mobileOpensPhoneEditor = !mobileLayoutEnabled || isPhoneSizedTouchDevice(readPhoneEntryEnvironment());
-  const toggleMobile = async () => {
-    if (!mobileOpensPhoneEditor) {
-      setMobileLayoutOverride(false);
-      return;
-    }
+  const openPhone = async () => {
     if (phoneEditorOpening) return;
     setPhoneEditorOpening(true);
     setPhoneEditorError(null);
     const result = await openPhoneEditor();
-    if (!result.ok) {
-      setPhoneEditorError(result.message);
-      setPhoneEditorOpening(false);
+    if (!result.ok) setPhoneEditorError(result.message);
+    // Normally the page is gone by now; if the user stayed (a cancelled leave prompt), the controls work again.
+    window.setTimeout(() => setPhoneEditorOpening(false), result.ok ? 4000 : 0);
+  };
+
+  // On a phone, Mobile is the phone editor. Elsewhere it keeps switching the Mobile dock layout on and
+  // off, and the Layouts menu opens the phone editor.
+  const mobileOpensPhoneEditor = isPhoneSizedTouchDevice(readPhoneEntryEnvironment());
+  const toggleMobile = () => {
+    if (mobileOpensPhoneEditor) {
+      void openPhone();
+      return;
     }
+    setMobileLayoutOverride(!mobileLayoutEnabled);
   };
 
   const selectLayout = (layoutId: string) => {
@@ -163,9 +166,11 @@ export function WorkspaceBar() {
           aria-pressed={mobileLayoutEnabled}
           className="workspace-bar-over-layout-toggle workspace-bar-mobile-toggle"
           disabled={mobileOpensPhoneEditor ? phoneEditorOpening : !overLayoutsAvailable}
-          onClick={() => void toggleMobile()}
+          onClick={toggleMobile}
           onPointerUp={(event) => event.currentTarget.blur()}
-          title={mobileOpensPhoneEditor ? (phoneEditorError ?? 'Open the phone editor') : 'Disable Mobile design'}
+          title={mobileOpensPhoneEditor
+            ? (phoneEditorError ?? 'Open the phone editor')
+            : mobileLayoutEnabled ? 'Disable Mobile design' : 'Enable Mobile design'}
           type="button"
         >
           <IconDeviceMobile aria-hidden="true" size={17} stroke={1.7} />
@@ -210,6 +215,21 @@ export function WorkspaceBar() {
                 </button>
               );
             })}
+            <div aria-hidden="true" className="workspace-bar-layouts-separator" />
+            <button
+              aria-disabled={phoneEditorOpening}
+              className="workspace-bar-phone-editor"
+              onClick={() => {
+                setMenuOpen(false);
+                void openPhone();
+              }}
+              onPointerUp={(event) => event.currentTarget.blur()}
+              role="menuitem"
+              type="button"
+            >
+              <IconDeviceMobile aria-hidden="true" size={16} stroke={1.7} />
+              <span>Phone editor</span>
+            </button>
           </div>
         )}
       </div>

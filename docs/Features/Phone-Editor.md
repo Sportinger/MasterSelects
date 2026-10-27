@@ -33,7 +33,11 @@ timeline. If the browser asks for access to the project folder again, one tap re
 
 **Full editor** on the home screen and in the project sheet saves the project and opens it in the
 full editor with every tool. The phone remembers that choice. To come back, tap **Mobile** in the
-bottom bar of the full editor.
+bottom bar of the full editor. On a computer or tablet, **Layouts → Phone editor** opens the phone
+editor too. While an export is running, both wait and tell you why.
+
+MasterSelects installed as an app (from the browser's install button) stays in the full editor on a
+phone, because the installed app covers only the full editor's address.
 
 ## The editing screen
 
@@ -104,10 +108,16 @@ milestone when tapped.
   `/m` (`src/routing/phoneEntry.ts`): a phone is a device whose primary pointer is coarse and whose
   screen has a short side below 600 CSS px, so tablets and unfolded foldables stay in the desktop
   editor with its automatic Mobile dock layout. `?test`, `?entry=editor`, `/medium`, `/chat` and
-  deep links below `/editor/` never move. **Full editor** (`project/phoneFullEditor.ts`) saves and
-  stores `ms.phoneEditor.preferFullEditor` in localStorage; the desktop **Mobile** toggle
-  (`src/components/common/openPhoneEditor.ts`) saves, clears that choice and opens `/m`. A failed
-  save keeps the current editor open and shows why.
+  deep links below `/editor/` never move, and neither does the installed app (display mode
+  standalone, fullscreen or minimal-ui), whose manifest scope is `/editor`. **Full editor**
+  (`project/phoneFullEditor.ts`) saves and stores `ms.phoneEditor.preferFullEditor` in
+  localStorage (without storage it opens `/editor?entry=editor`); the desktop **Mobile** toggle on a
+  phone and **Layouts → Phone editor** (`src/components/common/openPhoneEditor.ts`) save, clear
+  that choice and open `/m`. Both refuse while an export runs (`services/project/editorSwitchGuard.ts`),
+  and a failed save keeps the current editor open and shows why. The Android app serves `/m` as an
+  editor entry (`EditorUrlPolicy.java`). Opening a stored project sets the media store's
+  `currentProjectName` from the project itself (`editorProjectionActivation.ts`), and renames update
+  it, so the top bar, AI audit and export names show the real name after a reload.
 - Runtime: `runtime/PhoneRuntimeHost.tsx` owns the single `useEngine()` and `useGlobalHistory()`,
   mounts the playback and FlashBoard runtime hosts and restores the last project like the desktop
   toolbar (`runToolbarProjectBootRestore`, then `setupAutoSync`).

@@ -229,6 +229,9 @@ describe('precise timeline edit classification', () => {
       target: 'clip',
     });
     expect(isEditorExperienceAnalyticsActive('/chat')).toBe(true);
+    expect(isEditorExperienceAnalyticsActive('/m')).toBe(true);
+    expect(isEditorExperienceAnalyticsActive('/m/')).toBe(true);
+    expect(isEditorExperienceAnalyticsActive('/medium-x')).toBe(false);
     expect(isEditorExperienceAnalyticsActive('/landing')).toBe(false);
 
     trackSpy.mockRestore();

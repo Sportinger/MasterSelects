@@ -111,7 +111,10 @@ async function activateEditorProjection(projection: RepositoryProjection, previo
       return file;
     }
     const folders = convertProjectFolderToStore(project.folders), folderIds = new Set(folders.map(folder => folder.id));
-    const nextMedia = { ...mediaBefore, files, folders, compositions, activeCompositionId,
+    // The project's own name, so every reader of the media store (phone top bar, AI audit, export names)
+    // sees the opened project instead of the default 'Untitled Project'.
+    const currentProjectName = typeof project.name === 'string' && project.name.trim() ? project.name : mediaBefore.currentProjectName;
+    const nextMedia = { ...mediaBefore, currentProjectName, files, folders, compositions, activeCompositionId,
       slotAssignments: project.slotAssignments ?? {}, slotClipSettings: project.slotClipSettings ?? {},
       ...createGeneratedMediaItemsForLoad(project, folderIds), ...createSignalHydrationStateForLoad(project, folderIds),
       openCompositionIds: initialOpen ? [...new Set([...(project.openCompositionIds ?? []).filter(id => compositionIds.has(id)), ...(activeCompositionId ? [activeCompositionId] : [])])] : mediaBefore.openCompositionIds.filter(id => compositionIds.has(id)),

@@ -146,7 +146,11 @@ export async function renamePhoneProject(name: string): Promise<PhoneActionResul
   if (!data) return fail('No project is open.');
   if (data.name === trimmed) return { ok: true };
   try {
-    if (await projectFileService.renameProject(trimmed)) return { ok: true, message: `Renamed to "${trimmed}".` };
+    if (await projectFileService.renameProject(trimmed)) {
+      // The top bar, export file name and share title read the media store's project name.
+      useMediaStore.getState().setProjectName(trimmed);
+      return { ok: true, message: `Renamed to "${trimmed}".` };
+    }
     return fail(`Could not rename to "${trimmed}". A project with that name may already exist.`);
   } catch (error) {
     return fail(describePhoneProjectError('rename', error, `Could not rename to "${trimmed}".`));

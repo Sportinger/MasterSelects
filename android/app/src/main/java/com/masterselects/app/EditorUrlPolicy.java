@@ -7,7 +7,7 @@ import java.util.Set;
 final class EditorUrlPolicy {
     static final String ORIGIN = "https://www.masterselects.com";
     static final String START_URL = ORIGIN + "/editor";
-    private static final Set<String> ENTRIES = Set.of("/", "/index.html", "/editor", "/medium", "/chat",
+    private static final Set<String> ENTRIES = Set.of("/", "/index.html", "/editor", "/medium", "/m", "/chat",
         "/landing", "/imprint", "/privacy", "/terms", "/withdrawal", "/cancel",
         "/impressum", "/datenschutz", "/agb", "/widerruf", "/kuendigen", "/credits/claim", "/claim");
 
