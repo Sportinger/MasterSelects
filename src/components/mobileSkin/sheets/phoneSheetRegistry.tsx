@@ -23,6 +23,8 @@ export const PHONE_SHEET_REGISTRY: Readonly<Record<PhoneSheetId, LazyExoticCompo
   crop: lazy(() => import('../crop/PhoneCropSheet').then((m) => ({ default: m.PhoneCropSheet }))),
   overlay: lazy(() => import('../overlay/PhoneOverlaySheet').then((m) => ({ default: m.PhoneOverlaySheet }))),
   format: lazy(() => import('../format/PhoneFormatSheet').then((m) => ({ default: m.PhoneFormatSheet }))),
+  // M4 landscape editors list.
+  editors: lazy(() => import('../workspace/PhoneEditorsSheet').then((m) => ({ default: m.PhoneEditorsSheet }))),
   // M3 pro sheets.
   panel: lazy(() => import('../panels/PhonePanelSheet').then((m) => ({ default: m.PhonePanelSheet }))),
   allTools: lazy(() => import('../panels/PhoneAllToolsSheet').then((m) => ({ default: m.PhoneAllToolsSheet }))),

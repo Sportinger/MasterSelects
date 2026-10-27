@@ -24,6 +24,7 @@ export const usePhoneUiStore = create<PhoneUiState>()(
     toast: null,
     activeSheet: null,
     panelSheet: null,
+    workspace: null,
     setTimelineZoom: (zoom) => set({ timelineZoom: clampPhoneTimelineZoom(zoom) }),
     showUnavailable: (notice) => set({ unavailableNotice: notice }),
     dismissUnavailable: () => set({ unavailableNotice: null }),
@@ -35,5 +36,7 @@ export const usePhoneUiStore = create<PhoneUiState>()(
     openSheet: (sheetId) => set({ activeSheet: sheetId, panelSheet: null }),
     openPanelSheet: (type, title) => set({ activeSheet: 'panel', panelSheet: { type, title } }),
     closeSheet: () => set({ activeSheet: null, panelSheet: null }),
+    openWorkspace: (workspaceId) => set({ workspace: workspaceId, activeSheet: null, panelSheet: null }),
+    closeWorkspace: () => set({ workspace: null }),
   })),
 );

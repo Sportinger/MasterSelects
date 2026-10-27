@@ -100,6 +100,7 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('tracks', 'Tracks', 'reorder', 'root', 'M3', { run: () => openPhoneSheet('tracks') }),
   def('markers', 'Markers', 'keyframe', 'root', 'M3', { run: () => openPhoneSheet('markers') }),
   def('library', 'Library', 'media', 'root', 'M3', { run: () => openPhoneSheet('library') }),
+  def('editors', 'Editors', 'nodes', 'root', 'M4', { run: () => openPhoneSheet('editors') }),
   def('all-tools', 'All tools', 'more', 'root', 'M3', { run: () => openPhoneSheet('allTools') }),
 
   // Clip scope: at least one clip selected.

@@ -1,0 +1,118 @@
+.mobile-skin .phone-workspace {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  height: var(--phone-vh, 100dvh);
+  background: var(--phone-bg);
+  color: var(--phone-text);
+  padding: var(--phone-safe-top) var(--phone-safe-right) var(--phone-safe-bottom) var(--phone-safe-left);
+}
+
+.mobile-skin .phone-workspace__bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--phone-border);
+}
+
+.mobile-skin .phone-workspace__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--phone-text);
+  font-size: 18px;
+  touch-action: manipulation;
+}
+
+.mobile-skin .phone-workspace__button[aria-pressed='true'] { color: var(--phone-accent, var(--phone-text)); }
+.mobile-skin .phone-workspace__button:active { background: var(--phone-border); }
+.mobile-skin .phone-workspace__button:focus-visible { outline: 2px solid var(--phone-accent, #7aa2ff); outline-offset: -2px; }
+
+.mobile-skin .phone-workspace__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mobile-skin .phone-workspace__hint {
+  flex: 1;
+  margin: 0;
+  color: var(--phone-text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+
+.mobile-skin .phone-workspace__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.mobile-skin .phone-workspace__main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mobile-skin .phone-workspace__side {
+  position: relative;
+  flex: 0 0 clamp(180px, 28vw, 340px);
+  min-height: 0;
+  overflow: hidden;
+  border-color: var(--phone-border);
+  border-style: solid;
+  border-width: 0;
+}
+
+.mobile-skin .phone-workspace__side--left { border-right-width: 1px; }
+.mobile-skin .phone-workspace__side--right { border-left-width: 1px; }
+
+.mobile-skin .phone-workspace__placeholder {
+  margin: 0;
+  padding: 16px;
+  color: var(--phone-text-dim);
+}
+
+/* Landscape: the hint is not needed. Portrait: stack the side panels above and below the editor. */
+@media (orientation: landscape) {
+  .mobile-skin .phone-workspace__hint { visibility: hidden; }
+}
+
+@media (orientation: portrait) {
+  .mobile-skin .phone-workspace__body { flex-direction: column; }
+  .mobile-skin .phone-workspace__side { flex: 0 0 30%; }
+  .mobile-skin .phone-workspace__side--left { border-right-width: 0; border-bottom-width: 1px; }
+  .mobile-skin .phone-workspace__side--right { border-left-width: 0; border-top-width: 1px; }
+}
+
+.mobile-skin .phone-editors { margin: 0; padding: 4px 8px 16px; list-style: none; }
+.mobile-skin .phone-editors__row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--phone-text);
+  text-align: left;
+  touch-action: manipulation;
+}
+.mobile-skin .phone-editors__row:active { background: var(--phone-border); }
+.mobile-skin .phone-editors__row:focus-visible { outline: 2px solid var(--phone-accent, #7aa2ff); outline-offset: -2px; }
+.mobile-skin .phone-editors__title { font-size: 15px; font-weight: 600; }
+.mobile-skin .phone-editors__summary { color: var(--phone-text-dim); font-size: 13px; }

@@ -46,7 +46,7 @@ export type PhoneMilestone = 'M0' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6';
 /** Where an unavailable tool points meanwhile: the full editor, reached from the project sheet. */
 export const PHONE_FULL_EDITOR_HINT = 'Use the full editor meanwhile: tap the project name, then Full editor.';
 
-export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M3';
+export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M4';
 
 const MILESTONE_ORDER: readonly PhoneMilestone[] = ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
 
@@ -164,6 +164,8 @@ export interface PhoneUiState {
   activeSheet: string | null;
   /** The desktop panel the 'panel' sheet shows (M3), null otherwise. */
   panelSheet: { type: PanelType; title: string } | null;
+  /** The open full-screen landscape editor (M4, a PhoneWorkspaceId), null otherwise. */
+  workspace: string | null;
   setTimelineZoom: (zoom: number) => void;
   showUnavailable: (notice: PhoneUnavailableNotice) => void;
   dismissUnavailable: () => void;
@@ -173,6 +175,9 @@ export interface PhoneUiState {
   /** Opens the 'panel' sheet with a desktop panel inside (M3). */
   openPanelSheet: (type: PanelType, title: string) => void;
   closeSheet: () => void;
+  /** Opens a landscape editor full screen and closes any sheet (M4). */
+  openWorkspace: (workspaceId: string) => void;
+  closeWorkspace: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +192,9 @@ export type PhoneSheetId =
   | 'keyframe' | 'mask' | 'crop' | 'overlay' | 'format'
   // M3 pro sheets.
   | 'panel' | 'allTools' | 'compositions' | 'tracks' | 'markers' | 'edits' | 'replace' | 'captions'
-  | 'audioFx' | 'library' | 'settings';
+  | 'audioFx' | 'library' | 'settings'
+  // M4 landscape editors list.
+  | 'editors';
 
 export interface PhoneSheetProps {
   title: string;

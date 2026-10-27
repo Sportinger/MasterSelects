@@ -40,7 +40,7 @@ describe('phone action catalog', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(getPhoneActionsForScope('root').map((a) => a.label)).toEqual([
       'Edit', 'Audio', 'Text', 'Effects', 'Overlay', 'Captions', 'Filters', 'Adjust', 'Format', 'Assistant', 'Media',
-      'Tracks', 'Markers', 'Library', 'All tools',
+      'Tracks', 'Markers', 'Library', 'Editors', 'All tools',
     ]);
     expect(getPhoneActionsForScope('clip').map((a) => a.label)).toEqual([
       'Split', 'Delete', 'Delete & close gap', 'Duplicate', 'Edit text', 'Speed', 'Volume', 'Animation', 'Effects', 'Filters', 'Adjust', 'Mask',
@@ -62,8 +62,8 @@ describe('phone action catalog', () => {
     });
   });
 
-  it('ships M3 and resolves every M1 action as available', () => {
-    expect(PHONE_SHIPPED_MILESTONE).toBe('M3');
+  it('ships M4 and resolves every M1 action as available', () => {
+    expect(PHONE_SHIPPED_MILESTONE).toBe('M4');
     const m1 = PHONE_ACTIONS.filter((action) => action.milestone === 'M1');
     expect(m1.map((action) => action.id).toSorted()).toEqual(
       ['assistant', 'delete', 'duplicate', 'edit', 'media', 'reorder', 'ripple-delete', 'text'],

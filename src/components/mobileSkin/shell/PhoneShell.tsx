@@ -4,6 +4,7 @@ import { PhoneToast } from './PhoneToast';
 import { PhoneTopBar } from './PhoneTopBar';
 import { PhoneTransport } from './PhoneTransport';
 import { PhoneUnavailableNotice } from './PhoneUnavailableNotice';
+import { PhoneWorkspaceHost } from '../workspace/PhoneWorkspace';
 import { usePhoneViewport } from './usePhoneViewport';
 import './PhoneShell.css';
 
@@ -23,6 +24,7 @@ export function PhoneShell({ preview, timeline }: { preview: ReactNode; timeline
         {timeline}
       </section>
       <PhoneContextToolbar />
+      <PhoneWorkspaceHost />
       <PhoneUnavailableNotice />
       <PhoneToast />
     </div>
