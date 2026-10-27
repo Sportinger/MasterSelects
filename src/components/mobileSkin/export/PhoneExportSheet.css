@@ -5,7 +5,7 @@
   gap: 12px;
   padding: 4px 0 8px;
   font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color: var(--phone-text, #eef0f4);
+  color: var(--phone-text);
 }
 
 .mobile-skin .phone-export__summary {
@@ -19,30 +19,30 @@
 .mobile-skin .phone-export__hint,
 .mobile-skin .phone-export__result {
   margin: 0;
-  color: var(--phone-text-dim, #98a0ad);
+  color: var(--phone-text-dim);
   overflow-wrap: anywhere;
 }
 
 .mobile-skin .phone-export__result {
-  color: var(--phone-text, #eef0f4);
+  color: var(--phone-text);
 }
 
 .mobile-skin .phone-export__problem {
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid var(--phone-danger, #f0626b);
+  border: 1px solid var(--phone-danger);
   border-radius: 10px;
-  color: var(--phone-text, #eef0f4);
+  color: var(--phone-text);
   overflow-wrap: anywhere;
 }
 
 .mobile-skin .phone-export__button {
   min-height: 48px;
   padding: 0 18px;
-  border: 1px solid var(--phone-border, #2b2f39);
+  border: 1px solid var(--phone-border);
   border-radius: 12px;
-  background: var(--phone-surface-3, #262a33);
-  color: var(--phone-text, #eef0f4);
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -51,12 +51,12 @@
 
 .mobile-skin .phone-export__button--primary {
   border-color: transparent;
-  background: var(--phone-accent, #5b8def);
-  color: #fff;
+  background: var(--phone-accent);
+  color: var(--phone-on-accent);
 }
 
 .mobile-skin .phone-export__button--danger {
-  border-color: var(--phone-danger, #f0626b);
+  border-color: var(--phone-danger);
 }
 
 .mobile-skin .phone-export__button[aria-disabled='true'] {
@@ -80,12 +80,12 @@
   height: 10px;
   overflow: hidden;
   border-radius: 5px;
-  background: var(--phone-surface-3, #262a33);
+  background: var(--phone-surface-3);
 }
 
 .mobile-skin .phone-export__bar-fill {
   height: 100%;
-  background: var(--phone-accent, #5b8def);
+  background: var(--phone-accent);
   transition: width 120ms linear;
 }
 
@@ -93,6 +93,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -108,7 +109,7 @@
   padding: 0 12px;
   border: 0;
   background: none;
-  color: var(--phone-text-dim, #98a0ad);
+  color: var(--phone-text-dim);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
@@ -120,9 +121,9 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--phone-border, #2b2f39);
+  border: 1px solid var(--phone-border);
   border-radius: 12px;
-  background: var(--phone-surface-2, #1c1f26);
+  background: var(--phone-surface-2);
 }
 
 .mobile-skin .phone-export__confirm p {

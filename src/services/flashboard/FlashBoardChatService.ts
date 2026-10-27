@@ -1,4 +1,5 @@
 import { sendIntelligenceChat } from './FlashBoardChatProviderTransport';
+import { runAgentRequestScope } from '../aiTools/agentTransaction';
 import { FlashBoardNodeGraphPresentation } from './FlashBoardNodeGraphPresentation';
 import {
   appendFlashBoardChatRunToolCalls,
@@ -69,7 +70,8 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   };
 
   try {
-    const response = await sendIntelligenceChat(tracedRequest);
+    // One request is one Undo step: its tool calls' revisions are grouped (runAgentRequestScope).
+    const response = await runAgentRequestScope(run.runId, () => sendIntelligenceChat(tracedRequest));
     if (!request.signal?.aborted) nodePresentation.complete();
     const completed = completeFlashBoardChatRun(run.runId, {
       executedToolCalls,

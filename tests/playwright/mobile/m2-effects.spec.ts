@@ -436,14 +436,15 @@ test('colour-basic-adjustments: Brightness and Exposure change the picture; Rese
   await pixelsWhere(m1, pixels => sameAs(pixels, before), 'Cancel restores the exact before picture', 15_000, before)
 })
 
-test('grey-outs: later options stay visible and explain themselves on tap @phone', async ({ m1 }) => {
+test('grey-outs: options that need a clip stay visible and explain themselves on tap @phone', async ({ m1 }) => {
   const { clipId } = await arrangeClip(m1)
   await m1.bridge.toolData('addEffect', { clipId, effectType: 'glow' })
+  // The former M3 rows work now (m3-panels.spec.ts covers what they open).
   await openSheet(m1, 'effects')
-  await expectExplains(m1, m1.page.getByTestId(FX.effectsAllParameters), /M3/)
+  await expect(m1.page.getByTestId(FX.effectsAllParameters)).not.toHaveAttribute('aria-disabled', 'true')
   await cancel(m1)
   await openSheet(m1, 'adjust')
-  await expectExplains(m1, m1.page.getByTestId(FX.adjustWheels), /M3/)
+  await expect(m1.page.getByTestId(FX.adjustWheels)).not.toHaveAttribute('aria-disabled', 'true')
   await cancel(m1)
   await m1.bridge.toolData('clearSelection')
   await expect(m1.clip(clipId)).toHaveAttribute('aria-selected', 'false')

@@ -7,12 +7,17 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
+import type { TimelineClip } from '../../../types/timeline';
+import { getLabelHex } from '../../panels/media/labelColors';
+import { resolveClipContextMenuLabelTarget } from '../../timeline/utils/clipContextMenu';
 import { sanitizeTimelineFrameRate } from '../../../utils/timelineFrameQuantization';
 import { PHONE_TEST_IDS } from '../contracts';
 import { findPhoneCuts } from '../transition/phoneTransitionCuts';
-import { PhoneClipStrip, type PhoneLane, type PhoneLaneKind } from './PhoneClipStrip';
+import { PhoneClipStrip } from './PhoneClipStrip';
+import { buildPhoneLanes } from './phoneLaneLayout';
 import { PhoneCutButtons } from './PhoneCutButtons';
+import { PhoneTimelineControls } from './PhoneTimelineControls';
+import { PhoneLaneOverlays, PhoneRulerOverlays } from './PhoneTimelineOverlays';
 import {
   formatRulerTime, rulerTicks, rulerTickStep, timelineContentEnd, visibleClipsInWindow,
 } from './phoneTimelineGeometry';
@@ -20,33 +25,7 @@ import { usePhoneClipVisualWarmup } from './usePhoneClipVisuals';
 import { usePhoneTimelineNavigation } from './usePhoneTimelineNavigation';
 import './PhoneTimeline.css';
 
-const LANE_GAP = 4;
-const LANE_HEIGHT: Record<PhoneLaneKind | 'main', number> = { main: 56, video: 40, audio: 36, other: 32 };
 const EMPTY_SELECTION: ReadonlySet<string> = new Set();
-
-function laneKind(track: TimelineTrack): PhoneLaneKind {
-  if (track.type === 'video') return 'video';
-  if (track.type === 'audio') return 'audio';
-  return 'other';
-}
-
-/** Video tracks on top (store order), the lowest video track is the emphasized main track. */
-function buildPhoneLanes(tracks: readonly TimelineTrack[]): { lanes: PhoneLane[]; height: number } {
-  const video = tracks.filter((track) => track.type === 'video');
-  const audio = tracks.filter((track) => track.type === 'audio');
-  const other = tracks.filter((track) => track.type !== 'video' && track.type !== 'audio');
-  const mainId = video[video.length - 1]?.id;
-  let top = LANE_GAP;
-  const lanes = [...video, ...audio, ...other].map((track): PhoneLane => {
-    const kind = laneKind(track);
-    const main = track.id === mainId;
-    const height = main ? LANE_HEIGHT.main : LANE_HEIGHT[kind];
-    const lane = { trackId: track.id, name: track.name, kind, main, top, height };
-    top += height + LANE_GAP;
-    return lane;
-  });
-  return { lanes, height: top };
-}
 
 function useElementSize(ref: RefObject<HTMLElement | null>): { width: number; height: number } {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -85,7 +64,10 @@ export function PhoneTimeline() {
 
   const surfaceSize = useElementSize(surfaceRef);
   const lanesViewportSize = useElementSize(lanesViewportRef);
-  const { lanes, height: laneContentHeight } = useMemo(() => buildPhoneLanes(tracks), [tracks]);
+  const focus = useTimelineStore((state) => state.trackFocusMode);
+  const thumbnailsOn = useTimelineStore((state) => state.thumbnailsEnabled);
+  const waveformsOn = useTimelineStore((state) => state.waveformsEnabled);
+  const { lanes, height: laneContentHeight } = useMemo(() => buildPhoneLanes(tracks, focus), [tracks, focus]);
   const laneClips = useMemo(() => {
     const trackIds = new Set(lanes.map((lane) => lane.trackId));
     return clips.filter((clip) => trackIds.has(clip.trackId));
@@ -117,6 +99,16 @@ export function PhoneTimeline() {
     return map;
   }, [visibleClips]);
   const visualsVersion = usePhoneClipVisualWarmup(visibleClips);
+  // Source label colours (the desktop context menu's target), as one string so tiles re-render only on change.
+  const labelKey = useMediaStore((state) => visibleClips.map((clip) => `${clip.id}=${resolveClipContextMenuLabelTarget(clip, state).currentColor}`).join(','));
+  const labelColors = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const pair of labelKey ? labelKey.split(',') : []) {
+      const [id, color] = pair.split('=');
+      if (color && color !== 'none') map.set(id, getLabelHex(color as Parameters<typeof getLabelHex>[0]));
+    }
+    return map;
+  }, [labelKey]);
 
   const tickStep = rulerTickStep(zoom);
   const ticks = useMemo(() => rulerTicks(timeWindow, tickStep, Math.max(contentEnd, duration)), [contentEnd, duration, tickStep, timeWindow]);
@@ -134,6 +126,7 @@ export function PhoneTimeline() {
       >
         <div className="phone-timeline__ruler" aria-hidden="true">
           <div ref={rulerLayerRef} className="phone-timeline__layer">
+            <PhoneRulerOverlays zoom={zoom} timeWindow={timeWindow} />
             {ticks.map((time) => (
               <span key={time} className="phone-timeline__tick" style={{ left: time * zoom }}>
                 {formatRulerTime(time, tickStep)}
@@ -164,8 +157,12 @@ export function PhoneTimeline() {
                 timeWindow={timeWindow}
                 visualsVersion={visualsVersion}
                 thumbnailAspect={thumbnailAspect}
+                labelColors={labelColors}
+                thumbnails={thumbnailsOn}
+                waveforms={waveformsOn}
               />
             ))}
+            <PhoneLaneOverlays zoom={zoom} height={laneContentHeight} />
             <PhoneCutButtons
               lanes={lanes}
               cutsByTrack={cutsByTrack}
@@ -181,6 +178,7 @@ export function PhoneTimeline() {
         </div>
         <div className="phone-timeline__playhead" data-testid={PHONE_TEST_IDS.playhead} aria-hidden="true" />
       </div>
+      <PhoneTimelineControls />
     </div>
   );
 }

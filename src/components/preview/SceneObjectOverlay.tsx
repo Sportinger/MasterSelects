@@ -43,6 +43,7 @@ import { applyDragTransform } from './sceneOverlay/sceneOverlayDragTransformPlan
 import { publishLayerTransformPreview } from './publishLayerTransformPreview';
 import { useSceneOverlayGizmoHandlers } from './sceneOverlay/useSceneOverlayGizmoHandlers';
 import { useSceneOverlayKeybindings } from './sceneOverlay/useSceneOverlayKeybindings';
+import { isTouchBridgedMouseEvent } from './useTouchMouseBridge';
 import {
   SceneObjectOrbitContextMenu,
   type SceneObjectOrbitContextMenuState,
@@ -461,7 +462,8 @@ export function SceneObjectOverlay({
     const handleMouseMove = (event: MouseEvent) => {
       event.preventDefault();
       const runtime = dragRuntimeRef.current;
-      const pointerLockActive = runtime.target !== null && document.pointerLockElement === runtime.target;
+      const pointerLockActive = runtime.target !== null && document.pointerLockElement === runtime.target
+        && !isTouchBridgedMouseEvent(event);
       runtime.hasPointerLock = pointerLockActive;
 
       let deltaX: number;
@@ -551,7 +553,8 @@ export function SceneObjectOverlay({
       rotationAngularLastAngle: null,
       rotationAngularAccumulatedRadians: 0,
     };
-    requestPointerLock(lockTarget, fallbackTarget);
+    // A finger has no pointer lock (and a locked pointer reports no movement for bridged touch).
+    if (!params.fromTouch) requestPointerLock(lockTarget, fallbackTarget);
     if (!transient) {
       startBatch(`Scene ${mode}`);
     }

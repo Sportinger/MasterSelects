@@ -24,10 +24,12 @@ import {
   fitCurveTimeViewToClip,
   normalizeCurveTimeView,
   panCurveTimeViewHorizontally,
+  scaleCurveTimeViewAt,
   zoomCurveTimeViewAtPointer,
   type CurveTimeView,
 } from './curvesPanelTimeView';
 import { useAltWheelBrowserFocusGuard } from '../../../hooks/useAltWheelBrowserFocusGuard';
+import { useCurvesTouchGestures } from './useCurvesTouchGestures';
 import './CurvesPanel.css';
 
 const DOCK_CURVES_FALLBACK_WIDTH = 640;
@@ -326,6 +328,21 @@ export function CurvesPanel(props: CurvesPanelProps) {
   ]);
 
   dockTimeViewRef.current = dockTimeView;
+  const touchGestures = useCurvesTouchGestures({
+    getTimeView: () => dockTimeViewRef.current,
+    scaleTimeAt: (start, factor, anchorX, panX) => {
+      const nextView = scaleCurveTimeViewAt({
+        anchorX,
+        compositionDuration: duration,
+        factor,
+        panX,
+        view: start,
+        viewportWidth: graphWidth,
+      });
+      dockTimeViewRef.current = nextView;
+      setDockTimeView(nextView);
+    },
+  });
   const dockPanelId = dockProps?.panelId;
   useEffect(() => {
     if (!dockPanelId) return undefined;
@@ -380,6 +397,9 @@ export function CurvesPanel(props: CurvesPanelProps) {
       className="curves-panel"
       aria-label="Curves"
       data-testid="curves-panel"
+      data-time-zoom={dockTimeView.zoom.toFixed(3)}
+      data-time-scroll={dockTimeView.scrollX.toFixed(1)}
+      {...touchGestures}
       style={{ '--track-header-width': `${trackHeaderWidth}px` } as CSSProperties}
     >
       {surface}

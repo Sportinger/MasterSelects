@@ -3,18 +3,27 @@
 // it). The sheet moves the playhead to the cut so the preview shows the middle of the transition;
 // every choice applies live inside one owned edit session (phoneEditSession): Done keeps it as ONE
 // undo step, Cancel rolls everything back and returns the playhead. "Apply to all cuts" extends
-// the same choice to every cut on the track, still one undo step. Transition settings and offset
-// stay visible but greyed until the pro sheets.
+// the same choice to every cut on the track, still one undo step. "Settings and offset" keeps the
+// sheet's choice (one undo step) and opens the transition in the desktop Properties panel.
+// "Edit transition content" keeps the choice too and enters the transition's own composition (the
+// editor's openTransitionCompositionFromStores, the desktop double-click path); the top bar's back
+// crumb leads to the parent cut. "Edit in Nodes" does the same and opens the landscape node editor.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { openTransitionCompositionFromStores } from '../../timeline/hooks/useTransitionCompositionOpen';
+import { Logger } from '../../../services/logger';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
+import { usePhoneCompositionTrail } from '../compositions/phoneCompositionTrail';
 import type { TransitionCategory } from '../../../transitions';
 import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
-import { PhoneChoice, PhoneGreyedOption, blurAfterPointer } from './phoneChoiceControls';
+import { openPhoneProperties } from '../panels/phonePanelNavigation';
+import { PhoneProRow } from '../panels/PhoneProRows';
+import { PhoneChoice, blurAfterPointer } from './phoneChoiceControls';
 import {
   applyPhoneTransition, phoneTransitionCatalog, phoneTransitionScopeCuts, phoneTransitionTiming,
   phoneTransitionUnavailableReason, type PhoneTransitionChoice, type PhoneTransitionDesired,
@@ -29,7 +38,9 @@ import './PhoneTransitionSheet.css';
 export const PHONE_TRANSITION_MIN_DURATION = 0.1;
 export const PHONE_TRANSITION_MAX_DURATION = 5;
 const DEFAULT_DURATION = 1;
-const SETTINGS_REASON = 'Direction, colour, softness and moving a transition off the cut arrive with the pro sheets (M3). Until then they keep their defaults; the full editor has them: tap the project name, then Full editor.';
+const log = Logger.create('PhoneTransitionSheet');
+const CONTENT_NONE_REASON = 'Pick a transition first: its content is a composition of the two clips at this cut, which you can then edit layer by layer.';
+const SETTINGS_NONE_REASON = 'Pick a transition first: direction, colour, softness and its offset belong to a transition at this cut.';
 
 /** The cut this sheet edits: the remembered target, else the cut of the selected clip. */
 function initialCut(): PhoneCut | null {
@@ -143,6 +154,51 @@ export const PhoneTransitionSheet: PhoneSheetComponent = () => {
     closeSheet();
   };
 
+  // Settings and offset: keep the choice as one undo step, then edit the transition in Properties.
+  const openSettings = async () => {
+    if (busy || !target) return;
+    if (choice === 'none') {
+      usePhoneUiStore.getState().showUnavailable({ actionId: IDS.settings, label: 'Settings and offset', reason: SETTINGS_NONE_REASON });
+      return;
+    }
+    setBusy(true);
+    const desired = { type: choice, duration };
+    const result = await session.commit(session.changed ? () => { applyPhoneTransition(target, scope, desired); } : undefined);
+    if (!result.ok) { closeSheet(); showToast(result.message, 'error'); return; }
+    const opened = openPhoneProperties({ kind: 'transition', clipId: target.clipAId, edge: 'out' });
+    if (!opened.ok) { closeSheet(); showToast(opened.message, 'error'); }
+  };
+
+  // Edit transition content: keep the choice (one undo step), then enter the transition's composition.
+  const openContent = async (nodes: boolean) => {
+    if (busy || !target) return;
+    if (choice === 'none') {
+      usePhoneUiStore.getState().showUnavailable({ actionId: nodes ? IDS.contentNodes : IDS.content, label: 'Edit transition content', reason: CONTENT_NONE_REASON });
+      return;
+    }
+    setBusy(true);
+    const desired = { type: choice, duration };
+    const result = await session.commit(session.changed ? () => { applyPhoneTransition(target, scope, desired); } : undefined);
+    if (!result.ok) { closeSheet(); showToast(result.message, 'error'); return; }
+    const transition = useTimelineStore.getState().clips.find((clip) => clip.id === target.clipAId)?.transitionOut;
+    const parentId = useMediaStore.getState().activeCompositionId;
+    if (!transition || !parentId) { closeSheet(); showToast('There is no transition at this cut any more.', 'error'); return; }
+    try {
+      openTransitionCompositionFromStores(target.clipAId, transition.id);
+    } catch (error) {
+      log.error('Opening the transition composition failed', error);
+    }
+    const childId = useTimelineStore.getState().clips.find((clip) => clip.id === target.clipAId)?.transitionOut?.compositionId
+      ?? useMediaStore.getState().compositions.find((composition) => composition.transitionComp?.parentTransitionId === transition.id)?.id;
+    closeSheet();
+    if (!childId) {
+      showToast('The editor could not build this transition’s content: one of the clips has no known media length yet.', 'error');
+      return;
+    }
+    if (childId !== parentId) usePhoneCompositionTrail.getState().enter(parentId, childId);
+    if (nodes) usePhoneUiStore.getState().openWorkspace('nodes');
+  };
+
   if (!cut || !target) {
     return (
       <PhoneSheet title="Transition" onCancel={cancel} onDone={() => undefined} doneDisabled>
@@ -232,7 +288,27 @@ export const PhoneTransitionSheet: PhoneSheetComponent = () => {
         >
           {applyAllLabel}
         </button>
-        <PhoneGreyedOption label="Settings and offset" reason={SETTINGS_REASON} testId={IDS.settings} />
+        <PhoneProRow
+          label="Settings and offset"
+          detail="Opens Properties"
+          testId={IDS.settings}
+          disabled={choice === 'none'}
+          onOpen={() => { void openSettings(); }}
+        />
+        <PhoneProRow
+          label="Edit transition content"
+          detail="Its layers, masks, effects and keys"
+          testId={IDS.content}
+          disabled={choice === 'none'}
+          onOpen={() => { void openContent(false); }}
+        />
+        <PhoneProRow
+          label="Edit in Nodes"
+          detail="The content's graph, landscape"
+          testId={IDS.contentNodes}
+          disabled={choice === 'none'}
+          onOpen={() => { void openContent(true); }}
+        />
       </div>
     </PhoneSheet>
   );

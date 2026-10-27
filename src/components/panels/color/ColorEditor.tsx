@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { createParameterSourceEvaluator } from '../../../services/parameterSources/parameterSourceEvaluation';
 import { isParameterNodeDriven } from '../../../services/parameterSources/parameterSourceTargets';
-import { startBatch, endBatch } from '../../../stores/historyStore';
+import { beginColorEditGesture, runColorEditGesture, type ColorEditGesture } from './colorEditGesture';
 import {
   MAX_RUNTIME_PRIMARY_NODES,
   PRIMARY_COLOR_PARAM_DEFS,
@@ -62,6 +62,8 @@ export function ColorEditor({
   onExitWorkspace,
 }: ColorEditorProps) {
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  // The open drag/slider gesture: every change it makes runs inside it, so it is one undo step.
+  const gestureRef = useRef<ColorEditGesture | null>(null);
   const rangeSettingsRevision = useEditableDraggableNumberSettingsRevision();
   const clip = useTimelineStore(state => state.clips.find(c => c.id === clipId));
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
@@ -91,6 +93,13 @@ export function ColorEditor({
     ensureColorCorrection(clipId);
   }, [clipId, ensureColorCorrection]);
 
+  // A gesture still open when the editor goes away (closed mid-drag) is committed, never left open.
+  useEffect(() => () => {
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    gesture?.commit();
+  }, []);
+
   const colorState = ensureColorCorrectionState(clip?.colorCorrection);
   const activeColorVersion = getActiveColorVersion(colorState);
   if (!clip) {
@@ -111,8 +120,18 @@ export function ColorEditor({
     ? clipColorKeyframes.some(k => k.property.startsWith(`color.${activeVersion.id}.${selectedNode.id}.`))
     : false;
 
-  const handleBatchStart = () => startBatch('Adjust color');
-  const handleBatchEnd = () => endBatch();
+  const handleBatchStart = () => {
+    if (!gestureRef.current) gestureRef.current = beginColorEditGesture('Adjust color');
+  };
+  const handleBatchEnd = () => {
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    gesture?.commit();
+  };
+  const inGesture = (action: () => void) => {
+    if (gestureRef.current) gestureRef.current.run(action);
+    else action();
+  };
 
   const openWorkspace = () => {
     setColorViewMode(clipId, 'nodes');
@@ -136,11 +155,11 @@ export function ColorEditor({
 
   const setParam = (nodeId: string, paramName: string, value: number) => {
     if (isParameterNodeDriven(clip, createColorProperty(activeVersion.id, nodeId, paramName))) return;
-    setPropertyValue(
+    inGesture(() => setPropertyValue(
       clipId,
       createColorProperty(activeVersion.id, nodeId, paramName) as AnimatableProperty,
       value
-    );
+    ));
   };
 
   const createProperty = (nodeId: string, paramName: string) => (
@@ -178,17 +197,14 @@ export function ColorEditor({
 
     if (entries.length === 0) return;
 
-    startBatch('Set color keyframes');
-    try {
+    runColorEditGesture('Set color keyframes', () => {
       entries.forEach(({ property, value }) => {
         if (!isRecording(clipId, property)) {
           toggleKeyframeRecording(clipId, property);
         }
         addKeyframe(clipId, property, value);
       });
-    } finally {
-      endBatch();
-    }
+    });
   };
 
   const setWheelChannelValues = (

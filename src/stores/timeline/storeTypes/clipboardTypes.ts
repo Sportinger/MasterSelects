@@ -139,8 +139,14 @@ export interface ClipboardActions {
   copyClips: () => void;
   pasteClips: () => void;
   hasClipboardData: () => boolean;
-  copyKeyframes: () => void;
-  pasteKeyframes: () => void;
+  /** Copies the keyframe-lane selection, or exactly `keyframeIds` when given. */
+  copyKeyframes: (keyframeIds?: readonly string[]) => void;
+  /**
+   * Pastes copied keyframes at the playhead into the selected clip (or the source clip). With
+   * `targetClipIds` it pastes into each of those clips (one undo step) and never falls back to a
+   * clip paste; `clipLocalTime` places the first key at that clip-local time instead of the playhead.
+   */
+  pasteKeyframes: (options?: { targetClipIds?: readonly string[]; clipLocalTime?: number }) => void;
   copyClipEffects: (clipId: string) => void;
   pasteClipEffects: (targetClipIds?: string[]) => void;
   hasClipboardEffects: () => boolean;

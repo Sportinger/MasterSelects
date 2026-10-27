@@ -12,6 +12,10 @@ export const PHONE_TRANSITION_TEST_IDS = {
   status: 'phone-transition-status',
   message: 'phone-transition-message',
   settings: 'phone-transition-settings',
+  /** Enters the transition's own composition (back crumb in the top bar returns to the cut). */
+  content: 'phone-transition-content',
+  /** Same, then opens the landscape node editor on it. */
+  contentNodes: 'phone-transition-content-nodes',
   empty: 'phone-transition-empty',
 } as const;
 

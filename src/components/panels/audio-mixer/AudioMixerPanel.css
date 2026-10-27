@@ -914,3 +914,27 @@
   }
 }
 }
+
+/* Phone editor (M4): the landscape mixer is short, so inserts and sends sit side by side in the
+   rack instead of the sends squeezing the FX slot to nothing; both scroll when they overflow.
+   Fingers drag the whole fader (MixerVolumeFader) and the pan slider without scrolling the strips. */
+.mobile-skin .audio-mixer-rack {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.mobile-skin .audio-mixer-rack-group {
+  justify-content: flex-start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.mobile-skin .audio-mixer-rack-slot {
+  min-height: 28px;
+  padding: 0 2px;
+  font-size: 10px;
+}
+
+.mobile-skin .audio-mixer-pan-row input[type='range'] {
+  touch-action: none;
+}

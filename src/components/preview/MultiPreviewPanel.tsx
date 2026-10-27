@@ -13,10 +13,15 @@ import { useDockStore } from '../../stores/dockStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import { getProgramAngleIndex } from '../../services/multicam/multicamPlan';
+import { Logger } from '../../services/logger';
 import { StatsOverlay } from './StatsOverlay';
 import { MultiPreviewSlot } from './MultiPreviewSlot';
 import type { MultiPreviewPanelData } from '../../types/dock';
 import './MultiPreview.css';
+
+const log = Logger.create('MultiPreview');
+
+const EXPORT_LOCKED_REASON = 'Editing is locked while the export runs; multicam changes wait until it finishes.';
 
 interface MultiPreviewPanelProps {
   panelId: string;
@@ -41,7 +46,14 @@ function MultiPreviewStatsOverlay({
   );
 }
 
-export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
+export function MultiPreviewPanel({ panelId, data: dockData }: MultiPreviewPanelProps) {
+  // The panel's own copy of its layout: a dock panel mirrors it into the dock store, a panel
+  // outside the dock (the phone's landscape editor) keeps it here instead of losing every change.
+  const [data, setData] = useState(dockData);
+  useEffect(() => setData(dockData), [dockData]);
+  const [status, setStatus] = useState<string | null>(null);
+  const setMulticamActive = useTimelineStore((s) => s.setMulticamActive);
+  const switchMulticamAngle = useTimelineStore((s) => s.switchMulticamAngle);
   const compositions = useMediaStore((s) => s.compositions);
   const visibleCompositions = useMemo(() => compositions.filter(isUserVisibleComposition), [compositions]);
   const { previewQuality, setPreviewQuality } = useSettingsStore();
@@ -126,29 +138,84 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sourceOpen, qualityOpen]);
 
+  const commitData = useCallback(
+    (next: MultiPreviewPanelData) => {
+      setData(next);
+      updatePanelData(panelId, next);
+    },
+    [panelId, updatePanelData]
+  );
+
   const handleSourceChange = useCallback(
     (compositionId: string | null) => {
-      updatePanelData(panelId, { ...data, sourceCompositionId: compositionId });
+      commitData({ ...data, sourceCompositionId: compositionId });
       setSourceOpen(false);
     },
-    [panelId, data, updatePanelData]
+    [commitData, data]
   );
 
   const handleSlotCompositionChange = useCallback(
     (slotIndex: number, compositionId: string | null) => {
       const newSlots = [...data.slots] as MultiPreviewPanelData['slots'];
       newSlots[slotIndex] = { compositionId };
-      updatePanelData(panelId, { ...data, slots: newSlots });
+      commitData({ ...data, slots: newSlots });
     },
-    [panelId, data, updatePanelData]
+    [commitData, data]
   );
 
   const toggleTransparency = useCallback(() => {
-    updatePanelData(panelId, { ...data, showTransparencyGrid: !data.showTransparencyGrid });
-  }, [panelId, data, updatePanelData]);
+    commitData({ ...data, showTransparencyGrid: !data.showTransparencyGrid });
+  }, [commitData, data]);
+
+  const toggleMulticam = useCallback(() => {
+    const enabling = !multicamOn;
+    // The export edit lock blocks multicam changes and returns nothing: say that, not a track reason.
+    if (useTimelineStore.getState().isExporting) {
+      log.warn('Multicam toggle blocked during export', { enabling });
+      setStatus(EXPORT_LOCKED_REASON);
+      return;
+    }
+    if (setMulticamActive(enabling)) {
+      setStatus(null);
+      return;
+    }
+    const reason = enabling
+      ? 'Multicam needs at least two video tracks with camera clips (one camera per track, unlocked).'
+      : 'Multicam could not be turned off for this composition.';
+    log.warn(enabling ? 'Multicam could not be turned on' : 'Multicam could not be turned off', { reason });
+    setStatus(reason);
+  }, [multicamOn, setMulticamActive]);
+
+  // Touch: tapping a camera cuts to it at the playhead, like its number key on a keyboard.
+  const handleAngleTap = useCallback((angleIndex: number) => {
+    const label = `Camera ${angleIndex + 1}`;
+    if (angleIndex === onAirAngle) {
+      setStatus(`${label} is already on air here.`);
+      return;
+    }
+    if (useTimelineStore.getState().isExporting) {
+      log.warn('Multicam cut blocked during export', { angleIndex });
+      setStatus(EXPORT_LOCKED_REASON);
+      return;
+    }
+    if (switchMulticamAngle(angleIndex)) {
+      setStatus(null);
+      return;
+    }
+    const reason = `${label} has no material at the playhead; the program stays as it is.`;
+    log.info('Multicam cut ignored', { angleIndex, reason });
+    setStatus(reason);
+  }, [onAirAngle, switchMulticamAngle]);
 
   return (
-    <div className="multi-preview-container">
+    <div
+      className="multi-preview-container"
+      onPointerUp={(event) => {
+        // Pointer focus hygiene: a tapped or clicked control does not keep a focus ring.
+        const control = event.target instanceof Element ? event.target.closest('button') : null;
+        if (control instanceof HTMLElement) window.setTimeout(() => { if (document.activeElement === control) control.blur(); }, 0);
+      }}
+    >
       {/* Shared controls bar */}
       <div className="preview-controls multi-preview-controls">
         {/* Source composition dropdown */}
@@ -190,7 +257,7 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
           type="button"
           className={`multi-preview-multicam-toggle ${multicamOn ? 'active' : ''}`}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => useTimelineStore.getState().setMulticamActive(!multicamOn)}
+          onClick={toggleMulticam}
           disabled={!activeCompositionId}
           aria-pressed={multicamOn}
           title={multicamOn
@@ -269,6 +336,7 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
                 ? { compositionId: activeCompositionId, angleIndex: index, label: angleLabels[index] ?? activeMulticam.angles[index].label }
                 : null}
               onAir={multicamOn && onAirAngle === index}
+              onAngleTap={handleAngleTap}
               autoSource={
                 isAutoMode && sourceComp
                   ? { compositionId: sourceComp.id, layerIndex: index }
@@ -278,6 +346,10 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
           ))}
         </div>
       </div>
+
+      {status && (
+        <p className="multi-preview-status" role="status" data-testid="multi-preview-status">{status}</p>
+      )}
 
       {/* Single stats overlay over the whole panel */}
       <MultiPreviewStatsOverlay

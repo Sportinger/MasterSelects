@@ -1,6 +1,7 @@
 import { getEditorRepositorySession, beginEditorTransaction, commitEditorTransaction, cancelEditorTransaction,
   ownsEditorTransaction, runEditorTransaction, captureEditorTransactionAcrossAwaits } from '../project/repository/transaction/editorMutationRuntime';
 import type { TransactionToken } from '../project/repository/transaction/ProjectTransactionCoordinator';
+import { agentRequestRevisionSource } from '../project/repository/transaction/historyNavigationPlan';
 import {
   cancelHistoryBatch,
   endBatch,
@@ -9,6 +10,7 @@ import {
 } from '../../stores/historyStore';
 import { getTimelineRevision } from '../../stores/timeline/revisionMiddleware';
 import { Logger } from '../logger';
+import type { CallerContext } from './policy/types';
 import {
   completeAIToolAudit,
   type AIToolAuditResult,
@@ -58,11 +60,57 @@ export interface AgentToolAuditCompletion {
 
 let transactionCounter = 0;
 const openTransactionIds = new Set<string>();
+/** Requests running right now (id -> nesting depth). Several can overlap: boards, chats and agents share one tab. */
+const activeAgentRequests = new Map<string, number>();
+let warnedOverlap = false;
 
-export function beginAgentTransaction(label: string): AgentTransaction {
+/**
+ * Runs one assistant request (all its provider rounds and tool calls). Agent transactions committed while it
+ * runs are tagged with the request, and Undo/Redo treat its consecutive revisions as one step
+ * (historyNavigationPlan). A nested scope of the same request joins it. Without a project repository the
+ * legacy history keeps one step per changing tool call.
+ *
+ * There is no async context in the browser, so a transaction that does not name its request is attributed
+ * only while exactly one request runs. While requests overlap such transactions stay plain 'agent' revisions
+ * (separate Undo steps) instead of joining the wrong request; a caller that knows its request passes
+ * `requestId` (AIToolExecutionOptions.agentRequestId).
+ */
+export async function runAgentRequestScope<T>(requestId: string, action: () => Promise<T>): Promise<T> {
+  activeAgentRequests.set(requestId, (activeAgentRequests.get(requestId) ?? 0) + 1);
+  try { return await action(); } finally {
+    const depth = (activeAgentRequests.get(requestId) ?? 1) - 1;
+    if (depth > 0) activeAgentRequests.set(requestId, depth); else activeAgentRequests.delete(requestId);
+    if (activeAgentRequests.size <= 1) warnedOverlap = false;
+  }
+}
+/** The one running request, or null when none or several overlap. */
+export function getActiveAgentRequestId(): string | null {
+  return activeAgentRequests.size === 1 ? activeAgentRequests.keys().next().value ?? null : null;
+}
+
+export interface AgentTransactionRequestOptions {
+  /** The request this transaction belongs to (explicit attribution, wins over the running scope). */
+  requestId?: string | null;
+  /** Who executes the tool. Direct bridge and console calls are never part of a chat request. */
+  callerContext?: CallerContext;
+}
+const REQUEST_LESS_CALLERS: ReadonlySet<CallerContext> = new Set(['devBridge', 'console']);
+export function resolveAgentRequestId(options: AgentTransactionRequestOptions = {}): string | null {
+  if (options.requestId) return options.requestId;
+  if (options.callerContext && REQUEST_LESS_CALLERS.has(options.callerContext)) return null;
+  const active = getActiveAgentRequestId();
+  if (!active && activeAgentRequests.size > 1 && !warnedOverlap) {
+    warnedOverlap = true;
+    log.warn('Assistant requests overlap: their tool calls stay separate Undo steps', { requests: [...activeAgentRequests.keys()] });
+  }
+  return active;
+}
+
+export function beginAgentTransaction(label: string, requestOptions: AgentTransactionRequestOptions = {}): AgentTransaction {
   const transactionId = `agent-tx-${++transactionCounter}`;
   if (getEditorRepositorySession()) {
-    const repositoryToken = beginEditorTransaction(label, 'agent');
+    const requestId = resolveAgentRequestId(requestOptions);
+    const repositoryToken = beginEditorTransaction(label, requestId ? agentRequestRevisionSource(requestId) : 'agent');
     openTransactionIds.add(transactionId);
     return { transactionId, label, stateRevisionBefore: getTimelineRevision(), alreadyBatching: false,
       historyBatchId: transactionCounter, abortNoop: false, repositoryToken };

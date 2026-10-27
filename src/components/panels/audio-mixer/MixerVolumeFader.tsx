@@ -156,7 +156,9 @@ export function MixerVolumeFader({
 
   const handlePointerDown = useCallback((event: PointerEvent) => {
     if (event.button !== 0) return;
-    if (event.target !== thumbRef.current) return;
+    // Mouse and pen grab the cap itself; a finger may land anywhere on the fader and drags it
+    // relatively from its current value (a 34 px cap is too small a target on a phone).
+    if (event.target !== thumbRef.current && event.pointerType !== 'touch') return;
     event.preventDefault();
     event.stopPropagation();
     draggingRef.current = true;

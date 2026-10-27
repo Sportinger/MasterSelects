@@ -4,7 +4,7 @@
 // session: Done = one undo step, Cancel = exact rollback (a grade the sheet created disappears again).
 // With nothing selected everything stays visible but greyed, with the reason on tap.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { isParameterNodeDriven } from '../../../services/parameterSources/parameterSourceTargets';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -14,8 +14,10 @@ import { PHONE_FULL_EDITOR_HINT, type PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { openPhoneClipboard } from '../clipboard/phoneClipboardCommands';
 import {
-  formatPhoneAdjustValue, PHONE_ADJUST_CONTROLS, phoneAdjustProperty, setPhoneAdjustValues, type PhoneAdjustControl,
+  formatPhoneAdjustValue, PHONE_ADJUST_CONTROLS, phoneAdjustDrivenSkips, phoneAdjustProperty, setPhoneAdjustValues,
+  type PhoneAdjustControl, type PhoneAdjustSkip,
 } from './phoneAdjustControls';
 import { PHONE_EFFECTS_TEST_IDS as IDS } from './phoneEffectsTestIds';
 import { readPhoneVisualSelection } from './phoneEffectTargets';
@@ -24,8 +26,15 @@ import './PhoneEffects.css';
 
 type Key = keyof RuntimePrimaryColorParams;
 
+/** A sentence naming the node-driven controls a change left alone, or null. */
+function describeSkips(skips: readonly PhoneAdjustSkip[]): string | null {
+  if (skips.length === 0) return null;
+  const labels = [...new Set(skips.map((skip) => PHONE_ADJUST_CONTROLS.find((control) => control.key === skip.key)?.label ?? skip.key))];
+  const clips = new Set(skips.map((skip) => skip.clipId)).size;
+  return `${labels.join(', ')} ${labels.length === 1 ? 'is' : 'are'} driven by a node on ${clips} clip${clips === 1 ? '' : 's'} and stayed unchanged there. ${PHONE_FULL_EDITOR_HINT}`;
+}
+
 const ROOT_REASON = 'Select a clip first: Adjust changes the colour of the selected clips. For the whole picture, use Effects with nothing selected: it adds an adjustment layer with Brightness, Contrast or Saturation.';
-const WHEELS_REASON = `Colour wheels (lift, gamma, gain and offset per channel) come to the phone with milestone M3. ${PHONE_FULL_EDITOR_HINT}`;
 
 /** The values the primary clip shows at the playhead, keyframes included. */
 function usePrimaryValues(clipId: string | null): Record<Key, number> {
@@ -50,6 +59,7 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
   const closeSheet = usePhoneUiStore((state) => state.closeSheet);
   const showToast = usePhoneUiStore((state) => state.showToast);
   const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
+  const openWorkspace = usePhoneUiStore((state) => state.openWorkspace);
   const session = usePhoneEditSession('Adjust colour');
   const selectionRef = useRef(readPhoneVisualSelection({ allowAdjustment: false }));
   const selection = selectionRef.current;
@@ -59,6 +69,14 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
   const touched = useRef<Partial<Record<Key, number>>>({});
   const [activeKey, setActiveKey] = useState<Key>(PHONE_ADJUST_CONTROLS[0].key);
   const [busy, setBusy] = useState(false);
+  const [skipNote, setSkipNote] = useState<string | null>(null);
+  // A keyframed control gets its key at the playhead, and Done writes the final values once more
+  // (in case the platform ended the live transaction). Running playback would move the playhead in
+  // between and leave a stray key at the Done time, so playback pauses while Adjust is open.
+  useEffect(() => {
+    const timeline = useTimelineStore.getState();
+    if (timeline.isPlaying) timeline.pause();
+  }, []);
   const primaryClip = useTimelineStore((state) => (primaryId ? state.clips.find((clip) => clip.id === primaryId) ?? null : null));
   const blocked = clipIds.length === 0;
   const blockedReason = selection.nothingSelected ? ROOT_REASON : selection.note ?? 'Select a clip with a picture first.';
@@ -70,7 +88,8 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
 
   const set = (patch: Partial<Record<Key, number>>) => {
     Object.assign(touched.current, patch);
-    void session.apply(() => setPhoneAdjustValues(clipIds, patch));
+    setSkipNote(describeSkips(phoneAdjustDrivenSkips(clipIds, Object.keys(patch) as Key[])));
+    void session.apply(() => { setPhoneAdjustValues(clipIds, patch); });
   };
 
   const selectTile = (control: PhoneAdjustControl) => {
@@ -81,15 +100,18 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
   const resetAll = () => {
     if (blocked) { showUnavailable({ actionId: 'adjust-reset-all', label: 'Reset all', reason: blockedReason }); return; }
     const changed = PHONE_ADJUST_CONTROLS.filter((control) => Math.abs(values[control.key] - control.def.defaultValue) > control.def.step / 2);
-    if (changed.length === 0) return;
-    set(Object.fromEntries(changed.map((control) => [control.key, control.def.defaultValue])));
+    // Node-driven controls on the primary cannot be reset here: leave them out and say so.
+    const drivenKeys = new Set(primaryId ? phoneAdjustDrivenSkips([primaryId], changed.map((control) => control.key)).map((skip) => skip.key) : []);
+    const resettable = changed.filter((control) => !drivenKeys.has(control.key));
+    if (resettable.length > 0) set(Object.fromEntries(resettable.map((control) => [control.key, control.def.defaultValue])));
+    if (drivenKeys.size > 0) setSkipNote(describeSkips(phoneAdjustDrivenSkips(clipIds, [...drivenKeys])));
   };
 
   const done = async () => {
     if (busy) return;
     setBusy(true);
     const final = { ...touched.current };
-    const result = await session.commit(Object.keys(final).length ? () => setPhoneAdjustValues(clipIds, final) : undefined);
+    const result = await session.commit(Object.keys(final).length ? () => { setPhoneAdjustValues(clipIds, final); } : undefined);
     closeSheet();
     if (!result.ok) showToast(result.message, 'error');
   };
@@ -100,15 +122,42 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
     closeSheet();
   };
 
+  // Wheels: keep this sheet's changes as one undo step, then open the landscape Colour editor (M4:
+  // lift/gamma/gain/offset wheels, curves, colour nodes and scopes) on the selected clip.
+  const openWheels = async () => {
+    if (busy) return;
+    if (blocked || !primaryId) { showUnavailable({ actionId: 'adjust-wheels', label: 'Wheels', reason: blockedReason }); return; }
+    setBusy(true);
+    const final = { ...touched.current };
+    const result = await session.commit(Object.keys(final).length ? () => { setPhoneAdjustValues(clipIds, final); } : undefined);
+    if (!result.ok) { closeSheet(); showToast(result.message, 'error'); return; }
+    openWorkspace('color');
+  };
+
+  // Copy or paste colour: keep this sheet's changes (one undo step), then open Copy & paste on the grade.
+  const openClipboard = async () => {
+    if (busy) return;
+    setBusy(true);
+    const final = { ...touched.current };
+    const result = await session.commit(Object.keys(final).length ? () => { setPhoneAdjustValues(clipIds, final); } : undefined);
+    if (!result.ok) { closeSheet(); showToast(result.message, 'error'); return; }
+    openPhoneClipboard('colour');
+  };
+
+  // Secondary clips whose active control a node drives do not follow the slider: count only the others.
+  const drivenSecondaries = blocked ? 0 : phoneAdjustDrivenSkips(clipIds.filter((id) => id !== primaryId), [active.key]).length;
+  const following = clipIds.length - 1 - drivenSecondaries;
   const status = blocked
     ? blockedReason
-    : `${selection.primary?.name ?? ''}${clipIds.length > 1 ? ` and ${clipIds.length - 1} more get the same values` : ''}`;
+    : `${selection.primary?.name ?? ''}${following > 0 ? ` and ${following} more get the same values` : ''}${drivenSecondaries > 0
+      ? ` (${active.label} is node-driven on ${drivenSecondaries} other clip${drivenSecondaries === 1 ? '' : 's'}, unchanged)` : ''}`;
 
   return (
     <PhoneSheet title="Adjust" height="half" onCancel={cancel} onDone={() => { void done(); }} doneDisabled={busy}>
       <div className="phone-fx" onPointerUp={blurPointerButton}>
         <p className="phone-fx__target" data-testid={IDS.adjustStatus}>{status}</p>
         {!blocked && selection.note && <p className="phone-fx__note">{selection.note}</p>}
+        {!blocked && skipNote && <p className="phone-fx__note" role="status" data-testid={IDS.adjustSkipNote}>{skipNote}</p>}
         <PhoneValueSlider
           label={active.label}
           value={values[active.key]}
@@ -141,17 +190,21 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
           <button
             type="button"
             className="phone-adjust__tile"
-            aria-disabled="true"
+            aria-disabled={blocked}
             data-testid={IDS.adjustWheels}
-            onClick={() => showUnavailable({ actionId: 'adjust-wheels', label: 'Colour wheels (M3)', reason: WHEELS_REASON })}
+            data-pro-row="true"
+            onClick={() => { void openWheels(); }}
           >
             <span>Wheels</span>
-            <span className="phone-adjust__tile-value">M3</span>
+            <span className="phone-adjust__tile-value">Colour editor ›</span>
           </button>
         </div>
         <div className="phone-adjust__actions">
           <button type="button" className="phone-adjust__action" aria-disabled={blocked} data-testid={IDS.adjustResetAll} onClick={resetAll}>
             Reset all
+          </button>
+          <button type="button" className="phone-adjust__action" data-testid={IDS.adjustClipboard} onClick={() => { void openClipboard(); }}>
+            Copy or paste colour
           </button>
         </div>
       </div>

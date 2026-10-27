@@ -2,7 +2,7 @@
 // sync, background generation jobs, global history and project boot. Phone UI below reads the
 // result through usePhoneRuntime() and never calls useEngine/useGlobalHistory itself.
 
-import { useCallback, useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { EditorPlaybackRuntimeHost } from '../../common/EditorPlaybackRuntimeHost';
 import { FlashBoardRuntimeHost } from '../../panels/flashboard/FlashBoardRuntimeHost';
 import { useEngine } from '../../../hooks/useEngine';
@@ -13,6 +13,9 @@ import type { PhoneHistoryControls, PhoneRuntimeValue } from '../contracts';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneRuntimeProvider } from './PhoneRuntimeContext';
 import { PhoneRuntimeOverlays } from './PhoneRuntimeOverlays';
+import { markPhoneBootPhase } from './phoneBootTimeline';
+import { readPhoneEngineStartDeferral } from './phoneEngineStartPolicy';
+import { usePhoneBootTimings } from './usePhoneBootTimings';
 import { usePhoneProjectBoot } from './usePhoneProjectBoot';
 import { usePhoneRuntimeEnvironment } from './usePhoneRuntimeEnvironment';
 
@@ -34,12 +37,28 @@ interface PhoneRuntimeHostProps {
   children: ReactNode;
 }
 
-export function PhoneRuntimeHost({ children }: PhoneRuntimeHostProps) {
-  // Initializes the shared engine and its render loop. Its canvasRef stays unused on purpose:
-  // PhonePreview registers its canvas as a render target instead (see SCOUT section 2).
+/**
+ * Initializes the shared engine and its render loop. Its canvasRef stays unused on purpose:
+ * PhonePreview registers its canvas as a render target instead (see SCOUT section 2).
+ * Mounted once and never unmounted, so the engine starts exactly once.
+ */
+function PhoneEngineStarter() {
   useEngine();
+  return null;
+}
+
+export function PhoneRuntimeHost({ children }: PhoneRuntimeHostProps) {
+  markPhoneBootPhase('boot-start');
   usePhoneRuntimeEnvironment();
   const boot = usePhoneProjectBoot();
+  usePhoneBootTimings(boot.bootPending, boot.projectOpen);
+  // Read once per page: a device whose adapter request stalled before starts the GPU after the project.
+  const [deferEngine] = useState(() => {
+    const defer = readPhoneEngineStartDeferral();
+    if (defer) log.warn('GPU start deferred until the project is open (adapter request stalled on an earlier start)');
+    return defer;
+  });
+  const engineStartAllowed = !deferEngine || !boot.bootPending;
   const { undo, redo, canUndo, canRedo, historyNotice, clearHistoryNotice } = useGlobalHistory();
 
   const engineReady = useEngineStore((s) => s.isEngineReady);
@@ -89,6 +108,7 @@ export function PhoneRuntimeHost({ children }: PhoneRuntimeHostProps) {
       <FlashBoardRuntimeHost />
       <EditorPlaybackRuntimeHost />
       {children}
+      {engineStartAllowed && <PhoneEngineStarter />}
       <PhoneRuntimeOverlays
         bootPending={boot.bootPending}
         historyNotice={historyNotice}

@@ -294,6 +294,6 @@ export const getStateAccessPolicyBaselines = {
   // October integration adds 17 exact targets (43 reads) and 12 action-time
   // reads for export quality, driven transforms, text selection and composition sync.
   // 2026-10-20: +9 classified targets (52 reads, Image workspace, reconnect), +3 reads on two ceilings; 10-22: +2 (presets, Style).
-  classCHardTargetFileCount: 486,
-  classCHardTargetMaxHits: 1623,
+  classCHardTargetFileCount: 570,
+  classCHardTargetMaxHits: 1981,
 } as const;

@@ -507,3 +507,12 @@
     display: none;
   }
 }
+
+/* Phone skin (/m colour editor side panel): finger-sized scope switches. Desktop sizes unchanged. */
+.mobile-skin .scopes-panel-header { min-height: 44px; flex-wrap: wrap; row-gap: 4px; }
+.mobile-skin .scope-type-selector-trigger { width: 128px; height: 36px; font-size: 14px; }
+.mobile-skin .scope-type-selector-menu button { height: 44px; font-size: 14px; }
+.mobile-skin .scopes-panel-header .scope-mode-btn { min-width: 34px; min-height: 34px; font-size: 12px; }
+.mobile-skin .scopes-panel button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.mobile-skin .scopes-panel button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.mobile-skin .scopes-panel button:focus-visible { outline: 2px solid var(--accent, #7aa2ff); outline-offset: 1px; }

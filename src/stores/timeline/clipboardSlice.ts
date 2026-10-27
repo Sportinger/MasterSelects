@@ -343,10 +343,12 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
 
   hasClipboardData: () => (get().clipboardData?.length ?? 0) > 0,
 
-  copyKeyframes: () => {
-    const { selectedKeyframeIds, clipKeyframes } = get();
+  copyKeyframes: (keyframeIds) => {
+    const { clipKeyframes } = get();
+    // Explicit ids (phone keyframe sheet, attribute clipboard) or the keyframe-lane selection.
+    const wanted = Array.isArray(keyframeIds) ? new Set(keyframeIds) : get().selectedKeyframeIds;
 
-    if (selectedKeyframeIds.size === 0) {
+    if (wanted.size === 0) {
       log.debug('No keyframes selected to copy');
       return;
     }
@@ -355,7 +357,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     const selectedKfs: Keyframe[] = [];
     clipKeyframes.forEach((keyframes) => {
       keyframes.forEach(kf => {
-        if (selectedKeyframeIds.has(kf.id)) {
+        if (wanted.has(kf.id)) {
           selectedKfs.push(kf);
         }
       });
@@ -369,48 +371,61 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     log.info('Copied keyframes', { count: clipboardKeyframes.length, skipped });
   },
 
-  pasteKeyframes: () => {
+  pasteKeyframes: (options) => {
     const { clipboardKeyframes, playheadPosition, clips, selectedClipIds, clipKeyframes, invalidateCache, pasteClips } = get();
+    const explicitTargets = options && Array.isArray(options.targetClipIds) ? options.targetClipIds : null;
 
     if (!clipboardKeyframes || clipboardKeyframes.length === 0) {
+      if (explicitTargets) {
+        log.warn('No copied keyframes to paste', { targetClipIds: explicitTargets });
+        return;
+      }
       // Fall through to clip paste
       pasteClips();
       return;
     }
 
-    // Determine target clip: use selected clip, or fall back to the original clip
-    const targetClipId = selectedClipIds.size === 1
+    // Explicit targets, else the selected clip, else the original clip.
+    const targetClipIds = explicitTargets ?? [selectedClipIds.size === 1
       ? [...selectedClipIds][0]
-      : clipboardKeyframes[0].clipId;
-
-    const targetClip = clips.find(c => c.id === targetClipId);
-    if (!targetClip) {
-      log.warn('No target clip found for keyframe paste');
+      : clipboardKeyframes[0].clipId];
+    const targetClips = targetClipIds
+      .map(id => clips.find(c => c.id === id))
+      .filter((clip): clip is NonNullable<typeof clip> => !!clip);
+    if (targetClips.length === 0) {
+      log.warn('No target clip found for keyframe paste', { targetClipIds });
       return;
     }
 
     captureSnapshot('Paste keyframes');
 
     const timestamp = Date.now();
-    const { keyframes, pasted, skipped } = planPastedKeyframes({
-      clipboardKeyframes,
-      targetClip,
-      clipLocalTime: playheadPosition - targetClip.startTime,
-      existing: clipKeyframes.get(targetClipId) || [],
-      resolveSourceOffset: get().getSourceTimeForClip,
-      createId: () => `kf_${timestamp}_${randomSuffix()}`,
-    });
     const newMap = new Map(clipKeyframes);
-    newMap.set(targetClipId, keyframes);
+    let nextClips = clips;
+    for (const targetClip of targetClips) {
+      const localTime = typeof options?.clipLocalTime === 'number' && Number.isFinite(options.clipLocalTime)
+        ? options.clipLocalTime
+        : playheadPosition - targetClip.startTime;
+      const { keyframes, pasted, skipped } = planPastedKeyframes({
+        clipboardKeyframes,
+        targetClip,
+        clipLocalTime: localTime,
+        existing: newMap.get(targetClip.id) || [],
+        resolveSourceOffset: get().getSourceTimeForClip,
+        createId: () => `kf_${timestamp}_${randomSuffix()}`,
+      });
+      newMap.set(targetClip.id, keyframes);
+      nextClips = clearProcessedAudioAnalysisRefsForKeyframeTargets(nextClips,
+        pasted > 0 ? clipboardKeyframes.map(key => ({ clipId: targetClip.id, property: key.property })) : []);
+      log.info('Pasted keyframes', { count: pasted, skipped, targetClipId: targetClip.id });
+    }
     const retainedIds = new Set([...newMap.values()].flatMap(keys => keys.map(key => key.id)));
     set({
       clipKeyframes: newMap,
       selectedKeyframeIds: new Set([...get().selectedKeyframeIds].filter(id => retainedIds.has(id))),
-      clips: clearProcessedAudioAnalysisRefsForKeyframeTargets(clips,
-        pasted > 0 ? clipboardKeyframes.map(key => ({ clipId: targetClipId, property: key.property })) : []),
+      clips: nextClips,
     });
     invalidateCache();
-    log.info('Pasted keyframes', { count: pasted, skipped, targetClipId });
   },
 
   copyClipEffects: (clipId) => {

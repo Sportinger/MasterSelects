@@ -1,0 +1,117 @@
+/* Audio effects sheet of the phone skin (scoped beneath .mobile-skin); shares the audio sheet base. */
+.mobile-skin .phone-audiofx__note { margin: 0; color: var(--phone-text-dim); font-size: 13px; line-height: 1.4; }
+.mobile-skin .phone-audiofx__stack { display: flex; flex-direction: column; gap: 8px; }
+.mobile-skin .phone-audiofx__rows { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.mobile-skin .phone-audiofx__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 2px 4px 2px 0;
+  border-radius: 10px;
+  background: var(--phone-surface);
+}
+.mobile-skin .phone-audiofx__row[aria-selected='true'] { box-shadow: inset 0 0 0 2px var(--phone-accent); }
+.mobile-skin .phone-audiofx__row[data-enabled='false'] .phone-audiofx__row-name { color: var(--phone-text-off); text-decoration: line-through; }
+.mobile-skin .phone-audiofx__row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  overflow: hidden;
+  color: var(--phone-text);
+  font-size: 14px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mobile-skin .phone-audiofx__icon {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  color: var(--phone-text);
+  font-size: 18px;
+}
+.mobile-skin .phone-audiofx__icon[aria-disabled='true'] { color: var(--phone-text-off); }
+.mobile-skin .phone-audiofx__icon--danger { color: var(--phone-danger); }
+.mobile-skin .phone-audiofx__icon:active,
+.mobile-skin .phone-audiofx__row-name:active { background: var(--phone-surface-3); }
+.mobile-skin .phone-audiofx__switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  min-height: 44px;
+  border-radius: 22px;
+}
+.mobile-skin .phone-audiofx__switch::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  right: 4px;
+  height: 26px;
+  margin-top: -13px;
+  border-radius: 13px;
+  background: var(--phone-surface-3);
+}
+.mobile-skin .phone-audiofx__switch[aria-checked='true']::before { background: var(--phone-accent); }
+.mobile-skin .phone-audiofx__switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px;
+  border-radius: 50%;
+  background: var(--phone-text);
+  transition: transform 120ms ease;
+}
+.mobile-skin .phone-audiofx__switch[aria-checked='true'] .phone-audiofx__switch-knob { transform: translateX(18px); }
+.mobile-skin .phone-audiofx__main { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
+
+.mobile-skin .phone-audiofx__chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.mobile-skin .phone-audiofx__chips::-webkit-scrollbar { display: none; }
+.mobile-skin .phone-audiofx__chip {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 22px;
+  border: 1px solid var(--phone-border);
+  color: var(--phone-text-dim);
+  font-size: 13px;
+}
+.mobile-skin .phone-audiofx__chip[aria-pressed='true'] { background: var(--phone-text); color: var(--phone-bg); border-color: var(--phone-text); }
+.mobile-skin .phone-audiofx__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.mobile-skin .phone-audiofx__card {
+  min-height: 52px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
+  font-size: 13px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.mobile-skin .phone-audiofx__card:active { filter: brightness(1.15); }
+.mobile-skin .phone-audiofx__card[aria-disabled='true'] { color: var(--phone-text-off); background: var(--phone-surface-2); }
+.mobile-skin .phone-audiofx__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--phone-surface);
+}
+.mobile-skin .phone-audiofx__group-title { font-size: 14px; font-weight: 600; }
+
+.mobile-skin .phone-audiofx button:focus { outline: none; }
+.mobile-skin .phone-audiofx button:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
+
+/* Rows that open a landscape editor: they work, so no dashed "unavailable" look. */
+.mobile-skin .phone-audio-more__item.phone-audiofx__editor {
+  border-style: solid;
+  color: var(--phone-text);
+  background: var(--phone-surface-2);
+}
+.mobile-skin .phone-audio-more__item.phone-audiofx__editor[aria-disabled='true'] { color: var(--phone-text-off); }

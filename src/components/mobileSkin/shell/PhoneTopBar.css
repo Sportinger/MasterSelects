@@ -1,0 +1,37 @@
+/* Composition strip of the top bar (PhoneTopBar.tsx): list button, back crumb, tabs. Scoped under .mobile-skin. */
+
+.mobile-skin .phone-comp-strip {
+  display: flex;
+  align-items: stretch;
+  height: var(--phone-tabs-h);
+}
+.mobile-skin .phone-comp-strip > .phone-comp-tabs { flex: 1 1 auto; min-width: 0; }
+.mobile-skin .phone-comp-strip__button {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  color: var(--phone-text);
+  border-right: 1px solid var(--phone-border);
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-comp-strip__back {
+  flex: 0 1 auto;
+  max-width: 40%;
+  min-width: 44px;
+  padding: 0 10px;
+  overflow: hidden;
+  color: var(--phone-accent);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-right: 1px solid var(--phone-border);
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-comp-strip__button:active,
+.mobile-skin .phone-comp-strip__back:active { background: var(--phone-surface-3); }
+.mobile-skin .phone-comp-strip__button:focus:not(:focus-visible),
+.mobile-skin .phone-comp-strip__back:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.mobile-skin .phone-comp-strip__button:focus-visible,
+.mobile-skin .phone-comp-strip__back:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: -2px; }

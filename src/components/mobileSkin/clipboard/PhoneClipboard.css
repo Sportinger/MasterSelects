@@ -1,0 +1,143 @@
+/* Copy & paste sheet, clip pick list and multi-title style sheet (clipboard/). --phone-* tokens only. */
+
+.mobile-skin .phone-clipboard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-clipboard__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mobile-skin .phone-clipboard__title {
+  margin: 0;
+  color: var(--phone-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.mobile-skin .phone-clipboard__status,
+.mobile-skin .phone-clipboard__note {
+  margin: 0;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.mobile-skin .phone-clipboard__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mobile-skin .phone-clipboard__button {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--phone-accent);
+  color: var(--phone-on-accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-clipboard__button[aria-disabled='true'] {
+  background: var(--phone-surface-3);
+  color: var(--phone-text-off);
+}
+.mobile-skin .phone-clipboard__button:focus { outline: none; }
+.mobile-skin .phone-clipboard__button:focus-visible,
+.mobile-skin .phone-pick__row:focus-visible {
+  outline: 2px solid var(--phone-accent);
+  outline-offset: 2px;
+}
+
+/* ---- Pick list ---- */
+.mobile-skin .phone-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mobile-skin .phone-pick__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mobile-skin .phone-pick__label {
+  color: var(--phone-text);
+  font-size: 14px;
+}
+.mobile-skin .phone-pick__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mobile-skin .phone-pick__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--phone-border);
+  border-radius: 10px;
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-pick__row:focus { outline: none; }
+.mobile-skin .phone-pick__row[aria-checked='true'] { border-color: var(--phone-accent); }
+.mobile-skin .phone-pick__row[aria-disabled='true'] {
+  color: var(--phone-text-off);
+  border-style: dashed;
+}
+.mobile-skin .phone-pick__box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--phone-border);
+  border-radius: 6px;
+  background: var(--phone-surface);
+  color: var(--phone-accent);
+  font-size: 14px;
+}
+.mobile-skin .phone-pick__row[aria-checked='true'] .phone-pick__box {
+  border-color: var(--phone-accent);
+  background: var(--phone-accent);
+  color: var(--phone-on-accent);
+}
+.mobile-skin .phone-pick__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mobile-skin .phone-pick__detail {
+  flex: none;
+  color: var(--phone-text-dim);
+  font-size: 12px;
+}
+
+/* ---- Multi-title style ---- */
+.mobile-skin .phone-text-multi__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mobile-skin .phone-text-multi__value {
+  min-width: 64px;
+  color: var(--phone-text);
+  font-size: 14px;
+  text-align: center;
+}

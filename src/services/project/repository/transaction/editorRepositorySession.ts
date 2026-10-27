@@ -27,6 +27,8 @@ export async function readEditorRepositoryWorkspace(session: RepositorySession, 
   for (const key of entities.keys()) {
     if (!key.includes('/block/') && !key.includes('/item/') && !key.startsWith('artifact-') && !key.startsWith('source-identity:')) {
       for (const category of ['fields', 'resolvers', 'nested']) keys.push(`codec/${category}/${key}`);
+      // A track's workspace audio (record arm, monitoring) lives beside its record (trackAudioWorkspaceViewKey).
+      if (key.startsWith('track/')) keys.push(`codec/fields/${key}/audio`);
     }
     const match = /^composition\/project\/([^/]+)$/u.exec(key); if (!match) continue;
     const id = decodeURIComponent(match[1]);

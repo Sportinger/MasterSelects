@@ -310,3 +310,11 @@
   width: 20px;
   height: 20px;
 }
+
+/* Touch (phone 3D scene editor, tablets): finger-sized rows and buttons, no grey tap flash. */
+@media (pointer: coarse) {
+  .layers-row { min-height: 40px; }
+  .layers-panel button,
+  .layers-row { -webkit-tap-highlight-color: transparent; }
+  .layers-panel :is(.layers-header, .layers-list, .layers-toolbar) button { min-width: 32px; min-height: 32px; }
+}

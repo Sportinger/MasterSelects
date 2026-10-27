@@ -37,7 +37,7 @@ export const classifiedFeatureGetStateHardTargets = [
   { path: 'src/components/panels/properties/transformTab/ResolveWarpPointsEditor.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/sam2/BrowserRotoPanel.tsx', maxCurrentHits: 6 },
   { path: 'src/components/preview/CaptionWordPreviewEditor.tsx', maxCurrentHits: 1 },
-  { path: 'src/components/preview/MultiPreviewPanel.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/preview/MultiPreviewPanel.tsx', maxCurrentHits: 2 },
   { path: 'src/components/preview/PerspectiveGuidePreviewHost.tsx', maxCurrentHits: 5 },
   { path: 'src/components/preview/PreviewScenePreparationOverlay.tsx', maxCurrentHits: 1 },
   { path: 'src/components/preview/previewDockSplitFit.ts', maxCurrentHits: 2 },

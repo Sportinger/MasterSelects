@@ -14,6 +14,7 @@ import {
   type MaskPathDragBatch,
   type MaskVertexUpdate,
 } from './maskPathDragPreview';
+import { buildMaskEdgeDragUpdates } from './maskEdgeDragMath';
 
 type EdgeDragVertex = { id: string; x: number; y: number };
 
@@ -101,39 +102,8 @@ export function useMaskEdgeDrag(
     let dragBatch: MaskPathDragBatch | null = null;
     let latestVertexUpdates: MaskVertexUpdate[] = [];
 
-    const buildEdgeUpdates = (dx: number, dy: number, snapToAxis: boolean, alignAdjacentEdges: boolean) => {
-      const state = edgeDragState.current;
-      const nextA = { x: state.vertexA.x + dx, y: state.vertexA.y + dy };
-      const nextBPoint = { x: state.vertexB.x + dx, y: state.vertexB.y + dy };
-      const horizontalEdge = Math.abs(state.vertexB.x - state.vertexA.x) >= Math.abs(state.vertexB.y - state.vertexA.y);
-
-      if (snapToAxis) {
-        if (horizontalEdge) {
-          const y = (nextA.y + nextBPoint.y) / 2;
-          nextA.y = y;
-          nextBPoint.y = y;
-        } else {
-          const x = (nextA.x + nextBPoint.x) / 2;
-          nextA.x = x;
-          nextBPoint.x = x;
-        }
-      }
-
-      if (alignAdjacentEdges) {
-        if (horizontalEdge) {
-          if (state.previousA) nextA.x = state.previousA.x;
-          if (state.nextB) nextBPoint.x = state.nextB.x;
-        } else {
-          if (state.previousA) nextA.y = state.previousA.y;
-          if (state.nextB) nextBPoint.y = state.nextB.y;
-        }
-      }
-
-      return [
-        { id: state.vertexA.id, updates: nextA },
-        { id: state.vertexB.id, updates: nextBPoint },
-      ];
-    };
+    const buildEdgeUpdates = (dx: number, dy: number, snapToAxis: boolean, alignAdjacentEdges: boolean) =>
+      buildMaskEdgeDragUpdates(edgeDragState.current, dx, dy, snapToAxis, alignAdjacentEdges);
 
     const applyEdgeDrag = (clientX: number, clientY: number, shiftKey: boolean, alignAdjacentEdges: boolean) => {
       if (!edgeDragState.current.isDragging || !selectedClip || !activeMask) return;

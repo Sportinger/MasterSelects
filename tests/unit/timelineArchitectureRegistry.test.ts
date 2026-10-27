@@ -1210,7 +1210,8 @@ describe('timeline architecture registry', () => {
     expect(trackSource).not.toContain('prewarmStemSourceMediaFiles');
     expect(trackSource).not.toContain('bakeClipVideoBakeRegion');
     expect(dispatcherSource).toContain('ClipInteractionShellModuleCommand');
-    expect(dispatcherSource).toContain('resolveAudioRegionTimelineRangeForClip');
+    expect(dispatcherSource).toContain("from '../utils/audioRegionClipCommands'");
+    expect(readRepoFile('src/components/timeline/utils/audioRegionClipCommands.ts')).toContain('resolveAudioRegionTimelineRangeForClip');
     expect(dispatcherSource).toContain('setAudioRegionSelection(command.selection)');
     expect(dispatcherSource).toContain('copySelectedAudioRegion()');
     expect(dispatcherSource).toContain('prewarmStemSourceMediaFiles');

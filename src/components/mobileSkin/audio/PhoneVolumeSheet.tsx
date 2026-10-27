@@ -28,16 +28,15 @@ import {
   type PhoneAudioLevels,
 } from './phoneAudioLevels';
 import { writePhoneAudioLevels } from './phoneVolumeCommands';
-import { PhoneSliderRow, PhoneToggleButton, PhoneUnavailableList, type PhoneUnavailableItem } from './PhoneAudioControls';
+import { blurAfterPointer, PhoneSliderRow, PhoneToggleButton, PhoneUnavailableList, type PhoneUnavailableItem } from './PhoneAudioControls';
 import { PHONE_VOLUME_TEST_IDS as IDS } from './phoneAudioTestIds';
 import './PhoneAudioSheets.css';
 
 const FADE_SLIDER_MAX = 10;
 
 const MORE: readonly PhoneUnavailableItem[] = [
-  { id: 'pan', label: 'Pan', reason: 'Placing the sound left or right is not on the phone yet. Use the full editor meanwhile: tap the project name, then Full editor.' },
-  { id: 'noise', label: 'Noise reduction', reason: 'Cleaning up noise is not on the phone yet. Use the full editor meanwhile: Properties, Audio FX Stack, Noise Reduction.' },
-  { id: 'effects', label: 'Audio effects', reason: 'EQ, compressor, reverb and the other audio effects are not on the phone yet. Use the full editor meanwhile: Properties, Audio FX Stack.' },
+  { id: 'pan', label: 'Pan', reason: 'This Volume sheet keeps to level and fades. To place this clip left or right, tap Audio effects below and add Pan; for a whole track use Tracks, More, Pan.' },
+  { id: 'noise', label: 'Noise reduction', reason: 'Noise reduction is an audio effect: tap Audio effects below (or select the clip, then Audio effects) and add Noise Reduction. This Volume sheet keeps to level and fades.' },
 ];
 
 function initialState() {
@@ -55,6 +54,7 @@ export const PhoneVolumeSheet: PhoneSheetComponent = () => {
   const closeSheet = usePhoneUiStore((state) => state.closeSheet);
   const showToast = usePhoneUiStore((state) => state.showToast);
   const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
+  const openSheet = usePhoneUiStore((state) => state.openSheet);
   const session = usePhoneEditSession('Adjust volume');
   // Read once when the sheet opens; the sheet edits from this snapshot.
   const [initial] = useState(initialState);
@@ -111,6 +111,20 @@ export const PhoneVolumeSheet: PhoneSheetComponent = () => {
     if (busy) return;
     session.cancel();
     closeSheet();
+  };
+
+  /** Keeps this sheet's change (its own undo step) and opens the Audio effects sheet for the same clips. */
+  const openAudioEffects = async () => {
+    if (busy) return;
+    setBusy(true);
+    if (!disabled && session.changed) {
+      const final = levelsRef.current;
+      const result = await session.commit(() => { writePhoneAudioLevels(targets.clipIds, final); });
+      if (!result.ok) showToast(result.message, 'error');
+    } else {
+      session.cancel();
+    }
+    openSheet('audioFx');
   };
 
   const fadeLimit = Math.max(0, summary.shortestDuration / 2);
@@ -208,6 +222,17 @@ export const PhoneVolumeSheet: PhoneSheetComponent = () => {
             {noteLines.map((line) => <p key={line}>{line}</p>)}
           </div>
         ) : null}
+
+        <button
+          type="button"
+          className="phone-audio-toggle"
+          data-testid={IDS.audioEffects}
+          aria-disabled={busy || undefined}
+          onPointerUp={blurAfterPointer}
+          onClick={() => { void openAudioEffects(); }}
+        >
+          Audio effects (EQ, compressor, reverb…)
+        </button>
 
         <PhoneUnavailableList items={MORE} testIdPrefix={IDS.unavailablePrefix} heading="More audio tools" />
       </div>

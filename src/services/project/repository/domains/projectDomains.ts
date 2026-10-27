@@ -20,8 +20,17 @@ function rejectRepositoryMarkers(value: JsonValue): void {
     rejectRepositoryMarkers(child);
   }
 }
-const without = (value: ObjectValue, fields: string[]): ObjectValue => Object.fromEntries(Object.entries(value).filter(([key]) => !fields.includes(key)));
+const without = (value: ObjectValue, fields: readonly string[]): ObjectValue => Object.fromEntries(Object.entries(value).filter(([key]) => !fields.includes(key)));
 
+/**
+ * Track audio fields that are workspace state (record arm, monitoring, input device, meter mode): kept out of
+ * the track record and its Undo history, stored in the workspace view `codec/fields/<track key>/audio`.
+ */
+export const TRACK_AUDIO_WORKSPACE_FIELDS: readonly string[] = ['inputDeviceId', 'recordArm', 'inputMonitor', 'meterMode'];
+/** Workspace view key that holds a track's TRACK_AUDIO_WORKSPACE_FIELDS (read back by the project decoder). */
+export function trackAudioWorkspaceViewKey(compositionId: string, trackId: string): string {
+  return `codec/fields/${entityKey('track', compositionId, trackId)}/audio`;
+}
 /** Use this entry point for a touched aggregate; whole-project encoding is import/capture only. */
 export function encodeProjectAggregate(domain: string, ownerId: string, id: string, value: unknown, options: AggregateEncodingOptions = {}): Map<string, EntityDTO> {
   rejectRepositoryMarkers(domainJson(value));
@@ -32,7 +41,7 @@ export function encodeCompositionClip(compositionId: string, clip: ProjectClip, 
 }
 export function encodeCompositionTrack(compositionId: string, track: ProjectTrack, options: AggregateEncodingOptions = {}): Map<string, EntityDTO> {
   const content = classifyFields(track, ProjectTrackFields).content ?? {};
-  if (content.audioState) content.audioState = without(object(content.audioState), ['inputDeviceId', 'recordArm', 'inputMonitor', 'meterMode']);
+  if (content.audioState) content.audioState = without(object(content.audioState), TRACK_AUDIO_WORKSPACE_FIELDS);
   return encodeProjectAggregate('track', compositionId, track.id, splitNestedDomain(domainJson(content), 'ProjectTrack').content, options);
 }
 
@@ -111,8 +120,8 @@ export function encodeProjectDomains(project: ProjectFile): EncodedProjectDomain
       const trackContent = split(trackKey, classifyFields(track, ProjectTrackFields));
       if (trackContent.audioState) {
         const audio = object(trackContent.audioState);
-        fields[`${trackKey}/audio`] = Object.fromEntries(['inputDeviceId', 'recordArm', 'inputMonitor', 'meterMode'].filter((name) => name in audio).map((name) => [name, audio[name]]));
-        trackContent.audioState = without(audio, ['inputDeviceId', 'recordArm', 'inputMonitor', 'meterMode']);
+        fields[`${trackKey}/audio`] = Object.fromEntries(TRACK_AUDIO_WORKSPACE_FIELDS.filter((name) => name in audio).map((name) => [name, audio[name]]));
+        trackContent.audioState = without(audio, TRACK_AUDIO_WORKSPACE_FIELDS);
       }
       return add(trackKey, 'track-aggregate', trackContent);
     }));

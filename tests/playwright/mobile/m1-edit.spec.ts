@@ -424,14 +424,15 @@ test('10 after a reload of /m the project is restored with the same clips @phone
   await expectPreviewAt(m1, 0, (await m1.timeline()).main)
 })
 
-test('11 a tool of a later milestone is visible, greyed out, and tapping it shows the reason @phone', async ({ m1 }) => {
+test('11 a tool that does not apply is visible, greyed out, and tapping it shows the reason @phone', async ({ m1 }) => {
   const { page } = m1
   const state = await importViaSheet(m1, { visual: [m1.media.short.path] }, { main: 1, total: 1 })
   await tapClip(m1, state.main[0].id)
   await expect(m1.toolbar).toHaveAttribute('data-scope', 'clip')
-  // Replace ships with M3: visible on the clip toolbar, greyed out until then.
-  const speed = page.getByTestId(phoneActionTestId('replace'))
-  await expect(speed, 'Replace (M3) stays visible on the clip toolbar').toBeVisible()
+  // Every milestone action has shipped; Edit text only applies to titles, so on a video clip it stays
+  // visible on the clip toolbar, greyed out, with its reason (owner rule: grey out, never hide).
+  const speed = page.getByTestId(phoneActionTestId('edit-text'))
+  await expect(speed, 'Edit text stays visible on the clip toolbar of a video clip').toBeVisible()
   await expect(speed).toHaveAttribute('aria-disabled', 'true')
   expect(await speed.evaluate(element => (element as HTMLButtonElement).disabled), 'greyed out but focusable').toBe(false)
   await expect(page.getByTestId(IDS.unavailableNotice)).toHaveCount(0)

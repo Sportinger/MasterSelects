@@ -1,5 +1,6 @@
 // React hook for WebGPU engine integration - Optimized
 
+import { getSplitCompareSettings } from '../stores/splitCompareStore';
 import { useEffect, useRef, useCallback } from 'react';
 import { useEngineStore } from '../stores/engineStore';
 import { useTimelineStore } from '../stores/timeline';
@@ -225,6 +226,8 @@ export function useEngine() {
           !timelineState.maskDragging &&
           !hasMaskEditPreview &&
           !hasActiveTemporalClip &&
+          // A cached frame has no split compare in it: render live while the compare is on.
+          !getSplitCompareSettings().enabled &&
           renderHostPort.renderCachedFrame(currentPlayhead)
         ) {
           // Stable playback audio is synchronized by usePlaybackLoop on its

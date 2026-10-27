@@ -157,6 +157,27 @@ function anchorOf(shape: PhoneMaskShape, bounds: ReturnType<typeof boundsOf>) {
   return shape === 'linear' ? { x: bounds.centerX, y: bounds.minY } : { x: bounds.centerX, y: bounds.centerY };
 }
 
+/**
+ * The shape's vertices exactly where the editor draws them (rotation around the geometry centre in
+ * raster pixels, then the position offset baked in), for turning a shape into editable points.
+ */
+export function bakedPhoneMaskVertices(shape: PhoneMaskShape, params: PhoneMaskParams, aspect: number, prefix = 'pm'): MaskVertex[] {
+  const patch = buildPhoneMaskPatch(shape, params, aspect, prefix);
+  const vertices = patch.vertices ?? [];
+  const bounds = boundsOf(vertices);
+  const pivot = { x: bounds.centerX, y: bounds.centerY };
+  const rotation = patch.rotation ?? 0;
+  const offset = patch.position ?? { x: 0, y: 0 };
+  const turn = (vector: { x: number; y: number }) => {
+    const tip = rotateInRaster({ x: pivot.x + vector.x, y: pivot.y + vector.y }, pivot, rotation, aspect);
+    return { x: z(tip.x - pivot.x), y: z(tip.y - pivot.y) };
+  };
+  return vertices.map((vertex) => {
+    const at = rotateInRaster(vertex, pivot, rotation, aspect);
+    return { ...vertex, x: z(at.x + offset.x), y: z(at.y + offset.y), handleIn: turn(vertex.handleIn), handleOut: turn(vertex.handleOut) };
+  });
+}
+
 /** Full mask state for a shape: what the sheet writes with updateMask (absolute, not a delta). */
 export function buildPhoneMaskPatch(shape: PhoneMaskShape, params: PhoneMaskParams, aspect: number, prefix = 'pm'): Partial<ClipMask> {
   const vertices = phoneMaskVertices(shape, params, aspect, prefix);

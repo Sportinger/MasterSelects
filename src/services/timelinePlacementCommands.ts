@@ -3,6 +3,7 @@ import { placeSignalAssetOnTimeline } from '../runtime/renderers/signalTimelineR
 import { useTimelineStore } from '../stores/timeline';
 import type { TimelinePlacementMode } from '../stores/timeline/editOperations/types';
 import type { TimelineStore, TimelineToolPreview } from '../stores/timeline/types';
+import type { AddClipOptions } from '../stores/timeline/storeTypes/clipActionTypes';
 import { placeLiveInputOnTimeline } from './mediaRuntime/liveInputTimelineAdapter';
 import {
   getPlacementSourceName,
@@ -18,6 +19,12 @@ export {
 } from './timelinePlacementSource';
 
 const EPSILON = 0.001;
+
+/** Per-call options; the desktop default (natural size) applies when omitted. */
+export interface TimelinePlacementCommandOptions {
+  /** How a placed video or image is sized in the composition (the phone uses 'fit', like its media import). */
+  visualScaleMode?: AddClipOptions['visualScaleMode'];
+}
 
 export interface TimelinePlacementCommandResult {
   success: boolean;
@@ -327,6 +334,7 @@ async function placeSource(
   startTime: number,
   clipDuration: number,
   mode: TimelinePlacementMode,
+  options: TimelinePlacementCommandOptions = {},
 ): Promise<string | null> {
   const state = useTimelineStore.getState();
   let createdClipId: string | null | undefined;
@@ -344,7 +352,10 @@ async function placeSource(
         clipDuration,
         source.item.id,
         getTimelineMediaTypeOverride(source.item),
-        { source: { naturalDuration: source.naturalDuration } },
+        {
+          source: { naturalDuration: source.naturalDuration },
+          ...(options.visualScaleMode && source.trackType === 'video' ? { visualScaleMode: options.visualScaleMode } : {}),
+        },
       );
     }
   } else if (source.kind === 'composition') {
@@ -389,7 +400,10 @@ async function placeSource(
   return createdClipId ?? null;
 }
 
-export async function runTimelinePlacementCommand(mode: TimelinePlacementMode): Promise<TimelinePlacementCommandResult> {
+export async function runTimelinePlacementCommand(
+  mode: TimelinePlacementMode,
+  options: TimelinePlacementCommandOptions = {},
+): Promise<TimelinePlacementCommandResult> {
   const source = resolveCurrentTimelinePlacementSource();
   if (!source) {
     return { success: false, reason: 'No source media item is selected.' };
@@ -431,7 +445,7 @@ export async function runTimelinePlacementCommand(mode: TimelinePlacementMode): 
     });
   }
 
-  const createdClipId = await placeSource(source, trackId, target.startTime, target.clipDuration, mode);
+  const createdClipId = await placeSource(source, trackId, target.startTime, target.clipDuration, mode, options);
   if (!createdClipId) {
     return { success: false, reason: 'The selected source could not be placed on the timeline.' };
   }

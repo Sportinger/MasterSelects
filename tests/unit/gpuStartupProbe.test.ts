@@ -41,6 +41,16 @@ describe('GPU startup probe in diagnostic context', () => {
     });
   });
 
+  // Field data (Pixel 10 Pro, PowerVR): init took 27.8 s against a 15 s adapter deadline. After a
+  // timeout the GPU process is stuck, and creating a WebGL context there blocks the main thread.
+  it('skips the WebGL hint after an adapter request timed out, and says so', () => {
+    recordGpuAdapterAttempt('requestAdapter (core)', 'timeout', 15_000);
+    recordGpuStartupFailure('adapter_timeout');
+    const startup = collectDiagnosticContext().webgpu?.startup;
+    expect(startup).toMatchObject({ failure: 'adapter_timeout', webglSkipped: 'adapter_timeout' });
+    expect(startup?.webgl).toBeUndefined();
+  });
+
   it('bounds the attempt list', () => {
     for (let index = 0; index < 20; index += 1) recordGpuAdapterAttempt(`attempt ${index}`, 'null', 1);
     expect(collectDiagnosticContext().webgpu?.startup?.attempts).toHaveLength(8);

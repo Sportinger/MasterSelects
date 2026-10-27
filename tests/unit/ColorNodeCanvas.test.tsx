@@ -9,7 +9,7 @@ vi.mock('../../src/services/nodeGraph/colorNodeActions', () => ({ createColorNod
   moveNode: spies.move, connectPorts: spies.connect, addNode: spies.add, disconnectEdge: spies.disconnect,
   deleteNode: vi.fn(), toggleBypass: vi.fn(),
 }) }));
-vi.mock('../../src/stores/historyStore', () => ({ startBatch: () => ({ opened: true }), endBatch: vi.fn() }));
+vi.mock('../../src/stores/historyStore', () => ({ startBatch: () => ({ opened: true }), endBatch: vi.fn(), cancelHistoryBatch: vi.fn() }));
 vi.mock('../../src/components/panels/nodes/NodeGraphCanvas', () => ({ NodeGraphCanvas: (props: any) => <div data-testid="shared-canvas">
   <span>{props.graph.nodes.length} nodes</span>
   <button onClick={() => props.onMoveNode('node_primary', { x: 400, y: 80 })}>Move fixture</button>

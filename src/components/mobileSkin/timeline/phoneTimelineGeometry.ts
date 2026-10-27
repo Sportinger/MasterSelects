@@ -215,3 +215,17 @@ export function timelineContentEnd(clips: readonly PhoneGeometryClip[], duration
   if (end <= 0) return safeDuration;
   return safeDuration > 0 ? Math.min(end, safeDuration) : end;
 }
+
+/** Seconds for screen readers: '1.50 s', '1 min 2.00 s'. */
+export function formatSpokenSeconds(seconds: number): string {
+  const safe = Math.max(0, finiteOr(seconds, 0));
+  const minutes = Math.floor(safe / 60);
+  const rest = (safe - minutes * 60).toFixed(2);
+  return minutes > 0 ? `${minutes} min ${rest} s` : `${rest} s`;
+}
+
+/** Accessible name of a clip tile: its name, where it starts and how long it is. */
+export function phoneClipAccessibleName(clip: { name: string; startTime: number; duration: number }): string {
+  const name = clip.name.trim() || 'Untitled clip';
+  return `${name}, starts at ${formatSpokenSeconds(clip.startTime)}, ${formatSpokenSeconds(clip.duration)} long`;
+}

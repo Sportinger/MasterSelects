@@ -111,11 +111,13 @@ export class NoteEntryCoordinator {
     const noteEnd = finalBeat + effectiveDuration;
 
     // Remove overlapping CHORD notes atomically, using scaled durations for tuplet notes.
-    // Rests are intentionally skipped here — replaceRestsWithChord (inside addNote) handles
-    // rest removal with proper tie migration, so deleting rests here would break that.
+    // For a new chord, rests are skipped here — replaceRestsWithChord (inside addNote) handles
+    // rest removal with proper tie migration, so deleting rests here would break that. A new REST
+    // has no such path: it replaces overlapping rests here, or the measure would hold two rests
+    // at one beat, overflow, and stop rendering.
     const epsilon = 0.001;
     const toDelete = this.getScoreModel().getNotesInMeasure(params.measure).filter(n => {
-      if (n.isRest) return false;
+      if (n.isRest && !params.isRest) return false;
       let nDuration = durationToBeats(n.duration, n.dots || 0);
       if (n.tupletId) {
         const nTuplet = (targetMeasure.tuplets || []).find(t => t.id === n.tupletId);

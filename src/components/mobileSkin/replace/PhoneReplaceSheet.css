@@ -1,0 +1,16 @@
+/* Replace sheet (PhoneReplaceSheet.tsx). Scoped under .mobile-skin. */
+
+.mobile-skin .phone-replace { display: flex; flex-direction: column; gap: 12px; }
+.mobile-skin .phone-replace__note { margin: 0; color: var(--phone-text-dim); font-size: 13px; line-height: 1.35; }
+.mobile-skin .phone-replace__note--warn { color: var(--phone-danger); }
+.mobile-skin .phone-replace__grid { display: flex; flex-direction: column; gap: 6px; }
+.mobile-skin .phone-replace__grid > .phone-pro-button { justify-content: space-between; width: 100%; }
+.mobile-skin .phone-replace__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-skin .phone-replace__tag {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--phone-surface-3);
+  color: var(--phone-text-dim);
+  font-size: 11px;
+}

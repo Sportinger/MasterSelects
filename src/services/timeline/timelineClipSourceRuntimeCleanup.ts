@@ -1,6 +1,7 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { audioRoutingManager } from '../audioRoutingManager';
+import { isManagedMediaObjectUrl } from '../project/mediaObjectUrlManager';
 import { clearMasterAudio, playheadState } from '../layerBuilder/PlayheadState';
 import { renderHostPort } from '../render/renderHostPort';
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
@@ -31,6 +32,9 @@ function safelyLoadMediaElement(element: HTMLMediaElement): void {
 
 function revokeElementSource(element: HTMLMediaElement): void {
   try {
+    // A media file's primary URL (and every other managed URL) is shared by the media panel, other
+    // clips and an undo of this edit; revoking it here left them black. The manager revokes its own.
+    if (isManagedMediaObjectUrl(element.src)) return;
     if (element.src) {
       URL.revokeObjectURL(element.src);
     }

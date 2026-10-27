@@ -8,6 +8,8 @@ import {
 const BRIDGED_MOUSE_EVENT_MARKER = '__masterSelectsTouchMouseBridge';
 const CLICK_MOVE_TOLERANCE_PX = 5;
 const COMPATIBILITY_CLICK_SUPPRESSION_MS = 1_000;
+/** The browser's compatibility click lands on the touched element where the finger lifted; a tap elsewhere is a new, real tap. */
+const COMPATIBILITY_CLICK_RADIUS_PX = 24;
 
 type TouchMouseBridgeElement = HTMLElement | SVGElement;
 
@@ -35,6 +37,11 @@ export interface TouchMouseBridgeOptions<T extends TouchMouseBridgeElement> {
   enabled?: boolean;
   emitClick?: boolean;
   shouldStart?: (event: ReactPointerEvent<T>) => boolean;
+}
+
+/** True for the mouse events this bridge synthesizes from a finger (they carry no pointer-lock movement). */
+export function isTouchBridgedMouseEvent(event: Event): boolean {
+  return Boolean((event as MarkedMouseEvent)[BRIDGED_MOUSE_EVENT_MARKER]);
 }
 
 function dispatchBridgedMouseEvent(
@@ -73,7 +80,7 @@ export function useTouchMouseBridge<T extends TouchMouseBridgeElement>({
   shouldStart,
 }: TouchMouseBridgeOptions<T> = {}): TouchMouseBridgeHandlers<T> {
   const activeTouchRef = useRef<ActiveTouch | null>(null);
-  const suppressCompatibilityClickUntilRef = useRef(0);
+  const suppressCompatibilityClickRef = useRef<{ until: number; x: number; y: number; target: Element } | null>(null);
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<T>) => {
     if (
@@ -127,8 +134,12 @@ export function useTouchMouseBridge<T extends TouchMouseBridgeElement>({
       ? activeTouch.startTarget
       : event.currentTarget;
     dispatchBridgedMouseEvent('mouseup', target, event);
-    suppressCompatibilityClickUntilRef.current = performance.now()
-      + COMPATIBILITY_CLICK_SUPPRESSION_MS;
+    suppressCompatibilityClickRef.current = {
+      until: performance.now() + COMPATIBILITY_CLICK_SUPPRESSION_MS,
+      x: event.clientX,
+      y: event.clientY,
+      target: activeTouch.startTarget,
+    };
 
     if (emitClick && !cancelled && !activeTouch.moved) {
       dispatchBridgedMouseEvent('click', target, event);
@@ -144,7 +155,12 @@ export function useTouchMouseBridge<T extends TouchMouseBridgeElement>({
 
   const handleClickCapture = useCallback((event: ReactMouseEvent<T>) => {
     if ((event.nativeEvent as MarkedMouseEvent)[BRIDGED_MOUSE_EVENT_MARKER]) return;
-    if (performance.now() >= suppressCompatibilityClickUntilRef.current) return;
+    const suppression = suppressCompatibilityClickRef.current;
+    if (!suppression || performance.now() >= suppression.until) return;
+    const onTouchedElement = event.target instanceof Node && suppression.target.contains(event.target);
+    const atLiftPoint = Math.hypot(event.clientX - suppression.x, event.clientY - suppression.y) <= COMPATIBILITY_CLICK_RADIUS_PX;
+    if (!onTouchedElement && !atLiftPoint) return;
+    suppressCompatibilityClickRef.current = null;
     event.preventDefault();
     event.stopPropagation();
   }, []);

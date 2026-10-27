@@ -37,6 +37,7 @@ export const PhoneFiltersSheet: PhoneSheetComponent = () => {
   const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
   const session = usePhoneEditSession('Filter');
   const customLooks = useLookStore((state) => state.customLooks);
+  const removeCustomLook = useLookStore((state) => state.removeCustomLook);
   const [category, setCategory] = useState<LookCategory | 'all'>('all');
   const allLooks = useMemo(() => getVisibleLooks({ customLooks, query: '', category: 'all' }), [customLooks]);
   const looks = useMemo(() => getVisibleLooks({ customLooks, query: '', category }), [customLooks, category]);
@@ -185,8 +186,30 @@ export const PhoneFiltersSheet: PhoneSheetComponent = () => {
               <span className="phone-fx__card-name">{look.name}</span>
             </button>
           ))}
-          {looks.length === 0 && <p className="phone-fx__note">No saved filters yet. Save an effect stack as a Look in the full editor.</p>}
+          {looks.length === 0 && <p className="phone-fx__note">No saved filters yet. In Effects, name a clip's effect stack and tap Save as look.</p>}
         </div>
+        {category === 'custom' && customLooks.length > 0 && (
+          <ul className="phone-filters__saved" aria-label="Saved looks">
+            {customLooks.map((look) => (
+              <li key={look.id} className="phone-filters__saved-row">
+                <span>{look.name} · {look.stack.length} effect{look.stack.length === 1 ? '' : 's'}</span>
+                <button
+                  type="button"
+                  className="phone-fx__chip"
+                  data-testid={IDS.filtersDeleteLook}
+                  data-look-id={look.id}
+                  aria-label={`Delete saved look ${look.name}`}
+                  onClick={() => {
+                    removeCustomLook(look.id);
+                    showToast(`Deleted “${look.name}”. Clips that use it keep their effects.`, 'info');
+                  }}
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </PhoneSheet>
   );

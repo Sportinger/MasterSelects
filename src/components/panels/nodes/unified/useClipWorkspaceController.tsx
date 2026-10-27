@@ -1,4 +1,5 @@
 import { clipWorkspaceAddActions, runWorkspaceAdd } from './clipWorkspaceAddActions';
+import { nodeInspectorStartsOpen } from '../workspace/nodeInspectorDefault';
 import { SceneOutputNavigation } from '../workspace/SceneOutputNavigation';
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { transferNodeGroup } from '../../../../services/nodeGraph/transferNodeGroup';
@@ -80,7 +81,7 @@ export function useClipWorkspaceController(clipId: string, panelId: string) {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [animationInspector, setAnimationInspector] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(nodeInspectorStartsOpen);
   const [viewTheme, setViewTheme] = useState<NodeGraphViewTheme>('general');
   const pinnedClipId = typeof data?.nodeClipId === 'string' && data.nodeClipId ? data.nodeClipId : null;
   const subject = useNodeGraphSubject(viewTheme, pinnedClipId);

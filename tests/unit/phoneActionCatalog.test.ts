@@ -40,11 +40,12 @@ describe('phone action catalog', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(getPhoneActionsForScope('root').map((a) => a.label)).toEqual([
       'Edit', 'Audio', 'Text', 'Effects', 'Overlay', 'Captions', 'Filters', 'Adjust', 'Format', 'Assistant', 'Media',
-      'Tracks', 'Markers', 'Library', 'Editors', 'All tools',
+      'Tracks', 'Markers', 'Library', 'Editors', 'Timeline', 'All tools',
     ]);
     expect(getPhoneActionsForScope('clip').map((a) => a.label)).toEqual([
       'Split', 'Delete', 'Delete & close gap', 'Duplicate', 'Edit text', 'Speed', 'Volume', 'Animation', 'Effects', 'Filters', 'Adjust', 'Mask',
       'Crop', 'Transition', 'Keyframe', 'Replace', 'Trim modes', 'Audio effects', 'All settings', 'Reorder',
+      'Copy & paste', 'Style titles', 'Sound range', 'Notation', 'Details', 'Bake',
     ]);
   });
 

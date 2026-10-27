@@ -1,0 +1,132 @@
+/* Overlays over the phone preview picture: clip handles, compare line, actual-pixels pan surface,
+   rulers and guides, the view button. Handles sit on the picture itself, so they use the accent
+   colour with a light/dark double edge that reads on any footage in both themes. */
+
+.mobile-skin .phone-gizmo {
+  position: absolute;
+  z-index: 18;
+  overflow: visible;
+  pointer-events: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+.mobile-skin .phone-gizmo__hit {
+  fill: transparent;
+  stroke: transparent;
+  stroke-linejoin: round;
+  pointer-events: all;
+}
+.mobile-skin .phone-gizmo__catcher { fill: transparent; pointer-events: all; }
+.mobile-skin .phone-gizmo__box {
+  fill: none;
+  stroke: var(--phone-accent);
+  pointer-events: none;
+  filter: drop-shadow(0 0 1px var(--phone-scrim));
+}
+.mobile-skin .phone-gizmo__knob {
+  fill: var(--phone-surface);
+  stroke: var(--phone-accent);
+  pointer-events: none;
+}
+.mobile-skin .phone-gizmo__snap {
+  stroke: var(--phone-danger);
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+/* Split compare: the line and its grip; Before / After labels at the top. */
+.mobile-skin .phone-compare {
+  position: absolute;
+  z-index: 17;
+  pointer-events: none;
+}
+.mobile-skin .phone-compare__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 44px;
+  margin-left: -22px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: ew-resize;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-compare__handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 21px;
+  width: 2px;
+  background: var(--phone-accent);
+  box-shadow: 0 0 0 1px var(--phone-scrim);
+}
+.mobile-skin .phone-compare__grip {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 50%;
+  background: var(--phone-accent);
+  box-shadow: 0 0 0 2px var(--phone-surface);
+}
+.mobile-skin .phone-compare__handle:focus-visible .phone-compare__grip { box-shadow: 0 0 0 3px var(--phone-text); }
+.mobile-skin .phone-compare__label {
+  position: absolute;
+  top: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--phone-surface);
+  color: var(--phone-text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.mobile-skin .phone-compare__label--before { margin-right: 8px; }
+.mobile-skin .phone-compare__label--after { margin-left: 8px; }
+
+/* Actual pixels: the finger slides the picture. */
+.mobile-skin .phone-preview-pan {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  touch-action: none;
+  cursor: grab;
+}
+
+/* Rulers and guides (the desktop PreviewRulers), with finger-sized guide hit areas. */
+.mobile-skin .phone-preview-rulers {
+  position: absolute;
+  inset: 0;
+  z-index: 19;
+  pointer-events: none;
+}
+.mobile-skin .phone-preview-rulers .preview-ruler,
+.mobile-skin .phone-preview-rulers .preview-guide { touch-action: none; }
+.mobile-skin .phone-preview-rulers .preview-guide-vertical { width: 28px; margin-left: -14px; }
+.mobile-skin .phone-preview-rulers .preview-guide-vertical::before { left: 13px; width: 2px; }
+.mobile-skin .phone-preview-rulers .preview-guide-horizontal { height: 28px; margin-top: -14px; }
+.mobile-skin .phone-preview-rulers .preview-guide-horizontal::before { top: 13px; height: 2px; }
+.mobile-skin .phone-preview-rulers .preview-ruler-clear { width: 18px; height: 18px; }
+
+/* View button in the preview's top-right corner (below the top ruler when it shows). */
+.mobile-skin .phone-preview-view-button {
+  position: absolute;
+  top: 24px;
+  right: 8px;
+  z-index: 21;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--phone-border);
+  border-radius: 22px;
+  background: var(--phone-surface);
+  color: var(--phone-text);
+  font-size: 13px;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-preview-view-button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.mobile-skin .phone-preview-view-button:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }

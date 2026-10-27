@@ -114,6 +114,14 @@ export class ScoreShortcutManager {
     }
   }
 
+  /** Runs a registered action by name (touch toolbars without a keyboard). False when unknown. */
+  run(action: string): boolean {
+    const handler = this.handlers.get(action);
+    if (!handler) return false;
+    handler();
+    return true;
+  }
+
   enable(): void {
     if (!this.enabled) {
       this.doc.addEventListener('keydown', this.boundKeyHandler);

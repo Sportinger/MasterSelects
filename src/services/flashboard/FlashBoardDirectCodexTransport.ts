@@ -44,6 +44,11 @@ import {
   startOrResumeDirectCodexThread,
 } from './FlashBoardDirectCodexThreadSession';
 import { resolveDirectModelProfile } from './FlashBoardDirectModelProfile';
+import { directCodexUnavailableMessage } from './FlashBoardDirectCodexAvailability';
+import { getActiveAgentRequestId } from '../aiTools/agentTransaction';
+import { Logger } from '../logger';
+
+const log = Logger.create('DirectCodex');
 
 export { createDirectCodexTurnToolGuard } from './FlashBoardDirectCodexTurnPolicy';
 export { runDirectCodexToolWithRecovery } from './FlashBoardDirectCodexToolRecovery';
@@ -292,6 +297,7 @@ async function runDirectCodexChat(
   const reloadSnapshot = request.resumeMessageId
     ? readDirectCodexReloadSnapshot(request.resumeMessageId)
     : null;
+  const requestGroupId = reloadSnapshot?.requestGroupId ?? getActiveAgentRequestId() ?? undefined;
   const modelProfileId = request.directModelProfile;
   const modelProfile = resolveDirectModelProfile(modelProfileId);
   let threadId = reloadSnapshot?.threadId
@@ -582,19 +588,33 @@ async function runDirectCodexChat(
       fail(error instanceof Error ? error : new Error('Codex Direct failed.'));
     }
   });
-  socket.addEventListener('error', () => fail(new Error(
-    'Codex Direct is unavailable. Start MasterSelects with npm run dev:full.',
-  )));
+  let socketOpened = false;
+  let reportedUnavailable = false;
+  const failUnavailable = (event: string) => {
+    if (reportedUnavailable || request.signal?.aborted) return;
+    reportedUnavailable = true;
+    log.warn(`Direct socket ${event} before the turn could run; the assistant service is unreachable.`);
+    fail(new Error(directCodexUnavailableMessage()));
+  };
+  socket.addEventListener('open', () => { socketOpened = true; }, { once: true });
+  socket.addEventListener('error', () => {
+    if (!socketOpened) failUnavailable('error');
+    else fail(new Error('Codex Direct disconnected before completion.'));
+  });
   socket.addEventListener('close', () => {
+    // A refused upgrade can arrive as a bare close without 'open' (or after 'error').
+    if (!socketOpened) {
+      failUnavailable('closed');
+      return;
+    }
     if (streamParsers.some(parser => parser.active) && !providerTurnCompleted) fail(new Error('Codex disconnected during the node stream. Completed steps remain undoable.'));
     if (!finalText && !streamedText) fail(new Error('Codex Direct disconnected before completion.'));
   });
 
   const opened = new Promise<void>((resolve, reject) => {
     socket.addEventListener('open', () => resolve(), { once: true });
-    socket.addEventListener('error', () => reject(new Error(
-      'Codex Direct is unavailable. Start MasterSelects with npm run dev:full.',
-    )), { once: true });
+    socket.addEventListener('error', () => reject(new Error(directCodexUnavailableMessage())), { once: true });
+    socket.addEventListener('close', () => reject(new Error(directCodexUnavailableMessage())), { once: true });
   });
   const abort = () => {
     if (threadId && turnId && socket.readyState === WebSocket.OPEN) {
@@ -649,6 +669,8 @@ async function runDirectCodexChat(
         conversationRef: request.conversationRef?.trim() || 'default',
         ...(modelProfileId ? { modelProfile: modelProfileId } : {}),
         prompt: request.prompt,
+        // The Undo group of the request, so a resume after a reload keeps one Undo step.
+        ...(requestGroupId ? { requestGroupId } : {}),
         threadId,
         turnId,
       });

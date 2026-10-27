@@ -1,7 +1,10 @@
 // 'audio' sheet (root scope): add music or sound effects from the device at the playhead, record
 // a voiceover from the playhead, and extract the sound of the video clip under the playhead into
-// its own clip. Beat markers are visible but greyed (they come with M3). Everything happens live
-// inside ONE phone edit session: Done keeps all of it as one undo step, Cancel removes all of it.
+// its own clip. Beats detects the beats of a music clip and puts the clips of a video track on them
+// (PhoneAudioBeats). Everything happens live inside ONE phone edit session: Done keeps all of it as
+// one undo step, Cancel removes all of it. Rows that open another surface keep the session first.
+// The Voiceover tab also records a punch range (PhoneAudioPunch) and rescues interrupted
+// recordings (PhoneAudioRecovery); More audio tools opens Sound range and Notation.
 
 import { useRef, useState, type ChangeEvent } from 'react';
 
@@ -16,6 +19,11 @@ import { placePhoneMedia } from '../media/phoneMediaPlacement';
 import { blurAfterPointer, PhoneUnavailableList, type PhoneUnavailableItem } from './PhoneAudioControls';
 import { formatPhoneAudioTime, resolvePhoneExtractTarget, type PhoneExtractTarget } from './phoneAudioTimeline';
 import { usePhoneVoiceover } from './usePhoneVoiceover';
+import { usePhonePunchRecording } from './usePhonePunchRecording';
+import { PhoneAudioPunch } from './PhoneAudioPunch';
+import { PhoneAudioRecovery } from './PhoneAudioRecovery';
+import { PhoneAudioBeats } from './PhoneAudioBeats';
+import { openPhoneEditor } from '../audiofx/phoneOpenEditor';
 import { PHONE_AUDIO_TEST_IDS as IDS } from './phoneAudioTestIds';
 import './PhoneAudioSheets.css';
 
@@ -30,10 +38,7 @@ const SECTIONS: readonly { id: Section; label: string }[] = [
   { id: 'beats', label: 'Beats' },
 ];
 
-const BEATS_REASON = 'Beat detection and beat markers come to the phone with milestone M3. The full editor already detects beats (Properties, Analysis) and lines clips up on them with beat rules: tap the project name, then Full editor.';
-
 const MORE: readonly PhoneUnavailableItem[] = [
-  { id: 'tracks', label: 'Audio tracks', reason: 'Naming, ordering, solo and mute of audio tracks are not on the phone yet. Use the full editor meanwhile: tap the project name, then Full editor.' },
   { id: 'devices', label: 'Microphone choice', reason: 'The phone records from the default microphone. Choosing another input is in the full editor: Settings, Audio.' },
 ];
 
@@ -53,6 +58,7 @@ export const PhoneAudioSheet: PhoneSheetComponent = () => {
   const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
   const session = usePhoneEditSession('Add audio');
   const voiceover = usePhoneVoiceover(session);
+  const punch = usePhonePunchRecording(session);
   const { progress, importFiles } = usePhoneMediaImport();
   const musicInputRef = useRef<HTMLInputElement>(null);
   const playhead = useTimelineStore((state) => state.playheadPosition);
@@ -66,7 +72,7 @@ export const PhoneAudioSheet: PhoneSheetComponent = () => {
   const timelineNow = useTimelineStore.getState();
   const extract = resolvePhoneExtractTarget(timelineNow.tracks, timelineNow.clips, [...timelineNow.selectedClipIds], playhead);
 
-  const recording = voiceover.phase !== 'idle';
+  const recording = voiceover.phase !== 'idle' || punch.active;
   const busy = importing || recording || closing;
 
   const onMusicChosen = (event: ChangeEvent<HTMLInputElement>) => {
@@ -132,17 +138,29 @@ export const PhoneAudioSheet: PhoneSheetComponent = () => {
       showToast('Adding audio is in progress. Wait until it finishes.');
       return;
     }
-    void voiceover.discard().then(() => {
+    void Promise.all([voiceover.discard(), punch.discard()]).then(() => {
       session.cancel();
       closeSheet();
     });
   };
 
-  const selectSection = (next: Section) => {
-    if (next === 'beats') {
-      showUnavailable({ actionId: 'audio-beats', label: 'Beats', reason: BEATS_REASON });
+  /** Keeps this sheet's changes (one undo step), then opens another surface in its place. */
+  const leaveTo = async (open: () => void) => {
+    if (busy) {
+      showToast(recording ? 'Stop the recording first.' : 'Adding audio is in progress. Wait until it finishes.');
       return;
     }
+    setClosing(true);
+    if (session.changed) {
+      const result = await session.commit();
+      if (!result.ok) showToast(result.message, 'error');
+    } else {
+      session.cancel();
+    }
+    open();
+  };
+
+  const selectSection = (next: Section) => {
     if (recording) {
       showToast('Stop the recording first.');
       return;
@@ -165,7 +183,6 @@ export const PhoneAudioSheet: PhoneSheetComponent = () => {
               role="tab"
               className="phone-audio-tabs__tab"
               aria-selected={section === item.id}
-              aria-disabled={item.id === 'beats' || undefined}
               data-testid={`${IDS.sectionPrefix}${item.id}`}
               onPointerUp={blurAfterPointer}
               onClick={() => selectSection(item.id)}
@@ -250,6 +267,10 @@ export const PhoneAudioSheet: PhoneSheetComponent = () => {
                 ))}
               </ul>
             ) : null}
+            <PhoneAudioPunch punch={punch}
+              blocked={voiceover.phase !== 'idle' ? 'Stop the voiceover first.' : voiceover.unavailableReason}
+              onBlockedTap={(reason) => showUnavailable({ actionId: 'audio-punch', label: 'Record a range', reason })} />
+            <PhoneAudioRecovery session={session} busy={busy} />
           </div>
         ) : null}
 
@@ -279,13 +300,34 @@ export const PhoneAudioSheet: PhoneSheetComponent = () => {
           </div>
         ) : null}
 
+        {section === 'beats' ? (
+          <PhoneAudioBeats session={session} busy={busy} onBeatRules={() => { void leaveTo(() => { openPhoneEditor('nodes'); }); }} />
+        ) : null}
+
         {problems.length > 0 ? (
           <ul className="phone-audio-sheet__problems" role="alert">
             {problems.map((problem, index) => <li key={`${index}-${problem}`}>{problem}</li>)}
           </ul>
         ) : null}
 
-        <PhoneUnavailableList items={MORE} testIdPrefix={IDS.unavailablePrefix} heading="More audio tools" />
+        <div className="phone-audio-more" role="group" aria-label="More audio tools">
+          <span className="phone-audio-more__heading">More audio tools</span>
+          <div className="phone-audio-more__items">
+            <button type="button" className="phone-audio-toggle" data-testid={IDS.tracks} onPointerUp={blurAfterPointer}
+              onClick={() => { void leaveTo(() => usePhoneUiStore.getState().openSheet('tracks')); }}>
+              Audio tracks…
+            </button>
+            <button type="button" className="phone-audio-toggle" data-testid={IDS.soundRange} onPointerUp={blurAfterPointer}
+              onClick={() => { void leaveTo(() => usePhoneUiStore.getState().openSheet('audioRegion')); }}>
+              Sound range…
+            </button>
+            <button type="button" className="phone-audio-toggle" data-testid={IDS.notation} onPointerUp={blurAfterPointer}
+              onClick={() => { void leaveTo(() => usePhoneUiStore.getState().openSheet('score')); }}>
+              Notation…
+            </button>
+          </div>
+        </div>
+        <PhoneUnavailableList items={MORE} testIdPrefix={IDS.unavailablePrefix} heading="Not on the phone" />
       </div>
     </PhoneSheet>
   );

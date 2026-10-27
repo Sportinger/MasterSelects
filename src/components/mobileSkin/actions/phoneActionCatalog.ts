@@ -16,6 +16,8 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { getSelectedPhoneTextClip } from '../text/usePhoneTitleCommands';
 import { splitSelectedAtPlayhead } from './phoneCutActions';
+import { resolvePhoneRegionTarget } from '../audioRegions/phoneAudioRegionModel';
+import { findSelectedPhoneScoreClip } from '../audioRegions/phoneScoreModel';
 import {
   deleteSelectedClips,
   duplicateSelectedClips,
@@ -101,7 +103,9 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('markers', 'Markers', 'keyframe', 'root', 'M3', { run: () => openPhoneSheet('markers') }),
   def('library', 'Library', 'media', 'root', 'M3', { run: () => openPhoneSheet('library') }),
   def('editors', 'Editors', 'nodes', 'root', 'M4', { run: () => openPhoneSheet('editors') }),
+  def('timeline-tools', 'Timeline', 'reorder', 'root', 'M4', { run: () => openPhoneSheet('timelineTools') }),
   def('all-tools', 'All tools', 'more', 'root', 'M3', { run: () => openPhoneSheet('allTools') }),
+  // G1: snapping, range, tempo, metronome and view options of the timeline.
 
   // Clip scope: at least one clip selected.
   def('split', 'Split', 'split', 'clip', 'M0', {
@@ -139,6 +143,32 @@ export const PHONE_ACTIONS: readonly PhoneActionDefinition[] = [
   def('reorder', 'Reorder', 'reorder', 'clip', 'M1', {
     run: () => ({ ok: true, message: 'Long-press a clip and drag it' }),
   }),
+  // G2: copy effects, colour and animation between clips; style several titles at once.
+  def('clipboard', 'Copy & paste', 'duplicate', 'clip', 'M3', { run: () => openPhoneSheet('clipboard') }),
+  def('style-titles', 'Style titles', 'text', 'clip', 'M3', {
+    availability: () => (getSelectedPhoneTextClip()
+      ? { kind: 'available' }
+      : { kind: 'unavailable', reason: 'Select a title (a text clip on an unlocked track) to style it together with other titles.' }),
+    run: () => openPhoneSheet('textMulti'),
+  }),
+  // G4: sound range editor (audio clips, or the linked sound of a video) and score notation.
+  def('sound-range', 'Sound range', 'audio', 'clip', 'M4', {
+    availability: (context) => {
+      const state = useTimelineStore.getState();
+      const target = resolvePhoneRegionTarget(state.clips, state.tracks, context.selectedClipIds);
+      return target.kind === 'ready' ? { kind: 'available' } : { kind: 'unavailable', reason: target.reason };
+    },
+    run: () => openPhoneSheet('audioRegion'),
+  }),
+  def('notation', 'Notation', 'keyframe', 'clip', 'M4', {
+    availability: (context) => (findSelectedPhoneScoreClip(useTimelineStore.getState().clips, context.selectedClipIds)
+      ? { kind: 'available' }
+      : { kind: 'unavailable', reason: 'Select a score clip to write notes. Add a score track and clip in the Audio sheet: More audio tools, Notation.' }),
+    run: () => openPhoneSheet('score'),
+  }),
+  // G1: clip name, source colour and parenting; video bake regions.
+  def('clip-details', 'Details', 'more', 'clip', 'M4', { run: () => openPhoneSheet('clipDetails') }),
+  def('bake', 'Bake', 'speed', 'clip', 'M4', { run: () => openPhoneSheet('bake') }),
 ];
 
 export function getPhoneActionsForScope(scope: PhoneToolbarScope): readonly PhoneActionDefinition[] {

@@ -392,7 +392,7 @@ draggable/keyboard-accessible overlay. The setting is runtime UI state and does
 not alter project media or the exported result.
 
 
-No editor control mounts `SplitCompareOverlay` (`src/components/preview/SplitCompareOverlay.tsx`) at the moment, so users compare with an effect's Bypass instead; the pass stays reachable through `splitCompareStore`.
+The desktop editor mounts no `SplitCompareOverlay` (`src/components/preview/SplitCompareOverlay.tsx`) at the moment, so users there compare with an effect's Bypass; the [phone editor](./Phone-Editor.md#preview-handles-and-view) drives the pass through `splitCompareStore` with its own finger handle. While the compare is on, the compositor sends a layer's effects through the ordered pass chain (a lone inline effect such as Invert or Brightness would otherwise skip the compare and show treated on both sides), and the paused preview does not serve a cached RAM-preview frame, which has no compare in it.
 
 ### Glyph, Cell, And Compute Effects
 

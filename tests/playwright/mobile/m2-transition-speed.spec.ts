@@ -10,6 +10,7 @@ import {
   A_TAG, B_TAG, FPS, IDS, differingShare, expect, importViaSheet, previewPixels, seek, signatureOf, tapAction, tapClip, tapOn, test,
   type M1Session, type M1Timeline,
 } from './m1Fixture'
+import { expectHandedOver, handoffState, leaveWorkspace } from './m3TimelineFixture'
 
 /**
  * M2 "Gestalten", packet transitions and speed (PLAN.md section 5): the transition button at a cut,
@@ -24,6 +25,7 @@ import {
  * Media: A = 4 s (frames 0..119), B = 3 s (frames 0..89), short = 1 s, all 360x640 at 30 fps.
  */
 test.describe.configure({ timeout: 150_000 })
+test.afterEach(async ({ m1 }) => { await leaveWorkspace(m1) })
 
 interface TransitionInfo { id: string; type: string; duration: number; linkedClipId: string }
 interface ClipDetails { duration: number; startTime: number; speed: number; reversed: boolean; transitionOut?: TransitionInfo; transitionIn?: TransitionInfo }
@@ -303,26 +305,44 @@ test('S4 a speed curve keeps the clip length and changes the pace inside it; one
   await expectFrame(m1, frameAtSpeed(t, 1), 'A at 1x again after one Undo')
 })
 
-test('S5 options the phone does not have yet stay visible, greyed, and explain themselves @phone', async ({ m1 }) => {
+test('S5 options that do not apply yet stay visible, greyed, and explain themselves @phone', async ({ m1 }) => {
   const [a] = (await importAB(m1)).main
   await openSpeed(m1, a.id)
+  // Freeze frame and Fit to a length work now (m3-panels.spec.ts covers them).
   for (const id of [SPEED.freeze, SPEED.fitLength]) {
-    await expect(m1.page.getByTestId(id)).toHaveAttribute('aria-disabled', 'true')
-    await tapOn(m1, m1.page.getByTestId(id))
-    await expectExplained(m1, /M3/)
+    await expect(m1.page.getByTestId(id)).not.toHaveAttribute('aria-disabled', 'true')
   }
-  await expect(m1.sheet, 'explaining an option keeps the sheet open').toBeVisible()
   await tapOn(m1, m1.page.getByTestId(SPEED.tabCurve))
+  // Without a curve there are no points to edit yet: the row says what to do first.
   await expect(m1.page.getByTestId(SPEED.editPoints)).toHaveAttribute('aria-disabled', 'true')
+  await tapOn(m1, m1.page.getByTestId(SPEED.editPoints))
+  await expectExplained(m1, /Pick a curve first/)
+  await expect(m1.sheet, 'explaining an option keeps the sheet open').toBeVisible()
   await tapCancel(m1)
   await m1.bridge.toolData('clearSelection')
   await seek(m1, a.start + a.duration)
   await openCut(m1, a.id)
   await expect(m1.page.getByTestId(TRANSITION.settings)).toHaveAttribute('aria-disabled', 'true')
   await tapOn(m1, m1.page.getByTestId(TRANSITION.settings))
-  await expectExplained(m1, /M3/)
+  await expectExplained(m1, /Pick a transition first/)
   await tapCancel(m1)
   expect(await transitionOut(m1, a.id), 'looking at the options changed nothing').toBeNull()
+})
+
+test('INV-1/warp-retiming: Edit curve points keeps the curve as one undo step and opens Curves with the clip and its Properties @phone', async ({ m1 }) => {
+  const [a] = (await importAB(m1)).main
+  await openSpeed(m1, a.id)
+  await tapOn(m1, m1.page.getByTestId(SPEED.tabCurve))
+  await tapOn(m1, m1.page.getByTestId(phoneSpeedCurveTestId('speed-up')))
+  await expect(m1.page.getByTestId(SPEED.editPoints)).not.toHaveAttribute('aria-disabled', 'true')
+  await tapOn(m1, m1.page.getByTestId(SPEED.editPoints))
+  const state = await expectHandedOver(m1, 'curves')
+  expect(state.selected, 'Curves shows this clip').toEqual([a.id])
+  expect(state.clips.find(clip => clip.id === a.id)?.warpPoints, 'the curve was kept before the editor opened').toBeGreaterThan(2)
+  await expect(m1.page.getByTestId('phone-workspace'), 'Properties (the Retime warp points) is open').toHaveAttribute('data-right', 'open')
+  await leaveWorkspace(m1)
+  await undoOnce(m1)
+  await expect.poll(async () => (await handoffState(m1)).clips.find(clip => clip.id === a.id)?.warpPoints, { message: 'one Undo did not remove the curve' }).toBe(0)
 })
 
 test('S6 with two clips selected the sheet names its clip, says the other stays, and changes only that clip @phone', async ({ m1 }) => {

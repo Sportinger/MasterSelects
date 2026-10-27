@@ -26,6 +26,8 @@ import {
 
 import { ColorEditor } from '../color/ColorEditor';
 import { ColorCurvesPanel } from './ColorCurvesPanel';
+import { ColorKeyframesPanel } from './ColorKeyframesPanel';
+import { useInsidePhoneSkin } from './useInsidePhoneSkin';
 
 type ColorToolMode =
   | 'primaries'
@@ -77,6 +79,12 @@ export type ColorAuxMode = 'keyframes' | 'scopes';
 export function ColorToolDock({ auxMode, clipId, clipName, onAuxModeChange }: ColorToolDockProps) {
   const [activeTool, setActiveTool] = useState<ColorToolMode>('primaries');
   const [isMiddleDragging, setIsMiddleDragging] = useState(false);
+  const [dockRef, onPhone] = useInsidePhoneSkin<HTMLElement>();
+  // The phone has no dock to switch: keyframes open inside this panel and the scopes live in the
+  // editor's side panel. Placeholder tools without an implementation are not offered there at all.
+  const [phoneKeyframes, setPhoneKeyframes] = useState(false);
+  const tools = onPhone ? COLOR_TOOLS.filter(tool => tool.available) : COLOR_TOOLS;
+  const showKeyframes = onPhone && phoneKeyframes;
   const navRef = useRef<HTMLElement>(null);
   const middleDragRef = useRef<{
     pointerId: number;
@@ -153,7 +161,7 @@ export function ColorToolDock({ auxMode, clipId, clipName, onAuxModeChange }: Co
   }, []);
 
   return (
-    <section className="color-tool-dock">
+    <section className={`color-tool-dock${onPhone ? ' color-tool-dock-phone' : ''}`} ref={dockRef}>
       <nav
         aria-label="Color tools"
         className={`color-tool-dock-nav${isMiddleDragging ? ' is-middle-dragging' : ''}`}
@@ -163,15 +171,16 @@ export function ColorToolDock({ auxMode, clipId, clipName, onAuxModeChange }: Co
         onPointerUp={finishMiddleDrag}
         ref={navRef}
       >
-        {COLOR_TOOLS.map(tool => {
+        {tools.map(tool => {
           const ToolIcon = tool.icon;
           return (
             <button
-              aria-current={activeTool === tool.id ? 'page' : undefined}
-              className={activeTool === tool.id ? 'active' : undefined}
+              aria-current={activeTool === tool.id && !showKeyframes ? 'page' : undefined}
+              className={activeTool === tool.id && !showKeyframes ? 'active' : undefined}
+              data-color-tool={tool.id}
               disabled={!tool.available}
               key={tool.id}
-              onClick={() => setActiveTool(tool.id)}
+              onClick={() => { setActiveTool(tool.id); setPhoneKeyframes(false); }}
               title={tool.available ? tool.label : `${tool.label} · adapter pending`}
               type="button"
             >
@@ -183,15 +192,17 @@ export function ColorToolDock({ auxMode, clipId, clipName, onAuxModeChange }: Co
         })}
         <span aria-hidden="true" className="color-tool-dock-nav-spacer" />
         <button
-          aria-current={auxMode === 'keyframes' ? 'page' : undefined}
-          className={`color-tool-dock-nav-status${auxMode === 'keyframes' ? ' active' : ''}`}
-          onClick={() => onAuxModeChange('keyframes')}
+          aria-current={(onPhone ? showKeyframes : auxMode === 'keyframes') ? 'page' : undefined}
+          aria-label="Keyframes"
+          className={`color-tool-dock-nav-status${(onPhone ? showKeyframes : auxMode === 'keyframes') ? ' active' : ''}`}
+          data-color-tool="keyframes"
+          onClick={() => (onPhone ? setPhoneKeyframes(current => !current) : onAuxModeChange('keyframes'))}
           title="Keyframes"
           type="button"
         >
           <IconLayersIntersect size={29} stroke={1.45} />
         </button>
-        <button
+        {!onPhone && <button
           aria-current={auxMode === 'scopes' ? 'page' : undefined}
           className={`color-tool-dock-nav-status${auxMode === 'scopes' ? ' active' : ''}`}
           onClick={() => onAuxModeChange('scopes')}
@@ -199,11 +210,12 @@ export function ColorToolDock({ auxMode, clipId, clipName, onAuxModeChange }: Co
           type="button"
         >
           <IconWaveSine size={30} stroke={1.5} />
-        </button>
+        </button>}
       </nav>
 
       <div className="color-tool-dock-content">
-        {(activeTool === 'primaries' || activeTool === 'exposure') && (
+        {showKeyframes && <ColorKeyframesPanel clipId={clipId} />}
+        {!showKeyframes && (activeTool === 'primaries' || activeTool === 'exposure') && (
           <section className="color-workspace-wheels">
             <header className="color-workspace-surface-header">
               <strong>{activeTool === 'primaries' ? 'Primaries · Color Wheels' : 'Exposure · Levels'}</strong>
@@ -219,7 +231,7 @@ export function ColorToolDock({ auxMode, clipId, clipName, onAuxModeChange }: Co
             </div>
           </section>
         )}
-        {activeTool === 'curves' && <ColorCurvesPanel clipId={clipId} />}
+        {!showKeyframes && activeTool === 'curves' && <ColorCurvesPanel clipId={clipId} />}
       </div>
     </section>
   );

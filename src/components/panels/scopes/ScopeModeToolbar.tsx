@@ -21,6 +21,8 @@ export function ScopeModeToolbar({ mode, onModeChange }: ScopeModeToolbarProps) 
         <button
           key={m.id}
           className={`scope-mode-btn ${m.className} ${mode === m.id ? 'active' : ''}`}
+          type="button"
+          aria-pressed={mode === m.id}
           onClick={() => onModeChange(m.id)}
           title={m.id === 'luma' ? 'Luma (BT.709)' : m.label}
         >

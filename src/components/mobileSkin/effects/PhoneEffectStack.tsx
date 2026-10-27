@@ -1,6 +1,6 @@
 // Applied effects of the target clip in render order: tap a row to focus its main slider, switch it
-// on/off, move it up/down or remove it. The full parameter set is milestone M3: its row stays
-// visible, greyed, and says so on tap.
+// on/off, move it up/down or remove it. "All parameters" keeps what this sheet did (one undo step)
+// and opens the desktop Properties panel on the clip's Effects tab: every parameter, preset and keyframe.
 
 import { getEffect, getEffectDisplayName } from '../../../effects';
 import { isParameterNodeDriven } from '../../../services/parameterSources/parameterSourceTargets';
@@ -10,13 +10,14 @@ import type { Effect } from '../../../types/effects';
 import type { TimelineClip } from '../../../types/timeline';
 import { PHONE_FULL_EDITOR_HINT } from '../contracts';
 import { PhoneIcon } from '../shell/phoneIcons';
+import { openPhoneProperties } from '../panels/phonePanelNavigation';
+import { PhoneProRow } from '../panels/PhoneProRows';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { formatPhoneParamValue, phoneParamRange, phonePrimaryParam } from './phoneEffectCatalog';
 import { PHONE_EFFECTS_TEST_IDS as IDS } from './phoneEffectsTestIds';
 import { PhoneValueSlider } from './PhoneValueSlider';
 import type { PhoneEffectsCommands } from './usePhoneEffectsCommands';
 
-const ALL_PARAMETERS_REASON = `Every parameter of an effect (and its presets and keyframes) comes to the phone with milestone M3. The main slider above covers the most used one. ${PHONE_FULL_EDITOR_HINT}`;
 
 interface PhoneEffectStackProps {
   clip: TimelineClip;
@@ -48,7 +49,7 @@ function PrimarySlider({ clip, effect, commands }: { clip: TimelineClip; effect:
   const keyframed = useTimelineStore((state) => Boolean(primary && (state.clipKeyframes.get(clip.id) ?? [])
     .some((keyframe) => keyframe.property === createEffectProperty(effect.id, primary.name))));
   if (!primary) {
-    return <p className="phone-fx__note">{getEffectDisplayName(effect)} has no main slider: it is on or off here. Its settings come with M3.</p>;
+    return <p className="phone-fx__note">{getEffectDisplayName(effect)} has no main slider: it is on or off here. Its settings are under All parameters.</p>;
   }
   const { min, max, step } = phoneParamRange(primary.param);
   const driven = isParameterNodeDriven(clip, createEffectProperty(effect.id, primary.name));
@@ -70,7 +71,14 @@ function PrimarySlider({ clip, effect, commands }: { clip: TimelineClip; effect:
 }
 
 export function PhoneEffectStack({ clip, stack, focused, onFocus, commands }: PhoneEffectStackProps) {
-  const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
+  const showToast = usePhoneUiStore((state) => state.showToast);
+  // Keep what the sheet changed as one undo step, then show every parameter in the desktop inspector.
+  const openAllParameters = async () => {
+    const result = await commands.commit();
+    if (!result.ok) { showToast(result.message, 'error'); return; }
+    const opened = openPhoneProperties({ kind: 'clip', clipId: clip.id, tab: 'effects' });
+    if (!opened.ok) showToast(opened.message, 'error');
+  };
   if (stack.length === 0) {
     return <p className="phone-fx__note" data-testid={IDS.effectsEmpty}>No effects yet. Tap one below to add it.</p>;
   }
@@ -134,15 +142,12 @@ export function PhoneEffectStack({ clip, stack, focused, onFocus, commands }: Ph
         ))}
       </ul>
       {focused && <PrimarySlider key={focused.id} clip={clip} effect={focused} commands={commands} />}
-      <button
-        type="button"
-        className="phone-fx__more"
-        aria-disabled="true"
-        data-testid={IDS.effectsAllParameters}
-        onClick={() => showUnavailable({ actionId: 'effects-all-parameters', label: 'All parameters (M3)', reason: ALL_PARAMETERS_REASON })}
-      >
-        All parameters (M3)
-      </button>
+      <PhoneProRow
+        label="All parameters"
+        detail="Keeps this sheet, opens Properties"
+        testId={IDS.effectsAllParameters}
+        onOpen={() => { void openAllParameters(); }}
+      />
     </section>
   );
 }

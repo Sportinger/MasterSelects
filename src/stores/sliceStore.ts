@@ -43,7 +43,7 @@ interface SliceActions {
 }
 
 /** Build localStorage key from current project name */
-function getStorageKey(): string {
+export function getOutputManagerStorageKey(): string {
   const name = useMediaStore.getState().currentProjectName || 'Untitled Project';
   // Sanitize: replace non-alphanumeric with underscore
   const safe = name.replace(/[^a-zA-Z0-9_\- ]/g, '_').trim();
@@ -317,7 +317,7 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
     if (!storage) return;
 
     const { configs } = get();
-    const key = getStorageKey();
+    const key = getOutputManagerStorageKey();
     try {
       // Save slice configs
       const data = JSON.stringify(serializeConfigs(configs));
@@ -370,7 +370,7 @@ export const useSliceStore = create<SliceState & SliceActions>()((set, get) => (
     const storage = getBrowserLocalStorage();
     if (!storage) return;
 
-    const key = getStorageKey();
+    const key = getOutputManagerStorageKey();
     try {
       const raw = storage.getItem(key);
       if (!raw) return;
@@ -424,7 +424,7 @@ export function getSavedTargetMeta(): SavedTargetMeta[] {
   const storage = getBrowserLocalStorage();
   if (!storage) return [];
 
-  const key = getStorageKey();
+  const key = getOutputManagerStorageKey();
   try {
     const raw = storage.getItem(key + '_targets');
     if (!raw) return [];

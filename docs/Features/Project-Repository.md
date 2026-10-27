@@ -33,6 +33,20 @@ Release encodes the final state and saves one revision. Cancellation restores th
 without saving intermediate samples, while unrelated clip edits stay independent. Structural edits
 within the same gesture flush the current preview before taking the normal mutation path.
 
+A gesture's input owner (the pointer or control that started it) stays current for the whole
+native event dispatch, including the microtasks between its listeners, and ends only when the
+dispatch is over. A slider or drag started from a React handler therefore joins one gesture and
+becomes one undo step instead of one step per frame. A history `startBatch` called while an editor
+transaction is already running joins that transaction instead of opening a second gesture that
+would stay open and block Undo (`transaction/editorGestureOwnership.ts`,
+`src/stores/historyStore/index.ts`).
+
+Consecutive revisions from one AI assistant request (source `agent-request:<id>`) form a single
+Undo/Redo step, however many tool calls the request makes; a user revision in between splits the
+step (`transaction/historyNavigationPlan.ts`). A track's record arm, input monitoring, input device
+and meter mode are workspace fields, not content: undoing an edit of that track keeps their live
+values, and reopening the project restores them (`TRACK_AUDIO_WORKSPACE_FIELDS`).
+
 Filesystem head checks discover the commit folder freshly before and after a
 publication. Each discovery enumerates that folder once and pages through a
 bounded filename snapshot, rather than rescanning it for every page. Independent

@@ -17,7 +17,7 @@ import {
   type MaskVertexUpdate,
 } from './maskPathDragPreview';
 
-function constrainHandleDelta(dx: number, dy: number, shiftKey: boolean): { x: number; y: number } {
+export function constrainHandleDelta(dx: number, dy: number, shiftKey: boolean): { x: number; y: number } {
   if (!shiftKey) return { x: dx, y: dy };
 
   const length = Math.hypot(dx, dy);

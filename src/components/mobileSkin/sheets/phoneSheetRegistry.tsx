@@ -37,6 +37,23 @@ export const PHONE_SHEET_REGISTRY: Readonly<Record<PhoneSheetId, LazyExoticCompo
   audioFx: lazy(() => import('../audiofx/PhoneAudioFxSheet').then((m) => ({ default: m.PhoneAudioFxSheet }))),
   library: lazy(() => import('../library/PhoneLibrarySheet').then((m) => ({ default: m.PhoneLibrarySheet }))),
   settings: lazy(() => import('../settings/PhoneSettingsSheet').then((m) => ({ default: m.PhoneSettingsSheet }))),
+  // G2: attribute clipboard and styling several titles at once.
+  clipboard: lazy(() => import('../clipboard/PhoneClipboardSheet').then((m) => ({ default: m.PhoneClipboardSheet }))),
+  textMulti: lazy(() => import('../text/PhoneTextMultiSheet').then((m) => ({ default: m.PhoneTextMultiSheet }))),
+  // G6: source monitor and media jobs.
+  source: lazy(() => import('../source/PhoneSourceSheet').then((m) => ({ default: m.PhoneSourceSheet }))),
+  mediaJobs: lazy(() => import('../library/PhoneMediaJobsSheet').then((m) => ({ default: m.PhoneMediaJobsSheet }))),
+  // G4: sound range editor and score notation.
+  audioRegion: lazy(() => import('../audioRegions/PhoneAudioRegionSheet').then((m) => ({ default: m.PhoneAudioRegionSheet }))),
+  score: lazy(() => import('../audioRegions/PhoneScoreSheet').then((m) => ({ default: m.PhoneScoreSheet }))),
+  // G1: timeline settings, clip details and parenting, bake regions, range variants.
+  timelineTools: lazy(() => import('../timelineTools/PhoneTimelineToolsSheet').then((m) => ({ default: m.PhoneTimelineToolsSheet }))),
+  clipDetails: lazy(() => import('../timelineTools/PhoneClipDetailsSheet').then((m) => ({ default: m.PhoneClipDetailsSheet }))),
+  bake: lazy(() => import('../timelineTools/PhoneBakeSheet').then((m) => ({ default: m.PhoneBakeSheet }))),
+  variants: lazy(() => import('../timelineTools/PhoneVariantsSheet').then((m) => ({ default: m.PhoneVariantsSheet }))),
+  // G3: preview view options and finger-drawn shape paths.
+  'preview-view': lazy(() => import('../preview/PhonePreviewViewSheet').then((m) => ({ default: m.PhonePreviewViewSheet }))),
+  'shape-path': lazy(() => import('../animation/PhoneShapePathSheet').then((m) => ({ default: m.PhoneShapePathSheet }))),
 };
 
 export function isPhoneSheetId(value: string | null): value is PhoneSheetId {

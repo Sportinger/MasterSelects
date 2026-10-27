@@ -12,5 +12,12 @@ export const PHONE_KEYFRAME_TEST_IDS = {
   /** Delete the row's key at the playhead. */
   deleteKey: 'phone-keyframe-delete',
   status: 'phone-keyframe-status',
+  /** Select mode: tapping keys picks them (data-picked) instead of jumping. */
+  selectMode: 'phone-keyframe-select-mode',
+  copy: 'phone-keyframe-copy',
+  deleteSelected: 'phone-keyframe-delete-selected',
+  /** Pastes the copied keys at the playhead into this clip. */
+  paste: 'phone-keyframe-paste',
+  pasted: 'phone-keyframe-pasted',
   empty: 'phone-keyframe-empty',
 } as const;

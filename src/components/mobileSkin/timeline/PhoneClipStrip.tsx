@@ -12,7 +12,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../types/timeline';
 import { PHONE_TEST_IDS } from '../contracts';
 import { selectPhoneClip } from '../actions/phoneCutActions';
-import type { PhoneLaneLayout, PhoneTimeWindow } from './phoneTimelineGeometry';
+import { phoneClipAccessibleName, type PhoneLaneLayout, type PhoneTimeWindow } from './phoneTimelineGeometry';
 import { PhoneTrimHandles } from './PhoneTrimHandles';
 import { usePhoneClipEditPreviewStore, type PhoneClipEditPreview } from './usePhoneClipEditGesture';
 import {
@@ -39,6 +39,11 @@ interface PhoneClipStripProps {
   /** Bumps when cached thumbnails/waveforms change. */
   visualsVersion: number;
   thumbnailAspect: number;
+  /** Source label colour per clip id (hex); clips without one are missing. */
+  labelColors?: ReadonlyMap<string, string>;
+  /** The editor's thumbnailsEnabled / waveformsEnabled (Timeline → View). */
+  thumbnails?: boolean;
+  waveforms?: boolean;
 }
 
 const TILE_INSET_Y = 2;
@@ -54,7 +59,9 @@ function withPreview(clip: TimelineClip, preview: PhoneClipEditPreview): Timelin
   };
 }
 
-export function PhoneClipStrip({ lane, clips, selectedClipIds, zoom, timeWindow, visualsVersion, thumbnailAspect }: PhoneClipStripProps) {
+export function PhoneClipStrip({
+  lane, clips, selectedClipIds, zoom, timeWindow, visualsVersion, thumbnailAspect, labelColors, thumbnails = true, waveforms = true,
+}: PhoneClipStripProps) {
   const preview = usePhoneClipEditPreviewStore((state) => state.preview);
   const primaryId = useTimelineStore((state) => state.primarySelectedClipId);
   const ghostSource = useTimelineStore((state) => (preview?.kind === 'move' && preview.trackId === lane.trackId
@@ -90,6 +97,9 @@ export function PhoneClipStrip({ lane, clips, selectedClipIds, zoom, timeWindow,
             windowEnd={timeWindow.end}
             visualsVersion={visualsVersion}
             thumbnailAspect={thumbnailAspect}
+            labelColor={labelColors?.get(clip.id) ?? null}
+            thumbnails={thumbnails}
+            waveforms={waveforms}
           />
         ))}
         {ghost && ghostVisible && (
@@ -104,6 +114,9 @@ export function PhoneClipStrip({ lane, clips, selectedClipIds, zoom, timeWindow,
             windowEnd={timeWindow.end}
             visualsVersion={visualsVersion}
             thumbnailAspect={thumbnailAspect}
+            labelColor={labelColors?.get(ghost.id) ?? null}
+            thumbnails={thumbnails}
+            waveforms={waveforms}
           />
         )}
       </div>
@@ -136,10 +149,14 @@ interface PhoneClipTileProps {
   windowEnd: number;
   visualsVersion: number;
   thumbnailAspect: number;
+  labelColor: string | null;
+  thumbnails: boolean;
+  waveforms: boolean;
 }
 
 const PhoneClipTile = memo(function PhoneClipTile({
   clip, lane, selected, dragSource = false, ghost = false, zoom, windowStart, windowEnd, visualsVersion, thumbnailAspect,
+  labelColor, thumbnails, waveforms,
 }: PhoneClipTileProps) {
   const clipEnd = clip.startTime + clip.duration;
   const portionStart = Math.max(clip.startTime, windowStart);
@@ -175,14 +192,17 @@ const PhoneClipTile = memo(function PhoneClipTile({
       tabIndex={ghost ? undefined : 0}
       aria-selected={ghost ? undefined : selected}
       aria-hidden={ghost ? true : undefined}
-      aria-label={ghost ? undefined : clip.name}
+      aria-label={ghost ? undefined : phoneClipAccessibleName(clip)}
       data-testid={ghost ? 'phone-clip-ghost' : PHONE_TEST_IDS.clip}
       data-clip-id={clip.id}
       data-track-id={clip.trackId}
+      data-label-color={labelColor ?? undefined}
+      data-parent-id={clip.parentClipId ?? undefined}
       style={{ left, width, top: TILE_INSET_Y, height }}
       onKeyDown={ghost ? undefined : onKeyDown}
     >
-      {lane.kind === 'video' && (
+      {labelColor && <span className="phone-clip__label-stripe" style={{ background: labelColor }} aria-hidden="true" />}
+      {lane.kind === 'video' && thumbnails && (
         <PhoneFilmstrip
           clip={clip}
           startRatio={startRatio}
@@ -193,7 +213,7 @@ const PhoneClipTile = memo(function PhoneClipTile({
           version={visualsVersion}
         />
       )}
-      {lane.kind === 'audio' && (
+      {lane.kind === 'audio' && waveforms && (
         <PhoneWaveform clip={clip} startRatio={startRatio} endRatio={endRatio} width={width} height={height} version={visualsVersion} />
       )}
       {width >= 28 && <span className="phone-clip__label">{clip.name}</span>}

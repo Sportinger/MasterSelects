@@ -9,6 +9,8 @@ export interface DirectCodexReloadSnapshot {
   /** Absent in snapshots written before model profiles; those were Codex turns. */
   modelProfile?: DirectModelProfileId;
   prompt: string;
+  /** Undo group (agent request id) of the original send; a resume tags its tool calls with it. */
+  requestGroupId?: string;
   threadId: string;
   turnId: string | null;
   updatedAt: number;
@@ -35,6 +37,7 @@ function parseSnapshot(value: unknown): DirectCodexReloadSnapshot | null {
     || !validIdentifier(candidate.assistantMessageId)
     || !validIdentifier(candidate.conversationRef)
     || (candidate.modelProfile !== undefined && !isDirectModelProfileId(candidate.modelProfile))
+    || (candidate.requestGroupId !== undefined && !validIdentifier(candidate.requestGroupId))
     || !validIdentifier(candidate.threadId)
     || (candidate.turnId !== null && !validIdentifier(candidate.turnId))
     || typeof candidate.prompt !== 'string'

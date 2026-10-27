@@ -42,7 +42,7 @@
   border-color: var(--phone-accent);
   background: color-mix(in srgb, var(--phone-accent) 22%, var(--phone-surface));
 }
-.mobile-skin .phone-choice[aria-pressed='true'] .phone-choice__glyph { background: var(--phone-accent); color: #fff; }
+.mobile-skin .phone-choice[aria-pressed='true'] .phone-choice__glyph { background: var(--phone-accent); color: var(--phone-on-accent); }
 .mobile-skin .phone-choice[aria-disabled='true'] { color: var(--phone-text-off); border-style: dashed; }
 .mobile-skin .phone-choice:active { background: var(--phone-surface-3); }
 
@@ -80,7 +80,7 @@
   transition: transform 120ms ease;
 }
 .mobile-skin .phone-switch[aria-checked='true'] .phone-switch__track { background: var(--phone-accent); }
-.mobile-skin .phone-switch[aria-checked='true'] .phone-switch__thumb { transform: translateX(18px); background: #fff; }
+.mobile-skin .phone-switch[aria-checked='true'] .phone-switch__thumb { transform: translateX(18px); background: var(--phone-on-accent); }
 .mobile-skin .phone-switch[aria-disabled='true'] .phone-switch__label { color: var(--phone-text-off); }
 
 .mobile-skin .phone-tabs {

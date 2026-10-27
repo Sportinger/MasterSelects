@@ -1,6 +1,21 @@
 // Selection actions
 
-import type { MediaSliceCreator, LabelColor } from '../types';
+import type { MediaFolder, MediaSliceCreator, LabelColor } from '../types';
+import { Logger } from '../../../services/logger';
+
+const log = Logger.create('MediaSelection');
+
+/** Folder ids of `itemIds` that would land in themselves or one of their own subfolders. */
+export function findFolderMoveCycles(folders: readonly MediaFolder[], itemIds: readonly string[], targetId: string | null): string[] {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const chain = new Set<string>();
+  let cursor = targetId ? byId.get(targetId) : undefined;
+  while (cursor && !chain.has(cursor.id)) {
+    chain.add(cursor.id);
+    cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+  }
+  return itemIds.filter((id) => byId.has(id) && chain.has(id));
+}
 
 export interface SelectionActions {
   moveToFolder: (itemIds: string[], folderId: string | null) => void;
@@ -11,8 +26,13 @@ export interface SelectionActions {
   setLabelColor: (itemIds: string[], color: LabelColor) => void;
 }
 
-export const createSelectionSlice: MediaSliceCreator<SelectionActions> = (set) => ({
-  moveToFolder: (itemIds: string[], folderId: string | null) => {
+export const createSelectionSlice: MediaSliceCreator<SelectionActions> = (set, get) => ({
+  moveToFolder: (requestedIds: string[], folderId: string | null) => {
+    // A folder moved into itself or its own subfolder would detach the whole branch from the tree.
+    const cycles = findFolderMoveCycles(get().folders, requestedIds, folderId);
+    if (cycles.length > 0) log.warn('Refused to move folders into themselves or their own subfolders', { folderIds: cycles, folderId });
+    const itemIds = cycles.length > 0 ? requestedIds.filter((id) => !cycles.includes(id)) : requestedIds;
+    if (itemIds.length === 0) return;
     set((state) => ({
       files: state.files.map((f) =>
         itemIds.includes(f.id) ? { ...f, parentId: folderId } : f

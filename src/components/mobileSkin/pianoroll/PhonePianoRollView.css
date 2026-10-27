@@ -1,0 +1,61 @@
+.mobile-skin .phone-piano-roll {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: #0f0f0f;
+  color: #d4d4d4;
+  font-size: 13px;
+}
+
+.mobile-skin .phone-piano-roll > * { flex: 1 1 auto; min-height: 0; }
+
+.mobile-skin .phone-piano-roll--empty {
+  gap: 10px;
+  padding: 16px;
+  overflow: auto;
+  background: var(--phone-bg);
+  color: var(--phone-text);
+}
+
+.mobile-skin .phone-piano-roll--empty > * { flex: 0 0 auto; }
+
+.mobile-skin .phone-piano-roll__message { margin: 0; color: var(--phone-text-dim, #98a0ad); line-height: 1.4; }
+.mobile-skin .phone-piano-roll__list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.mobile-skin .phone-piano-roll__error { margin: 0; color: #ff8a80; }
+
+.mobile-skin .phone-piano-roll__button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--phone-border, #2c3038);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--phone-text);
+  font: inherit;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.mobile-skin .phone-piano-roll__button--primary {
+  align-self: flex-start;
+  border-color: var(--phone-accent, #5b8def);
+  background: var(--phone-accent, #5b8def);
+  color: var(--phone-on-accent, #0b0c0f);
+}
+
+.mobile-skin .phone-piano-roll__button:active { filter: brightness(1.15); }
+.mobile-skin .phone-piano-roll__button:focus-visible,
+.mobile-skin .phone-piano-roll .pr-touch-action:focus-visible,
+.mobile-skin .phone-piano-roll [data-testid^='piano-roll-tool-']:focus-visible {
+  outline: 2px solid var(--phone-accent, #7aa2ff);
+  outline-offset: 1px;
+}
+
+.mobile-skin .phone-piano-roll .pr-touch-action:focus:not(:focus-visible),
+.mobile-skin .phone-piano-roll [data-testid^='piano-roll-tool-']:focus:not(:focus-visible) { outline: none; }
+.mobile-skin .phone-piano-roll button { -webkit-tap-highlight-color: transparent; }
+
+/* The piano roll's header scrolls sideways on the phone; its groups keep their size. */
+.mobile-skin .phone-piano-roll [data-testid='piano-roll'] > div:first-child > * { flex-shrink: 0; }

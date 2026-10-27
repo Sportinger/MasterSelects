@@ -48,6 +48,12 @@ export async function generateM2AudioMedia(): Promise<M2AudioMedia> {
   return { tone, videoWithTone }
 }
 
+/** 4 s click track at 120 BPM (a 20 ms 1 kHz burst every 0.5 s), stereo WAV: beats to detect. */
+export async function generateClickTrack(): Promise<string> {
+  return cached(path.join(MEDIA_DIR, 'm2-clicks-120bpm-4s-v1.wav'), temporary => run('ffmpeg', ['-y', '-loglevel', 'error',
+    '-f', 'lavfi', '-i', "aevalsrc='if(lt(mod(t\\,0.5)\\,0.02)\\,0.8*sin(2*PI*1000*t)\\,0)':s=48000:d=4", '-ac', '2', temporary]), 'wav')
+}
+
 /** A tone no other case imported (own content), so the editor treats it as a brand-new source. */
 export async function uniqueTone(directory: string): Promise<string> {
   const frequency = 300 + Math.floor(Math.random() * 600)

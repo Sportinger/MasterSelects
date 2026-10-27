@@ -567,3 +567,9 @@ YouTube credential reads, writes and deletion wait for their IndexedDB transacti
 ### Rejected GPU adapter configurations
 
 A rejected `requestAdapter()` configuration now proceeds to the remaining existing platform fallbacks, just like a null adapter result. Previously the rejection escaped the whole initialization sequence, skipping a potentially working default adapter or Android compatibility backend. Pending requests still retain the 15-second deadline; timeouts and superseded initialization do not start extra requests. Missing WebGPU support or failure of every configuration remains a reported startup failure.
+
+### Android adapter memory
+
+On Android the adapter request order and deadline come from a per-device memory in localStorage (`ms.gpu.androidAdapter`, `src/engine/core/androidAdapterMemory.ts`), because a stalled request cannot be followed by a second one in the same start. The default order is core, then compatibility, with the 15-second deadline. After the core request stalled, the next start tries compatibility first; a device on which compatibility worked keeps that order; once both paths have stalled, the deadline drops to 6 seconds. A browser update starts fresh. The chosen order and reason are logged as a warning. On such a device the [phone editor](./Phone-Editor.md#android-start) opens the project before it starts the GPU.
+
+After an adapter request timed out, the startup probe skips the WebGL adapter hint: creating a WebGL context while the GPU process is stuck would block the page for seconds. The diagnostics then carry `webglSkipped: 'adapter_timeout'` instead of `webgl` (`src/services/diagnostics/gpuStartupProbe.ts`).

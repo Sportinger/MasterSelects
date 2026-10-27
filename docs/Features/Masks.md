@@ -124,6 +124,8 @@ The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 - `Escape` exits drawing or editing modes.
 - `Enter` closes the active open path when it has at least three vertices.
 
+The edge-drag constraints (Shift straight edge, Ctrl/Cmd align neighbours) are pure math in `src/components/preview/maskEdgeDragMath.ts` (`buildMaskEdgeDragUpdates`), and the handle-angle snap is the exported `constrainHandleDelta`, so the phone editor's pen buttons apply exactly the same rules.
+
 The overlay uses normalized layer-local coordinates internally. Pointer input is unprojected through the current layer transform before updating vertices, handles, edges, or whole masks.
 
 ## Mask Properties

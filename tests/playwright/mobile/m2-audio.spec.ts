@@ -1,18 +1,20 @@
 import { phoneActionTestId } from '../../../src/components/mobileSkin/contracts'
 import { PHONE_AUDIO_TEST_IDS as AUDIO, PHONE_VOLUME_TEST_IDS as VOLUME } from '../../../src/components/mobileSkin/audio/phoneAudioTestIds'
+import { PHONE_TRACKS_TEST_IDS as TRACKS } from '../../../src/components/mobileSkin/tracks/phoneTracksTestIds'
 import { chromeLaunchArgs, resolveRuntimeProfile } from '../config/runtimeProfile'
 import {
   IDS, differingShare, expect, exportToReady, importViaSheet, previewPixels, seek, tapAction, tapClip, tapForDownload, tapOn, test,
   waitForIdle, type M1Session, type M1Timeline,
 } from './m1Fixture'
 import {
-  TONE_SECONDS, clipAudio, fakeMicrophoneArgs, fileAudioRms, generateM2AudioMedia, historyProbe, holdSourceVerification, mediaNames, mixRms, uniqueTone, waitForSourcesVerified, timelineSnapshot, type M2AudioMedia,
+  TONE_SECONDS, clipAudio, fakeMicrophoneArgs, generateClickTrack, fileAudioRms, generateM2AudioMedia, historyProbe, holdSourceVerification, mediaNames, mixRms, uniqueTone, waitForSourcesVerified, timelineSnapshot, type M2AudioMedia,
 } from './m2AudioFixture'
+import { handoffState } from './m3TimelineFixture'
 
 /**
  * M2 "Gestalten" audio acceptance of the phone skin (PLAN.md section 5, packet P3): the Volume
  * sheet (clip scope: level, mute, fades, also for the linked sound of a video) and the Audio
- * sheet (root scope: music at the playhead, voiceover, extract audio, greyed beats). One catalog
+ * sheet (root scope: music at the playhead, voiceover, extract audio, beats). One catalog
  * case per test in the M1 phone world (m1Fixture.ts: one project built through the phone UI, a
  * fresh empty composition per test). Every action under test is real touch; files come in through
  * the hidden inputs; the microphone is Chromium's fake device fed with a 440 Hz tone.
@@ -370,28 +372,82 @@ test('INV1/link-clips (extract audio): Extract separates the sound of the video 
   await expect.poll(async () => timelineSnapshot(m1.page), { message: 'one Undo links them again' }).toBe(before)
 })
 
-test('INV4/audio-beat-onset-detection: beats and the other later audio tools are visible, greyed and explain themselves @phone', async ({ m1 }) => {
+test('INV-4/audio-track-management: Audio links to the Tracks sheet; Pan and Noise reduction say where they work @phone', async ({ m1 }) => {
   const tone = await importTone(m1)
   await nothingSelected(m1)
   const notice = m1.page.getByTestId(IDS.unavailableNotice)
-  const explains = async (testId: string) => {
+  const explains = async (testId: string, pattern: RegExp) => {
     const control = m1.page.getByTestId(testId)
     await expect(control).toBeVisible()
     await expect(control).toHaveAttribute('aria-disabled', 'true')
     await tapOn(m1, control)
-    await expect(notice, `${testId} explains itself`).toBeVisible()
-    expect((await notice.innerText()).trim().length).toBeGreaterThan(20)
+    await expect(notice, `${testId} explains itself`).toContainText(pattern)
     await tapOn(m1, notice.getByRole('button').last())
     await expect(notice).toBeHidden()
     await expect(m1.sheet, 'the sheet stays open behind the notice').toBeVisible()
   }
-  await tapAction(m1, phoneActionTestId('audio'))
-  await explains(`${AUDIO.sectionPrefix}beats`)
-  await explains(`${AUDIO.unavailablePrefix}tracks`)
+  await openVolume(m1, tone.id)
+  await explains(`${VOLUME.unavailablePrefix}pan`, /add Pan/)
+  await explains(`${VOLUME.unavailablePrefix}noise`, /Noise Reduction/)
   await cancel(m1)
 
-  await openVolume(m1, tone.id)
-  await explains(`${VOLUME.unavailablePrefix}pan`)
-  await explains(`${VOLUME.unavailablePrefix}noise`)
+  await nothingSelected(m1)
+  await tapAction(m1, phoneActionTestId('audio'))
+  await explains(`${AUDIO.unavailablePrefix}devices`, /microphone/)
+  await tapOn(m1, m1.page.getByTestId(AUDIO.tracks))
+  await expect(m1.page.getByTestId(TRACKS.list), 'Audio tracks opens the Tracks sheet').toBeVisible()
   await cancel(m1)
+})
+
+async function openBeats(m1: M1Session) {
+  await nothingSelected(m1)
+  await tapAction(m1, phoneActionTestId('audio'))
+  await tapOn(m1, m1.page.getByTestId(`${AUDIO.sectionPrefix}beats`))
+  await expect(m1.page.getByTestId(AUDIO.beatsPlace), 'the Beats tab is open').toBeVisible()
+}
+
+test('INV-4/audio-beat-onset-detection: Detect beats analyses a music clip from the Audio sheet @phone', async ({ m1 }) => {
+  const clicks = await generateClickTrack()
+  const state = await importViaSheet(m1, { audio: [clicks] }, { total: 1 })
+  const music = audioClipOf(state)!
+  await waitForSourcesVerified(m1.page)
+  await openBeats(m1)
+  const source = m1.page.locator(`[data-testid="${AUDIO.beatsSource}"][data-value="${music.id}:unanalyzed"]`)
+  await expect(source, 'the music clip is offered, not analysed yet').toHaveAttribute('aria-checked', 'true')
+  await tapOn(m1, m1.page.getByTestId(AUDIO.beatsDetect))
+  await expect.poll(async () => (await handoffState(m1)).clips.find(clip => clip.id === music.id)?.beatGridId ?? null,
+    { message: 'the beat grid did not land on the clip', timeout: 90_000 }).not.toBeNull()
+  await expect(m1.page.getByTestId(AUDIO.beatsMessage)).toContainText(/ready/)
+  await expect(m1.page.locator(`[data-testid="${AUDIO.beatsSource}"][data-value="${music.id}:source"]`), 'the detected grid is the chosen source').toHaveAttribute('aria-checked', 'true')
+  await cancel(m1)
+})
+
+test('INV-4/audio-beat-distribution-rules: Put on the beat lines up a track on the tempo map; Cancel leaves nothing, Done is one undo step @phone', async ({ m1 }) => {
+  const state = await importViaSheet(m1, { visual: [m1.media.short.path, m1.media.a.path] }, { main: 2, total: 2 })
+  const [short, a] = state.main
+  expect(a.start, 'A follows the 1 s clip').toBeCloseTo(1, 3)
+  await waitForIdle(m1)
+  const before = await timelineSnapshot(m1.page)
+  const place = async () => {
+    await openBeats(m1)
+    await tapOn(m1, m1.page.locator(`[data-testid="${AUDIO.beatsSource}"][data-value="tempo-map"]`))
+    await tapOn(m1, m1.page.locator(`[data-testid="${AUDIO.beatsTrack}"][data-track-id="${a.trackId}"]`))
+    await tapOn(m1, m1.page.locator(`[data-testid="${AUDIO.beatsStep}"][data-step="2"]`))
+    await tapOn(m1, m1.page.getByTestId(AUDIO.beatsPlace))
+    await expect(m1.page.getByTestId(AUDIO.beatsMessage)).toContainText(/on the beat/)
+    // The default tempo map is 60 BPM: every 2nd beat is every 2 s, so A moves from 1 s to 2 s.
+    await expect.poll(async () => (await handoffState(m1)).clips.find(clip => clip.id === a.id)?.startTime, { message: 'A did not move onto the beat' }).toBeCloseTo(2, 3)
+    expect((await handoffState(m1)).clips.find(clip => clip.id === short.id)?.startTime, 'the first clip stays on beat 0').toBeCloseTo(0, 3)
+  }
+  await place()
+  await cancel(m1)
+  await expect.poll(async () => timelineSnapshot(m1.page), { message: 'Cancel left a moved clip behind' }).toBe(before)
+  expect((await handoffState(m1)).beatRules, 'Cancel left no beat rule').toEqual([])
+
+  await place()
+  await done(m1)
+  expect((await handoffState(m1)).beatRules, 'the beat rule stays editable').toEqual([expect.objectContaining({ members: 2, beatStep: 2 })])
+  await undoOnce(m1)
+  await expect.poll(async () => timelineSnapshot(m1.page), { message: 'one Undo puts the clips back' }).toBe(before)
+  expect((await handoffState(m1)).beatRules).toEqual([])
 })

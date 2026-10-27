@@ -36,6 +36,8 @@ export interface AIToolCallExecutionResult {
 
 export interface AIToolExecutionOptions {
   auditProviderToolCallId?: string;
+  /** Assistant request this call belongs to: its revisions join that request's one Undo step (runAgentRequestScope). */
+  agentRequestId?: string;
   /** Presentation only: report each completed action while executeBatch is still running. */
   onBatchAction?: (step: { index: number; total: number; tool: string; success: boolean }) => void | Promise<void>;
   signal?: AbortSignal;

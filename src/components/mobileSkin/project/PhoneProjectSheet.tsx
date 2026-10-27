@@ -1,5 +1,6 @@
 // 'projects' sheet: rename the open project (Done = rename), see its canvas and save state, and go
-// back to the project list. Going back saves, closes the project through the desktop close path and
+// back to the project list. The M3 tools below (Library, Settings, info, duplicate, versions, .msproj
+// export) live in PhoneProjectTools. Going back saves, closes the project through the desktop close path and
 // asks the phone UI to show its home screen. Full editor saves and opens the same project at /editor.
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
@@ -9,6 +10,8 @@ import { usePhoneUiStore } from '../state/phoneUiStore';
 import { renamePhoneProject } from './usePhoneProjectCommands';
 import { PhoneStorageStatus } from './PhoneStorageStatus';
 import { saveAndOpenFullEditor } from './phoneFullEditor';
+import { PhoneProjectTools } from './PhoneProjectTools';
+import { PhoneProjectStorageTools } from './PhoneProjectStorageTools';
 import { validateProjectName } from '../../common/projectNameValidation';
 import { Logger } from '../../../services/logger';
 import { projectFileService } from '../../../services/projectFileService';
@@ -19,25 +22,9 @@ import './PhoneProject.css';
 
 const log = Logger.create('PhoneProjectSheet');
 
-// ---------------------------------------------------------------------------
-// Home requests: a module-level listener set the home/assembly code subscribes to.
-// ---------------------------------------------------------------------------
-
-const homeListeners = new Set<() => void>();
-
-/** Subscribe to "show the phone home screen" requests; returns the unsubscribe function. */
-export function subscribePhoneHomeRequests(callback: () => void): () => void {
-  homeListeners.add(callback);
-  return () => {
-    homeListeners.delete(callback);
-  };
-}
-
-/** Ask the phone UI to show its home (project list) screen. */
-export function requestPhoneHome(): void {
-  if (homeListeners.size === 0) log.warn('Phone home requested, but no home screen is listening');
-  for (const listener of [...homeListeners]) listener();
-}
+export { requestPhoneHome, subscribePhoneHomeRequests } from '../shell/phoneHomeRequests';
+import { requestPhoneHome } from '../shell/phoneHomeRequests';
+import { notifyPhoneProjectStateChanged } from '../runtime/phoneProjectStateEvents';
 
 function useCompositionSummary(): string {
   const composition = useMediaStore((state) => state.compositions.find((comp) => comp.id === state.activeCompositionId));
@@ -106,6 +93,8 @@ export const PhoneProjectSheet: PhoneSheetComponent = () => {
         return;
       }
       await closeCurrentProject();
+      // The home must know right away that no project is open (no stale "Back to editing").
+      notifyPhoneProjectStateChanged();
       closeSheet();
       requestPhoneHome();
     } catch (failure) {
@@ -139,7 +128,7 @@ export const PhoneProjectSheet: PhoneSheetComponent = () => {
   return (
     <PhoneSheet
       title="Project"
-      height="half"
+      height="tall"
       onCancel={closeSheet}
       onDone={() => void commitRename()}
       doneLabel={busy === 'rename' ? 'Renaming…' : 'Done'}
@@ -188,6 +177,8 @@ export const PhoneProjectSheet: PhoneSheetComponent = () => {
           {busy === 'full-editor' ? 'Saving and opening…' : 'Full editor · all tools'}
         </button>
       </form>
+      <PhoneProjectTools projectOpen={projectOpen} />
+      <PhoneProjectStorageTools projectOpen={projectOpen} />
     </PhoneSheet>
   );
 };

@@ -99,6 +99,8 @@ overflow tie-splits, ties, articulations, stems) and `MouseNoteEntry`
 geometry plus the model slot ids in the SVG — no harvested bounding-box
 registry.
 
+A touch host can embed the editor with a `touchBar` and run every shortcut action by name (`ScoreShortcutManager.run(action)`); the [phone editor](./Phone-Editor.md#sound-range-recording-and-notation) uses this. Entering a rest where a rest already stands (such as the filler rest after the last note) replaces it, so the measure never holds two rests at one beat and the following slots keep rendering; this also applies to the `r` key.
+
 ## Notation rendering (`src/services/score/render/`)
 
 `VexFlowScoreRenderer` re-renders the full score into SVG on every change:

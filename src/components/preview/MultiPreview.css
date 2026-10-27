@@ -210,3 +210,39 @@
 .multi-preview-multicam-toggle:focus-visible {
   box-shadow: 0 0 0 2px var(--accent);
 }
+
+/* Why a multicam action did nothing (silent failure is a bug) */
+.multi-preview-status {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  z-index: 20;
+  max-width: calc(100% - 16px);
+  margin: 0;
+  padding: 4px 10px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--preview-overlay-bg);
+  color: var(--text-primary);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* Touch screens have no hover: the slot's composition picker stays visible and finger-sized. */
+@media (hover: none), (pointer: coarse) {
+  .multi-preview-slot-dropdown-wrapper {
+    opacity: 1;
+  }
+
+  .multi-preview-slot-dropdown-btn,
+  .multi-preview-controls button {
+    min-height: 32px;
+  }
+
+  .multi-preview-slot-dropdown-btn,
+  .multi-preview-multicam-toggle,
+  .multi-preview-controls button {
+    -webkit-tap-highlight-color: transparent;
+  }
+}

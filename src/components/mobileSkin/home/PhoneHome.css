@@ -1,4 +1,5 @@
-/* Phone home screen. Full-screen layer above the shell; scoped beneath .mobile-skin. */
+/* Phone home screen. Full-screen layer inside the shell (PhoneShell `home`): above the five strips,
+   below sheets (z 40+), the unavailable notice and toasts. Scoped beneath .mobile-skin. */
 .mobile-skin .phone-home {
   position: fixed;
   inset: 0;
@@ -45,7 +46,7 @@
   background: var(--phone-surface-2);
   overflow-wrap: anywhere;
 }
-.mobile-skin .phone-home__error { border-color: var(--phone-danger); color: #ffd7da; }
+.mobile-skin .phone-home__error { border-color: var(--phone-danger); color: var(--phone-danger-text); }
 
 .mobile-skin .phone-home__card {
   padding: 14px;
@@ -95,7 +96,7 @@
   border: 2px solid currentColor;
   border-radius: 3px;
 }
-.mobile-skin .phone-home__format[aria-checked='true'] { background: #e9ebf0; color: #14161b; }
+.mobile-skin .phone-home__format[aria-checked='true'] { background: var(--phone-chip-on-bg); color: var(--phone-chip-on-text); }
 
 .mobile-skin .phone-home__form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .mobile-skin .phone-home__button {
@@ -106,7 +107,7 @@
   background: var(--phone-surface-3);
   font-weight: 600;
 }
-.mobile-skin .phone-home__button--primary { background: var(--phone-accent); color: #0b0c0f; }
+.mobile-skin .phone-home__button--primary { background: var(--phone-accent); color: var(--phone-on-accent); }
 .mobile-skin .phone-home__button[aria-disabled='true'],
 .mobile-skin .phone-home__row[aria-disabled='true'],
 .mobile-skin .phone-home__wide--import[aria-disabled='true'] { opacity: 0.6; }
@@ -149,3 +150,9 @@
 .mobile-skin .phone-home__wide--import { align-items: center; justify-content: center; background: var(--phone-surface-3); }
 .mobile-skin .phone-home button:focus-visible,
 .mobile-skin .phone-home__input:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
+
+/* First-run welcome (dismissable, remembered on this device). */
+.mobile-skin .phone-home__welcome { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--phone-accent); }
+.mobile-skin .phone-home__welcome-title { margin: 0; font-size: 17px; }
+.mobile-skin .phone-home__welcome-steps { margin: 0; padding-left: 20px; line-height: 1.5; font-size: 14px; }
+.mobile-skin .phone-home__welcome-note { margin: 0; color: var(--phone-text-dim); font-size: 13px; line-height: 1.4; }

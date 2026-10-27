@@ -15,6 +15,7 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { RECENT_PROJECTS_CHANGED_EVENT, projectFileService } from '../../../services/projectFileService';
 import {
   createBlankProject,
+  createNewProject,
   openProjectArchive,
   openStoredProject,
   saveCurrentProject,
@@ -154,6 +155,35 @@ export async function renamePhoneProject(name: string): Promise<PhoneActionResul
     return fail(`Could not rename to "${trimmed}". A project with that name may already exist.`);
   } catch (error) {
     return fail(describePhoneProjectError('rename', error, `Could not rename to "${trimmed}".`));
+  }
+}
+
+/**
+ * Duplicates the open project under a new name and continues in the copy (the desktop's Save As):
+ * the original is saved first and stays as it was; later changes land in the copy only.
+ */
+export async function duplicatePhoneProject(name: string): Promise<PhoneActionResult> {
+  const trimmed = name.trim();
+  const invalid = validateProjectName(trimmed);
+  if (invalid) return fail(invalid);
+  const data = projectFileService.getProjectData();
+  if (!data) return fail('No project is open.');
+  if (data.name === trimmed) return fail('Pick a different name for the copy.');
+  try {
+    const stored = await projectFileService.listStoredProjects().catch(() => [] as string[]);
+    if (stored.includes(trimmed)) return fail(`A project named "${trimmed}" already exists.`);
+    if (!await saveCurrentProject({ source: 'manual' })) {
+      return fail('The original could not be saved first, so no copy was made.');
+    }
+    if (!await createNewProject(trimmed)) {
+      return fail(resolveProjectRootMode() === 'fsa'
+        ? 'No folder was picked for the copy.'
+        : 'The copy could not be saved. The original is unchanged.');
+    }
+    useMediaStore.getState().setProjectName(trimmed);
+    return { ok: true, message: `Now editing the copy "${trimmed}". "${data.name}" stays as it was.` };
+  } catch (error) {
+    return fail(describePhoneProjectError('duplicate', error, 'The project could not be duplicated. The original is unchanged.'));
   }
 }
 

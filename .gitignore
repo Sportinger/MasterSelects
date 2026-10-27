@@ -27,6 +27,7 @@ lerna-debug.log*
 # Testing
 coverage
 playwright-report/
+playwright-report-phone/
 playwright-built-report/
 test-results/
 blob-report/

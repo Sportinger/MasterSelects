@@ -1,40 +1,23 @@
-import { useMemo } from 'react';
-import { PHONE_FULL_EDITOR_HINT, PHONE_TEST_IDS, type PhoneIconName } from '../contracts';
+import { useMemo, type PointerEvent } from 'react';
+import { PHONE_TEST_IDS, type PhoneIconName } from '../contracts';
 import { Logger } from '../../../services/logger';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
-import { requestPhoneHome } from '../project/PhoneProjectSheet';
+import { requestPhoneHome } from './phoneHomeRequests';
 import { PhoneStorageStatus } from '../project/PhoneStorageStatus';
+import { leavePhoneNestedComposition } from '../compositions/phoneCompositionCommands';
+import { phoneCompositionBackStep, usePhoneCompositionTrail } from '../compositions/phoneCompositionTrail';
+import { PHONE_COMPOSITIONS_TEST_IDS } from '../compositions/phoneCompositionsTestIds';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from './phoneIcons';
+import './PhoneTopBar.css';
 
 const log = Logger.create('PhoneTopBar');
 
-interface GreyedButtonProps {
-  actionId: string;
-  label: string;
-  icon: PhoneIconName;
-  reason: string;
-  showLabel?: boolean;
-  className?: string;
-}
-
-/** Visible, focusable, aria-disabled: tapping explains why it does not work yet. */
-function GreyedButton({ actionId, label, icon, reason, showLabel, className }: GreyedButtonProps) {
-  const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
-  return (
-    <button
-      type="button"
-      className={`phone-icon-button ${className ?? ''}`.trim()}
-      aria-label={label}
-      aria-disabled="true"
-      data-testid={`phone-topbar-${actionId}`}
-      onClick={() => showUnavailable({ actionId, label, reason })}
-    >
-      <PhoneIcon name={icon} size={22} />
-      {showLabel ? <span className="phone-icon-button__label">{label}</span> : null}
-    </button>
-  );
+/** Pointer-focus hygiene: a tapped button lets go of focus a frame later; keyboard focus stays. */
+function blurAfterPointer(event: PointerEvent<HTMLElement>): void {
+  const target = event.currentTarget;
+  window.requestAnimationFrame(() => { if (document.activeElement === target) target.blur(); });
 }
 
 interface TopBarButtonProps {
@@ -70,6 +53,12 @@ function CompositionTabs() {
   const activeId = useMediaStore((state) => state.activeCompositionId);
   const showToast = usePhoneUiStore((state) => state.showToast);
 
+  const openSheet = usePhoneUiStore((state) => state.openSheet);
+  const trail = usePhoneCompositionTrail((state) => state.trail);
+  const back = phoneCompositionBackStep(trail, activeId);
+  const backName = back ? compositions.find((comp) => comp.id === back.parentId)?.name : undefined;
+  const activeName = compositions.find((comp) => comp.id === activeId)?.name ?? 'No composition';
+
   const tabs = useMemo(
     () =>
       openIds.flatMap((id) => {
@@ -89,7 +78,37 @@ function CompositionTabs() {
     }
   };
 
+  const goBack = async () => {
+    if (!back) return;
+    const result = await leavePhoneNestedComposition(back.parentId);
+    if (!result.ok) showToast(result.message, 'error');
+  };
+
   return (
+    <div className="phone-comp-strip">
+      <button
+        type="button"
+        className="phone-comp-strip__button"
+        aria-label={`Compositions: ${activeName} is open. Open the composition list`}
+        data-testid={PHONE_COMPOSITIONS_TEST_IDS.topBarButton}
+        data-active-composition={activeId ?? ''}
+        onPointerUp={blurAfterPointer}
+        onClick={() => openSheet('compositions')}
+      >
+        <PhoneIcon name="compositions" size={18} />
+      </button>
+      {back && backName !== undefined ? (
+        <button
+          type="button"
+          className="phone-comp-strip__back"
+          aria-label={`Back to ${backName}`}
+          data-testid={PHONE_COMPOSITIONS_TEST_IDS.topBarBack}
+          onPointerUp={blurAfterPointer}
+          onClick={() => void goBack()}
+        >
+          ‹ {backName}
+        </button>
+      ) : null}
     <div className="phone-comp-tabs" role="tablist" aria-label="Compositions" data-testid={PHONE_TEST_IDS.compositionTabs}>
       {tabs.map((tab) => (
         <button
@@ -105,13 +124,7 @@ function CompositionTabs() {
           {tab.name}
         </button>
       ))}
-      <GreyedButton
-        actionId="new-composition"
-        label="New composition"
-        icon="plus"
-        className="phone-comp-tabs__add"
-        reason={`Multiple compositions arrive in M3. ${PHONE_FULL_EDITOR_HINT}`}
-      />
+    </div>
     </div>
   );
 }
@@ -147,7 +160,7 @@ export function PhoneTopBar() {
         <PhoneStorageStatus />
         <TopBarButton
           actionId="assistant"
-          label="Assistant (beta)"
+          label="Assistant"
           icon="assistant"
           onPress={() => openSheet('assistant')}
         />

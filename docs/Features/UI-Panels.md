@@ -39,6 +39,10 @@ Phones, tablets and desktop browsers use the same editor shell; Mobile is a layo
 - **Project Info** shows whether the latest changes are saved ("Content confirmed").
 - **Clear All Cache & Reload** clears the browser's stored data, caches and service workers for the editor and reloads it.
 
+### Output Menu Details
+
+- The Output Manager's target list routes each output to the active composition, a fixed composition or a slot; opening, restoring, closing and removing outputs go through one shared command module (`src/components/outputManager/outputTargetCommands.ts`). A restored output with its own source is scheduled for rendering again, closing an output window stops its rendering, and routing an unknown output logs a warning. The target preview asks for a frame right after it registers its canvas, so switching outputs or sources while paused no longer leaves it black.
+
 ### Info Menu
 
 - **Version** shows the running version; **About MasterSelects** and **Documentation** open the about page and these docs.

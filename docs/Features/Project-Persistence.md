@@ -401,7 +401,7 @@ Projects saved before batch export carry export settings without a batch
 section; opening or resuming them fills in an empty batch instead of failing.
 
 Undo does not restart an export or provider request and does not erase chat.
-Selection is cleaned up when its referenced object no longer exists. Each
+Selection is cleaned up when its referenced object no longer exists. A free-standing (detached) effect group keeps that state through save, reload, Undo and Redo instead of re-attaching as a bypassed effect. Each
 composition remains the owner of its timeline and master audio state.
 
 Temporary camera `NO KF` live offsets remain preview-session state. Provider

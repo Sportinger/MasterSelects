@@ -3,7 +3,7 @@ import type { TimelineClip } from '../../../types/timeline';
 import type { ColorNodeType } from '../../../types/colorCorrection';
 import { useTimelineStore } from '../../../stores/timeline';
 import { readTimelineRuntimeState } from '../../../services/timeline/timelineRuntimeCoordinator';
-import { startBatch, endBatch } from '../../../stores/historyStore';
+import { runColorEditGesture } from './colorEditGesture';
 import { buildClipColorNodeGraph } from '../../../services/nodeGraph/clipGraphDocument';
 import { createColorNodeActions } from '../../../services/nodeGraph/colorNodeActions';
 import { NodeGraphCanvas } from '../nodes/NodeGraphCanvas';
@@ -30,10 +30,10 @@ export function ColorNodeCanvas({ clip, selectedNodeId, onSelectNode, addNodeDis
   const [menu, setMenu] = useState<{ x: number; y: number; nodeId?: string | null } | null>(null);
   if (!graph) return null;
   const ids = selection.graphId === graph.id ? selection.ids : [];
+  // One undo step per graph action, run inside its gesture (colorEditGesture); a failed action is
+  // rolled back and says why in place.
   const run = (label: string, action: () => void) => {
-    const batch = startBatch(label);
-    try { action(); setMessage(''); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
-    finally { if (batch.opened) endBatch(); }
+    try { runColorEditGesture(label, action); setMessage(''); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
   };
   const add = (type: string) => run('Add color node', () => {
     const id = actions.addNode(type as ColorNodeType);

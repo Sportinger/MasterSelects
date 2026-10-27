@@ -1,0 +1,10 @@
+/* Compositions sheet (PhoneCompositionsSheet.tsx, PhoneCompositionForm.tsx). Scoped under .mobile-skin. */
+
+.mobile-skin .phone-compositions,
+.mobile-skin .phone-compositions__form { display: flex; flex-direction: column; gap: 12px; }
+.mobile-skin .phone-compositions__top-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.mobile-skin .phone-compositions__top-actions > .phone-pro-button { flex: 1 1 140px; }
+.mobile-skin .phone-compositions__form-actions { display: flex; gap: 8px; }
+.mobile-skin .phone-compositions__form-actions > .phone-pro-button { flex: 1 1 0; }
+.mobile-skin .phone-compositions__note { margin: 0; color: var(--phone-text-dim); font-size: 12px; }
+.mobile-skin .phone-compositions__confirm { margin: 0; font-size: 15px; line-height: 1.4; }

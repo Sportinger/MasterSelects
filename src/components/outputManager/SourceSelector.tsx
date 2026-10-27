@@ -4,29 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import type { RenderSource } from '../../types/renderTarget';
+import { listOutputSourceOptions, outputSourceKey, outputSourceLabel } from './outputSourceOptions';
 
 interface SourceSelectorProps {
   currentSource: RenderSource;
   onChange: (source: RenderSource) => void;
-}
-
-function sourceLabel(source: RenderSource, compositions: { id: string; name: string }[]): string {
-  switch (source.type) {
-    case 'activeComp':
-      return 'Active Composition';
-    case 'program':
-      return 'Program (Main Mix)';
-    case 'composition': {
-      const comp = compositions.find(c => c.id === source.compositionId);
-      return comp?.name ?? 'Unknown Composition';
-    }
-    case 'slot':
-      return `Slot ${source.slotIndex + 1}`;
-    case 'layer':
-      return `Layer (${source.layerIds.length})`;
-    default:
-      return 'Unknown';
-  }
 }
 
 export function SourceSelector({ currentSource, onChange }: SourceSelectorProps) {
@@ -48,18 +30,11 @@ export function SourceSelector({ currentSource, onChange }: SourceSelectorProps)
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  const label = sourceLabel(currentSource, compositions);
-
-  // Build slot entries from activeLayerSlots
-  const slotEntries: { index: number; compName: string | null }[] = [];
-  if (activeLayerSlots) {
-    for (const [key, compId] of Object.entries(activeLayerSlots)) {
-      const idx = Number(key);
-      const comp = compId ? allCompositions.find(c => c.id === compId) : null;
-      slotEntries.push({ index: idx, compName: comp?.name ?? null });
-    }
-    slotEntries.sort((a, b) => a.index - b.index);
-  }
+  const label = outputSourceLabel(currentSource, compositions);
+  const options = listOutputSourceOptions(compositions, allCompositions, activeLayerSlots);
+  const currentKey = outputSourceKey(currentSource);
+  const compositionOptions = options.filter((option) => option.group === 'composition');
+  const slotOptions = options.filter((option) => option.group === 'slot');
 
   return (
     <div className="om-source-selector" ref={dropdownRef}>
@@ -80,25 +55,25 @@ export function SourceSelector({ currentSource, onChange }: SourceSelectorProps)
             Active Composition
           </button>
           <div className="om-source-separator" />
-          {compositions.map((comp) => (
+          {compositionOptions.map((option) => (
             <button
-              key={comp.id}
-              className={`om-source-option ${currentSource.type === 'composition' && currentSource.compositionId === comp.id ? 'active' : ''}`}
-              onClick={() => { onChange({ type: 'composition', compositionId: comp.id }); setOpen(false); }}
+              key={option.key}
+              className={`om-source-option ${currentKey === option.key ? 'active' : ''}`}
+              onClick={() => { onChange(option.source); setOpen(false); }}
             >
-              {comp.name}
+              {option.label}
             </button>
           ))}
-          {slotEntries.length > 0 && (
+          {slotOptions.length > 0 && (
             <>
               <div className="om-source-separator" />
-              {slotEntries.map((slot) => (
+              {slotOptions.map((option) => (
                 <button
-                  key={`slot-${slot.index}`}
-                  className={`om-source-option ${currentSource.type === 'slot' && currentSource.slotIndex === slot.index ? 'active' : ''}`}
-                  onClick={() => { onChange({ type: 'slot', slotIndex: slot.index }); setOpen(false); }}
+                  key={option.key}
+                  className={`om-source-option ${currentKey === option.key ? 'active' : ''}`}
+                  onClick={() => { onChange(option.source); setOpen(false); }}
                 >
-                  Slot {slot.index + 1}{slot.compName ? ` (${slot.compName})` : ' (Empty)'}
+                  {option.label}
                 </button>
               ))}
             </>

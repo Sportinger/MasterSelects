@@ -168,3 +168,49 @@
   color: var(--phone-text-off);
   font-size: 13px;
 }
+
+/* Beats tab: source, track and step chips (one choice each). */
+.mobile-skin .phone-audio-beats__chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.mobile-skin .phone-audio-beats__chips::-webkit-scrollbar { display: none; }
+.mobile-skin .phone-audio-beats__chip {
+  flex: 0 0 auto;
+  min-height: 44px;
+  max-width: 220px;
+  padding: 0 12px;
+  border-radius: 22px;
+  border: 1px solid var(--phone-border);
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mobile-skin .phone-audio-beats__chip[aria-checked='true'] { background: var(--phone-text); color: var(--phone-bg); border-color: var(--phone-text); }
+.mobile-skin .phone-audio-beats__chip:focus { outline: none; }
+.mobile-skin .phone-audio-beats__chip:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
+
+/* Voiceover tab: punch range and rescue recordings. */
+.mobile-skin .phone-audio-recovery { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--phone-border); }
+.mobile-skin .phone-audio-recovery__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--phone-surface);
+}
+.mobile-skin .phone-audio-recovery__actions { display: flex; gap: 6px; }
+.mobile-skin .phone-audio-recovery__actions > .phone-audio-toggle { flex: 1 1 0; }
+.mobile-skin .phone-audio-punch__row { display: flex; gap: 8px; align-items: center; }
+.mobile-skin .phone-audio-punch__field { display: inline-flex; flex: 1 1 auto; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.mobile-skin .phone-audio-punch__field .phone-audio-row__field { flex: 1 1 auto; min-height: 44px; }
+.mobile-skin .phone-audio-toggle:focus,
+.mobile-skin .phone-audio-big:focus { outline: none; }
+.mobile-skin .phone-audio-toggle:focus-visible,
+.mobile-skin .phone-audio-big:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
+.mobile-skin .phone-audio-tabs__tab:focus,
+.mobile-skin .phone-audio-more__item:focus,
+.mobile-skin .phone-audio-row__reset:focus { outline: none; }
+.mobile-skin .phone-audio-tabs__tab:focus-visible,
+.mobile-skin .phone-audio-more__item:focus-visible,
+.mobile-skin .phone-audio-row__reset:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }

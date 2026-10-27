@@ -433,6 +433,7 @@ export const ProjectEffectFields = {
   "enabled": { class: 'content', owner: 'timeline' },
   "params": { class: 'content', owner: 'timeline' },
   "operatorGraph": { class: 'content', owner: 'timeline' },
+  "detached": { class: 'content', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<ProjectEffect>;
 
 export const ProjectExportPresetFields = {

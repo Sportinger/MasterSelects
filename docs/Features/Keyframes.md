@@ -205,6 +205,7 @@ When recording is enabled:
 - `Shift+drag` on a keyframe constrains movement to one axis in the curve editor.
 - Vector animation state keyframes show state labels on the value axis and draw stepped segments instead of Bezier curves.
 - Mask path rows expose timing and easing in the timeline; their value is a whole shape snapshot rather than a numeric scalar.
+- The **Curves** dock panel shows the same curves for the selected clip. By touch, a finger on or within a finger's width of a keyframe or Bezier handle selects and drags it with the same single undo step as the mouse; one finger on empty graph scrolls through time; two fingers side by side zoom time around their midpoint, and two fingers one above the other make the curves taller.
 
 ### Delete and Copy/Paste
 
@@ -212,6 +213,7 @@ When recording is enabled:
 - `Ctrl+C` with keyframes selected copies only the keyframes.
 - `Ctrl+V` pastes keyframes relative to the current playhead.
 - Keyframes are normalized on copy so pasted timing stays relative to the first copied keyframe.
+- For tools and touch hosts, `copyKeyframes(keyframeIds)` copies exactly the given keys, and `pasteKeyframes({ targetClipIds, clipLocalTime })` pastes into several clips as one undo step, optionally at an explicit clip-local time. With explicit targets and nothing copied it logs a warning instead of pasting clips. Without arguments both behave as the keyboard shortcuts.
 - Pasting replaces existing keys within each pasted property's time range, including keys at the same time. Keys outside that range and other properties stay intact; repeated paste does not create duplicates.
 - Copying whole clips preserves audio edits and effect automation, retargets curves to the copied effects, and gives each copy independent Bezier handles.
 - If the clipboard does not contain keyframes, paste falls back to the clip clipboard flow.

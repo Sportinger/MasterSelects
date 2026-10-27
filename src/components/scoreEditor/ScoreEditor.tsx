@@ -8,7 +8,7 @@
 // bind to the popup's own document; chrome styling is a stylesheet injected
 // into the popup head (only <link> stylesheets are mirrored by the boot).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { ScoreData } from '../../types/scoreClip';
 import { ScoreModel } from '../../services/score/ScoreModel';
@@ -58,6 +58,11 @@ const SCORE_EDITOR_CSS = `
 
 interface ScoreEditorProps {
   clipId: string;
+  /**
+   * Extra controls under the toolbar for touch hosts without a keyboard (the phone): they get the
+   * shortcut actions by name (SCORE_SHORTCUTS action ids, e.g. 'enterRest', 'pitchUp', 'enterNoteC').
+   */
+  touchBar?: (runAction: (action: string) => boolean) => ReactNode;
 }
 
 interface EditorStack {
@@ -73,7 +78,7 @@ interface EditorStack {
   player: ScorePlayer;
 }
 
-export function ScoreEditor({ clipId }: ScoreEditorProps) {
+export function ScoreEditor({ clipId, touchBar }: ScoreEditorProps) {
   const clip = useTimelineStore((state) => state.clips.find((c) => c.id === clipId));
   const scoreData = clip?.scoreData;
   const clipName = clip?.name ?? 'Score';
@@ -330,6 +335,7 @@ export function ScoreEditor({ clipId }: ScoreEditorProps) {
           }}
         />
       )}
+      {ready && touchBar ? touchBar(action => stackRef.current?.shortcuts.run(action) ?? false) : null}
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         <div
           ref={sheetRef}

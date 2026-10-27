@@ -103,17 +103,7 @@ test('mask-feather-profile: Cancel after shape, soft edge and invert leaves pict
   expect(await clipSnapshot(m1, clip.id), 'Cancel leaves the clip exactly as before').toBe(snapshot)
 })
 
-test('mask: the pen shape stays visible, greyed out, and explains itself @phone', async ({ m1 }) => {
-  const clip = await importClipA(m1)
-  await openClipSheet(m1, clip.id, 'mask')
-  const pen = chip(m1, MASK.shapes, 'pen')
-  await expect(pen).toBeVisible()
-  await expect(pen).toHaveAttribute('aria-disabled', 'true')
-  await tapOn(m1, pen)
-  await expect(m1.page.getByTestId(PHONE_TEST_IDS.unavailableNotice)).toContainText(/pen tool/i)
-  await dismissNotice(m1)
-  await tapCancel(m1)
-})
+// The Pen shape works now: drawing by touch is covered in m6-mask-pen.spec.ts (INV3/mask-pen-path).
 
 // ---------------------------------------------------------------------------
 // Crop & transform

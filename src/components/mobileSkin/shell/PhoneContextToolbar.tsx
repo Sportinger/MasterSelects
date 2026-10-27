@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { PHONE_TEST_IDS, phoneActionTestId, type PhoneActionContext, type PhoneActionDefinition } from '../contracts';
 import { Logger } from '../../../services/logger';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -12,7 +12,12 @@ const log = Logger.create('PhoneToolbar');
 export function PhoneContextToolbar() {
   const { status } = usePhoneRuntime();
   const selected = useTimelineStore((state) => state.selectedClipIds);
-  const playheadTime = useTimelineStore((state) => state.playheadPosition);
+  // While playing, the playhead moves every frame: the toolbar keeps the time where playback
+  // started instead of re-rendering with it (a tap re-resolves against the live playhead anyway).
+  const pausedPlayhead = useTimelineStore((state) => (state.isPlaying ? null : state.playheadPosition));
+  const [lastPausedPlayhead, setLastPausedPlayhead] = useState(0);
+  if (pausedPlayhead !== null && pausedPlayhead !== lastPausedPlayhead) setLastPausedPlayhead(pausedPlayhead);
+  const playheadTime = pausedPlayhead ?? lastPausedPlayhead;
   // Subscribing to clips re-resolves Split when edits move clip edges under the playhead.
   const clips = useTimelineStore((state) => state.clips);
   const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);

@@ -132,3 +132,40 @@ export function zoomCurveTimeViewAtPointer({
 
   return { scrollX: nextScrollX, zoom: nextZoom };
 }
+
+interface ScaleCurveTimeViewInput {
+  compositionDuration: number;
+  /** Multiplies the zoom (2 = twice as many pixels per second), e.g. a two-finger pinch ratio. */
+  factor: number;
+  /** Graph-local x that stays on the same time, e.g. the midpoint between two fingers. */
+  anchorX: number;
+  /** Moves the content by this many pixels after zooming (positive drags it to the right). */
+  panX?: number;
+  view: CurveTimeView;
+  viewportWidth: number;
+}
+
+/** Ratio zoom around an anchor plus a pan, the shape a two-finger pinch produces. */
+export function scaleCurveTimeViewAt({
+  compositionDuration,
+  factor,
+  anchorX,
+  panX = 0,
+  view,
+  viewportWidth,
+}: ScaleCurveTimeViewInput): CurveTimeView {
+  const current = normalizeCurveTimeView(view);
+  if (viewportWidth <= 0) return current;
+  const safeFactor = Number.isFinite(factor) && factor > 0 ? factor : 1;
+  const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current.zoom * safeFactor));
+  const clampedAnchorX = Math.max(0, Math.min(viewportWidth, anchorX));
+  const anchorTime = (current.scrollX + clampedAnchorX) / current.zoom;
+  const maximumScrollX = Math.max(
+    0,
+    Math.max(0.001, compositionDuration) * nextZoom
+      + TIMELINE_END_PADDING_PX
+      - viewportWidth,
+  );
+  const nextScrollX = anchorTime * nextZoom - clampedAnchorX - (Number.isFinite(panX) ? panX : 0);
+  return { scrollX: Math.max(0, Math.min(maximumScrollX, nextScrollX)), zoom: nextZoom };
+}

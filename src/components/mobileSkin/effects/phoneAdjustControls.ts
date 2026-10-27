@@ -3,6 +3,8 @@
 // PRIMARY_COLOR_PARAM_DEFS; values are written with setPropertyValue on `color.<version>.<node>.<param>`,
 // exactly like the desktop colour editor, so keyframed values get a key at the playhead.
 
+import { Logger } from '../../../services/logger';
+import { isParameterNodeDriven } from '../../../services/parameterSources/parameterSourceTargets';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 import {
@@ -10,6 +12,8 @@ import {
   PRIMARY_COLOR_PARAM_DEFS, type ColorParamDefinition, type RuntimePrimaryColorParams,
 } from '../../../types/colorCorrection';
 import type { TimelineClip } from '../../../types/timeline';
+
+const log = Logger.create('PhoneAdjust');
 
 export interface PhoneAdjustControl {
   key: keyof RuntimePrimaryColorParams;
@@ -52,18 +56,41 @@ export function phoneAdjustProperty(clip: Pick<TimelineClip, 'colorCorrection'>,
   return node ? createColorProperty(node.versionId, node.nodeId, key) as AnimatableProperty : null;
 }
 
+export interface PhoneAdjustSkip { clipId: string; key: keyof RuntimePrimaryColorParams }
+
+/** The (clip, control) pairs a node graph drives: the store ignores writes to them, so the phone says so. */
+export function phoneAdjustDrivenSkips(clipIds: readonly string[], keys: readonly (keyof RuntimePrimaryColorParams)[]): PhoneAdjustSkip[] {
+  const { clips } = useTimelineStore.getState();
+  const skips: PhoneAdjustSkip[] = [];
+  for (const clipId of clipIds) {
+    const clip = clips.find((candidate) => candidate.id === clipId);
+    if (!clip) continue;
+    for (const key of keys) {
+      const property = phoneAdjustProperty(clip, key);
+      if (property && isParameterNodeDriven(clip, property)) skips.push({ clipId, key });
+    }
+  }
+  return skips;
+}
+
 /**
  * Sets `values` on every clip (absolute; a clip without a grade gets the editor's default grade first).
- * Runs inside the caller's transaction.
+ * Runs inside the caller's transaction. Node-driven controls are left alone and returned (and logged),
+ * never skipped without a word.
  */
-export function setPhoneAdjustValues(clipIds: readonly string[], values: Partial<Record<keyof RuntimePrimaryColorParams, number>>): void {
+export function setPhoneAdjustValues(clipIds: readonly string[], values: Partial<Record<keyof RuntimePrimaryColorParams, number>>): PhoneAdjustSkip[] {
+  const skipped: PhoneAdjustSkip[] = [];
   for (const clipId of clipIds) {
     useTimelineStore.getState().ensureColorCorrection(clipId);
     const clip = useTimelineStore.getState().clips.find((candidate) => candidate.id === clipId);
     if (!clip) continue;
     for (const [key, value] of Object.entries(values)) {
       const property = phoneAdjustProperty(clip, key);
-      if (property && typeof value === 'number') useTimelineStore.getState().setPropertyValue(clipId, property, value);
+      if (!property || typeof value !== 'number') continue;
+      if (isParameterNodeDriven(clip, property)) { skipped.push({ clipId, key: key as keyof RuntimePrimaryColorParams }); continue; }
+      useTimelineStore.getState().setPropertyValue(clipId, property, value);
     }
   }
+  if (skipped.length) log.info('Adjust left node-driven controls unchanged', skipped);
+  return skipped;
 }

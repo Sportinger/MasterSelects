@@ -1,8 +1,8 @@
-import { RepositoryError, type EntityDTO } from '../../contracts';
+import { RepositoryError, type EntityDTO, type JsonValue } from '../../contracts';
 import type { TimelineStore } from '../../../../../stores/timeline/types';
 import type { Composition } from '../../../../../stores/mediaStore/types';
 import { convertCompositions, convertRuntimeProjectClip, convertProjectTrack } from '../../../projectCompositionSerialization';
-import { encodeCompositionClip, encodeCompositionTrack } from '../../domains/projectDomains';
+import { encodeCompositionClip, encodeCompositionTrack, TRACK_AUDIO_WORKSPACE_FIELDS, trackAudioWorkspaceViewKey } from '../../domains/projectDomains';
 import { entityKey } from '../../domains/jsonBoundary';
 import { changedItems, type DomainMutationPlan } from '../domainMutationAdapter';
 import { decodeOwnedAggregate, emptyPlan, existingAggregate, membership } from './aggregatePlan';
@@ -58,6 +58,16 @@ export function prepareTimelineMutation(before: TimelineStore, patch: Partial<Ti
     const key = entityKey('track', owner.id, change.id);
     plan.aggregates.push({ key, before: existingAggregate(entities, key), after: change.after
       ? encodeCompositionTrack(owner.id, convertProjectTrack(change.after)) : new Map() });
+  }
+  // Record arm, monitoring, input device and meter mode are workspace state, not track content: they go
+  // to the workspace view the project decoder reads, so Undo/Redo and reopening keep their live values.
+  for (const change of trackChanges) {
+    const after = change.after?.audioState as Record<string, unknown> | undefined;
+    if (!after) continue;
+    const prior = change.before?.audioState as Record<string, unknown> | undefined;
+    if (prior && TRACK_AUDIO_WORKSPACE_FIELDS.every(field => prior[field] === after[field])) continue;
+    const value = Object.fromEntries(TRACK_AUDIO_WORKSPACE_FIELDS.filter(field => after[field] !== undefined).map(field => [field, after[field]]));
+    plan.views.push({ key: trackAudioWorkspaceViewKey(owner.id, change.id), value: value as JsonValue });
   }
   if (repair || (before.tracks !== next.tracks && (before.tracks.length !== next.tracks.length || before.tracks.some((track, i) => track.id !== next.tracks[i]?.id)))) {
     membership(plan, entities, 'tracks', owner.id, next.tracks.map(track => track.id), 'track');

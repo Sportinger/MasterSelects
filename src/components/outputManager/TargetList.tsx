@@ -5,8 +5,10 @@ import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useSliceStore } from '../../stores/sliceStore';
 import { SourceSelector } from './SourceSelector';
-import { renderScheduler } from '../../services/renderScheduler';
 import { renderHostPort } from '../../services/render/renderHostPort';
+import {
+  closeOutputTarget, isOutputTarget, isOutputTargetClosed, removeOutputTarget, restoreOutputTarget, routeOutputTargetSource,
+} from './outputTargetCommands';
 import type { RenderSource, RenderTarget } from '../../types/renderTarget';
 import type { OutputSlice } from '../../types/outputSlice';
 
@@ -15,9 +17,7 @@ interface TargetListProps {
   onSelect: (id: string) => void;
 }
 
-function isTargetClosed(target: RenderTarget): boolean {
-  return target.window === null || target.window === undefined || target.window.closed;
-}
+const isTargetClosed = isOutputTargetClosed;
 
 /** Inline editable name — double-click to edit, Enter/blur to confirm, Escape to cancel */
 function InlineEdit({ value, onCommit, className }: { value: string; onCommit: (v: string) => void; className?: string }) {
@@ -98,7 +98,7 @@ export function TargetList({ selectedTargetId, onSelect }: TargetListProps) {
   const outputTargets = useMemo(() => {
     const result: RenderTarget[] = [];
     for (const t of targets.values()) {
-      if (t.destinationType === 'window' || t.destinationType === 'tab') {
+      if (isOutputTarget(t)) {
         result.push(t);
       }
     }
@@ -106,16 +106,7 @@ export function TargetList({ selectedTargetId, onSelect }: TargetListProps) {
   }, [targets]);
 
   const handleSourceChange = (targetId: string, source: RenderSource) => {
-    const store = useRenderTargetStore.getState();
-    store.updateTargetSource(targetId, source);
-
-    // If switching to/from independent source, update scheduler
-    if (source.type !== 'activeComp') {
-      renderScheduler.register(targetId);
-      renderScheduler.updateTargetSource(targetId);
-    } else {
-      renderScheduler.unregister(targetId);
-    }
+    routeOutputTargetSource(targetId, source);
   };
 
   const handleToggleEnabled = (targetId: string, enabled: boolean) => {
@@ -123,15 +114,15 @@ export function TargetList({ selectedTargetId, onSelect }: TargetListProps) {
   };
 
   const handleClose = (targetId: string) => {
-    renderHostPort.closeOutputWindow(targetId);
+    closeOutputTarget(targetId);
   };
 
   const handleRestore = (targetId: string) => {
-    renderHostPort.restoreOutputWindow(targetId);
+    restoreOutputTarget(targetId);
   };
 
   const handleRemove = (targetId: string) => {
-    renderHostPort.removeOutputTarget(targetId);
+    removeOutputTarget(targetId);
   };
 
   const handleNewOutput = () => {

@@ -5,7 +5,10 @@
  * from a created device. The WebGL renderer string is the one GPU hint that
  * still exists then.
  */
+import { Logger } from '../logger';
 import { readWebGlDebugAdapterInfo, type WebGlAdapterHint } from '../render/webglAdapterHint';
+
+const log = Logger.create('GpuStartupProbe');
 
 const MAX_ATTEMPTS = 8;
 
@@ -29,6 +32,8 @@ export interface GpuStartupProbe {
     featureLevel?: string;
   };
   webgl?: WebGlAdapterHint | null;
+  /** Why the WebGL hint was not read (it would have blocked the page). */
+  webglSkipped?: 'adapter_timeout';
   secureContext?: boolean;
 }
 
@@ -64,8 +69,16 @@ export function recordGpuStartupFailure(failure: string): void {
   const entry = current();
   entry.failure = failure;
   entry.secureContext = typeof window !== 'undefined' ? window.isSecureContext : undefined;
+  if (entry.webgl !== undefined || entry.webglSkipped) return;
+  // After an adapter request timed out, the browser's GPU process is stuck: creating a WebGL context
+  // there blocks the main thread until it answers (seconds on Android PowerVR), so skip the hint.
+  if (entry.attempts.some((attempt) => attempt.result === 'timeout')) {
+    entry.webglSkipped = 'adapter_timeout';
+    log.warn('WebGL adapter hint skipped: an adapter request timed out, a WebGL context would block the page.');
+    return;
+  }
   // Only on failure: creating a WebGL context costs a little and is not needed otherwise.
-  if (entry.webgl === undefined) entry.webgl = readWebGlDebugAdapterInfo();
+  entry.webgl = readWebGlDebugAdapterInfo();
 }
 
 export function getGpuStartupProbe(): GpuStartupProbe | null {

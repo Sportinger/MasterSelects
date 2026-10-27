@@ -7,7 +7,7 @@ export const schemas3: Record<string, DomainSchema> = {
 "n304": {"fields":{"kind":{"class":"content","owner":"timeline","node":null},"distortion":{"class":"content","owner":"timeline","node":"n305"},"progress":{"class":"runtime","owner":"timeline","node":null},"seed":{"class":"content","owner":"timeline","node":null}}},
 "n305": {"variants":[]},
 "n306": {"element":"n307"},
-"n307": {"fields":{"id":{"class":"content","owner":"timeline","node":null},"type":{"class":"content","owner":"timeline","node":null},"name":{"class":"content","owner":"timeline","node":null},"enabled":{"class":"content","owner":"timeline","node":null},"params":{"class":"content","owner":"timeline","node":"n154"},"operatorGraph":{"class":"content","owner":"timeline","node":"n155"}}},
+"n307": {"fields":{"id":{"class":"content","owner":"timeline","node":null},"type":{"class":"content","owner":"timeline","node":null},"name":{"class":"content","owner":"timeline","node":null},"enabled":{"class":"content","owner":"timeline","node":null},"params":{"class":"content","owner":"timeline","node":"n154"},"operatorGraph":{"class":"content","owner":"timeline","node":"n155"},"detached":{"class":"content","owner":"timeline","node":null}}},
 "n308": {"fields":{"id":{"class":"content","owner":"timeline","node":null},"type":{"class":"content","owner":"timeline","node":null},"duration":{"class":"content","owner":"timeline","node":null},"offset":{"class":"content","owner":"timeline","node":null},"linkedClipId":{"class":"content","owner":"timeline","node":null},"compositionId":{"class":"content","owner":"timeline","node":null},"params":{"class":"content","owner":"timeline","node":"n309"}}},
 "n309": {"dictionary":"n310"},
 "n310": {"variants":[]},

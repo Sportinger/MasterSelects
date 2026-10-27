@@ -221,6 +221,7 @@ Create primitive mesh clips from the Media Panel via `+ Add > 3D > Mesh` or the 
 - Rotation dragging follows the selected projected local ring and applies the delta as a local-axis rotation before converting back to Euler transform values. This keeps red, green, and blue controls aligned with the visual local gizmo even after the object is already rotated.
 - Double-clicking an axis resets that single component, while double-clicking the white center hub resets the active transform group.
 - The W/E/R hotkeys switch between Move, Rotate, and Scale while the preview overlay is active.
+- By touch, a finger drags the Move, Rotate and Scale handles without pointer lock (a finger has none, and a locked pointer reports no movement for bridged touch). In the edit view, one finger on empty scene orbits, a pinch zooms and two fingers moving together pan the scene camera.
 - 3D object handles remain visible and selectable in normal preview, layer Edit mode, camera Edit mode, and camera orthographic edit views. Clicking a handle selects that clip and activates the native scene gizmo for the selected 3D object.
 
 ### Scene Camera

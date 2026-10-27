@@ -51,6 +51,8 @@ function serializeProjectEffect(effect: Effect) {
     id: migrated.id, type: migrated.type, name: migrated.name || migrated.type,
     enabled: migrated.enabled !== false, params: structuredClone(migrated.params),
     operatorGraph: migrated.operatorGraph ? structuredClone(migrated.operatorGraph) : undefined,
+    // Authored: a free-standing node group stays outside the chain after save, reload and Undo/Redo.
+    ...(migrated.detached ? { detached: true as const } : {}),
   };
 }
 

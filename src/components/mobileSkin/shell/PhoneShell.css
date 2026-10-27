@@ -1,5 +1,9 @@
 /* Phone skin shell. Everything lives beneath .mobile-skin; nothing restyles the desktop editor. */
 .mobile-skin {
+  /* Colour tokens. Body text (--phone-text, --phone-text-dim, --phone-accent, --phone-danger) keeps
+     at least 4.5:1 on every --phone-bg/--phone-surface* background; --phone-text-off (greyed,
+     disabled controls) keeps at least 3:1 so a greyed feature stays readable. Checked by
+     tests/playwright/mobile/m6-a11y.spec.ts and tests/unit/phoneThemeContrast.test.ts. */
   --phone-bg: #0b0c0f;
   --phone-surface: #14161b;
   --phone-surface-2: #1c1f26;
@@ -7,9 +11,16 @@
   --phone-border: #2b2f39;
   --phone-text: #eef0f4;
   --phone-text-dim: #98a0ad;
-  --phone-text-off: #5d6470;
-  --phone-accent: #5b8def;
-  --phone-danger: #f0626b;
+  --phone-text-off: #7a818e;
+  --phone-accent: #6797f2;
+  --phone-on-accent: #0b0c0f;
+  --phone-danger: #f36b74;
+  --phone-danger-text: #ffd7da;
+  --phone-veil-1: rgba(255, 255, 255, 0.03);
+  --phone-veil-2: rgba(255, 255, 255, 0.06);
+  --phone-scrim: rgba(0, 0, 0, 0.45);
+  --phone-chip-on-bg: #e9ebf0;
+  --phone-chip-on-text: #14161b;
   --phone-top-h: 48px;
   --phone-tabs-h: 36px;
   --phone-transport-h: 48px;
@@ -71,6 +82,13 @@
   border-radius: 8px;
 }
 
+/* The five strips' wrapper takes no box: the strips stay flex children of the shell. */
+.mobile-skin .phone-shell__strips { display: contents; }
+
+/* Inputs on the home (rendered inside the shell) must stay selectable and editable on iOS. */
+.mobile-skin .phone-home input,
+.mobile-skin .phone-home textarea { user-select: text; -webkit-user-select: text; }
+
 /* ---- Strip 1: top bar ---- */
 .mobile-skin .phone-top-bar {
   flex: 0 0 auto;
@@ -113,17 +131,29 @@
 .mobile-skin .phone-icon-button[aria-disabled='true'] {
   color: var(--phone-text-off);
 }
+/* The primary button (Export) keeps a 36 px pill but a full 44 px touch target: the pill is drawn by
+   ::before inside the taller button. */
 .mobile-skin .phone-icon-button--primary {
-  background: var(--phone-accent);
-  color: #0b0c0f;
-  font-weight: 600;
-  height: 36px;
+  position: relative;
+  isolation: isolate;
+  height: 44px;
   min-width: 44px;
+  background: none;
+  color: var(--phone-on-accent);
+  font-weight: 600;
 }
-.mobile-skin .phone-icon-button--primary[aria-disabled='true'] {
-  background: var(--phone-surface-3);
-  color: var(--phone-text-dim);
+.mobile-skin .phone-icon-button--primary::before {
+  content: '';
+  position: absolute;
+  inset: 4px 0;
+  z-index: -1;
+  border-radius: 10px;
+  background: var(--phone-accent);
 }
+.mobile-skin .phone-icon-button--primary:active { background: none; }
+.mobile-skin .phone-icon-button--primary:active::before { filter: brightness(0.88); }
+.mobile-skin .phone-icon-button--primary[aria-disabled='true'] { color: var(--phone-text-dim); }
+.mobile-skin .phone-icon-button--primary[aria-disabled='true']::before { background: var(--phone-surface-3); }
 .mobile-skin .phone-icon-button__label {
   font-size: 13px;
 }
@@ -266,7 +296,7 @@
   align-items: flex-end;
   justify-content: center;
   padding-bottom: calc(var(--phone-safe-bottom) + var(--phone-keyboard-inset, 0px));
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--phone-scrim);
 }
 .mobile-skin .phone-notice {
   width: 100%;
@@ -290,7 +320,7 @@
   background: var(--phone-surface-3);
   font-weight: 600;
 }
-.mobile-skin .phone-button--primary { background: var(--phone-accent); color: #0b0c0f; }
+.mobile-skin .phone-button--primary { background: var(--phone-accent); color: var(--phone-on-accent); }
 
 .mobile-skin .phone-toast {
   position: absolute;
@@ -307,7 +337,7 @@
   pointer-events: none;
   text-align: center;
 }
-.mobile-skin .phone-toast--error { border-color: var(--phone-danger); color: #ffd7da; }
+.mobile-skin .phone-toast--error { border-color: var(--phone-danger); color: var(--phone-danger-text); }
 
 @media (prefers-reduced-motion: no-preference) {
   .mobile-skin .phone-toast { animation: phone-toast-in 140ms ease-out; }
@@ -319,3 +349,15 @@
 /* The timeline's own layers (playhead, drag ghost, hints) stay inside its band: they must never
    paint over the preview or an open sheet. */
 .mobile-skin .phone-shell__timeline { isolation: isolate; }
+
+/* Shown for the moment a landscape editor's code is loading (PhoneShell). */
+.mobile-skin .phone-workspace-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--phone-bg);
+  color: var(--phone-text-dim);
+}

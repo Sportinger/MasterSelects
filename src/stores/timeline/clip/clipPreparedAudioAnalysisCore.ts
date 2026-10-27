@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip } from '../../../types/timeline';
 import { Logger } from '../../../services/logger';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { clipRequiresProcessedWaveformPyramid } from '../../../services/audio/ProcessedWaveformPyramidService';
@@ -76,7 +76,15 @@ export function shouldSkipPreparedAnalysis(
 ): { clipName: string; needsProcessed: boolean } | null {
   const { get } = context;
   const clip = get().clips.find(c => c.id === clipId);
-  if (!clip || clip.waveformGenerating) return null;
+  if (!clip) {
+    log.warn('Audio analysis skipped: the clip no longer exists', { clipId });
+    return null;
+  }
+  if (clip.waveformGenerating) {
+    // Callers retry once the waveform is ready; say so instead of returning silently.
+    log.info('Audio analysis skipped: the clip waveform is still being generated', { clipId });
+    return null;
+  }
 
   const keyframes = get().clipKeyframes.get(clipId) ?? [];
   const needsProcessed = clipRequiresProcessedWaveformPyramid(clip, keyframes);

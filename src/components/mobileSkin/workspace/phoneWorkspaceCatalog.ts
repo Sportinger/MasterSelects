@@ -4,7 +4,7 @@
 
 import type { PanelType } from '../../../types/dock';
 
-export type PhoneWorkspaceId = 'nodes' | 'mixer' | 'multicam' | 'pianoRoll' | 'scene3d' | 'curves' | 'color';
+export type PhoneWorkspaceId = 'nodes' | 'mixer' | 'multicam' | 'pianoRoll' | 'scene3d' | 'curves' | 'color' | 'output';
 
 export type PhoneWorkspaceSide = 'left' | 'right';
 
@@ -65,6 +65,12 @@ export const PHONE_WORKSPACES: readonly PhoneWorkspaceDefinition[] = [
     left: { kind: 'panel', type: 'color-scopes', title: 'Scopes' },
     right: { kind: 'panel', type: 'color-nodes', title: 'Color Nodes' },
   },
+  {
+    id: 'output', title: 'Output', summary: 'Projector outputs: sources, slices, corner pin, masks',
+    main: { kind: 'custom', id: 'output-stage', title: 'Output' },
+    left: { kind: 'custom', id: 'output-targets', title: 'Outputs' },
+    right: { kind: 'custom', id: 'output-slices', title: 'Slices' },
+  },
 ];
 
 export function getPhoneWorkspace(id: PhoneWorkspaceId): PhoneWorkspaceDefinition | undefined {
@@ -85,9 +91,33 @@ function readCollapsed(): CollapsedState {
   }
 }
 
-/** Side panels start open in landscape; the person's choice per editor and side is kept across reloads. */
+/** The person's stored choice for one side of one editor; undefined while they never toggled it. */
+export function readPhoneWorkspaceSideChoice(id: PhoneWorkspaceId, side: PhoneWorkspaceSide): boolean | undefined {
+  const value = readCollapsed()[id]?.[side];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+/** Stored choice, or collapsed when nothing is stored (callers that know the room use `defaultPhoneWorkspaceSidesOpen`). */
 export function isPhoneWorkspaceSideCollapsed(id: PhoneWorkspaceId, side: PhoneWorkspaceSide): boolean {
-  return readCollapsed()[id]?.[side] === true;
+  return readPhoneWorkspaceSideChoice(id, side) === true;
+}
+
+/** Width of one open side panel; mirrors `clamp(180px, 28vw, 340px)` in PhoneWorkspace.css. */
+export function phoneWorkspaceSideWidth(viewportWidth: number): number {
+  return Math.min(340, Math.max(180, viewportWidth * 0.28));
+}
+
+/** The editor in the middle keeps at least this much width before side panels open on their own. */
+export const PHONE_WORKSPACE_MIN_MAIN_WIDTH = 320;
+
+/**
+ * Whether side panels the person never toggled start open: only in landscape and only when the editor
+ * in the middle keeps PHONE_WORKSPACE_MIN_MAIN_WIDTH next to every side panel the editor has.
+ */
+export function defaultPhoneWorkspaceSidesOpen(width: number, height: number, sides: number): boolean {
+  if (sides === 0) return false;
+  if (width <= height) return false;
+  return width - sides * phoneWorkspaceSideWidth(width) >= PHONE_WORKSPACE_MIN_MAIN_WIDTH;
 }
 
 export function setPhoneWorkspaceSideCollapsed(id: PhoneWorkspaceId, side: PhoneWorkspaceSide, collapsed: boolean): void {

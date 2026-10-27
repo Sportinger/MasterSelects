@@ -144,52 +144,47 @@ export function openTransitionCompositionForState(
   context.openCompositionTab(upgradedCompositionId, { skipAnimation: true, playFromTime: 0 });
 }
 
-export function useTransitionCompositionOpen(): (outgoingClipId: string, transitionId: string) => void {
-  const timelineClips = useTimelineStore((state) => state.clips);
-  const getSerializableState = useTimelineStore((state) => state.getSerializableState);
-  const selectTransitionProperties = useTimelineStore((state) => state.selectTransitionProperties);
-  const invalidateCache = useTimelineStore((state) => state.invalidateCache);
-  const compositions = useMediaStore((state) => state.compositions);
-  const activeCompositionId = useMediaStore((state) => state.activeCompositionId);
-  const createComposition = useMediaStore((state) => state.createComposition);
-  const updateComposition = useMediaStore((state) => state.updateComposition);
-  const openCompositionTab = useMediaStore((state) => state.openCompositionTab);
+/**
+ * Opens (creating when needed) the composition of the transition `transitionId` on `outgoingClipId`
+ * in the active composition, reading fresh store state. The desktop timeline (double-click), the node
+ * workspace and the phone transition sheet all use this one path.
+ */
+export function openTransitionCompositionFromStores(
+  outgoingClipId: string,
+  transitionId: string,
+  options?: OpenTransitionCompositionOptions,
+): void {
+  const timeline = useTimelineStore.getState();
+  const media = useMediaStore.getState();
+  openTransitionCompositionForState({
+    timelineClips: timeline.clips,
+    serializableClips: timeline.getSerializableState().clips,
+    parentComposition: media.compositions.find((composition) => composition.id === media.activeCompositionId),
+    compositions: media.compositions,
+    createComposition: media.createComposition,
+    updateComposition: media.updateComposition,
+    openCompositionTab: media.openCompositionTab,
+    selectTransitionProperties: timeline.selectTransitionProperties,
+    attachTransitionComposition: ({ outgoingClipId: outgoingId, incomingClipId, transitionId: attachedId, compositionId }) => {
+      useTimelineStore.setState((state) => ({
+        clips: state.clips.map((clip) => {
+          if (clip.id === outgoingId && clip.transitionOut?.id === attachedId) {
+            return { ...clip, transitionOut: { ...clip.transitionOut, compositionId } };
+          }
+          if (clip.id === incomingClipId && clip.transitionIn?.id === attachedId) {
+            return { ...clip, transitionIn: { ...clip.transitionIn, compositionId } };
+          }
+          return clip;
+        }),
+      }));
+    },
+    invalidateCache: timeline.invalidateCache,
+    replaceCompositions: (nextCompositions) => useMediaStore.setState({ compositions: nextCompositions }),
+  }, outgoingClipId, transitionId, options);
+}
 
-  return useCallback((outgoingClipId, transitionId) => {
-    openTransitionCompositionForState({
-      timelineClips,
-      serializableClips: getSerializableState().clips,
-      parentComposition: compositions.find((composition) => composition.id === activeCompositionId),
-      compositions,
-      createComposition,
-      updateComposition,
-      openCompositionTab,
-      selectTransitionProperties,
-      attachTransitionComposition: ({ outgoingClipId, incomingClipId, transitionId, compositionId }) => {
-        useTimelineStore.setState((state) => ({
-          clips: state.clips.map((clip) => {
-            if (clip.id === outgoingClipId && clip.transitionOut?.id === transitionId) {
-              return { ...clip, transitionOut: { ...clip.transitionOut, compositionId } };
-            }
-            if (clip.id === incomingClipId && clip.transitionIn?.id === transitionId) {
-              return { ...clip, transitionIn: { ...clip.transitionIn, compositionId } };
-            }
-            return clip;
-          }),
-        }));
-      },
-      invalidateCache,
-      replaceCompositions: (nextCompositions) => useMediaStore.setState({ compositions: nextCompositions }),
-    }, outgoingClipId, transitionId);
-  }, [
-    activeCompositionId,
-    compositions,
-    createComposition,
-    getSerializableState,
-    invalidateCache,
-    openCompositionTab,
-    selectTransitionProperties,
-    timelineClips,
-    updateComposition,
-  ]);
+export function useTransitionCompositionOpen(): (outgoingClipId: string, transitionId: string) => void {
+  return useCallback((outgoingClipId: string, transitionId: string) => {
+    openTransitionCompositionFromStores(outgoingClipId, transitionId);
+  }, []);
 }

@@ -14,9 +14,13 @@ export interface EditorAsyncMutation {
   run<T>(action: () => T): T;
   invoke<T>(action: () => T): T;
 }
-/** Capture once, before the first await. Only synchronous mutation phases enter the token. */
+/**
+ * Capture once, before the first await. Only synchronous mutation phases enter the token.
+ * Without a caller transaction each run commits its own revision with `source` ('import' by default);
+ * late results that must never become an Undo step pass a system source such as 'background'.
+ */
 export function captureEditorAsyncMutation(label: string, targetIsCurrent: () => boolean = () => true,
-  options: { joinTransaction?: boolean } = {}): EditorAsyncMutation {
+  options: { joinTransaction?: boolean; source?: string } = {}): EditorAsyncMutation {
   ensureOwnershipSubscription();
   const session = getEditorRepositorySession(), epoch = ownership.epoch;
   const token = options.joinTransaction === false ? null : getEditorTransactionToken();
@@ -31,7 +35,7 @@ export function captureEditorAsyncMutation(label: string, targetIsCurrent: () =>
     try {
       if (token) return runEditorTransaction(token, action);
       if (!session) return action();
-      const local = beginEditorTransaction(label, 'import');
+      const local = beginEditorTransaction(label, options.source ?? 'import');
       try { const value = runEditorTransaction(local, action); commitEditorTransaction(local); return value; }
       catch (error) { if (ownsEditorTransaction(local)) cancelEditorTransaction(local); throw error; }
     } finally { depth--; }

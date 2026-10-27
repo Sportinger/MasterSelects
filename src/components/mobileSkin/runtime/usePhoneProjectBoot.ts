@@ -17,6 +17,8 @@ import {
   setupAutoSync,
 } from '../../../services/projectSync';
 import { Logger } from '../../../services/logger';
+import { markPhoneBootPhase } from './phoneBootTimeline';
+import { subscribePhoneProjectStateChanges } from './phoneProjectStateEvents';
 
 const log = Logger.create('PhoneProjectBoot');
 
@@ -48,6 +50,9 @@ export function usePhoneProjectBoot(): PhoneProjectBootState {
     setProjectOpen(projectFileService.isProjectOpen());
     setPermissionPending(projectFileService.needsPermission());
   }, []);
+
+  // Opening or closing a project from the phone refreshes at once instead of waiting for the poll.
+  useEffect(() => subscribePhoneProjectStateChanges(refreshProjectState), [refreshProjectState]);
 
   const markProjectSelected = useCallback(() => {
     refreshProjectState();
@@ -103,7 +108,10 @@ export function usePhoneProjectBoot(): PhoneProjectBootState {
       setBootPending(false);
     };
 
+    // Nothing in this restore waits for the GPU: the engine starts in parallel (PhoneRuntimeHost)
+    // and the preview shows its own "starting" state until it is ready.
     const restore = async () => {
+      markPhoneBootPhase('boot-start');
       setProjectLoadProgress({
         phase: 'opening',
         percent: 3,
@@ -112,12 +120,15 @@ export function usePhoneProjectBoot(): PhoneProjectBootState {
       });
       const result = await runToolbarProjectBootRestore({
         url: window.location.href,
-        restoreLastProject: async () => (
-          await restoreAndroidProjectAutomatically((handle) => projectFileService.loadProject(handle))
-          || projectFileService.restoreLastProject()
-        ),
+        restoreLastProject: async () => {
+          const opened = await restoreAndroidProjectAutomatically((handle) => projectFileService.loadProject(handle))
+            || await projectFileService.restoreLastProject();
+          markPhoneBootPhase('repository-open', opened ? 'restored' : 'no last project');
+          return opened;
+        },
         loadProjectToStores,
       });
+      markPhoneBootPhase('stores-hydrated', result);
       log.info('Phone project boot resolved', { result });
       // A restored project completes its own progress inside loadProjectToStores.
       if (result !== 'restored') setProjectLoadProgress(null);

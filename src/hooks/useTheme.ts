@@ -130,10 +130,15 @@ function applyCrazyColors(root: HTMLElement) {
 }
 
 /** Generate a monochromatic palette from a single hue + brightness */
+/** Custom theme brightness (0 = very dark, 100 = very light) above which its colours are a light palette. */
+export function isCustomThemeLight(brightness: number): boolean {
+  return brightness > 50;
+}
+
 function applyCustomColors(root: HTMLElement, hue: number, brightness: number) {
   // brightness: 0 = very dark, 100 = very light
   // We map brightness to a base lightness for backgrounds
-  const isLight = brightness > 50;
+  const isLight = isCustomThemeLight(brightness);
   const baseSat = 15; // subtle saturation for a professional look
 
   if (isLight) {

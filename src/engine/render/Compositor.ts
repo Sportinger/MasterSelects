@@ -270,7 +270,11 @@ export class Compositor {
         : null;
       const beforeColorEffects = orderedColorIndex === null ? visualAdjustmentEffects : visualAdjustmentEffects.slice(0, orderedColorIndex);
       const afterColorEffects = orderedColorIndex === null ? [] : visualAdjustmentEffects.slice(orderedColorIndex);
-      const forceOrderedPasses = orderedColorIndex !== null || visualAdjustmentEffects.some(effect => nodePreviewTextureTap.has(`effect:${effect.id}`));
+      // The split compare (preview only; exports pass no splitCompare) runs in the effect pass chain,
+      // so a lone inline effect (invert, brightness, ...) must take that chain too or it is not compared.
+      const forceOrderedPasses = orderedColorIndex !== null
+        || Boolean(state.splitCompare?.enabled && state.effectCompareView)
+        || visualAdjustmentEffects.some(effect => nodePreviewTextureTap.has(`effect:${effect.id}`));
       const beforeColorStack = splitLayerEffects(beforeColorEffects, state.skipEffects, forceOrderedPasses);
       const afterColorStack = splitLayerEffects(afterColorEffects, state.skipEffects, forceOrderedPasses);
       const inlineEffects = beforeColorStack.inlineEffects;

@@ -26,7 +26,7 @@ import { PianoRollGridLines } from './PianoRollGridLines';
 import { buildPianoRollGrid } from './pianoRollGrid';
 import { PianoRollSnapControls } from './PianoRollSnapControls';
 import {
-  gridStepSeconds, shouldSnap, snapContentTime, snapNoteDuration, type PianoRollSnapContext,
+  gridStepSeconds, shouldSnap, snapContentTime, type PianoRollSnapContext,
 } from './pianoRollSnap';
 import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow, type MidiClipWindow } from '../../services/midi/midiClipTiming';
 import { computeTrimTiming, trimOriginalsFromClip, type TrimOriginals } from '../timeline/utils/clipTrimTiming';
@@ -36,6 +36,11 @@ import { redo, undo } from '../../stores/historyStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { PianoRollControllerArea } from './controllerLanes/PianoRollControllerArea';
 import { velocityToColor } from './controllerLanes/pianoRollLaneTypes';
+import { usePianoRollTouchEditing } from './usePianoRollTouchEditing';
+import { PianoRollTouchActions } from './PianoRollTouchActions';
+import { type PianoRollDragHistory } from './pianoRollDragHistory';
+import { clamp, PITCH_COUNT, PITCH_MAX, PITCH_MIN, pitchToY, yToPitch } from './pianoRollGeometry';
+import { type PendingNote, type PianoRollDragState, runInDragHistory, usePianoRollDrag } from './usePianoRollDrag';
 
 // Two independent zoom axes, like Cubase (#249): horizontal = time scale
 // (px per second), vertical = note-row height (px per pitch). Both live in
@@ -58,18 +63,11 @@ const KEYBOARD_W = 48;     // px, left keyboard column
 const PLAYHEAD_ACCENT = '#2997E5';
 const PLAYHEAD_HEAD_SIZE = 14; // px width of the grab head (≈ .playhead-head)
 const PLAYHEAD_HEAD_H = 20;    // px height of the grab head — a little longer
-// A plain click (no drag) makes a SHORT note; drag-and-release sizes longer
-// notes by the drag distance (#249). Kept visible/grabbable at default zoom
-// (0.1s ≈ 12px at 120 px/s).
-const CLICK_NOTE_DURATION = 0.1; // seconds, note created by a plain click (no drag)
 // Below this row height the note name (e.g. "C#4") can't fit legibly, so it's
 // hidden; below this pixel width the note is too short to show even a clipped
 // name without looking like noise (#249 note labels).
 const MIN_NOTE_LABEL_ROW_H = 11;
 const MIN_NOTE_LABEL_WIDTH = 16;
-const PITCH_MIN = 21;      // A0
-const PITCH_MAX = 108;     // C8
-const PITCH_COUNT = PITCH_MAX - PITCH_MIN + 1;
 
 // Cubase-style "outside the clip" margins (#249 clip-resize). Each side shows a
 // dimmed band, proportional to the clip length but bounded so a tiny clip still
@@ -82,10 +80,6 @@ const MARGIN_CAP_SEC = 4;
 // can see what falls outside the clip while resizing.
 const OUT_OF_WINDOW_NOTE_OPACITY = 0.32;
 const DIMMED_MARGIN_BG = 'rgba(0,0,0,0.45)';
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
@@ -100,36 +94,10 @@ function pitchLabel(pitch: number): string {
   return `${name}${octave}`;
 }
 
-function pitchToY(pitch: number, rowH: number): number {
-  return (PITCH_MAX - pitch) * rowH;
-}
-
-function yToPitch(y: number, rowH: number): number {
-  return PITCH_MAX - Math.floor(y / rowH);
-}
-
-type DragState =
-  | { kind: 'create'; noteId: null; pitch: number; startTime: number }
-  | { kind: 'move'; noteId: string; grabOffsetTime: number }
-  | { kind: 'resize'; noteId: string; startTime: number }
-  // Eraser swipe: delete any note the cursor passes over (#249 tool palette).
-  | { kind: 'erase' }
-  // Marquee select: rubber-band rectangle in grid-content pixels.
-  | { kind: 'marquee'; startX: number; startY: number }
-  // Group move: drag all selected notes together. `origins` snapshots each
-  // selected note's start/pitch at grab time so deltas apply from a fixed base.
-  | { kind: 'move-group'; anchorId: string; grabOffsetTime: number; origins: { id: string; start: number; pitch: number }[] };
-
 // Active editor tool (#249). Pointer = the original draw/move/resize behavior;
 // eraser deletes; select marquee-picks and group-moves notes. Shared id type so
 // the keyboard-shortcut seam and the palette can't drift.
 type Tool = PianoRollToolId;
-
-interface PendingNote {
-  pitch: number;
-  start: number;
-  duration: number;
-}
 
 // Live clip-resize preview (#249). While a Time-ruler handle is dragged we hold
 // the in-progress window here and render the whole editor from it — matching the
@@ -143,7 +111,17 @@ interface ResizeDrag {
 
 interface PianoRollProps {
   clipId: string;
+  /**
+   * Rendered inside a host page (the phone editor) instead of its own popup window: fills its
+   * container, leaves the host's global shortcuts alone and shows touch buttons for the
+   * keyboard-only actions.
+   */
+  embedded?: boolean;
 }
+
+// Touch: how far from a note's end a finger still grabs the length instead of the body.
+const TOUCH_RESIZE_GRIP_MIN_PX = 12;
+const TOUCH_RESIZE_GRIP_MAX_PX = 24;
 
 // --- tool palette (#249) ---------------------------------------------------
 // Reuses the main timeline's Tabler tool icons and mirrors the
@@ -167,9 +145,10 @@ const ERASER_CURSOR_SVG =
   "</g></svg>";
 const ERASER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ERASER_CURSOR_SVG)}") 5 19, auto`;
 
-function ToolButton({ active, title, onClick, glyph: Glyph }: {
-  active: boolean; title: string; onClick: () => void; glyph: Icon;
+function ToolButton({ active, title, onClick, glyph: Glyph, tool, large }: {
+  active: boolean; title: string; onClick: () => void; glyph: Icon; tool: PianoRollToolId; large?: boolean;
 }) {
+  const size = large ? 40 : 24;
   const [hover, setHover] = useState(false);
   const background = active ? 'rgba(45,140,235,0.18)' : hover ? 'rgba(255,255,255,0.08)' : 'transparent';
   const color = active ? TOOL_ACCENT : hover ? '#fff' : 'rgba(255,255,255,0.72)';
@@ -179,11 +158,14 @@ function ToolButton({ active, title, onClick, glyph: Glyph }: {
       type="button"
       onClick={onClick}
       title={title}
+      data-testid={`piano-roll-tool-${tool}`}
+      aria-pressed={active}
+      onPointerUp={large ? (event) => event.currentTarget.blur() : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 24, height: 24, padding: 0, borderRadius: 3, cursor: 'pointer',
+        width: size, height: size, padding: 0, borderRadius: 3, cursor: 'pointer', touchAction: 'manipulation',
         border: `1px solid ${borderColor}`, background, color,
         transition: 'color 120ms ease, background-color 120ms ease, border-color 120ms ease',
       }}
@@ -193,7 +175,7 @@ function ToolButton({ active, title, onClick, glyph: Glyph }: {
   );
 }
 
-export function PianoRoll({ clipId }: PianoRollProps) {
+export function PianoRoll({ clipId, embedded = false }: PianoRollProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   // The ruler track that slides under the viewport's horizontal scroll. Driven by
@@ -210,7 +192,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   // horizontal scroll as the ruler/playhead so its bars stay under their notes.
   const velocityFollowRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number | null>(null);
-  const dragRef = useRef<DragState | null>(null);
+  const dragRef = useRef<PianoRollDragState | null>(null);
+  // The open history batch of the running drag (one undo step per drag, see pianoRollDragHistory).
+  const dragHistoryRef = useRef<PianoRollDragHistory | null>(null);
   const pendingRef = useRef<PendingNote | null>(null);
   const [pendingNote, setPendingNote] = useState<PendingNote | null>(null);
   // Flipped true whenever a drag (create/move/resize) starts, so the document
@@ -279,7 +263,6 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const gridSubdivision = useTimelineStore(selectPianoRollGridSubdivision);
   const setSnapEnabled = useTimelineStore((state) => state.setPianoRollSnapEnabled);
   const setGridSubdivision = useTimelineStore((state) => state.setPianoRollGridSubdivision);
-  const addMidiNote = useTimelineStore((state) => state.addMidiNote);
   const addMidiNotes = useTimelineStore((state) => state.addMidiNotes);
   const updateMidiNote = useTimelineStore((state) => state.updateMidiNote);
   const removeMidiNote = useTimelineStore((state) => state.removeMidiNote);
@@ -679,139 +662,10 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     return null;
   }, [clipId]);
 
-  // --- global drag handling ---------------------------------------------------
-  useEffect(() => {
-    if (!dragActive) return;
-
-    const handleMove = (e: MouseEvent) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      const { x, y } = localPoint(e.clientX, e.clientY);
-      // Map the cursor's screen offset to CONTENT time through the clip window
-      // (#232), so note times stay anchored to the content, not the window edge.
-      const liveInPoint = useTimelineStore.getState().clips.find((c) => c.id === clipId)?.inPoint ?? 0;
-      // Floor at the window's left edge (inPoint), NOT 0: after a left-extend the
-      // clip's inPoint is negative (empty space before content origin 0), so that
-      // region is valid content time. Clamping to 0 snapped clicks back to the old
-      // origin; clamping to inPoint keeps notes inside the visible window (#249).
-      const time = Math.max(liveInPoint, clipLocalToContentTime({ inPoint: liveInPoint }, x / pxPerSecRef.current));
-
-      // Snapping quantizes the note EDGE the pointer controls: the start for a
-      // move, the end for a create/resize. `snapNoteDuration` floors a snapped
-      // length at one grid unit so a 2 px twitch cannot make a sliver note.
-      const snapping = shouldSnap(snapRef.current.enabled, e);
-      if (drag.kind === 'create') {
-        const duration = snapping
-          ? snapNoteDuration(snapRef.current.context, drag.startTime, time, 0.02)
-          : Math.max(0.02, time - drag.startTime);
-        const next = { pitch: drag.pitch, start: drag.startTime, duration };
-        pendingRef.current = next;
-        setPendingNote(next);
-        return;
-      }
-      if (drag.kind === 'move') {
-        const newStart = Math.max(liveInPoint, snapTime(time - drag.grabOffsetTime, e));
-        const newPitch = yToPitch(y, rowHRef.current);
-        updateMidiNote(clipId, drag.noteId, { start: newStart, pitch: newPitch }, { captureHistory: false });
-        return;
-      }
-      if (drag.kind === 'resize') {
-        const duration = snapping
-          ? snapNoteDuration(snapRef.current.context, drag.startTime, time, 0.02)
-          : Math.max(0.02, time - drag.startTime);
-        updateMidiNote(clipId, drag.noteId, { duration }, { captureHistory: false });
-        return;
-      }
-      if (drag.kind === 'erase') {
-        const hit = noteAtPx(x, y);
-        if (hit) removeMidiNote(clipId, hit.id);
-        return;
-      }
-      if (drag.kind === 'move-group') {
-        const anchor = drag.origins.find((o) => o.id === drag.anchorId);
-        if (!anchor) return;
-        // Only the anchor snaps; every other note keeps its offset from it, so a
-        // group move quantizes without collapsing the phrase onto the grid.
-        const newAnchorStart = Math.max(liveInPoint, snapTime(time - drag.grabOffsetTime, e));
-        const deltaTime = newAnchorStart - anchor.start;
-        const deltaPitch = yToPitch(y, rowHRef.current) - anchor.pitch;
-        for (const o of drag.origins) {
-          updateMidiNote(clipId, o.id, {
-            start: Math.max(liveInPoint, o.start + deltaTime),
-            pitch: clamp(o.pitch + deltaPitch, PITCH_MIN, PITCH_MAX),
-          }, { captureHistory: false });
-        }
-        return;
-      }
-      if (drag.kind === 'marquee') {
-        const rx = Math.min(drag.startX, x);
-        const ry = Math.min(drag.startY, y);
-        const rw = Math.abs(x - drag.startX);
-        const rh = Math.abs(y - drag.startY);
-        setMarquee({ x: rx, y: ry, w: rw, h: rh });
-        const liveClip = useTimelineStore.getState().clips.find((c) => c.id === clipId);
-        const liveNotes = liveClip?.midiData?.notes ?? [];
-        const ppx = pxPerSecRef.current;
-        const rowPx = rowHRef.current;
-        const next = new Set<string>();
-        for (const n of liveNotes) {
-          if (!liveClip || !isNoteStartInWindow(liveClip, n)) continue;
-          const left = contentTimeToClipLocal(liveClip, n.start) * ppx;
-          const width = Math.max(2, n.duration * ppx);
-          const top = pitchToY(n.pitch, rowPx);
-          // Axis-aligned rectangle overlap.
-          if (left <= rx + rw && left + width >= rx && top <= ry + rh && top + rowPx >= ry) next.add(n.id);
-        }
-        setSelectedIds(next);
-      }
-    };
-
-    const handleUp = () => {
-      const drag = dragRef.current;
-      dragRef.current = null;
-      setDragActive(false);
-      if (drag?.kind === 'create') {
-        const pending = pendingRef.current ?? { pitch: drag.pitch, start: drag.startTime, duration: CLICK_NOTE_DURATION };
-        // A near-zero drag is a plain click → one grid unit when snapping (so a
-        // clicked note lands on the grid at both ends), else a short fixed note.
-        // An actual drag keeps its dragged length.
-        const { enabled, context } = snapRef.current;
-        const clickDuration = (enabled ? gridStepSeconds(context, pending.start) : null) ?? CLICK_NOTE_DURATION;
-        const duration = pending.duration <= 0.05 ? clickDuration : pending.duration;
-        addMidiNote(clipId, { ...pending, duration });
-        pendingRef.current = null;
-        setPendingNote(null);
-      } else if (drag && (drag.kind === 'move' || drag.kind === 'resize')) {
-        // Commit a single history snapshot for the whole drag.
-        const note = useTimelineStore.getState().clips.find((c) => c.id === clipId)?.midiData?.notes
-          .find((n) => n.id === drag.noteId);
-        if (note) {
-          updateMidiNote(clipId, drag.noteId, { start: note.start }, { captureHistory: true });
-        }
-      } else if (drag?.kind === 'move-group') {
-        // One history snapshot for the whole group move (live drag was silent).
-        const note = useTimelineStore.getState().clips.find((c) => c.id === clipId)?.midiData?.notes
-          .find((n) => n.id === drag.anchorId);
-        if (note) {
-          updateMidiNote(clipId, drag.anchorId, { start: note.start }, { captureHistory: true });
-        }
-      } else if (drag?.kind === 'marquee') {
-        setMarquee(null);
-      }
-    };
-
-    // CRITICAL: this component runs in the opener's JS realm but is mounted in a
-    // popup window, so the global `document` is the MAIN window's document. Mouse
-    // events happen in the popup, so listen on the grid's ownerDocument (the
-    // popup's document) — otherwise mouseup never fires and notes never commit.
-    const doc = gridRef.current?.ownerDocument ?? document;
-    doc.addEventListener('mousemove', handleMove);
-    doc.addEventListener('mouseup', handleUp);
-    return () => {
-      doc.removeEventListener('mousemove', handleMove);
-      doc.removeEventListener('mouseup', handleUp);
-    };
-  }, [dragActive, clipId, addMidiNote, updateMidiNote, removeMidiNote, localPoint, noteAtPx, snapTime]);
+  usePianoRollDrag({
+    clipId, dragActive, setDragActive, dragRef, dragHistoryRef, pendingRef, setPendingNote, setMarquee,
+    setSelectedIds, gridRef, pxPerSecRef, rowHRef, snapRef, localPoint, noteAtPx, snapTime,
+  });
 
   // --- clipboard + history (#249) --------------------------------------------
   // Copy/cut/paste/duplicate operate on the live selection and the shared
@@ -874,6 +728,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   // shortcut seam), delete (Delete/Backspace), clipboard (Ctrl+C/X/V), duplicate
   // (Ctrl+D, Ctrl+B alias) and undo/redo (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y).
   useEffect(() => {
+    // Embedded in the host page, the host's own global shortcuts (undo, play) already run; binding
+    // these on the host document too would run each of them twice. The touch buttons cover them.
+    if (embedded) return undefined;
     const doc = gridRef.current?.ownerDocument ?? document;
     const onKey = (e: KeyboardEvent) => {
       // Never steal keys from an editable field (future-proofing — the popup has
@@ -932,11 +789,26 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       doc.removeEventListener('keydown', onKey);
       doc.removeEventListener('pointerdown', handoffPointerFocus, true);
     };
-  }, [clipId, removeMidiNotes, copySelection, cutSelection, pasteClipboard, duplicateSelection, runHistory, selectTool]);
+  }, [embedded, clipId, removeMidiNotes, copySelection, cutSelection, pasteClipboard, duplicateSelection, runHistory, selectTool]);
+
+  // --- touch (phone editor, M4) ------------------------------------------------
+  const { touchHandlers, touchSnapshotRef, touchBeginRef } = usePianoRollTouchEditing({
+    clipId, scrollRef, dragRef, dragHistoryRef, pendingRef, pxPerSecRef, rowHRef, pendingScrollRef,
+    setDragActive, setPendingNote, setMarquee, setPxPerSec, setRowH,
+    limits: useCallback(() => ({
+      minPxPerSec: MIN_PX_PER_SEC,
+      maxPxPerSec: MAX_PX_PER_SEC,
+      minRowH: clamp((scrollRef.current?.clientHeight ?? 0) / PITCH_COUNT, MIN_ROW_H, MAX_ROW_H),
+      maxRowH: MAX_ROW_H,
+      keyboardWidth: KEYBOARD_W,
+    }), []),
+  });
+  // The clipboard lives outside React; re-render after a touch Copy so Paste enables.
+  const [, setClipboardRevision] = useState(0);
 
   if (!clip || clip.source?.type !== 'midi') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#888' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: embedded ? '100%' : '100vh', color: '#888' }}>
         This MIDI clip is no longer available.
       </div>
     );
@@ -1000,7 +872,18 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const deleteNote = (e: React.MouseEvent, note: MidiNote) => {
     e.preventDefault();
     e.stopPropagation();
+    // A long press of a finger also raises contextmenu; on touch, deleting is the Eraser's or the
+    // Delete button's job, never a side effect of holding a note while moving it.
+    if ((e.nativeEvent as Partial<PointerEvent>).pointerType === 'touch') return;
     removeMidiNote(clipId, note.id);
+  };
+
+  // An eraser swipe is one undo step: the note under the press is deleted inside the swipe's
+  // history batch, so Undo (or a touch cancel) brings it back together with the swiped ones.
+  const startEraserSwipe = (first: MidiNote | null) => {
+    if (first) runInDragHistory(dragHistoryRef, () => removeMidiNote(clipId, first.id));
+    dragRef.current = { kind: 'erase' };
+    setDragActive(true);
   };
 
   // --- tool-aware mousedown dispatch (#249) ----------------------------------
@@ -1010,10 +893,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     if (tool === 'pointer') { startCreate(e); return; }
     const { x, y } = localPoint(e.clientX, e.clientY);
     if (tool === 'eraser') {
-      const hit = noteAtPx(x, y);
-      if (hit) removeMidiNote(clipId, hit.id);
-      dragRef.current = { kind: 'erase' };
-      setDragActive(true);
+      startEraserSwipe(noteAtPx(x, y));
       e.preventDefault();
       return;
     }
@@ -1033,9 +913,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     e.stopPropagation();
     e.preventDefault();
     if (tool === 'eraser') {
-      removeMidiNote(clipId, note.id);
-      dragRef.current = { kind: 'erase' };
-      setDragActive(true);
+      startEraserSwipe(note);
       return;
     }
     // select tool
@@ -1065,6 +943,22 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     setDragActive(true);
   };
 
+  // A finger press: the same tool dispatch as a mouse press. The note under the finger is found by
+  // its drawn box; the last few pixels of a note (wider than the 6 px mouse grip) grab its length.
+  touchBeginRef.current = (e) => {
+    touchSnapshotRef.current = notes;
+    const { x, y } = localPoint(e.clientX, e.clientY);
+    const note = noteAtPx(x, y);
+    if (!note) { handleGridMouseDown(e); return; }
+    if (tool === 'pointer') {
+      const right = (contentTimeToClipLocal(clip, note.start) + note.duration) * pxPerSec;
+      const width = Math.max(2, note.duration * pxPerSec);
+      const grip = clamp(width * 0.35, TOUCH_RESIZE_GRIP_MIN_PX, TOUCH_RESIZE_GRIP_MAX_PX);
+      if (x >= right - grip) { startResize(e, note); return; }
+    }
+    handleNoteMouseDown(e, note);
+  };
+
   const clipLocalPlayhead = playheadPosition - effStartTime;
   const showPlayhead = clipLocalPlayhead >= 0 && clipLocalPlayhead <= clipDuration;
   // Whole-pixel SCREEN x for the playhead (track frame, where the ruler's
@@ -1091,10 +985,18 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const showNoteLabels = rowH >= MIN_NOTE_LABEL_ROW_H;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f0f0f' }}>
+    <div
+      data-testid="piano-roll"
+      data-px-per-sec={pxPerSec}
+      data-row-height={rowH}
+      data-tool={tool}
+      style={{ display: 'flex', flexDirection: 'column', height: embedded ? '100%' : '100vh', background: '#0f0f0f' }}
+    >
       {/* Header */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px',
+        display: 'flex', alignItems: 'center', gap: embedded ? 8 : 12, padding: embedded ? '4px 8px' : '8px 14px',
+        // Embedded on a phone the row scrolls sideways instead of wrapping, so the grid keeps its height.
+        overflowX: embedded ? 'auto' : undefined, scrollbarWidth: embedded ? 'none' : undefined,
         background: '#161616', borderBottom: '1px solid #2a2a2a', flexShrink: 0,
       }}>
         {/* Tool palette (#249): pointer = draw/move/resize, eraser = delete,
@@ -1103,9 +1005,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           display: 'inline-flex', alignItems: 'center', gap: 3, padding: 2,
           border: '1px solid rgba(255,255,255,0.08)', borderRadius: 5, background: 'rgba(0,0,0,0.18)',
         }}>
-          <ToolButton active={tool === 'pointer'} title="Pointer — draw, move & resize notes (1)" onClick={() => selectTool('pointer')} glyph={IconPointer} />
-          <ToolButton active={tool === 'eraser'} title="Eraser — click or swipe to delete notes (2)" onClick={() => selectTool('eraser')} glyph={IconEraser} />
-          <ToolButton active={tool === 'select'} title="Select — marquee to select, drag to move, Del to remove (3)" onClick={() => selectTool('select')} glyph={IconMarquee2} />
+          <ToolButton tool="pointer" large={embedded} active={tool === 'pointer'} title="Pointer — draw, move & resize notes (1)" onClick={() => selectTool('pointer')} glyph={IconPointer} />
+          <ToolButton tool="eraser" large={embedded} active={tool === 'eraser'} title="Eraser — click or swipe to delete notes (2)" onClick={() => selectTool('eraser')} glyph={IconEraser} />
+          <ToolButton tool="select" large={embedded} active={tool === 'select'} title="Select — marquee to select, drag to move, Del to remove (3)" onClick={() => selectTool('select')} glyph={IconMarquee2} />
         </div>
         {/* Snap toggle + grid division. The division drives the DRAWN grid even
             with snap off, so the lines stay available to eye notes against. */}
@@ -1115,6 +1017,18 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           onToggle={setSnapEnabled}
           onSubdivisionChange={setGridSubdivision}
         />
+        {embedded && (
+          <PianoRollTouchActions
+            selectionCount={selectedIds.size}
+            canPaste={hasPianoRollClipboard()}
+            onDelete={() => { removeMidiNotes(clipId, Array.from(selectedIdsRef.current)); setSelectedIds(new Set()); }}
+            onDuplicate={duplicateSelection}
+            onCopy={() => { copySelection(); setClipboardRevision((revision) => revision + 1); }}
+            onPaste={pasteClipboard}
+            onUndo={() => runHistory('undo')}
+            onRedo={() => runHistory('redo')}
+          />
+        )}
         <span style={{ flex: 1 }} />
         {/* Show/hide the controller-lane (velocity) area; the flag persists. */}
         <button
@@ -1188,6 +1102,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
         <style>{'.pr-grid-scroll::-webkit-scrollbar{display:none}'}</style>
         <div
           ref={scrollRef}
+          data-testid="piano-roll-scroll"
           className="pr-grid-scroll"
           onScroll={handleGridScroll}
           style={{
@@ -1341,10 +1256,17 @@ export function PianoRoll({ clipId }: PianoRollProps) {
               lives here so localPoint/hit-test math keeps pixel 0 = clip start. */}
           <div
             ref={gridRef}
+            data-testid="piano-roll-grid"
             onMouseDown={handleGridMouseDown}
+            onPointerDown={touchHandlers.onPointerDown}
+            onPointerMove={touchHandlers.onPointerMove}
+            onPointerUp={touchHandlers.onPointerUp}
+            onPointerCancel={touchHandlers.onPointerCancel}
             onMouseMove={updateHoverPitch}
             onMouseLeave={() => setHoverPitch(null)}
-            style={{ position: 'absolute', top: 0, left: marginPx, width: windowPx, height: gridH, cursor: tool === 'pointer' ? 'default' : tool === 'eraser' ? ERASER_CURSOR : 'crosshair' }}
+            // touch-action only affects fingers: the browser must not scroll or zoom the page while
+            // a finger draws, and two-finger pinch/pan is handled by usePianoRollTouch.
+            style={{ position: 'absolute', top: 0, left: marginPx, width: windowPx, height: gridH, touchAction: 'none', cursor: tool === 'pointer' ? 'default' : tool === 'eraser' ? ERASER_CURSOR : 'crosshair' }}
           >
           {/* Ghost notes from other overlapping MIDI clips — read-only (#232).
               Drawn before the real notes so editable notes always sit on top. */}
@@ -1378,6 +1300,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
             return (
               <div
                 key={note.id}
+                data-testid="piano-roll-note"
+                data-note-id={note.id}
+                data-selected={selected ? 'true' : undefined}
                 onMouseDown={(e) => handleNoteMouseDown(e, note)}
                 onContextMenu={(e) => deleteNote(e, note)}
                 title={`${pitchLabel(note.pitch)} · ${note.duration.toFixed(2)}s`}

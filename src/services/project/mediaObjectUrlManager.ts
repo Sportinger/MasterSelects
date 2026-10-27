@@ -168,6 +168,15 @@ class MediaObjectUrlManager {
    * A revoked primary URL of this media is answered with the current one (or undefined when the
    * media has none): a revoked blob URL only fails with ERR_FILE_NOT_FOUND. Other URLs pass through.
    */
+  /** True while `url` is a live URL this manager created and still owns (any media, any key). */
+  owns(url: string | undefined): boolean {
+    if (!url) return false;
+    for (const urls of this.urlsByMediaId.values()) {
+      for (const candidate of urls.values()) if (candidate === url) return true;
+    }
+    return false;
+  }
+
   isRevokedPrimary(url: string | undefined): boolean {
     return url !== undefined && this.replacedPrimaryUrls.has(url);
   }
@@ -241,6 +250,11 @@ export function getPrimaryMediaObjectUrl(mediaId: string): string | undefined {
 }
 
 /** True for a primary media URL this manager revoked: loading it only fails with ERR_FILE_NOT_FOUND. */
+/** True while the manager owns `url`: only the manager may revoke it (other media and clips share it). */
+export function isManagedMediaObjectUrl(url: string | undefined): boolean {
+  return mediaObjectUrlManager.owns(url);
+}
+
 export function isRevokedPrimaryMediaObjectUrl(url: string | undefined): boolean {
   return mediaObjectUrlManager.isRevokedPrimary(url);
 }

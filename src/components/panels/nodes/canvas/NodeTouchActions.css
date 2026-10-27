@@ -1,0 +1,47 @@
+/* Touch-only toolbar actions (NodeTouchActions.tsx): hidden for mouse layouts. */
+.node-workspace-touch-action { display: none; }
+.node-workspace-touch-action:disabled { opacity: 0.45; }
+@media (pointer: coarse) { .node-workspace-touch-action { display: inline-flex; } }
+.mobile-skin .node-workspace-touch-action { display: inline-flex; }
+
+/* Phone skin: finger-sized toolbar buttons and add-menu rows; the toolbar scrolls sideways instead of
+   pushing the canvas off a narrow landscape screen. Desktop layouts are untouched. */
+.mobile-skin .node-workspace-toolbar { flex-wrap: nowrap; min-width: 0; }
+.mobile-skin .node-workspace-toolbar-title { min-width: 0; flex-shrink: 1; overflow: hidden; }
+.mobile-skin .node-workspace-toolbar-actions { flex-shrink: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; }
+.mobile-skin .node-workspace-toolbar-button { height: 36px; min-width: 44px; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
+.mobile-skin .node-workspace-toolbar-button:focus:not(:focus-visible) { outline: none; }
+.mobile-skin .node-workspace-context-menu { width: 184px; }
+.mobile-skin .node-workspace-context-menu button { height: 36px; }
+.mobile-skin .node-workspace-context-search { min-height: 40px; font-size: 16px; }
+
+/* Phone skin: node inspectors open as a drawer over the canvas instead of squeezing it. */
+.mobile-skin .node-workspace-panel { position: relative; }
+.mobile-skin .node-workspace-panel > .node-workspace-inspector-handle { flex-basis: 32px; padding-top: 12px; font-size: 18px; }
+.mobile-skin .node-workspace-panel > .node-workspace-inspector {
+  position: absolute; top: 0; right: 32px; bottom: 0; z-index: 20;
+  width: min(300px, calc(100% - 64px)); min-width: 0; max-width: none;
+  overflow-y: auto; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+}
+.mobile-skin .node-workspace-view-bar { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.mobile-skin .node-workspace-toolbar-actions .node-workspace-toolbar-button { display: inline-flex; align-items: center; justify-content: center; }
+.mobile-skin .node-workspace-toolbar-title > span:first-child { display: none; }
+.mobile-skin .node-workspace-toolbar-title > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The phone panel host caps every descendant at max-width: 100% (PhonePanelHost.css). Inside the
+   node canvas, cards, ports and plugs are absolutely positioned in a zero-width layer, so that cap
+   squeezed them to 0 px (invisible ports, unhittable cards). Its finger-size min-height and
+   touch-action: manipulation on buttons would also distort plug hit boxes and let the browser take
+   cable drags. The canvas keeps its own geometry and handles every gesture itself. */
+.mobile-skin .phone-panel-host .node-workspace-canvas,
+.mobile-skin .phone-panel-host .node-workspace-canvas * { max-width: none; }
+.mobile-skin .phone-panel-host .node-workspace-canvas button,
+.mobile-skin .phone-panel-host .node-workspace-canvas [role='button'] { min-height: 0; touch-action: none; }
+
+/* Short landscape phones: three toolbar rows would take half the height from the canvas. */
+@media (max-height: 480px) {
+  .mobile-skin .node-workspace-toolbar { min-height: 0; padding: 2px 6px; }
+  .mobile-skin .node-workspace-toolbar-button { height: 32px; }
+  .mobile-skin .node-workspace-view-bar { min-height: 0; padding: 2px 6px; }
+  .mobile-skin .node-composition-breadcrumb { display: none; }
+}

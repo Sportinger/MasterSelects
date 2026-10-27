@@ -29,6 +29,8 @@ export interface ProjectEffect {
   enabled: boolean;
   params: Record<string, AudioEffectParamValue>;
   operatorGraph?: EffectOperatorGraph;
+  /** Free-standing node group outside the clip chain (Effect.detached). */
+  detached?: true;
 }
 
 export interface ProjectMaskVertex {

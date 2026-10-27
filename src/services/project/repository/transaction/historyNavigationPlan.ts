@@ -9,6 +9,20 @@ const SYSTEM_REVISION_SOURCES: ReadonlySet<string> = new Set(['source-identity',
 export function isSystemRevisionSource(source: string | null | undefined): boolean {
   return typeof source === 'string' && SYSTEM_REVISION_SOURCES.has(source);
 }
+/**
+ * Source of a revision an assistant request recorded. Every changing tool call of one request commits its own
+ * revision (a request spans provider rounds, and user edits in between stay separate revisions); consecutive
+ * revisions of the same request form one Undo/Redo step. A user edit between two of them splits the step there,
+ * so Undo never takes back a manual change together with the request.
+ */
+const AGENT_REQUEST_SOURCE_PREFIX = 'agent-request:';
+export function agentRequestRevisionSource(requestId: string): string { return `${AGENT_REQUEST_SOURCE_PREFIX}${requestId}`; }
+export function isAgentRequestRevisionSource(source: string | null | undefined): boolean {
+  return typeof source === 'string' && source.startsWith(AGENT_REQUEST_SOURCE_PREFIX);
+}
+function requestGroupOf(source: string): string | null {
+  return isAgentRequestRevisionSource(source) ? source : null;
+}
 /** Longest run of system revisions a plan looks through before it falls back to a plain parent/child step. */
 export const MAX_SYSTEM_REVISION_WALK = 1024;
 
@@ -57,6 +71,18 @@ function carriedValues(graph: NavigationGraph, userKeys: readonly EntityKey[], s
   return { carry, dropped };
 }
 
+/** The user step that ends at `anchor`: one revision, or every directly preceding revision of the same request. */
+async function userStepEndingAt(graph: NavigationGraph, anchor: RevisionStep): Promise<{ first: RevisionStep; keys: EntityKey[]; inner: RevisionStep[] }> {
+  const group = requestGroupOf(anchor.source), keys = [...anchor.keys], inner: RevisionStep[] = [];
+  let first = anchor;
+  for (let steps = 0; group && first.parentRevisionId && steps < MAX_SYSTEM_REVISION_WALK; steps++) {
+    const below = await systemStackAt(graph, first.parentRevisionId);
+    if (!below?.anchor?.parentRevisionId || requestGroupOf(below.anchor.source) !== group) break;
+    inner.unshift(...below.system); keys.push(...below.anchor.keys); first = below.anchor;
+  }
+  return { first, keys, inner };
+}
+
 export async function planUndo(graph: NavigationGraph, current: string): Promise<NavigationPlan | null> {
   const stack = await systemStackAt(graph, current);
   if (!stack) {
@@ -65,8 +91,11 @@ export async function planUndo(graph: NavigationGraph, current: string): Promise
   }
   // System revisions alone are no undo step: nothing of the user's would be taken back.
   if (!stack.anchor?.parentRevisionId) return null;
-  const { carry, dropped } = stack.system.length ? carriedValues(graph, stack.anchor.keys, stack.system) : { carry: null, dropped: 0 };
-  return { target: stack.anchor.parentRevisionId, redoChild: stack.anchor.revisionId, carry, dropped };
+  const step = await userStepEndingAt(graph, stack.anchor);
+  // System revisions inside a request step are judged like the ones above it (older first).
+  const system = [...step.inner, ...stack.system];
+  const { carry, dropped } = system.length ? carriedValues(graph, step.keys, system) : { carry: null, dropped: 0 };
+  return { target: step.first.parentRevisionId!, redoChild: step.first.revisionId, carry, dropped };
 }
 
 /** Follows redo preferences from `start` through system revisions to the next user revision. */
@@ -78,6 +107,19 @@ async function nextUserRevision(graph: NavigationGraph, start: string, avoid: Re
     id = await graph.redoChild(id);
   }
   return null;
+}
+
+/** The user step that starts at `first`: one revision, or it and the following revisions of the same request. */
+async function userStepStartingAt(graph: NavigationGraph, first: RevisionStep, avoid: ReadonlySet<string>): Promise<{ last: RevisionStep; keys: EntityKey[] }> {
+  const group = requestGroupOf(first.source), keys = [...first.keys];
+  let last = first;
+  for (let steps = 0; group && steps < MAX_SYSTEM_REVISION_WALK; steps++) {
+    const child = await graph.redoChild(last.revisionId);
+    const next = child ? await nextUserRevision(graph, child, avoid) : null;
+    if (!next || requestGroupOf(next.source) !== group) break;
+    keys.push(...next.keys); last = next;
+  }
+  return { last, keys };
 }
 
 export async function planRedo(graph: NavigationGraph, current: string): Promise<NavigationPlan | null> {
@@ -93,11 +135,12 @@ export async function planRedo(graph: NavigationGraph, current: string): Promise
   for (let index = 0; index < levels.length; index++) {
     const child = await graph.redoChild(levels[index].revisionId);
     if (!child || onPath.has(child)) continue;
-    const redone = await nextUserRevision(graph, child, onPath);
-    if (!redone) continue;
-    if (index === 0) return { target: redone.revisionId, carry: null, redoChild: null, dropped: 0 };
+    const first = await nextUserRevision(graph, child, onPath);
+    if (!first) continue;
+    const redone = await userStepStartingAt(graph, first, onPath);
+    if (index === 0) return { target: redone.last.revisionId, carry: null, redoChild: null, dropped: 0 };
     const { carry, dropped } = carriedValues(graph, redone.keys, levels.slice(0, index).toReversed());
-    return { target: redone.revisionId, carry, redoChild: null, dropped };
+    return { target: redone.last.revisionId, carry, redoChild: null, dropped };
   }
   return null;
 }

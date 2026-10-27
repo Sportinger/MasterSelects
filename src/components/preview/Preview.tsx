@@ -58,6 +58,7 @@ import { usePreviewWheelHandler } from './usePreviewWheelHandler';
 import { usePreviewInitialEditCameraView } from './usePreviewInitialEditCameraView';
 import { usePreviewEffectOrbit } from './usePreviewEffectOrbit';
 import { useTouchMouseBridge } from './useTouchMouseBridge';
+import { usePreviewHostInitialEdit } from './usePreviewHostInitialEdit';
 import { isSceneGizmoTouchDragTarget } from './sceneOverlay/sceneGizmoTouch';
 import { PreviewFpsTouchControls } from './PreviewFpsTouchControls';
 import { isMobileLayoutId } from '../dock/mobileLayoutOrientation';
@@ -95,7 +96,7 @@ interface PreviewProps {
   initialEdit?: Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>;
 }
 
-export function Preview({ panelId, source, showTransparencyGrid, showRulers = false, showTransport = false, initialEdit }: PreviewProps) {
+export function Preview({ panelId, source, showTransparencyGrid, showRulers = false, showTransport = false, initialEdit: panelInitialEdit }: PreviewProps) {
   const { isEngineReady } = useEngine();
   // NOTE: these are store actions (stable references) — safe to destructure once.
   const { addKeyframe, hasKeyframes, isRecording } = useTimelineStore.getState();
@@ -201,6 +202,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showRulers = fa
     : selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const initialEdit = usePreviewHostInitialEdit(containerRef, panelInitialEdit);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const exportPreviewCanvasRef = useRef<HTMLCanvasElement>(null);

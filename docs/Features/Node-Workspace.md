@@ -260,7 +260,7 @@ exports prevent insertion. Storage failures are shown without replacing the libr
 
 ## Adding nodes, node groups and effects
 
-The canvas context menu has three levels, each with nested category submenus:
+The canvas context menu has three levels, each with nested category submenus: On a touch screen (no hover) the menu does not close when the pointer leaves it; it closes on a tap outside or a choice.
 
 - **Nodes**: basic building blocks by category (Inputs, Values & Time, Math, Logic &
   Switch, Vector & Convert, Color & Mask, Coordinates & Lens, Sampling & Filter, Time &
@@ -596,6 +596,13 @@ Delete removes the selected node, never the clip that is still selected in the t
 outside the initial hit target. Touch and pen input do not enter this mouse-specific
 gesture. Pointer activation does not leave focus styling behind, while keyboard
 navigation retains the intentional `focus-visible` outline.
+
+On a touch screen, one finger on empty canvas pans and two fingers pinch-zoom around
+their midpoint; a finger that landed on a card but has not dragged it yet joins the
+pinch. Tapping a clip node opens that clip's lane. On a coarse pointer the toolbar
+shows **Add** (the add menu, at the middle of the canvas and aimed at the selected
+node) and **Delete** (removes the selection like the Delete key), because right-click
+and the Delete key are out of reach there.
 
 ## Inline previews
 

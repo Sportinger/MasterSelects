@@ -307,15 +307,51 @@ export function usePreviewWheelHandler({
       const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
       if (!freshTransform) return;
 
-      if (event.deltaY !== 0) {
-        engineState.setSceneNavOrbitTarget(null);
+      const sceneNavClip = navigationSceneNavClip;
+      const resolveNavCameraSettings = (): SceneCameraSettings => {
         const timelineState = useTimelineStore.getState();
-        const cameraSettings = editCameraModeActive && navigationSceneNavClip.id === editCameraClipIdRef.current
+        return editCameraModeActive && sceneNavClip.id === editCameraClipIdRef.current
           ? editCameraSettingsRef.current
           : timelineState.getInterpolatedCameraSettings(
-              navigationSceneNavClip.id,
-              timelineState.playheadPosition - navigationSceneNavClip.startTime,
+              sceneNavClip.id,
+              timelineState.playheadPosition - sceneNavClip.startTime,
             );
+      };
+
+      // Two fingers moving together pan the scene camera (a mouse pans with the middle button).
+      const pinchPan = isPreviewPinchWheelEvent(event as WheelEvent)
+        ? getPreviewPinchTranslation(event as WheelEvent)
+        : null;
+      if (pinchPan && (pinchPan.x !== 0 || pinchPan.y !== 0)) {
+        engineState.setSceneNavOrbitTarget(null);
+        const panSettings = resolveNavCameraSettings();
+        const panFrame = resolveOrbitCameraFrame(
+          freshTransform,
+          {
+            nearPlane: panSettings.near,
+            farPlane: panSettings.far,
+            fov: panSettings.fov,
+            minimumDistance: getSharedSceneDefaultCameraDistance(panSettings.fov),
+          },
+          { width: effectiveResolution.width, height: effectiveResolution.height },
+        );
+        const worldPerPixel = (2 * panFrame.distance * Math.tan(((panFrame.fovDegrees * Math.PI) / 180) * 0.5))
+          / Math.max(1, effectiveResolution.height);
+        const positionDelta = addSceneVectors(
+          scaleSceneVector(panFrame.right, -pinchPan.x * worldPerPixel),
+          scaleSceneVector(panFrame.cameraUp, pinchPan.y * worldPerPixel),
+        );
+        applyNavigationCameraValues(navigationSceneNavClip, {
+          positionX: freshTransform.position.x + positionDelta.x,
+          positionY: freshTransform.position.y + positionDelta.y,
+          positionZ: freshTransform.position.z + positionDelta.z,
+        });
+        scheduleGaussianWheelBatchEnd();
+      }
+
+      if (event.deltaY !== 0) {
+        engineState.setSceneNavOrbitTarget(null);
+        const cameraSettings = resolveNavCameraSettings();
         const frame = resolveOrbitCameraFrame(
           freshTransform,
           {

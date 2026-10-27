@@ -46,6 +46,8 @@ import { fittedNodeViewport, useNodeGraphViewport } from './canvas/useNodeGraphV
 import { useNodeFoldViewport } from './canvas/useNodeFoldViewport';
 import { useNodeGrowthViewport } from './canvas/useNodeGrowthViewport';
 import { useNodeConnectionDrag } from './canvas/useNodeConnectionDrag';
+import { useNodeTouchPinch } from './canvas/useNodeTouchPinch';
+import { NodeTouchActions } from './canvas/NodeTouchActions';
 import { getConnectionPlugs } from './canvas/connectionPlugs';
 import { NodeGraphPlugs } from './canvas/NodeGraphPlugs';
 import { useNodePortHover } from './canvas/useNodePortHover';
@@ -322,6 +324,10 @@ export function NodeGraphCanvas({
     onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection, onConnectBranch: branchUi.connect,
     onBlockedCable: () => setGroupMessage('This cable is derived from the clip (its source, text or a recorded bake) and cannot be unplugged.'),
   });
+  useNodeTouchPinch({ canvasRef, getViewport: () => visualViewportRef.current, showViewport: showVisualViewport, setViewport,
+    // A finger that landed on a card but has not dragged it yet joins the pinch instead (fingers often start on cards).
+    canStart: () => !nodeDragGestureRef.current?.moved && !connectionDraft,
+    onStart: () => { panGestureRef.current = null; pendingPanRef.current = null; setIsPanning(false); if (nodeDragGestureRef.current && !nodeDragGestureRef.current.moved) nodeDragGestureRef.current = null; } });
   const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft, isPanning, zoomingRef);
   const dom = useNodeDomVisibility(displayNodes, plugs, domViewport);
   const activeCards = useActiveNodeCards(dom.nodes, plugs, getGraphPointFromClient);
@@ -472,6 +478,8 @@ export function NodeGraphCanvas({
           <NodePlaybackSignalsButton /><NodeCableStyleButton /><NodeCableAvoidButton />
           {(clipOwnerId || sourceGraph.workspace) && <NodeCompactLayoutButton enabled={placement.compactEffects !== false} onToggle={toggleCompact} />}
           {selectedEdge && !selectedEdge.readOnly && <button type="button" className="node-workspace-toolbar-button" onClick={disconnectSelectedEdge}>Disconnect</button>}
+          <NodeTouchActions canvasRef={canvasRef} getGraphPoint={getGraphPointFromClient} selectedNodeId={selectedNodeId} selectionSize={multiSelection.size}
+            onOpenAddMenu={onOpenAddMenu} onDelete={onDeleteNode || onDeleteNodes ? deleteSelectedNode : undefined} />
           <button type="button" className="node-workspace-toolbar-button" onClick={event => { fitGraph(); if (event.detail > 0) event.currentTarget.blur(); }}>Fit</button>
           {!!targetGraph.groups?.length && onSetAllGroupsCollapsed && <button type="button" className="node-workspace-toolbar-button"
             title="Expand or collapse every group, including nested groups" onClick={event => {

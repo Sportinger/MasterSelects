@@ -84,7 +84,7 @@
   border: 2px solid var(--phone-bg);
   border-radius: 50%;
   background: var(--phone-text);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 4px var(--phone-scrim);
 }
 .mobile-skin .phone-design-slider__range::-moz-range-thumb {
   width: 24px;

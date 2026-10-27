@@ -2,19 +2,25 @@
 // chips, Keep pitch and Reverse. Curve: speed-ramp presets written as the editor's retime curve
 // (phoneSpeedCurves). Every change applies live inside one owned edit session (phoneEditSession):
 // the clip's length on the timeline follows like on the desktop, Done keeps everything as ONE undo
-// step, Cancel restores the exact state from before. Options of the full editor that the phone
-// does not have yet (freeze frame, fit to a length, editing curve points) stay visible and greyed.
+// step, Cancel restores the exact state from before. Fit to a length sets the speed from a typed
+// length inside the same session; Freeze frame keeps the sheet's changes, then freezes the clip at the
+// playhead as its own undo step (the desktop's freeze). Edit curve points keeps the sheet's changes and
+// opens the landscape Curves editor with the clip selected and Properties open: its Retime section holds
+// the desktop's warp point editor (time and source time per point, add and remove).
 
 import { useMemo, useState } from 'react';
 
 import { useTimelineStore } from '../../../stores/timeline';
 import type { PhoneSheetComponent } from '../contracts';
+import { openPhoneEditor } from '../audiofx/phoneOpenEditor';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneEditSession } from '../sheets/phoneEditSession';
 import { usePhoneUiStore } from '../state/phoneUiStore';
-import { PhoneChoice, PhoneGreyedOption, PhoneSwitch, PhoneTabs, blurAfterPointer } from '../transition/phoneChoiceControls';
+import { phoneFitSpeed } from '../panels/phoneFitLength';
+import { PhoneFitLengthRow, PhoneProRow } from '../panels/PhoneProRows';
+import { PhoneChoice, PhoneSwitch, PhoneTabs, blurAfterPointer } from '../transition/phoneChoiceControls';
 import {
-  PHONE_SPEED_CHIPS, PHONE_SPEED_PREVIEW_RANGE, PHONE_SPEED_SLIDER_STEPS, applyPhoneSpeedState, formatPhoneSpeed,
+  PHONE_SPEED_CHIPS, PHONE_SPEED_MAX, PHONE_SPEED_MIN, PHONE_SPEED_PREVIEW_RANGE, PHONE_SPEED_SLIDER_STEPS, applyPhoneSpeedState, formatPhoneSpeed,
   phoneSliderToSpeed, phoneSpeedLeftOutNote, phoneSpeedTarget, phoneSpeedToSlider, phoneSpeedUnavailableReason, readPhoneSpeedSnapshot,
   type PhoneSpeedCurveChoice, type PhoneSpeedDesired, type PhoneSpeedSnapshot,
 } from './phoneSpeedCommands';
@@ -22,11 +28,9 @@ import { PHONE_SPEED_CURVES } from './phoneSpeedCurves';
 import { PHONE_SPEED_TEST_IDS as IDS, phoneSpeedChipTestId, phoneSpeedCurveTestId } from './phoneSpeedTestIds';
 import './PhoneSpeedSheet.css';
 
-const LATER = 'Use the full editor meanwhile: tap the project name, then Full editor.';
-const FREEZE_REASON = `Freeze frame arrives with the pro speed sheet (M3). ${LATER}`;
-const FIT_REASON = `Fitting a clip to a length you type arrives with the pro speed sheet (M3). ${LATER}`;
-const POINTS_REASON = `Moving single curve points needs the landscape curve editor (M4). ${LATER}`;
-const KEYFRAME_CURVE_REASON = 'This clip already changes its speed with keyframes. A preset would silently override them, so presets stay off; edit the keyframes in the full editor.';
+const FREEZE_OUTSIDE_REASON = 'Move the playhead inside this clip first: Freeze frame holds the frame under the playhead for the whole clip.';
+const POINTS_REASON = 'Pick a curve first: its points then open in the Curves editor (Properties, Retime).';
+const KEYFRAME_CURVE_REASON = 'This clip already changes its speed with keyframes. A preset would silently override them, so presets stay off; shape the keyframes in the Curves editor (Editors, Curves).';
 const REMAP_LABEL: Record<'freeze' | 'loop' | 'warp', string> = { freeze: 'a freeze frame', loop: 'a loop', warp: 'a speed curve' };
 
 type Tab = 'normal' | 'curve';
@@ -76,6 +80,44 @@ export const PhoneSpeedSheet: PhoneSheetComponent = () => {
     if (busy) return;
     session.cancel();
     closeSheet();
+  };
+
+  const fitLength = (seconds: number): string | null => {
+    if (!original) return null;
+    const fit = phoneFitSpeed(liveDuration ?? original.duration, desired.magnitude, seconds, PHONE_SPEED_MIN, PHONE_SPEED_MAX);
+    if (!fit) return 'This clip has no length to fit.';
+    update({ magnitude: fit.speed });
+    return fit.clamped
+      ? `The editor's speeds run from ${formatPhoneSpeed(PHONE_SPEED_MIN)} to ${formatPhoneSpeed(PHONE_SPEED_MAX)}, so the clip lasts ${fit.length.toFixed(2)} s.`
+      : null;
+  };
+
+  // Freeze frame: keep this sheet's changes (one undo step), then the desktop's freeze at the playhead.
+  const freeze = async () => {
+    if (busy || !original) return;
+    const timeline = useTimelineStore.getState();
+    const clip = timeline.clips.find((candidate) => candidate.id === original.clipId);
+    const local = clip ? timeline.playheadPosition - clip.startTime : -1;
+    if (!clip || !(local >= 0 && local < clip.duration)) {
+      usePhoneUiStore.getState().showUnavailable({ actionId: IDS.freeze, label: 'Freeze frame', reason: FREEZE_OUTSIDE_REASON });
+      return;
+    }
+    setBusy(true);
+    const result = await session.commit(session.changed ? () => { applyPhoneSpeedState(original, desired); } : undefined);
+    closeSheet();
+    if (!result.ok) { showToast(result.message, 'error'); return; }
+    const frozen = useTimelineStore.getState().freezeClipAtPlayhead(original.clipId);
+    showToast(frozen ? 'Frozen on the playhead frame. Undo brings the motion back.' : FREEZE_OUTSIDE_REASON, frozen ? 'info' : 'error');
+  };
+
+  // Edit curve points: keep this sheet's changes (one undo step), then the Curves editor on this clip.
+  const editPoints = async () => {
+    if (busy || !original) return;
+    setBusy(true);
+    const result = await session.commit(session.changed ? () => { applyPhoneSpeedState(original, desired); } : undefined);
+    closeSheet();
+    if (!result.ok) { showToast(result.message, 'error'); return; }
+    openPhoneEditor('curves', { clipId: original.clipId, revealSide: 'right' });
   };
 
   const selectedCurve = useMemo<string>(() => {
@@ -167,8 +209,8 @@ export const PhoneSpeedSheet: PhoneSheetComponent = () => {
               testId={IDS.reverse}
               onChange={(reversed) => update({ reversed })}
             />
-            <PhoneGreyedOption label="Freeze frame" reason={FREEZE_REASON} testId={IDS.freeze} />
-            <PhoneGreyedOption label="Fit to a length" reason={FIT_REASON} testId={IDS.fitLength} />
+            <PhoneProRow label="Freeze frame" detail="Holds the playhead frame" testId={IDS.freeze} onOpen={() => { void freeze(); }} />
+            <PhoneFitLengthRow testId={IDS.fitLength} currentLength={liveDuration ?? original.duration} onFit={fitLength} />
           </>
         ) : (
           <>
@@ -200,7 +242,16 @@ export const PhoneSpeedSheet: PhoneSheetComponent = () => {
                 <PhoneChoice variant="tile" label="Custom" glyph="✎" selected testId={phoneSpeedCurveTestId('custom')} onSelect={() => undefined} />
               )}
             </div>
-            <PhoneGreyedOption label="Edit curve points" reason={POINTS_REASON} testId={IDS.editPoints} />
+            <PhoneProRow
+              label="Edit curve points"
+              detail="Curves editor"
+              testId={IDS.editPoints}
+              disabled={selectedCurve === 'none'}
+              onOpen={() => {
+                if (selectedCurve === 'none') usePhoneUiStore.getState().showUnavailable({ actionId: IDS.editPoints, label: 'Edit curve points', reason: POINTS_REASON });
+                else void editPoints();
+              }}
+            />
           </>
         )}
         {notes.length > 0 && (

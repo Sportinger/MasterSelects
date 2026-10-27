@@ -21,6 +21,28 @@
   color: var(--phone-text, #eef0f4);
   -webkit-tap-highlight-color: transparent;
 }
+/* Light phone palette for every light editor theme: Light, System on a light device and a bright Custom
+   theme (data-phone-scheme, runtime/phoneColorScheme.ts). Same contrast guarantees as the dark one. */
+.mobile-skin[data-phone-scheme='light'] {
+  --phone-bg: #eceef2;
+  --phone-surface: #f7f8fa;
+  --phone-surface-2: #ffffff;
+  --phone-surface-3: #e1e4ea;
+  --phone-border: #c7ccd5;
+  --phone-text: #14171d;
+  --phone-text-dim: #4a5261;
+  --phone-text-off: #737b88;
+  --phone-accent: #2a5cc4;
+  --phone-on-accent: #ffffff;
+  --phone-danger: #be2e38;
+  --phone-danger-text: #8f1d26;
+  --phone-veil-1: rgba(0, 0, 0, 0.03);
+  --phone-veil-2: rgba(0, 0, 0, 0.06);
+  --phone-scrim: rgba(20, 23, 29, 0.28);
+  --phone-chip-on-bg: #14171d;
+  --phone-chip-on-text: #ffffff;
+}
+.mobile-skin[data-testid='phone-root'][data-phone-scheme='light'] { color-scheme: light; }
 
 /* ---- Boot progress and problem banner (PhoneBootStatus) ---- */
 
@@ -57,7 +79,7 @@
   border: 1px solid var(--phone-border, #2b2f39);
   border-radius: 12px;
   background: var(--phone-surface, #14161b);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 24px var(--phone-scrim, rgba(0, 0, 0, 0.45));
 }
 
 .mobile-skin .phone-boot-status--problem .phone-boot-status__card {
@@ -127,8 +149,8 @@
 
 .mobile-skin .phone-boot-status__button.is-primary {
   border-color: var(--phone-accent, #5b8def);
-  background: var(--phone-accent, #5b8def);
-  color: #fff;
+  background: var(--phone-accent, #6797f2);
+  color: var(--phone-on-accent, #0b0c0f);
 }
 
 /* Pointer-focus hygiene: no stuck ring after a tap, a styled ring for keyboard focus. */

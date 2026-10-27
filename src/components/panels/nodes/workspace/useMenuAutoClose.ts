@@ -10,11 +10,17 @@ const MENU_IDLE_CLOSE_DELAY_MS = 1500;
  * right after opening if it is never entered, and after the pointer leaves unless it returns.
  * `keepOpen` (a typed search, a shown error) suppresses the leave close.
  */
+/** Touch screens have no hover to keep a menu open: there it closes only on a tap outside or a choice. */
+function hasNoHover(): boolean {
+  return typeof window !== 'undefined' && (window.matchMedia?.('(hover: none)').matches ?? false);
+}
+
 export function useMenuAutoClose(onClose: () => void, keepOpen: boolean) {
   const timer = useRef<number | undefined>(undefined);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
+    if (hasNoHover()) return undefined;
     timer.current = window.setTimeout(() => onCloseRef.current(), MENU_IDLE_CLOSE_DELAY_MS);
     return () => window.clearTimeout(timer.current);
   }, []);
@@ -24,7 +30,7 @@ export function useMenuAutoClose(onClose: () => void, keepOpen: boolean) {
     onMouseEnter: cancel,
     onMouseLeave: () => {
       cancel();
-      if (!keepOpen) timer.current = window.setTimeout(() => onCloseRef.current(), MENU_LEAVE_CLOSE_DELAY_MS);
+      if (!keepOpen && !hasNoHover()) timer.current = window.setTimeout(() => onCloseRef.current(), MENU_LEAVE_CLOSE_DELAY_MS);
     },
   };
 }

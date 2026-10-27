@@ -1,7 +1,9 @@
 .mobile-skin .phone-workspace {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  /* Above sheets (40/41) and the loading cover (45), below the "not on the phone" notice (50) so a
+     greyed control inside an editor can explain itself, and below toasts (60). */
+  z-index: 48;
   display: flex;
   flex-direction: column;
   height: var(--phone-vh, 100dvh);
@@ -67,7 +69,9 @@
 
 .mobile-skin .phone-workspace__side {
   position: relative;
+  display: flex;
   flex: 0 0 clamp(180px, 28vw, 340px);
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   border-color: var(--phone-border);
@@ -75,8 +79,68 @@
   border-width: 0;
 }
 
+.mobile-skin .phone-workspace__side-content {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .mobile-skin .phone-workspace__side--left { border-right-width: 1px; }
-.mobile-skin .phone-workspace__side--right { border-left-width: 1px; }
+.mobile-skin .phone-workspace__side--right { border-left-width: 1px; flex-direction: row-reverse; }
+
+/* Grip at the inner edge of an open side: a slim strip with a visible handle, swipe outward closes. */
+.mobile-skin .phone-workspace__grip {
+  position: relative;
+  flex: 0 0 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-workspace__grip::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--phone-border);
+  transform: translate(-50%, -50%);
+}
+
+/* A collapsed side leaves a thin rail with its name; tap or swipe inward opens it. */
+.mobile-skin .phone-workspace__rail {
+  display: flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0 solid var(--phone-border);
+  background: transparent;
+  color: var(--phone-text-dim);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-skin .phone-workspace__rail--left { border-right-width: 1px; }
+.mobile-skin .phone-workspace__rail--right { border-left-width: 1px; }
+.mobile-skin .phone-workspace__rail-label { writing-mode: vertical-rl; white-space: nowrap; }
+.mobile-skin .phone-workspace__rail--left .phone-workspace__rail-label { transform: rotate(180deg); }
+.mobile-skin .phone-workspace__rail:active,
+.mobile-skin .phone-workspace__grip:active { background: var(--phone-border); }
+.mobile-skin .phone-workspace__rail:focus,
+.mobile-skin .phone-workspace__grip:focus { outline: none; }
+.mobile-skin .phone-workspace__rail:focus-visible,
+.mobile-skin .phone-workspace__grip:focus-visible { outline: 2px solid var(--phone-accent, #7aa2ff); outline-offset: -2px; }
+.mobile-skin .phone-workspace__button:focus:not(:focus-visible) { outline: none; }
 
 .mobile-skin .phone-workspace__placeholder {
   margin: 0;
@@ -87,13 +151,24 @@
 /* Landscape: the hint is not needed. Portrait: stack the side panels above and below the editor. */
 @media (orientation: landscape) {
   .mobile-skin .phone-workspace__hint { visibility: hidden; }
+  /* Short landscape screens: a slimmer bar leaves the height to the editor. */
+  @media (max-height: 480px) {
+    .mobile-skin .phone-workspace__bar { min-height: 40px; }
+    .mobile-skin .phone-workspace__button { min-height: 40px; }
+  }
 }
 
 @media (orientation: portrait) {
   .mobile-skin .phone-workspace__body { flex-direction: column; }
-  .mobile-skin .phone-workspace__side { flex: 0 0 30%; }
+  .mobile-skin .phone-workspace__side { flex: 0 0 30%; flex-direction: column; }
   .mobile-skin .phone-workspace__side--left { border-right-width: 0; border-bottom-width: 1px; }
-  .mobile-skin .phone-workspace__side--right { border-left-width: 0; border-top-width: 1px; }
+  .mobile-skin .phone-workspace__side--right { border-left-width: 0; border-top-width: 1px; flex-direction: column-reverse; }
+  .mobile-skin .phone-workspace__grip { flex: 0 0 14px; }
+  .mobile-skin .phone-workspace__grip::after { width: 36px; height: 4px; }
+  .mobile-skin .phone-workspace__rail { flex: 0 0 28px; }
+  .mobile-skin .phone-workspace__rail--left { border-right-width: 0; border-bottom-width: 1px; }
+  .mobile-skin .phone-workspace__rail--right { border-left-width: 0; border-top-width: 1px; }
+  .mobile-skin .phone-workspace__rail-label { writing-mode: horizontal-tb; transform: none !important; }
 }
 
 .mobile-skin .phone-editors { margin: 0; padding: 4px 8px 16px; list-style: none; }
@@ -116,3 +191,4 @@
 .mobile-skin .phone-editors__row:focus-visible { outline: 2px solid var(--phone-accent, #7aa2ff); outline-offset: -2px; }
 .mobile-skin .phone-editors__title { font-size: 15px; font-weight: 600; }
 .mobile-skin .phone-editors__summary { color: var(--phone-text-dim); font-size: 13px; }
+.mobile-skin .phone-workspace__button[aria-disabled='true'] { opacity: 0.4; }

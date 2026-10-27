@@ -6,8 +6,9 @@ import { EditorProjectSelectionOverlay } from '../common/EditorProjectSelectionO
 import { PHONE_SKIN_ROOT_CLASS, PHONE_TEST_IDS } from './contracts';
 import { PhoneHome } from './home/PhoneHome';
 import { PhonePreview } from './preview/PhonePreview';
-import { subscribePhoneHomeRequests } from './project/PhoneProjectSheet';
+import { subscribePhoneHomeRequests } from './shell/phoneHomeRequests';
 import { PhoneBootStatus } from './runtime/PhoneBootStatus';
+import { usePhoneColorScheme } from './runtime/phoneColorScheme';
 import { usePhoneProjectSelection, usePhoneRuntime } from './runtime/PhoneRuntimeContext';
 import { PhoneRuntimeHost } from './runtime/PhoneRuntimeHost';
 import { PhoneShell } from './shell/PhoneShell';
@@ -47,18 +48,23 @@ function PhoneWorkspace() {
 
   return (
     <>
-      <PhoneShell preview={<PhonePreview />} timeline={<PhoneTimeline />} />
+      <PhoneShell
+        preview={<PhonePreview />}
+        timeline={<PhoneTimeline />}
+        home={showHome ? <PhoneHome showBack={status.projectOpen} onClose={() => setHomeRequested(false)} /> : null}
+      />
       <PhoneSheetHost />
       {resumeNeeded && <EditorProjectSelectionOverlay onProjectSelected={markProjectSelected} />}
-      {showHome && <PhoneHome showBack={status.projectOpen} onClose={() => setHomeRequested(false)} />}
       <PhoneBootStatus />
     </>
   );
 }
 
 export default function PhoneApp() {
+  // Every light editor theme (Light, System on a light device, a bright Custom) gives the phone light tokens.
+  const colorScheme = usePhoneColorScheme();
   return (
-    <div className={PHONE_SKIN_ROOT_CLASS} data-testid={PHONE_TEST_IDS.root}>
+    <div className={PHONE_SKIN_ROOT_CLASS} data-testid={PHONE_TEST_IDS.root} data-phone-scheme={colorScheme}>
       <PhoneRuntimeHost>
         <PhoneWorkspace />
       </PhoneRuntimeHost>

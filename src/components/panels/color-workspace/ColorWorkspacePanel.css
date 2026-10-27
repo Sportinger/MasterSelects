@@ -524,3 +524,14 @@
   }
 }
 }
+
+/* Phone skin: a finger on the curve drags points (ColorCurvesPanel), never the page; larger channel
+   buttons. Desktop unchanged. */
+.mobile-skin .color-curves-graph { touch-action: none; }
+.mobile-skin .color-curve-toolbar button { height: 36px; min-width: 40px; font-size: 14px; }
+.mobile-skin .color-curves-body { grid-template-columns: minmax(0, 1fr) 72px; }
+.mobile-skin .color-tool-dock-phone .color-tool-dock-nav button { min-width: 52px; }
+.mobile-skin .color-tool-dock button,
+.mobile-skin .color-curves-panel button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.mobile-skin .color-tool-dock button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.mobile-skin .color-tool-dock button:focus-visible { outline: 2px solid var(--accent, #7aa2ff); outline-offset: -2px; }

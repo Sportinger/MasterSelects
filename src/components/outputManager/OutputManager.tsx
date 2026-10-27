@@ -7,8 +7,8 @@ import { TargetPreview } from './TargetPreview';
 import { TabBar } from './TabBar';
 import { SliceInputOverlay } from './SliceInputOverlay';
 import { SliceOutputOverlay } from './SliceOutputOverlay';
-import { useSliceStore, getSavedTargetMeta } from '../../stores/sliceStore';
-import { useRenderTargetStore } from '../../stores/renderTargetStore';
+import { useSliceStore } from '../../stores/sliceStore';
+import { restoreSavedOutputTargets } from './outputTargetCommands';
 import { closeOutputManager } from './OutputManagerBoot';
 
 const MIN_ZOOM = 0.25;
@@ -33,24 +33,7 @@ export function OutputManager() {
 
     // Restore saved targets that don't exist yet in renderTargetStore
     // They'll appear as "closed" (grayed out) with a Restore button
-    const savedTargets = getSavedTargetMeta();
-    const store = useRenderTargetStore.getState();
-    for (const saved of savedTargets) {
-      if (!store.targets.has(saved.id)) {
-        store.registerTarget({
-          id: saved.id,
-          name: saved.name,
-          source: saved.source,
-          destinationType: 'window',
-          enabled: false,
-          showTransparencyGrid: false,
-          canvas: null,
-          context: null,
-          window: null,
-          isFullscreen: saved.isFullscreen ?? false,
-        });
-      }
-    }
+    restoreSavedOutputTargets();
   }, [loadFromLocalStorage]);
 
   const handleSaveAndExit = useCallback(() => {

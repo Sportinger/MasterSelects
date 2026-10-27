@@ -193,8 +193,13 @@ test('split at the playhead makes two clips with continuous boundary frames and 
 
 test('a greyed action stays visible and tapping it shows the reason notice @phone', async ({ phone }) => {
   const { touch, page } = phone
+  // Since M4 every root tool works; a tool that does not fit the selection stays greyed instead:
+  // with a video clip selected, "Edit text" is greyed (it needs a text clip).
+  const { clips } = await phone.timeline()
+  await touch.tap(await visibleCentre(phone.clip(clips[0].id), phone.surface))
+  await expect(phone.toolbar).toHaveAttribute('data-scope', 'clip')
   const greyed = phone.toolbar.locator('[aria-disabled="true"]').first()
-  await expect(greyed, 'the root toolbar must show later-milestone tools greyed out, not hide them').toBeVisible()
+  await expect(greyed, 'the clip toolbar must show a tool that does not fit the selection greyed out, not hide it').toBeVisible()
   const traits = await greyed.evaluate(element => ({ nativeDisabled: (element as HTMLButtonElement).disabled === true, tabIndex: (element as HTMLElement).tabIndex, label: element.textContent?.trim() ?? '' }))
   expect(traits.nativeDisabled, 'a greyed action must stay focusable (aria-disabled), not natively disabled').toBe(false)
   expect(traits.tabIndex).toBeGreaterThanOrEqual(0)

@@ -149,6 +149,18 @@ function shouldAttachFreshLazyElement(
     if (attachedElement === currentRecord.element) setAttachedElement(clip, kind, undefined);
     return true;
   }
+  // The clip's source was swapped in place (replace source, or its undo): the element still streams
+  // the old media. Reattaching it would show the old footage or a released (black) element.
+  const clipMediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
+  // A clip cleanup (delete, or the undo of a nest that removes the composition clip holding a copy
+  // with the same id) emptied the element behind the record's back: it would stay black forever.
+  const releasedElsewhere = currentRecord !== undefined && !currentRecord.element.getAttribute('src');
+  if (releasedElsewhere || (currentRecord?.mediaFileId && clipMediaFileId && currentRecord.mediaFileId !== clipMediaFileId)) {
+    log.debug('Lazy media element rebuilt', { clipId: clip.id, kind, reason: releasedElsewhere ? 'released elsewhere' : 'source swap', from: currentRecord!.mediaFileId, to: clipMediaFileId });
+    detachRecord(currentRecord!, ctx);
+    if (attachedElement === currentRecord!.element) setAttachedElement(clip, kind, undefined);
+    return true;
+  }
   if (!attachedElement) {
     if (!currentRecord) return true;
 

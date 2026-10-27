@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
-import { endBatch, startBatch } from '../../../stores/historyStore';
+import { beginColorEditGesture, runColorEditGesture, type ColorEditGesture } from '../color/colorEditGesture';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { BezierHandle, Keyframe } from '../../../types';
+import type { BezierHandle } from '../../../types/animationProperties';
+import type { Keyframe } from '../../../types/keyframes';
 import {
   COLOR_CURVE_CHANNELS,
   createNeutralColorCurve,
@@ -20,6 +21,7 @@ import {
 } from '../../../types/colorCorrection';
 import { CurveEditor, type CurveEditorEditPhase } from '../../timeline/CurveEditor';
 import '../../timeline/TimelineKeyframesCurveEditor.css';
+import { createCurveTouchMapping, findTouchedCurvePoint, type CurveTouchMapping } from './colorCurveTouch';
 
 interface ColorCurvesPanelProps {
   clipId: string;
@@ -68,7 +70,8 @@ export function ColorCurvesPanel({ clipId }: ColorCurvesPanelProps) {
   const [selectedPointIds, setSelectedPointIds] = useState<Set<string>>(new Set());
   const [graphSize, setGraphSize] = useState({ width: 320, height: 220 });
   const graphHostRef = useRef<HTMLDivElement>(null);
-  const batchOpenRef = useRef(false);
+  const gestureRef = useRef<ColorEditGesture | null>(null);
+  const touchDragRef = useRef<{ pointerId: number; id: string; mapping: CurveTouchMapping } | null>(null);
   const clip = useTimelineStore(state => state.clips.find(candidate => candidate.id === clipId));
   const ensureColorCorrection = useTimelineStore(state => state.ensureColorCorrection);
   const updateColorNodeParam = useTimelineStore(state => state.updateColorNodeParam);
@@ -109,7 +112,9 @@ export function ColorCurvesPanel({ clipId }: ColorCurvesPanelProps) {
   );
 
   useEffect(() => () => {
-    if (batchOpenRef.current) endBatch();
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    gesture?.commit();
   }, []);
 
   if (!clip || !activeVersion || !selectedNode) {
@@ -117,31 +122,36 @@ export function ColorCurvesPanel({ clipId }: ColorCurvesPanelProps) {
   }
 
   const writePoints = (nextPoints: ColorCurvePoint[]) => {
-    updateColorNodeParam(
+    const write = () => updateColorNodeParam(
       clipId,
       activeVersion.id,
       selectedNode.id,
       paramKey,
       serializeColorCurvePoints(nextPoints),
     );
+    if (gestureRef.current) gestureRef.current.run(write);
+    else write();
   };
 
+  // One curve drag = one undo step (see colorEditGesture). The commit phase writes its final value
+  // first, then closes the gesture.
   const updateBatch = (phase: CurveEditorEditPhase | undefined) => {
-    if (phase === 'begin' && !batchOpenRef.current) {
-      startBatch('Adjust color curve');
-      batchOpenRef.current = true;
+    if (phase === 'begin' && !gestureRef.current) {
+      gestureRef.current = beginColorEditGesture('Adjust color curve');
     }
-    if (phase === 'commit' && batchOpenRef.current) {
-      endBatch();
-      batchOpenRef.current = false;
-    }
+  };
+  const finishBatch = (phase: CurveEditorEditPhase | undefined) => {
+    if (phase !== 'commit' || !gestureRef.current) return;
+    const gesture = gestureRef.current;
+    gestureRef.current = null;
+    gesture.commit();
   };
 
   const movePoint = (id: string, x: number, y: number, phase?: CurveEditorEditPhase) => {
     updateBatch(phase);
     const sorted = points.toSorted((left, right) => left.x - right.x);
     const index = sorted.findIndex(point => point.id === id);
-    if (index < 0) return;
+    if (index < 0) { finishBatch(phase); return; }
     const minX = index === 0 ? 0 : sorted[index - 1].x + 0.001;
     const maxX = index === sorted.length - 1 ? 1 : sorted[index + 1].x - 0.001;
     writePoints(sorted.map(point => point.id === id ? {
@@ -149,6 +159,7 @@ export function ColorCurvesPanel({ clipId }: ColorCurvesPanelProps) {
       x: index === 0 ? 0 : index === sorted.length - 1 ? 1 : Math.max(minX, Math.min(maxX, x)),
       y: clampUnit(y),
     } : point));
+    finishBatch(phase);
   };
 
   const updateHandle = (
@@ -162,6 +173,7 @@ export function ColorCurvesPanel({ clipId }: ColorCurvesPanelProps) {
       ...point,
       [handle === 'in' ? 'handleIn' : 'handleOut']: position,
     } : point));
+    finishBatch(phase);
   };
 
   const addPoint = () => {
@@ -172,20 +184,56 @@ export function ColorCurvesPanel({ clipId }: ColorCurvesPanelProps) {
       x,
       y: samples[Math.round(x * (samples.length - 1))],
     };
-    startBatch('Add color curve point');
-    writePoints([...points, point]);
-    endBatch();
+    runColorEditGesture('Add color curve point', () => writePoints([...points, point]));
     setSelectedPointIds(new Set([point.id]));
   };
 
   const resetCurve = () => {
-    startBatch('Reset color curve');
-    writePoints(createNeutralColorCurve(activeChannel));
-    endBatch();
+    runColorEditGesture('Reset color curve', () => writePoints(createNeutralColorCurve(activeChannel)));
     setSelectedPointIds(new Set());
   };
 
   const selectedPoint = points.find(point => selectedPointIds.has(point.id));
+
+  // Touch: the shared CurveEditor drags points with mouse events, which a finger never sends while
+  // moving. A finger therefore grabs the nearest point within a finger-sized radius here and drags it
+  // through the same movePoint path (one undo step per drag). Mouse and pen keep the CurveEditor path.
+  const handleTouchPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch' || !event.isPrimary) return;
+    const host = event.currentTarget;
+    const centres = [...host.querySelectorAll<SVGCircleElement>('circle.curve-editor-keyframe')].map(circle => {
+      const rect = circle.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    const hostRect = host.getBoundingClientRect();
+    const mapping = createCurveTouchMapping(points, centres, { top: hostRect.top, height: hostRect.height });
+    if (!mapping) return;
+    const id = findTouchedCurvePoint(points, mapping, event.clientX, event.clientY);
+    if (!id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    host.setPointerCapture?.(event.pointerId);
+    touchDragRef.current = { pointerId: event.pointerId, id, mapping };
+    setSelectedPointIds(new Set([id]));
+    updateBatch('begin');
+  };
+
+  const handleTouchPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = touchDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = drag.mapping.toCurve(event.clientX, event.clientY);
+    movePoint(drag.id, point.x, point.y);
+  };
+
+  const finishTouchDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = touchDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    touchDragRef.current = null;
+    event.stopPropagation();
+    finishBatch('commit');
+  };
 
   return (
     <section className="color-curves-panel" data-channel={activeChannel}>
@@ -212,7 +260,15 @@ export function ColorCurvesPanel({ clipId }: ColorCurvesPanelProps) {
       </header>
 
       <div className="color-curves-body">
-        <div className="color-curves-graph" ref={graphHostRef}>
+        <div
+          className="color-curves-graph"
+          onLostPointerCapture={finishTouchDrag}
+          onPointerCancelCapture={finishTouchDrag}
+          onPointerDownCapture={handleTouchPointerDown}
+          onPointerMoveCapture={handleTouchPointerMove}
+          onPointerUpCapture={finishTouchDrag}
+          ref={graphHostRef}
+        >
           <CurveEditor
             clipDuration={1}
             clipId={clipId}

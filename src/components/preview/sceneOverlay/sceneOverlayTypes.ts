@@ -72,6 +72,8 @@ export interface SceneGizmoDragStartParams {
   rotationRingClientRect?: DragState['rotationRingClientRect'];
   rotationRingPoints?: ProjectedRotateRingPoint[];
   rotationStartRingAngle?: number;
+  /** Started by a finger (touch bridge or touch pointer): no pointer lock, deltas from client positions. */
+  fromTouch?: boolean;
 }
 
 export interface DragRuntime {

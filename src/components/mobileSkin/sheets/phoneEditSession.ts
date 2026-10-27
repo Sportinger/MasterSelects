@@ -3,9 +3,11 @@
 // history batch without a repository): Done commits everything as ONE undo step, Cancel rolls it back
 // to the exact state before the sheet opened, without calling undo.
 //
-// Changes should SET absolute values ("brightness = 0.4"), not add deltas: the editor may end an open
-// gesture on window blur, and the next change then opens a fresh one that must carry the full state.
-// commit(finalChange) re-applies the final state inside the session for the same reason.
+// The session owns its gesture as an explicit owner: an input gesture, a nested startBatch/endBatch
+// (e.g. applying a Look) or a window blur (file picker, app switch) cannot end it. Changes should still
+// SET absolute values ("brightness = 0.4"): if the gesture is lost anyway (project switch), the next
+// change opens a fresh one and the user is told; commit(finalChange) re-applies the final state then.
+// A live change that throws is reported to the user (toast), not only logged.
 
 import { useEffect, useRef } from 'react';
 
@@ -19,6 +21,7 @@ import {
 } from '../../../services/project/repository/transaction/editorGestureOwnership';
 import { cancelHistoryBatch, endBatch, startBatch } from '../../../stores/historyStore';
 import type { PhoneActionResult } from '../contracts';
+import { usePhoneUiStore } from '../state/phoneUiStore';
 
 const log = Logger.create('PhoneEditSession');
 
@@ -36,7 +39,15 @@ export interface PhoneEditSession {
   readonly closed: boolean;
 }
 
-export function createPhoneEditSession(label: string): PhoneEditSession {
+export interface PhoneEditSessionOptions {
+  /** Shown when a live change fails or earlier changes were lost. Default: an error toast. */
+  onError?: (message: string) => void;
+}
+
+const toastError = (message: string) => usePhoneUiStore.getState().showToast(message, 'error');
+
+export function createPhoneEditSession(label: string, options: PhoneEditSessionOptions = {}): PhoneEditSession {
+  const report = options.onError ?? toastError;
   let gesture: { id: number; token: TransactionToken } | null = null;
   let legacyBatch: { opened: boolean } | null = null;
   let chain: Promise<void> = Promise.resolve();
@@ -47,11 +58,17 @@ export function createPhoneEditSession(label: string): PhoneEditSession {
   const gestureAlive = () => gesture !== null && ownsEditorTransaction(gesture.token);
 
   const open = () => {
-    // The editor ends open gestures on window blur; start a fresh one instead of writing outside any.
-    if (gesture && !gestureAlive()) gesture = null;
+    if (gesture && !gestureAlive()) {
+      // Only a project switch or a failed transaction ends an explicit gesture; its changes are gone.
+      gesture = null;
+      if (changed) {
+        log.warn(`${label}: the open transaction was lost; earlier changes were discarded`);
+        report(`${label}: earlier changes in this sheet were discarded. Check the result before Done.`);
+      }
+    }
     if (gesture || legacyBatch) return;
     if (repository()) {
-      const opened = beginEditorGesture(label);
+      const opened = beginEditorGesture(label, { explicit: true });
       if (opened.token && opened.batchId !== null) gesture = { id: opened.batchId, token: opened.token };
     } else {
       legacyBatch = { opened: startBatch(label).opened };
@@ -76,6 +93,7 @@ export function createPhoneEditSession(label: string): PhoneEditSession {
       await runInside(change);
     }).catch((error) => {
       log.warn(`${label}: live change failed`, error);
+      report(`${label}: the change failed${error instanceof Error && error.message ? ` (${error.message})` : ''}.`);
     });
     return chain;
   };
@@ -91,6 +109,11 @@ export function createPhoneEditSession(label: string): PhoneEditSession {
     if (closed) return { ok: false, message: `${label} was already closed.` };
     await chain;
     closed = true;
+    const lost = changed && gesture !== null && !gestureAlive();
+    if (lost && !finalChange) {
+      log.warn(`${label}: the open transaction was lost before Done; nothing to keep`);
+      return { ok: false, message: `${label}: the changes were discarded before Done. Please make them again.` };
+    }
     try {
       if (gestureAlive()) {
         if (finalChange) await runInside(finalChange);
@@ -129,9 +152,9 @@ export function createPhoneEditSession(label: string): PhoneEditSession {
 }
 
 /** One session per sheet mount; a sheet that unmounts without Done is cancelled (rolled back). */
-export function usePhoneEditSession(label: string): PhoneEditSession {
+export function usePhoneEditSession(label: string, options?: PhoneEditSessionOptions): PhoneEditSession {
   const sessionRef = useRef<PhoneEditSession | null>(null);
-  sessionRef.current ??= createPhoneEditSession(label);
+  sessionRef.current ??= createPhoneEditSession(label, options);
   const session = sessionRef.current;
   useEffect(() => () => session.cancel(), [session]);
   return session;

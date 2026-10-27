@@ -120,7 +120,7 @@
 .mobile-skin .phone-design-chip[aria-pressed='true'] {
   border-color: var(--phone-accent);
   background: color-mix(in srgb, var(--phone-accent) 22%, var(--phone-surface));
-  color: #fff;
+  color: var(--phone-text);
 }
 .mobile-skin .phone-design-chip[aria-disabled='true'] {
   color: var(--phone-text-off);

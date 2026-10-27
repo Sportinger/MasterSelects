@@ -2,20 +2,13 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { getEditorRepositorySession, subscribeEditorRepositorySession } from '../../services/project/repository/transaction/editorRepositorySession';
 import { RepositoryHistoryReader, HISTORY_PAGE_SIZE, type HistoryCollection, type HistoryPage, type HistoryRow } from '../../services/project/repository/history/RepositoryHistoryReader';
 import type { CoordinatorStatus } from '../../services/project/repository/transaction/ProjectTransactionCoordinator';
+import { revisionSourceDisplayLabel as historyDisplayLabel } from '../../services/project/repository/history/revisionSourceLabel';
 import './HistoryPanel.css';
 const ROW_HEIGHT = 42;
 const collections: Array<{ id: HistoryCollection; label: string }> = [
   { id: 'revisions', label: 'Changes' }, { id: 'branches', label: 'Branches' }, { id: 'versions', label: 'Versions' },
   { id: 'roots', label: 'Starting points' }, { id: 'legacy', label: 'Imported history' },
 ];
-function historyDisplayLabel(value: string): string {
-  const sources: Record<string, string> = { user: 'Edit', gesture: 'Edit', background: 'Background task',
-    'source-identity': 'Media verification', import: 'Import', project: 'Project change' };
-  if (sources[value]) return sources[value];
-  if (!/^[a-z][A-Za-z0-9_]*$/u.test(value)) return value;
-  const words = value.replace(/([a-z0-9])([A-Z])/gu, '$1 $2').replace(/_/gu, ' ').toLowerCase();
-  return words[0].toUpperCase() + words.slice(1);
-}
 const dateFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 interface IndexStatus { phase: 'ready' | 'rebuilding' | 'fallback'; scannedRecords: number; writable: boolean; }
 export function HistoryPanel() {

@@ -2,6 +2,7 @@
 // that resolve hit targets and reset plans, then delegate drag starts and
 // transform resets back to the overlay entry (which owns the pointer-lock core).
 
+import { isTouchBridgedMouseEvent } from '../useTouchMouseBridge';
 import {
   useCallback,
   type MouseEvent as ReactMouseEvent,
@@ -34,6 +35,11 @@ import type {
   ProjectedRotateRing,
   SceneGizmoDragStartParams,
 } from './sceneOverlayTypes';
+
+function isFingerEvent(event: Event): boolean {
+  return isTouchBridgedMouseEvent(event)
+    || (typeof PointerEvent !== 'undefined' && event instanceof PointerEvent && event.pointerType === 'touch');
+}
 
 interface UseSceneOverlayGizmoHandlersParams {
   clips: TimelineClip[];
@@ -84,6 +90,7 @@ export function useSceneOverlayGizmoHandlers({
       clientX: event.clientX,
       clientY: event.clientY,
       currentTarget: event.currentTarget,
+      fromTouch: isFingerEvent(event.nativeEvent),
       object: selectedObject,
       axis: handle.axis,
       direction: handle.direction,
@@ -138,6 +145,7 @@ export function useSceneOverlayGizmoHandlers({
       clientX: event.clientX,
       clientY: event.clientY,
       currentTarget: event.currentTarget,
+      fromTouch: isFingerEvent(event.nativeEvent),
       object: selectedObject,
       axis: ring.axis,
       direction: ring.handle.direction,
@@ -191,6 +199,7 @@ export function useSceneOverlayGizmoHandlers({
       clientX: event.clientX,
       clientY: event.clientY,
       currentTarget: event.currentTarget,
+      fromTouch: isFingerEvent(event.nativeEvent),
       object,
       axis: 'all',
       direction: mode === 'scale' ? CENTER_SCALE_DIRECTION : { x: 1, y: 0 },

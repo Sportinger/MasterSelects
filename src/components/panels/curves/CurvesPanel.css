@@ -45,3 +45,24 @@
   border-left: 5px solid transparent;
   transform: translateX(-50%);
 }
+
+/* Touch: the graph owns one- and two-finger gestures (useCurvesTouchGestures); the parameter
+   list keeps native vertical scrolling. Mouse and pen are unaffected by touch-action. */
+.curves-panel .timeline-global-curve-editor-pane {
+  touch-action: none;
+}
+
+.curves-panel .timeline-global-curve-sidebar {
+  touch-action: pan-y;
+}
+
+@media (pointer: coarse) {
+  /* Larger dots read better under a finger; the hit area itself is a finger's width in the gesture hook. */
+  .curves-panel .global-curve-editor-keyframe {
+    r: 7px;
+  }
+
+  .curves-panel .curve-editor-handle {
+    r: 6px;
+  }
+}

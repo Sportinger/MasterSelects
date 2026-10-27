@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { isLocalDevAuthHost } from './localDevAuth';
 import { IconArrowRight, IconMail, IconSparkles, IconX } from '@tabler/icons-react';
 import { useAccountStore } from '../../stores/accountStore';
 import type { BillingPlanId } from '../../services/cloudApi';
@@ -15,7 +16,7 @@ const DEV_PLANS: { id: BillingPlanId; label: string }[] = [
 function isLocalDev(): boolean {
   if (typeof window === 'undefined') return false;
   const { hostname, port } = window.location;
-  return (hostname === 'localhost' || hostname === '127.0.0.1') && port === '5173';
+  return isLocalDevAuthHost(hostname, port, import.meta.env.DEV);
 }
 
 interface AuthDialogProps {

@@ -29,6 +29,12 @@ vi.mock('../../src/services/render/renderHostPort', () => ({
   },
 }));
 
+// The WebGPU canvas path; the Linux/Mesa software presentation is covered in phoneColourScopeCanvas.test.ts.
+vi.mock('../../src/utils/canvasPlatform', () => ({
+  prefersSoftwareTimelineCanvas: () => false,
+  resetCanvasPlatformPreferenceForTests: () => {},
+}));
+
 import { useGpuScope } from '../../src/components/panels/scopes/useScopeAnalysis';
 
 function ScopeHarness() {

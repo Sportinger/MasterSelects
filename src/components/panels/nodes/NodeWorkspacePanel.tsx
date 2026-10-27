@@ -15,6 +15,7 @@ import { NodeGraphCanvas } from './NodeGraphCanvas';
 import { ACTIVE_NODE_SOURCE, NodeWorkspaceSourceSelect, TIMELINE_NODE_SOURCE, nodeViewSource } from './workspace/NodeWorkspaceSourceSelect';
 import { NodeViewLockButton } from './workspace/NodeViewLockButton';
 import { NodeCatalog } from './workspace/NodeCatalog';
+import { nodeInspectorStartsOpen } from './workspace/nodeInspectorDefault';
 import { CompositionBreadcrumb } from './composition/CompositionBreadcrumb';
 import { CompositionNodeInspector } from './composition/CompositionNodeInspector';
 import { useCompositionGraphSubject } from './composition/useCompositionGraphSubject';
@@ -58,7 +59,7 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   const [activeClip, setActiveClip] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ graphId: string; ids: string[] } | null>(null);
   const [message, setMessage] = useState('');
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(nodeInspectorStartsOpen);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [compositionMenu, setCompositionMenu] = useState<{ x: number; y: number } | null>(null);
   const [focusGroup, setFocusGroup] = useState<{ id: string; nonce: number }>();
@@ -156,7 +157,7 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
     const output = from?.outputs.find(port => port.id === value.fromPortId), input = to?.inputs.find(port => port.id === value.toPortId);
     const clipId = output?.metadata?.targetClipId ?? clipOf(from);
     if (!clipId || to?.binding?.kind !== 'composition-track' || !output || !input || output.metadata?.readOnly || input.metadata?.readOnly
-      || output.type !== input.type) { setMessage('Only compatible clip output ? track assignments can cross a clip boundary.'); return; }
+      || output.type !== input.type) { setMessage('Only compatible clip output → track assignments can cross a clip boundary.'); return; }
     const clip = useTimelineStore.getState().clips.find(clip => clip.id === clipId);
     if (clip) { try { setMessage(moveCompositionClip(clip.id, clip.startTime, to.binding.trackId)); } catch (error) { setMessage(String(error)); } }
   };
@@ -180,6 +181,14 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
       if (segmentClipId || timelineIds.size === 1) state.selectClip(segmentClipId ?? [...timelineIds][0], additive);
       else if (timelineIds.size) state.selectClips([...timelineIds], { revealProperties: false });
     }
+  };
+  // Touch has no strip segment small enough to hit reliably at phone zoom levels: a finger tap on a
+  // clip node opens that clip's lane like a timeline pick. Mouse and pen keep the desktop behaviour.
+  const lastPointerType = useRef<string>('mouse');
+  const revealTouchedClipLane = (id: string) => {
+    if (lastPointerType.current !== 'touch' || rootOwner) return;
+    const clipId = clipOf(graph.nodes.find(node => node.id === id) ?? composition.graph.nodes.find(node => node.id === id));
+    if (clipId) setRevealedClips(new Set([laneOwner(clipId)]));
   };
   const onTimeline = () => {
     if (rootOwner && useMediaStore.getState().activeCompositionId === compositionId) { fold({ [workspaceClipGroup(rootOwner)]: false }); requestGroupFocus(workspaceClipGroup(rootOwner)); }
@@ -211,7 +220,7 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   return <div className="node-workspace-context">
     <CompositionBreadcrumb context={rootOwner ? { kind: 'clip', clipId: rootOwner } : { kind: 'composition', compositionId }} onTimeline={onTimeline} />
     {expandedIds.map(id => <ClipWorkspaceController key={`${compositionId}:${id}`} clipId={id} panelId={panelId} inline={!rootOwner} onChange={register} />)}
-    <div className="node-workspace-panel" ref={currentController?.panelRef}>
+    <div className="node-workspace-panel" ref={currentController?.panelRef} onPointerDownCapture={event => { lastPointerType.current = event.pointerType; }}>
       <div className="node-workspace-main">
         <div className="node-workspace-view-bar"><NodeViewLockButton locked={locked}
           onChange={lock => setSource(lock ? rootOwner ?? TIMELINE_NODE_SOURCE : ACTIVE_NODE_SOURCE)} />
@@ -221,9 +230,9 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
         </div>
         {embeddedSelection && currentController?.toolbar}
         {message && <div className="node-workspace-graph-message" role="status">{message}</div>}
-        {rootOwner && !rootController ? <div className="node-workspace-empty-state">{clips.some(clip => clip.id === rootOwner) ? 'Loading clip graph?' : 'Assigned clip is not in the active composition.'}</div>
+        {rootOwner && !rootController ? <div className="node-workspace-empty-state">{clips.some(clip => clip.id === rootOwner) ? 'Loading clip graph…' : 'Assigned clip is not in the active composition.'}</div>
           : <NodeGraphCanvas {...routes} graph={graph} focusGroupRequest={focusGroup} followGraphGrowth={!!rootOwner} selectedNodeId={selectedNode?.id ?? null} selectedNodeIds={selectedIds}
-            onSelectNode={id => select([id])} onSelectNodes={select}
+            onSelectNode={id => { select([id]); revealTouchedClipLane(id); }} onSelectNodes={select}
             onToggleNodeSelection={id => select(selectedIds.includes(id) ? selectedIds.filter(value => value !== id) : [...selectedIds, id])}
             onOpenNode={id => { const node = graph.nodes.find(node => node.id === id) ?? composition.graph.nodes.find(node => node.id === id); if (node) open(node); }}
             selectedSegmentClipIds={selectedClips} onSelectSummarySegment={(id, segmentId, additive) => {
@@ -255,7 +264,7 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
       </div>
       {embeddedSelection && currentController ? currentController.inspector : <>
         <button type="button" className="node-workspace-inspector-handle" aria-expanded={inspectorOpen} aria-label={inspectorOpen ? 'Hide node inspector' : 'Show node inspector'}
-          onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setInspectorOpen(value => !value); }}>{inspectorOpen ? '?' : '?'}</button>
+          onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setInspectorOpen(value => !value); }}>{inspectorOpen ? '›' : '‹'}</button>
         {inspectorOpen && (catalogOpen ? <NodeCatalog width={300} /> : <CompositionNodeInspector node={selectedNode} clipIds={[...selectedClips]} onOpen={open} />)}
       </>}
       <WorkspaceControllerMenus controllers={controllers} />

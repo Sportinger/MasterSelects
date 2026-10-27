@@ -1,5 +1,5 @@
 import { bindEditorAsyncStore, captureEditorAsyncMutation } from '../../../services/project/repository/transaction/editorAsyncMutation';
-import type { TimelineTrack } from '../../../types';
+import type { TimelineTrack } from '../../../types/timeline';
 import type { AddClipOptions } from '../types';
 import { Logger } from '../../../services/logger';
 import { classifyMediaType } from '../helpers/mediaTypeHelpers';
@@ -77,7 +77,9 @@ export async function applyAddClipAction(
     return undefined;
   }
 
-  const { setClips, updateClip } = createClipRuntimeUpdateActions(context, { binding, file });
+  // The runtime updates pick their own binding (the import's, or a detached one once the importing
+  // transaction ended), so they get the unbound store: the bound one ignores late writes silently.
+  const { setClips, updateClip } = createClipRuntimeUpdateActions(original, { binding, file });
   const sourceMediaFile = await loadSourceMediaFile(mediaFileId);
   binding.assertCurrent();
   const activeCompositionDimensions = options?.visualScaleMode && hasVisualMediaType(mediaType)

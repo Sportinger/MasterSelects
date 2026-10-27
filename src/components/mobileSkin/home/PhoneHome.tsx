@@ -14,12 +14,16 @@ import { Logger } from '../../../services/logger';
 import { usePhoneProjectCommands, type PhoneStoredProject } from '../project/usePhoneProjectCommands';
 import { saveAndOpenFullEditor } from '../project/phoneFullEditor';
 import { usePhoneProjectSelection } from '../runtime/PhoneRuntimeContext';
+import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from '../shell/phoneIcons';
+import { PHONE_HOME_TEST_IDS, TEMPLATES_NOTE } from './phoneHomeTestIds';
+import { dismissPhoneWelcome, usePhoneWelcomeDue } from './phoneWelcome';
 import './PhoneHome.css';
 
 const log = Logger.create('PhoneHome');
 const FORMAT_IDS = Object.keys(PHONE_PROJECT_FORMATS) as PhoneProjectFormatId[];
 const DEFAULT_FORMAT: PhoneProjectFormatId = '9:16';
+
 
 export interface PhoneHomeProps {
   /** Called after a project was created, opened or imported, and by "Back to editing". */
@@ -59,6 +63,7 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const welcomeDue = usePhoneWelcomeDue();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const { refresh } = commands;
@@ -136,6 +141,27 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
 
         {error ? <p className="phone-home__error" role="alert">{error}</p> : null}
         {note ? <p className="phone-home__note" role="status">{note}</p> : null}
+
+        {welcomeDue ? (
+          <section className="phone-home__card phone-home__welcome" aria-label="Welcome" data-testid={PHONE_HOME_TEST_IDS.welcome}>
+            <h2 className="phone-home__welcome-title">Welcome to MasterSelects on your phone</h2>
+            <ol className="phone-home__welcome-steps">
+              <li><strong>New project</strong> picks a canvas (9:16 for stories).</li>
+              <li><strong>Media</strong> adds clips; tap a clip for its tools, swipe the timeline to scrub.</li>
+              <li><strong>Export</strong> (top right) renders and shares the video.</li>
+            </ol>
+            <p className="phone-home__welcome-note">Know editors already? Every tool is in All tools, and the Full editor opens the same project. Settings &gt; Help shows this again.</p>
+            <div className="phone-home__form-actions">
+              <button type="button" className="phone-home__button" data-testid={PHONE_HOME_TEST_IDS.welcomeSkip} onClick={dismissPhoneWelcome}>
+                Skip
+              </button>
+              <button type="button" className="phone-home__button phone-home__button--primary" data-testid={PHONE_HOME_TEST_IDS.welcomeStart}
+                onClick={() => { dismissPhoneWelcome(); setCreating(true); }}>
+                Start a project
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         <section className="phone-home__card" aria-label="New project">
           {creating ? (
@@ -238,19 +264,20 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
           type="button"
           className="phone-home__wide"
           aria-disabled="true"
-          onClick={() => setNote('Templates and Looks arrive with milestone M3 of the phone editor.')}
+          data-testid={PHONE_HOME_TEST_IDS.templates}
+          onClick={() => setNote(TEMPLATES_NOTE)}
         >
           <span className="phone-home__wide-title">Templates / Looks</span>
-          <span className="phone-home__wide-meta">Arrives with M3</span>
+          <span className="phone-home__wide-meta">Looks inside a project</span>
         </button>
         <button
           type="button"
           className="phone-home__wide"
           aria-disabled="true"
-          onClick={() => setNote('Open a project, then tap the assistant button in the top bar (beta).')}
+          onClick={() => setNote('Open a project, then tap the assistant button in the top bar.')}
         >
           <span className="phone-home__wide-title">Assistant</span>
-          <span className="phone-home__wide-meta">Beta inside a project</span>
+          <span className="phone-home__wide-meta">Inside a project</span>
         </button>
 
         <button
@@ -276,6 +303,16 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
             if (file) void run('Importing the project', () => commands.importArchive(file));
           }}
         />
+
+        <button
+          type="button"
+          className="phone-home__wide"
+          data-testid={PHONE_HOME_TEST_IDS.settings}
+          onClick={() => usePhoneUiStore.getState().openSheet('settings')}
+        >
+          <span className="phone-home__wide-title">Settings</span>
+          <span className="phone-home__wide-meta">Account, theme, cache and version</span>
+        </button>
 
         <button
           type="button"

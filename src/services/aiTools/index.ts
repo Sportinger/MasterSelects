@@ -196,7 +196,7 @@ async function executeAIToolWithDeferredAudit(
   }
 
   const standaloneTransaction = getEditorRepositorySession() && !getPinnedAgentTransaction(options) && opensStandaloneAgentTransaction(toolName)
-    ? beginAgentTransaction(`AI: ${toolName}`) : null;
+    ? beginAgentTransaction(`AI: ${toolName}`, { callerContext, requestId: options.agentRequestId }) : null;
   options = pinAgentTransactionOptions(options, standaloneTransaction);
   const useGuidedExecution = shouldUseGuidedAIToolExecution(callerContext, options);
   setAIExecutionActive(true, useGuidedExecution ? getGuidedLegacyFeedback(options) : getLegacyFeedback(options));
@@ -281,7 +281,7 @@ export async function executeAIToolCalls(
     }));
   }
 
-  const transaction = beginTransactionForToolCalls(allowedCalls, options);
+  const transaction = beginTransactionForToolCalls(allowedCalls, callerContext, options);
   options = pinAgentTransactionOptions(options, transaction);
   try {
     setAIExecutionActive(true, getGuidedLegacyFeedback(options));
@@ -555,7 +555,7 @@ async function executeAIToolCallsDirect(
 ): Promise<AIToolCallExecutionResult[]> {
   const auditCompletions: AgentToolAuditCompletion[] = [];
   const results: AIToolCallExecutionResult[] = [];
-  const transaction = beginTransactionForToolCalls(toolCalls, options);
+  const transaction = beginTransactionForToolCalls(toolCalls, callerContext, options);
   options = pinAgentTransactionOptions(options, transaction);
   try {
     for (let index = 0; index < toolCalls.length; index++) {
@@ -612,6 +612,7 @@ async function executeAIToolCallsDirect(
 
 function beginTransactionForToolCalls(
   toolCalls: AIToolCallExecution[],
+  callerContext: CallerContext,
   options: AIToolExecutionOptions,
 ) {
   if (options.suppressHistory
@@ -623,6 +624,7 @@ function beginTransactionForToolCalls(
   const additionalToolCount = toolCalls.length - 1;
   return beginAgentTransaction(
     `AI task: ${firstTool}${additionalToolCount > 0 ? ` +${additionalToolCount}` : ''}`,
+    { callerContext, requestId: options.agentRequestId },
   );
 }
 

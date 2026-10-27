@@ -8,6 +8,9 @@ import {
   type KeyframeRecordingFeedbackDetail,
 } from '../../../utils/keyframeRecordingFeedback';
 import { EQ_BAND_PARAMS } from './sharedConstants';
+import { endBatch, startBatch } from '../../../stores/historyStore';
+import { finishEditorGesture, runEditorGesture } from '../../../services/project/repository/transaction/editorGestureOwnership';
+import { getEditorRepositorySession } from '../../../services/project/repository/transaction/editorMutationRuntime';
 export {
   EditableDraggableNumber as DraggableNumber,
   type EditableDraggableNumberProps as DraggableNumberProps,
@@ -70,6 +73,27 @@ function endKeyframeToggleDrag() {
 }
 
 function applyKeyframeToggleEntries(
+  mode: KeyframeToggleDragMode,
+  clipId: string,
+  entries: KeyframeToggleEntry[],
+) {
+  // One stopwatch press is one undo step, also when it keys several properties (a colour wheel keys
+  // four). With the project repository each store change outside an editor gesture would otherwise
+  // become its own revision, and one Undo would remove only the last key.
+  const batch = startBatch(mode === 'disable' ? 'Disable keyframes' : 'Add keyframes');
+  const repository = getEditorRepositorySession() !== null && batch.opened && batch.batchId !== null;
+  try {
+    if (repository) runEditorGesture(batch.batchId!, () => applyKeyframeToggleEntriesNow(mode, clipId, entries));
+    else applyKeyframeToggleEntriesNow(mode, clipId, entries);
+  } finally {
+    if (batch.opened) {
+      if (repository) finishEditorGesture(batch.batchId!);
+      endBatch();
+    }
+  }
+}
+
+function applyKeyframeToggleEntriesNow(
   mode: KeyframeToggleDragMode,
   clipId: string,
   entries: KeyframeToggleEntry[],

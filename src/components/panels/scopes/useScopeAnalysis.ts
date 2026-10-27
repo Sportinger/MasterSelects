@@ -2,6 +2,40 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useEngineStore } from '../../../stores/engineStore';
 import { ScopeRenderer } from '../../../engine/analysis/ScopeRenderer';
 import { renderHostPort } from '../../../services/render/renderHostPort';
+import { SoftwareOutputCanvas } from '../../../engine/core/SoftwareOutputCanvas';
+import { Logger } from '../../../services/logger';
+import { prefersSoftwareTimelineCanvas } from '../../timeline/utils/timelineCanvasPlatform';
+
+const log = Logger.create('Scopes');
+
+// One presentation context per canvas: a canvas that once handed out a 2D context (software
+// presentation) can never hand out a WebGPU one, so a remount must reuse it.
+const softwareContexts = new WeakMap<HTMLCanvasElement, SoftwareOutputCanvas>();
+
+/**
+ * The scope canvas' output context. On Linux/Mesa a WebGPU <canvas> reports success but never
+ * composites (docs/Features/Linux-Mesa-GPU.md), so the scope renders on the GPU and is presented
+ * through the same software path as the preview there; elsewhere it is a normal WebGPU context.
+ */
+export function createScopeCanvasContext(canvas: HTMLCanvasElement): GPUCanvasContext | null {
+  if (prefersSoftwareTimelineCanvas()) {
+    let context = softwareContexts.get(canvas);
+    if (!context) {
+      context = new SoftwareOutputCanvas(canvas);
+      softwareContexts.set(canvas, context);
+    }
+    return context;
+  }
+  return canvas.getContext('webgpu') as GPUCanvasContext | null;
+}
+
+let lastScopeError = '';
+function reportScopeError(scopeType: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message === lastScopeError) return;
+  lastScopeError = message;
+  log.warn(`The ${scopeType} scope could not draw this frame`, error);
+}
 
 export type ScopeTab = 'histogram' | 'vectorscope' | 'waveform';
 export type ScopeViewMode = 'rgb' | 'r' | 'g' | 'b' | 'luma' | 'parade';
@@ -52,10 +86,19 @@ export function useGpuScope(
       const device = renderHostPort.getDevice();
       if (!device || destroyed) return;
 
-      const ctx = canvas.getContext('webgpu') as GPUCanvasContext;
-      if (!ctx) return;
+      let ctx: GPUCanvasContext | null;
       const format = navigator.gpu.getPreferredCanvasFormat();
-      ctx.configure({ device, format, alphaMode: 'opaque' });
+      try {
+        ctx = createScopeCanvasContext(canvas);
+        if (!ctx) {
+          log.warn(`The ${scopeType} scope has no canvas context; it stays empty`);
+          return;
+        }
+        ctx.configure({ device, format, alphaMode: 'opaque' });
+      } catch (error) {
+        reportScopeError(scopeType, error);
+        return;
+      }
       ctxRef.current = ctx;
 
       if (!rendererRef.current) {
@@ -71,7 +114,7 @@ export function useGpuScope(
       initedRef.current = false;
       ctxRef.current = null;
     };
-  }, [canvasRef, isEngineReady, visible]);
+  }, [canvasRef, isEngineReady, visible, scopeType]);
 
   // Render callback
   const render = useCallback(async () => {
@@ -142,8 +185,9 @@ export function useGpuScope(
         renderer.renderVectorscope(texture, ctx);
       }
       lastAnalyzedRenderTimeRef.current = renderedAt;
-    } catch {
-      // GPU error — skip frame
+    } catch (error) {
+      // Skip this frame, but say why once instead of failing silently.
+      reportScopeError(scopeType, error);
     }
   }, [scopeType, canvasRef, viewMode, waveformSizing]);
 

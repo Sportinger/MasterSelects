@@ -7,6 +7,7 @@ import { attachWebGPUDeviceDiagnostics, markExpectedWebGPUDeviceDestruction, mar
 import { recordGpuAdapter, recordGpuStartupFailure } from '../../services/diagnostics/gpuStartupProbe';
 import type { GPUInitializationFailure } from './gpuInitializationFailure';
 import { GPUInitializationCancelledError, GPURequestTimeoutError, requestEditorDevice, requestGpuAdapter, type GPURequestAdapterOptionsWithFeatureLevel } from './gpuDeviceRequest';
+import { browserIdentity, planAndroidAdapterRequests, readAndroidAdapterMemory, recordAndroidAdapterOutcome } from './androidAdapterMemory';
 import { DeviceLossPolicy, REPEATED_LOSS_WINDOW_MS, whenPageVisible } from './deviceLossPolicy';
 import { guardGpuDevice } from './gpuPipelineGuard';
 
@@ -114,14 +115,9 @@ export class WebGPUContext {
         // Android devices do not benefit from desktop-style GPU power selection.
         // More importantly, some Chrome/driver combinations leave a
         // powerPreference request pending and then serialize every later adapter
-        // request behind it. Ask for the normal adapter first so devices which
-        // previously worked keep their full WebGPU feature level.
-        log.info('Android detected; requesting adapter without powerPreference');
-        this.adapter = await requestGpuAdapter(
-          undefined,
-          'requestAdapter (Android core)',
-          () => this.initializationGeneration,
-        );
+        // request behind it. The request order (core or compatibility first) comes
+        // from how the previous start went on this device.
+        this.adapter = await this.requestAndroidAdapter();
       } else {
         // Try with power preference first, then fallback without it.
         // Safari on single-GPU Macs can fail with 'high-performance'.
@@ -159,25 +155,6 @@ export class WebGPUContext {
           'requestAdapter (no preference)',
           () => this.initializationGeneration,
         );
-      }
-
-      // Chrome's WebGPU compatibility mode can use an OpenGL ES 3.1 backend on
-      // Android hardware where the stricter core/Vulkan adapter is unavailable.
-      // Older Chrome versions ignore the unknown dictionary member, so this is
-      // also a safe final retry there.
-      if (!this.adapter && isAndroid) {
-        log.warn('Android core adapter unavailable, trying WebGPU compatibility mode...');
-        const compatibilityOptions: GPURequestAdapterOptionsWithFeatureLevel = {
-          featureLevel: 'compatibility',
-        };
-        this.adapter = await requestGpuAdapter(
-          compatibilityOptions,
-          'requestAdapter (Android compatibility)',
-          () => this.initializationGeneration,
-        );
-        if (this.adapter) {
-          log.warn('Using WebGPU compatibility mode on Android');
-        }
       }
 
       if (!this.adapter) {
@@ -254,6 +231,56 @@ export class WebGPUContext {
       this.logInitFailure('Failed to initialize WebGPU', error);
       return false;
     }
+  }
+
+  /**
+   * Android adapter selection. The normal (core) adapter keeps the full feature level; Chrome's
+   * compatibility mode can use an OpenGL ES 3.1 backend where the stricter core/Vulkan adapter is
+   * unavailable (older Chrome ignores the unknown member, so it is also a safe plain retry).
+   * A request that stalls past its deadline ends this start (a pending request must never be
+   * followed by another one), but it is remembered per device: the next start asks for the other
+   * path first, or fails fast when both stalled before (androidAdapterMemory.ts).
+   */
+  private async requestAndroidAdapter(): Promise<GPUAdapter | null> {
+    const browser = browserIdentity(navigator.userAgent || '');
+    const memory = readAndroidAdapterMemory();
+    const plan = planAndroidAdapterRequests(memory, browser);
+    if (plan.reason === 'default' || plan.reason === 'core-worked') {
+      log.info('Android detected; requesting adapter without powerPreference');
+    } else {
+      log.warn('Android adapter order chosen from the previous start on this device', {
+        order: plan.order.join(' > '), timeoutMs: plan.timeoutMs, reason: plan.reason, memory,
+      });
+    }
+    for (const [index, path] of plan.order.entries()) {
+      if (index > 0) log.warn(`Android ${plan.order[0]} adapter unavailable, trying ${path === 'compatibility' ? 'WebGPU compatibility mode' : 'the core adapter'}...`);
+      const options: GPURequestAdapterOptionsWithFeatureLevel | undefined = path === 'compatibility'
+        ? { featureLevel: 'compatibility' }
+        : undefined;
+      let adapter: GPUAdapter | null;
+      try {
+        adapter = await requestGpuAdapter(
+          options,
+          path === 'core' ? 'requestAdapter (Android core)' : 'requestAdapter (Android compatibility)',
+          () => this.initializationGeneration,
+          plan.timeoutMs,
+        );
+      } catch (error) {
+        if (error instanceof GPURequestTimeoutError) {
+          const stored = recordAndroidAdapterOutcome(path, 'timeout', browser);
+          log.warn(`Android ${path} adapter request stalled for ${plan.timeoutMs} ms; remembered for the next start`, {
+            stored: stored !== null, next: stored ? planAndroidAdapterRequests(stored, browser) : null,
+          });
+        }
+        throw error;
+      }
+      if (adapter) {
+        recordAndroidAdapterOutcome(path, 'ok', browser);
+        if (path === 'compatibility') log.warn('Using WebGPU compatibility mode on Android');
+        return adapter;
+      }
+    }
+    return null;
   }
 
   /** During loss recovery a failed attempt is a warning; recoverDevice files the incident's error. */

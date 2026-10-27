@@ -12,6 +12,8 @@ The workflow provides a default `Input -> Primary -> Output` graph, serial Prima
 
 Each wheel heading includes a grouped keyframe toggle for its R, G, B and luminance channels. Individual channel toggles remain available and record the actual parameter value, preserving the normal timeline keyframe workflow.
 
+Every colour edit is one undo step: a wheel or slider drag, a reset, a curve-point drag, add or reset, and each colour graph action. A stopwatch press that keys several properties at once (a wheel keys four) is one undo step too, so one Undo removes all of its keys.
+
 Numeric Corrector/Wheels parameters also accept [procedural parameter sources](./Node-Workspace.md#procedural-parameter-sources).
 Choose a source in the ordinary Properties/Nodes inspector; the dedicated Color
 tab keeps its wheel layout and displays effective driven values. A driven channel
@@ -179,7 +181,7 @@ Primary and Wheels controls use `MIDIParameterLabel`; the toolbar can enable rec
 
 ## Scopes And Monitoring
 
-Waveform, Histogram, Vectorscope, and RGB Parade analyze the final rendered texture. The Color workspace docks the scope surface beside Color Controls and uses a Resolve-style accessible popup selector to switch the active scope without leaving the grading layout. Parade renders all three channels in one GPU analysis/render pass rather than mounting three independent scopes. Waveform analysis computes only the channels needed by the active mode, adaptively reduces vertical source sampling for large frames while retaining exact horizontal coverage, and avoids repeated analysis of an unchanged paused frame. A settled panel resize triggers one paused-frame refresh. There is no before/after source, matte view, clipping overlay, or selected-node scope source.
+Waveform, Histogram, Vectorscope, and RGB Parade analyze the final rendered texture. The Color workspace docks the scope surface beside Color Controls and uses a Resolve-style accessible popup selector to switch the active scope without leaving the grading layout. Parade renders all three channels in one GPU analysis/render pass rather than mounting three independent scopes. Waveform analysis computes only the channels needed by the active mode, adaptively reduces vertical source sampling for large frames while retaining exact horizontal coverage, and avoids repeated analysis of an unchanged paused frame. A settled panel resize triggers one paused-frame refresh. On Linux/Mesa the scope canvas renders on the GPU but is presented through the software canvas path, like the preview ([Linux Mesa GPU](./Linux-Mesa-GPU.md)). There is no before/after source, matte view, clipping overlay, or selected-node scope source.
 
 ---
 

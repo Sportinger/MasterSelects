@@ -1,8 +1,11 @@
 import { useFlashBoardRuntime } from './useFlashBoardRuntime';
+import { useFlashBoardDirectChatReloadResume } from './useFlashBoardDirectChatReloadResume';
 import '../media/MediaAIGenerativeTray.css';
 
 export function FlashBoardRuntimeHost() {
   const { dismissRefundDialog, refundDialog } = useFlashBoardRuntime({ enableKeyboardDelete: false });
+  // A Direct turn running when the page reloaded resumes here, whether or not a chat view is open.
+  useFlashBoardDirectChatReloadResume();
 
   if (!refundDialog) return null;
 

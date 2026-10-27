@@ -4,22 +4,21 @@
 // downloading it. The Blob lives in React state of this hook only, never in a store.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExportSubmissionGate } from '../../export/ExportSubmissionGate';
-import { runWebCodecsExport } from '../../export/runners/webCodecsExportRunner';
 import { useExportScreenWakeLock } from '../../../hooks/useExportScreenWakeLock';
 import { AudioEncoderWrapper } from '../../../engine/audio';
 import { FrameExporter } from '../../../engine/export';
 import { Logger } from '../../../services/logger';
-import { withTimelineLinkedMedia } from '../../../services/project/repository/transaction/editorLinkedMediaConnection';
-import { useExportStore } from '../../../stores/exportStore';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
-import { normalizeExportRenderQuality } from '../../../types/renderSettings';
+import type { PhoneExportRunSpec } from './phoneExportAdvancedPlan';
+import { PhoneExportRunHandle, runPhoneExportSpec } from './phoneExportRun';
 import {
   buildPhoneExportPlan,
   resolvePhoneExportFps,
   resolvePhoneExportSize,
   type PhoneExportCapabilities,
   type PhoneExportPlan,
+  type PhoneExportPlanReady,
 } from './phoneExportPlan';
 
 const log = Logger.create('PhoneExport');
@@ -28,7 +27,7 @@ export type PhoneExportState =
   | { status: 'idle' }
   | { status: 'preparing' }
   | { status: 'exporting'; progress: number }
-  | { status: 'done'; blob: Blob; filename: string; sizeBytes: number; durationSec: number }
+  | { status: 'done'; blob: Blob; filename: string; sizeBytes: number; durationSec: number; shortened: boolean }
   | { status: 'failed'; message: string }
   | { status: 'cancelled' };
 
@@ -38,8 +37,14 @@ export interface UsePhoneExportResult {
   state: PhoneExportState;
   /** True from Cancel until the runner has cleaned up. */
   cancelling: boolean;
-  start: () => Promise<void>;
+  /** Runs the default plan, or `spec` from the Advanced part when given. */
+  start: (spec?: PhoneExportRunSpec | null) => Promise<void>;
   cancel: () => Promise<void>;
+  /** Video exports with at least one rendered frame can stop early and keep the rendered part. */
+  canFinishEarly: boolean;
+  /** True from "Keep rendered part" until the shortened file is ready. */
+  finishing: boolean;
+  finishEarly: () => void;
   /** Back to idle (drops a finished result); ignored while an export runs. */
   reset: () => void;
 }
@@ -51,7 +56,7 @@ interface ProbedCapabilities {
 
 let audioProbe: Promise<'aac' | 'opus' | null> | null = null;
 
-function probeAudioCodec(): Promise<'aac' | 'opus' | null> {
+export function probeAudioCodec(): Promise<'aac' | 'opus' | null> {
   audioProbe ??= AudioEncoderWrapper.detectSupportedCodec()
     .then((result) => result?.codec ?? null)
     .catch((error) => {
@@ -78,6 +83,35 @@ function safeFilenameBase(projectName: string | undefined): string {
   return cleaned || 'MasterSelects export';
 }
 
+/** The default (M1) plan as a run spec: H.264 MP4 (or VP9 WebM) through the WebCodecs runner. */
+export function simplePlanToRunSpec(plan: PhoneExportPlanReady): PhoneExportRunSpec {
+  return {
+    kind: 'webcodecs',
+    formatId: plan.containerFormat === 'webm' ? 'webm-vp9' : 'mp4-h264',
+    width: plan.width,
+    height: plan.height,
+    fps: plan.fps,
+    startTime: plan.startTime,
+    endTime: plan.endTime,
+    durationSec: plan.durationSec,
+    exportTime: plan.startTime,
+    videoCodec: plan.videoCodec,
+    container: plan.containerFormat,
+    bitrate: plan.bitrate,
+    rateControl: 'vbr',
+    includeAudio: plan.includeAudio,
+    audioFormat: 'browser',
+    audioSampleRate: plan.audioSampleRate,
+    audioBitrate: plan.audioBitrate,
+    imageFormat: 'png',
+    ffmpegCodec: 'prores',
+    proresProfile: 'hq',
+    extension: plan.extension,
+    summary: plan.summary,
+    notice: plan.notice,
+  };
+}
+
 function pauseTimelinePlayback(): void {
   const timeline = useTimelineStore.getState();
   if (timeline.isPlaying) timeline.pause();
@@ -96,9 +130,12 @@ export function usePhoneExport(): UsePhoneExportResult {
   const [probed, setProbed] = useState<ProbedCapabilities | null>(null);
 
   const gateRef = useRef(new ExportSubmissionGate());
-  const exporterRef = useRef<InstanceType<typeof FrameExporter> | null>(null);
+  const handleRef = useRef<PhoneExportRunHandle | null>(null);
   const runRef = useRef<Promise<void> | null>(null);
   const cancelRequestedRef = useRef(false);
+  const finishRequestedRef = useRef(false);
+  const [finishing, setFinishing] = useState(false);
+  const [runKind, setRunKind] = useState<PhoneExportRunSpec['kind'] | null>(null);
   const mountedRef = useRef(true);
 
   useExportScreenWakeLock(state.status === 'preparing' || state.status === 'exporting');
@@ -139,7 +176,7 @@ export function usePhoneExport(): UsePhoneExportResult {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      exporterRef.current?.cancel();
+      handleRef.current?.cancel();
     };
   }, []);
 
@@ -147,55 +184,36 @@ export function usePhoneExport(): UsePhoneExportResult {
     if (mountedRef.current) setState(next);
   }, []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (advanced?: PhoneExportRunSpec | null) => {
     if (runRef.current) return;
-    if (!plan || !plan.supported) {
+    if (!advanced && (!plan || !plan.supported)) {
       publish({ status: 'failed', message: plan ? plan.reason : 'Still checking what this browser can encode.' });
       return;
     }
-    const exportPlan = plan;
+    const spec = advanced ?? simplePlanToRunSpec(plan as PhoneExportPlanReady);
     cancelRequestedRef.current = false;
+    finishRequestedRef.current = false;
     setCancelling(false);
+    setFinishing(false);
+    setRunKind(spec.kind);
     publish({ status: 'preparing' });
 
     const run = gateRef.current.run(async () => {
       pauseTimelinePlayback();
-      const timeline = useTimelineStore.getState();
-      timeline.startExport(exportPlan.startTime, exportPlan.endTime);
+      const handle = new PhoneExportRunHandle();
+      handleRef.current = handle;
+      // A still frame has no range; every other kind locks the timeline like the desktop export.
+      const locksTimeline = spec.kind !== 'still';
+      if (locksTimeline) useTimelineStore.getState().startExport(spec.startTime, spec.endTime);
       try {
         if (cancelRequestedRef.current) {
           publish({ status: 'cancelled' });
           return;
         }
-        const result = await withTimelineLinkedMedia(runWebCodecsExport, {
-          width: exportPlan.width,
-          height: exportPlan.height,
-          fps: exportPlan.fps,
-          startTime: exportPlan.startTime,
-          endTime: exportPlan.endTime,
-          videoCodec: exportPlan.videoCodec,
-          containerFormat: exportPlan.containerFormat,
-          bitrate: exportPlan.bitrate,
-          rateControl: 'vbr',
-          stackedAlpha: false,
-          includeAudio: exportPlan.includeAudio,
-          audioSampleRate: exportPlan.audioSampleRate,
-          audioBitrate: exportPlan.audioBitrate,
-          normalizeAudio: false,
-          exportMode: 'fast',
+        log.info('Phone export started', { kind: spec.kind, format: spec.formatId, size: `${spec.width}x${spec.height}`, fps: spec.fps });
+        const result = await runPhoneExportSpec(spec, handle, {
           filename: safeFilenameBase(projectName),
-          onExporter: (exporter) => {
-            exporterRef.current = exporter;
-            if (cancelRequestedRef.current) exporter.cancel();
-          },
-          onProgress: (progress) => {
-            const fraction = Math.min(1, Math.max(0, progress.percent / 100));
-            publish({ status: 'exporting', progress: Number.isFinite(fraction) ? fraction : 0 });
-          },
-          onTimelineProgress: (percent, currentTime) => {
-            useTimelineStore.getState().setExportProgress(percent, currentTime);
-          },
-          renderQuality: normalizeExportRenderQuality(useExportStore.getState().settings.renderQuality),
+          onProgress: (progress) => publish({ status: 'exporting', progress }),
         });
 
         if (cancelRequestedRef.current || !result) {
@@ -208,7 +226,8 @@ export function usePhoneExport(): UsePhoneExportResult {
             blob: result.blob,
             filename: result.filename,
             sizeBytes: result.blob.size,
-            durationSec: exportPlan.durationSec,
+            durationSec: spec.durationSec,
+            shortened: finishRequestedRef.current,
           });
         }
       } catch (error) {
@@ -219,8 +238,8 @@ export function usePhoneExport(): UsePhoneExportResult {
           publish({ status: 'failed', message: error instanceof Error ? error.message : 'Export failed.' });
         }
       } finally {
-        exporterRef.current = null;
-        useTimelineStore.getState().endExport();
+        handleRef.current = null;
+        if (locksTimeline) useTimelineStore.getState().endExport();
       }
     });
     runRef.current = run;
@@ -228,7 +247,7 @@ export function usePhoneExport(): UsePhoneExportResult {
       await run;
     } finally {
       runRef.current = null;
-      if (mountedRef.current) setCancelling(false);
+      if (mountedRef.current) { setCancelling(false); setFinishing(false); setRunKind(null); }
     }
   }, [plan, projectName, publish]);
 
@@ -237,15 +256,29 @@ export function usePhoneExport(): UsePhoneExportResult {
     if (!run) return;
     cancelRequestedRef.current = true;
     setCancelling(true);
-    exporterRef.current?.cancel();
+    handleRef.current?.cancel();
     // The gate stays closed until the runner has released its decoders and encoders.
     await run;
   }, []);
+
+  const finishEarly = useCallback(() => {
+    if (!runRef.current || finishRequestedRef.current || cancelRequestedRef.current) return;
+    if (!handleRef.current?.finishEarly()) {
+      log.warn('Keep rendered part was tapped before the runner started');
+      return;
+    }
+    finishRequestedRef.current = true;
+    setFinishing(true);
+    log.info('Phone export: finishing the file early with the rendered part');
+  }, []);
+
+  const canFinishEarly = state.status === 'exporting' && state.progress > 0 && !cancelling && !finishing
+    && runKind !== null && PhoneExportRunHandle.supportsFinishEarly(runKind);
 
   const reset = useCallback(() => {
     if (runRef.current) return;
     setState({ status: 'idle' });
   }, []);
 
-  return { plan, state, cancelling, start, cancel, reset };
+  return { plan, state, cancelling, start, cancel, canFinishEarly, finishing, finishEarly, reset };
 }

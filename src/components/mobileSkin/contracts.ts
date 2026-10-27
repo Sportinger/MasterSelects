@@ -194,7 +194,17 @@ export type PhoneSheetId =
   | 'panel' | 'allTools' | 'compositions' | 'tracks' | 'markers' | 'edits' | 'replace' | 'captions'
   | 'audioFx' | 'library' | 'settings'
   // M4 landscape editors list.
-  | 'editors';
+  | 'editors'
+  // G2: attribute clipboard and styling several titles at once.
+  | 'clipboard' | 'textMulti'
+  // G6: source monitor and media jobs.
+  | 'source' | 'mediaJobs'
+  // G4: sound range editor and score notation.
+  | 'audioRegion' | 'score'
+  // G1: timeline settings, clip details and parenting, bake regions, range variants.
+  | 'timelineTools' | 'clipDetails' | 'bake' | 'variants'
+  // G3: preview view options (handles, rulers, guides, 1:1, compare) and finger-drawn shape paths.
+  | 'preview-view' | 'shape-path';
 
 export interface PhoneSheetProps {
   title: string;

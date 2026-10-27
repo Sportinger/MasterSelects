@@ -37,3 +37,33 @@
   padding: 16px;
   color: var(--phone-text-dim);
 }
+
+/* The sheet body gives its whole height to the panel; the panel scrolls itself. */
+.mobile-skin .phone-sheet__body:has(> .phone-panel-host) {
+  padding: 0 0 var(--phone-safe-bottom);
+  overflow: hidden;
+}
+
+/* Never wider than the phone: desktop min-widths give way, wide content wraps or scrolls inside.
+   Content inside canvas layers keeps its own size: node cards, ports and scope layers are positioned
+   absolutely in zero-width layers and would shrink to nothing. */
+.mobile-skin .phone-panel-host,
+.mobile-skin .phone-panel-host *:not(:where([class*='canvas']) *) {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.mobile-skin .phone-panel-host { overflow-x: hidden; }
+
+/* Inspector rows (Properties, effect parameters): finger-sized rows and sliders on the phone. */
+.mobile-skin .phone-panel-host .resolve-inspector-section,
+.mobile-skin .phone-panel-host .effect-params {
+  --resolve-inspector-row-height: 36px;
+}
+
+.mobile-skin .phone-panel-host__error {
+  margin: 0;
+  padding: 16px;
+  color: var(--phone-danger);
+  line-height: 1.45;
+}

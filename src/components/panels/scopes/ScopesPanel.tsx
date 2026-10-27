@@ -89,7 +89,7 @@ export function ScopesPanel({ initialMode = 'parade' }: ScopesPanelProps) {
   const supportsChannelModes = mode === 'waveform' || mode === 'histogram';
 
   return (
-    <section className="scopes-panel">
+    <section className="scopes-panel" data-scope-mode={mode}>
       <header className="scopes-panel-header">
         <strong>Scopes</strong>
         {supportsChannelModes && (

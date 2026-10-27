@@ -5,12 +5,13 @@
 
 import { Logger } from '../../services/logger';
 import { recordGpuAdapterAttempt } from '../../services/diagnostics/gpuStartupProbe';
+import { DEFAULT_GPU_REQUEST_TIMEOUT_MS } from './androidAdapterMemory';
 
 const log = Logger.create('WebGPUContext');
 
 // Cold GPU process startup can exceed two seconds. Keep the original request
 // alive until this deadline; a pending request is not a rejected configuration.
-const GPU_REQUEST_TIMEOUT_MS = 15_000;
+const GPU_REQUEST_TIMEOUT_MS = DEFAULT_GPU_REQUEST_TIMEOUT_MS;
 
 export class GPURequestTimeoutError extends Error {
   readonly phase: 'adapter' | 'device';
@@ -41,14 +42,15 @@ function withGpuRequestTimeout<T>(
   label: string,
   generation: GPURequestGeneration,
   disposeLateResult?: (result: T) => void,
+  timeoutMs: number = GPU_REQUEST_TIMEOUT_MS,
 ): Promise<T> {
   const startedIn = generation();
   return new Promise<T>((resolve, reject) => {
     let expired = false;
     const timer = setTimeout(() => {
       expired = true;
-      reject(new GPURequestTimeoutError(`${label} timed out after ${GPU_REQUEST_TIMEOUT_MS}ms`, label.startsWith('requestAdapter') ? 'adapter' : 'device'));
-    }, GPU_REQUEST_TIMEOUT_MS);
+      reject(new GPURequestTimeoutError(`${label} timed out after ${timeoutMs}ms`, label.startsWith('requestAdapter') ? 'adapter' : 'device'));
+    }, timeoutMs);
     promise.then(result => {
       clearTimeout(timer);
       if (expired || startedIn !== generation()) {
@@ -66,16 +68,20 @@ function withGpuRequestTimeout<T>(
   });
 }
 
-/** One adapter configuration; a rejected configuration returns null so the caller can try the next one. */
+/**
+ * One adapter configuration; a rejected configuration returns null so the caller can try the next one.
+ * `timeoutMs` shortens the deadline (Android devices whose adapter requests stalled before).
+ */
 export async function requestGpuAdapter(
   options: GPURequestAdapterOptions | GPURequestAdapterOptionsWithFeatureLevel | undefined,
   label: string,
   generation: GPURequestGeneration,
+  timeoutMs: number = GPU_REQUEST_TIMEOUT_MS,
 ): Promise<GPUAdapter | null> {
   const startedAt = performance.now();
   try {
     const request = options ? navigator.gpu.requestAdapter(options) : navigator.gpu.requestAdapter();
-    const adapter = await withGpuRequestTimeout(request, label, generation);
+    const adapter = await withGpuRequestTimeout(request, label, generation, undefined, timeoutMs);
     recordGpuAdapterAttempt(label, adapter ? 'ok' : 'null', performance.now() - startedAt);
     return adapter;
   } catch (error) {

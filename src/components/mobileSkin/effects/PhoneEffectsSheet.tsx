@@ -11,7 +11,10 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { openPhoneClipboard } from '../clipboard/phoneClipboardCommands';
+import { PhoneProRow } from '../panels/PhoneProRows';
 import { PhoneEffectStack } from './PhoneEffectStack';
+import { PhoneLookSaveRow } from './PhoneLookSaveRow';
 import {
   filterPhoneEffects, PHONE_ADJUSTMENT_SUPPORT_NOTE, phoneEffectAvailability, phoneEffectGroups,
 } from './phoneEffectCatalog';
@@ -73,6 +76,15 @@ export const PhoneEffectsSheet: PhoneSheetComponent = () => {
     closeSheet();
   };
 
+  // Copy or paste effects: keep this sheet's changes (one undo step), then open Copy & paste on effects.
+  const openClipboard = async () => {
+    if (busy) return;
+    setBusy(true);
+    const result = await commands.commit();
+    if (!result.ok) { closeSheet(); showToast(result.message, 'error'); return; }
+    openPhoneClipboard('effects');
+  };
+
   const targetText = blocked
     ? selection.note
     : clip
@@ -94,6 +106,13 @@ export const PhoneEffectsSheet: PhoneSheetComponent = () => {
             commands={commands}
           />
         )}
+        {clip && <PhoneLookSaveRow clip={clip} />}
+        <PhoneProRow
+          label="Copy or paste effects"
+          detail="With their animation, onto several clips"
+          testId={IDS.effectsClipboard}
+          onOpen={() => { void openClipboard(); }}
+        />
 
         <section className="phone-fx__browser" aria-label="Add an effect">
           <input

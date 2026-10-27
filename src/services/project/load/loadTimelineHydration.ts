@@ -316,6 +316,7 @@ export function convertProjectCompositionToStore(
           enabled: effect.enabled,
           params: structuredClone(effect.params),
           operatorGraph: effect.operatorGraph ? structuredClone(effect.operatorGraph) : undefined,
+          ...(effect.detached ? { detached: true } : {}),
         })),
         transitionIn: c.transitionIn ? normalizeTransitionInstanceParams(structuredClone(c.transitionIn)) : undefined,
         transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,

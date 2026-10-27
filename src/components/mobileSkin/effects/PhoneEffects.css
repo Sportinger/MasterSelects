@@ -363,3 +363,33 @@
   border-radius: 10px;
   font-size: 14px;
 }
+
+/* ---- Save as look, clipboard row ---- */
+.mobile-skin .phone-fx__save-look {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.mobile-skin .phone-fx__save-look .phone-fx__search {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.mobile-skin .phone-fx__save-look .phone-fx__note { flex-basis: 100%; }
+.mobile-skin .phone-filters__saved {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mobile-skin .phone-filters__saved-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--phone-text);
+  font-size: 14px;
+}

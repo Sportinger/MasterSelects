@@ -1,0 +1,48 @@
+/* Notation sheet: the desktop score editor inline, restyled with the phone tokens. */
+.mobile-skin .phone-score { display: flex; flex-direction: column; gap: 10px; }
+.mobile-skin .phone-score__editor {
+  height: min(62vh, 560px);
+  border-radius: 10px;
+  border: 1px solid var(--phone-border);
+  background: var(--phone-surface);
+  color: var(--phone-text);
+  overflow: hidden;
+}
+.mobile-skin .phone-score__editor .se-toolbar { border-bottom-color: var(--phone-border); overflow-x: auto; flex-wrap: nowrap; }
+.mobile-skin .phone-score__editor .se-group { background: var(--phone-surface-3); flex: 0 0 auto; }
+.mobile-skin .phone-score__editor .se-btn { min-width: 40px; height: 40px; color: var(--phone-text); }
+.mobile-skin .phone-score__editor .se-btn-active,
+.mobile-skin .phone-score__editor .se-btn-active:hover { background: var(--phone-accent); color: var(--phone-on-accent); }
+.mobile-skin .phone-score__editor .se-btn:hover { background: transparent; }
+.mobile-skin .phone-score-touch { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--phone-border); }
+.mobile-skin .phone-score-touch__row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.mobile-skin .phone-score-touch__row::-webkit-scrollbar { display: none; }
+.mobile-skin .phone-score-touch__key {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--phone-surface-3);
+  color: var(--phone-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.mobile-skin .phone-score-touch__key[aria-pressed='true'] { background: var(--phone-accent); color: var(--phone-on-accent); }
+.mobile-skin .phone-score-touch__key:focus,
+.mobile-skin .phone-score__pick:focus { outline: none; }
+.mobile-skin .phone-score-touch__key:focus-visible,
+.mobile-skin .phone-score__pick:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: 2px; }
+.mobile-skin .phone-score__pick {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 52px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--phone-surface);
+  color: var(--phone-text);
+  text-align: left;
+}

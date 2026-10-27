@@ -237,6 +237,8 @@ toggleFolderExpanded(id)          // Toggle expand/collapse
 moveToFolder(itemIds[], folderId) // Move items (null = root)
 ```
 
+Moving a folder into itself or one of its own subfolders would detach the whole branch from the tree, so `moveToFolder` refuses those folders with a logged warning and still moves the other items.
+
 ---
 
 ## Deleting Media
@@ -570,7 +572,7 @@ interface MediaFile {
 
 Touch drags use the same internal external-drop bridge as desktop and guided drags. Track validation, non-overlap placement, linked video/audio creation, new-track zones, and the timeline drop preview therefore stay on the existing deterministic placement path instead of maintaining a separate mobile clip-creation path. The drag starts only after a deliberate 14 px movement, so small finger jitter remains available to the long-press context menu. A normal vertical panel scroll that starts before the short hold threshold cancels the touch drag, and list rows keep native vertical scrolling without exposing metadata columns during the hold. Classic-list touches are also excluded from dock panel-tab swiping, so a diagonal or edge-started list scroll is not cancelled by panel navigation.
 
-Holding `Shift` while dragging a compatible Media Panel source over an existing clip switches the hover preview to source replacement. Dropping replaces only the clip source and keeps its timing, transforms, effects, masks, and keyframes. The same replacement path is available from the Source section in the Transform tab by dropping a compatible source there.
+Holding `Shift` while dragging a compatible Media Panel source over an existing clip switches the hover preview to source replacement. Dropping replaces only the clip source and keeps its timing, transforms, effects, masks, and keyframes. The media file's shared object URL stays alive (the media panel, other clips and the undo of the replacement still use it); only URLs private to the clip are revoked. A lazily loaded video element that still streams the old media is rebuilt for the new one. The same replacement path is available from the Source section in the Transform tab by dropping a compatible source there.
 
 ### Drag Types
 | Item Type | Drag Payload Kind | Data Transfer Key |

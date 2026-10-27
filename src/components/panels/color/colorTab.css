@@ -596,3 +596,19 @@
 .color-shared-node-view button { -webkit-tap-highlight-color: transparent; }
 .color-shared-node-view button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .color-shared-node-view button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Phone skin (/m landscape colour editor): the narrow side panel scrolls the shared node toolbar
+   instead of letting its buttons run over the title, and finger-sized targets replace the dense
+   desktop ones. The desktop layout is unchanged. */
+.mobile-skin .color-shared-node-view .node-workspace-toolbar {
+  justify-content: flex-start;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.mobile-skin .color-shared-node-view .node-workspace-toolbar-title { display: none; }
+.mobile-skin .color-shared-node-view .node-workspace-toolbar-button { height: 36px; min-width: 48px; font-size: 13px; }
+.mobile-skin .color-shared-node-actions .inspector-select { max-width: none; flex: 1; }
+.mobile-skin .color-editor .color-toggle,
+.mobile-skin .color-editor .color-wheel-reset { min-height: 36px; min-width: 44px; }

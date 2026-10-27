@@ -16,6 +16,7 @@ import { commitPhoneClipDrop, commitPhoneClipTrim, computePhoneTrimTiming } from
 import { selectPhoneClip } from '../actions/phoneCutActions';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import type { PhoneLaneLayout } from './phoneTimelineGeometry';
+import { snapPhoneMoveStart, snapPhoneTrimEdge, type PhoneSnapContext } from './phoneTimelineSnap';
 
 const log = Logger.create('PhoneClipEditGesture');
 export const PHONE_LONG_PRESS_MS = 400;
@@ -30,6 +31,8 @@ export interface PhoneClipEditPreview {
   inPoint: number;
   outPoint: number;
   edge?: 'start' | 'end';
+  /** The time the dragged edge snapped to (drawn as a snap line), null when moving freely. */
+  snapTime?: number | null;
 }
 
 interface PreviewState {
@@ -90,6 +93,15 @@ function closestElement(target: EventTarget | null, selector: string): HTMLEleme
 /** The lowest video track is the emphasized main track (same rule as PhoneTimeline). */
 export function phoneMainTrackId(tracks: readonly TimelineTrack[]): string | null {
   return tracks.filter((track) => track.type === 'video').at(-1)?.id ?? null;
+}
+
+/** The editor's snapping settings for one gesture; the playhead is the one before the drag. */
+function phoneSnapContext(playhead: number, zoom: number): PhoneSnapContext {
+  const state = useTimelineStore.getState();
+  const grid = state.rulerLanes.some((lane) => lane.format === 'bars')
+    ? { tempoMap: state.tempoMap, subdivision: state.timelineGridSubdivision }
+    : null;
+  return { enabled: state.snappingEnabled, clips: state.clips, playhead, markers: state.markers, zoom, grid };
 }
 
 function report(result: PhoneActionResult): void {
@@ -221,13 +233,19 @@ export function usePhoneClipEditGesture({ surfaceRef, lanesViewportRef, getConte
         return;
       }
       const { zoom } = contextRef.current();
-      const delta = zoom > 0 ? frame(dx / zoom) : 0;
+      const rawDelta = zoom > 0 ? frame(dx / zoom) : 0;
       const { clip } = gesture;
+      const snap = phoneSnapContext(gesture.playhead, zoom);
       if (gesture.kind === 'trim') {
+        const originalEdge = gesture.edge === 'start' ? clip.startTime : clip.startTime + clip.duration;
+        const snapped = snapPhoneTrimEdge(snap, clip.id, originalEdge + rawDelta);
+        const delta = snapped.snappedTo === null ? rawDelta : snapped.edge - originalEdge;
         const timing = computePhoneTrimTiming(clip, gesture.edge, delta, timeline().clips);
+        const landed = gesture.edge === 'start' ? timing.newStartTime : timing.newStartTime + timing.newDuration;
         setPreview({
           kind: 'trim', clipId: clip.id, trackId: clip.trackId, startTime: timing.newStartTime, duration: timing.newDuration,
           inPoint: timing.newInPoint, outPoint: timing.newOutPoint, edge: gesture.edge,
+          snapTime: snapped.snappedTo !== null && Math.abs(landed - snapped.snappedTo) < 1e-6 ? snapped.snappedTo : null,
         });
         const fps = contextRef.current().frameRate;
         const lastFrame = Math.max(timing.newStartTime, timing.newStartTime + timing.newDuration - (fps > 0 ? 1 / fps : 0));
@@ -237,9 +255,10 @@ export function usePhoneClipEditGesture({ surfaceRef, lanesViewportRef, getConte
       const sourceTrack = timeline().tracks.find((track) => track.id === clip.trackId);
       const current = usePhoneClipEditPreviewStore.getState().preview;
       const trackId = laneTrackAt(event.clientY, sourceTrack) ?? current?.trackId ?? clip.trackId;
+      const moved = snapPhoneMoveStart(snap, clip, Math.max(0, frame(clip.startTime + rawDelta)));
       setPreview({
-        kind: 'move', clipId: clip.id, trackId, startTime: Math.max(0, frame(clip.startTime + delta)), duration: clip.duration,
-        inPoint: clip.inPoint, outPoint: clip.outPoint,
+        kind: 'move', clipId: clip.id, trackId, startTime: moved.startTime, duration: clip.duration,
+        inPoint: clip.inPoint, outPoint: clip.outPoint, snapTime: moved.snappedTo,
       });
     };
 

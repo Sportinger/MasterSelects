@@ -23,10 +23,8 @@ import {
   type KernelRunReport,
 } from '../../../services/flashboard/FlashBoardChatService';
 import { createAgentActivityEvent } from '../../../services/flashboard/FlashBoardChatActivity';
-import {
-  resetDirectCodexSession,
-  resumeDirectCodexChat,
-} from '../../../services/flashboard/FlashBoardDirectCodexTransport';
+import { resetDirectCodexSession } from '../../../services/flashboard/FlashBoardDirectCodexTransport';
+import { runAgentRequestScope } from '../../../services/aiTools/agentTransaction';
 import { isDirectChatAgentMode } from '../../../services/flashboard/FlashBoardDirectModelProfile';
 import { getActiveRepositorySession } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import {
@@ -137,7 +135,6 @@ export function useFlashBoardChatController({
   const updateComposer = useFlashBoardStore((state) => state.updateComposer);
   const chatAbortRef = useRef<AbortController | null>(null);
   const resumedHostedTurnIdsRef = useRef(new Set<string>());
-  const resumedDirectTurnIdsRef = useRef(new Set<string>());
   const copiedChatResetTimeoutRef = useRef<number | null>(null);
   const chatAgentModeExplicitlySelectedRef = useRef(loadStoredFlashBoardChatAgentMode() !== null);
   const [chatPanelOpen, setChatPanelOpen] = useState(initialMode === 'chat');
@@ -218,8 +215,9 @@ export function useFlashBoardChatController({
       return;
     }
     if (!canUseHostedChat) {
-      // A persisted Fast/Medium/Slow choice survives sign-out and reloads.
-      chatAgentModeExplicitlySelectedRef.current = loadStoredFlashBoardChatAgentMode() !== null;
+      // A persisted Fast/Medium/Slow choice survives sign-out and reloads; an in-session pick made
+      // while storage is unavailable must not be forgotten here either.
+      if (loadStoredFlashBoardChatAgentMode() !== null) chatAgentModeExplicitlySelectedRef.current = true;
       setAvailableChatAgentModes(['standard']);
       setAvailableChatModelClasses([]);
       setChatModelClassAvailabilityStatus('idle');
@@ -684,27 +682,20 @@ export function useFlashBoardChatController({
   }, [chatModelClass]);
 
   useEffect(() => {
+    // Reloaded Direct (Fast/Medium/Slow) turns resume in the always-mounted FlashBoardRuntimeHost
+    // (useFlashBoardDirectChatReloadResume); this view resumes only hosted Normal Path turns.
     if (isChatting || !canUseHostedChat) return;
-    const pendingMessage = chatMessages.find((message) => {
-      if (message.role !== 'assistant' || message.isPending !== true) return false;
-      if (hasDirectCodexReloadSnapshot(message.id)) {
-        return !resumedDirectTurnIdsRef.current.has(message.id);
-      }
-      return hasHostedAgentReloadSnapshot(message.id)
-        && !resumedHostedTurnIdsRef.current.has(message.id);
-    });
+    const pendingMessage = chatMessages.find((message) => (
+      message.role === 'assistant'
+      && message.isPending === true
+      && !hasDirectCodexReloadSnapshot(message.id)
+      && hasHostedAgentReloadSnapshot(message.id)
+      && !resumedHostedTurnIdsRef.current.has(message.id)
+    ));
     if (!pendingMessage) return;
 
-    const direct = hasDirectCodexReloadSnapshot(pendingMessage.id);
-    const recoveryConversationRef = pendingMessage.conversationRef
-      ?? directConversationRef
-      ?? 'default';
-    if (direct) resumedDirectTurnIdsRef.current.add(pendingMessage.id);
-    else resumedHostedTurnIdsRef.current.add(pendingMessage.id);
-    const abortController = direct
-      ? startFlashBoardDirectChatRun(recoveryConversationRef)
-      : new AbortController();
-    if (abortController === null) return;
+    resumedHostedTurnIdsRef.current.add(pendingMessage.id);
+    const abortController = new AbortController();
     chatAbortRef.current = abortController;
     const executedToolCalls: FlashBoardExecutedToolCall[] = [
       ...(pendingMessage.toolCalls ?? []),
@@ -740,25 +731,16 @@ export function useFlashBoardChatController({
 
     setIsChatting(true);
     setChatError(null);
-    updatePending({
-      isError: undefined,
-      text: direct ? 'Reconnecting to Codex…' : 'Reconnecting to kernel…',
-    });
+    updatePending({ isError: undefined, text: 'Reconnecting to kernel…' });
 
     if (streamedResponse) {
       updatePending({ isStreaming: true, text: streamedResponse });
     }
 
-    const resume = direct ? resumeDirectCodexChat : resumeNormalPathAgentChat;
-    void resume({
+    // The resumed tool calls stay one Undo step, like the original send (runAgentRequestScope).
+    void runAgentRequestScope(pendingMessage.id, () => resumeNormalPathAgentChat({
       assistantMessageId: pendingMessage.id,
       request: {
-        ...(direct ? {
-          agentPath: 'direct-codex' as const,
-          conversationRef: recoveryConversationRef === 'default'
-            ? undefined
-            : recoveryConversationRef,
-        } : {}),
         activityRunId: pendingMessage.id,
         hostedAvailable: true,
         model: activeChatModelId,
@@ -771,9 +753,7 @@ export function useFlashBoardChatController({
           if (streamedResponse) return;
           updatePending({
             kernelProgress: undefined,
-            text: direct
-              ? 'Reconnecting to Codex…'
-              : phase === 'kernel' ? 'Reconnecting to kernel…' : 'AI thinking…',
+            text: phase === 'kernel' ? 'Reconnecting to kernel…' : 'AI thinking…',
           });
         },
         onTextDelta: (delta) => {
@@ -781,20 +761,16 @@ export function useFlashBoardChatController({
           streamedResponse += delta;
           streamedTextUpdate.schedule();
         },
-        prompt: direct
-          ? 'Resume the active Codex Direct turn.'
-          : 'Resume the active hosted-agent turn.',
+        prompt: 'Resume the active hosted-agent turn.',
         provider: 'kie',
         resumeMessageId: pendingMessage.id,
         signal: abortController.signal,
         temperature: chatTemperature,
         toolExecutionMode: 'normal',
       },
-    }).then((response) => {
+    })).then((response) => {
       if (response === null) {
-        throw new Error(direct
-          ? 'The Codex Direct turn can no longer be resumed.'
-          : 'The hosted-agent turn can no longer be resumed.');
+        throw new Error('The hosted-agent turn can no longer be resumed.');
       }
       setChatMessages((current) => buildFlashBoardChatCompletionMessages(
         current,
@@ -804,7 +780,6 @@ export function useFlashBoardChatController({
         executedToolCalls,
       ));
     }).catch((error) => {
-      if (direct) clearDirectCodexReloadSnapshot(pendingMessage.id);
       const errorMessage = abortController.signal.aborted
         ? 'Chat stopped.'
         : error instanceof Error ? error.message : 'Chat resume failed.';
@@ -814,7 +789,6 @@ export function useFlashBoardChatController({
         errorMessage,
       ));
     }).finally(() => {
-      if (direct) finishFlashBoardDirectChatRun(abortController);
       if (chatAbortRef.current === abortController) {
         chatAbortRef.current = null;
         setIsChatting(false);
@@ -825,7 +799,6 @@ export function useFlashBoardChatController({
     canUseHostedChat,
     chatMessages,
     chatTemperature,
-    directConversationRef,
     isChatting,
     setChatMessages,
   ]);

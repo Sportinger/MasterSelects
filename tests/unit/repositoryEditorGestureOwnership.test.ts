@@ -19,8 +19,8 @@ vi.mock('../../src/services/project/repository/transaction/editorMutationRuntime
     try { return action(); } finally { runtime.explicit = previous; }
   },
 }));
-import { bindEditorGestureCallback, getEditorGestureToken, installEditorGestureEvents, hasOpenEditorGestures }
-  from '../../src/services/project/repository/transaction/editorGestureOwnership';
+import { beginEditorGesture, bindEditorGestureCallback, getCurrentEditorGestureId, getEditorGestureToken, installEditorGestureEvents,
+  hasOpenEditorGestures } from '../../src/services/project/repository/transaction/editorGestureOwnership';
 
 let frames: Map<number, FrameRequestCallback>, nextFrame: number, target: HTMLDivElement;
 async function flushFrame() {
@@ -85,6 +85,22 @@ describe('editor input gesture lifetime', () => {
     target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }));
     await Promise.resolve(); expect(runtime.begin).toHaveBeenCalledTimes(2); expect(hasOpenEditorGestures()).toBe(true);
     window.dispatchEvent(new Event('blur')); expect(runtime.cancel).toHaveBeenCalledOnce(); expect(hasOpenEditorGestures()).toBe(false);
+  });
+  // A browser runs microtasks between the listeners of one native event: after the window capture
+  // listener and before React's root listener. jsdom does not, so this test holds the event "in
+  // dispatch" by hand. Before the fix the owner ended in that microtask, and a slider's startBatch from
+  // React's pointerdown opened an owner-less gesture: one undo step per drag frame (inspector sliders).
+  it('keeps the input owner across microtasks while its event is still being dispatched', async () => {
+    let dispatching = true;
+    class HeldMouseEvent extends MouseEvent { override get eventPhase() { return dispatching ? Event.CAPTURING_PHASE : Event.NONE; } }
+    target.dispatchEvent(new HeldMouseEvent('mousedown', { bubbles: false }));
+    await Promise.resolve();
+    const opened = beginEditorGesture('Slider drag');
+    expect(opened.opened).toBe(true);
+    expect(getCurrentEditorGestureId(), 'the gesture belongs to the pointer, not an explicit owner').toBe(opened.batchId);
+    dispatching = false;
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getCurrentEditorGestureId(), 'the owner ends with its dispatch').toBeNull();
   });
   it('does not apply an old scheduled edit after the project session changes', async () => {
     const edit = vi.fn(); target.addEventListener('mousedown', () => requestAnimationFrame(bindEditorGestureCallback(edit)));

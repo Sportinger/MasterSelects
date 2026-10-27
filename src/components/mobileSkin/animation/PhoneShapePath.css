@@ -1,0 +1,18 @@
+/* Shape path overlay on the phone preview (PhoneShapePathOverlay). On-picture marks use the accent
+   colour and the surface token, so they read in both themes. */
+.mobile-skin .phone-shape-path {
+  position: absolute;
+  z-index: 20;
+  overflow: visible;
+  color: var(--phone-accent);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  cursor: crosshair;
+}
+.mobile-skin .phone-shape-path__line { fill: none; stroke: currentColor; stroke-linejoin: round; stroke-linecap: round; }
+.mobile-skin .phone-shape-path__stroke { fill: none; stroke: var(--phone-danger); stroke-linejoin: round; stroke-linecap: round; }
+.mobile-skin .phone-shape-path__arm { stroke: var(--phone-text-dim); }
+.mobile-skin .phone-shape-path__knob { fill: var(--phone-surface); stroke: currentColor; }
+.mobile-skin .phone-shape-path__point { fill: var(--phone-surface); stroke: currentColor; }
+.mobile-skin .phone-shape-path__point[data-selected='true'] { fill: currentColor; stroke: var(--phone-surface); }

@@ -72,6 +72,9 @@ export function TargetPreview({ targetId }: TargetPreviewProps) {
     }
 
     registeredRef.current = true;
+    // A re-registered canvas starts empty; the engine idles while paused, so ask for a frame now
+    // (otherwise switching targets or sources while paused leaves the preview black).
+    renderHostPort.requestRender();
 
     return () => {
       if (source.type !== 'activeComp') {

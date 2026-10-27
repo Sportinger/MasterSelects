@@ -4,9 +4,9 @@
 
 <figure class="docs-shot docs-shot--float-right">
 
-![The phone editor at /m with a clip selected: the preview on top, the transport with play, undo and redo, the timeline with its fixed centre playhead, and the clip tools at the bottom with Split active and later tools greyed out](assets/phone-editor/phone-editor-clip-selected.webp)
+![The phone editor at /m with a clip selected: the preview on top, the transport with play, undo and redo, the timeline with its fixed centre playhead, and the clip tools at the bottom with Split active and some tools greyed out](assets/phone-editor/phone-editor-clip-selected.webp)
 
-<figcaption>The phone editor with a clip selected. Tools of later milestones stay visible but greyed out.</figcaption>
+<figcaption>The phone editor with a clip selected. Tools a phone cannot use stay visible but greyed out.</figcaption>
 </figure>
 
 Open **masterselects.com** on your phone and the phone editor opens by itself, made for your thumb
@@ -126,26 +126,207 @@ clip; without a clip it says so. You see a summary, a progress bar and **Cancel*
 ready, **Share** hands it to the phone's share sheet (`navigator.share` with the file) and **Save**
 downloads it; phones without file sharing offer Save.
 
-**Tip:** a greyed-out tool is not hidden on purpose. Tap it: it tells you why it does not work on
-the phone yet. Until then, the same project opens in the full editor (tap the project name, then
-**Full editor**).
+**Advanced** picks any format MasterSelects can write: MP4 or WebM (H.264, HEVC, AV1, VP9), MOV
+ProRes or DNxHR (they load the FFmpeg encoder first, which is slow on a phone), GIF, an image sequence
+as ZIP, a single PNG, JPG or WebP of the frame under the playhead, or sound only as WAV, MP3 or AAC.
+Set the resolution, frame rate, quality or an exact bitrate, and the range: the whole edit, your in
+and out marks or the selected clips. Presets are shared with the desktop export panel, and **All
+options** opens the desktop panel itself. **Batch queue** exports several media files one after
+another, retries the ones that failed, and saves or shares each result. **Keep rendered part** stops
+a running video export early and keeps what is rendered so far.
 
-## Assistant (beta)
+**Tip:** a greyed-out tool is not hidden on purpose. Tap it: it tells you why it does not work on
+a phone. The same project always opens in the full editor (tap the project name, then **Full editor**).
+
+## Pro tools
+
+The pro tools open as sheets like the design tools, with the same rule: **Done** keeps your changes
+as one undo step, **Cancel** throws them away.
+
+**Compositions:** tap the stack icon at the left of the composition tabs to see every composition and
+switch between them. **New composition** asks for a name, format, frame rate and duration; **More**
+renames, duplicates, changes settings or deletes one (it always asks first and never deletes your last
+composition). Select clips and tap **Nest** to move them into a new composition that takes their
+place; **Enter** opens a nested one and the back arrow in the top bar takes you out again.
+
+**Tracks, markers and trimming:** with nothing selected, **Tracks** adds video, audio and MIDI tracks,
+hides, mutes, solos or locks them, and under **More** renames, recolours, resizes, reorders or deletes
+them and sets an audio track's level and pan. **Markers** adds a marker with a label and colour at the
+playhead; tap one to jump to it. With a clip selected, **Trim modes** gives you ripple trim to the
+playhead, roll, slip and slide in frame steps, close gaps and link or unlink picture and sound.
+**Replace** swaps the clip's footage and keeps everything you did to the clip. **All settings** opens
+every property of the selected clip.
+
+**Timeline tools:** under the timeline, the magnet turns snapping on or off (to clips, playhead,
+markers and the beat grid), **In** and **Out** mark the export and loop range, and the metronome clicks
+while you play (never in the export). **Timeline** in the tools opens **Snap**, **Range** (nudge,
+loop, clear, bake the range, compare alternatives), **Tempo** (tempo, time signature, tempo changes,
+metronome) and **View** (focus, thumbnails, waveforms). With a clip selected, **Details** shows its
+source and timing, colours its source, renames MIDI clips and storyboard scenes, and gives it a parent
+clip, parent track or new null object. **Bake** pre-renders a clip for smooth playback. **Compare
+alternatives** plays the versions A, B and C the assistant built for a range, and **Accept** keeps one.
+
+**Copy & paste, looks and titles:** select a clip and tap **Copy & paste** to copy its effects, colour
+grade and animation, then tick the clips to paste onto and tap **Paste**. **Effects** and **Adjust**
+reach the same sheet (**Copy or paste effects**, **Copy or paste colour**); in **Keyframe**, **Select**
+picks keys to copy, delete or paste at the playhead. **Save as look** in Effects stores a clip's effect
+stack under **Filters → Saved** on this device. **Style titles** changes size, colour, bold, italic,
+alignment, outline or shadow of several titles at once. In a transition, **Edit transition content**
+opens its own composition for every phone tool and **Edit in Nodes** its node graph.
+
+**Captions:** with nothing selected, tap **Captions**. **Generate** lists every clip with speech;
+**Transcribe** runs on your phone for free (**On this phone**) or with an online provider for an
+account with credits. **Words** fixes a typo or cuts a word from picture and sound; **Style** and
+**Timing** set the look, how many words a caption shows and how long it holds.
+
+**Audio effects:** select a clip with sound and tap **Audio effects**. Add an effect, drag its main
+slider, switch it off, reorder or remove it; **All parameters** opens every setting. **Clean up**
+normalizes the level or removes silent parts, and **AI** separates stems or opens AI Studio.
+
+**Library and settings:** **Library** shows all media of your project with thumbnails, folders,
+labels and details. **Source monitor** (on an item, or under All tools) plays a file frame by frame,
+sets In and Out and places the part with the editor's own modes: Insert, Overwrite, Append, On top,
+Replace, Fit to fill or Ripple overwrite. **Jobs** lists imports, proxies, waveforms and analyses with
+their progress; an item can save or share its original file, and **Paste** brings in a copied picture,
+file or video link. Import, move, duplicate or delete several items at once; before deleting, it tells
+you which clips use an item, and one Undo brings everything back. Missing media show up in red and one
+tap relinks them. **Web sources** searches YouTube, Instagram or TikTok, and **Storage and sequences**
+imports numbered 3D model or splat files as one item. Tap the project name, then **Settings**, for the
+theme, the transcription provider, **Touch and input** (a ring under every finger for screen
+recordings), **Assistant**, **Integrations**, your account, the version and a cache reset that says
+exactly what it clears. **Help** installs MasterSelects as an app, opens the legal pages and the chat
+with the developer, and shows the welcome again.
+
+**Project tools:** the project sheet can **Duplicate** the project and keep working in the copy, save
+and restore named **Versions**, and **Export .msproj** to share or save the whole project. **Storage**
+moves other temporary projects into permanent storage. A folder backup needs a folder picker, which
+phone browsers do not have, so it stays greyed with that reason.
+
+**Speed, effects and transitions, in depth:** **Freeze frame** holds the frame under the playhead and
+**Fit to a length** sets the speed from the seconds you type. **All parameters** in the effects sheet
+opens every setting of the clip's effects, and **Settings and offset** in a transition its direction,
+softness and offset. Wherever a landscape editor does the job better, the sheet hands over: **Edit
+curve points** opens Curves, **Track and master effects** the Mixer, **Edit notes** the piano roll and
+**Wheels** in Adjust the Colour editor. **Audio → Beats** puts the clips of a video track on every
+beat of a music clip.
+
+## Preview handles and view
+
+Tap a clip, then drag it on the preview to move it, pinch to resize and twist two fingers to rotate.
+Its frame shows while your fingers are on it and snaps to the frame edges, the centre and your guides;
+each gesture is one undo step. **View** beside the picture (or **All tools → Preview view**) turns the
+handles or snapping off, resets the position, shows pixel rulers, adds or clears guides, switches
+between Fit and 1:1, and compares before and after: the clip without its effects left of a line you
+drag, the edited version right of it. Exports never contain the compare. **All tools → Shape path**
+draws a free line with your finger as a Motion Design path; keyframe its **Reveal** for a line that
+draws itself.
+
+## Sound range, recording and notation
+
+Select a clip with sound and tap **Sound range** (also under **Audio → More audio tools**). Drag across
+the waveform to select part of the sound, or switch to **Move range** to slide or resize it. The tabs
+then split, cut, copy and paste the range, change its level or fades, insert or delete silence,
+reverse it, swap or fold channels, add a filter, compressor or gate, and repair hum, clicks or loudness
+or fill the range with the clip's room tone. **Stack** lets you listen to the edited or original range
+and bypass each edit. In **Audio → Voiceover**, **Record a range** records only between a punch-in and
+a punch-out time, and **Rescue recordings** brings back an interrupted take. **Notation** opens the
+score editor with touch keys for notes, chords, rests and stems; score clips do not sound in the
+timeline or export yet.
+
+## All tools and desktop panels
+
+**All tools** in the main toolbar lists everything the phone editor can do; type to search. An entry
+opens a toolbar tool, a pro sheet, the fullscreen preview or a desktop panel such as Properties, Media,
+Export, History, AI Studio or Go Live. A panel opens in a tall sheet under the preview and works as on
+the desktop, with the same undo history; **All tools** at its top takes you back. The fullscreen button
+next to Undo shows your edit on the whole screen; tap the picture or use the back gesture to return.
+
+## Landscape editors
+
+Tap **Editors** in the main toolbar and pick **Nodes**, **Mixer**, **Multicam**, **Piano roll**,
+**3D scene**, **Curves**, **Colour** or **Output**. The editor opens full screen; turn the phone sideways for room.
+**Back** in its top bar, or your phone's back gesture, returns to the timeline, and Undo and Redo sit
+in the same bar. Each side panel folds away with the arrows in the bar or a swipe on its edge grip and
+leaves a thin rail with its name; tap it or swipe inward to bring it back. The editor remembers your
+choice, also after a reload.
+
+- **Nodes:** drag empty canvas to move, pinch to zoom, drag a node to move it, drag between ports to
+  connect. **Add** inserts nodes and effects, **Delete** removes the selection, and a tap on a clip
+  node opens its lane.
+- **Mixer:** drag any fader with a finger (you need not hit the cap), drag Pan, tap Mute, Solo, R, In,
+  FX or Send, and swipe the strips sideways; the master stays in place.
+- **Piano roll:** edits the selected MIDI clip, or lists the composition's MIDI clips and creates one.
+  Draw, move and resize notes with the Pointer, remove them with the Eraser, frame them with Select.
+  Two fingers zoom time sideways and pitch up and down. Each drag is one undo step.
+- **Colour:** the Primaries wheels, Exposure, Custom Curves and colour keys in the middle, the scopes
+  on the left and the colour node graph on the right. Each drag, reset or node change is one undo step.
+- **Multicam:** tap **Multicam** to turn a composition with one camera per video track into a
+  multicam edit, then tap a camera to cut to it at the playhead. If nothing happens, a note says why.
+- **3D scene:** tap an object or its layer, drag the Move, Rotate and Scale handles with a finger,
+  drag the empty scene to orbit, pinch to zoom and move two fingers together to pan.
+- **Curves:** tap near a keyframe to select it, drag it or its Bezier handles, drag the empty graph
+  through time; two fingers side by side zoom time, one above the other make the curves taller.
+- **Output:** projector outputs. On the left add outputs and choose what each shows (the active
+  composition, a fixed composition or a slot); in the middle the output's real picture; on the right
+  its slices and masks. Drag the corner handles to pick the source region (**Input**) and pin it onto
+  the stage (**Output**); a mask blacks out its inside or outside. **Done** saves the mapping for the
+  desktop Output Manager (a save, not an undo step); **Cancel** or **Back** discards it. A phone cannot
+  drive a projector, so **Open on display** stays greyed: open the mapping from the full editor.
+
+## Assistant
 
 The speech-bubble button in the top bar opens the assistant: the same MasterSelects chat as on the
 desktop, in a tall sheet with the preview above it. Ask for an edit in your own words ("cut the
-pauses", "add a title that says Berlin"). The assistant uses the same tools as on the desktop, and
-every change is a normal step on the timeline that you can undo. It needs an account with AI access,
-like the desktop chat. **Close** keeps the conversation; it continues on the desktop too.
+pauses", "add a title that says Berlin"); every change is a normal step on the timeline. Under **All
+tools → Assistant**, each "Ask the assistant: …" entry puts a prepared request into the field without
+sending it.
 
-## What works today
+- **Fast**, **Medium** or **Slow** at the top picks the model; the choice is remembered.
+- The line below shows your account: signed out (**Sign in**), guest, no credits (**Get credits**) or
+  your credit count. Editing by hand always keeps working.
+- While a request runs, a live line shows what the assistant does and **Send** becomes **Stop**. You
+  can close the sheet and keep editing; the request keeps running.
+- Every answer lists the tools it used, each with Done, Failed or Running and a short result.
+- A request is one undo step, however many tools it used: **Undo this request** or one Undo in the
+  transport takes it back. An edit you make while it runs stays and splits it there.
+- When the assistant built three versions, you can watch A, B or C and keep one. **New** starts a fresh
+  conversation.
 
-The phone editor grows in milestones. **M0** proved touch and speed, **M1** brought the story cutter
-(projects, gallery import, trim, split, move, delete, titles, export, reopening) and the assistant as a
-beta, and **M2** (this version) the design tools above. Captions, multiple compositions, every
-parameter of an effect and the other pro tools follow with **M3**; the landscape editors (nodes,
-mixer, multicam, colour wheels) with **M4**. Every tool already has its place and shows its milestone
-when tapped.
+## Draw a mask with the pen
+
+Select a clip, tap **Mask**, then **Pen**. Tap the preview to place points; keep your finger down and
+drag to bend the line into a curve. Tap the first point (or **Close path**) to close the shape. Drag a
+point to move it and its round handles to reshape the curve; **Undo point** takes the last point back
+and **Clear** starts over. **Soft edge** and **Invert** work on the pen path too, and the full editor
+shows the same mask. **Edit as points** turns a rectangle, circle, star or heart into points; **Lock
+axis**, **Whole shape**, **Handles only**, **Snap handles**, **Straight edges** and **Align neighbours**
+do what the modifier keys do in the full editor.
+
+## Accessibility and themes
+
+Every control has a name for screen readers, and timeline clips read as "name, starts at …, … long".
+A keyboard reaches everything: Tab moves through top bar, transport, timeline and tools in screen
+order, stays inside an open sheet, and Escape closes it and returns focus. Buttons you tap often are at
+least 44 px, sheets open without animation when the system asks for reduced motion, and the phone
+follows the editor theme: it is light for Light, for System while the device is light, and for a
+Custom theme brighter than 50.
+
+## Android start
+
+Home, the project list, the timeline and the sheets work while the graphics engine is still starting.
+On an Android phone whose graphics took too long to start before, the next start opens your project
+first and starts the graphics afterwards, so you can begin sooner. A phone whose graphics adapter
+request timed out tries the compatibility path first next time.
+
+## Milestones
+
+**M0** proved touch and speed, **M1** brought the story cutter and **M2** the design tools. **M3**
+added the pro sheets, All tools and the desktop panels, **M4** the landscape editors, **M5** the
+assistant out of beta and **M6** completeness. Every feature of the plan's catalog now has a place on
+the phone, with no open gap left. Whatever does not work on a phone stays visible, greyed, and explains
+itself on tap: downloading from a link (it needs the desktop helper), a second screen, the OptiX
+renderer, local Python models, showing a file in the file manager, the folder backup (no folder picker
+in phone browsers) and reading text in pictures (MasterSelects has no OCR engine yet).
 
 ## Technical details
 
@@ -158,67 +339,57 @@ when tapped.
   deep links below `/editor/` never move, and neither does the installed app (display mode
   standalone, fullscreen or minimal-ui), whose manifest scope is `/editor`. **Full editor**
   (`project/phoneFullEditor.ts`) saves and stores `ms.phoneEditor.preferFullEditor` in
-  localStorage (without storage it opens `/editor?entry=editor`); the desktop **Mobile** toggle on a
-  phone and **Layouts → Phone editor** (`src/components/common/openPhoneEditor.ts`) save, clear
-  that choice and open `/m`. Both refuse while an export runs (`services/project/editorSwitchGuard.ts`),
-  and a failed save keeps the current editor open and shows why. The Android app serves `/m` as an
-  editor entry (`EditorUrlPolicy.java`). Opening a stored project sets the media store's
-  `currentProjectName` from the project itself (`editorProjectionActivation.ts`), and renames update
-  it, so the top bar, AI audit and export names show the real name after a reload.
+  localStorage; the desktop **Mobile** toggle and **Layouts → Phone editor**
+  (`src/components/common/openPhoneEditor.ts`) save, clear that choice and open `/m`. Both refuse
+  while an export runs (`services/project/editorSwitchGuard.ts`). The Android app serves `/m` as an
+  editor entry (`EditorUrlPolicy.java`).
 - Runtime: `runtime/PhoneRuntimeHost.tsx` owns the single `useEngine()` and `useGlobalHistory()`,
   mounts the playback and FlashBoard runtime hosts and restores the last project like the desktop
-  toolbar (`runToolbarProjectBootRestore`, then `setupAutoSync`).
-- Home: `home/PhoneHome.tsx` replaces the desktop project chooser. It shows when no project is open
-  or when `requestPhoneHome()` (top bar Projects, project sheet) fires; everything goes through
-  `project/usePhoneProjectCommands.ts` (create, open, import archive) and a failed command is shown
-  inline. Only a stored project that needs its folder access again still uses the desktop
-  `EditorProjectSelectionOverlay`, because the phone home has no resume command.
-- Sheets: `sheets/PhoneSheet.tsx` is the frame (Cancel, title, Done; `half` is 45 % and `tall` 75 % of
-  the visual viewport, lifted by `--phone-keyboard-inset`; Escape, Cancel and a backdrop tap cancel;
-  focus moves in and back). `sheets/PhoneSheetHost.tsx` renders the sheet of
-  `usePhoneUiStore().activeSheet` from the lazy `sheets/phoneSheetRegistry.tsx` (`projects`, `media`,
-  `title`, `export`) through a portal into `.phone-shell`, so toasts and notices stay above it. While a
-  sheet is open the preview is resized to the space above it (CSS `:has()`), never unmounted. A sheet
-  chunk that fails to load shows a toast and closes.
-- Clip edits: `actions/phoneClipEditActions.ts` holds delete, ripple delete and duplicate for the
-  selected clips; `actions/phoneActionCatalog.ts` wires them, the sheets and the hints to the toolbar.
-- Design sheets (M2): `effects/` (Effects, Filters = the editor's Looks via `applyLookToClip`, Adjust =
-  the clip's colour grade Primaries), `transition/` + `timeline/PhoneCutButtons.tsx` (cut buttons,
-  the editor's transition operations), `speed/` (`setClipSpeed`, `setClipPreservesPitch`,
-  `toggleClipReverse`, `setClipTimeRemap` curves), `audio/` (volume and fades, `setClipAudioMuted`,
-  music import, voiceover recording, extract audio), `text/` (title styles), `animation/` (In / Out /
-  Combo / Reveal presets written as transform, opacity and text keyframes), `keyframe/` +
-  `shell/PhoneTransport.tsx` (diamond and keyframe list), `mask/`, `crop/`, `overlay/` and `format/`
-  (`updateComposition` with `resizeLayout: 'relative'`). Every sheet edits through
-  `sheets/phoneEditSession.ts`: live changes inside one owned transaction (a repository gesture, or a
-  history batch without a repository), **Done** commits one undo step, **Cancel** or closing the sheet
-  rolls back to the exact earlier state. Options the phone cannot do yet stay visible, greyed, and
-  explain themselves on tap.
-- Editor changes made for M2 (also on the desktop): the timeline action `setClipAudioMuted` with a
-  **Mute** row in the Properties Volume tab (`clip.audioState.muted` was honoured by playback and
-  export but had no control); `updateComposition(id, updates, { resizeLayout: 'relative' })` keeps
-  clips in proportion when the canvas changes (the default `'pixels'` is unchanged); the layer cache
-  rebuilds when a lazily loaded image finishes (`getLazyImageStatusRevision`), so a photo added under a
-  paused playhead appears at once.
-- Preview: `preview/PhonePreview.tsx` registers its canvas as the `activeComp` render target
-  `phone-main-preview`; backing size follows the desktop preview-quality policy.
-- Timeline: `timeline/phoneTimelineGeometry.ts` holds the fixed-centre geometry (half-viewport padding
-  at both ends, frame-aligned seeks, scrolling stops at the last clip). One gesture owner
-  (`usePhoneTimelineNavigation.ts`) handles pan, pinch (anchored at the playhead) and tap; only clips
-  near the viewport are rendered and the content layer moves by transform. Zoom is phone-local
-  (`state/phoneUiStore.ts`, 4–1200 px per second, default 60) and never touches the desktop zoom or scroll.
-- Split dispatches `applyTimelineEditOperation` with `split-at-time` for the selected clips only, so it
-  never cuts unselected clips under the playhead.
+  toolbar. `runtime/phoneEngineStartPolicy.ts` defers the engine until the project is open on an
+  Android device whose adapter request stalled before; the adapter order and deadline come from
+  `ms.gpu.androidAdapter` (`src/engine/core/androidAdapterMemory.ts`, see
+  [Debugging](./Debugging.md#android-adapter-memory)). `runtime/phoneBootTimeline.ts` keeps the boot
+  marks on `window.__MS_PHONE_BOOT__`.
+- Sheets: `sheets/PhoneSheet.tsx` is the frame (`half` 45 %, `tall` 75 % of the visual viewport,
+  lifted by `--phone-keyboard-inset`). `sheets/PhoneSheetHost.tsx` renders
+  `usePhoneUiStore().activeSheet` from the lazy `sheets/phoneSheetRegistry.tsx`: `projects`, `media`,
+  `title`, `export`, `assistant`, the M2 ids (`effects` … `format`), `editors`, `panel`, `allTools`,
+  `compositions`, `tracks`, `markers`, `edits`, `replace`, `captions`, `audioFx`, `library`,
+  `settings`, `clipboard`, `textMulti`, `source`, `mediaJobs`, `audioRegion`, `score`,
+  `timelineTools`, `clipDetails`, `bake`, `variants`, `preview-view` and `shape-path`. Every editing sheet goes through `sheets/phoneEditSession.ts`: live changes inside one
+  owned transaction, **Done** commits one undo step, **Cancel** rolls back exactly.
+- Pro sheets (M3): `compositions/`, `tracks/`, `markers/`, `edits/` (trim modes), `replace/`
+  (`replaceClipSource`), `captions/`, `audiofx/`, `library/`, `settings/` and `project/` (versions,
+  duplicate, `.msproj`). `export/` holds the advanced export and batch queue. The final wave added
+  `timelineTools/` (snap, range, tempo, view, details, bake, variants), `clipboard/` (copy and paste,
+  saved looks, title styling), `audioRegions/` (sound range, punch recording, notation), `output/`
+  (the Output editor) and `source/` (source monitor, media jobs).
+- Desktop panels: `panels/PhonePanelView.tsx` renders the real desktop panel (`DockPanelContent`)
+  with the providers the dock normally supplies; `panels/phonePanelCatalog.ts` lists the panels and
+  `panels/phoneAllToolsCatalog.ts` builds the **All tools** list.
+- Landscape editors (M4): `workspace/phoneWorkspaceCatalog.ts` defines the eight editors and their
+  side panels; `workspace/PhoneWorkspace.tsx` is the frame, with the back gesture in
+  `usePhoneWorkspaceBackGesture.ts`. Collapsed sides are stored per editor under
+  `ms.phoneWorkspace.collapsed`. `pianoroll/` embeds the desktop piano roll (`embedded` mode).
+- Assistant (M5): `assistant/` builds the phone chat on the FlashBoard chat controller
+  (`useFlashBoardChatController`), with model choice, account states and the tool-call list;
+  `phoneAssistantTasks.ts` holds the All tools requests. No prompt, tool or kernel code changes.
 - Toolbar: `actions/phoneActionCatalog.ts` lists every root and clip action with its milestone;
-  `PHONE_SHIPPED_MILESTONE` in `contracts.ts` (now `M1`) decides which ones work. Unavailable actions
-  are focusable, `aria-disabled` and explain themselves on tap.
-- Assistant beta: `assistant/PhoneAssistantSheet.tsx` mounts the existing `FlashBoardComposer` in chat mode
-  (cloud service) with the story workflow provider the desktop dock normally supplies, and activates the
-  primary chat workspace like `/medium`. No prompt, tool or kernel code changes.
-- Tests: `tests/unit/phoneTimelineGeometry.test.ts`, `phoneCutActions.test.ts`, `phoneActionCatalog.test.ts`,
-  `entryExperience.test.ts`, `phoneEntry.test.ts`, `WorkspaceBar.test.tsx` and the `phone*` unit tests of
-  each M2 sheet; Playwright `m2-*.spec.ts` prove for every sheet that Done changes the picture, one Undo
-  restores it and Cancel leaves pixels and timeline unchanged; Playwright journeys in `tests/playwright/mobile/` (`npm run test:e2e:phone`,
-  Pixel-7 and iPhone viewports with touch). The phone emulation does not spoof an Android user agent:
-  the engine's Linux/Mesa presentation path is keyed on "not Android", and a spoofed Android agent on a
-  Linux test host leaves the WebGPU preview black.
+  `PHONE_SHIPPED_MILESTONE` in `contracts.ts` (`M4`, the last milestone that gates actions) decides
+  which ones work. Unavailable actions are focusable, `aria-disabled` and explain themselves on tap.
+- Preview, timeline and split: `preview/PhonePreview.tsx` registers the `phone-main-preview` render
+  target; `timeline/phoneTimelineGeometry.ts` holds the fixed-centre geometry and
+  `usePhoneTimelineNavigation.ts` the single gesture owner; zoom is phone-local (4–1200 px per second,
+  default 60). Split dispatches `split-at-time` for the selected clips only.
+- Catalog coverage: `catalog/` maps every id of the phone plan's catalog to its place on the phone
+  (toolbar action, sheet control, desktop panel, landscape editor, always-visible control, assistant
+  task, or a greyed exception with its reason). `tests/unit/phoneCatalogCoverage.test.ts` checks every
+  entry against the real phone catalogs. Its gap budget is 0 and "M6: the catalog has no open gap"
+  passes; the folder backup and OCR are deliberate exceptions with their reasons.
+- Tests: the unit `tests/unit/phone*.test.ts` files plus `entryExperience.test.ts` and
+  `phoneEntry.test.ts`; Playwright journeys `m0-*` to `m6-*.spec.ts` in `tests/playwright/mobile/`
+  (`npm run test:e2e:phone`) on the `pixel-7` and `iphone-viewport` projects with real touch. They
+  prove for every sheet that Done changes the picture, one Undo restores it and Cancel leaves pixels
+  and timeline unchanged. The phone emulation does not spoof an Android user agent: the engine's
+  Linux/Mesa presentation path is keyed on "not Android", and a spoofed agent on a Linux test host
+  leaves the WebGPU preview black.

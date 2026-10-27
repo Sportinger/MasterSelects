@@ -1,0 +1,332 @@
+/* Phone output editor (Output Manager on the phone). Light and dark through the --phone-* tokens. */
+
+.mobile-skin .phone-output {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  color: var(--phone-text);
+}
+
+.mobile-skin .phone-output__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--phone-border);
+}
+
+.mobile-skin .phone-output__spacer { flex: 1; }
+
+.mobile-skin .phone-output__tabs {
+  display: inline-flex;
+  border: 1px solid var(--phone-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.mobile-skin .phone-output__tab {
+  min-width: 64px;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-skin .phone-output__tab[aria-selected='true'] {
+  background: var(--phone-chip-on-bg);
+  color: var(--phone-chip-on-text);
+}
+
+.mobile-skin .phone-output__zoom {
+  min-width: 44px;
+  color: var(--phone-text-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.mobile-skin .phone-output__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--phone-border);
+  border-radius: 10px;
+  background: var(--phone-surface-2);
+  color: var(--phone-text);
+  font-size: 13px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-skin .phone-output__chip:focus { outline: none; }
+.mobile-skin .phone-output__chip:focus-visible,
+.mobile-skin .phone-output__tab:focus-visible,
+.mobile-skin .phone-output__card-head:focus-visible,
+.mobile-skin .phone-output__handle:focus-visible {
+  outline: 2px solid var(--phone-accent);
+  outline-offset: -2px;
+}
+.mobile-skin .phone-output__tab:focus,
+.mobile-skin .phone-output__card-head:focus,
+.mobile-skin .phone-output__handle:focus { outline: none; }
+
+.mobile-skin .phone-output__chip:active { background: var(--phone-surface-3); }
+.mobile-skin .phone-output__chip[aria-pressed='true'] { background: var(--phone-chip-on-bg); color: var(--phone-chip-on-text); }
+.mobile-skin .phone-output__chip:disabled { color: var(--phone-text-off); }
+.mobile-skin .phone-output__chip.is-greyed { color: var(--phone-text-off); border-style: dashed; }
+.mobile-skin .phone-output__chip--primary { border-color: var(--phone-accent); background: var(--phone-accent); color: var(--phone-on-accent); }
+.mobile-skin .phone-output__chip--danger { color: var(--phone-danger-text); }
+
+.mobile-skin .phone-output__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--phone-veil-1);
+  touch-action: none;
+}
+
+.mobile-skin .phone-output__viewport {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: 0 0;
+  container-type: size;
+}
+
+.mobile-skin .phone-output__box {
+  position: relative;
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  background: #000;
+  box-shadow: 0 0 0 1px var(--phone-border);
+}
+
+.mobile-skin .phone-output__box .om-preview,
+.mobile-skin .phone-output__box .om-preview-empty {
+  position: absolute;
+  inset: 0;
+}
+
+.mobile-skin .phone-output__box .om-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mobile-skin .phone-output__outlines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.mobile-skin .phone-output__outline {
+  fill: transparent;
+  stroke: var(--phone-accent);
+  stroke-width: 1.5px;
+  stroke-opacity: 0.6;
+}
+
+.mobile-skin .phone-output__outline--mask { stroke: var(--phone-danger); stroke-dasharray: 6 3; }
+.mobile-skin .phone-output__outline.is-selected { stroke-width: 2.5px; stroke-opacity: 1; }
+
+.mobile-skin .phone-output__handle {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-skin .phone-output__handle-dot {
+  width: 40%;
+  height: 40%;
+  border: 2px solid var(--phone-on-accent);
+  border-radius: 50%;
+  background: var(--phone-accent);
+  box-shadow: 0 0 0 1px var(--phone-scrim);
+}
+
+.mobile-skin .phone-output__handle--mask .phone-output__handle-dot { background: var(--phone-danger); }
+
+.mobile-skin .phone-output__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 16px;
+  color: var(--phone-text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+
+.mobile-skin .phone-output__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  color: var(--phone-text);
+}
+
+.mobile-skin .phone-output__panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-skin .phone-output__panel-title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mobile-skin .phone-output__hint {
+  margin: 0;
+  color: var(--phone-text-dim);
+  font-size: 12px;
+}
+
+.mobile-skin .phone-output__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mobile-skin .phone-output__card,
+.mobile-skin .phone-output__item {
+  border: 1px solid var(--phone-border);
+  border-radius: 10px;
+  background: var(--phone-surface);
+}
+
+.mobile-skin .phone-output__card.is-selected,
+.mobile-skin .phone-output__item.is-selected { border-color: var(--phone-accent); }
+.mobile-skin .phone-output__item.is-off .phone-output__card-title { color: var(--phone-text-off); }
+
+.mobile-skin .phone-output__card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--phone-text);
+  text-align: left;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-skin .phone-output__card-title {
+  flex: 1;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-skin .phone-output__card-meta { color: var(--phone-text-dim); font-size: 11px; }
+
+.mobile-skin .phone-output__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--phone-text-off);
+}
+.mobile-skin .phone-output__dot.is-on { background: var(--phone-accent); }
+
+.mobile-skin .phone-output__card-body,
+.mobile-skin .phone-output__details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.mobile-skin .phone-output__details {
+  padding: 8px 0 0;
+  border-top: 1px solid var(--phone-border);
+}
+
+.mobile-skin .phone-output__item .phone-output__actions { padding: 0 10px 10px; }
+
+.mobile-skin .phone-output__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mobile-skin .phone-output__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-skin .phone-output__label {
+  min-width: 52px;
+  color: var(--phone-text-dim);
+  font-size: 12px;
+}
+
+.mobile-skin .phone-output__field {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--phone-border);
+  border-radius: 8px;
+  background: var(--phone-surface-2);
+  color: var(--phone-text);
+  font-size: 16px;
+}
+
+.mobile-skin .phone-output__field:focus { outline: none; border-color: var(--phone-accent); }
+.mobile-skin .phone-output__field.is-invalid { border-color: var(--phone-danger); }
+.mobile-skin .phone-output__field--number { width: 64px; flex: 0 1 64px; font-variant-numeric: tabular-nums; }
+
+.mobile-skin .phone-output__corners {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-skin .phone-output__corner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mobile-skin .phone-output__corner .phone-output__label { flex: 1; min-width: 0; }

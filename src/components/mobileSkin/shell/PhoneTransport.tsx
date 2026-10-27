@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { PHONE_FULL_EDITOR_HINT, PHONE_TEST_IDS } from '../contracts';
+import { useEffect, useState } from 'react';
+import { PHONE_TEST_IDS } from '../contracts';
 import { Logger } from '../../../services/logger';
 import { getPlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -7,6 +7,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { usePhoneRuntime } from '../runtime/PhoneRuntimeContext';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneKeyframeButton } from '../keyframe/PhoneKeyframeButton';
+import { PHONE_PREVIEW_TEST_IDS, usePhonePreviewModeStore } from '../preview/phonePreviewMode';
 import { PhoneIcon } from './phoneIcons';
 
 const log = Logger.create('PhoneTransport');
@@ -40,46 +41,38 @@ function useLivePlayhead(isPlaying: boolean): number {
   return isPlaying ? live : stored;
 }
 
-interface GreyedProps {
-  actionId: string;
-  label: string;
-  reason: string;
-  icon: 'fullscreen';
+/** Edited content end (the timeline duration is padded to a minimum workspace length). */
+function selectContentEnd(state: { clips: readonly { startTime: number; duration: number }[] }): number {
+  let end = 0;
+  for (const clip of state.clips) end = Math.max(end, clip.startTime + clip.duration);
+  return end;
 }
 
-function GreyedTransportButton({ actionId, label, reason, icon }: GreyedProps) {
-  const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
+/**
+ * The running time. Its own component on purpose: while playing it re-renders every animation
+ * frame, and nothing else in the transport (play, undo, redo, keyframe) must re-render with it.
+ */
+function PhoneTransportTime() {
+  const isPlaying = useTimelineStore((state) => state.isPlaying);
+  const contentEnd = useTimelineStore(selectContentEnd);
+  const timelineDuration = useTimelineStore((state) => state.duration);
+  const frameRate = useMediaStore(
+    (state) => state.compositions.find((comp) => comp.id === state.activeCompositionId)?.frameRate ?? 30,
+  );
+  const position = useLivePlayhead(isPlaying);
+  const duration = contentEnd > 0 ? contentEnd : timelineDuration;
   return (
-    <button
-      type="button"
-      className="phone-icon-button"
-      aria-label={label}
-      aria-disabled="true"
-      data-testid={`phone-transport-${actionId}`}
-      onClick={() => showUnavailable({ actionId, label, reason })}
-    >
-      <PhoneIcon name={icon} size={22} />
-    </button>
+    <div className="phone-transport__time" data-testid={PHONE_TEST_IDS.time}>
+      <span className="phone-transport__now">{formatPhoneTime(position, frameRate)}</span>
+      <span className="phone-transport__total"> / {formatPhoneTime(duration, frameRate)}</span>
+    </div>
   );
 }
 
 export function PhoneTransport() {
   const { history } = usePhoneRuntime();
   const isPlaying = useTimelineStore((state) => state.isPlaying);
-  const clips = useTimelineStore((state) => state.clips);
-  const timelineDuration = useTimelineStore((state) => state.duration);
-  const frameRate = useMediaStore(
-    (state) => state.compositions.find((comp) => comp.id === state.activeCompositionId)?.frameRate ?? 30,
-  );
   const showToast = usePhoneUiStore((state) => state.showToast);
-  const position = useLivePlayhead(isPlaying);
-
-  // The timeline duration is padded to a minimum workspace length; show the edited content end.
-  const contentEnd = useMemo(
-    () => clips.reduce((end, clip) => Math.max(end, clip.startTime + clip.duration), 0),
-    [clips],
-  );
-  const duration = contentEnd > 0 ? contentEnd : timelineDuration;
 
   const togglePlay = async () => {
     const timeline = useTimelineStore.getState();
@@ -93,11 +86,8 @@ export function PhoneTransport() {
   };
 
   return (
-    <div className="phone-transport" data-testid={PHONE_TEST_IDS.transport}>
-      <div className="phone-transport__time" data-testid={PHONE_TEST_IDS.time}>
-        <span className="phone-transport__now">{formatPhoneTime(position, frameRate)}</span>
-        <span className="phone-transport__total"> / {formatPhoneTime(duration, frameRate)}</span>
-      </div>
+    <div className="phone-transport" role="group" aria-label="Playback" data-testid={PHONE_TEST_IDS.transport}>
+      <PhoneTransportTime />
       <button
         type="button"
         className="phone-icon-button phone-icon-button--play"
@@ -134,12 +124,16 @@ export function PhoneTransport() {
         >
           <PhoneIcon name="redo" size={22} />
         </button>
-        <GreyedTransportButton
-          actionId="fullscreen"
-          label="Fullscreen preview"
-          icon="fullscreen"
-          reason={`Fullscreen preview arrives with milestone M3 of the phone editor. ${PHONE_FULL_EDITOR_HINT}`}
-        />
+        <button
+          type="button"
+          className="phone-icon-button"
+          aria-label="Fullscreen preview"
+          data-testid={PHONE_PREVIEW_TEST_IDS.fullscreenButton}
+          onPointerUp={(event) => event.currentTarget.blur()}
+          onClick={() => usePhonePreviewModeStore.getState().enterFullscreen()}
+        >
+          <PhoneIcon name="fullscreen" size={22} />
+        </button>
       </div>
     </div>
   );

@@ -23,7 +23,11 @@ interface MultiPreviewSlotProps {
   multicamAngle?: { compositionId: string; angleIndex: number; label: string } | null;
   // This camera is on air at the playhead (red frame)
   onAir?: boolean;
+  // Touch tap on a multicam camera (cut to it); mouse and pen keep the keyboard 1..n workflow.
+  onAngleTap?: (angleIndex: number) => void;
 }
+
+const TAP_MOVE_TOLERANCE_PX = 10;
 
 export function MultiPreviewSlot({
   panelId,
@@ -35,7 +39,9 @@ export function MultiPreviewSlot({
   autoSource = null,
   multicamAngle = null,
   onAir = false,
+  onAngleTap,
 }: MultiPreviewSlotProps) {
+  const tapStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const isEngineReady = useEngineStore((state) => state.isEngineReady);
   const compositions = useMediaStore((s) => s.compositions);
   const visibleCompositions = useMemo(() => compositions.filter(isUserVisibleComposition), [compositions]);
@@ -177,7 +183,26 @@ export function MultiPreviewSlot({
   );
 
   return (
-    <div className={`multi-preview-slot ${highlighted ? 'highlighted' : ''} ${onAir ? 'multicam-on-air' : ''}`} ref={containerRef}>
+    <div
+      className={`multi-preview-slot ${highlighted ? 'highlighted' : ''} ${onAir ? 'multicam-on-air' : ''}`}
+      ref={containerRef}
+      data-testid="multi-preview-slot"
+      data-slot-index={slotIndex}
+      data-multicam-angle={multicamAngle ? multicamAngle.angleIndex : undefined}
+      data-on-air={onAir ? 'true' : undefined}
+      onPointerDown={(event) => {
+        if (event.pointerType !== 'touch' || !multicamAngle) return;
+        tapStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      }}
+      onPointerUp={(event) => {
+        const start = tapStartRef.current;
+        tapStartRef.current = null;
+        if (!start || start.pointerId !== event.pointerId || !multicamAngle || !onAngleTap) return;
+        if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_MOVE_TOLERANCE_PX) return;
+        onAngleTap(multicamAngle.angleIndex);
+      }}
+      onPointerCancel={() => { tapStartRef.current = null; }}
+    >
       {/* Hover-visible composition dropdown (custom mode only) */}
       {multicamAngle ? (
         <div className="multi-preview-slot-dropdown-wrapper multicam-angle-label">

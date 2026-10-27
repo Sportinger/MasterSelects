@@ -102,6 +102,9 @@ Use the AI debug bridge (see [Debugging](./Debugging.md)):
   `src/services/mediaRuntime/liveInputRuntime.ts`, and
   `src/services/sceneCutDetection/proxySceneCutAnalyzer.ts` — additional
   shipped consumers of the shared Linux canvas policy.
+- `src/components/panels/scopes/useScopeAnalysis.ts` — the colour scopes render
+  on WebGPU and present through `SoftwareOutputCanvas` on Linux, like the
+  preview; one presentation context per canvas survives a remount.
 
 ## Linux WebGPU warning
 

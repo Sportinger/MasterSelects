@@ -175,7 +175,7 @@ export const PhoneCropSheet: PhoneSheetComponent = () => {
               <PhoneActionButton label="Reset transform" testId={IDS.resetTransform} unavailable={blocked}
                 onPress={() => applyTransform(resetPhoneTransform(transform), ['position.x', 'position.y', 'scale.all', 'scale.x', 'scale.y', 'rotation.z', 'opacity'])} />
             </div>
-            <PhoneSheetNote>Values with keyframes get a keyframe at the playhead. Dragging and pinching on the preview, 3D and anchor point are in the full editor.</PhoneSheetNote>
+            <PhoneSheetNote>Values with keyframes get a keyframe at the playhead. You can also drag, pinch and twist the selected clip right on the preview. 3D and anchor point are in the full editor.</PhoneSheetNote>
           </>
         ) : null}
       </div>
