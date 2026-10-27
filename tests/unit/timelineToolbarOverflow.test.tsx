@@ -1,70 +1,87 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import type { ComponentProps } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.unmock('../../src/stores/settingsStore');
 
 vi.mock('../../src/components/timeline/TimelineControls', () => ({
   TimelineControls: ({ variant }: { variant: string }) => (
-    <div data-testid={`timeline-controls-${variant}`}>{variant}</div>
+    <button data-testid={`timeline-controls-${variant}`}>{variant}</button>
   ),
 }));
-
 vi.mock('../../src/components/timeline/hooks/useLegacyTransitionCompositionUpgrade', () => ({
   useLegacyTransitionCompositionUpgrade: () => null,
 }));
-
-import { TimelineToolbarChrome } from '../../src/components/timeline/components/TimelineToolbarChrome';
+import { DockTabStrip } from '../../src/components/dock/tabPane/DockTabStrip';
+import { TimelineSidebar } from '../../src/components/timeline/components/TimelineSidebar';
+import { useSettingsStore } from '../../src/stores/settingsStore';
+beforeEach(() => {
+  useSettingsStore.setState({ compactTimelineToolbar: true, compactTimelineSidebarOpen: false });
+});
+afterEach(cleanup);
 
 function renderToolbar(onToggleTimelineCurveMode = vi.fn()) {
-  render(
-    <TimelineToolbarChrome
-      duration={90}
-      formatTime={(seconds) => String(seconds)}
-      hasInOutDisplayRange={false}
-      inOutDisplayDuration={0}
-      isEditingTimelineDuration={false}
-      onTimelineDurationClick={() => undefined}
-      onTimelineDurationInputChange={() => undefined}
-      onTimelineDurationKeyDown={() => undefined}
-      onTimelineDurationSubmit={() => undefined}
-      onTimelineTimeDoubleClick={() => undefined}
+  // The handle belongs to the composition tab strip; render both real owners
+  // so these tests cover their shared open state and Escape focus handoff.
+  const tabProps = {
+    group: { id: 'timeline-group', panels: [] },
+    tabBarRef: { current: null },
+    hasTimelinePanel: true,
+    timelinePanel: { id: 'timeline', type: 'timeline' },
+    openCompositions: [{ id: 'comp-1', name: 'Main Comp' }],
+    activeCompositionId: 'comp-1',
+    slotGridProgress: 0,
+    compositionTabHandlers: {},
+  } as ComponentProps<typeof DockTabStrip>;
+  return render(<>
+    <DockTabStrip {...tabProps} />
+    <TimelineSidebar
       onToggleTimelineCurveMode={onToggleTimelineCurveMode}
-      slotGridProgress={0}
-      timelineControlsProps={{} as never}
-      timelineCurrentFrame={0}
-      timelineCurveMode="timeline"
-      timelineDurationInputRef={{ current: null }}
-      timelineDurationInputValue="90"
-      timelineFpsValue="30"
-      timelineRulerCurrentTime={0}
-      timelineTimeDisplayMode="time"
-      timelineTotalFrames={2700}
-    />,
-  );
+      timelineControlsProps={{} as never} timelineCurveMode="timeline" />
+  </>);
 }
 
-describe('timeline toolbar overflow', () => {
-  it('places the controls after transport inside the More popover', () => {
-    const onToggleTimelineCurveMode = vi.fn();
-    renderToolbar(onToggleTimelineCurveMode);
-
-    expect(screen.queryByRole('dialog', { name: 'More timeline controls' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'More timeline controls' }));
-
-    const dialog = screen.getByRole('dialog', { name: 'More timeline controls' });
-    expect(within(dialog).getByTestId('timeline-controls-utility')).toBeTruthy();
-    expect(within(dialog).getByTestId('timeline-controls-zoom')).toBeTruthy();
-
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Toggle Timeline and Graph view' }));
-    expect(onToggleTimelineCurveMode).toHaveBeenCalledOnce();
+describe('timeline ruler sidebar', () => {
+  it('restores and persists the classic toolbar preference', () => {
+    useSettingsStore.getState().setCompactTimelineToolbar(true);
+    renderToolbar();
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use classic toolbar' }));
+    expect(useSettingsStore.getState().compactTimelineToolbar).toBe(false);
+    expect(JSON.parse(localStorage.getItem('masterselects-settings')!).state.compactTimelineToolbar).toBe(false);
+  });
+  it('reveals view, zoom, graph and recording controls on demand', () => {
+    const toggle = vi.fn();
+    renderToolbar(toggle);
+    const handle = screen.getByRole('button', { name: 'Timeline settings' });
+    expect(handle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('timeline-controls-utility')).toBeNull();
+    fireEvent.click(handle);
+    const panel = screen.getByRole('dialog', { name: 'Timeline settings' });
+    expect(handle).toHaveAttribute('aria-expanded', 'true');
+    for (const variant of ['utility', 'zoom', 'recording']) {
+      expect(within(panel).getByTestId(`timeline-controls-${variant}`)).toBeTruthy();
+    }
+    fireEvent.click(within(panel).getByRole('button', { name: 'Toggle Timeline and Graph view' }));
+    expect(toggle).toHaveBeenCalledOnce();
   });
 
-  it('switches at the timeline container width and for coarse portrait input', () => {
-    const css = readFileSync(resolve('src/components/timeline/Timeline.css'), 'utf8');
+  it('closes with Escape and returns keyboard focus to its handle', () => {
+    renderToolbar();
+    const handle = screen.getByRole('button', { name: 'Timeline settings' });
+    fireEvent.click(handle);
+    screen.getByTestId('timeline-controls-utility').focus();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(handle).toHaveFocus();
+  });
 
-    expect(css).toContain('container-name: timeline-toolbar');
-    expect(css).toContain('@container timeline-toolbar (max-width: 980px)');
-    expect(css).toContain('@media (orientation: portrait) and (pointer: coarse)');
-    expect(css).toContain('.timeline-timebar > .timeline-toolbar-overflow');
+  it('keeps inside interactions open and dismisses on an outside pointer', () => {
+    renderToolbar();
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline settings' }));
+    fireEvent.pointerDown(screen.getByTestId('timeline-controls-zoom'));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

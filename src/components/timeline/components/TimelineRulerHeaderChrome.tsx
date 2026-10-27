@@ -1,4 +1,6 @@
 import type { ComponentProps, CSSProperties, PointerEvent } from 'react';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useTimelineOverLayout } from '../hooks/useTimelineOverLayout';
 import { TimelineControls } from '../TimelineControls';
 import { TimelineRuler } from '../TimelineRuler';
 import type { TimelineControlsProps } from '../types';
@@ -8,7 +10,6 @@ import {
   selectRulerLanes,
   selectTempoMap,
 } from '../../../stores/timeline/selectors';
-import { useTimelineOverLayout } from '../hooks/useTimelineOverLayout';
 
 type TimelineRulerProps = ComponentProps<typeof TimelineRuler>;
 
@@ -45,6 +46,7 @@ export function TimelineRulerHeaderChrome({
   videoBakeRegions,
   zoom,
 }: TimelineRulerHeaderChromeProps) {
+  const compact = useSettingsStore(state => state.compactTimelineToolbar);
   const { isMediumMobileTimelineLayout } = useTimelineOverLayout();
   // Ruler lanes / tempo map are timeline view state; read them here so the ruler
   // stays a pure props component (issue #257).
@@ -67,9 +69,7 @@ export function TimelineRulerHeaderChrome({
       <div className="timeline-header-row" style={rulerHeightStyle}>
         <div className="ruler-header">
           <div className="timeline-ruler-control-strip">
-            {!isMediumMobileTimelineLayout && (
-              <TimelineControls variant="main" {...timelineControlsProps} />
-            )}
+            {(compact || !isMediumMobileTimelineLayout) && <TimelineControls variant="main" {...timelineControlsProps} />}
           </div>
         </div>
         <div

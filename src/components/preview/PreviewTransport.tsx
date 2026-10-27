@@ -18,12 +18,13 @@ import {
 import { useEffect, useMemo, useRef, type PointerEvent } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { PreviewQuality } from '../../stores/settingsStore';
+import { useSettingsStore, type PreviewQuality } from '../../stores/settingsStore';
+import { formatTimelineTimecode } from '../timeline/utils/timelineGrid';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useDockStore } from '../../stores/dockStore';
 import { sanitizeTimelineFrameRate, stepTimeByFrames } from '../../utils/timelineFrameQuantization';
-import { formatTimelineTimecode } from '../timeline/utils/timelineGrid';
+import { PreviewTimeDisplay } from './PreviewTimeDisplay';
 import { usePreviewDockPanelId } from './PreviewDockPanelContext';
 import { usePreviewTransportPortal } from './PreviewTransportPortalContext';
 import { PreviewCanvasZoomBar } from './PreviewCanvasZoomBar';
@@ -64,6 +65,7 @@ export function PreviewTransport({
   canvasZoom,
   compositionSize,
 }: PreviewTransportProps) {
+  const compactTimelineToolbar = useSettingsStore(state => state.compactTimelineToolbar);
   const dockPanelId = usePreviewDockPanelId();
   const { setSourceControlsTarget } = usePreviewTransportPortal();
   const maximizedPanelId = useDockStore(state => state.maximizedPanelId);
@@ -192,10 +194,10 @@ export function PreviewTransport({
   };
   // Collapsed transport keeps only the show/hide toggle visible.
   const showViewerTools = playbackControlsVisible && !sourceMonitorActive && sceneObjectOverlayEnabled;
+
   const formattedTimecode = formatTimelineTimecode(playheadPosition, frameRate);
   const resolveStyleTimecode = formattedTimecode.split(':').length === 3
-    ? `00:${formattedTimecode}`
-    : formattedTimecode;
+    ? `00:${formattedTimecode}` : formattedTimecode;
 
   return (
     <div
@@ -350,6 +352,8 @@ export function PreviewTransport({
                   aria-pressed={isPlaying}
                   className={isPlaying ? 'active' : undefined}
                   onClick={() => (isPlaying ? pause() : void play())}
+                  data-guided-target={compactTimelineToolbar ? "button:timeline-play" : undefined}
+                  data-tutorial-id={compactTimelineToolbar ? "play-btn" : undefined}
                   title={isPlaying ? 'Pause' : 'Play'}
                   type="button"
                 >
@@ -385,7 +389,11 @@ export function PreviewTransport({
                 </button>
               </div>
 
-              <output>{resolveStyleTimecode}</output>
+              {compactTimelineToolbar
+                ? <PreviewTimeDisplay duration={duration} playheadPosition={playheadPosition}
+                    inPoint={inPoint} outPoint={outPoint} frameRate={frameRate} />
+                : <output>{resolveStyleTimecode}</output>}
+
             </div>
           </>
         )}

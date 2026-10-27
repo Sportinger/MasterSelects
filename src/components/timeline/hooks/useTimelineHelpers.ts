@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 import type { TimelineClip, Keyframe } from '../../../types';
+import { parseTimelineClock } from '../utils/parseTimelineClock';
 import { createTimelineGridPlan, formatTimelineClock } from '../utils/timelineGrid';
 
 interface UseTimelineHelpersProps {
@@ -25,29 +26,6 @@ export function useTimelineHelpers({ zoom, frameRate, clips, getClipKeyframes }:
 
   // Format time as MM:SS.cc (shared with the piano-roll Time lane, issue #249 §6).
   const formatTime = useCallback((seconds: number) => formatTimelineClock(seconds), []);
-
-  // Parse time string (MM:SS.ms or SS.ms or just seconds) back to seconds
-  const parseTime = useCallback((timeStr: string): number | null => {
-    const trimmed = timeStr.trim();
-    if (!trimmed) return null;
-
-    // Try MM:SS.ms format
-    const match = trimmed.match(/^(\d+):(\d+)(?:\.(\d+))?$/);
-    if (match) {
-      const mins = parseInt(match[1], 10);
-      const secs = parseInt(match[2], 10);
-      const ms = match[3] ? parseInt(match[3].padEnd(2, '0').slice(0, 2), 10) : 0;
-      return mins * 60 + secs + ms / 100;
-    }
-
-    // Try SS.ms or just seconds
-    const num = parseFloat(trimmed);
-    if (!isNaN(num) && num >= 0) {
-      return num;
-    }
-
-    return null;
-  }, []);
 
   // Get clips at a specific time
   const getClipsAtTime = useCallback(
@@ -83,7 +61,7 @@ export function useTimelineHelpers({ zoom, frameRate, clips, getClipKeyframes }:
     gridSize,
     gridPlan,
     formatTime,
-    parseTime,
+    parseTime: parseTimelineClock,
     getClipsAtTime,
     getSnapTargetTimes,
   };

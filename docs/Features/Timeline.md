@@ -4,6 +4,12 @@ The Timeline is where you arrange your clips over time: video, audio, images, te
 
 It holds video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting and Slot Grid playback.
 
+**Compact timeline** – Click the small sidebar button next to **Proxy** in the normal toolbar. Your choice is remembered on this browser. To restore the normal toolbar, open the sidebar and choose **Use classic toolbar**.
+
+**Timeline settings** – In compact mode, open the small handle at the far right of the composition tab bar above the timeline for ruler lanes, metronome, view options, Slot Grid, zoom, Timeline/Graph view and audio recording. The panel overlays the tracks; click outside or press Escape to close it. Editing tools stay on the left of the ruler.
+
+In compact mode, the slim square-cornered master level bar sits flush against the browser’s left edge, at two-thirds its former width. Playback and the current time / duration display live below the [Preview](./Preview.md). Proxy playback is available under **Timeline settings → View → Proxy**.
+
 ---
 
 ## Large compositions
