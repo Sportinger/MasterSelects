@@ -140,7 +140,7 @@ vi.mock('../../src/stores/engineStore', () => {
 });
 
 vi.mock('../../src/stores/historyStore', () => ({
-  startBatch: vi.fn(),
+  startBatch: vi.fn(() => ({ opened: true, batchId: 1 })),
   endBatch: vi.fn(),
 }));
 
