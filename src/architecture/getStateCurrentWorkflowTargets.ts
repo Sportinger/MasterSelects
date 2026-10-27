@@ -1,3 +1,7 @@
+// 2026-10-27: the phone editor (/m, 17 files, 60 reads), the Preview transport step and the Linux codec
+// notices (6 reads) joined; the compact timeline sidebar added one read to TimelineControls.
+import { phoneEditorGetStateHardTargets } from './getStatePhoneEditorTargets';
+
 export const currentWorkflowGetStateHardTargets = [
   // Release 3.1.3 added imperative UI event handlers and cross-store tracking,
   // terrain, annotation, and camera-output workflows. These reads must observe
@@ -122,4 +126,5 @@ export const currentWorkflowGetStateHardTargets = [
   { path: 'src/stores/timeline/helpers/activeCompositionSize.ts', maxCurrentHits: 1 },
   { path: 'src/components/preview/PreviewTransport.tsx', maxCurrentHits: 1 },
   { path: 'src/services/codecNotices/linuxCodecNotices.ts', maxCurrentHits: 5 },
+  ...phoneEditorGetStateHardTargets,
 ] as const;
