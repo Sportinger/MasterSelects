@@ -2,6 +2,13 @@
   {
     "date": "2026-10-27",
     "type": "new",
+    "title": "MasterSelects 3.3.4",
+    "description": "The phone editor gets its design tools: effects, filters and colour adjustments, transitions at every cut, speed with curves, volume, fades, music, voiceover and extracted audio, styled titles, In/Out animations, a keyframe diamond, masks, crop and transform, picture-in-picture overlays and canvas formats. Every tool shows its change live, Cancel leaves the project exactly as it was, and Done is one step you can undo. Undo and Redo now skip the editor's own background work, such as verifying a freshly imported file, so one Undo always takes back your last edit, also on the desktop.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-27",
+    "type": "new",
     "title": "MasterSelects 3.3.3",
     "description": "On a phone, masterselects.com now opens the new phone editor: start a 9:16 project, pick clips from your gallery, trim, split, delete and reorder them with your thumb, add titles, export in 1080p and share or save the video, with the assistant as a beta. Full editor switches to every tool with the same project and Mobile brings you back; on a computer, Layouts → Phone editor opens it. The timeline can also switch to a compact layout with a sidebar, a settings handle on the composition tabs and the clock below the preview. After a reload the project's real name shows everywhere instead of Untitled Project.",
     "section": "Release"
