@@ -6,6 +6,14 @@ The project repository stores content and undo history together. Edits produce
 immutable revisions; undo and redo move between revisions. Editing an earlier
 revision creates a branch and retains the previous branch.
 
+**Undo skips the editor's own background work.** Some revisions are written by the editor itself, not
+by you: media verification after an import ("Media verification", source `source-identity`), late
+results of import and source jobs (`background`) and persisted job results (`artifact`). Undo and Redo
+step over them to your previous or next edit and keep what they recorded, a background commit never
+cancels an Undo or Redo that is running, and it does not take away your Redo. The history panel still
+lists them. Planner: `transaction/historyNavigationPlan.ts`; background writers wait for a running
+navigation with `coordinator.whenNavigationIdle()`. Test: `tests/unit/repositorySystemRevisionUndo.test.ts`.
+
 ## Saving and recovery
 
 Content changes are saved continuously. **Ctrl/Cmd+S** waits for the current

@@ -41,6 +41,7 @@ export function createRepositoryDomainPublication(options: DomainPublicationOpti
   };
   const journal = async (id: string, value: JsonValue) => { await coordinator.flush(coordinator.appendJournal(id, value)); };
   const mutate = async (key: string, entity: EntityDTO | null) => {
+    await coordinator.whenNavigationIdle();
     const token = coordinator.begin('Persist project result', 'artifact');
     let committed = false;
     try { coordinator.write(token, key, entity); const result = coordinator.commit(token); committed = true; await coordinator.flush(result.receipt); }

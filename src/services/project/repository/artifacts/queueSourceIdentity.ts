@@ -18,6 +18,8 @@ export function queueSourceIdentity(session: RepositorySession, mediaId: string,
     const identity = await session.client.request<{ hash: string; length: number }>({ type: 'hash-source', blob }, signal);
     if (!/^sha256:[a-f0-9]{64}$/.test(identity.hash) || identity.length !== blob.size) throw new RepositoryError('corrupt', 'Invalid source verification response');
     const value: VerifiedSourceIdentity = { identityStatus: 'verified', algorithm: 'sha256', contentHash: identity.hash, byteLength: identity.length };
+    // Commit after a queued or running Undo/Redo, never into its activation window (that would throw and hash again).
+    await session.coordinator.whenNavigationIdle();
     // No await between the final original-source check and the owned logical commit.
     signal?.throwIfAborted();
     if (!isCurrent()) return null;

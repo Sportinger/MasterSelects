@@ -1,6 +1,11 @@
 import { REPOSITORY_LIMITS, RepositoryError, toRepositoryError } from '../contracts';
 import { canonicalJson, frozenJson } from '../segments/canonical';
 import type { CheckoutResult, EntityDTO, EntityKey, JsonValue, OperationReceipt, RepositoryProjection, RevisionMetadata, RecordReference, BlobReference } from '../contracts';
+import { Logger } from '../../../logger';
+import { MAX_SYSTEM_REVISION_WALK, isSystemRevisionSource, planRedo, planUndo, type NavigationGraph, type NavigationPlan } from './historyNavigationPlan';
+
+export { isSystemRevisionSource } from './historyNavigationPlan';
+const log = Logger.create('ProjectTransactionCoordinator');
 
 export interface LogicalEntityChange { entityKey: EntityKey; before: EntityDTO | null; after: EntityDTO | null; }
 export interface LogicalRevision {
@@ -96,10 +101,23 @@ export class ProjectTransactionCoordinator {
   async getNavigationAvailability(): Promise<{ canUndo: boolean; canRedo: boolean }> {
     const current = this.revisionId;
     if (!current) return { canUndo: false, canRedo: false };
-    const revision = this.localRevisions.get(current) ?? await this.storage.getRevision(current);
-    const child = this.redo[current] ?? await this.storage.getRedoChild(current);
-    return { canUndo: !!revision?.parentRevisionId, canRedo: !!child };
+    const [undo, redo] = await Promise.all([planUndo(this.navigationGraph, current), planRedo(this.navigationGraph, current)]);
+    return { canUndo: !!undo, canRedo: !!redo };
   }
+  /** Revision graph view for Undo/Redo planning: local undo cache first, durable history second. */
+  private readonly navigationGraph: NavigationGraph = {
+    step: async revisionId => {
+      const local = this.localRevisions.get(revisionId);
+      if (local) return { revisionId, parentRevisionId: local.parentRevisionId, source: local.source, keys: local.changes.map(change => change.entityKey) };
+      const stored = await this.storage.getRevision(revisionId);
+      return stored ? { revisionId, parentRevisionId: stored.parentRevisionId, source: stored.source, keys: stored.changedEntities } : null;
+    },
+    redoChild: async revisionId => {
+      const preferred = this.redo[revisionId];
+      return preferred && this.localRevisions.get(preferred)?.parentRevisionId === revisionId ? preferred : this.storage.getRedoChild(revisionId, preferred);
+    },
+    current: key => this.entities.get(key) ?? null,
+  };
   getEntities(): ReadonlyMap<EntityKey, EntityDTO> { return this.entities; }
   owns(token: TransactionToken): boolean { return token.sessionEpoch === this.sessionEpoch && this.transactions.get(token.owner)?.token === token; }
   getProjection(): RepositoryProjection { return { revisionId: this.revisionId, generation: this.generation, entities: new Map(this.entities) }; }
@@ -118,7 +136,8 @@ export class ProjectTransactionCoordinator {
   begin(label: string, source = 'user', join?: TransactionToken): TransactionToken {
     this.assertMutable();
     if (join) { this.requireTransaction(join); return join; }
-    this.cancelNavigation();
+    // A system writer must not take back the user's Undo/Redo; the navigation re-plans over its revision.
+    if (!isSystemRevisionSource(source)) this.cancelNavigation();
     const token = Object.freeze({ transactionId: crypto.randomUUID(), owner: Symbol(label), sessionEpoch: this.sessionEpoch });
     this.transactions.set(token.owner, { token, label, source, before: new Map(), after: new Map() });
     return token;
@@ -152,21 +171,33 @@ export class ProjectTransactionCoordinator {
     if (changes.length) {
       const bytes = new TextEncoder().encode(JSON.stringify(changes)).byteLength;
       if (this.queuedBytes + bytes > REPOSITORY_LIMITS.queueBytes) throw new RepositoryError('budget', 'Project transaction exceeds remaining recovery queue budget');
-      this.cancelNavigation();
-      const revision: LogicalRevision = Object.freeze({ revisionId: crypto.randomUUID(), transactionId: token.transactionId,
-        parentRevisionId: this.revisionId, label: tx.label, source: tx.source, createdAt: Date.now(), changes: Object.freeze(changes) });
-      if (this.revisionId) this.redo = { ...this.redo, [this.revisionId]: revision.revisionId };
-      this.revisionId = revision.revisionId;
-      this.generation++;
-      this.localRevisions.set(revision.revisionId, revision);
-      const sequence = ++this.sequence;
-      const redo = Object.freeze({ ...this.redo });
-      this.enqueue(sequence, bytes, () => this.storage.publishRevision(revision, this.workspaceId, redo, sequence), undefined,
-        { revision, redo, sequence });
+      if (!isSystemRevisionSource(tx.source)) this.cancelNavigation();
+      this.appendRevision(token.transactionId, tx.label, tx.source, changes, bytes);
     }
     this.finishTransaction(tx);
     this.notify();
     return { revisionId: this.revisionId, receipt: this.receipt() };
+  }
+  private appendRevision(transactionId: string, label: string, source: string, changes: LogicalEntityChange[], bytes: number): void {
+    const revision: LogicalRevision = Object.freeze({ revisionId: crypto.randomUUID(), transactionId,
+      parentRevisionId: this.revisionId, label, source, createdAt: Date.now(), changes: Object.freeze(changes) });
+    if (this.revisionId && !isSystemRevisionSource(source)) {
+      // A user edit becomes the redo branch, also through the system revisions directly beneath it.
+      // A system revision leaves the redo branch alone, so Redo after Undo still finds the undone edit.
+      const redo = { ...this.redo, [this.revisionId]: revision.revisionId };
+      for (let child = this.localRevisions.get(this.revisionId), steps = 0;
+        child?.parentRevisionId && isSystemRevisionSource(child.source) && steps < MAX_SYSTEM_REVISION_WALK; steps++) {
+        redo[child.parentRevisionId] = child.revisionId; child = this.localRevisions.get(child.parentRevisionId);
+      }
+      this.redo = redo;
+    }
+    this.revisionId = revision.revisionId;
+    this.generation++;
+    this.localRevisions.set(revision.revisionId, revision);
+    const sequence = ++this.sequence;
+    const redo = Object.freeze({ ...this.redo });
+    this.enqueue(sequence, bytes, () => this.storage.publishRevision(revision, this.workspaceId, redo, sequence), undefined,
+      { revision, redo, sequence });
   }
   cancel(token: TransactionToken): void {
     const tx = this.requireTransaction(token);
@@ -295,32 +326,68 @@ export class ProjectTransactionCoordinator {
     this.notify(); return this.receipt();
   }
   private cancelNavigation(): void { this.navigationEpoch++; this.navigationController?.abort(); this.navigationController = null; this.navigationState = 'idle'; }
+  /** System writers await this before they begin, so they commit after a queued or running Undo/Redo instead of into its activation. */
+  async whenNavigationIdle(): Promise<void> {
+    let chain: Promise<unknown>;
+    do {
+      chain = this.navigationChain;
+      await chain.catch(() => null); await Promise.allSettled([...this.activeCheckouts]);
+    } while (chain !== this.navigationChain || this.activeCheckouts.size);
+  }
   undo(): Promise<CheckoutResult | null> { return this.navigate('undo'); }
   redoRevision(): Promise<CheckoutResult | null> { return this.navigate('redo'); }
   private navigate(direction: 'undo' | 'redo'): Promise<CheckoutResult | null> {
     const epoch = this.navigationEpoch;
     this.navigationState = 'pending'; this.notify();
+    const idle = () => { this.navigationState = 'idle'; this.notify(); return null; };
     this.navigationChain = this.navigationChain.catch(() => null).then(async () => {
-      if (epoch !== this.navigationEpoch) return null;
-      const current = this.revisionId;
-      if (!current) return null;
-      const local = this.localRevisions.get(current);
-      const target = direction === 'undo'
-        ? local ? local.parentRevisionId : (await this.storage.getRevision(current))?.parentRevisionId
-        : this.redo[current] && this.localRevisions.get(this.redo[current]!)?.parentRevisionId === current
-          ? this.redo[current] : await this.storage.getRedoChild(current, this.redo[current]);
-      if (!target || epoch !== this.navigationEpoch) { this.navigationState = 'idle'; this.notify(); return null; }
-      return this.checkout(target, epoch);
+      for (let attempt = 0; ; attempt++) {
+        if (epoch !== this.navigationEpoch) return null;
+        const current = this.revisionId;
+        if (!current) return idle();
+        const plan = direction === 'undo' ? await planUndo(this.navigationGraph, current) : await planRedo(this.navigationGraph, current);
+        if (epoch !== this.navigationEpoch) return null;
+        if (!plan) return idle();
+        if (plan.dropped) log.info(`${direction === 'undo' ? 'Undo' : 'Redo'} leaves out ${plan.dropped} background revision(s) that belong to the step it moves across`);
+        const result = await this.checkout(plan.target, epoch, plan);
+        // Only a system revision committed meanwhile moves the head without a new epoch: plan again from it.
+        if (result.status === 'cancelled' && epoch === this.navigationEpoch && this.revisionId !== current && attempt < 3) continue;
+        if (result.status === 'cancelled' && epoch === this.navigationEpoch) idle();
+        return result;
+      }
     });
     return this.navigationChain;
   }
-  checkout(target: string, expectedNavigationEpoch = this.navigationEpoch): Promise<CheckoutResult> {
-    const job = this.performCheckout(target, expectedNavigationEpoch);
+  /** Entities of `target` from the local undo cache (back to the common ancestor, then forward), or null when a revision on the way is not cached. */
+  private projectLocally(base: string, target: string): Map<EntityKey, EntityDTO> | null {
+    const chain: LogicalRevision[] = [], depth = new Map<string, number>();
+    for (let id = target; chain.length < MAX_SYSTEM_REVISION_WALK;) {
+      depth.set(id, chain.length);
+      const revision = this.localRevisions.get(id);
+      if (!revision) break;
+      chain.push(revision);
+      if (!revision.parentRevisionId) break;
+      id = revision.parentRevisionId;
+    }
+    const map = new Map(this.entities);
+    const apply = (key: EntityKey, value: EntityDTO | null) => { if (value) map.set(key, value); else map.delete(key); };
+    let ancestor = base;
+    for (let steps = 0; !depth.has(ancestor); steps++) {
+      const revision = this.localRevisions.get(ancestor);
+      if (!revision?.parentRevisionId || steps >= MAX_SYSTEM_REVISION_WALK) return null;
+      for (const change of revision.changes) apply(change.entityKey, change.before);
+      ancestor = revision.parentRevisionId;
+    }
+    for (const revision of chain.slice(0, depth.get(ancestor)).toReversed()) for (const change of revision.changes) apply(change.entityKey, change.after);
+    return map;
+  }
+  checkout(target: string, expectedNavigationEpoch = this.navigationEpoch, plan?: NavigationPlan): Promise<CheckoutResult> {
+    const job = this.performCheckout(target, expectedNavigationEpoch, plan);
     this.activeCheckouts.add(job);
     void job.then(() => this.activeCheckouts.delete(job), () => this.activeCheckouts.delete(job));
     return job;
   }
-  private async performCheckout(target: string, expectedNavigationEpoch: number): Promise<CheckoutResult> {
+  private async performCheckout(target: string, expectedNavigationEpoch: number, plan?: NavigationPlan): Promise<CheckoutResult> {
     if (this.transactions.size || this.closing || this.activating || !this.activation.canActivate()) return { status: 'cancelled', revisionId: target };
     const base = this.revisionId;
     const generation = this.generation;
@@ -330,18 +397,18 @@ export class ProjectTransactionCoordinator {
     const stillOwns = () => !controller.signal.aborted && this.navigationController === controller
       && this.revisionId === base && this.generation === generation && expectedNavigationEpoch === this.navigationEpoch && !this.closing && this.transactions.size === 0;
     try {
-      let loaded: ReadonlyMap<EntityKey, EntityDTO>;
       const currentLocal = base ? this.localRevisions.get(base) : undefined;
-      const targetLocal = this.localRevisions.get(target);
-      if (currentLocal?.parentRevisionId === target) {
-        const map = new Map(this.entities);
-        for (const change of currentLocal.changes) if (change.before) map.set(change.entityKey, change.before); else map.delete(change.entityKey);
-        loaded = map;
-      } else if (targetLocal?.parentRevisionId === base) {
-        const map = new Map(this.entities);
-        for (const change of targetLocal.changes) if (change.after) map.set(change.entityKey, change.after); else map.delete(change.entityKey);
-        loaded = map;
-      } else { await this.flush(); loaded = await this.storage.loadProjection(target, controller.signal); }
+      const local = base && base !== target ? this.projectLocally(base, target) : null;
+      let targetEntities: ReadonlyMap<EntityKey, EntityDTO>;
+      if (local) targetEntities = local;
+      else { await this.flush(); targetEntities = await this.storage.loadProjection(target, controller.signal); }
+      // The runtime is activated with the carried system values, so the screen already matches the carry revision below.
+      let loaded = targetEntities;
+      if (plan?.carry?.size) {
+        const carried = new Map(targetEntities);
+        for (const [key, value] of plan.carry) if (value) carried.set(key, value); else carried.delete(key);
+        loaded = carried;
+      }
       if (!stillOwns() || !this.activation.canActivate()) return { status: 'cancelled', revisionId: target };
       const previous = this.getProjection();
       const projection = { revisionId: target, generation: generation + 1, entities: loaded };
@@ -349,11 +416,13 @@ export class ProjectTransactionCoordinator {
       try { await this.activation.activate(projection, previous, controller.signal); }
       finally { this.activating = false; }
       if (!stillOwns()) return { status: 'cancelled', revisionId: target };
-      this.entities = new Map(loaded); this.revisionId = target; this.generation++;
-      if (base && currentLocal?.parentRevisionId === target) this.redo = { ...this.redo, [target]: base };
+      this.entities = new Map(targetEntities); this.revisionId = target; this.generation++;
+      if (plan?.redoChild) this.redo = { ...this.redo, [target]: plan.redoChild };
+      else if (base && currentLocal?.parentRevisionId === target) this.redo = { ...this.redo, [target]: base };
       const sequence = ++this.sequence;
       const redo = { ...this.redo };
       this.enqueue(sequence, 256, () => this.storage.publishNavigation(target, this.workspaceId, redo, sequence));
+      if (plan?.carry?.size) this.recordCarry(targetEntities, plan.carry);
       this.navigationState = 'idle';
       return { status: 'applied', revisionId: target };
     } catch (error) {
@@ -363,6 +432,17 @@ export class ProjectTransactionCoordinator {
       if (this.navigationController === controller) this.navigationController = null;
       this.notify();
     }
+  }
+  /** Records the carried system values on the navigation target as one system revision (no undo step, redo kept). */
+  private recordCarry(targetEntities: ReadonlyMap<EntityKey, EntityDTO>, carry: ReadonlyMap<EntityKey, EntityDTO | null>): void {
+    const changes: LogicalEntityChange[] = [];
+    for (const [entityKey, after] of carry) {
+      const before = targetEntities.get(entityKey) ?? null;
+      if (!equalEntity(before, after)) changes.push(Object.freeze({ entityKey, before, after }));
+      if (after) this.entities.set(entityKey, after); else this.entities.delete(entityKey);
+    }
+    if (changes.length) this.appendRevision(crypto.randomUUID(), 'Keep background changes', 'background', changes,
+      new TextEncoder().encode(JSON.stringify(changes)).byteLength);
   }
   restore(projection: RepositoryProjection, sequence: number, redo: Record<string, string> = {}): void {
     if (this.transactions.size || this.pending.size) throw new RepositoryError('ownership', 'Cannot restore over pending project operations');
