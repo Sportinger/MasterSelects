@@ -190,6 +190,48 @@ five Vorschau-Wahrheit cases found two). Handle each one the same way:
    and update the test catalog (state, spec; record a verification only for a
    revision that is merged).
 
+## Phone journeys (/m)
+
+The phone skin served at `/m` has its own config, `playwright.phone.config.ts`
+(`npm run test:e2e:phone`), and its journeys live in `tests/playwright/mobile/`.
+It reuses the runtime profile (`MASTERSELECTS_E2E_*` host, port, channel,
+headless) and the Linux launch flags of the desktop suite, runs one worker and
+Chromium only. Two projects: `pixel-7` (412x915, pixel ratio 2.625, mobile user
+agent, touch) and `iphone-viewport` (390x844, touch). The second is viewport and
+touch emulation in Chromium, not Safari; genuine Safari behaviour stays a
+real-device gate.
+
+- `mobile/phoneFixture.ts`: a worker-scoped phone context (device settings come
+  from the project's `use` block, warm GPU as in the desktop fixtures) and one
+  shared Sammeltest project built once: 20 generated frame-code clips at 360x640,
+  30 fps, back to back on the main video track (two long ones, 18 short ones).
+  The project is arranged through the Dev Bridge tools `createComposition` and
+  `importLocalFiles`, the same existing path as `fixtures/frameCodeProject.ts`;
+  the phone has no import UI before M1. Only arrangement and inspection use the
+  bridge; the action under test is always touch on the phone UI. The page opens
+  plain `/m` (never `?test`, which forces the desktop layout). Each test resets to
+  playhead 0, nothing selected, the base timeline (undo, else re-import) and
+  frame 0 in the preview (else a page reload, noted as `reset-reload`).
+- `mobile/phoneTouch.ts`: real touch through DevTools
+  (`Input.dispatchTouchEvent`): `tap`, one-finger `pan` with intermediate moves
+  and `pinch` around a midpoint, paced by animation frames, not timers; plus
+  `readPreviewFrame` (frame code of the preview through `PreviewProbe`) and a
+  long-task / frame-gap recorder.
+- `mobile/m0-touch.spec.ts`: the M0 acceptance, one case per test. The scroll
+  case reports its numbers (attachment `scroll-performance.json`) and treats the
+  50 ms limit as soft on hosts without a GPU; set `MASTERSELECTS_PHONE_PERF=strict`
+  to fail on any long task.
+
+```text
+# against a Vite you started yourself (the token file must match the one Vite got)
+MASTERSELECTS_E2E_HEADLESS=1 MASTERSELECTS_E2E_PORT=5180 MASTERSELECTS_E2E_SKIP_WEB_SERVER=1 \
+  MASTERSELECTS_BRIDGE_TOKEN_FILE=test-results/playwright/.ai-bridge-token-5180 \
+  npx playwright test -c playwright.phone.config.ts --project pixel-7
+```
+
+Let Playwright start Vite itself by leaving `MASTERSELECTS_E2E_SKIP_WEB_SERVER`
+unset. The clips need `ffmpeg` on the test host, like the desktop frame-code cases.
+
 ## Reference-project media pack
 
 The larger reference-project sources live in

@@ -10,7 +10,7 @@ import { LegalDialog } from './components/common/LegalDialog';
 import { APP_BUILD_ID, APP_SOURCE_REVISION, APP_SOURCE_DIRTY, APP_RELEASE_ID } from './services/appBuild';
 import { AppLoadingScreen } from './components/common/AppLoadingScreen';
 import { AccountDialogHost } from './components/common/AccountDialogHost';
-import { loadEditorAppModule, preloadEditorRuntime } from './editorEntryLoader';
+import { loadEditorAppModule, preloadEditorRuntime, preloadPhoneRuntime } from './editorEntryLoader';
 import {
   captureCreationModeMorphSnapshot,
   captureCreationModeTargetSnapshot,
@@ -29,6 +29,9 @@ import { readAcquisitionAttribution } from './services/productAnalytics/acquisit
 import { getRuntimeDeviceContext } from './utils/runtimeDeviceContext';
 
 const EditorApp = lazy(loadEditorAppModule);
+// The /m phone skin is its own lazy entry: it never imports the desktop App.
+// preloadPhoneRuntime also schedules the shared once-only editorBoot (idempotent).
+const PhoneApp = lazy(preloadPhoneRuntime);
 const CreditClaimPage = lazy(() =>
   import('./creditClaims/CreditClaimPage').then((module) => ({ default: module.CreditClaimPage }))
 );
@@ -77,6 +80,7 @@ export function RootApp({ initialExperience }: RootAppProps) {
       activeExperience !== 'editor'
       && activeExperience !== 'chat'
       && activeExperience !== 'medium'
+      && activeExperience !== 'phone'
     ) return;
 
     const runtime = getRuntimeDeviceContext();
@@ -300,6 +304,17 @@ export function RootApp({ initialExperience }: RootAppProps) {
       <Suspense fallback={<AppLoadingScreen label="Opening credit claim" />}>
         <CreditClaimPage />
       </Suspense>
+    );
+  }
+
+  if (activeExperience === 'phone') {
+    return (
+      <>
+        <Suspense fallback={<AppLoadingScreen />}>
+          <PhoneApp />
+        </Suspense>
+        <AccountDialogHost />
+      </>
     );
   }
 

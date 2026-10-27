@@ -1,0 +1,142 @@
+/* Root of the /m phone skin. Everything is scoped beneath .mobile-skin; nothing here restyles
+   the desktop editor. The five-strip layout itself lives in shell/PhoneShell.css. */
+.mobile-skin {
+  --phone-safe-top: env(safe-area-inset-top, 0px);
+  --phone-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --phone-safe-left: env(safe-area-inset-left, 0px);
+  --phone-safe-right: env(safe-area-inset-right, 0px);
+}
+
+.mobile-skin[data-testid='phone-root'] {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  color-scheme: dark;
+  background: var(--phone-bg, #0b0c0f);
+  color: var(--phone-text, #eef0f4);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---- Boot progress and problem banner (PhoneBootStatus) ---- */
+
+.mobile-skin .phone-boot-status {
+  z-index: var(--z-overlay, 1000);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font: 14px/1.35 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.mobile-skin .phone-boot-status--booting {
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: calc(16px + var(--phone-safe-top)) calc(16px + var(--phone-safe-right))
+    calc(16px + var(--phone-safe-bottom)) calc(16px + var(--phone-safe-left));
+}
+
+.mobile-skin .phone-boot-status--problem {
+  position: fixed;
+  left: calc(16px + var(--phone-safe-left));
+  right: calc(16px + var(--phone-safe-right));
+  top: calc(56px + var(--phone-safe-top));
+  /* Above the shell, below the project chooser so its Resume/Create stay reachable. */
+  z-index: var(--z-modal, 10000);
+}
+
+.mobile-skin .phone-boot-status__card {
+  width: 100%;
+  max-width: 420px;
+  padding: 14px 16px;
+  border: 1px solid var(--phone-border, #2b2f39);
+  border-radius: 12px;
+  background: var(--phone-surface, #14161b);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.mobile-skin .phone-boot-status--problem .phone-boot-status__card {
+  margin: 0 auto;
+  border-color: var(--phone-danger, #f0626b);
+}
+
+.mobile-skin .phone-boot-status__title {
+  margin: 0 0 4px;
+  font-weight: 600;
+  color: var(--phone-text, #eef0f4);
+}
+
+.mobile-skin .phone-boot-status__detail {
+  margin: 0 0 6px;
+  color: var(--phone-text-dim, #98a0ad);
+  overflow-wrap: anywhere;
+}
+
+.mobile-skin .phone-boot-status__bar {
+  height: 4px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--phone-surface-3, #262a33);
+}
+
+.mobile-skin .phone-boot-status__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--phone-accent, #5b8def);
+  transition: width 200ms ease;
+}
+
+.mobile-skin .phone-boot-status__fill.is-indeterminate {
+  width: 35%;
+  animation: phone-boot-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes phone-boot-indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-skin .phone-boot-status__fill.is-indeterminate { animation: none; width: 100%; opacity: 0.5; }
+}
+
+.mobile-skin .phone-boot-status__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.mobile-skin .phone-boot-status__button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--phone-border, #2b2f39);
+  border-radius: 10px;
+  background: var(--phone-surface-2, #1c1f26);
+  color: var(--phone-text, #eef0f4);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-skin .phone-boot-status__button.is-primary {
+  border-color: var(--phone-accent, #5b8def);
+  background: var(--phone-accent, #5b8def);
+  color: #fff;
+}
+
+/* Pointer-focus hygiene: no stuck ring after a tap, a styled ring for keyboard focus. */
+.mobile-skin .phone-boot-status__button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.mobile-skin .phone-boot-status__button:focus-visible {
+  outline: 2px solid var(--phone-accent, #5b8def);
+  outline-offset: 2px;
+}

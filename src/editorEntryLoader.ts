@@ -1,4 +1,5 @@
 let editorAppModulePromise: Promise<typeof import('./App')> | null = null;
+let phoneAppModulePromise: Promise<typeof import('./components/mobileSkin/PhoneApp')> | null = null;
 let editorBootModulePromise: Promise<typeof import('./editorBoot')> | null = null;
 let editorBootScheduled = false;
 
@@ -7,11 +8,17 @@ export function loadEditorAppModule(): Promise<typeof import('./App')> {
   return editorAppModulePromise;
 }
 
-function scheduleEditorBoot(editorAppModule: Promise<typeof import('./App')>): void {
+export function loadPhoneAppModule(): Promise<typeof import('./components/mobileSkin/PhoneApp')> {
+  phoneAppModulePromise ??= import('./components/mobileSkin/PhoneApp');
+  return phoneAppModulePromise;
+}
+
+// Both entry shells (desktop App and the /m phone skin) share one once-only editorBoot.
+function scheduleEditorBoot(entryModule: Promise<unknown>): void {
   if (editorBootScheduled) return;
   editorBootScheduled = true;
 
-  void editorAppModule
+  void entryModule
     .then(() => {
       const startBoot = () => {
         editorBootModulePromise ??= import('./editorBoot');
@@ -35,4 +42,10 @@ export function preloadEditorRuntime(): Promise<typeof import('./App')> {
   const editorAppModule = loadEditorAppModule();
   scheduleEditorBoot(editorAppModule);
   return editorAppModule;
+}
+
+export function preloadPhoneRuntime(): Promise<typeof import('./components/mobileSkin/PhoneApp')> {
+  const phoneAppModule = loadPhoneAppModule();
+  scheduleEditorBoot(phoneAppModule);
+  return phoneAppModule;
 }

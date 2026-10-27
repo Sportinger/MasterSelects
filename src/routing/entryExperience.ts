@@ -3,6 +3,7 @@ export type EntryExperience =
   | 'chat'
   | 'editor'
   | 'medium'
+  | 'phone'
   | 'imprint'
   | 'landing'
   | 'privacy'
@@ -29,6 +30,8 @@ const CREDIT_CLAIM_PATHS = ['/credits/claim', '/claim'];
 const ROOT_PATHS = ['/', '/index.html'];
 const EDITOR_PATHS = ['/editor'];
 const MEDIUM_PATHS = ['/medium'];
+// Opt-in phone skin; /m/... sub-paths stay phone like /editor/... stays editor.
+const PHONE_PATHS = ['/m'];
 const IMPRINT_PATHS = ['/impressum', '/imprint'];
 const PRIVACY_PATHS = ['/datenschutz', '/privacy'];
 // Keep in sync with LEGAL_PAGE_PATHS in src/legal/consumerContractTexts.ts.
@@ -150,6 +153,11 @@ export function isMediumPath(pathname: string): boolean {
   return MEDIUM_PATHS.some((basePath) => matchesPathPrefix(normalizedPath, basePath));
 }
 
+export function isPhonePath(pathname: string): boolean {
+  const normalizedPath = normalizePathname(pathname);
+  return PHONE_PATHS.some((basePath) => matchesPathPrefix(normalizedPath, basePath));
+}
+
 export function isCreditClaimPath(pathname: string): boolean {
   const normalizedPath = normalizePathname(pathname);
   return CREDIT_CLAIM_PATHS.some((basePath) => matchesPathPrefix(normalizedPath, basePath));
@@ -182,6 +190,7 @@ export function isSupportedPagePath(pathname: string): boolean {
     || isChatPath(normalizedPath)
     || isEditorPath(normalizedPath)
     || isMediumPath(normalizedPath)
+    || isPhonePath(normalizedPath)
     || isCreditClaimPath(normalizedPath)
     || resolveLegalEntryExperience(normalizedPath) !== null;
 }
@@ -210,6 +219,10 @@ export function resolveEntryExperience(locationLike: EntryLocationLike): EntryEx
 
   if (isMediumPath(locationLike.pathname)) {
     return 'medium';
+  }
+
+  if (isPhonePath(locationLike.pathname)) {
+    return 'phone';
   }
 
   if (

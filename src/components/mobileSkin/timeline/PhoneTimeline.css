@@ -1,0 +1,227 @@
+.mobile-skin .phone-timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mobile-skin .phone-timeline__surface {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  outline: none;
+}
+
+.mobile-skin .phone-timeline__surface:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--border-focus, var(--accent));
+}
+
+.mobile-skin .phone-timeline__layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+
+/* ---- Ruler ---- */
+.mobile-skin .phone-timeline__ruler {
+  position: relative;
+  flex: 0 0 22px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.mobile-skin .phone-timeline__tick {
+  position: absolute;
+  top: 0;
+  height: 22px;
+  padding-left: 3px;
+  border-left: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+/* ---- Lanes ---- */
+.mobile-skin .phone-timeline__lanes {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 216px; /* about four lanes; more lanes scroll vertically */
+  overflow: hidden;
+}
+
+.mobile-skin .phone-timeline__lane-backs {
+  position: absolute;
+  inset: 0 0 auto 0;
+  will-change: transform;
+}
+
+.mobile-skin .phone-timeline__lane-back {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--veil-1, rgba(255, 255, 255, 0.03));
+}
+
+.mobile-skin .phone-timeline__lane-back--main {
+  background: var(--veil-2, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 1px 0 var(--border-subtle), inset 0 -1px 0 var(--border-subtle);
+}
+
+.mobile-skin .phone-timeline__bound {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: var(--border-strong);
+  pointer-events: none;
+}
+
+.mobile-skin .phone-timeline__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ---- Fixed centre playhead ---- */
+.mobile-skin .phone-timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text-primary);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.mobile-skin .phone-timeline__playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -5px;
+  border: 6px solid transparent;
+  border-top-color: var(--text-primary);
+}
+
+/* ---- Clip tiles ---- */
+.mobile-skin .phone-clip-strip {
+  position: absolute;
+  left: 0;
+  width: 0;
+  overflow: visible;
+}
+
+.mobile-skin .phone-clip {
+  position: absolute;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: var(--blue-700, #1d4ed8);
+  color: var(--text-on-accent, #fff);
+  contain: layout paint;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-skin .phone-clip--audio {
+  background: var(--green-700, #15803d);
+  color: var(--green-300, #86efac);
+}
+
+.mobile-skin .phone-clip--other {
+  background: var(--purple-600, #7c3aed);
+}
+
+.mobile-skin .phone-clip--cut-left { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.mobile-skin .phone-clip--cut-right { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+.mobile-skin .phone-clip--selected {
+  box-shadow: inset 0 0 0 2px var(--gray-0, #fff), 0 0 0 1px rgba(0, 0, 0, 0.6);
+  z-index: 1;
+}
+
+.mobile-skin .phone-clip:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--border-focus, var(--accent)), 0 0 0 2px var(--accent);
+  z-index: 2;
+}
+
+.mobile-skin .phone-clip--selected:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--gray-0, #fff), 0 0 0 2px var(--accent);
+}
+
+.mobile-skin .phone-clip__filmstrip {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mobile-skin .phone-clip__thumb {
+  flex: 0 0 auto;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.9;
+}
+
+.mobile-skin .phone-clip__thumb--missing {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.mobile-skin .phone-clip__waveform {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--green-300, #86efac);
+  pointer-events: none;
+}
+
+.mobile-skin .phone-clip__waveform--empty {
+  visibility: hidden;
+}
+
+.mobile-skin .phone-clip__label {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 6px 2px;
+  color: inherit;
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+  pointer-events: none;
+}

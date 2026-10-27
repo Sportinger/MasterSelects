@@ -53,6 +53,7 @@
     "test:e2e:release": "npm run test:e2e:types && npm run build && npm run test:e2e:built:run && playwright test --headed --project=chrome-headed-dev",
     "test:e2e:report": "playwright show-report playwright-report",
     "test:e2e:types": "tsc -p tests/playwright/tsconfig.json",
+    "test:e2e:phone": "playwright test -c playwright.phone.config.ts",
     "test:e2e:beta": "playwright test --config playwright.beta.config.ts",
     "test:security": "vitest run tests/security/ tests/unit/aiToolPolicy.test.ts tests/unit/logRedaction.test.ts tests/unit/redact.test.ts --reporter=verbose",
     "fixtures:stress-test-media": "node scripts/prepare-stress-test-media.mjs",

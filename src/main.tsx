@@ -7,7 +7,7 @@ import './styles/tokens.css'
 import './styles/themes/resolve.css'
 import './styles/base.css'
 import RootApp from './RootApp.tsx'
-import { preloadEditorRuntime } from './editorEntryLoader'
+import { preloadEditorRuntime, preloadPhoneRuntime } from './editorEntryLoader'
 import {
   canonicalEntryPath,
   ensureDirectEntryReturnsToLanding,
@@ -50,6 +50,9 @@ if (
   || initialExperience === 'medium'
 ) {
   void preloadEditorRuntime();
+} else if (initialExperience === 'phone') {
+  // The phone skin never imports the desktop App; it boots the same editor services.
+  void preloadPhoneRuntime();
 }
 
 // Note: StrictMode disabled for WebGPU compatibility in development

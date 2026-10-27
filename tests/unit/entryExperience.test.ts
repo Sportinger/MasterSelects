@@ -7,6 +7,7 @@ import {
   canonicalEntryPath,
   createLandingBackedEntryState,
   ensureDirectEntryReturnsToLanding,
+  isPhonePath,
   isSupportedPagePath,
   resolveEntryExperience,
 } from '../../src/routing/entryExperience';
@@ -98,6 +99,29 @@ describe('entry experience routing', () => {
   ] as const)('serves the legal route %s', (pathname, experience) => {
     expect(resolveEntryExperience({ hostname: 'www.masterselects.com', pathname })).toBe(experience);
     expect(isSupportedPagePath(pathname)).toBe(true);
+  });
+
+  it.each(['/m', '/m/', '/m/project'])('opens the phone skin on %s', (pathname) => {
+    const location = { hostname: 'www.masterselects.com', pathname, search: '' };
+    expect(isPhonePath(pathname)).toBe(true);
+    expect(resolveEntryExperience(location)).toBe('phone');
+    // Production admission: functions/_middleware.ts serves the app only for supported paths.
+    expect(isSupportedPagePath(pathname)).toBe(true);
+    expect(canonicalEntryPath(location)).toBeNull();
+  });
+
+  it.each(['/medium', '/mobile', '/ma', '/m.html'])('does not mistake %s for the phone skin', (pathname) => {
+    expect(isPhonePath(pathname)).toBe(false);
+    expect(resolveEntryExperience({ hostname: 'localhost', pathname, search: '' })).not.toBe('phone');
+  });
+
+  it('keeps editor overrides ahead of the phone route', () => {
+    expect(resolveEntryExperience({ hostname: 'localhost', pathname: '/m', search: '?test=parallel-decode' }))
+      .toBe('editor');
+    expect(resolveEntryExperience({ hostname: 'localhost', pathname: '/m/', search: '?entry=editor' }))
+      .toBe('editor');
+    expect(resolveEntryExperience({ hostname: 'localhost', pathname: '/m', search: '?entry=phone' }))
+      .toBe('phone');
   });
 
   it('forces the editor when test mode is requested', () => {
