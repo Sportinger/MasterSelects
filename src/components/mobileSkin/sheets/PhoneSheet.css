@@ -109,3 +109,5 @@
   .mobile-skin .phone-sheet { animation: phone-sheet-rise 160ms ease-out; }
 }
 @keyframes phone-sheet-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.mobile-skin .phone-sheet__note { margin: 0; padding: 8px 16px 16px; color: var(--phone-text-dim); line-height: 1.45; }

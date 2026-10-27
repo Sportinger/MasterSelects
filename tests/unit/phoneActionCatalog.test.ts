@@ -61,8 +61,8 @@ describe('phone action catalog', () => {
     });
   });
 
-  it('ships M1 and resolves every M1 action as available', () => {
-    expect(PHONE_SHIPPED_MILESTONE).toBe('M1');
+  it('ships M2 and resolves every M1 action as available', () => {
+    expect(PHONE_SHIPPED_MILESTONE).toBe('M2');
     const m1 = PHONE_ACTIONS.filter((action) => action.milestone === 'M1');
     expect(m1.map((action) => action.id).toSorted()).toEqual(
       ['assistant', 'delete', 'duplicate', 'edit', 'media', 'reorder', 'ripple-delete', 'text'],
@@ -73,13 +73,22 @@ describe('phone action catalog', () => {
     }
   });
 
-  it('keeps M2 and later actions unavailable with a reason', () => {
+  it('keeps actions of later milestones unavailable with a reason', () => {
     const later = PHONE_ACTIONS.filter((action) => !isMilestoneShipped(action.milestone));
-    expect(later.length).toBeGreaterThan(10);
+    expect(later.length).toBeGreaterThan(0);
     for (const action of later) {
       const state = resolvePhoneActionState(action, baseContext);
       expect(state.kind).toBe('unavailable');
       if (state.kind === 'unavailable') expect(state.reason).toContain(`milestone ${action.milestone}`);
+    }
+  });
+
+  it('opens a design sheet from every M2 action', () => {
+    const m2 = PHONE_ACTIONS.filter((action) => action.milestone === 'M2');
+    expect(m2.length).toBe(16);
+    for (const action of m2) {
+      expect(resolvePhoneActionState(action, baseContext)).toEqual({ kind: 'available' });
+      expect(action.run).toBeTypeOf('function');
     }
   });
 

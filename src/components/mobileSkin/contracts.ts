@@ -44,7 +44,7 @@ export type PhoneMilestone = 'M0' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6';
 /** Where an unavailable tool points meanwhile: the full editor, reached from the project sheet. */
 export const PHONE_FULL_EDITOR_HINT = 'Use the full editor meanwhile: tap the project name, then Full editor.';
 
-export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M1';
+export const PHONE_SHIPPED_MILESTONE: PhoneMilestone = 'M2';
 
 const MILESTONE_ORDER: readonly PhoneMilestone[] = ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'];
 
@@ -174,7 +174,11 @@ export interface PhoneUiState {
 // ---------------------------------------------------------------------------
 
 /** Sheet ids known to sheets/phoneSheetRegistry.tsx. */
-export type PhoneSheetId = 'projects' | 'media' | 'title' | 'export' | 'assistant';
+export type PhoneSheetId =
+  | 'projects' | 'media' | 'title' | 'export' | 'assistant'
+  // M2 design sheets.
+  | 'effects' | 'filters' | 'adjust' | 'transition' | 'speed' | 'volume' | 'audio' | 'animation'
+  | 'keyframe' | 'mask' | 'crop' | 'overlay' | 'format';
 
 export interface PhoneSheetProps {
   title: string;
