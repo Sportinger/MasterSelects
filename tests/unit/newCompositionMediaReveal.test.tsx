@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { Composition } from '../../src/stores/mediaStore';
+import type { Composition, MediaFile } from '../../src/stores/mediaStore';
 import { getLastMediaSourceRevealRequest } from '../../src/services/mediaSourceReveal';
 import { useMediaPanelCompositionSettings } from '../../src/components/panels/media/panel/useMediaPanelCompositionSettings';
 import { useMediaPanelCreateComposition } from '../../src/components/panels/media/panel/useMediaPanelCreateComposition';
@@ -21,6 +21,38 @@ describe('new composition visibility in the media panel', () => {
     expect(getLastMediaSourceRevealRequest()).toMatchObject({ mediaFileId: 'new-comp', source: 'media-panel' });
     expect(result.current.settingsDialog).toBeNull();
   });
+
+  it.each(['audio', 'image', 'model', 'gaussian-splat'] as const)(
+    'populates a composition from %s on the correct track', async type => {
+      const source = {
+        id: 'source-media', name: 'Source.mp3', type,
+        file: new File(['source'], 'Source.mp3'), duration: 12,
+      } as MediaFile;
+      const composition = { id: 'new-comp', type: 'composition', timelineData: {
+        tracks: [createMockTrack({ id: 'video-1', type: 'video' }),
+          createMockTrack({ id: 'audio-1', type: 'audio' })],
+      } } as Composition;
+      const originalAddClip = useTimelineStore.getState().addClip;
+      const addClip = vi.fn().mockResolvedValue('new-clip');
+      useTimelineStore.setState({ addClip });
+      const updateComposition = vi.fn();
+      const { result, unmount } = renderHook(() => useMediaPanelCreateComposition({
+        contextMenu: null, createComposition: vi.fn(() => composition), updateComposition,
+        openCompositionTab: vi.fn(), getActiveParentId: () => null,
+        showFloatingText: vi.fn(), closeContextMenu: vi.fn(),
+      }));
+      try {
+        await act(async () => result.current(source));
+        expect(addClip).toHaveBeenCalledWith(type === 'audio' ? 'audio-1' : 'video-1',
+          source.file, 0, 12, source.id, type);
+        expect(updateComposition).toHaveBeenCalledWith(composition.id,
+          expect.objectContaining({ duration: 12, timelineData: expect.any(Object) }));
+      } finally {
+        unmount();
+        useTimelineStore.setState({ addClip: originalAddClip });
+      }
+    },
+  );
 
   it('reveals the composition created from an existing media item after population', async () => {
     const composition = {

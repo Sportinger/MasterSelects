@@ -185,7 +185,22 @@ export function resolveExternalDropImmediatePreview({
         if (item.kind !== 'file') continue;
 
         const file = item.getAsFile();
-        if (!file) continue;
+        // Native desktop drags keep files protected until drop. MIME metadata
+        // remains readable during dragenter/dragover, including for MP3/WAV.
+        if (!file) {
+          if (item.type.startsWith('audio/')) {
+            isAudio = true;
+            isVideo = false;
+            hasAudio = true;
+            break;
+          }
+          if (item.type.startsWith('video/')) break;
+          if (item.type.startsWith('image/')) {
+            hasAudio = false;
+            break;
+          }
+          continue;
+        }
 
         if (isAudioFile(file)) {
           isAudio = true;

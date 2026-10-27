@@ -486,7 +486,11 @@ export function useExternalDrop({
       const startTime = Math.max(0, pixelToTime(x));
       const filePath = extractExternalDropFilePath(e.dataTransfer);
 
-      const commandResult = await executeTimelineExternalDropCommand({
+      // Native file access expires when the drop handler yields. Go straight
+      // to the file collector instead of awaiting the internal-item executor.
+      const commandResult = dropCommand.kind === 'external-files'
+        ? { handled: false }
+        : await executeTimelineExternalDropCommand({
         actions: {
           addClip,
           addCompClip,
@@ -600,7 +604,11 @@ export function useExternalDrop({
         return;
       }
 
-      const commandResult = await executeTimelineExternalDropCommand({
+      // Native file access expires when the drop handler yields. Go straight
+      // to the file collector instead of awaiting the internal-item executor.
+      const commandResult = dropCommand.kind === 'external-files'
+        ? { handled: false }
+        : await executeTimelineExternalDropCommand({
         actions: {
           addClip,
           addCompClip,

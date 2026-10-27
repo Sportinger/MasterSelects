@@ -116,6 +116,19 @@ describe('MediaContextActionsMenu', () => {
     expect(onCopyPrompt).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['audio', 'image', 'model', 'gaussian-splat'] as const)(
+    'offers Create Comp for an imported %s', type => {
+      const source = { ...mediaFile, type, file: new File(['source'], 'source') };
+      const onCreateCompositionFromItem = vi.fn(async () => undefined);
+      render(<MediaContextActionsMenu {...createProps({
+        selectedItem: source, mediaFile: source, isVideoFile: false,
+        isImageFile: type === 'image', onCreateCompositionFromItem,
+      })} />);
+      fireEvent.click(screen.getByText('Create Comp'));
+      expect(onCreateCompositionFromItem).toHaveBeenCalledWith(source);
+    },
+  );
+
   it('offers Create Comp for an existing composition and passes it through', () => {
     const composition: Composition = {
       id: 'comp-source',

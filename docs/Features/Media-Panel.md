@@ -62,10 +62,18 @@ The **+ Add** button in the header and the **Add** submenu of the right-click me
 
 Text, Solid and Blank Clip layers, and the **3D** and **Motion** layers, are added on the timeline: right-click empty space on a video track → **Add Layer**. See [Timeline](./Timeline.md) and [Text Clips](./Text-Clips.md).
 
+#### Create Comp
+
+Right-click a video, audio file, image, 3D model or Gaussian splat and choose
+**Create Comp**. The source starts at time zero in a new composition. Audio uses
+an audio track; visual media uses a video track. Source dimensions and duration
+are used when available, with the default composition size and a five-second
+duration otherwise. Existing compositions and live inputs also support Create Comp.
+
 #### Drag and Drop
 - Drag files or folders from the OS anywhere over the open editor: a large blue overlay covers the workspace.
 - Drop outside the Timeline to import into Media and reveal the Media Panel. Drops inside the Media Panel preserve folder and Board placement.
-- Drop on the Timeline to place clips there using its existing track/position preview. Internal clip and media drags keep their usual behavior.
+- Drop on the Timeline to place clips there using its existing track/position preview. MP3 and other audio files dragged from the desktop are recognized while hovering over an audio track. Internal clip and media drags keep their usual behavior.
 - Paste clipboard images or files with `Ctrl+V` while the Media Panel is hovered
 - Paste a copied video link (YouTube and other `yt-dlp` sites) with `Ctrl+V` to open the in-panel download dialog with thumbnail and resolution choices ([Media Downloads](./Download-Panel.md#url-paste))
 - Drag folders directly into the panel; nested folders are recreated inside the project
@@ -426,7 +434,7 @@ Right-click on items or empty space for context options. On touch devices, eithe
 - **Rename** (single selection only)
 - **Download** (single file selection, saves through the browser from the retained file/blob URL). If a stored source was moved or deleted, the download tries the retained URL and reports unavailable media when no fallback remains. Failed project/handle reads are caught and logged instead of escaping as an unhandled rejection.
 - **Crop** (single image selection, opens the source monitor directly in crop mode)
-- **Create Comp** (single image/video selection, creates a composition at the media resolution, opens it, and places the media at time 0)
+- **Create Comp** (single video, audio, image, 3D model, splat, composition or supported live input; opens a new composition and places the source at time 0 on the matching track)
 - **Extract First Frame** / **Extract Last Frame** (single video selection, imports the extracted PNG beside the source media)
 - **Move to Folder** submenu (shows available folders + "Root")
 - **Delete** (shows count for multi-selection)

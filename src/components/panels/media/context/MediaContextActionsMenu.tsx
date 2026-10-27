@@ -5,6 +5,7 @@ import type {
   ProjectItem,
   SolidItem,
 } from '../../../../stores/mediaStore';
+import { canCreateCompositionFromMedia } from '../compositionSource';
 import type { VideoFrameExtractionPosition } from '../videoFrameExtraction';
 import { MediaAddItemsMenu } from '../import/MediaAddItemsMenu';
 import { handleSubmenuHover, handleSubmenuLeave } from '../submenuPosition';
@@ -150,8 +151,7 @@ export function MediaContextActionsMenu({
   const canCopyGenerationPrompt = !multiSelect && generationPrompt.length > 0;
   const canCreateCompositionFromSelection = Boolean(
     composition
-    || (mediaFile?.liveInput && mediaFile.liveInput.kind !== 'composition-feedback')
-    || ((isVideoFile || isImageFile) && mediaFile?.file),
+    || canCreateCompositionFromMedia(mediaFile),
   );
 
   return (

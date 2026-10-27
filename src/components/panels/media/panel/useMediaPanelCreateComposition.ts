@@ -5,6 +5,7 @@ import { DEFAULT_TRACKS, useTimelineStore } from '../../../../stores/timeline';
 import { requestMediaSourceReveal } from '../../../../services/mediaSourceReveal';
 import { placeLiveInputOnTimeline } from '../../../../services/mediaRuntime/liveInputTimelineAdapter';
 import { requestMediaBoardPlacement } from '../board/placementRequests';
+import { canCreateCompositionFromMedia } from '../compositionSource';
 import type { MediaPanelContextMenu } from '../context/types';
 
 type MediaState = ReturnType<typeof useMediaStore.getState>;
@@ -51,11 +52,7 @@ export function useMediaPanelCreateComposition({
     const isSupportedLiveInput = Boolean(
       mediaItem?.liveInput && mediaItem.liveInput.kind !== 'composition-feedback',
     );
-    if (
-      !isNestedComposition
-      && !isSupportedLiveInput
-      && (!mediaSourceFile || (mediaItem?.type !== 'video' && mediaItem?.type !== 'image'))
-    ) return;
+    if (!isNestedComposition && !canCreateCompositionFromMedia(mediaItem)) return;
 
     const settings = isNestedComposition
       ? {
@@ -77,7 +74,8 @@ export function useMediaPanelCreateComposition({
     await openCompositionTab(composition.id, { skipAnimation: true });
 
     const tracks = composition.timelineData?.tracks ?? DEFAULT_TRACKS;
-    const trackId = tracks.find((track) => track.type === 'video' && !track.locked)?.id;
+    const trackType = mediaItem?.type === 'audio' && !isSupportedLiveInput ? 'audio' : 'video';
+    const trackId = tracks.find((track) => track.type === trackType && !track.locked)?.id;
     if (!trackId) return;
 
     if (isNestedComposition) {
