@@ -174,7 +174,7 @@ export interface TimelineRulerProps {
 
 // Props for TimelineControls component
 export interface TimelineControlsProps {
-  variant?: 'full' | 'main' | 'utility' | 'transport' | 'zoom';
+  variant?: 'full' | 'main' | 'utility' | 'transport' | 'zoom' | 'recording';
   isPlaying: boolean;
   loopPlayback: boolean;
   playheadPosition: number;

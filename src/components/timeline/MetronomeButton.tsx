@@ -53,6 +53,7 @@ export function MetronomeButton() {
           <path d="M9 3h6l4 18H5L9 3z" strokeLinejoin="round" />
           <line x1="12" y1="21" x2="17" y2="7" />
         </svg>
+        <span className="timeline-metronome-label">Metronome</span>
       </button>
       <button
         type="button"
@@ -86,14 +87,14 @@ export function MetronomeButton() {
             { value: 'beats', label: 'Every beat' },
             { value: 'bars', label: 'Bars only' },
           ] as const).map((option) => (
-            <div
+            <button type="button"
               key={option.value}
               className={`view-dropdown-item ${mode === option.value ? 'active' : ''}`}
               onClick={() => setMetronomeMode(option.value)}
             >
-              <span className={`view-check ${mode === option.value ? 'checked' : ''}`}>✓</span>
+              <span aria-hidden="true" className={`view-check ${mode === option.value ? 'checked' : ''}`}>✓</span>
               <span>{option.label}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}

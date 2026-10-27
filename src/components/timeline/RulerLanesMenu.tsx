@@ -63,6 +63,7 @@ export function RulerLanesMenu() {
         className={`btn btn-sm ${open ? 'btn-active' : ''}`}
         onClick={() => setOpen((previous) => !previous)}
         title="Ruler lanes"
+        aria-expanded={open}
       >
         Rulers
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 4 }}>
@@ -80,9 +81,19 @@ export function RulerLanesMenu() {
               <Fragment key={option.format}>
                 <div
                   className={`view-dropdown-item ${enabled ? 'active' : ''}`}
+                  role="checkbox"
+                  aria-checked={enabled}
+                  tabIndex={0}
+                  onKeyDown={event => {
+                    if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      toggleFormat(option.format);
+                    }
+                  }}
                   onClick={() => toggleFormat(option.format)}
                 >
-                  <span className={`view-check ${enabled ? 'checked' : ''}`}>✓</span>
+                  <span aria-hidden="true" className={`view-check ${enabled ? 'checked' : ''}`}>✓</span>
                   <span className="ruler-lane-label">{option.label}</span>
                   {ownsGrid && (
                     // The row itself stays a pure toggle; expanding is a
@@ -103,15 +114,15 @@ export function RulerLanesMenu() {
                   )}
                 </div>
                 {ownsGrid && gridOpen && TIMELINE_GRID_SUBDIVISIONS.map((subdivision) => (
-                  <div
+                  <button type="button"
                     key={subdivision}
                     // Indented: these belong to Bars + Beats, not to the lane list.
                     className={`view-dropdown-item ruler-lane-subitem ${gridSubdivision === subdivision ? 'active' : ''}`}
                     onClick={() => setTimelineGridSubdivision(subdivision)}
                   >
-                    <span className={`view-check ${gridSubdivision === subdivision ? 'checked' : ''}`}>✓</span>
+                    <span aria-hidden="true" className={`view-check ${gridSubdivision === subdivision ? 'checked' : ''}`}>✓</span>
                     <span className="ruler-lane-label">{TIMELINE_GRID_SUBDIVISION_LABELS[subdivision]}</span>
-                  </div>
+                  </button>
                 ))}
               </Fragment>
             );

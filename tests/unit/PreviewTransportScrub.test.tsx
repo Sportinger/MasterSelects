@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.unmock('../../src/stores/settingsStore');
+
 const timelineState = vi.hoisted(() => ({
   clips: [],
   duration: 10,
