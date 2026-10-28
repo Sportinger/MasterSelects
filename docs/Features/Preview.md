@@ -155,6 +155,16 @@ judged by frame index, never by a time distance that also admits a neighbour:
   "earlier PTS within one frame" allowance for averaged VFR rates keeps a 1 ms rounding margin, so
   floating-point noise (0.1333 − 0.1 < 1/30) no longer passes frame 3 off as frame 4. Only an
   element at the frame-exact seek position for the target counts as seeked onto it.
+- **Jittered phone timestamps keep their frame.** Phone recorders stamp capture times: Android
+  footage at 30 fps carries frames up to 4 ms off k/30. A presented timestamp up to a quarter frame
+  before k/fps is labelled k/fps (`nominalPresentedFrameTime` in `src/services/videoSourceFrameRate.ts`,
+  applied where `requestVideoFrameCallback` times enter the sync: seek callbacks, the Android frame
+  capture and the decoder warmup), so the scrub-cache slot, the held-frame guard and the presented
+  frame all name frame k. A timestamp within a quarter frame after the previous grid point is the
+  previous frame, however late it was stamped, and never settles the next target. Before, on the
+  Pixel 10 Pro, frame 246 (stamped 2.6 ms early) filled slot 245 and timeline frame 245 kept showing
+  it, and frame 152 (2.8 ms late) settled a step to frame 153, so the paused preview stayed one
+  keyboard step behind.
 - **Held and cached frames show the target frame only.** The paused guard
   (`htmlVideoPausedFrameGuard.ts`) compares frame indices on the source grid, never finer than the
   scrub cache's 1/30 s slots; it used to accept anything from one 1/30 s slot back to 50 ms ahead.
@@ -168,7 +178,8 @@ judged by frame index, never by a time distance that also admits a neighbour:
 
 `tests/playwright/foundation/preview-truth.spec.ts` checks this against the preview's real pixels
 (frame-code clip, Next frame ×37, play/pause); `tests/unit/pausedFrameExactSeek.test.ts` pins the
-seek positions, frame identity, guard and stepping at 24 to 60 fps.
+seek positions, frame identity, guard and stepping at 24 to 60 fps, and the jittered timestamps of
+the generated Android phone recording.
 
 ### Playback Limits
 

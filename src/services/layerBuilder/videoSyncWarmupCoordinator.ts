@@ -1,4 +1,4 @@
-import { rememberPresentedSourceFrame } from './videoSyncFrameSelection';
+import { nominalPresentedFrameTime, rememberPresentedSourceFrame } from './videoSyncFrameSelection';
 import { createClipSpeedSource, createStoreSpeedSource, isUnitRateSourceWindow, resolveClipSourceTime } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types/timeline';
 import { flags } from '../../engine/featureFlags';
@@ -434,8 +434,8 @@ export class VideoSyncWarmupCoordinator {
 
       finishingWarmup = true;
       this.deps.warmups.clearWatchdog(video);
-      // Playback presents frames ahead of currentTime: label the copy with the presented frame's own time.
-      const presentedTime = Number.isFinite(presentedMediaTime) ? presentedMediaTime! : video.currentTime;
+      // Playback presents frames ahead of currentTime: label the copy with the presented frame's own (grid) time.
+      const presentedTime = Number.isFinite(presentedMediaTime) ? nominalPresentedFrameTime(video, presentedMediaTime!) : video.currentTime;
       let captured = renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId);
       if (!captured) {
         captured = await renderHostPort.preCacheVideoFrame(video, clipId);

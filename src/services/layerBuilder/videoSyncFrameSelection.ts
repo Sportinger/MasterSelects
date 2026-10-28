@@ -1,7 +1,9 @@
 import type { TimelineClip } from '../../types/timeline';
 import type { FrameContext } from './types';
 import { getMediaFileForClip } from './FrameContext';
-import { getVideoSourceFrameRate, setVideoSourceFrameRate } from '../videoSourceFrameRate';
+import { getVideoSourceFrameRate, PRESENTED_FRAME_EARLY_TOLERANCE_FRAMES, setVideoSourceFrameRate } from '../videoSourceFrameRate';
+
+export { nominalPresentedFrameTime } from '../videoSourceFrameRate';
 
 const presentedFrames = new WeakMap<HTMLVideoElement, { seekTime: number; pts: number }>();
 
@@ -107,9 +109,16 @@ export function samePresentedSourceFrame(video: HTMLVideoElement, pts: number, t
   // nominal frame duration an earlier PTS is the held frame (bins of an averaged fps can split it),
   // but the previous frame starts a full duration earlier: compared without the rounding margin,
   // floating-point noise (0.1333.. - 0.1 < 1/30) used to accept it as the target's frame.
-  return fps ? Math.floor((pts + 0.000001) * fps) === Math.floor(target * fps + 1e-9)
-    || target - pts < 1 / fps - PTS_ROUNDING_SECONDS
-    : sameSourceFrame(pts, target);
+  if (!fps) return sameSourceFrame(pts, target);
+  const targetFrame = Math.floor(target * fps + 1e-9);
+  const ptsPosition = (pts + 0.000001) * fps;
+  if (Math.floor(ptsPosition) === targetFrame) return true;
+  // A PTS near the previous frame's grid point is the previous frame, however late phone capture
+  // jitter stamped it: frame 152 of an Android recording at 5.0695 s (2.8 ms after 152/30) lies within
+  // 1/fps - 1 ms of 153/30 and kept the paused preview one keyboard step behind (Pixel run 2026-10-28).
+  if (Math.floor(ptsPosition) === targetFrame - 1
+    && ptsPosition - (targetFrame - 1) <= PRESENTED_FRAME_EARLY_TOLERANCE_FRAMES) return false;
+  return target - pts < 1 / fps - PTS_ROUNDING_SECONDS;
 }
 
 /** Diagnostic: the presented PTS is the target's frame, allowing for a timestamp rounded up past it. */
