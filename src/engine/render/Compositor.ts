@@ -8,10 +8,7 @@ import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import { getPixelParticleDisintegrateRenderer } from '../particles/PixelParticleDisintegrateRenderer';
 import { splitLayerEffects } from './layerEffectStack';
 import { Logger } from '../../services/logger';
-import {
-  isSupportedAdjustmentEffectType,
-  UnsupportedAdjustmentEffectError,
-} from '../../services/motionDesign/adjustment/supportedEffects';
+import { bypassUnavailableAdjustmentEffects } from './adjustmentLayerEffects';
 import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
 import { resolveCompositeSourceSize } from './compositeSourceSize';
 import type { SplitCompareSettings } from '../../stores/splitCompareStore';
@@ -201,27 +198,10 @@ export class Compositor {
         continue;
       }
 
-      const unsupportedAdjustmentEffect = isAdjustmentLayer
-        ? layer.effects.find((effect) => !isSupportedAdjustmentEffectType(effect.type))
-        : undefined;
-      if (unsupportedAdjustmentEffect) {
-        const error = new UnsupportedAdjustmentEffectError(
-          layer.id,
-          unsupportedAdjustmentEffect.id,
-          unsupportedAdjustmentEffect.type,
-        );
-        if (state.particleQuality === 'export') {
-          throw error;
-        }
-        log.warn('Skipping adjustment layer with unsupported effect', {
-          layerId: layer.id,
-          effectId: unsupportedAdjustmentEffect.id,
-          effectType: unsupportedAdjustmentEffect.type,
-        });
-        continue;
-      }
-
-      const adjustmentEffects = resolveSurfaceFrameEffects(layer.effects, data.displayedMediaTime);
+      // An adjustment effect that cannot run is bypassed on its own (and reported once); the
+      // rest of the adjustment stack keeps rendering on the accumulated frame.
+      const layerEffects = isAdjustmentLayer ? bypassUnavailableAdjustmentEffects(layer.id, layer.effects) : layer.effects;
+      const adjustmentEffects = resolveSurfaceFrameEffects(layerEffects, data.displayedMediaTime);
 
       // Get uniform buffer
       const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(resourceLayerId);

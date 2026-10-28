@@ -17,6 +17,8 @@ interface EffectCatalogPickerProps {
   groups: EffectCatalogGroup[];
   sourceFrameId: string;
   onSelect: (effectId: string) => void;
+  /** One line under the grid, e.g. which effects this target cannot take and why. */
+  footnote?: string;
 }
 
 /**
@@ -31,7 +33,7 @@ function nameMatchRank(name: string, query: string): number {
   return normalizedName.split(/[\s()/-]+/u).some((word) => word.startsWith(query)) ? 2 : 3;
 }
 
-export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectCatalogPickerProps) {
+export function EffectCatalogPicker({ groups, sourceFrameId, onSelect, footnote }: EffectCatalogPickerProps) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('all');
@@ -103,6 +105,7 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectC
           ))}
         </div>
         {tiles.length === 0 && <p className="effect-catalog-empty">No matching effects.</p>}
+        {footnote && <p className="effect-catalog-empty effect-catalog-footnote">{footnote}</p>}
       </div>
     </details>
   );

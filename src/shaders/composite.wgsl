@@ -441,6 +441,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 
   // Low byte = blend mode; bit 8 = the layer texture is premultiplied (a composited
   // transition composition). Straighten it so partial alpha is not applied twice.
+  // Bit 9 = adjustment layer: replace mix (see below).
   let blendMode = layer.blendMode & 0xFFu;
   if ((layer.blendMode & 0x100u) != 0u && layerColor.a > 0.0) {
     layerColor = vec4f(layerColor.rgb / layerColor.a, layerColor.a);
@@ -456,7 +457,11 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 
   // Check if UV is out of bounds - use this to mask the layer
   let outOfBounds = uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || outsideTexture;
-  let maskAlpha = select(layerColor.a, 0.0, outOfBounds) * getTransitionAlpha(clampedUV);
+  let transitionAlpha = getTransitionAlpha(clampedUV);
+  let maskAlpha = select(layerColor.a, 0.0, outOfBounds) * transitionAlpha;
+  // Coverage of the layer itself (opacity, transition, mask), without the layer texture's alpha:
+  // the weight of the adjustment replace mix below.
+  var coverage = select(transitionAlpha, 0.0, outOfBounds) * layer.opacity;
 
   // Apply blend mode
   var blended: vec3f;
@@ -536,6 +541,17 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
       maskValue = 1.0 - maskValue;
     }
     finalAlpha = finalAlpha * maskValue;
+    coverage = coverage * maskValue;
+  }
+
+  // Adjustment layers (bit 9): the layer texture is the frame below after the layer's effects, so
+  // it replaces that frame by the layer's coverage instead of going over it. Where an effect left
+  // pixels transparent (Fisheye corners, a keyed screen, dissolved particles) the result is
+  // transparent, as on a clip, instead of showing the unprocessed frame through. Alpha the effect
+  // removed relative to the frame below scales the colour, so straight-alpha cutouts stay clean.
+  if ((layer.blendMode & 0x200u) != 0u && blendMode <= 31u && blendMode != 1u && blendMode != 2u) {
+    let keptCoverage = clamp(layerColor.a / max(baseColor.a, 1e-5), 0.0, 1.0);
+    return vec4f(mix(baseColor.rgb, blended * keptCoverage, coverage), mix(baseColor.a, layerColor.a, coverage));
   }
 
   // For stencil/silhouette modes, handle differently

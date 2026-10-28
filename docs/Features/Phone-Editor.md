@@ -102,7 +102,7 @@ Effects that change nothing at their defaults, such as Brightness or Saturation,
 example strength on the card; adding one still starts at its defaults. Your clip's effects are listed above the
 cards: switch one off, move it up or down, remove it, or drag its slider to set its main value. With
 nothing selected, **Effects** adds an adjustment layer at the playhead that changes everything below
-it (Brightness, Contrast, Saturation, Invert and Gaussian Blur so far). **Filters** puts one look on
+it (every effect except the few that need a clip of their own, such as Slit Scan or the tracking effects). **Filters** puts one look on
 the clip, with **Strength** to make it subtler and **None** to remove it. **Adjust** changes the
 colour: tap a tile (Brightness, Exposure, Contrast, Saturation, Temperature, Tint, Highlights, Shadows
 and more) and drag the slider; **Reset** and **Reset all** go back to the defaults.

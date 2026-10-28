@@ -7,6 +7,7 @@ import {
 } from '../../src/engine/export/ExportLayerBuilder';
 import type { FrameContext as ExportFrameContext } from '../../src/engine/export/types';
 import { LayerBuilderService } from '../../src/services/layerBuilder/LayerBuilderService';
+import { Logger } from '../../src/services/logger';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { DEFAULT_COMPOSITION } from '../../src/stores/mediaStore/constants';
 import { DEFAULT_TRANSFORM, useTimelineStore } from '../../src/stores/timeline';
@@ -357,43 +358,74 @@ describe('MD7 Motion Adjustment LayerBuilder integration', () => {
     )).toEqual([]);
   });
 
-  it('fails closed for unsupported effects and non-identity adjustment transforms', () => {
+  it('renders values as set and logs a replaced value once per parameter, not once per frame', () => {
+    const warn = vi.spyOn(Object.getPrototypeOf(Logger.create('probe')) as { warn: (message: string, data?: unknown) => void }, 'warn')
+      .mockImplementation(() => undefined);
+    const track = videoTrack('track:animated-adjustment');
+    const build = (amount: number, levels: string) => {
+      useTimelineStore.setState({
+        tracks: [track],
+        clips: [adjustmentClip('clip:animated-adjustment', track.id, {
+          effects: [
+            { id: 'effect:glow', name: 'Glow', type: 'glow', enabled: true, params: { amount } },
+            { id: 'effect:posterize', name: 'Posterize', type: 'posterize', enabled: true, params: { levels } },
+          ] as Effect[],
+        })],
+        playheadPosition: 1,
+        isPlaying: false,
+        isDraggingPlayhead: false,
+        clipKeyframes: new Map(),
+      });
+      return new LayerBuilderService().buildLayersFromStore()[0]!;
+    };
+    // An animated Glow Amount past its 0..5 slider (keyframe overshoot) and a malformed Posterize value.
+    for (const [index, amount] of [5.5, 6, 6.5].entries()) {
+      const layer = build(amount, `bad-${index}`);
+      expect(layer.effects.find((effect) => effect.id === 'effect:glow')?.params.amount).toBe(amount);
+    }
+    const adjusted = warn.mock.calls.filter(([message]) => message === 'Adjustment effect parameter adjusted for rendering');
+    expect(adjusted).toHaveLength(1);
+    expect(adjusted[0]![1]).toMatchObject({ effectId: 'effect:posterize' });
+    warn.mockRestore();
+  });
+
+  it('admits registry effects, bypasses only unavailable ones, and fails closed for non-identity transforms', () => {
     const track = videoTrack('track:rejected-adjustment');
-    const unsupported = adjustmentClip('clip:unsupported-adjustment', track.id, {
+    const mixed = adjustmentClip('clip:mixed-adjustment', track.id, {
       effects: [{
         id: 'effect:exposure',
         name: 'Exposure',
         type: 'exposure',
         enabled: true,
-        params: { amount: 1 },
+        params: {},
+      }, {
+        id: 'effect:slit-scan',
+        name: 'Slit Scan',
+        type: 'slit-scan',
+        enabled: true,
+        params: {},
       }],
     });
     useTimelineStore.setState({
       tracks: [track],
-      clips: [unsupported],
+      clips: [mixed],
       playheadPosition: 1,
       isPlaying: false,
       isDraggingPlayhead: false,
       clipKeyframes: new Map(),
     });
-    expect(new LayerBuilderService().buildLayersFromStore()).toEqual([]);
+    const previewLayers = new LayerBuilderService().buildLayersFromStore();
+    expect(previewLayers).toHaveLength(1);
+    expect(previewLayers[0]!.effects.map((effect) => effect.type)).toEqual(['exposure']);
 
-    const disabledUnsupported = adjustmentClip('clip:disabled-unsupported-adjustment', track.id, {
-      effects: [{
-        id: 'effect:disabled-exposure',
-        name: 'Disabled Exposure',
-        type: 'exposure',
-        enabled: false,
-        params: { amount: 1 },
-      }],
-    });
     initializeLayerBuilder([track]);
-    expect(() => buildLayersAtTime(
-      exportContext(track, disabledUnsupported),
+    const exportLayers = buildLayersAtTime(
+      exportContext(track, mixed),
       new Map(),
       null,
       false,
-    )).toThrowError('uses unsupported effect exposure');
+    );
+    expect(exportLayers.map((layer) => layer.effects.map((effect) => effect.type))).toEqual([['exposure']]);
 
     const transformed = adjustmentClip('clip:transformed-adjustment', track.id, {
       transform: {

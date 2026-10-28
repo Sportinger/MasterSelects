@@ -125,9 +125,14 @@ describe('MD7 supported effect contract adapter', () => {
     expectAdapterError(
       input([
         effect('valid-first', 'brightness', { amount: 0.1 }),
-        effect('unsupported-late', 'glow', { radius: 12 }),
+        // Glow is admitted since the registry-wide admission; Slit Scan needs a source video.
+        effect('unsupported-late', 'slit-scan', {}),
       ]),
       'UNSUPPORTED_ADJUSTMENT_EFFECT',
+    );
+    expectAdapterError(
+      input([effect('wrong-type', 'glow', { radius: 'wide' })]),
+      'INVALID_ADJUSTMENT_EFFECT_PARAMETERS',
     );
     expectAdapterError(
       input([effect('bad-brightness', 'brightness', { amount: 2 })]),

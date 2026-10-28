@@ -75,19 +75,21 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
       .toBe('screen');
   });
 
-  it('shows a fail-closed diagnostic for unsupported effects', () => {
+  it('names an effect that cannot run on an adjustment layer and keeps the rest rendering', () => {
     act(() => {
       useTimelineStore.setState((state) => ({
         clips: state.clips.map((clip) => clip.id === clipId
-          ? { ...clip, effects: [effect('vignette', { amount: 0.5 })] }
+          ? { ...clip, effects: [effect('vignette', { amount: 0.5 }), effect('slit-scan', {})] }
           : clip),
       }));
     });
 
     render(<MotionAdjustmentTab clipId={clipId} opacity={1} blendMode="normal" />);
 
-    expect(screen.getByTestId('motion-adjustment-diagnostics')).toHaveTextContent('Render blocked');
-    expect(screen.getByTestId('motion-adjustment-diagnostics')).toHaveTextContent('unsupported effect vignette');
+    const status = screen.getByTestId('motion-adjustment-diagnostics');
+    expect(status).toHaveTextContent('Effects bypassed');
+    expect(status).toHaveTextContent('1 supported effect ready');
+    expect(status).toHaveTextContent('Slit Scan cannot run on an adjustment layer');
   });
 
   it('reports complete supported-effect parity for valid effect data', () => {
@@ -104,7 +106,7 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
     });
   });
 
-  it('limits the Effects picker to the renderer-supported adjustment matrix', () => {
+  it('lists every admitted effect in the Effects picker and names the unavailable ones', () => {
     render(<EffectsTab clipId={clipId} effects={[]} />);
 
     const categoryPicker = screen.getByRole('combobox', { name: 'Effect category' });
@@ -114,12 +116,35 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
       .map((option) => option.getAttribute('data-value'))
       .filter(Boolean);
     fireEvent.click(categoryPicker);
-    expect(categoryValues).toEqual(['all', 'Color & Tone', 'Blur & Sharpen']);
-    expect(screen.getAllByRole('button', {
-      name: /^(Brightness|Contrast|Saturation|Invert|Gaussian Blur)$/,
-    })).toHaveLength(5);
+    expect(categoryValues.length).toBeGreaterThan(3);
+    expect(screen.getAllByRole('button', { name: /^(Brightness|Glow|Pixelate)$/ })).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /^Slit Scan$/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Not available on adjustment layers.*Slit Scan/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Particle Out' })).not.toBeInTheDocument();
-    expect(screen.getByText('Adjustment-safe effects')).toBeInTheDocument();
+    expect(screen.getByText('Effects process the layers below')).toBeInTheDocument();
+  });
+
+  it('says on the effect card why an effect is bypassed or a value is replaced, and leaves values as set alone', () => {
+    const appliedEffects = [
+      effect('slit-scan', {}),
+      effect('posterize', { levels: 'many' }),
+      // Beyond the slider, but rendered as set (as on a clip): no adjustment notice.
+      effect('pixelate', { size: 400 }),
+      effect('glow', {}),
+    ];
+    act(() => {
+      useTimelineStore.setState((state) => ({
+        clips: state.clips.map((clip) => clip.id === clipId ? { ...clip, effects: appliedEffects } : clip),
+      }));
+    });
+
+    render(<EffectsTab clipId={clipId} effects={appliedEffects} />);
+    const notices = screen.getAllByTestId('motion-adjustment-effect-notice');
+    expect(notices).toHaveLength(2);
+    expect(notices[0]).toHaveAttribute('data-bypassed', 'true');
+    expect(notices[0]).toHaveTextContent('Slit Scan cannot run on an adjustment layer');
+    expect(notices[1]).toHaveAttribute('data-bypassed', 'false');
+    expect(notices[1]).toHaveTextContent('levels must be a finite number; it renders with its default');
   });
 
   it('collapses and expands applied effects independently', () => {

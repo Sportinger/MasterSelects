@@ -61,6 +61,7 @@ import { normalizeMotionReplicatorBundle } from '../../motionDesign/contracts/re
 import { planMotionReplicatorSemanticOperation } from '../../motionDesign/replicator/semanticOperations';
 import { getTimelineMotionStructureGraphRevision } from '../../motionDesign/contracts/timelineStructureAdapter';
 import { applyTimelineMotionAdjustmentMutation } from '../../motionDesign/adjustment/timelineMutationAdapter';
+import { effectParamWarnings } from './effects';
 import { planMotionModifierSemanticOperation, type MotionModifierSemanticOperation } from '../../motionDesign/modifiers/semanticOperations';
 import { MOTION_MODIFIER_MAX_ABS_AMOUNT, MOTION_MODIFIER_TARGET_PATHS, parseMotionModifierStackContract } from '../../motionDesign/modifiers/contracts';
 import { compileMotionExpression } from '../../motionDesign/expressions/validator';
@@ -396,6 +397,30 @@ export async function handleCreateMotionNull(
   }
 }
 
+/**
+ * Notes on the parameters an editMotionAdjustment call set, the same ones updateEffect gives on a
+ * clip (effectParamWarnings): a number outside its rendered range, a retired parameter, a value the
+ * effect cannot show. Supplied effects are matched by their id, or in order to the created ids.
+ */
+function adjustmentEffectParameterWarnings(
+  args: Record<string, unknown>,
+  clipId: string,
+  createdEffectIds: readonly string[],
+): string[] {
+  if (!Array.isArray(args.effects)) return [];
+  const clip = useTimelineStore.getState().clips.find((candidate) => candidate.id === clipId);
+  if (!clip) return [];
+  let created = 0;
+  return args.effects.flatMap((supplied: unknown) => {
+    if (typeof supplied !== 'object' || supplied === null) return [];
+    const { id, parameters } = supplied as { id?: unknown; parameters?: unknown };
+    const effectId = typeof id === 'string' ? id : createdEffectIds[created++];
+    const effect = clip.effects.find((candidate) => candidate.id === effectId);
+    if (!effect || typeof parameters !== 'object' || parameters === null) return [];
+    return effectParamWarnings(effect, Object.keys(parameters)).map((warning) => `${effect.name} (${effect.id}): ${warning}`);
+  });
+}
+
 export async function handleEditMotionAdjustment(
   args: Record<string, unknown>,
   timelineStore: TimelineStore,
@@ -422,10 +447,12 @@ export async function handleEditMotionAdjustment(
   if (result.receipt.operation !== 'remove') {
     selectClipAndOpenTab(result.receipt.clipId, 'adjustment');
   }
+  const warnings = adjustmentEffectParameterWarnings(args, result.receipt.clipId, result.receipt.createdEffectIds);
   return {
     success: true,
     data: {
       ...result.receipt,
+      ...(warnings.length ? { warnings } : {}),
       ...describeMutationEntities(clipSnapshot, clipsAfter),
       effectEntities: effectMutation.entities,
     },

@@ -1,13 +1,13 @@
 // Pure catalog rules of the phone Effects sheet: which groups and effects it lists (straight from the
 // editor's registry, getCategoriesWithEffects), which parameter is an effect's one main slider, and
-// whether an effect can be added to the current target (adjustment layers render only the effects
-// the editor admits for them, SUPPORTED_ADJUSTMENT_EFFECT_TYPES). No store access here.
+// whether an effect can be added to the current target (adjustment layers take every effect the
+// editor admits for them, adjustmentEffectClassification.ts). No store access here.
 
 import { getCategoriesWithEffects, getEffect, type EffectDefinition, type EffectParam } from '../../../effects';
 import type { LookDefinition } from '../../../effects/looks/types';
 import {
-  isSupportedAdjustmentEffectType, SUPPORTED_ADJUSTMENT_EFFECT_TYPES,
-} from '../../../services/motionDesign/adjustment/supportedEffects';
+  classifyAdjustmentEffect, listAdjustmentEffectClassifications,
+} from '../../../services/motionDesign/adjustment/adjustmentEffectClassification';
 import { phoneEffectPreviewParams } from './phoneEffectPreviewParams';
 
 export interface PhoneEffectGroup {
@@ -96,16 +96,21 @@ export type PhoneEffectTargetKind = 'clip' | 'adjustment';
 
 export type PhoneEffectAvailability = { kind: 'available' } | { kind: 'unavailable'; reason: string };
 
-const ADJUSTMENT_NAMES = SUPPORTED_ADJUSTMENT_EFFECT_TYPES.map((type) => getEffect(type)?.name ?? type);
+const UNAVAILABLE_ADJUSTMENT_NAMES = listAdjustmentEffectClassifications()
+  .filter((entry) => !entry.admitted)
+  .map((entry) => getEffect(entry.effectType)?.name ?? entry.effectType);
 
-/** Short sentence naming what an adjustment layer can render, from the editor's admission list. */
-export const PHONE_ADJUSTMENT_SUPPORT_NOTE = `Adjustment layers render ${ADJUSTMENT_NAMES.slice(0, -1).join(', ')} and ${ADJUSTMENT_NAMES.at(-1)} so far.`;
+/** Short sentence naming what an adjustment layer can render, from the editor's admission rules. */
+export const PHONE_ADJUSTMENT_SUPPORT_NOTE = UNAVAILABLE_ADJUSTMENT_NAMES.length
+  ? `Adjustment layers render every effect except ${UNAVAILABLE_ADJUSTMENT_NAMES.join(', ')}.`
+  : 'Adjustment layers render every effect.';
 
-/** Whether `effectType` can be added to the target; adjustment layers admit only the editor's supported set. */
+/** Whether `effectType` can be added to the target; adjustment layers admit every effect that runs on the composite below. */
 export function phoneEffectAvailability(effectType: string, target: PhoneEffectTargetKind): PhoneEffectAvailability {
   if (!getEffect(effectType)) return { kind: 'unavailable', reason: `The effect ${effectType} is not in this editor version.` };
-  if (target === 'adjustment' && !isSupportedAdjustmentEffectType(effectType)) {
-    return { kind: 'unavailable', reason: `${getEffect(effectType)!.name} cannot go on an adjustment layer yet. ${PHONE_ADJUSTMENT_SUPPORT_NOTE} Select a clip to use it on that clip.` };
+  const classification = target === 'adjustment' ? classifyAdjustmentEffect(effectType) : null;
+  if (classification && !classification.admitted) {
+    return { kind: 'unavailable', reason: `${classification.reason} Select a clip to use it on that clip.` };
   }
   return { kind: 'available' };
 }

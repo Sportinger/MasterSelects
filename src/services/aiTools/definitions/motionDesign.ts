@@ -453,7 +453,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'editMotionAdjustment',
-      description: 'Create, configure, move, trim, or remove a native Adjustment 1.0 layer as one atomic timeline edit. Configuration replaces the ordered effect list and accepts only Brightness, Contrast, Saturation, Invert, and Gaussian Blur plus the frozen blend-mode set.',
+      description: 'Create, configure, move, trim, or remove a native adjustment layer as one atomic timeline edit. Configuration replaces the ordered effect list. Every video effect from listEffects processes the composite below, except effects that need a source clip of their own or cut pixels out (they are rejected with the reason). Blend modes are the frozen adjustment set.',
       parameters: {
         type: 'object',
         properties: {
@@ -497,7 +497,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
           },
           effects: {
             type: 'array',
-            description: 'Ordered replacement effect list for create or configure. Omitted parameters receive frozen defaults.',
+            description: 'Ordered replacement effect list for create or configure. Omitted parameters receive the effect defaults.',
             items: {
               type: 'object',
               properties: {
@@ -507,18 +507,12 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
                 },
                 type: {
                   type: 'string',
-                  enum: ['brightness', 'contrast', 'saturation', 'invert', 'gaussian-blur'],
+                  description: 'Effect type id from listEffects, e.g. "brightness", "gaussian-blur", "pixelate", "glow".',
                 },
                 enabled: { type: 'boolean' },
                 parameters: {
                   type: 'object',
-                  description: 'Effect parameters from the frozen compatibility matrix.',
-                  properties: {
-                    amount: { type: 'number' },
-                    radius: { type: 'number' },
-                    samples: { type: 'integer' },
-                  },
-                  required: [],
+                  description: 'Effect parameters by the effect\'s own definitions (listEffects). Numbers are clamped to the effect\'s range; values of the wrong type are rejected.',
                 },
               },
               required: ['type'],

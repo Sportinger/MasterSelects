@@ -49,12 +49,13 @@ describe('phone effect catalog', () => {
     }
   });
 
-  it('offers only the editor-admitted effects on adjustment layers and says why', () => {
+  it('offers every editor-admitted effect on adjustment layers and says why the rest are refused', () => {
     expect(phoneEffectAvailability('glow', 'clip')).toEqual({ kind: 'available' });
     expect(phoneEffectAvailability('brightness', 'adjustment')).toEqual({ kind: 'available' });
-    const refused = phoneEffectAvailability('glow', 'adjustment');
+    expect(phoneEffectAvailability('glow', 'adjustment')).toEqual({ kind: 'available' });
+    const refused = phoneEffectAvailability('slit-scan', 'adjustment');
     expect(refused.kind).toBe('unavailable');
-    expect(refused.kind === 'unavailable' && refused.reason).toMatch(/Brightness, Contrast, Saturation, Invert and Gaussian Blur/);
+    expect(refused.kind === 'unavailable' && refused.reason).toMatch(/Slit Scan cannot run on an adjustment layer: .*source video/);
   });
 
   it('formats values in the display unit', () => {

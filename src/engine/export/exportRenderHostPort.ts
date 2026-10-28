@@ -1,4 +1,5 @@
 import type { ModelSequenceData } from '../../types/mediaSequences';
+import { Logger } from '../../services/logger';
 import type { Layer } from '../core/types';
 import type { RenderCommandTarget } from '../render/contracts/workerRenderGraph';
 import type { GaussianSplatSceneLoadRequest } from '../render/dispatcher/gaussianSequenceFacet';
@@ -179,6 +180,20 @@ function readRenderHostDevMode(): string | null {
   } catch {
     return null;
   }
+}
+
+const workerExportLog = Logger.create('WorkerExportHost');
+const reportedWorkerExportFallbacks = new Set<string>();
+
+/** Says once per reason why a worker GPU export frame went to the main compositor (or was blocked). */
+function reportWorkerExportFallback(error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error);
+  if (reportedWorkerExportFallbacks.has(reason)) return;
+  if (reportedWorkerExportFallbacks.size > 64) reportedWorkerExportFallbacks.clear();
+  reportedWorkerExportFallbacks.add(reason);
+  workerExportLog.warn(isWorkerOnlyStrictMode()
+    ? 'Worker GPU export frame blocked (worker-only mode)'
+    : 'Worker GPU export frame rendered by the main compositor instead', { reason });
 }
 
 function canUseWorkerSoftwareExport(): boolean {
@@ -704,7 +719,8 @@ class WorkerFirstExportRenderHostPort implements ExportRenderHostPort {
       this.renderedFrameCount += 1;
       this.readbackFrameCount += 1;
       return readback.pixels;
-    } catch {
+    } catch (error) {
+      reportWorkerExportFallback(error);
       if (isWorkerOnlyStrictMode()) return this.blockStrictFallbackFrame();
       return this.renderMainFallbackFrame(layers, frameContext);
     }

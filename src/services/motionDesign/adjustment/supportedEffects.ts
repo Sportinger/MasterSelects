@@ -1,7 +1,13 @@
-import type { MotionAdjustmentEffectContract } from './contracts';
+import type { JsonObject, MotionAdjustmentEffectContract } from './contracts';
 import { assertMotionAdjustmentJsonData } from './contractLimits';
 
-export const SUPPORTED_ADJUSTMENT_EFFECT_TYPES = Object.freeze([
+/**
+ * The effects the worker GPU executor (effectAdapter.ts, renderGraphExecutor.ts) can draw on an
+ * adjustment layer: the original Adjustment 1.0 set. The main compositor draws every registry
+ * effect an adjustment layer admits (adjustmentEffectClassification.ts); this list only says
+ * which of them the opt-in worker render modes can take without falling back.
+ */
+export const WORKER_GPU_ADJUSTMENT_EFFECT_TYPES = Object.freeze([
   'brightness',
   'contrast',
   'saturation',
@@ -9,8 +15,8 @@ export const SUPPORTED_ADJUSTMENT_EFFECT_TYPES = Object.freeze([
   'gaussian-blur',
 ] as const);
 
-export type SupportedAdjustmentEffectType =
-  (typeof SUPPORTED_ADJUSTMENT_EFFECT_TYPES)[number];
+export type WorkerGpuAdjustmentEffectType =
+  (typeof WORKER_GPU_ADJUSTMENT_EFFECT_TYPES)[number];
 
 export type MotionAdjustmentRenderSurface =
   | 'preview'
@@ -35,7 +41,7 @@ export interface MotionAdjustmentNumberParameterPolicy {
 }
 
 export interface MotionAdjustmentEffectCompatibilityEntry {
-  readonly effectType: SupportedAdjustmentEffectType;
+  readonly effectType: WorkerGpuAdjustmentEffectType;
   readonly surfaces: Readonly<
     Record<MotionAdjustmentRenderSurface, MotionAdjustmentSurfaceCompatibility>
   >;
@@ -71,6 +77,10 @@ function numberPolicy(
   });
 }
 
+/**
+ * Frozen parameter policy of the worker-executable effects. Saved projects with these effects keep
+ * validating and normalizing exactly as before the registry-wide admission.
+ */
 export const ADJUSTMENT_EFFECT_COMPATIBILITY_MATRIX = Object.freeze({
   brightness: Object.freeze({
     effectType: 'brightness',
@@ -102,69 +112,145 @@ export const ADJUSTMENT_EFFECT_COMPATIBILITY_MATRIX = Object.freeze({
     }),
   }),
 }) satisfies Readonly<
-  Record<SupportedAdjustmentEffectType, MotionAdjustmentEffectCompatibilityEntry>
+  Record<WorkerGpuAdjustmentEffectType, MotionAdjustmentEffectCompatibilityEntry>
 >;
 
-const SUPPORTED_EFFECT_TYPE_SET = new Set<string>(
-  SUPPORTED_ADJUSTMENT_EFFECT_TYPES,
+const WORKER_GPU_EFFECT_TYPE_SET = new Set<string>(
+  WORKER_GPU_ADJUSTMENT_EFFECT_TYPES,
 );
+
+/** Why one effect cannot run on an adjustment layer, from the registry classification. */
+export interface AdjustmentEffectAdmissionVerdict {
+  readonly admitted: boolean;
+  readonly reason?: string;
+}
+
+/**
+ * Registry-backed admission installed by the main thread (adjustmentEffectRegistryAdmission.ts).
+ * This module stays free of the effect registry so worker bundles that validate execution plans
+ * do not load every effect shader; without a policy only the worker-executable effects pass.
+ */
+export interface AdjustmentEffectAdmissionPolicy {
+  classify(effectType: string): AdjustmentEffectAdmissionVerdict;
+  /** Throws InvalidAdjustmentEffectParametersError; returns the validated, normalized copy. */
+  normalizeParameters(effectType: string, parameters: JsonObject): JsonObject;
+}
+
+let admissionPolicy: AdjustmentEffectAdmissionPolicy | null = null;
+
+export function installAdjustmentEffectAdmissionPolicy(
+  policy: AdjustmentEffectAdmissionPolicy,
+): void {
+  admissionPolicy = policy;
+}
 
 export class UnsupportedAdjustmentEffectError extends Error {
   readonly code = 'UNSUPPORTED_ADJUSTMENT_EFFECT';
   readonly layerId: string;
   readonly effectId: string;
   readonly effectType: string;
+  readonly reason: string | undefined;
 
   constructor(
     layerId: string,
     effectId: string,
     effectType: string,
+    reason?: string,
   ) {
     super(
-      `Adjustment layer ${layerId} uses unsupported effect ${effectType} (${effectId})`,
+      `Adjustment layer ${layerId} uses unsupported effect ${effectType} (${effectId})${reason ? `: ${reason}` : ''}`,
     );
     this.name = 'UnsupportedAdjustmentEffectError';
     this.layerId = layerId;
     this.effectId = effectId;
     this.effectType = effectType;
+    this.reason = reason;
   }
 }
 
 export class InvalidAdjustmentEffectParametersError extends Error {
   readonly code = 'INVALID_ADJUSTMENT_EFFECT_PARAMETERS';
-  readonly effectType: SupportedAdjustmentEffectType;
+  readonly effectType: string;
 
-  constructor(effectType: SupportedAdjustmentEffectType, message: string) {
+  constructor(effectType: string, message: string) {
     super(`Invalid ${effectType} adjustment parameters: ${message}`);
     this.name = 'InvalidAdjustmentEffectParametersError';
     this.effectType = effectType;
   }
 }
 
-export function isSupportedAdjustmentEffectType(
+export function isWorkerGpuAdjustmentEffectType(
   effectType: string,
-): effectType is SupportedAdjustmentEffectType {
-  return SUPPORTED_EFFECT_TYPE_SET.has(effectType);
+): effectType is WorkerGpuAdjustmentEffectType {
+  return WORKER_GPU_EFFECT_TYPE_SET.has(effectType);
+}
+
+/** Admission verdict of one effect type: the registry policy, else the worker-executable set. */
+export function adjustmentEffectAdmission(effectType: string): AdjustmentEffectAdmissionVerdict {
+  if (isWorkerGpuAdjustmentEffectType(effectType)) return { admitted: true };
+  if (admissionPolicy) return admissionPolicy.classify(effectType);
+  return {
+    admitted: false,
+    reason: `only ${WORKER_GPU_ADJUSTMENT_EFFECT_TYPES.join(', ')} are available without the effect registry`,
+  };
+}
+
+export function isSupportedAdjustmentEffectType(effectType: string): boolean {
+  return adjustmentEffectAdmission(effectType).admitted;
 }
 
 export function assertSupportedAdjustmentEffect(
   layerId: string,
   effect: MotionAdjustmentEffectContract,
-): asserts effect is MotionAdjustmentEffectContract & {
-  effectType: SupportedAdjustmentEffectType;
-} {
-  if (!isSupportedAdjustmentEffectType(effect.effectType)) {
+): void {
+  const verdict = adjustmentEffectAdmission(effect.effectType);
+  if (!verdict.admitted) {
     throw new UnsupportedAdjustmentEffectError(
       layerId,
       effect.id,
       effect.effectType,
+      verdict.reason,
     );
   }
   assertAdjustmentEffectParameters(effect.effectType, effect.parameters);
 }
 
 export function assertAdjustmentEffectParameters(
-  effectType: SupportedAdjustmentEffectType,
+  effectType: string,
+  parameters: unknown,
+): asserts parameters is JsonObject {
+  normalizeAdjustmentEffectParameters(effectType, parameters);
+}
+
+/**
+ * Validates and normalizes one admitted effect's parameters: the frozen policy for the
+ * worker-executable effects, otherwise the effect's own registry definitions.
+ */
+export function normalizeAdjustmentEffectParameters(
+  effectType: string,
+  parameters: unknown,
+): JsonObject {
+  if (isWorkerGpuAdjustmentEffectType(effectType)) {
+    return normalizeWorkerGpuAdjustmentEffectParameters(effectType, parameters);
+  }
+  assertMotionAdjustmentJsonData(parameters);
+  if (!isPlainRecord(parameters)) {
+    throw new InvalidAdjustmentEffectParametersError(
+      effectType,
+      'parameters must be a plain object',
+    );
+  }
+  if (!admissionPolicy) {
+    throw new InvalidAdjustmentEffectParametersError(
+      effectType,
+      'no parameter definitions are available for this effect here',
+    );
+  }
+  return admissionPolicy.normalizeParameters(effectType, parameters as JsonObject);
+}
+
+export function assertWorkerGpuAdjustmentEffectParameters(
+  effectType: WorkerGpuAdjustmentEffectType,
   parameters: unknown,
 ): asserts parameters is Record<string, number> {
   assertMotionAdjustmentJsonData(parameters);
@@ -203,11 +289,11 @@ export function assertAdjustmentEffectParameters(
   }
 }
 
-export function normalizeAdjustmentEffectParameters(
-  effectType: SupportedAdjustmentEffectType,
+export function normalizeWorkerGpuAdjustmentEffectParameters(
+  effectType: WorkerGpuAdjustmentEffectType,
   parameters: unknown,
 ): Record<string, number> {
-  assertAdjustmentEffectParameters(effectType, parameters);
+  assertWorkerGpuAdjustmentEffectParameters(effectType, parameters);
   const policy: Readonly<Record<string, MotionAdjustmentNumberParameterPolicy>> =
     ADJUSTMENT_EFFECT_COMPATIBILITY_MATRIX[effectType].parameters;
   return Object.fromEntries(

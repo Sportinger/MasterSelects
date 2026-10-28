@@ -9,7 +9,7 @@ import {
 } from './mutationEntityResults';
 import type { JsonObject } from '../../motionDesign/adjustment/contracts';
 import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../../motionDesign/adjustment/supportedEffectContractAdapter';
-import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/supportedEffects';
+import { adjustmentEffectAdmission } from '../../motionDesign/adjustment/supportedEffects';
 import { effectDefinitionNotes, effectParamDefinitions, graphBoundParameters, unusedParamWarnings } from '../../operators/effectParamVisibility';
 import { earlierStylizeRecipeNote, previousStylizeRecipeNote } from '../../operators/stylizeRecipes';
 import { chromaKeyScreen } from '../../../effects/keying/chroma-key/keyerContract';
@@ -287,14 +287,16 @@ function validateGenericAdjustmentEffect(
   effectId = 'effect:ai-preflight',
   enabled = true,
 ): ToolResult | null {
-  if (!isSupportedAdjustmentEffectType(effectType)) {
+  const admission = adjustmentEffectAdmission(effectType);
+  if (!admission.admitted) {
     return {
       success: false,
-      error: `Unsupported Adjustment 1.0 effect: ${effectType}`,
+      error: `Unsupported adjustment effect: ${effectType}. ${admission.reason ?? ''}`.trim(),
       data: {
         code: 'MD7_ADJUSTMENT_UNSUPPORTED_EFFECT',
         clipId,
         effectType,
+        ...(admission.reason ? { reason: admission.reason } : {}),
       },
     };
   }

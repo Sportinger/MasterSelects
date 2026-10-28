@@ -40,6 +40,8 @@ import { getParameterSourceTarget } from '../../../services/parameterSources/par
 import { resolveLinkedAudioClip } from '../../../services/nodeGraph/clipGraphProjectionAudio';
 import { LandmarkTrackingControls } from './LandmarkTrackingControls';
 import { EffectCatalogPicker } from './EffectCatalogPicker';
+import { MotionAdjustmentEffectNotice } from './MotionAdjustmentEffectNotice';
+import { adjustmentEffectCatalog } from './adjustmentEffectCatalog';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 import { EffectGpuFailureNotice } from './EffectGpuFailureNotice';
 import { EffectBudgetNotice } from './EffectBudgetNotice';
@@ -370,14 +372,6 @@ interface EffectsTabProps {
   isAudioClip?: boolean;
 }
 
-const MOTION_ADJUSTMENT_EFFECT_TYPES = new Set([
-  'brightness',
-  'contrast',
-  'saturation',
-  'invert',
-  'gaussian-blur',
-]);
-
 export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const [showAudioEffects, setShowAudioEffects] = useState(false);
   const audioMode = Boolean(isAudioClip || showAudioEffects);
@@ -449,17 +443,9 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
     }
   }, [addClipEffect, addKeyframe, clip, clipId]);
 
-  // Get effects grouped by category from registry (video effects only)
-  const effectCategories = useMemo(() => {
-    const categories = getCategoriesWithEffects();
-    if (!isMotionAdjustmentClip) return categories;
-    return categories
-      .map(({ category, effects: categoryEffects }) => ({
-        category,
-        effects: categoryEffects.filter((effect) => MOTION_ADJUSTMENT_EFFECT_TYPES.has(effect.id)),
-      }))
-      .filter(({ effects: categoryEffects }) => categoryEffects.length > 0);
-  }, [isMotionAdjustmentClip]);
+  // Effects grouped by category from the registry (video effects only). Adjustment layers list every
+  // effect they admit; the few that need a source clip of their own are named under the grid.
+  const { effectCategories, unavailableNote } = useMemo(() => adjustmentEffectCatalog(getCategoriesWithEffects(), isMotionAdjustmentClip), [isMotionAdjustmentClip]);
 
   // Video effects only (exclude audio effects from the list)
   const videoEffects = useMemo(() =>
@@ -488,6 +474,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
       {!audioMode && (
         <EffectCatalogPicker
           groups={effectCategories}
+          footnote={unavailableNote}
           sourceFrameId={`${clipId}:${Math.floor(playheadPosition * 30)}`}
           onSelect={(effectId) => {
             addClipEffect(clipId, effectId as EffectType);
@@ -518,7 +505,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
               </button>
             )}
             {isMotionAdjustmentClip && (
-              <span className="effect-mode-label">Adjustment-safe effects</span>
+              <span className="effect-mode-label">Effects process the layers below</span>
             )}
           </>
         )}
@@ -652,6 +639,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                   }}>×</button>
                 </div>
                 <EffectGpuFailureNotice effectType={effect.type} />
+                {isMotionAdjustmentClip && <MotionAdjustmentEffectNotice clipId={clipId} effect={interpolated} />}
                 <EffectParamRangeNotice effectType={effect.type} params={primitiveParams} graph={effect.operatorGraph} />
                 {!isCollapsed && (
                   <div className="effect-params">

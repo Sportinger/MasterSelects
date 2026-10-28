@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { executeAITool } from '../../src/services/aiTools';
+import { getDefaultParams } from '../../src/effects';
 import {
   getHistoryStateView,
   initHistoryStoreRefs,
@@ -277,12 +278,13 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     const unsupported = await executeAITool('editMotionAdjustment', {
       operation: 'create',
       trackId: 'video-1',
-      effects: [{ type: 'glow', parameters: { amount: 1 } }],
+      effects: [{ type: 'slit-scan', parameters: {} }],
     }, 'internal');
     expect(unsupported).toMatchObject({
       success: false,
       data: { code: 'MD7_ADJUSTMENT_UNSUPPORTED_EFFECT' },
     });
+    expect(unsupported.error).toContain('source video');
 
     const badBlend = await executeAITool('editMotionAdjustment', {
       operation: 'create',
@@ -316,19 +318,48 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     expect(getHistoryStateView().undo()).toBeNull();
   });
 
+  it('keeps a layer editable that holds an unavailable effect from an older project and reports it', async () => {
+    const { clipId } = await createAdjustment({ effects: [{ type: 'invert' }] });
+    // An older or pasted project: Slit Scan already on the layer (no picker or tool offers it).
+    useTimelineStore.setState({
+      clips: useTimelineStore.getState().clips.map((clip) => clip.id === clipId
+        ? { ...clip, effects: [{ id: 'legacy-slit', name: 'Slit Scan', type: 'slit-scan', enabled: true, params: {} }, ...clip.effects] as Effect[] }
+        : clip),
+    });
+
+    const moved = await executeAITool('editMotionAdjustment', { operation: 'move', clipId, startTime: 2 }, 'internal');
+    expect(moved.success).toBe(true);
+    expect((moved.data as { after: { bypassedEffects?: Array<{ effectId: string; reason: string }> } }).after.bypassedEffects)
+      .toEqual([expect.objectContaining({ effectId: 'legacy-slit', reason: expect.stringContaining('source video') })]);
+
+    // The repair an agent makes: replace the list; the unavailable effect goes, nothing is reported after.
+    const repaired = await executeAITool('editMotionAdjustment', {
+      operation: 'configure',
+      clipId,
+      effects: [{ type: 'invert' }],
+    }, 'internal');
+    expect(repaired.success).toBe(true);
+    const receipt = repaired.data as { before: { bypassedEffects?: unknown[] }; after: { bypassedEffects?: unknown[] }; removedEffectIds: string[] };
+    expect(receipt.before.bypassedEffects).toHaveLength(1);
+    expect(receipt.after.bypassedEffects).toBeUndefined();
+    expect(receipt.removedEffectIds).toContain('legacy-slit');
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects.map((effect) => effect.type))
+      .toEqual(['invert']);
+  });
+
   it('blocks generic AI effect paths from injecting unsupported adjustment data', async () => {
     const { clipId } = await createAdjustment();
     getHistoryStateView().clearHistory();
 
     const unsupported = await executeAITool('addEffect', {
       clipId,
-      effectType: 'glow',
-      params: { intensity: 2 },
+      effectType: 'hud-tracker',
     }, 'internal');
     expect(unsupported).toMatchObject({
       success: false,
       data: { code: 'MD7_ADJUSTMENT_UNSUPPORTED_EFFECT' },
     });
+    expect(unsupported.error).toContain('landmarks');
 
     const invalidParameters = await executeAITool('addEffect', {
       clipId,
@@ -363,6 +394,78 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects[0])
       .toMatchObject({ id: effectId, params: { amount: 0.25 } });
     expect(getHistoryStateView().undo()).toBeNull();
+  });
+
+  it('accepts every admitted registry effect through both AI paths with their own defaults', async () => {
+    const { clipId } = await createAdjustment({
+      effects: [{ type: 'pixelate', parameters: { size: 24 } }, { type: 'glow' }],
+    });
+    const created = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!;
+    expect(created.effects.map((effect) => effect.type)).toEqual(['pixelate', 'glow']);
+    expect(created.effects[0]!.params).toMatchObject({ ...getDefaultParams('pixelate'), size: 24 });
+    // A new registry effect stores its defaults explicitly, as addClipEffect does.
+    expect(created.effects[1]!.params).toEqual(getDefaultParams('glow'));
+
+    const wrongType = await executeAITool('editMotionAdjustment', {
+      operation: 'configure',
+      clipId,
+      effects: [{ type: 'pixelate', parameters: { size: 'large' } }],
+    }, 'internal');
+    expect(wrongType).toMatchObject({ success: false });
+    expect(wrongType.error).toContain('size must be a finite number');
+
+    const added = await executeAITool('addEffect', { clipId, effectType: 'vignette' }, 'internal');
+    expect(added.success).toBe(true);
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects.map((effect) => effect.type))
+      .toEqual(['pixelate', 'glow', 'vignette']);
+  });
+
+  it('refuses misspelled parameter names and reports out-of-range values instead of clamping them silently', async () => {
+    const { clipId } = await createAdjustment({ effects: [{ type: 'invert' }] });
+    getHistoryStateView().clearHistory();
+    const misspelled = await executeAITool('editMotionAdjustment', {
+      operation: 'configure',
+      clipId,
+      effects: [{ type: 'glow', parameters: { intensty: 3, amount: 4 } }],
+    }, 'internal');
+    expect(misspelled).toMatchObject({ success: false, data: { code: 'MD7_ADJUSTMENT_INVALID_EFFECT' } });
+    expect(misspelled.error).toContain('Unknown parameter for glow (effects[0]): intensty. Valid:');
+    expect(misspelled.error).toContain('amount');
+    expect(getHistoryStateView().undo()).toBeNull();
+
+    // Glow Amount 9 is above its 0..5 slider but renders as set on a clip: stored as set, no warning.
+    // Vignette Size 2 is above its rendered maximum 1.5: stored as set, and the result says what renders.
+    const configured = await executeAITool('editMotionAdjustment', {
+      operation: 'configure',
+      clipId,
+      effects: [{ type: 'glow', parameters: { amount: 9 } }, { type: 'vignette', parameters: { size: 2 } }],
+    }, 'internal');
+    expect(configured.success).toBe(true);
+    const effects = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!.effects;
+    expect(effects[0]!.params.amount).toBe(9);
+    expect(effects[1]!.params.size).toBe(2);
+    const warnings = (configured.data as { warnings?: string[] }).warnings ?? [];
+    // The same note updateEffect gives on a clip (effectParamWarnings), named by effect.
+    expect(warnings).toEqual([expect.stringMatching(/^Vignette \(.+\): Size 2 .+/)]);
+  });
+
+  it('stores a Stick Figure choreography longer than the 4 KB key budget through editMotionAdjustment', async () => {
+    const actions = JSON.stringify(Array.from({ length: 60 }, (_, index) => ({
+      id: `action-${index}`, action: 'walk', start: index, duration: 1, from: { x: 0.1, y: 0.8 }, to: { x: 0.9, y: 0.8 },
+    })));
+    expect(actions.length).toBeGreaterThan(4_096);
+    const result = await executeAITool('editMotionAdjustment', {
+      operation: 'create', trackId: 'video-1', startTime: 1, duration: 5,
+      effects: [{ type: 'stick-figure', parameters: { actions } }],
+    }, 'internal');
+    expect(result.error).toBeUndefined();
+    const clipId = (result.data as { clipId: string }).clipId;
+    const clip = useTimelineStore.getState().clips.find((candidate) => candidate.id === clipId)!;
+    expect(clip.effects[0]).toMatchObject({ type: 'stick-figure', params: { actions } });
+    // Later edits of the composition still plan around it.
+    const moved = await executeAITool('editMotionAdjustment', { operation: 'move', clipId, startTime: 2 }, 'internal');
+    expect(moved.error).toBeUndefined();
+    expect((moved.data as { after: { bypassedEffects?: unknown[] } }).after.bypassedEffects).toBeUndefined();
   });
 
   it('keeps the direct Add-menu store action locked-safe and one-step undoable', () => {

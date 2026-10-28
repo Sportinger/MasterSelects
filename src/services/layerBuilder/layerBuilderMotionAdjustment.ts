@@ -1,7 +1,5 @@
 import type { BlendMode, Effect, Layer, TimelineClip } from '../../types';
-import type { JsonObject } from '../motionDesign/adjustment/contracts';
-import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../motionDesign/adjustment/supportedEffectContractAdapter';
-import { isSupportedAdjustmentEffectType } from '../motionDesign/adjustment/supportedEffects';
+import { admitAdjustmentEffectsForRender } from '../motionDesign/adjustment/adjustmentEffectRenderAdmission';
 import { Logger } from '../logger';
 import { getClipTimeInfo } from './FrameContext';
 import type { TransformCache } from './TransformCache';
@@ -86,9 +84,11 @@ export function buildLayerBuilderMotionAdjustmentLayer(
 }
 
 /**
- * Shared fail-closed admission boundary for main, nested, and export builders.
- * Only effect data admitted by the frozen Adjustment 1.0 adapter reaches the
- * compositor. Adjustment transforms stay identity-only in v1.
+ * Shared admission boundary for main, nested, and export builders. Layer-level
+ * state (transform, mix, render properties) fails closed for the whole layer;
+ * effects are admitted one by one (adjustmentEffectRenderAdmission.ts): an
+ * effect that cannot run is bypassed alone, logged, and shown in the inspector.
+ * Adjustment transforms stay identity-only in v1.
  */
 export function buildMotionAdjustmentLayerFromBase(
   params: BuildMotionAdjustmentLayerFromBaseParams,
@@ -97,7 +97,7 @@ export function buildMotionAdjustmentLayerFromBase(
 
   try {
     assertRenderableAdjustmentClip(clip, baseLayer, compositionSize);
-    const normalizedEffects = normalizeAdjustmentEffects(clip.id, baseLayer.effects);
+    const normalizedEffects = normalizeAdjustmentEffects(clip.id, baseLayer.effects, surface);
     return {
       ...baseLayer,
       effects: normalizedEffects,
@@ -122,31 +122,36 @@ export function buildMotionAdjustmentLayerFromBase(
   }
 }
 
-function normalizeAdjustmentEffects(layerId: string, effects: readonly Effect[]): Effect[] {
-  const admitted = adaptTimelineEffectsToMotionAdjustmentContracts({
-    layerId,
-    effects: effects.map((effect) => ({
-      id: effect.id,
-      name: effect.name,
-      type: effect.type,
-      enabled: effect.enabled,
-      params: effect.params as JsonObject,
-    })),
-  });
+const reportedEffectIssues = new Set<string>();
 
-  return admitted.map((effect, index) => {
-    if (!isSupportedAdjustmentEffectType(effect.effectType)) {
-      throw new Error(`Unsupported admitted motion adjustment effect: ${effect.effectType}`);
-    }
-    return {
-      id: effect.id,
-      name: effects[index]?.name ?? effect.effectType,
-      type: effect.effectType,
-      enabled: effect.enabled,
-      params: { ...effect.parameters },
-      operatorGraph: effects[index]?.operatorGraph,
-    };
-  });
+/**
+ * Logs each bypassed effect once per layer and effect, and each replaced value once per layer,
+ * effect and parameter. Keys never contain the value: an animated value must not log every frame.
+ */
+function reportOnce(key: string, report: () => void): void {
+  if (reportedEffectIssues.has(key)) return;
+  if (reportedEffectIssues.size > 512) reportedEffectIssues.clear();
+  reportedEffectIssues.add(key);
+  report();
+}
+
+function normalizeAdjustmentEffects(
+  layerId: string,
+  effects: readonly Effect[],
+  surface: BuildMotionAdjustmentLayerFromBaseParams['surface'],
+): Effect[] {
+  const admission = admitAdjustmentEffectsForRender(layerId, effects);
+  for (const item of admission.bypassed) {
+    reportOnce(`bypass|${layerId}|${item.effectId}|${item.effectType}`, () => log.warn('Adjustment effect bypassed; the rest of the layer renders', {
+      clipId: layerId, surface, effectId: item.effectId, effectType: item.effectType, reason: item.reason,
+    }));
+  }
+  for (const item of admission.adjusted) {
+    reportOnce(`adjust|${layerId}|${item.effectId}|${item.parameter}`, () => log.warn('Adjustment effect parameter adjusted for rendering', {
+      clipId: layerId, surface, effectId: item.effectId, effectType: item.effectType, reason: item.message,
+    }));
+  }
+  return admission.effects;
 }
 
 function assertRenderableAdjustmentClip(

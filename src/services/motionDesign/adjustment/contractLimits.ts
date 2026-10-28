@@ -5,7 +5,15 @@ export const MOTION_ADJUSTMENT_MAX_POINTS_PER_MASK = 1_024;
 export const MOTION_ADJUSTMENT_MAX_OPERATIONS = 1_024;
 export const MOTION_ADJUSTMENT_MAX_JSON_DEPTH = 32;
 export const MOTION_ADJUSTMENT_MAX_JSON_NODES = 131_072;
+/** Object keys (parameter, field names) and the worker frame-stack contract's own strings. */
 export const MOTION_ADJUSTMENT_MAX_JSON_STRING_LENGTH = 4_096;
+/**
+ * String values. Registry effects on adjustment layers carry text parameters that grow with the
+ * content (Stick Figure actions, Guided Perspective guides), so a value may be far longer than a key;
+ * the total budget below still bounds one contract document.
+ */
+export const MOTION_ADJUSTMENT_MAX_JSON_STRING_VALUE_LENGTH = 1_048_576;
+export const MOTION_ADJUSTMENT_MAX_JSON_TOTAL_STRING_LENGTH = 16_777_216;
 /** Keeps the longest generated layer+effect reference below the ref budget. */
 export const MOTION_ADJUSTMENT_MAX_ID_LENGTH = 240;
 export const MOTION_ADJUSTMENT_MAX_REFERENCE_LENGTH = 512;
@@ -16,7 +24,7 @@ export const MOTION_ADJUSTMENT_MAX_REFERENCE_LENGTH = 512;
  * plain enumerable data objects, bounded depth, and no cycles/runtime objects.
  */
 export function assertMotionAdjustmentJsonData(value: unknown): void {
-  visitJsonData(value, 1, new WeakSet<object>(), { nodeCount: 0 });
+  visitJsonData(value, 1, new WeakSet<object>(), { nodeCount: 0, stringLength: 0 });
 }
 
 export function isMotionAdjustmentStableId(value: unknown): value is string {
@@ -49,6 +57,7 @@ function hasControlCharacter(value: string): boolean {
 
 interface MotionAdjustmentJsonBudgetState {
   nodeCount: number;
+  stringLength: number;
 }
 
 function visitJsonData(
@@ -68,8 +77,12 @@ function visitJsonData(
     return;
   }
   if (typeof value === 'string') {
-    if (value.length > MOTION_ADJUSTMENT_MAX_JSON_STRING_LENGTH) {
+    if (value.length > MOTION_ADJUSTMENT_MAX_JSON_STRING_VALUE_LENGTH) {
       throw new Error('Motion adjustment contract JSON string length exceeds its hard budget');
+    }
+    budget.stringLength += value.length;
+    if (budget.stringLength > MOTION_ADJUSTMENT_MAX_JSON_TOTAL_STRING_LENGTH) {
+      throw new Error('Motion adjustment contract JSON total string length exceeds its hard budget');
     }
     return;
   }
