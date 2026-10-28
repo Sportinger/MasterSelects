@@ -4,7 +4,8 @@ Narrated screen recordings of the real editor, made from a recipe, for the websi
 channels. The pointer is the presenter: it points, circles, drags panels and clicks, each move timed
 to a word of the voice. The camera only zooms lightly, for emphasis.
 
-Takes record in a headless Chrome at 2560×1440 and 100% scale, and the cut makes 1920×1080 from it.
+Takes record in a headless Chrome at 2560×1440 and 100% scale; that picture goes into the 1080p episode in
+MasterSelects whole, and the camera moves are keyframes there.
 An episode is made of short parts (about 20 s or less). Each part continues from the checkpoint the
 previous part left, so parts join seamlessly and a part needs no long setup. Every part goes into the
 episode's MasterSelects project, where the tutorial is cut and exported.
@@ -111,6 +112,19 @@ carries its word times (`setClipTranscript`), so the captions stay with a line t
 A replaced part takes out its old clips, its own captions and its media items, and the later parts move
 by the difference in length, so a shorter retake leaves no gap and a longer one does not run into the
 next part. Trim, move lines, add the music and export there.
+
+## The template and the finish
+
+`node scripts/tutorial-ms-template.mjs create` makes the template project
+`~/Documents/MasterSelects-Tutorials/_Template` once (tracks Captions, Picture, Voice, Music; the music
+at -22 dB, faded in); change it in MasterSelects as you like. `tutorial-ms-template.mjs new "<name>"`
+saves it as the episode's project. After the last part, `node scripts/tutorial-ms-finish.mjs <episode>`
+ends the music with the episode, exports it from MasterSelects to `tutorial-videos/<episode>.mp4` and
+checks the file (length, size, frame rate, sound, eight pictures in `<episode>.check.jpg`).
+
+A part's picture is the take's full 2560×1440 without a camera: the recipe's camera moves become
+position and scale keyframes of the picture clip in MasterSelects. The quick look still shows the
+take through the camera at 1080p.
 
 ## Parts, checkpoints and the build server
 

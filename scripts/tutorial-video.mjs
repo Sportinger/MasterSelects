@@ -37,7 +37,7 @@
 // Writes, under <out> (default tutorial-videos/, not tracked):
 //   <name>.cut/<name>.mp4        the picture, 1920×1080, no sound, no captions
 //   <name>.cut/voice/<name>.NN-<scene>.wav   one file per line
-//   <name>.cut/edl.json          where each line goes (seconds of the picture) and its word times: the input of
+//   <name>.cut/edl.json          where each line goes (seconds of the picture), its word times and the camera moves: the input of
 //                                scripts/tutorial-ms-cut.mjs, which puts the part into the episode's MasterSelects project
 //   <name>.mp4                   a quick look: picture and voice (and the recipe's music); --captions burns the word
 //                                captions in (for a video that is not cut in MasterSelects)
@@ -302,7 +302,8 @@ export async function main(args, { chrome, fresh = false } = {}) {
   // The edit list for the cut in MasterSelects (scripts/tutorial-ms-cut.mjs).
   const say = Object.fromEntries(recipe.scenes.map(item => [item.id, item.say]));
   const edl = { name: recipe.name, episode: recipe.episode ?? null, from: recipe.from ?? null, duration: result.duration,
-    picture: result.picture, lines: result.lines.map(line => ({ ...line, say: say[line.id] })), recorded: new Date().toISOString() };
+    picture: result.picture, size: result.size, camera: result.camera,
+    lines: result.lines.map(line => ({ ...line, say: say[line.id] })), recorded: new Date().toISOString() };
   fs.writeFileSync(path.join(cutDir, 'edl.json'), `${JSON.stringify(edl, null, 2)}\n`);
   const speed = m.timeMap(recording.fast);
   const voiced = narration.file || narration.lines;

@@ -271,6 +271,16 @@ export async function createBlankProjectInFolder(
   return createBlankProjectWith(name, () => projectFileService.createProjectInFolder(parent, name));
 }
 
+/**
+ * Save As inside a parent folder the app can already access: a new project with the current content (new
+ * repository identity), which stays open; the project it came from keeps its last saved state.
+ */
+export async function saveProjectAsInFolder(parent: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+  if (!await projectFileService.createProjectInFolder(parent, name, true)) return false;
+  await syncStoresToProject();
+  return projectFileService.saveProject();
+}
+
 async function createBlankProjectWith(
   name: string,
   createFolder: () => Promise<boolean>,
