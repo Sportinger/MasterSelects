@@ -7,7 +7,7 @@ import { sanitizeBootMarks, sanitizeLoadReports, type BootMark, type LoadReport 
  * Load-time evidence from the phone: the boot marks (window.__MS_PHONE_BOOT__), the sanitized
  * project-load reports (window.__MS_PROJECT_LOAD__) and what the progress UI showed when. Only
  * machine fields leave the page (phase names, steps, milliseconds): never a project name, path or
- * text the owner typed, because the same origin holds the owner's real projects.
+ * text the user typed, because the same origin holds the user's real projects.
  */
 
 export async function readBootMarks(page: Page): Promise<BootMark[]> {

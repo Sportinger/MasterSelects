@@ -41,7 +41,7 @@ export interface DeviceEnv {
    */
   outputDir: string
   /**
-   * MASTERSELECTS_DEVICE_ALLOW_EDITOR_TABS=1: run although the owner has a MasterSelects tab open in
+   * MASTERSELECTS_DEVICE_ALLOW_EDITOR_TABS=1: run although the phone user has a MasterSelects tab open in
    * the phone's Chrome. Off by default, because the test tab restores the last project and two tabs
    * on one project compete for its storage.
    */

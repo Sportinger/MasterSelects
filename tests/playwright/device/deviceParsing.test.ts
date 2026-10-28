@@ -40,7 +40,7 @@ describe('adb output', () => {
     expect(parsePortMappings('')).toEqual([])
   })
 
-  it('finds the owner tabs on the editor origin by path only, never with their query', () => {
+  it('finds the existing editor tabs on the editor origin by path only, never with their query', () => {
     expect(editorTabPaths(['https://www.masterselects.com/m?project=secret', 'https://example.org/m', 'chrome://newtab/', 'not a url',
       'https://www.masterselects.com/editor#x'], PRODUCTION_BASE_URL)).toEqual(['/m', '/editor'])
   })

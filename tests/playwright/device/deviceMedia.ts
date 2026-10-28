@@ -18,7 +18,7 @@ import type { DeviceMediaServer } from './deviceMediaServer'
  *
  * Out: the export sheet's Share hands a `File` to `navigator.share`. The harness replaces share and
  * canShare in its own tab with a stub that keeps the File (the real share sheet would need a person,
- * Save would leave a file in the owner's Downloads), then copies the bytes to the PC: PUT to the
+ * Save would leave a file in the phone's Downloads), then copies the bytes to the PC: PUT to the
  * media server (`reverse`) or base64 chunks over DevTools (`route`).
  */
 

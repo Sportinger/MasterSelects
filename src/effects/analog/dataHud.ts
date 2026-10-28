@@ -37,8 +37,8 @@ const ranges = {
 /** Presets: only values that differ from the defaults (EffectPreset). */
 const presets: readonly EffectPreset[] = [
   { id: 'tracking-data', name: 'Tracking Data', params: {} },
-  // Nissan 350Z reel: lime boxes with open sides, teal centre dots and coordinate labels, jumping at the glitch rate.
-  { id: '350z-overlay', name: '350Z Overlay', params: { scale: 300, gap: 0.4, lineWidth: 2, labels: 0.8 } },
+  // Lime boxes with open sides, teal centre dots and coordinate labels, jumping at the glitch rate.
+  { id: 'lime-overlay', name: 'Lime Overlay', params: { scale: 300, gap: 0.4, lineWidth: 2, labels: 0.8 } },
   { id: 'quiet-scan', name: 'Quiet Scan', params: { boxes: 1, textBlocks: 1, labels: 0.4, rate: 0.7, gap: 0.2, drift: 0.6 } },
   { id: 'dense-readout', name: 'Dense Readout', params: { scale: 200, textBlocks: 3, labels: 1, textSize: 12, rate: 3 } },
 ];

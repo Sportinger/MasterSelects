@@ -6,19 +6,19 @@ import { editorTabPaths } from './deviceParsing'
 import { installProgressRecorder } from './deviceTelemetry'
 
 /**
- * Connects to Chrome on the owner's phone over wireless adb and opens ONE NEW TAB for the run.
+ * Connects to Chrome on a real Android phone over wireless adb and opens ONE NEW TAB for the run.
  *
  * - DevTools: `adb forward tcp:<port> localabstract:chrome_devtools_remote`, then
  *   `chromium.connectOverCDP`. The phone's default browser context is used, because a context
  *   Playwright creates on Android Chrome has no network.
- * - The owner's tabs are never touched: the harness records which pages existed, opens its own tab
+ * - The phone user's tabs are never touched: the harness records which pages existed, opens its own tab
  *   with `newPage()` and works only there. It never navigates, reloads or closes another tab, and
  *   leaves its own tab open at the end (repository rule: never close tabs). Disconnecting closes
  *   only the DevTools connection.
  * - The phone must be unlocked before the run; the wake key keeps the screen on while connected.
  *   No device setting is changed.
  * - The new tab restores the phone's last project on /m (there is no way around the boot restore),
- *   and the journeys then create a new "Device test" project. If the owner already has a
+ *   and the journeys then create a new "Device test" project. If the phone user already has a
  *   MasterSelects tab open, both tabs would work on one project's storage, so the run refuses to
  *   start (reading the tab URLs only) unless MASTERSELECTS_DEVICE_ALLOW_EDITOR_TABS=1.
  */

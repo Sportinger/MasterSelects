@@ -315,7 +315,7 @@ unset. The clips need `ffmpeg` on the test host, like the desktop frame-code cas
 The emulated phone suite missed every recent production bug of the phone editor
 (slow loads from Android folders, multi-GB recordings in export, jittered phone
 timestamps). `playwright.device.config.ts` (`npm run test:e2e:device`) runs the
-journeys on a real Android phone (the owner's Pixel 10 Pro, Android 16, Chrome)
+journeys on a real Android phone (tested on a Pixel 10 Pro, Android 16, Chrome)
 over wireless adb, with generated phone recordings (`fixtures/phoneFootage.ts`;
 never real media). The config refuses to load without `MASTERSELECTS_DEVICE=1`,
 and the journey file ends in `.device.ts`, so no other config picks it up.
@@ -324,7 +324,7 @@ and the journey file ends in `.device.ts`, so no other config picks it up.
   `adb forward tcp:<port> localabstract:chrome_devtools_remote`, then
   `chromium.connectOverCDP` into Chrome's default context (a new context on
   Android Chrome has no network). The run opens **one new tab** and works only
-  there; it never navigates, reloads or closes the owner's tabs and leaves its own
+  there; it never navigates, reloads or closes the phone user's tabs and leaves its own
   tab open. It fails fast when the phone is locked (`isKeyguardShowing`), and
   refuses to start while a MasterSelects tab is already open on the phone (the new
   tab restores the last project, and two tabs on one project compete for its
@@ -338,7 +338,7 @@ and the journey file ends in `.device.ts`, so no other config picks it up.
 - **Oracles:** preview frame codes from device screenshots of the preview canvas
   (`device/devicePreview.ts`, both code rows of the phone footage); the export is
   shared to a stubbed `navigator.share` in the test tab (nothing lands in the
-  owner's Downloads), copied to the PC and decoded with the phone footage oracle;
+  phone's Downloads), copied to the PC and decoded with the phone footage oracle;
   load times come from `window.__MS_PHONE_BOOT__`, `window.__MS_PROJECT_LOAD__`
   (sanitized: phase names and milliseconds only) and the progress view. Budgets
   are soft (`expect.soft`), the numbers are attached to each case.

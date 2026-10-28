@@ -27,7 +27,7 @@ const ranges = {
 
 /** Presets: only values that differ from the defaults (EffectPreset). */
 const presets: readonly EffectPreset[] = [
-  // Nissan 350Z reel, frames 79-83: black car on neon yellow, sparse dots.
+  // Black object on neon yellow, sparse dots.
   { id: 'neon-yellow', name: 'Neon Yellow', params: {} },
   // Frames 84-91: the same silhouette white on black, with a faint cross grid.
   { id: 'white-on-black', name: 'White on Black', params: { colorA: '#f4f4f6', colorB: '#000000', marks: 'crosses', markArea: 'ink', markSize: 3, markAmount: 0.9, markOpacity: 0.15 } },

@@ -44,7 +44,7 @@ export function parsePortMappings(output: string): Array<{ serial?: string; loca
 }
 
 /**
- * Paths of the tabs (by URL) that already show the editor's origin: the owner's MasterSelects tabs.
+ * Paths of the tabs (by URL) that already show the editor's origin: the phone user's MasterSelects tabs.
  * Only the pathname is returned, never a query or fragment.
  */
 export function editorTabPaths(urls: readonly string[], baseURL: string): string[] {
@@ -116,7 +116,7 @@ const finite = (value: unknown): number | null => typeof value === 'number' && N
 /**
  * The boot marks, reduced to phase, time and a short machine detail ("not-restored"). A detail that
  * is not such a token (it might carry a project name) is dropped, so attachments never name the
- * owner's projects.
+ * user's projects.
  */
 export function sanitizeBootMarks(raw: unknown): BootMark[] {
   const marks = (raw as { marks?: unknown } | null)?.marks
