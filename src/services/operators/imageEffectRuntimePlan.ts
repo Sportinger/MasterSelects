@@ -6,6 +6,7 @@ import { compileImageOperatorGraph, compileImageOperatorPreview, type ImageOpera
 import { bindImageOperatorValues, validateImageOperatorValues } from './imageOperatorValueBindings';
 import { imageFilterShortcutKey } from './imageFilterShortcuts';
 import { materializeMaxEdge } from './imageOperatorPlan';
+import { SEGMENT_SORT_OPERATOR, segmentSortSettings } from './imageSegmentSortAxis';
 
 type ImageEffect = { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 interface PreparedImageEffect {
@@ -33,7 +34,8 @@ export const imagePlanResourceSignature = (graph: EffectOperatorGraph, params: R
   .filter(node => node.operator === 'image.source-motion').map(node => ['lookback', 'timeFactor', 'stabilize', 'required', 'denseInverseSearch'].map(key => {
     const binding = node.bindings[key];
     return typeof binding === 'string' ? params[binding] : node.constants?.[key];
-  })), graph.nodes.filter(node => node.operator === 'image.materialize').map(node => materializeMaxEdge(node, params) ?? 0)]);
+  })), graph.nodes.filter(node => node.operator === 'image.materialize').map(node => materializeMaxEdge(node, params) ?? 0),
+  graph.nodes.filter(node => node.operator === SEGMENT_SORT_OPERATOR).map(node => segmentSortSettings(node, params))]);
 // Card positions are editor presentation: moving a node must not recompile the
 // plan. Graphs may be edited in place, so the key is derived on every call.
 const executableGraph = (graph: EffectOperatorGraph) => ({ ...graph, layout: undefined,

@@ -70,6 +70,9 @@
       "maxBytes": 140000,
       "left": { "effect": "original" },
       "right": { "effect": "pixel-sort", "params": { "amount": 1, "threshold": 0.3 } }
-    }
+    },
+    {"name": "pixel-sort-bands", "out": "docs/Features/assets/effects/pixel-sort-bands.webp", "image": "harbor_town", "width": 1920, "layout": "compare", "outWidth": 1600, "maxBytes": 120000, "left": {"effect": "original"}, "right": {"effect": "pixel-sort-bands", "params": {"progress": 0.85}}, "alt": "The harbour town under a blue sky: the original on the left; on the right Pixel Sort Bands at its default settings and Progress 0.85, where the clouds and the light house fronts run down in fine vertical drips sorted from dark to light, while the dark water and the hills stay as they are", "caption": "Left: the original. Right: Pixel Sort Bands at its default settings, Progress 0.85."},
+    {"name": "block-cloud", "out": "docs/Features/assets/effects/block-cloud.webp", "image": "neon_rain_street", "width": 1920, "layout": "compare", "outWidth": 1600, "maxBytes": 120000, "left": {"effect": "original"}, "right": {"effect": "block-cloud", "params": {}, "times": [0, 0.5, 1]}, "alt": "The rainy night street with neon signs: the original on the left; on the right Block Cloud at its default settings, with drifting clouds of pink, cyan and green square blocks in three sizes covering about half of the street, their edges breaking up into single blocks", "caption": "Left: the original. Right: Block Cloud at its default settings (Progress 0.7)."},
+    {"name": "flow-mosh", "out": "docs/Features/assets/effects/flow-mosh.webp", "image": "harbor_town", "width": 1920, "layout": "compare", "outWidth": 1600, "maxBytes": 120000, "left": {"effect": "original"}, "right": {"effect": "flow-mosh", "params": {}}, "alt": "The harbour town: the original on the left; on the right Flow Mosh at its default settings, where the houses, boats and water have flowed diagonally up and to the right in small square cells, with single cells scattered into the sky and the sea", "caption": "Left: the original. Right: Flow Mosh at its default settings (Progress 0.6)."}
   ]
 }

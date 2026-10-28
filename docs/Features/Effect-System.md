@@ -96,7 +96,7 @@ and source. Other effects and structural settings are not implicitly enabled.
   offers **Update node setup**, which swaps that graph in and applies the preset in the same undo
   step, and says that it replaces edits made in the Nodes tab. The note disappears once the effect
   changes (a value, Undo, a graph edit). The row shows the preset the values match. AI tools do not
-  list presets yet. Three to five presets per effect; the docs check names them
+  list presets yet. At least three presets per effect; as many as there are distinct looks worth naming, each rendered and checked; the docs check names them
   ([Effect pages](./Documentation-Site.md#effect-pages)).
 - **Animated looks keep time with the playhead.** A look rendered by its node graph reads `image.timeline-time`,
   so it holds still while paused. Its definition says so with `timelineAnimated` instead of

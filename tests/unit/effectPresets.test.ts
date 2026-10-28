@@ -36,13 +36,12 @@ function setup(params: Record<string, number | string | boolean> = {}, keyframes
 const effect = () => useTimelineStore.getState().clips[0].effects[0];
 
 describe('effect presets', () => {
-  it('declares three to five valid, distinct presets wherever an effect has them', () => {
+  it('declares at least three valid, distinct presets wherever an effect has them', () => {
     const withPresets = getAllEffects().filter(definition => definition.presets?.length);
     expect(withPresets.map(definition => definition.id)).toContain('drift-lines');
     for (const definition of withPresets) {
       const presets = definition.presets!;
       expect(presets.length, definition.id).toBeGreaterThanOrEqual(3);
-      expect(presets.length, definition.id).toBeLessThanOrEqual(5);
       expect(new Set(presets.map(preset => preset.id)).size).toBe(presets.length);
       expect(new Set(presets.map(preset => preset.name)).size).toBe(presets.length);
       for (const preset of presets) {

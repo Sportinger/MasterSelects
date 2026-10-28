@@ -8,6 +8,7 @@ import { createCheckedPipeline } from '../engine/core/gpuPipelineGuard';
 import { EffectGpuPipelineError } from './effectGpuFailures';
 import { Logger } from '../services/logger';
 import { imageResourceSize } from '../services/operators/imageResourceScale';
+import { ImageGraphSegmentSortPass } from './ImageGraphSegmentSortPass';
 
 const log = Logger.create('ImageGraphPassRuntime');
 
@@ -63,6 +64,7 @@ export class ImageGraphPassRuntime {
   private readonly device: GPUDevice;
   private readonly pipelines = new Map<string, GPURenderPipeline>();
   private readonly failedPipelines = new Map<string, string>();
+  private segmentSortPass?: ImageGraphSegmentSortPass;
   private readonly free = new Map<string, PooledPassTexture[]>();
   /** Leased textures and the token of their current lease. */
   private readonly leased = new Map<PooledPassTexture, number>();
@@ -134,21 +136,29 @@ export class ImageGraphPassRuntime {
     }
     for (const pass of passes) {
       if (pass.inputResources.length > 8) throw new Error(`Image graph pass ${pass.id} exceeds eight resource inputs.`);
-      for (const id of pass.inputResources) if (!ids.has(id) || !produced.has(id)) throw new Error(`Image graph pass ${pass.id} reads unavailable resource ${id}.`);
+      for (const id of [...pass.inputResources, ...(pass.segmentSort ? [pass.segmentSort.colorResource] : [])])
+        if (!ids.has(id) || !produced.has(id)) throw new Error(`Image graph pass ${pass.id} reads unavailable resource ${id}.`);
       const { width, height } = imageResourceSize(pass.outputResource ? descriptors.get(pass.outputResource) : undefined, options.width, options.height);
       const packed = packImageOperatorRuntimeUniforms(pass.program, options.timelineTimeSeconds, width, height, metadata);
       const payloadIdentity = packed ? Array.from(new Uint32Array(packed.buffer, packed.byteOffset, packed.byteLength / 4)).join(',') : '';
-      const inputIdentities = pass.inputResources.map(id => identities.get(id) ?? `local:${id}`);
-      const producerIdentity = pass.outputResource ? `${pass.outputResource}:${width}x${height}:${pass.program.key}:${payloadIdentity}:${inputIdentities.join('|')}` : '';
+      const inputIdentities = [...pass.inputResources, ...(pass.segmentSort ? [pass.segmentSort.colorResource] : [])].map(id => identities.get(id) ?? `local:${id}`);
+      const sortIdentity = pass.segmentSort ? `:sort-${pass.segmentSort.settings.axis}-${pass.segmentSort.settings.order}` : '';
+      const producerIdentity = pass.outputResource ? `${pass.outputResource}:${width}x${height}:${pass.program.key}${sortIdentity}:${payloadIdentity}:${inputIdentities.join('|')}` : '';
       const shared = producerIdentity ? options.batch?.encoded.get(producerIdentity) : undefined;
       if (pass.outputResource && shared) { localViews.set(pass.outputResource, shared.view); identities.set(pass.outputResource, shared.identity); produced.add(pass.outputResource);
         options.batch?.resources.set(pass.outputResource, shared); if (pass.outputResource === options.stopAtResourceId) break; continue; }
       let output = options.outputView;
-      if (pass.outputResource) { const lease = this.lease(width, height); leases.push(lease); output = lease.item.view; }
+      // A Segment Sort writes its output from a compute pass: that texture needs storage use (its own pool).
+      if (pass.outputResource) { const lease = this.lease(width, height, pass.segmentSort ? 'storage' : 'render'); leases.push(lease); output = lease.item.view; }
       if (!output) throw new Error(`Image graph pass ${pass.id} has no output resource.`);
       if (pass.outputResource && descriptors.get(pass.outputResource)?.producerPassId !== pass.id)
         throw new Error(`Image graph resource ${pass.outputResource} has the wrong producer.`);
-      const pipeline = this.pipeline(pass.program, options.source.kind, pass.outputResource ? 'rgba16float' : options.outputFormat ?? 'rgba8unorm');
+      if (pass.segmentSort && !pass.outputResource) throw new Error(`Segment Sort pass ${pass.id} has no output resource.`);
+      // A Segment Sort pass renders its control image (key, run start, angle) first, then sorts into the output.
+      // rgba32float: keys, run starts and the angle reach the sort exactly as the recipe computed them.
+      const sortControl = pass.segmentSort ? this.lease(width, height, 'control') : undefined;
+      if (sortControl) leases.push(sortControl);
+      const pipeline = this.pipeline(pass.program, options.source.kind, sortControl ? 'rgba32float' : pass.outputResource ? 'rgba16float' : options.outputFormat ?? 'rgba8unorm');
       const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: options.sampler },
         { binding: 1, resource: options.source.kind === 'texture' ? options.source.view : options.source.texture }];
       if (packed) {
@@ -160,8 +170,13 @@ export class ImageGraphPassRuntime {
       }
       pass.inputResources.forEach((id, index) => entries.push({ binding: 3 + index, resource: localViews.get(id)! }));
       const bind = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
-      const render = options.encoder.beginRenderPass({ colorAttachments: [{ view: output, loadOp: 'clear', storeOp: 'store' }] });
+      const render = options.encoder.beginRenderPass({ colorAttachments: [{ view: sortControl?.item.view ?? output, loadOp: 'clear', storeOp: 'store' }] });
       render.setPipeline(pipeline); render.setBindGroup(0, bind); render.draw(6); render.end();
+      if (pass.segmentSort && sortControl) {
+        this.segmentSortPass ??= new ImageGraphSegmentSortPass(this.device);
+        this.segmentSortPass.encode(options.encoder, pass.segmentSort.settings, width, height, sortControl.item.view,
+          localViews.get(pass.segmentSort.colorResource)!, output);
+      }
       if (pass.outputResource) { produced.add(pass.outputResource); localViews.set(pass.outputResource, output); identities.set(pass.outputResource, producerIdentity);
         const materialized = { view: output, identity: producerIdentity }; options.batch?.encoded.set(producerIdentity, materialized);
         options.batch?.resources.set(pass.outputResource, materialized); if (pass.outputResource === options.stopAtResourceId) break; }
@@ -219,12 +234,15 @@ export class ImageGraphPassRuntime {
     if (stale.length) void this.device.queue.onSubmittedWorkDone().then(() => stale.forEach(item => item.texture.destroy()), () => undefined);
   }
 
-  private lease(width: number, height: number): PassTextureLease {
-    const key = `${width}x${height}`;
+  /** `render`: rgba16float pass resources; `storage`: the same, also writable from compute (Segment Sort output);
+   * `control`: rgba32float Segment Sort control images. Each kind has its own pool. */
+  private lease(width: number, height: number, kind: 'render' | 'storage' | 'control' = 'render'): PassTextureLease {
+    const key = `${width}x${height}${kind === 'render' ? '' : `:${kind}`}`;
     const reused = this.free.get(key)?.pop();
     const item = reused ?? (() => {
-      const texture = this.device.createTexture({ label: `image-graph-pass-${key}`, size: { width, height }, format: 'rgba16float',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+      const texture = this.device.createTexture({ label: `image-graph-pass-${key}`, size: { width, height },
+        format: kind === 'control' ? 'rgba32float' : 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | (kind === 'storage' ? GPUTextureUsage.STORAGE_BINDING : 0) });
       return { texture, view: texture.createView(), key, lastUsed: this.generation };
     })();
     const token = ++this.nextLeaseToken;
@@ -251,5 +269,5 @@ export class ImageGraphPassRuntime {
 
   dispose() { if (this.disposed) return; this.disposed = true;
     for (const item of [...this.leased.keys(), ...[...this.free.values()].flat()]) item.texture.destroy();
-    this.leased.clear(); this.free.clear(); this.pipelines.clear(); this.failedPipelines.clear(); }
+    this.leased.clear(); this.free.clear(); this.pipelines.clear(); this.failedPipelines.clear(); this.segmentSortPass = undefined; }
 }

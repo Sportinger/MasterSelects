@@ -111,6 +111,8 @@
       "width": 1920,
       "crop": [0, 0, 1920, 1080],
       "cellWidth": 640
-    }
+    },
+    {"effect": "pixel-sort-bands", "image": "harbor_town", "width": 1920, "crop": [560, 0, 800, 600], "cellWidth": 400, "columns": 3},
+    {"effect": "flow-mosh", "image": "harbor_town", "width": 1920, "crop": [560, 180, 800, 600], "cellWidth": 400, "columns": 3}
   ]
 }

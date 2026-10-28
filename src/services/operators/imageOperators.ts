@@ -3,6 +3,7 @@ import { MOTION_IMAGE_OPERATORS } from './motionImageOperators';
 import { GLYPH_FONT_OPTIONS } from '../../effects/_shared/glyphFonts';
 import { TEXT_ATLAS_DEFAULT_CHARACTERS, TEXT_ATLAS_MAX_CHARACTERS } from './imageOperatorGlyphResources';
 import { CACHE_IMAGE_SCALE_OPTIONS } from './imageResourceScale';
+import { SEGMENT_SORT_AXIS_OPTIONS, SEGMENT_SORT_CHUNK, SEGMENT_SORT_KEY_LEVELS, SEGMENT_SORT_MAX_ANGLE, SEGMENT_SORT_OPERATOR, SEGMENT_SORT_ORDER_OPTIONS } from './imageSegmentSortAxis';
 
 const port = (id: string, type: OperatorPort['type'], label: string, required = false): OperatorPort =>
   ({ id, type, label, required, ...(type === 'image' && required
@@ -160,6 +161,13 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
     description: 'Stably sorts up to 16 horizontal RGBA pixels by source-encoded Rec.709 luminance using strict greater-than comparisons; short segments duplicate their final pixel to fill the fixed 16-entry sort.',
     inputs: [port('image', 'image', 'Image', true), port('scale', 'number', 'Segment Size', true)], outputs: [port('image', 'image', 'Image')], parameters: [],
     consumers: ['image', 'pixel-sort'], implementation: 'shared', addable: false, bypass: 'passthrough' }),
+  { ...imageOperator({ id: SEGMENT_SORT_OPERATOR, family: 'image.segment-sort', variant: 'axis-runs', label: 'Segment Sort',
+    description: `Sorts runs of pixels along every column (Direction Columns) or row (Rows) of the frame, like a pixel sorter. A run starts at the edge of the frame, wherever Run Start is at least 0.5, and every ${SEGMENT_SORT_CHUNK} pixels along a line; inside a run the pixels are reordered by Key (0–1, ${SEGMENT_SORT_KEY_LEVELS} levels, equal keys keep their order; Order Descending puts high keys first) and carry their Image colour along. Angle (degrees, clamped to −${SEGMENT_SORT_MAX_ANGLE}..${SEGMENT_SORT_MAX_ANGLE}) slants the lines and is read once per frame at the first pixel. Runs as one GPU compute pass at frame size.`,
+    inputs: [port('image', 'image', 'Image', true), port('key', 'number', 'Key', true), port('start', 'number', 'Run Start'), port('angle', 'number', 'Angle (°)')],
+    outputs: [port('image', 'image', 'Image')],
+    parameters: [{ id: 'axis', label: 'Direction', type: 'select', default: 'columns', options: SEGMENT_SORT_AXIS_OPTIONS.map(option => ({ ...option })), animatable: false },
+      { id: 'order', label: 'Order', type: 'select', default: 'ascending', options: SEGMENT_SORT_ORDER_OPTIONS.map(option => ({ ...option })), animatable: false }],
+    consumers: ['image'], implementation: 'shared', addable: true }), fusion: 'pass-boundary' },
   imageOperator({ id: 'image.quadtree-partition', family: 'image.spatial-partition', variant: 'quadtree-6', label: 'Quadtree Partition',
     description: 'Finds the containing image block through at most six conditional subdivisions, sampling corner pixels then center in exact legacy order at each visited level.',
     inputs: [port('image', 'image', 'Image', true), port('scale', 'number', 'Minimum Size', true), port('threshold', 'number', 'Threshold', true),

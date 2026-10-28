@@ -1,5 +1,6 @@
 import { type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { createImageOperatorEvaluator } from '../../src/services/operators/imageOperatorEvaluation';
+import { segmentSortSourceMap } from '../../src/services/operators/imageSegmentSortAxis';
 
 export type Pixel = [number, number, number, number];
 type Sampler = (uv: [number, number]) => Pixel;
@@ -41,22 +42,41 @@ export function discreteImage(width: number, height: number, pixel: (x: number, 
 export function createImagePassEvaluator(plan: ImageOperatorPlan, resolution: [number, number], sampleImage: Sampler,
   options: PassEvaluationOptions = {}): Sampler {
   const caches = new Map<string, Map<number, Pixel>>();
-  const producer = (id: string) => {
+  const producerPass = (id: string) => {
     const pass = plan.passes?.find(candidate => candidate.outputResource === id);
     if (!pass) throw new Error(`No pass produces ${id}`);
-    return pass.program;
+    return pass;
+  };
+  const producer = (id: string) => producerPass(id).program;
+  /** Segment Sort resources: the control image of every pixel, sorted line by line (imageSegmentSortAxis.ts). */
+  const sorted = new Map<string, Pixel[]>();
+  const sortedTexel = (id: string, x: number, y: number): Pixel | undefined => {
+    const pass = producerPass(id);
+    if (!pass.segmentSort) return undefined;
+    let pixels = sorted.get(id);
+    if (!pixels) {
+      const [width, height] = resolution;
+      const control: Pixel[] = [];
+      for (let row = 0; row < height; row++) for (let column = 0; column < width; column++)
+        control.push(evaluate(pass.program, [(column + 0.5) / width, (row + 0.5) / height]));
+      const colorId = pass.segmentSort.colorResource;
+      const map = segmentSortSourceMap(width, height, index => [control[index][0], control[index][1], control[index][2]], pass.segmentSort.settings);
+      pixels = Array.from(map, source => texel(colorId, source % width, Math.floor(source / width)));
+      sorted.set(id, pixels);
+    }
+    return pixels[y * resolution[0] + x];
   };
   const texel = (id: string, x: number, y: number): Pixel => {
     let cache = caches.get(id);
     if (!cache) { cache = new Map(); caches.set(id, cache); }
     const key = y * resolution[0] + x, known = cache.get(key);
     if (known) return known;
-    const value = evaluate(producer(id), [(x + 0.5) / resolution[0], (y + 0.5) / resolution[1]]);
+    const value = sortedTexel(id, x, y) ?? evaluate(producer(id), [(x + 0.5) / resolution[0], (y + 0.5) / resolution[1]]);
     const stored = (options.float16 ? value.map(f16round) : value) as Pixel;
     cache.set(key, stored);
     return stored;
   };
-  const sampleResource = (id: string, sampled: [number, number]): Pixel => options.filterResources
+  const sampleResource = (id: string, sampled: [number, number]): Pixel => options.filterResources || producerPass(id).segmentSort
     ? bilinear(resolution[0], resolution[1], (x, y) => texel(id, x, y), sampled)
     : evaluate(producer(id), sampled);
   // One prepared evaluator per program: preparing it (scope tables, dependency sets) per pixel cost more

@@ -3,6 +3,7 @@ import type { ImageOperatorExternalResource } from './imageOperatorExternalResou
 import type { ImageOperatorFieldResource } from './imageOperatorFieldResources';
 import type { ImageOperatorResourceSampling } from './imageOperatorResources';
 import type { ImageOperatorValueBinding } from './imageOperatorValueBindings';
+import type { SegmentSortSettings } from './imageSegmentSortAxis';
 
 export type ImagePlanValue = 'image' | 'rgb' | 'alpha' | 'scalar' | 'boolean' | 'vec2' | 'vec3' | 'vec4';
 export type ImageOperatorCapability = 'uv' | 'resolution' | 'time' | 'sample' | 'pixel-load' | 'derivative';
@@ -29,6 +30,15 @@ export interface ImageOperatorSampleScope {
   id: number; output: number; type?: 'image' | 'scalar'; coordinate?: 'uv' | 'pixel';
   reducerContext?: { kind: 'kernel' | 'sequence'; id: number };
 }
+/**
+ * One pass of a materialized plan. A Segment Sort pass (image.segment-sort-axis) renders its program, the
+ * per-pixel control vec4 (key, run start, angle, 1), then sorts every line of `colorResource` by it into
+ * `outputResource` (imageSegmentSortAxis.ts).
+ */
+export interface ImageOperatorPass {
+  id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string;
+  segmentSort?: { settings: SegmentSortSettings; colorResource: string };
+}
 export interface ImageOperatorPlan extends ImageOperatorProgram {
   valueBindings?: readonly ImageOperatorValueBinding[];
   fusion: 'inline'; capabilities: readonly ImageOperatorCapability[]; instructions: ImagePlanInstruction[]; output: number;
@@ -40,7 +50,7 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   segmentSortScopes?: readonly { id: number; sample: number }[];
   quadtreeScopes?: readonly { id: number; sample: number }[];
   resourceInputs?: readonly string[]; resourceSampling?: readonly ImageOperatorResourceSampling[];
-  passes?: readonly { id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string }[];
+  passes?: readonly ImageOperatorPass[];
   resources?: readonly { id: string; producerPassId: string; format: 'rgba16float'; maxEdge?: number; scale?: number }[];
   previewResourceId?: string; frameHistoryResource?: string;
   externalResources?: readonly ImageOperatorExternalResource[]; fieldResources?: readonly ImageOperatorFieldResource[];

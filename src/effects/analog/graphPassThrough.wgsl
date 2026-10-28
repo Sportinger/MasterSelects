@@ -18,3 +18,18 @@ fn blockSilhouetteFragment(input: VertexOutput) -> @location(0) vec4f {
 fn dataHudFragment(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(inputTex, texSampler, input.uv);
 }
+
+@fragment
+fn pixelSortBandsFragment(input: VertexOutput) -> @location(0) vec4f {
+  return textureSample(inputTex, texSampler, input.uv);
+}
+
+@fragment
+fn blockCloudFragment(input: VertexOutput) -> @location(0) vec4f {
+  return textureSample(inputTex, texSampler, input.uv);
+}
+
+@fragment
+fn flowMoshFragment(input: VertexOutput) -> @location(0) vec4f {
+  return textureSample(inputTex, texSampler, input.uv);
+}

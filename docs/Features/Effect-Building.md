@@ -14,7 +14,7 @@ For developers and agents who build a new effect or rework an existing one. A re
    - Saved projects keep their look (`legacyDefault`, retired parameters).
    - The card uses the shared inspector rows (AGENTS.md, section 9).
 4. **Compare with the reference.** Render the effect with `scripts/effect-lab.mjs` on the shared images, and on the moving footage when it moves. Put the result next to the reference and keep going until a viewer would recognise the look.
-5. **Presets.** Give the effect three to five named presets that show its range. They belong to the effect and are picked in its card. Each one has to look good on its own, so render every preset and look at it. A preset resets every control it does not name, except text, quality controls and controls that belong to the shot rather than the look: mark those `presetKeeps` (a key's screen colour, a measured lens, where a figure stands).
+5. **Presets.** Give the effect at least three named presets that show its range; as many as there are distinct looks worth naming, each rendered and checked. They belong to the effect and are picked in its card. Each one has to look good on its own, so render every preset and look at it. A preset resets every control it does not name, except text, quality controls and controls that belong to the shot rather than the look: mark those `presetKeeps` (a key's screen colour, a measured lens, where a figure stands).
 6. **The docs page.** Write `docs/Features/effects/<effect-id>.md` by hand, following the [Style guide](./Documentation-Site.md#style-guide) and the [Effect pages](./Documentation-Site.md#effect-pages) contract. Video wherever something changes, stills where nothing does:
    - the top: a [compare slider](./Documentation-Site.md#compare-sliders) on a still or a loop for a filter, the effect alone on black for a generator;
    - the presets: one loop of all presets in a grid for a moving effect, a strip of stills for a static one;
@@ -46,7 +46,7 @@ In Claude Code the reviewers are subagents or a workflow; with Codex they are se
 
 - The look matches the reference: a picture of both side by side is in the report.
 - Every control acts, is safe over its whole range and has its own paragraph on the page.
-- Three to five presets, each one good on its own.
+- At least three presets (one per distinct look worth naming), each one good on its own.
 - The page follows the Style guide, and every picture and clip has been checked by eye.
 - The last review round found no blocking or major issue.
 - The targeted tests, the build and the live check passed.

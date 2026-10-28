@@ -11,13 +11,15 @@ export interface LayerEffectStack {
   unsupportedAfterRenderEffect?: Effect[];
 }
 
-/** An effect whose mix parameter (EffectDefinition.mixParam) is at 0 returns its input unchanged. */
-function isMixedOut(effect: Effect): boolean {
+/** An effect with a mix parameter (EffectDefinition.mixParam) at 0 returns its input unchanged. */
+export function isMixedOut(effect: Pick<Effect, 'type' | 'params'>): boolean {
   const definition = getEffect(effect.type);
   const mixParam = definition && 'mixParam' in definition ? definition.mixParam : undefined;
   if (!mixParam) return false;
-  const mix = effect.params?.[mixParam];
-  return typeof mix === 'number' && mix <= 0;
+  return (typeof mixParam === 'string' ? [mixParam] : mixParam).some(name => {
+    const mix = effect.params?.[name];
+    return typeof mix === 'number' && mix <= 0;
+  });
 }
 
 function applyInlineEffect(inlineEffects: InlineEffectParams, effect: Effect): 'inline' | 'contextual' | 'incomplete' {

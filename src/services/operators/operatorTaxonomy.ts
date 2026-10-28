@@ -41,7 +41,7 @@ const EXACT: Record<string, NodeCategoryId> = {
   'convert.rgb-to-hsv': 'color', 'convert.hsv-to-rgb': 'color', 'convert.rgb-to-oklch': 'color', 'convert.oklch-to-rgb': 'color', 'image.mask-overlay': 'color', 'image.luminance': 'color',
   'image.rgb-split': 'vector', 'image.rgb-combine': 'vector',
   'color.sobel-magnitude': 'sampling', 'field.sobel': 'sampling', 'image.sample': 'sampling', 'image.load-pixel-clamped': 'sampling',
-  'image.materialize': 'sampling', 'image.resource-input': 'sampling', 'image.segment-sort-luma': 'sampling', 'image.quadtree-partition': 'sampling',
+  'image.materialize': 'sampling', 'image.resource-input': 'sampling', 'image.segment-sort-luma': 'sampling', 'image.segment-sort-axis': 'sampling', 'image.quadtree-partition': 'sampling',
   'image.sample-history': 'time', 'image.frame-history': 'time', 'image.temporal-smooth': 'time', 'image.temporal-smooth.scalar': 'time',
   'image.temporal-history': 'time', 'image.source-motion': 'time', 'image.optical-flow': 'time', 'image.motion-consistency': 'time',
   'image.directional-smooth': 'time', 'field.motion': 'time',

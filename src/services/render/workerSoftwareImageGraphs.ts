@@ -1,4 +1,5 @@
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
+import { segmentSortSourceMap, type SegmentSortSettings } from '../operators/imageSegmentSortAxis';
 import { createImageOperatorEvaluator } from '../operators/imageOperatorEvaluation';
 import { pointwiseOperation } from '../operators/fields/pointwiseOperations';
 import { imageResourceSize } from '../operators/imageResourceScale';
@@ -150,8 +151,19 @@ function applyMaterializedPasses(data: Uint8ClampedArray, width: number, height:
         data[offset + 2] = toByte(result[2]); data[offset + 3] = toByte(result[3]);
       }
     }
-    if (pass.outputResource && output) produced.set(pass.outputResource, { width: passWidth, height: passHeight, pixels: output });
+    if (pass.outputResource && output) produced.set(pass.outputResource, pass.segmentSort
+      ? sortRaster(output, passWidth, passHeight, produced.get(pass.segmentSort.colorResource), pass.segmentSort.settings) : { width: passWidth, height: passHeight, pixels: output });
   }
+}
+
+/** A Segment Sort pass: `control` holds (key, run start, angle) per pixel; the colours of `color` move along their lines. */
+function sortRaster(control: Float32Array, width: number, height: number, color: FloatRaster | undefined, settings: SegmentSortSettings): FloatRaster {
+  if (!color || color.width !== width || color.height !== height) throw new Error('Segment Sort colour resource is missing or not frame size.');
+  // The GPU keeps the control image in rgba32float, like this raster.
+  const map = segmentSortSourceMap(width, height, index => [control[index * 4], control[index * 4 + 1], control[index * 4 + 2]], settings);
+  const pixels = new Float32Array(width * height * 4);
+  for (let index = 0; index < map.length; index++) pixels.set(color.pixels.subarray(map[index] * 4, map[index] * 4 + 4), index * 4);
+  return { width, height, pixels };
 }
 
 const toByte = (value: number) => Math.round(Math.min(1, Math.max(0, value)) * 255);

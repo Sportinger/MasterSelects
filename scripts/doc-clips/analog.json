@@ -397,6 +397,7 @@
       "alt": "Screen recording: the pointer clicks + Add Effect in Properties, Effects, types glitch and clicks the Glitch tile; the Glitch card appears, the pointer drags its Density slider to 1 and the preview of the dancer breaks up",
       "caption": "Adding Glitch: + Add Effect, type glitch, click the tile, drag Density.",
       "poster": 8.6
-    }
+    },
+    {"name": "block-cloud-presets", "kind": "presets", "effect": "block-cloud", "range": [0.5, 3.5], "crop": [0, 0, 1920, 1080], "width": 960, "columns": 3, "loop": 0.35, "poster": 1.2, "maxBytes": 1400000, "alt": "The dancing figure on the stage six times in a grid, moving in sync, each covered by drifting clouds of square blocks in three sizes: Brand Base with calm clouds in pink, cyan, green, white, dark grey and blush whose edges scatter into single blocks; Nervous with fast twitching edges and blocks that keep changing colour; Breathing with slow clouds that grow and shrink; Hesitant with dense clouds that hold; Clear with large solid patches of only pink, cyan and green; Wave with dense clouds that a ragged diagonal front will sweep away", "caption": "The six presets on the moving dancer, in sync, at Progress 0.7."}
   ]
 }
