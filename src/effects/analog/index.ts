@@ -9,6 +9,7 @@ export { crtScreen } from './crtScreen';
 export { glitch } from './glitch';
 export { blockDissolve } from './blockDissolve';
 export { dataHud } from './dataHud';
+export { blockSilhouette } from './blockSilhouette';
 export { filmPrism } from './filmPrism';
 
 const NO_ANGLE = (name: string) => `${name} has no angle; the value is ignored.`;

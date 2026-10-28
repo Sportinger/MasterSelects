@@ -85,6 +85,7 @@ export type EffectType =
   | 'glitch'
   | 'block-dissolve'
   | 'data-hud'
+  | 'block-silhouette'
   | 'analog-signal-lab'
   | 'crystal'
   | 'glass-dispersion'

@@ -862,6 +862,7 @@
     "docs/Features/assets/effects/thumbs/ascii.webp": {"recipe":"thumb scripts/effect-docs.mjs#ascii","fingerprint":"69399c64842d56b1"},
     "docs/Features/assets/effects/thumbs/block-dissolve.webp": {"recipe":"thumb scripts/effect-docs.mjs#block-dissolve","fingerprint":"9b48a9722a7d2859"},
     "docs/Features/assets/effects/thumbs/block-mosaic.webp": {"recipe":"thumb scripts/effect-docs.mjs#block-mosaic","fingerprint":"adb921eca76b9987"},
+    "docs/Features/assets/effects/thumbs/block-silhouette.webp": {"recipe":"thumb scripts/effect-docs.mjs#block-silhouette","fingerprint":"0f74acc2a412ca62"},
     "docs/Features/assets/effects/thumbs/blockify.webp": {"recipe":"thumb scripts/effect-docs.mjs#blockify","fingerprint":"647645c0e3e9d38f"},
     "docs/Features/assets/effects/thumbs/box-blur.webp": {"recipe":"thumb scripts/effect-docs.mjs#box-blur","fingerprint":"bbdb8dc5d42440b0"},
     "docs/Features/assets/effects/thumbs/brand-generator.webp": {"recipe":"thumb scripts/effect-docs.mjs#brand-generator","fingerprint":"317e323455585401"},

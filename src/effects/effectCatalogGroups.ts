@@ -14,7 +14,7 @@ export const EFFECT_GROUPS = [
   { id: 'lines', label: 'Lines & Engraving', effects: ['crosshatch', 'vector-tiling', 'contour', 'contour-map', 'outline', 'wave-lines', 'drift-lines'] },
   { id: 'textile', label: 'Textile & Craft', effects: ['embroidery', 'kilim', 'cross-stitch', 'stitch-poster'] },
   { id: 'text', label: 'Text & Glyph', effects: ['ascii', 'ascii-ghost', 'glyph-matrix', 'symbol-matrix', 'retro-matrix', 'matrix', 'grid-glyph', 'number-field', 'pixel-code', 'word-mosaic', 'inscribe', 'dither-text', 'data-hatch', 'pixel-dither', 'contour-type', 'brand-generator', 'capsule-cloud', 'ui-collage'] },
-  { id: 'analog', label: 'Analog & Glitch', effects: ['analog-signal-lab', 'crt-screen', 'scanlines', 'grain', 'glitch', 'glitch-grid', 'block-dissolve', 'data-hud', 'ribbon-scan', 'memory-leak'] },
+  { id: 'analog', label: 'Analog & Glitch', effects: ['analog-signal-lab', 'crt-screen', 'scanlines', 'grain', 'glitch', 'glitch-grid', 'block-dissolve', 'block-silhouette', 'data-hud', 'ribbon-scan', 'memory-leak'] },
   { id: 'keying', label: 'Keying', effects: ['chroma-key'] },
   { id: 'time', label: 'Time', effects: ['slit-scan', 'time-stack', 'kinetic-trace'] },
   { id: 'tracking', label: 'Tracking & Overlays', effects: ['face-cables', 'hand-particles', 'hud-tracker', 'cctv', 'subject', 'tracked-scene', 'stardust', 'rain-reveal'] },
