@@ -1,3 +1,4 @@
+import { memo, type ComponentProps } from 'react';
 import { ResolveWarpPointsEditor } from './ResolveWarpPointsEditor';
 import {
   CLIP_SPEED_MAX_PERCENT,
@@ -23,6 +24,7 @@ import {
 import type { CreateMidiTarget } from './transformTabTypes';
 import { LabeledValue } from './ValueControls';
 import { HandleOnlyRange } from './HandleOnlyRange';
+import { usePairedDragDraft } from '../../../common/usePairedDragDraft';
 import {
   buildResolveCropMaskPatch,
   isResolveCropMask,
@@ -55,6 +57,8 @@ interface ResolveVisualInspectorSectionsProps {
   onSpeedChange: (percent: number) => void;
 }
 
+const CROP_FIELD: PairedFieldProps = { decimals: 3, defaultValue: 0, sensitivity: 1 };
+
 function ResetButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
     <ResolveInspectorIconButton
@@ -69,11 +73,62 @@ function ResetButton({ label, onClick, disabled }: { label: string; onClick: () 
   );
 }
 
+type PairedFieldProps = Pick<ComponentProps<typeof LabeledValue>,
+  'decimals' | 'defaultValue' | 'midiTarget' | 'sensitivity' | 'suffix'>;
+
+/**
+ * Slider plus number field sharing one drag draft (usePairedDragDraft): the partner of the dragged
+ * control paints the same sample. Its own component, so a drag sample re-renders this row only.
+ */
+function SliderValuePair({ disabled, field, label, max, min, onBatchEnd, onBatchStart, onChange, value }: {
+  disabled?: boolean;
+  field: PairedFieldProps;
+  label: string;
+  max: number;
+  min: number;
+  onBatchEnd: () => void;
+  onBatchStart: () => void;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  const [shownValue, onDraftChange] = usePairedDragDraft(value);
+  return (
+    <div className="resolve-inspector-slider-value">
+      <HandleOnlyRange
+        aria-label={`${label} slider`}
+        disabled={disabled}
+        max={max}
+        min={min}
+        onChange={onChange}
+        onDraftChange={onDraftChange}
+        onDragEnd={onBatchEnd}
+        onDragStart={onBatchStart}
+        step={0.1}
+        value={shownValue}
+      />
+      <LabeledValue
+        {...field}
+        ariaLabel={label}
+        className="resolve-inspector-field resolve-inspector-field--plain"
+        disabled={disabled}
+        label=""
+        max={max}
+        min={min}
+        onChange={onChange}
+        onDraftChange={onDraftChange}
+        onDragEnd={onBatchEnd}
+        onDragStart={onBatchStart}
+        value={shownValue}
+      />
+    </div>
+  );
+}
+
 function PendingSectionBody({ children }: { children: string }) {
   return <p className="resolve-inspector-pending">{children}</p>;
 }
 
-export function ResolveVisualInspectorSections({
+export const ResolveVisualInspectorSections = memo(function ResolveVisualInspectorSections({
   blendMode,
   clipId,
   createMidiTarget,
@@ -95,10 +150,17 @@ export function ResolveVisualInspectorSections({
   onSpeedChange,
 }: ResolveVisualInspectorSectionsProps) {
   const opacitySources = useTransformNodeSources(clipId);
-  const retimeClip = useTimelineStore(state => state.clips.find(clip => clip.id === clipId));
-  const frozen = retimeClip?.timeRemap?.kind === 'freeze';
-  const warped = retimeClip?.timeRemap?.kind === 'warp';
-  const looped = retimeClip?.timeRemap?.kind === 'loop';
+  // Only the retime fields, not the whole clip: this memoised section must not re-render on every
+  // transform drag sample, which replaces the clip object.
+  const timeRemap = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.timeRemap);
+  const retimeInPoint = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.inPoint ?? 0);
+  const retimeSourceEnd = useTimelineStore(state => {
+    const clip = state.clips.find(candidate => candidate.id === clipId);
+    return clip ? clip.source?.naturalDuration ?? clip.outPoint : 0;
+  });
+  const frozen = timeRemap?.kind === 'freeze';
+  const warped = timeRemap?.kind === 'warp';
+  const looped = timeRemap?.kind === 'loop';
   const speedIgnored = frozen || warped;
   const speedHint = `Speed and Reverse are retained but ignored while ${frozen ? 'frozen' : 'warped'}.`;
   const speedKeyframeControl = speedIgnored ? (
@@ -175,32 +237,16 @@ export function ResolveVisualInspectorSections({
         ['softness', 'Softness', Math.max(sourceWidth, sourceHeight) / 2],
       ] as const).map(([key, label, max]) => (
         <ResolveInspectorRow key={key} label={label}>
-          <div className="resolve-inspector-slider-value">
-            <HandleOnlyRange
-              aria-label={`${label} slider`}
-              max={max}
-              min={0}
-              onChange={value => updateCropValue(key, value)}
-              onDragEnd={onBatchEnd}
-              onDragStart={onBatchStart}
-              step={0.1}
-              value={cropValues[key]}
-            />
-            <LabeledValue
-              ariaLabel={label}
-              className="resolve-inspector-field resolve-inspector-field--plain"
-              decimals={3}
-              defaultValue={0}
-              label=""
-              max={max}
-              min={0}
-              onChange={value => updateCropValue(key, value)}
-              onDragEnd={onBatchEnd}
-              onDragStart={onBatchStart}
-              sensitivity={1}
-              value={cropValues[key]}
-            />
-          </div>
+          <SliderValuePair
+            field={CROP_FIELD}
+            label={label}
+            max={max}
+            min={0}
+            onBatchEnd={onBatchEnd}
+            onBatchStart={onBatchStart}
+            onChange={value => updateCropValue(key, value)}
+            value={cropValues[key]}
+          />
         </ResolveInspectorRow>
       ))}
       <ResolveInspectorRow label="">
@@ -252,36 +298,23 @@ export function ResolveVisualInspectorSections({
             : <KeyframeToggle clipId={clipId} property="opacity" value={opacity} />}
           label="Opacity"
         >
-          <div className="resolve-inspector-slider-value">
-            <HandleOnlyRange
-              aria-label="Opacity slider"
-              disabled={opacitySources.has('opacity')}
-              max={100}
-              min={0}
-              onChange={onOpacityChange}
-              onDragEnd={onBatchEnd}
-              onDragStart={onBatchStart}
-              step={0.1}
-              value={opacityPercent}
-            />
-            <LabeledValue
-              ariaLabel="Opacity"
-              className="resolve-inspector-field resolve-inspector-field--plain"
-              decimals={2}
-              defaultValue={100}
-              disabled={opacitySources.has('opacity')}
-              label=""
-              max={100}
-              midiTarget={createMidiTarget('opacity', 'Opacity', opacity, 0, 1)}
-              min={0}
-              onChange={onOpacityChange}
-              onDragEnd={onBatchEnd}
-              onDragStart={onBatchStart}
-              sensitivity={0.5}
-              suffix="%"
-              value={opacityPercent}
-            />
-          </div>
+          <SliderValuePair
+            disabled={opacitySources.has('opacity')}
+            field={{
+              decimals: 2,
+              defaultValue: 100,
+              midiTarget: createMidiTarget('opacity', 'Opacity', opacity, 0, 1),
+              sensitivity: 0.5,
+              suffix: '%',
+            }}
+            label="Opacity"
+            max={100}
+            min={0}
+            onBatchEnd={onBatchEnd}
+            onBatchStart={onBatchStart}
+            onChange={onOpacityChange}
+            value={opacityPercent}
+          />
         </ResolveInspectorRow>
       </ResolveInspectorSection>
 
@@ -322,11 +355,11 @@ export function ResolveVisualInspectorSections({
             </ResolveInspectorIconButton>
           </ResolveInspectorRow>
           {warped && <ResolveWarpPointsEditor clipId={clipId} />}
-          {retimeClip?.timeRemap?.kind === 'freeze' && <ResolveInspectorNumberRow
-            label="Frozen Source" suffix="s" value={retimeClip.timeRemap.sourceTime}
-            defaultValue={retimeClip.inPoint} min={0} hardMin={0}
-            max={retimeClip.source?.naturalDuration ?? retimeClip.outPoint}
-            hardMax={retimeClip.source?.naturalDuration ?? retimeClip.outPoint} step={0.001}
+          {timeRemap?.kind === 'freeze' && <ResolveInspectorNumberRow
+            label="Frozen Source" suffix="s" value={timeRemap.sourceTime}
+            defaultValue={retimeInPoint} min={0} hardMin={0}
+            max={retimeSourceEnd}
+            hardMax={retimeSourceEnd} step={0.001}
             onChange={sourceTime => setTimeRemap(clipId, { kind: 'freeze', sourceTime })}
             onDragStart={onBatchStart} onDragEnd={onBatchEnd}
           />}
@@ -387,4 +420,4 @@ export function ResolveVisualInspectorSections({
       )}
     </div>
   );
-}
+});

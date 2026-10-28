@@ -46,7 +46,7 @@ export function resolvePositionValues({
   isEffectively3D,
   usesCameraControls,
 }: {
-  transform: TransformTabTransform;
+  transform: Pick<TransformTabTransform, 'position'>;
   compWidth: number;
   compHeight: number;
   isEffectively3D: boolean;

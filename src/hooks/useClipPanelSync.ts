@@ -3,13 +3,35 @@
 
 import { useEffect, useRef } from 'react';
 import { useTimelineStore } from '../stores/timeline';
+import type { TimelineState } from '../stores/timeline/types';
 import { FACTORY_COLOR_LAYOUT_ID, useDockStore } from '../stores/dockStore';
 import { nodeContainsPanelType } from '../stores/dockStore/layoutTree';
 import { isExclusiveTimelineMutationLeaseActive } from '../stores/timeline/exclusiveMutationLease';
 
+type PanelSyncState = Pick<TimelineState, 'clips' | 'tracks' | 'selectedClipIds' | 'propertiesSelection'>;
+
+/** The inspected target, or null when it does not exist (yet). A string, so it compares by value. */
+export function selectPanelSyncSelectionKey(state: PanelSyncState): string | null {
+  const { propertiesSelection, selectedClipIds } = state;
+  if (propertiesSelection?.kind === 'clip') {
+    return state.clips.some(clip => clip.id === propertiesSelection.clipId)
+      ? `clip:${propertiesSelection.clipId}`
+      : null;
+  }
+  if (propertiesSelection?.kind === 'track') {
+    return state.tracks.some(track => track.id === propertiesSelection.trackId)
+      ? `track:${propertiesSelection.trackId}`
+      : null;
+  }
+  if (propertiesSelection?.kind === 'master') return 'master';
+  const selectedId = selectedClipIds.size > 0 ? selectedClipIds.values().next().value : null;
+  return selectedId && state.clips.some(clip => clip.id === selectedId) ? `clip:${selectedId}` : null;
+}
+
 export function useClipPanelSync() {
-  const clips = useTimelineStore(state => state.clips);
-  const tracks = useTimelineStore(state => state.tracks);
+  // The key reads clips and tracks inside the selector: subscribing to the whole clips array
+  // re-rendered App on every inspector drag sample, although only existence matters here.
+  const selectionKey = useTimelineStore(selectPanelSyncSelectionKey);
   const selectedClipIds = useTimelineStore(state => state.selectedClipIds);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const activatePanelType = useDockStore(state => state.activatePanelType);
@@ -29,25 +51,6 @@ export function useClipPanelSync() {
   } | null>(null);
 
   useEffect(() => {
-    let selectionKey: string | null = null;
-
-    if (propertiesSelection?.kind === 'clip') {
-      selectionKey = clips.some(clip => clip.id === propertiesSelection.clipId)
-        ? `clip:${propertiesSelection.clipId}`
-        : null;
-    } else if (propertiesSelection?.kind === 'track') {
-      selectionKey = tracks.some(track => track.id === propertiesSelection.trackId)
-        ? `track:${propertiesSelection.trackId}`
-        : null;
-    } else if (propertiesSelection?.kind === 'master') {
-      selectionKey = 'master';
-    } else {
-      const selectedId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
-      selectionKey = selectedId && clips.some(clip => clip.id === selectedId)
-        ? `clip:${selectedId}`
-        : null;
-    }
-
     const previousRefs = prevSelectionRefs.current;
     const selectionActionOccurred = previousRefs === null
       || previousRefs.propertiesSelection !== propertiesSelection
@@ -79,8 +82,7 @@ export function useClipPanelSync() {
   }, [
     selectedClipIds,
     propertiesSelection,
-    clips,
-    tracks,
+    selectionKey,
     activatePanelType,
     activeSavedLayoutId,
     colorWorkspaceVisible,

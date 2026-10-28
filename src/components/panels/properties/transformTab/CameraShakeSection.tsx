@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { AnimatableProperty } from '../../../../types';
 import type { SceneCameraSettings } from '../../../../stores/mediaStore/types';
 import { ResolveInspectorSection } from '../resolveInspector/ResolveInspectorPrimitives';
@@ -11,7 +12,7 @@ interface Props {
   onBatchEnd: () => void;
   onPropertyChange: (property: AnimatableProperty, value: number) => void;
 }
-export function CameraShakeSection({ clipId, settings, onBatchStart, onBatchEnd, onPropertyChange }: Props) {
+export const CameraShakeSection = memo(function CameraShakeSection({ clipId, settings, onBatchStart, onBatchEnd, onPropertyChange }: Props) {
   const fields = [
     ['shakeAmount', 'Strength', 0, 0, 20, .01, '°'],
     ['shakeFrequency', 'Frequency', 8, .1, 30, .1, 'Hz'],
@@ -28,4 +29,4 @@ export function CameraShakeSection({ clipId, settings, onBatchStart, onBatchEnd,
         onDragStart={onBatchStart} onDragEnd={onBatchEnd} onChange={next => onPropertyChange(property, next)} />;
     })}
   </ResolveInspectorSection>;
-}
+});

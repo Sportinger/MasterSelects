@@ -17,8 +17,13 @@ interface MulticamDialogProps {
   selectedClipIds: Set<string>;
 }
 
+const NO_CLIPS: readonly TimelineClip[] = [];
+
 export function MulticamDialog({ open, onClose, selectedClipIds }: MulticamDialogProps) {
-  const { clips, createLinkedGroup } = useTimelineStore();
+  // A closed dialog stays mounted; it must not re-render on every store change (playhead ticks,
+  // inspector drag samples). It follows the clips only while it is open.
+  const clips = useTimelineStore(state => (open ? state.clips : NO_CLIPS));
+  const createLinkedGroup = useTimelineStore(state => state.createLinkedGroup);
 
   const [masterClipId, setMasterClipId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);

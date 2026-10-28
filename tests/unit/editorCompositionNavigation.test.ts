@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fixture = vi.hoisted(() => ({
   session: {} as object | null, media: {} as any, timeline: {} as any,
-  workspace: {} as Record<string, unknown>, stage: vi.fn(), activate: vi.fn(), project: vi.fn(), abandon: vi.fn(),
+  workspace: {} as Record<string, unknown>, stage: vi.fn(), flushPreviews: vi.fn(), activate: vi.fn(), project: vi.fn(), abandon: vi.fn(),
   queue: vi.fn(), stop: vi.fn(), sync: vi.fn(), clear: vi.fn(), render: vi.fn(),
   publication: { generation: 4, revisionId: 'revision', blocked: false },
   clock: { isUsingInternalPosition: false, position: 42 },
@@ -17,6 +17,7 @@ vi.mock('../../src/services/project/repository/transaction/storeMutationBoundary
 }));
 vi.mock('../../src/services/project/repository/transaction/editorMutationRuntime', () => ({
   getEditorRepositorySession: () => fixture.session,
+  flushEditorGesturePreviews: fixture.flushPreviews,
   getEditorRepositoryWorkspace: () => fixture.workspace,
   queueEditorRepositoryView: (key: string, value: unknown) => { fixture.queue(key, value); fixture.workspace[key] = value; },
 }));

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { useFrameCoalescedNumberChange } from '../../../common/useFrameCoalescedNumberChange';
 
 const THUMB_WIDTH_PX = 7;
@@ -20,6 +21,9 @@ interface HandleOnlyRangeProps {
   onChange: (value: number) => void;
   onDragEnd?: () => void;
   onDragStart?: () => void;
+  /** Every drag sample as it paints, then null after the release flush: lets a paired number field
+   * follow at input rate (usePairedDragDraft). Pass a stable function, such as a state setter. */
+  onDraftChange?: (value: number | null) => void;
   step: number;
   value: number;
 }
@@ -53,6 +57,7 @@ export function HandleOnlyRange({
   onChange,
   onDragEnd,
   onDragStart,
+  onDraftChange,
   step,
   value,
   ...ariaProps
@@ -60,9 +65,17 @@ export function HandleOnlyRange({
   const sliderRef = useRef<HTMLDivElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const [isTouchDragging, setIsTouchDragging] = useState(false);
+  // Local draft of a drag: the thumb follows every pointer sample while the store commit follows once per
+  // frame. Dropped right after the release flush, so the store value (clamped or rejected) wins.
+  const [dragValue, setDragValue] = useState<number | null>(null);
   const { enqueue, flush } = useFrameCoalescedNumberChange(onChange);
   const onDragEndRef = useRef(onDragEnd);
-  onDragEndRef.current = onDragEnd;
+  const onDraftChangeRef = useRef(onDraftChange);
+  // Synced after each commit, before any later pointer event reads them (not during render).
+  useLayoutEffect(() => {
+    onDragEndRef.current = onDragEnd;
+    onDraftChangeRef.current = onDraftChange;
+  });
 
   useEffect(() => () => {
     const dragState = dragStateRef.current;
@@ -70,12 +83,14 @@ export function HandleOnlyRange({
     dragState.removeWindowListeners();
     dragStateRef.current = null;
     flush();
+    onDraftChangeRef.current?.(null);
     onDragEndRef.current?.();
   }, [flush]);
 
   const clampedValue = clamp(value, min, max);
+  const displayValue = dragValue === null ? clampedValue : clamp(dragValue, min, max);
   const range = max - min;
-  const valueRatio = range > 0 ? (clampedValue - min) / range : 0;
+  const valueRatio = range > 0 ? (displayValue - min) / range : 0;
   const sliderStyle = {
     '--handle-only-range-position': `${valueRatio * 100}%`,
   } as CSSProperties;
@@ -99,7 +114,7 @@ export function HandleOnlyRange({
       aria-disabled={disabled || undefined}
       aria-valuemax={max}
       aria-valuemin={min}
-      aria-valuenow={clampedValue}
+      aria-valuenow={displayValue}
       className="handle-only-range"
       data-dock-tab-swipe-ignore="true"
       data-touch-dragging={isTouchDragging ? 'true' : undefined}
@@ -111,7 +126,7 @@ export function HandleOnlyRange({
         const hitRadius = event.pointerType === 'touch' || event.pointerType === 'pen'
           ? COARSE_POINTER_HIT_RADIUS_PX
           : FINE_POINTER_HIT_RADIUS_PX;
-        const isOnHandle = Math.abs(event.clientX - thumbCenterX(event.currentTarget, clampedValue, min, max)) <= hitRadius;
+        const isOnHandle = Math.abs(event.clientX - thumbCenterX(event.currentTarget, displayValue, min, max)) <= hitRadius;
 
         // Suppress the native range behavior both on the track and on the
         // thumb. The custom drag below avoids the browser's track-jump first.
@@ -123,7 +138,7 @@ export function HandleOnlyRange({
           pointerId: event.pointerId,
           removeWindowListeners: () => undefined,
           startClientX: event.clientX,
-          startValue: clampedValue,
+          startValue: displayValue,
         };
         const handlePointerMove = (pointerEvent: globalThis.PointerEvent) => {
           if (dragStateRef.current !== dragState || pointerEvent.pointerId !== dragState.pointerId) return;
@@ -135,7 +150,15 @@ export function HandleOnlyRange({
           const usableWidth = Math.max(1, slider.getBoundingClientRect().width - THUMB_WIDTH_PX);
           const nextValue = dragState.startValue
             + ((pointerEvent.clientX - dragState.startClientX) / usableWidth) * (max - min);
-          enqueue(roundToStep(nextValue, min, max, step));
+          const steppedValue = roundToStep(nextValue, min, max, step);
+          // Render the draft inside this pointer event: a state update from a native listener is otherwise
+          // rendered in a scheduler task that can land after this frame's paint, one frame late (journey
+          // tests/playwright/performance/inspector-latency.spec.ts measured 25-29 ms instead of 8-10 ms).
+          flushSync(() => {
+            setDragValue(steppedValue);
+            onDraftChangeRef.current?.(steppedValue);
+          });
+          enqueue(steppedValue);
         };
         const finishDrag = (pointerEvent?: globalThis.PointerEvent) => {
           if (dragStateRef.current !== dragState) return;
@@ -148,6 +171,8 @@ export function HandleOnlyRange({
           dragStateRef.current = null;
           setIsTouchDragging(false);
           flush();
+          setDragValue(null);
+          onDraftChangeRef.current?.(null);
           onDragEndRef.current?.();
         };
         const handleWindowBlur = () => finishDrag();

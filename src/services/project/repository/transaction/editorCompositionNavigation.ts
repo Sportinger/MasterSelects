@@ -2,7 +2,7 @@ import type { MediaState } from '../../../../stores/mediaStore/types';
 import type { TimelineStore } from '../../../../stores/timeline/types';
 import { RepositoryError } from '../contracts';
 import { getRepositoryStore, withRepositoryHydration } from './storeMutationBoundary';
-import { getEditorRepositorySession, getEditorRepositoryWorkspace, queueEditorRepositoryView } from './editorMutationRuntime';
+import { flushEditorGesturePreviews, getEditorRepositorySession, getEditorRepositoryWorkspace, queueEditorRepositoryView } from './editorMutationRuntime';
 import { blockEditorContentPublication, publishEditorContentProjection, readEditorContentPublication } from './editorPublication';
 import { stageEditorTimeline } from './editorTimelineRestore';
 import { isExclusiveTimelineMutationLeaseActive } from '../../../../stores/timeline/exclusiveMutationLease';
@@ -22,14 +22,18 @@ export async function navigateEditorComposition(id: string | null): Promise<void
   if (!session) return;
   const mediaStore = getRepositoryStore('media'), timelineStore = getRepositoryStore('timeline');
   if (!mediaStore || !timelineStore) throw new RepositoryError('ownership', 'Editor stores are not initialized');
-  const media = mediaStore.getState() as MediaState, timeline = timelineStore.getState() as TimelineStore;
-  if (id === media.activeCompositionId) return;
-  const composition = media.compositions.find(comp => comp.id === id);
-  if (id !== null && !composition) throw new RepositoryError('ownership', 'Composition is not in the installed project');
+  const requested = mediaStore.getState() as MediaState;
+  if (id === requested.activeCompositionId) return;
+  if (id !== null && !requested.compositions.some(comp => comp.id === id)) throw new RepositoryError('ownership', 'Composition is not in the installed project');
   const publication = readEditorContentPublication();
-  if (timeline.isExporting || isExclusiveTimelineMutationLeaseActive() || publication.blocked) {
+  if ((timelineStore.getState() as TimelineStore).isExporting || isExclusiveTimelineMutationLeaseActive() || publication.blocked) {
     throw new RepositoryError('ownership', 'Cannot switch composition during content activation or export');
   }
+  // An open gesture's live preview exists only in the timeline store this switch replaces: write it into
+  // its transaction first (this also updates the composition's projection the snapshots below carry).
+  flushEditorGesturePreviews('Composition switch');
+  const media = mediaStore.getState() as MediaState, timeline = timelineStore.getState() as TimelineStore;
+  const composition = media.compositions.find(comp => comp.id === id);
   const started = performance.now();
   const position = playheadState.isUsingInternalPosition ? playheadState.position : timeline.playheadPosition;
   if (media.activeCompositionId) {

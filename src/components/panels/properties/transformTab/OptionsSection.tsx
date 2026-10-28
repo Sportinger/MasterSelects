@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { SCENE_NAV_FPS_MOVE_SPEED_STEPS } from '../../../../stores/engineStore';
 import { KeyframeToggle } from '../shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../sharedConstants';
@@ -76,7 +77,7 @@ interface OptionsSectionProps {
   onWireframeToggle: () => void;
 }
 
-export function OptionsSection({
+export const OptionsSection = memo(function OptionsSection({
   clipId,
   blendMode,
   canToggleThreeDEffectors,
@@ -403,4 +404,4 @@ export function OptionsSection({
       )}
     </div>
   );
-}
+});

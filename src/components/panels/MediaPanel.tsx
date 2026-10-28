@@ -35,6 +35,7 @@ import { useMediaStore, type ProjectItem } from '../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { LiveInputSource } from '../../types/liveInput';
 import { liveInputRuntime } from '../../services/mediaRuntime/liveInputRuntime';
@@ -67,10 +68,14 @@ export function MediaPanel() {
     refreshFileUrls,
     ensureFileThumbnail,
   } = useMediaPanelStoreBindings();
-  const timelineClips = useTimelineStore(state => state.clips);
+  // A derived id list, not the clips array: an inspector drag replaces `clips` on every sample and
+  // re-rendered every bin cell. useShallow keeps the list (and the Set) while the ids stay the same.
+  const timelineOwnedMediaItemIdList = useTimelineStore(useShallow(
+    state => [...getTimelineOwnedMediaItemIds(state.clips ?? [])].toSorted(),
+  ));
   const timelineOwnedMediaItemIds = useMemo(
-    () => getTimelineOwnedMediaItemIds(timelineClips ?? []),
-    [timelineClips],
+    () => new Set(timelineOwnedMediaItemIdList),
+    [timelineOwnedMediaItemIdList],
   );
   const composerReferenceMediaFileIds = useFlashBoardStore(state => state.composer.referenceMediaFileIds);
   const updateFlashBoardComposer = useFlashBoardStore(state => state.updateComposer);
@@ -493,7 +498,7 @@ export function MediaPanel() {
     hiddenProjectItemIds: timelineOwnedMediaItemIds,
     sortItems,
   });
-  const mediaPreviewTooltip = useMediaPanelPreviewTooltip({ activeCompositionId, activeTimelineClips: timelineClips, itemsById: allProjectItemsById, mediaFiles: files });
+  const mediaPreviewTooltip = useMediaPanelPreviewTooltip({ activeCompositionId, itemsById: allProjectItemsById, mediaFiles: files });
   const handleItemDoubleClick = useCallback((item: ProjectItem, renameFromName = false) => {
     if (renameTimerRef.current !== null) {
       window.clearTimeout(renameTimerRef.current);

@@ -14,6 +14,9 @@ export interface TransformTabTransform {
   rotation: TransformVector3;
 }
 
+/** The spatial part of the transform, which the Transform section and anchor rows show. */
+export type TransformTabSpatialTransform = Pick<TransformTabTransform, 'position' | 'anchor' | 'scale' | 'rotation'>;
+
 export interface MidiParameterTargetView {
   clipId: string;
   property: string;

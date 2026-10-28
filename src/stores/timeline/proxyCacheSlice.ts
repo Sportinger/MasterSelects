@@ -1,6 +1,6 @@
 // Proxy cache and invalidation actions slice
 
-import type { ProxyCacheActions, SliceCreator } from './types';
+import type { ProxyCacheActions, SliceCreator, TimelineStore } from './types';
 import { Logger } from '../../services/logger';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { layerBuilder } from '../../services/layerBuilder';
@@ -240,18 +240,28 @@ export const createProxyCacheSlice: SliceCreator<ProxyCacheActions> = (set, get)
   },
 
   // Invalidate cache when content changes (clip moved, trimmed, etc.)
+  // It runs after every content edit, including each drag sample: it writes only what actually changes, and
+  // never mixes cache state into a content write (the repository keeps a drag sample a cheap live preview
+  // only when it carries clips/keyframes alone).
   invalidateCache: () => {
-    // Cancel any ongoing RAM preview
-    const resetVideoBakeState = resetVolatileVideoBakeRegionStatuses(get().clips, get().videoBakeRegions);
-    set({
-      ...resetVideoBakeState,
-      isRamPreviewing: false,
-      isClipVideoBakeRendering: false,
-      cachedFrameTimes: new Set(),
-      ramPreviewRange: null,
-      ramPreviewProgress: null,
-      clipVideoBakeProgress: null,
-    });
+    const state = get();
+    // Baked video regions become stale with the content they were rendered from.
+    const reset = resetVolatileVideoBakeRegionStatuses(state.clips, state.videoBakeRegions);
+    const contentPatch: Partial<TimelineStore> = {
+      ...(reset.clips !== state.clips ? { clips: reset.clips } : {}),
+      ...(reset.videoBakeRegions !== state.videoBakeRegions ? { videoBakeRegions: reset.videoBakeRegions } : {}),
+    };
+    if (Object.keys(contentPatch).length) set(contentPatch);
+    // Cancel any ongoing RAM preview and drop the cached frame list.
+    const cachePatch: Partial<TimelineStore> = {
+      ...(state.isRamPreviewing ? { isRamPreviewing: false } : {}),
+      ...(state.isClipVideoBakeRendering ? { isClipVideoBakeRendering: false } : {}),
+      ...(state.cachedFrameTimes.size ? { cachedFrameTimes: new Set<number>() } : {}),
+      ...(state.ramPreviewRange !== null ? { ramPreviewRange: null } : {}),
+      ...(state.ramPreviewProgress !== null ? { ramPreviewProgress: null } : {}),
+      ...(state.clipVideoBakeProgress !== null ? { clipVideoBakeProgress: null } : {}),
+    };
+    if (Object.keys(cachePatch).length) set(cachePatch);
     // Immediately clear all caches and request render
     layerBuilder.invalidateCache(); // Force layer rebuild
     videoBakeProxyCache.clear();

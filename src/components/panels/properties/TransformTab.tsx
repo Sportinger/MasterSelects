@@ -1,5 +1,5 @@
 // Transform Tab - Position, Scale, Rotation, Opacity controls
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { getCanvasSourceSize } from '../../../services/text/textCanvasFrameRegistry';
 
 import { useTimelineStore } from '../../../stores/timeline';
@@ -45,6 +45,8 @@ import {
   resolveLinkedVideoAudioPair,
 } from '../../../stores/timeline/helpers/linkedClipSpeed';
 import { isVideoInspectorSectionEnabled } from '../../../services/videoInspector/sectionBypass';
+import { useStableHandler } from './transformTab/useStableHandler';
+import { useTransformMediaSizes } from './transformTab/useTransformMediaSizes';
 
 function positiveDimension(value: number | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -68,7 +70,12 @@ interface TransformTabProps {
   cameraSettings?: SceneCameraSettings;
 }
 
-export function TransformTab({
+/**
+ * Memoised, like its sections: pass a transform that keeps its identity while its values stay the
+ * same (PropertiesPanel uses useStableTransform), so playhead ticks and edits of other clips skip it,
+ * and a drag re-renders only the section whose values change.
+ */
+export const TransformTab = memo(function TransformTab({
   clipId,
   transform,
   speed = 1,
@@ -150,7 +157,7 @@ export function TransformTab({
 
   const handleBatchStart = useCallback(() => startBatch('Adjust transform'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
-  const handleInspectorSectionEnabledChange = useCallback((
+  const handleInspectorSectionEnabledChange = useStableHandler((
     section: VideoInspectorSectionKey,
     enabled: boolean,
   ) => {
@@ -160,34 +167,27 @@ export function TransformTab({
         [section]: enabled,
       },
     });
-  }, [clip?.videoInspectorSections, clipId, updateClip]);
+  });
 
-  const mediaState = useMediaStore.getState();
-  const activeComp = mediaState.getActiveComposition();
-  const compWidth = activeComp?.width || 1920;
-  const compHeight = activeComp?.height || 1080;
-  const mediaFileId = clip?.source?.mediaFileId ?? clip?.mediaFileId;
-  const mediaFile = mediaFileId
-    ? (mediaState.files ?? []).find((candidate) => candidate.id === mediaFileId)
-    : undefined;
-  const nestedComposition = clip?.compositionId
-    ? (mediaState.compositions ?? []).find((candidate) => candidate.id === clip.compositionId)
-    : undefined;
+  // Subscribed, not read through getState(): the tab is memoised, so a composition resolution change,
+  // media metadata or a proxy arriving, or a source swap must re-render it. Each selector returns one
+  // number, so mirror writes of the composition list and edits of other files leave the tab alone.
+  const { compWidth, compHeight, mediaFileId, mediaWidth, mediaHeight, nestedWidth, nestedHeight } = useTransformMediaSizes(clip);
   const textSourceSize = clip?.source?.textCanvas ? getCanvasSourceSize(clip.source.textCanvas) : undefined;
   const sourceWidth =
-    positiveDimension(mediaFile?.width)
+    positiveDimension(mediaWidth)
     ?? positiveDimension(clip?.source?.videoElement?.videoWidth)
     ?? positiveDimension(clip?.source?.imageElement?.naturalWidth)
     ?? positiveDimension(clip?.source?.nativeDecoder?.width)
     ?? positiveDimension(textSourceSize?.width)
-    ?? positiveDimension(nestedComposition?.width);
+    ?? positiveDimension(nestedWidth);
   const sourceHeight =
-    positiveDimension(mediaFile?.height)
+    positiveDimension(mediaHeight)
     ?? positiveDimension(clip?.source?.videoElement?.videoHeight)
     ?? positiveDimension(clip?.source?.imageElement?.naturalHeight)
     ?? positiveDimension(clip?.source?.nativeDecoder?.height)
     ?? positiveDimension(textSourceSize?.height)
-    ?? positiveDimension(nestedComposition?.height);
+    ?? positiveDimension(nestedHeight);
   const fitToFrameScale = sourceWidth !== null && sourceHeight !== null
     ? calculateFitToFrameScale(
         sourceWidth,
@@ -223,13 +223,20 @@ export function TransformTab({
     [clip?.name, clipId],
   );
 
-  const positionValues = resolvePositionValues({
-    transform,
+  // The spatial part only: an opacity or blend edit leaves it (and the memoised Transform section) alone.
+  const spatialTransform = useMemo(() => ({
+    position: transform.position,
+    ...(transform.anchor ? { anchor: transform.anchor } : {}),
+    scale: transform.scale,
+    rotation: transform.rotation,
+  }), [transform.anchor, transform.position, transform.rotation, transform.scale]);
+  const positionValues = useMemo(() => resolvePositionValues({
+    transform: spatialTransform,
     compWidth,
     compHeight,
     isEffectively3D,
     usesCameraControls,
-  });
+  }), [spatialTransform, compWidth, compHeight, isEffectively3D, usesCameraControls]);
   const selectedModelPrimitiveIndex = Number.isInteger(clip?.source?.modelPrimitiveIndex)
     ? clip?.source?.modelPrimitiveIndex
     : undefined;
@@ -266,21 +273,21 @@ export function TransformTab({
     };
   }, [isModel, modelFile, modelFileName]);
 
-  const handlePosXChange = (value: number) => handlePropertyChange(
+  const handlePosXChange = useStableHandler((value: number) => handlePropertyChange(
     'position.x',
     positionValues.usesScenePositionUnits ? value : value / (compWidth / 2),
-  );
-  const handlePosYChange = (value: number) => handlePropertyChange(
+  ));
+  const handlePosYChange = useStableHandler((value: number) => handlePropertyChange(
     'position.y',
     positionValues.usesScenePositionUnits ? value : value / (compHeight / 2),
-  );
-  const handlePosZChange = (value: number) => handlePropertyChange(
+  ));
+  const handlePosZChange = useStableHandler((value: number) => handlePropertyChange(
     'position.z',
     positionValues.usesScenePositionUnits ? value : value / (compWidth / 2),
-  );
-  const handleCameraPositionXChange = (value: number) => handlePropertyChange('position.x', value);
-  const handleCameraPositionYChange = (value: number) => handlePropertyChange('position.y', value);
-  const handleCameraPositionZChange = (value: number) => handlePropertyChange('position.z', value);
+  ));
+  const handleCameraPositionXChange = useCallback((value: number) => handlePropertyChange('position.x', value), [handlePropertyChange]);
+  const handleCameraPositionYChange = useCallback((value: number) => handlePropertyChange('position.y', value), [handlePropertyChange]);
+  const handleCameraPositionZChange = useCallback((value: number) => handlePropertyChange('position.z', value), [handlePropertyChange]);
   const handleCameraFovChange = useCallback((value: number) => {
     handlePropertyChange('camera.fov', clampCameraFov(value));
   }, [handlePropertyChange]);
@@ -294,7 +301,7 @@ export function TransformTab({
     handlePropertyChange('camera.far', Math.max(cameraSettings.near + 0.1, value));
   }, [cameraSettings.near, handlePropertyChange]);
   const {
-    handleCameraLookRotationChange,
+    handleCameraLookRotationChange: cameraLookRotationChange,
   } = useCameraKeyframeInteractions({
     clip,
     clipId,
@@ -314,6 +321,8 @@ export function TransformTab({
     onPropertyChange: handlePropertyChange,
     updateCameraTransform: (patch) => updateClipTransform(clipId, patch),
   });
+  // It closes over the clip and transform; a stable identity keeps the memoised section's props.
+  const handleCameraLookRotationChange = useStableHandler(cameraLookRotationChange);
 
   const handleResetProperties = useCallback((
     label: string,
@@ -336,32 +345,34 @@ export function TransformTab({
     }]);
   }, [handleResetProperties]);
 
-  const handleScaleAllChange = (value: number) => handlePropertyChange('scale.all', value);
-  const handleScaleXChange = (value: number) => handlePropertyChange('scale.x', value);
-  const handleScaleYChange = (value: number) => handlePropertyChange('scale.y', value);
-  const handleScaleZChange = (value: number) => handlePropertyChange('scale.z', value);
+  const handleScaleAllChange = useCallback((value: number) => handlePropertyChange('scale.all', value), [handlePropertyChange]);
+  const handleScaleXChange = useCallback((value: number) => handlePropertyChange('scale.x', value), [handlePropertyChange]);
+  const handleScaleYChange = useCallback((value: number) => handlePropertyChange('scale.y', value), [handlePropertyChange]);
+  const handleScaleZChange = useCallback((value: number) => handlePropertyChange('scale.z', value), [handlePropertyChange]);
   const toggleScaleAxis = (property: 'scale.x' | 'scale.y', value: number) => {
     const magnitude = Math.abs(value) || 1;
     handlePropertyChange(property, value < 0 ? magnitude : -magnitude);
   };
-  const handleFitToFrame = fitToFrameScale === null
-    ? undefined
-    : () => {
-        startBatch('Fit source to composition');
-        try {
-          handlePropertyChange('scale.all', 1);
-          handlePropertyChange(
-            'scale.x',
-            (transform.scale.x < 0 ? -1 : 1) * fitToFrameScale,
-          );
-          handlePropertyChange(
-            'scale.y',
-            (transform.scale.y < 0 ? -1 : 1) * fitToFrameScale,
-          );
-        } finally {
-          endBatch();
-        }
-      };
+  const handleFlipX = useStableHandler(() => toggleScaleAxis('scale.x', transform.scale.x));
+  const handleFlipY = useStableHandler(() => toggleScaleAxis('scale.y', transform.scale.y));
+  const fitToFrame = useStableHandler(() => {
+    if (fitToFrameScale === null) return;
+    startBatch('Fit source to composition');
+    try {
+      handlePropertyChange('scale.all', 1);
+      handlePropertyChange(
+        'scale.x',
+        (transform.scale.x < 0 ? -1 : 1) * fitToFrameScale,
+      );
+      handlePropertyChange(
+        'scale.y',
+        (transform.scale.y < 0 ? -1 : 1) * fitToFrameScale,
+      );
+    } finally {
+      endBatch();
+    }
+  });
+  const handleFitToFrame = fitToFrameScale === null ? undefined : fitToFrame;
 
   const handleResetComposite = useCallback(() => {
     startBatch('Reset composite');
@@ -377,10 +388,28 @@ export function TransformTab({
   }, [handleResetProperties]);
 
   const opacityPct = transform.opacity * 100;
-  const handleOpacityChange = (pct: number) => handlePropertyChange('opacity', Math.max(0, Math.min(100, pct)) / 100);
+  const handleOpacityChange = useCallback(
+    (pct: number) => handlePropertyChange('opacity', Math.max(0, Math.min(100, pct)) / 100),
+    [handlePropertyChange],
+  );
   const speedPct = speed * 100;
-  const handleSpeedChange = (pct: number) => setClipSpeed(clipId, pct / 100);
-  const handleThreeDEffectorsToggle = useCallback(() => {
+  const handleSpeedChange = useCallback((pct: number) => setClipSpeed(clipId, pct / 100), [clipId, setClipSpeed]);
+  const handleFreeRunToggle = useStableHandler(() => updateClip(clipId, { freeRun: !freeRun }));
+  const handleToggle3D = useCallback(() => toggle3D(clipId), [clipId, toggle3D]);
+  const handleBlendModeChange = useCallback(
+    (blendMode: string) => updateClipTransform(clipId, { blendMode: blendMode as BlendMode }),
+    [clipId, updateClipTransform],
+  );
+  const handleLinkedAudioSpeedChange = useCallback(
+    (enabled: boolean) => setLinkedClipSpeedEnabled(clipId, enabled),
+    [clipId, setLinkedClipSpeedEnabled],
+  );
+  const handleWireframeToggle = useStableHandler(() => updateClip(clipId, { wireframe: !wireframe }));
+  const handleTransformSectionEnabledChange = useCallback(
+    (enabled: boolean) => handleInspectorSectionEnabledChange('transform', enabled),
+    [handleInspectorSectionEnabledChange],
+  );
+  const handleThreeDEffectorsToggle = useStableHandler(() => {
     if (!clip?.source) return;
     updateClip(clipId, {
       source: {
@@ -388,8 +417,8 @@ export function TransformTab({
         threeDEffectorsEnabled: !threeDEffectorsEnabled,
       },
     });
-  }, [clip, clipId, threeDEffectorsEnabled, updateClip]);
-  const handleModelPrimitiveIndexChange = useCallback((index: number | undefined) => {
+  });
+  const handleModelPrimitiveIndexChange = useStableHandler((index: number | undefined) => {
     if (!clip?.source) return;
     const source = { ...clip.source };
     if (index === undefined) {
@@ -398,7 +427,7 @@ export function TransformTab({
       source.modelPrimitiveIndex = index;
     }
     updateClip(clipId, { source });
-  }, [clip, clipId, updateClip]);
+  });
 
   return (
     <div
@@ -414,8 +443,8 @@ export function TransformTab({
           isLocked3D={isLocked3D}
           mediaFileId={mediaFileId}
           supportsFreeRun={supportsFreeRun}
-          onFreeRunToggle={() => updateClip(clipId, { freeRun: !freeRun })}
-          onToggle3D={() => toggle3D(clipId)}
+          onFreeRunToggle={handleFreeRunToggle}
+          onToggle3D={handleToggle3D}
         />
       )}
 
@@ -452,7 +481,7 @@ export function TransformTab({
           createMidiTarget={createMIDIParameterTarget}
           onBatchEnd={handleBatchEnd}
           onBatchStart={handleBatchStart}
-          onBlendModeChange={(blendMode) => updateClipTransform(clipId, { blendMode: blendMode as BlendMode })}
+          onBlendModeChange={handleBlendModeChange}
           onModelPrimitiveIndexChange={handleModelPrimitiveIndexChange}
           onOpacityChange={handleOpacityChange}
           onSceneNavFpsModeChange={setSceneNavFpsMode}
@@ -460,11 +489,11 @@ export function TransformTab({
           onSceneNavNoKeyframesChange={setSceneNavNoKeyframes}
           onSceneNavTouchControlsVisibleChange={setSceneNavTouchControlsOverride}
           onSpeedChange={handleSpeedChange}
-          onLinkedAudioSpeedChange={(enabled) => setLinkedClipSpeedEnabled(clipId, enabled)}
-          onFreeRunToggle={() => updateClip(clipId, { freeRun: !freeRun })}
+          onLinkedAudioSpeedChange={handleLinkedAudioSpeedChange}
+          onFreeRunToggle={handleFreeRunToggle}
           onThreeDEffectorsToggle={handleThreeDEffectorsToggle}
-          onToggle3D={() => toggle3D(clipId)}
-          onWireframeToggle={() => updateClip(clipId, { wireframe: !wireframe })}
+          onToggle3D={handleToggle3D}
+          onWireframeToggle={handleWireframeToggle}
         />
       )}
 
@@ -516,7 +545,7 @@ export function TransformTab({
         positionValues={positionValues}
         showLayerDimensionToggle={usesVisualInspectorSections}
         supportsScaleZ={supportsScaleZ}
-        transform={transform}
+        transform={spatialTransform}
         usesCameraControls={usesCameraControls}
         onBatchEnd={handleBatchEnd}
         onBatchStart={handleBatchStart}
@@ -526,9 +555,9 @@ export function TransformTab({
         onCameraLookRotationChange={handleCameraLookRotationChange}
         onAnchorChange={handlePropertyChange}
         onFitToFrame={handleFitToFrame}
-        onFlipX={() => toggleScaleAxis('scale.x', transform.scale.x)}
-        onFlipY={() => toggleScaleAxis('scale.y', transform.scale.y)}
-        onEnabledChange={enabled => handleInspectorSectionEnabledChange('transform', enabled)}
+        onFlipX={handleFlipX}
+        onFlipY={handleFlipY}
+        onEnabledChange={handleTransformSectionEnabledChange}
         onPosXChange={handlePosXChange}
         onPosYChange={handlePosYChange}
         onPosZChange={handlePosZChange}
@@ -538,7 +567,7 @@ export function TransformTab({
         onScaleXChange={handleScaleXChange}
         onScaleYChange={handleScaleYChange}
         onScaleZChange={handleScaleZChange}
-        onToggle3D={() => toggle3D(clipId)}
+        onToggle3D={handleToggle3D}
       />
 
       {usesVisualInspectorSections && (
@@ -555,8 +584,8 @@ export function TransformTab({
           showTemporalSections={sourceType === 'video'}
           onBatchEnd={handleBatchEnd}
           onBatchStart={handleBatchStart}
-          onBlendModeChange={blendMode => updateClipTransform(clipId, { blendMode: blendMode as BlendMode })}
-          onLinkedAudioSpeedChange={enabled => setLinkedClipSpeedEnabled(clipId, enabled)}
+          onBlendModeChange={handleBlendModeChange}
+          onLinkedAudioSpeedChange={handleLinkedAudioSpeedChange}
           onOpacityChange={handleOpacityChange}
           onSectionEnabledChange={handleInspectorSectionEnabledChange}
           onResetComposite={handleResetComposite}
@@ -566,4 +595,4 @@ export function TransformTab({
       )}
     </div>
   );
-}
+});

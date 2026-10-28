@@ -17,16 +17,21 @@ import { queueSourceIdentity } from '../artifacts/queueSourceIdentity';
 import { getEditorGestureToken, installEditorGestureEvents } from './editorGestureOwnership';
 import { canonicalJson } from '../segments/canonical';
 import { projectTimelineMutationToComposition } from './editorCompositionProjection';
+import { projectTimelineMutationForTransaction, restoreOffscreenCompositionProjections, type CompositionProjectionRecords } from './editorCompositionRollback';
 import { refreshEditorHistoryAvailability } from './editorHistory';
 import { playheadState } from '../../../layerBuilder/PlayheadState';
-import { TimelineGesturePreview } from './TimelineGesturePreview';
+import { TimelineGesturePreview, type GesturePreviewRejection } from './TimelineGesturePreview';
 import { revertFieldWrite } from './editorRollbackMerge';
 import { Logger } from '../../../logger';
 
 const log = Logger.create('EditorMutation');
 
-/** One write of a transaction: the field values before it (`patch`) and after it, for a per-item rollback. */
-interface RollbackMutation { domain: string; patch: Record<string, unknown>; after: Record<string, unknown>; }
+/**
+ * One write of a transaction: the field values before it (`patch`) and after it, for a per-item rollback. A
+ * timeline write names the composition whose timeline store it changed: after a composition switch that store
+ * holds another composition, and the write must not be reverted into it.
+ */
+interface RollbackMutation { domain: string; patch: Record<string, unknown>; after: Record<string, unknown>; compositionId?: string | null; }
 interface ActionScope {
   token: TransactionToken | null; owns: boolean; label: string; domain: string;
   /** Set on a write that forms its own revision with this source: its transaction begins with its first content. */
@@ -49,12 +54,42 @@ interface EditorRuntime {
   batch?: TransactionToken | null;
   gestureTokens?: Set<symbol>;
   gesturePreviews?: TimelineGesturePreview;
+  /** Gestures whose rejected preview was already logged: one message per gesture, not per pointer sample. */
+  gestureRejections?: Set<symbol>;
+  /** Per open transaction: its projections of each composition's timeline, for a cancel after a composition switch. */
+  compositionProjections?: Map<symbol, CompositionProjectionRecords>;
 }
 const runtime: EditorRuntime = import.meta.hot?.data?.editorRepositoryRuntime ?? {
   session: null, explicit: null, scopes: [], rollbacks: new Map(), workspace: {}, viewChain: Promise.resolve(), journalValues: new Map(), sourceJobs: new Map(), sessionListeners: new Set(), pendingViews: new Map(), viewScheduled: false, viewError: null, viewWriting: false, workspaceTimer: null,
 };
 runtime.gestureTokens ??= new Set();
+// After a code update with no gesture open, use the current preview class (an old instance keeps old rules).
+if (!(runtime.gesturePreviews instanceof TimelineGesturePreview) && !runtime.gestureTokens.size) runtime.gesturePreviews = new TimelineGesturePreview();
 runtime.gesturePreviews ??= new TimelineGesturePreview();
+runtime.gestureRejections ??= new Set();
+runtime.compositionProjections ??= new Map();
+function forgetTransaction(token: TransactionToken): void {
+  runtime.gesturePreviews!.delete(token); runtime.gestureTokens!.delete(token.owner); runtime.gestureRejections!.delete(token.owner);
+  runtime.compositionProjections!.delete(token.owner);
+}
+function activeCompositionId(): string | null | undefined {
+  return (getRepositoryStore('media')?.getState() as MediaState | undefined)?.activeCompositionId;
+}
+/** The projection records of an open transaction (created on its first timeline projection). */
+function projectionsOf(token: TransactionToken | null | undefined): CompositionProjectionRecords | undefined {
+  if (!token || !runtime.rollbacks.has(token.owner)) return undefined;
+  let records = runtime.compositionProjections!.get(token.owner);
+  if (!records) { records = new Map(); runtime.compositionProjections!.set(token.owner, records); }
+  return records;
+}
+/** A drag write that cannot stay a live preview is encoded in full from then on; say why, once per gesture. */
+function reportGesturePreviewRejection(token: TransactionToken, rejection: GesturePreviewRejection | false): void {
+  if (runtime.gestureRejections!.has(token.owner)) return;
+  runtime.gestureRejections!.add(token.owner);
+  const { reason, structural } = rejection || { reason: 'rejected by an outdated preview module', structural: false };
+  const message = `Gesture preview off for the rest of this drag (${reason}); later samples encode the whole clip`;
+  if (structural) log.info(message); else log.warn(message);
+}
 export function getEditorRepositorySession(): RepositorySession | null { return runtime.session; }
 export function getEditorTransactionToken(): TransactionToken | null {
   const top = runtime.scopes.at(-1);
@@ -73,7 +108,7 @@ export function installEditorRepositorySession(session: RepositorySession, optio
   if (sourceRetryTimer) clearTimeout(sourceRetryTimer); sourceRetryTimer = null;
   runtime.session = session; runtime.workspace = structuredClone(options.workspace ?? {}) as Record<string, unknown>;
   for (const job of runtime.sourceJobs.values()) job.controller.abort(); runtime.sourceJobs.clear();
-  runtime.explicit = null; runtime.scopes = []; runtime.rollbacks.clear(); runtime.journalValues.clear(); resetFlashBoardJournalMembership();
+  runtime.explicit = null; runtime.scopes = []; runtime.rollbacks.clear(); runtime.compositionProjections!.clear(); runtime.journalValues.clear(); resetFlashBoardJournalMembership();
   runtime.pendingViews.clear(); runtime.viewError = null; unsavedWarnings.clear();
   // An absent default view needs no write on every reopen. Later motion still publishes.
   const initialMedia = getRepositoryStore('media')?.getState() as MediaState | undefined;
@@ -144,15 +179,31 @@ function rememberRollback(token: TransactionToken, domain: string, patch: Record
   if (!Object.keys(patch).length) return;
   const rollbacks = runtime.rollbacks.get(token.owner);
   if (!rollbacks) return;
+  const compositionId = domain === 'timeline' ? activeCompositionId() ?? null : undefined;
   const last = rollbacks.findLast(item => item.domain === domain);
-  const continues = last && Object.keys(patch).every(key => !(key in last.after) || Object.is(last.after[key], patch[key]));
-  if (!last || !continues) { rollbacks.push({ domain, patch, after }); return; }
+  const continues = last && last.compositionId === compositionId
+    && Object.keys(patch).every(key => !(key in last.after) || Object.is(last.after[key], patch[key]));
+  if (!last || !continues) { rollbacks.push({ domain, patch, after, ...(compositionId !== undefined ? { compositionId } : {}) }); return; }
   for (const [key, value] of Object.entries(patch)) {
     if (!(key in last.patch)) last.patch[key] = value;
     last.after[key] = after[key];
   }
 }
-function flushGesturePreview(token: TransactionToken): void {
+/**
+ * A preview whose composition is no longer in the timeline store: its live values left with the store swap
+ * (a switch that did not flush it first, such as a project activation), and the composition's saved records and
+ * projection still hold the values from before the gesture. Nothing is written; the gesture's other edits stay.
+ */
+function settleStalePreview(token: TransactionToken, ending: 'save' | 'cancel' | 'write'): boolean {
+  const target = runtime.gesturePreviews!.compositionOf(token);
+  if (target === undefined || target === activeCompositionId()) return false;
+  runtime.gesturePreviews!.delete(token);
+  if (ending === 'cancel') log.info(`Gesture preview of composition ${target} was replaced by a composition switch; it keeps its values from before the gesture`);
+  else log.warn(`Gesture preview of composition ${target} was replaced by a composition switch before it was saved; its live values are dropped`);
+  return true;
+}
+function flushGesturePreview(token: TransactionToken, ending: 'save' | 'write' = 'write'): void {
+  if (settleStalePreview(token, ending)) return;
   const timeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
   const media = getRepositoryStore('media')?.getState() as MediaState | undefined;
   const baseline = timeline && runtime.gesturePreviews!.baseline(token, timeline, media?.activeCompositionId);
@@ -162,16 +213,30 @@ function flushGesturePreview(token: TransactionToken): void {
       entities: coordinator.getEntities(), activeComposition: media?.compositions.find(comp => comp.id === media.activeCompositionId),
     });
     finishDomainMutation(coordinator, prepareDomainMutation(coordinator, token, plan));
-    projectTimelineMutationToComposition(baseline, timeline);
+    projectTimelineMutationForTransaction(projectionsOf(token), baseline, timeline);
     rememberRollback(token, 'timeline', { clips: baseline.clips, clipKeyframes: baseline.clipKeyframes },
       { clips: timeline.clips, clipKeyframes: timeline.clipKeyframes });
     runtime.gesturePreviews!.delete(token);
   }
 }
+/**
+ * Called before the timeline store is replaced by another composition (tab navigation): every open gesture's
+ * live preview of the visible composition becomes a normal write of that gesture's transaction, so its release
+ * saves what the user saw and its cancel can restore the composition it no longer shows.
+ */
+export function flushEditorGesturePreviews(reason: string): void {
+  const active = activeCompositionId();
+  if (!runtime.session || !active) return;
+  for (const token of runtime.gesturePreviews!.tokensFor(active)) {
+    if (!ownsEditorTransaction(token)) { runtime.gesturePreviews!.delete(token); continue; }
+    flushGesturePreview(token);
+    log.info(`${reason} during an open gesture: its live preview of composition ${active} was written into the gesture`);
+  }
+}
 export function commitEditorTransaction(token: TransactionToken): ReturnType<RepositorySession['coordinator']['commit']> {
-  flushGesturePreview(token);
+  flushGesturePreview(token, 'save');
   const result = session().coordinator.commit(token); runtime.rollbacks.delete(token.owner);
-  runtime.gesturePreviews!.delete(token); runtime.gestureTokens!.delete(token.owner);
+  forgetTransaction(token);
   publishEditorContentProjection(session().coordinator.getStatus()); return result;
 }
 /**
@@ -204,8 +269,13 @@ export async function captureEditorTransactionAcrossAwaits<T>(token: Transaction
 }
 export function cancelEditorTransaction(token: TransactionToken): void {
   session().coordinator.cancel(token);
-  const mutations = runtime.rollbacks.get(token.owner) ?? [];
+  const all = runtime.rollbacks.get(token.owner) ?? [];
   const timelineBefore = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
+  // Timeline writes of a composition another one replaced in the store since: reverting them here would write
+  // that composition's clips into the visible one. Its projection is restored below instead.
+  const active = activeCompositionId() ?? null;
+  const mutations = all.filter(mutation => mutation.domain !== 'timeline' || mutation.compositionId === undefined || mutation.compositionId === active);
+  settleStalePreview(token, 'cancel');
   withRepositoryHydration(() => {
     // Per item: what other transactions changed in the same fields meanwhile (committed revisions) stays.
     for (const mutation of mutations.toReversed()) {
@@ -222,7 +292,9 @@ export function cancelEditorTransaction(token: TransactionToken): void {
   });
   const restored = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
   if (timelineBefore && restored && (runtime.gestureTokens!.has(token.owner) || mutations.some(mutation => mutation.domain === 'timeline'))) projectTimelineMutationToComposition(timelineBefore, restored);
-  runtime.gesturePreviews!.delete(token); runtime.gestureTokens!.delete(token.owner);
+  const offscreen = restoreOffscreenCompositionProjections(runtime.compositionProjections!.get(token.owner));
+  if (offscreen.length) log.info(`Cancel after a composition switch restored the edited composition(s) ${offscreen.join(', ')} off-screen`);
+  forgetTransaction(token);
   runtime.rollbacks.delete(token.owner); publishEditorContentProjection(session().coordinator.getStatus());
 }
 function beginScope(domain: string, label: string): ActionScope {
@@ -304,10 +376,20 @@ const boundary: StoreMutationBoundary = {
     if (domain === 'timeline' && isTimelineContent && gestureToken && runtime.gestureTokens!.has(gestureToken.owner)) {
       const media = getRepositoryStore('media')?.getState() as MediaState | undefined;
       boundary.assertAllowed(domain);
+      // A preview after an encoded write of the same composition would restore its baseline over that write on
+      // cancel. Writes of another composition (flushed before a switch) leave this one's preview path open.
+      const active = media?.activeCompositionId ?? null;
       const alreadyEncoded = runtime.rollbacks.get(gestureToken.owner)?.some(item => item.domain === 'timeline'
-        && ('clips' in item.patch || 'clipKeyframes' in item.patch));
-      if (!replacing && !alreadyEncoded && runtime.gesturePreviews!.stage(current.coordinator, gestureToken, media?.activeCompositionId,
-        before as TimelineStore, patch as Partial<TimelineStore>)) return { gesturePreview: true };
+        && item.compositionId === active && ('clips' in item.patch || 'clipKeyframes' in item.patch));
+      if (alreadyEncoded && !replacing && !runtime.gesturePreviews!.compositionOf(gestureToken)) {
+        reportGesturePreviewRejection(gestureToken, { reason: `the gesture already wrote composition ${active} in full`, structural: true });
+      }
+      if (!replacing && !alreadyEncoded) {
+        const staged = runtime.gesturePreviews!.stage(current.coordinator, gestureToken, media?.activeCompositionId,
+          before as TimelineStore, patch as Partial<TimelineStore>);
+        if (staged === true) return { gesturePreview: true };
+        reportGesturePreviewRejection(gestureToken, staged);
+      }
       // A structural edit interleaved with a drag must see its current authored content.
       flushGesturePreview(gestureToken);
     }
@@ -354,7 +436,7 @@ const boundary: StoreMutationBoundary = {
     if ((value as { gesturePreview?: boolean })?.gesturePreview) return;
     const preparation = value as PreparedMutation & { before: unknown };
     if (preparation.prepared) finishDomainMutation(session().coordinator, preparation.prepared);
-    if (_domain === 'timeline' && preparation.prepared) projectTimelineMutationToComposition(preparation.before as TimelineStore, after as TimelineStore);
+    if (_domain === 'timeline' && preparation.prepared) projectTimelineMutationForTransaction(projectionsOf(preparation.scope.token), preparation.before as TimelineStore, after as TimelineStore);
     for (const { id, value } of preparation.plan.journals) {
       if (JSON.stringify(runtime.journalValues.get(id)) === JSON.stringify(value)) continue;
       session().coordinator.appendJournal(id, value);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type { AnimatableProperty } from '../../../../types';
 import {
@@ -14,11 +14,12 @@ import {
   ResolveResetIcon,
 } from '../resolveInspector/ResolveInspectorPrimitives';
 import type { PositionValueContext } from './transformValues';
-import type { CreateMidiTarget, TransformTabTransform } from './transformTabTypes';
+import type { CreateMidiTarget, TransformTabSpatialTransform } from './transformTabTypes';
 import { LayerDimensionToggle } from './LayerModeControls';
 import { LabeledValue } from './ValueControls';
 import { AnchorPointRows } from './AnchorPointRows';
 import { HandleOnlyRange } from './HandleOnlyRange';
+import { usePairedDragDraft } from '../../../common/usePairedDragDraft';
 import { TransformNodeSourceActions } from './TransformNodeSourceActions';
 import { useTransformNodeSources } from './useTransformNodeSources';
 
@@ -31,7 +32,7 @@ interface ResolveTransformSectionProps {
   positionValues: PositionValueContext;
   showLayerDimensionToggle: boolean;
   supportsScaleZ: boolean;
-  transform: TransformTabTransform;
+  transform: TransformTabSpatialTransform;
   usesCameraControls: boolean;
   onBatchEnd: () => void;
   onBatchStart: () => void;
@@ -116,7 +117,9 @@ function SliderValue({
   property: 'rotation.x' | 'rotation.y' | 'rotation.z';
   value: number;
 }) {
-  const sliderValue = Math.max(-180, Math.min(180, value));
+  // Slider and field show the same drag sample in the same paint (no one-frame lag of the partner).
+  const [shownValue, onDraftChange] = usePairedDragDraft(value);
+  const sliderValue = Math.max(-180, Math.min(180, shownValue));
 
   return (
     <div className="resolve-inspector-slider-value">
@@ -126,6 +129,7 @@ function SliderValue({
         max={180}
         min={-180}
         onChange={onChange}
+        onDraftChange={onDraftChange}
         onDragEnd={onBatchEnd}
         onDragStart={onBatchStart}
         step={0.1}
@@ -140,16 +144,17 @@ function SliderValue({
         label=""
         midiTarget={createMidiTarget(property, midiLabel, value, -360, 360)}
         onChange={onChange}
+        onDraftChange={onDraftChange}
         onDragEnd={onBatchEnd}
         onDragStart={onBatchStart}
         sensitivity={0.25}
-        value={value}
+        value={shownValue}
       />
     </div>
   );
 }
 
-export function ResolveTransformSection({
+export const ResolveTransformSection = memo(function ResolveTransformSection({
   clipId,
   createMidiTarget,
   enabled,
@@ -622,4 +627,4 @@ export function ResolveTransformSection({
       </ResolveInspectorSection>
     </div>
   );
-}
+});

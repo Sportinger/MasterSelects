@@ -139,25 +139,36 @@ function resetBakedRegion(region: VideoBakeRegion): VideoBakeRegion {
   };
 }
 
+/** Maps the items and returns the same array when no item changed, so unchanged state keeps its identity. */
+function mapRetainingIdentity<T>(items: T[], map: (item: T) => T): T[] {
+  let next: T[] | null = null;
+  items.forEach((item, index) => {
+    const mapped = map(item);
+    if (next) { next.push(mapped); return; }
+    if (mapped !== item) next = [...items.slice(0, index), mapped];
+  });
+  return next ?? items;
+}
+
+/**
+ * Returns the given arrays themselves when no region is baked, baking or failed. Callers write the result
+ * on every content edit (invalidateCache runs per drag sample); fresh arrays would turn each pointer sample
+ * into a durable timeline edit of every clip and of the composition record.
+ */
 export function resetVolatileVideoBakeRegionStatuses(
-  clips: readonly TimelineClip[],
-  videoBakeRegions: readonly VideoBakeRegion[],
+  clips: TimelineClip[],
+  videoBakeRegions: VideoBakeRegion[],
 ): {
   clips: TimelineClip[];
   videoBakeRegions: VideoBakeRegion[];
 } {
   return {
-    videoBakeRegions: videoBakeRegions.map(resetBakedRegion),
-    clips: clips.map((clip) => {
+    videoBakeRegions: mapRetainingIdentity(videoBakeRegions, resetBakedRegion),
+    clips: mapRetainingIdentity(clips, (clip) => {
       const bakeRegions = clip.videoState?.bakeRegions;
       if (!bakeRegions?.length) return clip;
-      return {
-        ...clip,
-        videoState: {
-          ...clip.videoState,
-          bakeRegions: bakeRegions.map(resetBakedRegion),
-        },
-      };
+      const nextRegions = mapRetainingIdentity(bakeRegions, resetBakedRegion);
+      return nextRegions === bakeRegions ? clip : { ...clip, videoState: { ...clip.videoState, bakeRegions: nextRegions } };
     }),
   };
 }

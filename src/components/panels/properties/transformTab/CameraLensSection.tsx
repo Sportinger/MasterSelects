@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { AnimatableProperty } from '../../../../types';
 import type { SceneCameraSettings } from '../../../../stores/mediaStore/types';
 import { DEFAULT_CAMERA_LENS, type ToneMapping } from '../../../../engine/native3d/pathtrace/contracts/ptTypes';
@@ -29,7 +30,7 @@ interface CameraLensSectionProps {
  * both engines; aperture, focus and shutter for depth of field and motion blur. An f-stop of 0 is a
  * pinhole, a focus distance of 0 focuses on the camera target, a shutter angle of 0 disables blur.
  */
-export function CameraLensSection({ clipId, settings, onBatchEnd, onBatchStart, onPropertyChange, onToneMappingChange, onEnabledChange }: CameraLensSectionProps) {
+export const CameraLensSection = memo(function CameraLensSection({ clipId, settings, onBatchEnd, onBatchStart, onPropertyChange, onToneMappingChange, onEnabledChange }: CameraLensSectionProps) {
   const exposure = settings.exposure ?? DEFAULT_CAMERA_LENS.exposure;
   const fStop = settings.fStop ?? DEFAULT_CAMERA_LENS.fStop;
   const focusDistance = settings.focusDistance ?? DEFAULT_CAMERA_LENS.focusDistance;
@@ -63,4 +64,4 @@ export function CameraLensSection({ clipId, settings, onBatchEnd, onBatchStart, 
         onChange={value => onPropertyChange('camera.shutterAngle', value)} />
     </ResolveInspectorSection>
   );
-}
+});

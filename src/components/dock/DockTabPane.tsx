@@ -9,6 +9,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { selectIsSlotGridPanelActive, useSlotGridPanelStore } from '../../stores/slotGridPanelStore';
 import { useTimelineStore } from '../../stores/timeline';
+import type { TimelineState } from '../../stores/timeline/types';
 import { DockDropOverlays } from './tabPane/DockDropOverlays';
 import { DockTabDoubleTouchTracker } from './tabPane/DockTabDoubleTouchTracker';
 import { DockTabMenus } from './tabPane/DockTabMenus';
@@ -24,6 +25,28 @@ import { useTabPaneMenus } from './tabPane/useTabPaneMenus';
 
 interface DockTabPaneProps {
   group: DockTabGroup;
+}
+
+type PropertiesLabelState = Pick<TimelineState, 'clips' | 'selectedClipIds' | 'propertiesSelection'>;
+
+/** Name of the clip the Properties tab label shows (the inspected clip, else the first selected one). */
+function selectPropertiesClipName(state: PropertiesLabelState): string | null {
+  const { propertiesSelection, selectedClipIds } = state;
+  if (propertiesSelection?.kind === 'clip') {
+    return state.clips.find(c => c.id === propertiesSelection.clipId)?.name || null;
+  }
+  if (selectedClipIds.size === 0) return null;
+  const clipId = selectedClipIds.values().next().value;
+  return state.clips.find(c => c.id === clipId)?.name || null;
+}
+
+/** Type of the transition the Properties tab label shows, when a transition is inspected. */
+function selectPropertiesTransitionType(state: PropertiesLabelState): string | null {
+  const { propertiesSelection } = state;
+  if (propertiesSelection?.kind !== 'transition') return null;
+  const clip = state.clips.find(item => item.id === propertiesSelection.clipId);
+  const transition = propertiesSelection.edge === 'in' ? clip?.transitionIn : clip?.transitionOut;
+  return transition?.type ?? null;
 }
 
 export function DockTabPane({ group }: DockTabPaneProps) {
@@ -87,9 +110,11 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closeCompositionTab: s.closeCompositionTab,
     reorderCompositionTabs: s.reorderCompositionTabs,
   })));
-  const { clips, selectedClipIds, slotGridProgress, tracks, masterAudioState, propertiesSelection } = useTimelineStore(useShallow(s => ({
-    clips: s.clips,
-    selectedClipIds: s.selectedClipIds,
+  // Never the whole clips array: an inspector drag replaces it on every sample and every pane would
+  // re-render. Only the two names the tab label shows are selected (strings compare by value).
+  const { selectedClipName, selectedTransitionType, slotGridProgress, tracks, masterAudioState, propertiesSelection } = useTimelineStore(useShallow(s => ({
+    selectedClipName: selectPropertiesClipName(s),
+    selectedTransitionType: selectPropertiesTransitionType(s),
     slotGridProgress: s.slotGridProgress,
     tracks: s.tracks,
     masterAudioState: s.masterAudioState,
@@ -117,22 +142,9 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const hasTimelinePanel = timelinePanel !== null;
   const openCompositions = hasTimelinePanel ? getOpenCompositions() : [];
 
-  const selectedClipName = useMemo(() => {
-    if (propertiesSelection?.kind === 'clip') {
-      return clips.find(c => c.id === propertiesSelection.clipId)?.name || null;
-    }
-    if (selectedClipIds.size === 0) return null;
-    const clipId = [...selectedClipIds][0];
-    const clip = clips.find(c => c.id === clipId);
-    return clip?.name || null;
-  }, [clips, propertiesSelection, selectedClipIds]);
   const selectedPropertiesName = useMemo(() => {
     if (propertiesSelection?.kind === 'transition') {
-      const clip = clips.find(item => item.id === propertiesSelection.clipId);
-      const transition = propertiesSelection.edge === 'in'
-        ? clip?.transitionIn
-        : clip?.transitionOut;
-      return transition ? `TRANSITION ${transition.type}` : null;
+      return selectedTransitionType ? `TRANSITION ${selectedTransitionType}` : null;
     }
     if (propertiesSelection?.kind === 'track') {
       const track = tracks.find(item => item.id === propertiesSelection.trackId);
@@ -142,7 +154,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       return 'MASTER Master';
     }
     return selectedClipName ? `CLIP ${selectedClipName}` : null;
-  }, [clips, propertiesSelection, selectedClipName, tracks]);
+  }, [propertiesSelection, selectedClipName, selectedTransitionType, tracks]);
   const selectedSlotName = useMemo(() => {
     if (!slotGridPanelActive || !selectedSlotCompositionId) {
       return null;

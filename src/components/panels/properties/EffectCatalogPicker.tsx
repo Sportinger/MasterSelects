@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getDefaultParams } from '../../../effects';
 import { effectExperimentalNote, type EffectDefinition } from '../../../effects/types';
 import { catalogText } from '../../../services/nodeGraph/catalogText';
@@ -33,8 +33,32 @@ function nameMatchRank(name: string, query: string): number {
   return normalizedName.split(/[\s()/-]+/u).some((word) => word.startsWith(query)) ? 2 : 3;
 }
 
-export function EffectCatalogPicker({ groups, sourceFrameId, onSelect, footnote }: EffectCatalogPickerProps) {
+interface EffectCatalogTileProps {
+  effectId: string;
+  look: LookDefinition;
+  sourceFrameId: string;
+  onSelectEffect: (effectId: string) => void;
+}
+
+/** One catalog tile. Memoised: the collapsed catalog holds ~160 tiles, and none of them changes while a value is dragged. */
+const EffectCatalogTile = memo(function EffectCatalogTile({ effectId, look, sourceFrameId, onSelectEffect }: EffectCatalogTileProps) {
+  const apply = useCallback(() => onSelectEffect(effectId), [effectId, onSelectEffect]);
+  return <LookTile look={look} sourceFrameId={sourceFrameId} onApply={apply} />;
+});
+
+/**
+ * Memoised: it re-renders only when its groups, footnote, source frame or `onSelect` change,
+ * not on every parameter edit of the clip above it. Pass stable `groups` and `onSelect`.
+ */
+export const EffectCatalogPicker = memo(function EffectCatalogPicker({ groups, sourceFrameId, onSelect, footnote }: EffectCatalogPickerProps) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  // The tiles keep one stable select callback; it always calls the newest `onSelect`.
+  const onSelectRef = useRef(onSelect);
+  useLayoutEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  const selectEffect = useCallback((effectId: string) => {
+    onSelectRef.current(effectId);
+    if (detailsRef.current) detailsRef.current.open = false;
+  }, []);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('all');
   const categories = useMemo(() => groups.map((group) => group.category), [groups]);
@@ -69,11 +93,6 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect, footnote 
       : matches;
   }, [category, groups, query]);
 
-  const select = (effectId: string) => {
-    onSelect(effectId);
-    if (detailsRef.current) detailsRef.current.open = false;
-  };
-
   return (
     <details className="effect-catalog-picker" ref={detailsRef} onToggle={event => {
       if (event.currentTarget.open) event.currentTarget.querySelector<HTMLInputElement>('input[aria-label="Search effects"]')?.focus();
@@ -96,11 +115,12 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect, footnote 
         </div>
         <div className="effect-catalog-grid">
           {tiles.map(({ effect, look }) => (
-            <LookTile
+            <EffectCatalogTile
               key={effect.id}
+              effectId={effect.id}
               look={look}
               sourceFrameId={sourceFrameId}
-              onApply={() => select(effect.id)}
+              onSelectEffect={selectEffect}
             />
           ))}
         </div>
@@ -109,4 +129,4 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect, footnote 
       </div>
     </details>
   );
-}
+});
