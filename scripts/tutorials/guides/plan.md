@@ -19,7 +19,8 @@ Roman's requests from 2026-10-26:
 - a voice that runs too fast can be split and moved in MS for more pause;
 - the next take starts exactly where the last one ended (checkpoints, stage 2).
 
-[`agents.md`](agents.md) describes how the pipeline works today and its pitfalls. Work through the
+[`agents.md`](agents.md) describes how the pipeline works today and its pitfalls.
+[`test-yarn-2026-10-24.md`](test-yarn-2026-10-24.md) shows where a fresh agent lost its time. Work through the
 stages in order; each one is useful on its own. Tick off a stage here when it is done.
 
 ## Goals

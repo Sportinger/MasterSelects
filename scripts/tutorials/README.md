@@ -82,7 +82,7 @@ voice and music together do not clip. To try other cues without recording a new 
 ## Make a video from a voice recording
 
 1. Put the voice file into `scripts/tutorials/audio/`, for example `audio/my-episode.mp3`.
-2. Write a recipe (the format is at the top of `scripts/tutorial-video.mjs`). Set `name`, set
+2. Copy a recipe (`flamer-episode-1.json` is a complete example). Set `name`, set
    `"audio": "audio/my-episode.mp3"`, and split the transcript into scenes. Each scene's `say`
    holds its words in the order they are spoken. Audio tags such as `[whisper]` may stay in.
 3. Build it: `node scripts/tutorial-video.mjs scripts/tutorials/my-episode.json`. While you build a
@@ -124,14 +124,14 @@ frame with the checkpoint's last frame and stops if they differ (`seam.jpg` show
 difference). A retake always starts from the clean checkpoint.
 
 A start state that no take has left yet comes from a recipe with only `setup` and `resume`, saved
-without recording: `node scripts/tutorial-video.mjs scripts/tutorials/<part>-end.json
---setup-only --save <checkpoint>` (about a minute for 40 steps).
+without recording: `node scripts/tutorial-video.mjs scripts/tutorials/flamer-ep2-part2-end.json
+--setup-only --save flamer-ep2-part2` (67 s for the Qualle start state, 43 steps).
 
 The build server keeps one editor open in the same headless Chrome, for building a setup step by
 step and looking at every step:
 
 ```bash
-node scripts/tutorial-tab.mjs serve --from <checkpoint>   # or without --from: a new project
+node scripts/tutorial-tab.mjs serve --from flamer-ep2-part2   # or without --from: a new project
 node scripts/tutorial-tab.mjs step '{"click": "Nodes@left-group"}' '{"pause": 800}'   # a picture after each
 node scripts/tutorial-tab.mjs step '{"files": ["opera_house_dolly.mp4"]}'   # files to drag in (serve --recipe: its media names)
 node scripts/tutorial-tab.mjs locate 'aria:Strand Render@left-group'   # where a target is, marked in a picture

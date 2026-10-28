@@ -1,0 +1,128 @@
+{
+  "name": "flamer-ep2-part3-yarn",
+  "project": "Qualle",
+  "from": "flamer-ep2-part2",
+  "jpegQuality": 82,
+  "output": {"width": 1920, "height": 1080, "fps": 30},
+  "captions": {"size": 64, "maxWords": 4},
+  "hide": [".project-media-copy-toast"],
+  "end": 1500,
+  "voice": {"voice": "flamer", "model": "eleven_v4", "stability": 0.5, "similarity": 0.75, "speed": 1.0, "whole": true},
+  "keepPauses": true,
+  "scenes": [
+    {
+      "id": "pause",
+      "say": "[calm] Okay. First things first: [short pause] hit pause. [deadpan] Node graphs and playback at the same time... that's how computers start crying.",
+      "steps": [
+        {"word": "First", "early": 0.3},
+        {"move": "aria:Play@timeline-group", "ms": 900},
+        {"word": "pause", "early": 0.3},
+        {"circle": "aria:Play@timeline-group", "r": 22, "ms": 700},
+        {"word": "crying", "early": 0.3},
+        {"nod": "~0,0", "amp": 8, "cycles": 2, "ms": 600}
+      ]
+    },
+    {
+      "id": "nodes",
+      "say": "Open the Nodes tab. Here's our empty Weave. [short pause] Strand Render, Output, [pause] and a whole lot of nothing.",
+      "camera": {"panes": ["tab=Preview", "left-group"], "maxZoom": 1.33},
+      "cameraMs": 900,
+      "steps": [
+        {"word": "Open", "early": 0.6},
+        {"click": "Nodes@left-group", "ms": 600},
+        {"word": "empty", "early": 0.3},
+        {"circle": "aria:Weave node group@left-group", "r": 110, "ry": 85, "ms": 900},
+        {"word": "Strand", "early": 0.3},
+        {"move": "aria:Strand Render@left-group", "ms": 500},
+        {"word": "Output", "early": 0.3},
+        {"move": "aria:Output@left-group", "ms": 500},
+        {"word": "nothing", "early": 0.5},
+        {"circle": "pane:left-group:0.3,0.72", "r": 140, "ry": 50, "ms": 1000}
+      ]
+    },
+    {
+      "id": "sphere",
+      "say": "[upbeat] Right-click, add a Knit Sphere, and drag its output into Strand Render. [excited] And there's our ball! [deadpan] It's a little... thin.",
+      "steps": [
+        {"word": "Right-click", "early": 0.5},
+        {"move": "aria:Strand Render@left-group", "ms": 400},
+        {"click": "~-150,70", "button": "right", "ms": 350},
+        {"word": "Knit", "early": 0.3},
+        {"type": "knit sphere", "delay": 30},
+        {"press": "Enter", "after": 400},
+        {"word": "and", "early": 0.1},
+        {"connect": {"from": "Knit Sphere", "output": "Output Curves: Curves", "to": "Strand Render", "input": "Input Curves: Curves"}, "approach": 300, "ms": 600},
+        {"word": "ball", "early": 0.4},
+        {"move": "pane:tab=Preview:0.5,0.4", "ms": 500},
+        {"word": "thin", "early": 0.2},
+        {"circle": "~0,0", "r": 45, "ms": 800}
+      ]
+    },
+    {
+      "id": "yarn",
+      "say": "So right-click the cable, and insert a Yarn Profile. [impressed] Now it's actual yarn. Plies, fibers, twist, the whole thing.",
+      "steps": [
+        {"word": "So", "early": 0.2},
+        {"cableClick": {"from": "Knit Sphere", "output": "Output Curves: Curves", "to": "Strand Render", "input": "Input Curves: Curves"}, "approach": 350, "ms": 350},
+        {"word": "insert", "early": 0.2},
+        {"type": "yarn profile", "delay": 35},
+        {"press": "Enter", "after": 500},
+        {"word": "yarn", "nth": 2, "early": 0.3},
+        {"move": "pane:tab=Preview:0.5,0.4", "ms": 500},
+        {"word": "Plies", "early": 0.5},
+        {"move": "Plies@left-group", "ms": 600},
+        {"word": "fibers", "early": 0.35},
+        {"move": "Fibers per Ply@left-group", "ms": 350},
+        {"word": "twist", "early": 0.35},
+        {"move": "Ply Twist@left-group", "ms": 350},
+        {"word": "whole", "early": 0.2},
+        {"circle": "~20,-60", "r": 70, "ry": 110, "ms": 900}
+      ]
+    },
+    {
+      "id": "chunky",
+      "say": "Let's make it chunky. Radius up... [pause] a bit more... [excited] there we go! [proudly] That's a sweater now.",
+      "steps": [
+        {"word": "chunky", "early": 0.4},
+        {"move": "aria:Yarn Profile Radius", "ms": 500},
+        {"word": "Radius", "early": 0.4},
+        {"drag": "aria:Yarn Profile Radius", "to": "~19,0", "approach": 200, "ms": 450, "after": 80},
+        {"word": "bit", "early": 0.3},
+        {"drag": "aria:Yarn Profile Radius", "to": "~19,0", "approach": 200, "ms": 450, "after": 80},
+        {"word": "there", "early": 0.3},
+        {"move": "pane:tab=Preview:0.5,0.4", "ms": 500},
+        {"word": "sweater", "early": 0.2},
+        {"circle": "~0,0", "r": 60, "ry": 80, "ms": 800}
+      ]
+    },
+    {
+      "id": "fuzz",
+      "say": "And real wool is never perfect. Right-click the cable again, insert Flyaways, [whisper] and now it's fuzzy.",
+      "steps": [
+        {"word": "perfect", "early": 0.0},
+        {"cableClick": {"from": "Yarn Profile", "output": "Output Curves: Curves", "to": "Strand Render", "input": "Input Curves: Curves"}, "approach": 350, "ms": 350},
+        {"word": "insert", "early": 0.2},
+        {"type": "flyaways", "delay": 35},
+        {"press": "Enter", "after": 500},
+        {"word": "fuzzy", "early": 0.4},
+        {"move": "pane:tab=Preview:0.5,0.4", "ms": 500},
+        {"circle": "~0,0", "r": 40, "ms": 800}
+      ]
+    },
+    {
+      "id": "play",
+      "say": "[upbeat] Hit play... [satisfied] Knitted. In your browser. [deadpan] Grandma would be proud. [short pause] Next up: we turn this thing into a jellyfish.",
+      "steps": [
+        {"word": "play", "early": 0.5},
+        {"click": "aria:Play@timeline-group", "ms": 500},
+        {"word": "Knitted", "early": 0.3},
+        {"move": "pane:tab=Preview:0.5,0.45", "ms": 800},
+        {"camera": {"focus": "pane:tab=Preview:0.5,0.45", "zoom": 1.2}, "ms": 2500},
+        {"word": "proud", "early": 0.2},
+        {"nod": "~0,0", "amp": 10, "cycles": 2, "ms": 700},
+        {"word": "jellyfish", "early": 0.1},
+        {"camera": "all", "ms": 500}
+      ]
+    }
+  ]
+}
