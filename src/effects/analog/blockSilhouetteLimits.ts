@@ -14,3 +14,9 @@ export const BLOCK_SILHOUETTE_MARK_OPTIONS = [
   { value: 'dots', label: 'Dots' },
   { value: 'crosses', label: 'Crosses' },
 ] as const;
+/** What decides Ink: the block's brightness against Threshold, or how far its colour differs from the frame
+ * edge in the same row (a render on a studio backdrop or gradient, where the object is as bright as the background). */
+export const BLOCK_SILHOUETTE_MEASURE_OPTIONS = [
+  { value: 'brightness', label: 'Brightness' },
+  { value: 'edge', label: 'Differs from edge' },
+] as const;

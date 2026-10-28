@@ -1,6 +1,6 @@
 # Block Dissolve
 
-<!-- effect-docs: basic page sha=e7124a4500e9, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=33c316264650, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Breaks an object into blocks of different shapes, like a product render dissolving in a data glitch: whole parts vanish (Holes), edges flicker between the outline, a staircase and a 1-bit dither in Ink and Paper, some blocks jump sideways (Displace); Object picks dark, light or alpha as the object, Structure Rate and Flicker Rate the two clocks.
 
@@ -25,7 +25,7 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 | **Blocks** | | |
 | Block Size | 4 to 120 px | 24 px |
 | Variation | 0 to 1 | 0.6 |
-| Object | Dark on light, Light on dark, Alpha, Everywhere | Dark on light |
+| Object | Dark on light, Light on dark, Alpha, Everywhere, Differs from edge | Dark on light |
 | Threshold | 0 to 1 | 0.75 |
 | Solid | 0 to 1 | 0 |
 | **Holes** | | |
@@ -42,7 +42,7 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 | Dot Size | 1 to 16 px | 3 px |
 | Displace | 0 to 1 | 0.06 |
 | Pattern | Checker, Bayer, Diagonal | Checker |
-| Dot Colour | Original, Ink | Original |
+| Dot Colour | Original, Ink, Mark Colour | Original |
 | **Color** | | |
 | Ink | a colour | `#000000` |
 | Paper | a colour | `#ffffff` |

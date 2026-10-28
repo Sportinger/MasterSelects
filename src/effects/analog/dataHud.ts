@@ -51,6 +51,8 @@ export const dataHud: EffectDefinition = {
   // The marks follow the playhead and hold while paused.
   requiresContinuousRender: false,
   timelineAnimated: true,
+  // Amount 0 is the input unchanged: the renderer skips the graph while it is keyed off.
+  mixParam: 'amount',
   paramWarnings: values => {
     const notes = clampedValueNotes(params, values, ranges);
     if (typeof values.rate === 'number' && values.rate < 0) notes.push(`Rate ${values.rate} is below 0; the marks hold still as at 0.`);

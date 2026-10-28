@@ -75,6 +75,21 @@ describe('Block Dissolve recipe', () => {
     expect(own).toBeGreaterThan(100);
   });
 
+  it('finds an object as bright as its gradient backdrop with Object: Differs from edge', () => {
+    // A pale green disc on a light grey gradient: brightness cannot tell them apart.
+    const backdrop = (x: number, y: number): Pixel => Math.hypot(x - 48, y - 32) < 22 ? [.75, .9, .5, 1] : [.9 - y * .002, .9 - y * .002, .92 - y * .002, 1];
+    const output = render({ ...plain, solid: 1, mask: 'edge', threshold: .08 }, backdrop);
+    expect(output(48, 32).slice(0, 3)).toEqual([0, 0, 0]);
+    expect(output(4, 60).slice(0, 3).every(value => Math.abs(value - 1) < 1e-3)).toBe(true);
+  });
+
+  it('paints dots in Mark Colour with Dot Colour: Mark Colour', () => {
+    const output = render({ ...plain, dither: 1, pattern: 'checker', dotColor: 'mark', markColor: '#ff0000' }, disc);
+    const inside: Pixel[] = [];
+    for (let y = 24; y < 40; y++) for (let x = 40; x < 56; x++) inside.push(output(x, y));
+    expect(inside.some(pixel => pixel[0] > .99 && pixel[1] < .01 && pixel[2] < .01)).toBe(true);
+  });
+
   it('fills inside blocks flat with Ink by Solid', () => {
     const output = render({ ...plain, solid: 1, colorA: '#00ff00' }, disc);
     expect(output(48, 32)[1]).toBeCloseTo(1, 2);

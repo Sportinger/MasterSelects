@@ -20,6 +20,8 @@ export const OBJECT_MASK_OPTIONS = [
   { value: 'light', label: 'Light on dark' },
   { value: 'alpha', label: 'Alpha' },
   { value: 'everywhere', label: 'Everywhere' },
+  // Threshold is the colour difference from the frame edge in the same row (about 0.05 for a clean backdrop).
+  { value: 'edge', label: 'Differs from edge' },
 ] as const;
 /** Dither pattern: a fixed half-and-half checker, an ordered (Bayer) dither of the brightness, or the checker turned by 45°. */
 export const BLOCK_DISSOLVE_PATTERN_OPTIONS = [
@@ -38,10 +40,11 @@ export const BLOCK_DISSOLVE_PLACEMENT_OPTIONS = [
   { value: 'edges', label: 'Edges' },
   { value: 'anywhere', label: 'Anywhere' },
 ] as const;
-/** Dither dot colour: each dot keeps its pixel's colour, or takes Ink. */
+/** Dither dot colour: each dot keeps its pixel's colour, takes Ink, or takes Mark Colour (white binary dots beside red solid blocks). */
 export const BLOCK_DISSOLVE_DOT_COLOR_OPTIONS = [
   { value: 'original', label: 'Original' },
   { value: 'ink', label: 'Ink' },
+  { value: 'mark', label: 'Mark Colour' },
 ] as const;
 export const BLOCK_DISSOLVE_FILL_OPTIONS = [
   { value: 'paper', label: 'Paper' },

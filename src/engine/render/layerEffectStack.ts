@@ -11,6 +11,15 @@ export interface LayerEffectStack {
   unsupportedAfterRenderEffect?: Effect[];
 }
 
+/** An effect whose mix parameter (EffectDefinition.mixParam) is at 0 returns its input unchanged. */
+function isMixedOut(effect: Effect): boolean {
+  const definition = getEffect(effect.type);
+  const mixParam = definition && 'mixParam' in definition ? definition.mixParam : undefined;
+  if (!mixParam) return false;
+  const mix = effect.params?.[mixParam];
+  return typeof mix === 'number' && mix <= 0;
+}
+
 function applyInlineEffect(inlineEffects: InlineEffectParams, effect: Effect): 'inline' | 'contextual' | 'incomplete' {
   if (isLocalImageEffectType(effect.type)) {
     const { plan: program } = prepareImageEffect(effect);
@@ -40,6 +49,8 @@ export function splitLayerEffects(
 
   // Flocking and Weave draw in the 3D scene; they never change the clip's own pixels.
   effects = effects?.filter(effect => effect.type !== 'flocking' && effect.type !== 'weave');
+  // An effect mixed out to 0 is skipped instead of computing a picture that is then discarded.
+  effects = effects?.filter(effect => !(effect.enabled && isMixedOut(effect)));
   if (skipEffects || !effects || effects.length === 0) {
     return { inlineEffects };
   }

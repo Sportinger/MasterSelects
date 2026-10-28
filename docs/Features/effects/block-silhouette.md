@@ -1,6 +1,6 @@
 # Block Silhouette
 
-<!-- effect-docs: basic page sha=70a046be9eb2, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=56630c1fafbd, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Turns the picture into a flat two-colour silhouette on a block grid, like a neon poster: blocks darker than Threshold take Ink, the rest Paper (Invert swaps them); Marks adds dots or crosses on their own grid in the opposite colour.
 
@@ -24,6 +24,7 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 |---|---|---|
 | **Silhouette** | | |
 | Block Size | 4 to 120 px | 26 px |
+| Measure | Brightness, Differs from edge | Brightness |
 | Threshold | 0 to 1 | 0.2 |
 | Invert | 0 to 1 | 0 |
 | **Marks** | | |

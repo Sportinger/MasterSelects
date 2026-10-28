@@ -59,4 +59,14 @@ describe('Block Silhouette recipe', () => {
     expect(close(output(48, 32), [.1, .1, .1])).toBe(true);
     expect(close(output(1, 1), [1, 1, 1])).toBe(true);
   });
+  it('with Measure: Differs from edge takes Ink where the colour differs from the row backdrop, also on a gradient', () => {
+    // A light grey gradient backdrop (as bright as the object) with a pale green disc.
+    const backdrop = (x: number, y: number): Pixel => Math.hypot(x - 48, y - 32) < 22 ? [.75, .9, .5, 1] : [.9 - y * .002, .9 - y * .002, .92 - y * .002, 1];
+    const output = render({ marks: 'none', scale: 120, measure: 'edge', threshold: .08 }, backdrop);
+    expect(close(output(48, 32), [0, 0, 0])).toBe(true);
+    expect(close(output(4, 60), [0xee / 255, 1, 0x0d / 255])).toBe(true);
+    // Brightness alone cannot separate them.
+    const byBrightness = render({ marks: 'none', scale: 120, threshold: .5 }, backdrop);
+    expect(close(byBrightness(48, 32), close(byBrightness(4, 60), [0, 0, 0]) ? [0, 0, 0] : [0xee / 255, 1, 0x0d / 255])).toBe(true);
+  });
 });

@@ -191,6 +191,10 @@ export interface FullscreenEffectDefinition {
    * no continuous rendering; the docs show it as a loop. */
   timelineAnimated?: boolean;
 
+  /** A number parameter that mixes the whole effect in: at 0 the effect returns its input unchanged,
+   * so the renderer skips it (a keyframed Amount that switches a heavy graph off costs nothing). */
+  mixParam?: string;
+
   /** Named starting points picked in the effect card (EffectPreset). */
   presets?: readonly EffectPreset[];
 

@@ -1,6 +1,6 @@
 # Data HUD
 
-<!-- effect-docs: basic page sha=0a531afa4c47, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=f75d0b892c1f, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Draws a measurement overlay over the object, like a product render under analysis: lime boxes open in the middle of each side, teal centre dots, coordinate labels (x 537 y 984) and free blocks of data text; the marks keep their place and grow or shrink one by one; Boxes and Text Blocks set how many, Box Size, Gap and Line Width their look, Object where they may sit, Rate and Glide the rhythm.
 
@@ -35,7 +35,7 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 | Small Marks | 0 to 4 | 3 |
 | Text Blocks | 0 to 3 | 2 |
 | **Object** | | |
-| Object | Dark on light, Light on dark, Alpha, Everywhere | Dark on light |
+| Object | Dark on light, Light on dark, Alpha, Everywhere, Differs from edge | Dark on light |
 | Threshold | 0 to 1 | 0.75 |
 | **Color** | | |
 | Lines | a colour | `#c8e04c` |

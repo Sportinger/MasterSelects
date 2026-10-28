@@ -130,4 +130,14 @@ describe('splitLayerEffects', () => {
     expect(hasParticleRenderEffect(result)).toBe(true);
     expect(hasUnsupportedEffectsAfterRenderEffect(result)).toBe(true);
   });
+  it('skips an effect mixed out to 0 by its mix parameter and keeps it at any other value', () => {
+    const silhouette = (amount: number) => ({
+      id: `fx-silhouette-${amount}`, name: 'Block Silhouette', type: 'block-silhouette', enabled: true, params: { amount },
+    });
+    const off = splitLayerEffects([silhouette(0)] as Effect[]);
+    expect(off.complexEffects).toBeUndefined();
+    const on = splitLayerEffects([silhouette(0), silhouette(0.4), { id: 'fx-blur', name: 'Motion Blur', type: 'motion-blur', enabled: true, params: { amount: 0 } }] as Effect[]);
+    // Motion Blur's amount is its streak length, not a mix: it is not skipped.
+    expect(on.complexEffects?.map(effect => effect.id)).toEqual(['fx-silhouette-0.4', 'fx-blur']);
+  });
 });

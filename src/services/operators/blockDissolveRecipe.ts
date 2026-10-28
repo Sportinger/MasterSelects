@@ -93,7 +93,9 @@ function controls(g: AnalogRecipeBuilder) {
   // Hole placement: Edges 0 (holes bite in from the outline), Anywhere 1.
   g.add('holes-anywhere', 'math.step.scalar', { edge: 'half', value: g.bound('placement', 'holePlacement', 'values.choice') });
   // Dot Colour: Original 0 (each dot keeps its pixel's colour), Ink 1.
+  // Dot Colour: Original 0, Ink 1, Mark Colour 2.
   g.add('dots-ink', 'math.step.scalar', { edge: 'half', value: g.bound('dot-colour', 'dotColor', 'values.choice') });
+  g.add('dots-mark', 'math.step.scalar', { edge: g.number('dots-mark-edge', 1.5), value: 'dot-colour' });
   g.add('ink-rgb', 'convert.vec4-to-rgb', { value: g.bound('ink', 'colorA', 'values.color') });
   g.add('paper-rgb', 'convert.vec4-to-rgb', { value: g.bound('paper', 'colorB', 'values.color') });
   // Paper Marks: None 0, Dots 1, Crosses 2.
@@ -377,7 +379,7 @@ export function createDefaultBlockDissolveGraph(): EffectOperatorGraph {
   const slantDots = g.mul('dots-slant', g.mul('dots-slant-placed', g.mul('dots-slant-side', ditherSlant, 'slant-side'), ink), g.max('dots-slant-area', ownRaw, 'band'));
   const dots = g.plus('dots-on', g.plus('dots-edge', innerDots, bandDots), slantDots);
   const nearRgb = g.mixRgb('dot-near-rgb', 'band-rgb', own.rgb, ownRaw), nearAlpha = g.mix('dot-near-alpha', 'band-alpha', own.alpha, ownRaw);
-  const dotRgb = g.mixRgb('dot-rgb', nearRgb, ['ink-rgb', 'rgb'], 'dots-ink');
+  const dotRgb = g.mixRgb('dot-rgb', g.mixRgb('dot-rgb-flat', nearRgb, ['ink-rgb', 'rgb'], 'dots-ink'), ['paper-mark-rgb', 'rgb'], 'dots-mark');
   const dotAlpha = g.mix('dot-alpha', nearAlpha, 'one', 'dots-ink');
   const shownRgb = g.addRgb('shown-rgb', g.addRgb('shown-rgb-original', g.scaleRgb('original-part-rgb', own.rgb, original), g.scaleRgb('solid-part-rgb', ['ink-rgb', 'rgb'], 'use-solid')),
     g.addRgb('shown-rgb-pieces', g.scaleRgb('dot-part-rgb', dotRgb, dots), g.scaleRgb('displaced-part-rgb', displaced.rgb, shifted)));

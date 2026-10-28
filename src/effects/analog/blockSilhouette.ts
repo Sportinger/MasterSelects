@@ -1,11 +1,12 @@
 import shader from './graphPassThrough.wgsl?raw';
 import type { EffectDefinition, EffectParam, EffectPreset } from '../types';
 import { clampedValueNotes } from './analogParamWarnings';
-import { BLOCK_SILHOUETTE_AREA_OPTIONS, BLOCK_SILHOUETTE_GRID_RANGE, BLOCK_SILHOUETTE_MARK_OPTIONS, BLOCK_SILHOUETTE_MARK_RANGE, BLOCK_SILHOUETTE_SIZE_RANGE } from './blockSilhouetteLimits';
+import { BLOCK_SILHOUETTE_AREA_OPTIONS, BLOCK_SILHOUETTE_GRID_RANGE, BLOCK_SILHOUETTE_MARK_OPTIONS, BLOCK_SILHOUETTE_MARK_RANGE, BLOCK_SILHOUETTE_MEASURE_OPTIONS, BLOCK_SILHOUETTE_SIZE_RANGE } from './blockSilhouetteLimits';
 
 const params: Record<string, EffectParam> = {
   scale: { type: 'number', label: 'Block Size', default: 26, min: 4, max: 120, step: 1, animatable: true, unit: ' px', group: 'Silhouette',
     renderMin: BLOCK_SILHOUETTE_SIZE_RANGE[0], renderMax: BLOCK_SILHOUETTE_SIZE_RANGE[1] },
+  measure: { type: 'select', label: 'Measure', default: 'brightness', options: BLOCK_SILHOUETTE_MEASURE_OPTIONS.map(option => ({ ...option })), group: 'Silhouette' },
   threshold: { type: 'number', label: 'Threshold', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true, group: 'Silhouette' },
   invert: { type: 'number', label: 'Invert', default: 0, min: 0, max: 1, step: 1, animatable: true, group: 'Silhouette' },
   marks: { type: 'select', label: 'Marks', default: 'dots', options: BLOCK_SILHOUETTE_MARK_OPTIONS.map(option => ({ ...option })), group: 'Marks' },
@@ -39,6 +40,8 @@ export const blockSilhouette: EffectDefinition = {
   shader, entryPoint: 'blockSilhouetteFragment', uniformSize: 0,
   params,
   presets,
+  // Amount 0 is the input unchanged: the renderer skips the graph while it is keyed off.
+  mixParam: 'amount',
   paramWarnings: values => clampedValueNotes(params, values, ranges),
   packUniforms: () => null,
 };

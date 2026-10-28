@@ -69,6 +69,8 @@ export const blockDissolve: EffectDefinition = {
   // Blocks, holes and flicker follow the playhead and hold while paused.
   requiresContinuousRender: false,
   timelineAnimated: true,
+  // Amount 0 is the input unchanged: the renderer skips the graph while it is keyed off.
+  mixParam: 'amount',
   paramWarnings: values => {
     const notes = clampedValueNotes(params, values, ranges);
     for (const key of ['structureRate', 'flickerRate'] as const) {

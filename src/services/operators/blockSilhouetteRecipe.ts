@@ -3,6 +3,7 @@ import type { GraphPort } from './blurGraphBuilder';
 import { AnalogRecipeBuilder } from './analogRecipeBuilder';
 import { chance, indexKey, keyConstants, renderedPixels, roll, seedSalt } from './seededRecipeParts';
 import { gridMarks } from './gridMarkNodes';
+import { edgeDistance } from './objectMaskNodes';
 import { BLOCK_SILHOUETTE_GRID_RANGE, BLOCK_SILHOUETTE_MARK_RANGE, BLOCK_SILHOUETTE_SIZE_RANGE } from '../../effects/analog/blockSilhouetteLimits';
 
 /**
@@ -10,6 +11,8 @@ import { BLOCK_SILHOUETTE_GRID_RANGE, BLOCK_SILHOUETTE_MARK_RANGE, BLOCK_SILHOUE
  * silhouette on a block grid, like the neon-yellow frames of the Nissan 350Z reel.
  * - Every block of Block Size pixels (1080p, centred grid) measures its brightness at five points (near its
  *   corners and its centre); transparency counts as light. Below Threshold the block takes Ink, else Paper.
+ *   Measure: Differs from edge instead takes Ink where the block's colour differs from the frame edge in the
+ *   same row by more than Threshold (objectMaskNodes.ts), for a render on a studio backdrop or gradient.
  *   Invert (0/1, keyframeable) swaps the two, for the white-on-black variant.
  * - Marks: dots or crosses on their own grid (Grid Size), Mark Size thick, at a seeded share of the grid
  *   points (Mark Amount) within Mark Area (only where the outline passes within a block, on Ink, on Paper
@@ -34,6 +37,10 @@ function controls(g: AnalogRecipeBuilder) {
   g.clampedParam('size', 'scale', g.number('size-min', BLOCK_SILHOUETTE_SIZE_RANGE[0]), g.number('size-max', BLOCK_SILHOUETTE_SIZE_RANGE[1]));
   g.clampedParam('threshold', 'threshold', 'zero', 'one');
   g.clampedParam('invert', 'invert', 'zero', 'one');
+  // Measure: Brightness 0, Differs from edge 1. A tone of 1 − difference against 1 − Threshold keeps one comparison.
+  g.bound('measure', 'measure', 'values.choice');
+  g.add('measure-edge', 'math.step.scalar', { edge: 'half', value: 'measure' });
+  g.mix('threshold-used', 'threshold-clamped', g.sub('threshold-flipped', 'one', 'threshold-clamped'), 'measure-edge');
   g.clampedParam('grid', 'gridSize', g.number('grid-min', BLOCK_SILHOUETTE_GRID_RANGE[0]), g.number('grid-max', BLOCK_SILHOUETTE_GRID_RANGE[1]));
   g.clampedParam('mark', 'markSize', g.number('mark-min', BLOCK_SILHOUETTE_MARK_RANGE[0]), g.number('mark-max', BLOCK_SILHOUETTE_MARK_RANGE[1]));
   g.clampedParam('mark-amount', 'markAmount', 'zero', 'one');
@@ -58,7 +65,10 @@ function tone(g: AnalogRecipeBuilder, id: string, uv: GraphPort) {
   g.add(`${id}-split`, 'vector.split.rgba', { image: [`${id}-sample`, 'image'] });
   const alpha = g.add(`${id}-alpha`, 'convert.alpha-to-scalar', { alpha: [`${id}-split`, 'alpha'] });
   const luma = g.add(`${id}-luma`, 'color.luminance-rec709.rgb', { rgb: [`${id}-split`, 'rgb'] });
-  return g.plus(`${id}-tone`, g.mul(`${id}-covered`, luma, alpha), g.sub(`${id}-clear`, 'one', alpha));
+  const brightness = g.plus(`${id}-brightness`, g.mul(`${id}-covered`, luma, alpha), g.sub(`${id}-clear`, 'one', alpha));
+  // Differs from edge: transparency counts as backdrop (no difference).
+  const difference = g.mul(`${id}-edge-covered`, edgeDistance(g, `${id}-edge`, [`${id}-split`, 'rgb'], clamped), alpha);
+  return g.mix(`${id}-tone`, brightness, g.sub(`${id}-edge-tone`, 'one', difference), 'measure-edge');
 }
 
 /** `ink-on`: 1 where the block is Ink (below Threshold, or above it with Invert). */
@@ -71,7 +81,7 @@ function blocks(g: AnalogRecipeBuilder) {
     g.add2(`tap${k}-pixel`, start, g.mul2(`tap${k}-offset`, 'block-vec2', g.vec2(`tap${k}-fraction`, g.number(`tap${k}-fx`, fx), g.number(`tap${k}-fy`, fy)))), ['resolution', 'value'])));
   const sum = tones.slice(1).reduce<GraphPort>((total, value, k) => g.plus(`tone-sum${k}`, total, value), tones[0]);
   const mean = g.div('block-tone', sum, g.number('tap-count', MASK_TAPS.length));
-  const dark = g.sub('block-dark', 'one', g.add('block-light', 'math.step.scalar', { edge: 'threshold-clamped', value: mean }));
+  const dark = g.sub('block-dark', 'one', g.add('block-light', 'math.step.scalar', { edge: 'threshold-used', value: mean }));
   // Invert ≥ 0.5 swaps Ink and Paper: |dark − swap|.
   g.add('invert-on', 'math.step.scalar', { edge: 'half', value: 'invert-clamped' });
   g.fn('ink-on', 'abs', g.sub('ink-swapped', dark, 'invert-on'));
@@ -91,7 +101,7 @@ function marks(g: AnalogRecipeBuilder) {
   const inkAt = (id: string, dx: number, dy: number) => {
     const at = dx || dy ? g.add2(`${id}-pixel`, point, g.scale2(`${id}-step`, g.vec2(`${id}-direction`, g.number(`${id}-dx`, dx), g.number(`${id}-dy`, dy)), 'block-px')) : point;
     const tone = pointTone(g, id, g.binary(`${id}-read-uv`, 'math.divide-ieee.vec2', at, ['resolution', 'value']));
-    const dark = g.sub(`${id}-dark`, 'one', g.add(`${id}-light`, 'math.step.scalar', { edge: 'threshold-clamped', value: tone }));
+    const dark = g.sub(`${id}-dark`, 'one', g.add(`${id}-light`, 'math.step.scalar', { edge: 'threshold-used', value: tone }));
     return g.fn(`${id}-ink`, 'abs', g.sub(`${id}-swapped`, dark, 'invert-on'));
   };
   const centre = inkAt('mark-here', 0, 0);
