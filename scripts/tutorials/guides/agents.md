@@ -53,8 +53,9 @@ works on.
    start state step by step with pictures, and either record part 1 from it with `setup` steps or
    save it as a checkpoint (`tutorial-tab.mjs checkpoint <episode>-start`). **The next part of an
    episode:** `serve --from <previous part>`.
-4. Copy the last part recipe (`flamer-ep2-part3-yarn.json`), set `"from"` and `"episode"`, and write
-   the scenes. Try single steps with `tutorial-tab.mjs step` and look at each picture.
+4. Write the part recipe (format: [`../README.md`](../README.md) and the top of
+   `scripts/tutorial-video.mjs`), set `"from"` and `"episode"`, and write the scenes. Try single steps
+   with `tutorial-tab.mjs step` and look at each picture.
 5. `make … --voice none` while the steps still fail (free), then `make` with the voice.
 6. Look at the part in the cut editor (the take put it there), fine-tune it, show Roman, commit the
    recipe. Then the next part, from the checkpoint the take left.
@@ -66,24 +67,6 @@ recording shows the real editor of this checkout. A drawn pointer acts like a hu
 points, circles, drags panels and clicks, timed to the words. Tone and jokes:
 [`kramer-style.md`](kramer-style.md). Voice script and audio tags:
 [`elevenlabs-script.md`](elevenlabs-script.md).
-
-| Episode | State | Recipes |
-|---|---|---|
-| 1 | done. Roman's recorded voice, music, pointer gestures | `flamer-episode-1.json` |
-| 2, "Knitted Jellyfish" (Weave, Qualle form) | parts 1 and 2 recorded in 720p; part 3 ("Yarn") in 1440p from checkpoint `flamer-ep2-part2`; an older one-piece version exists | `flamer-ep2-part1.json`, `flamer-ep2-part2.json`, `flamer-ep2-part2-end.json` (builds the checkpoint), `flamer-ep2-part3-yarn.json`, `flamer-episode-2.json` |
-
-Episode 2 still needs:
-- a clean checkpoint at the end of part 3: `flamer-ep2-part3-yarn` was saved while playing and its
-  recipe has no `resume` steps, so a part from it differs in 17.6 % of the first frame (playhead,
-  Properties tab Transform instead of Effects, playback controls, the move gizmo of the selected
-  clip). Add the `resume` steps and take part 3 again (its voice is cached), or build the start state
-  with `--setup-only --save`;
-- parts 1 and 2 again in 1440p (part 1 with the new first line); part 2 should end where
-  `flamer-ep2-part2-end.json` ends, so part 3 can continue from its checkpoint;
-- the parts after part 3, starting from checkpoint `flamer-ep2-part3-yarn` (the scenes `form` … `outro` of `flamer-episode-2.json`, rebuilt in the new
-  part style; part 3 ends with "Next up: we turn this thing into a jellyfish");
-- the fly-around in edit mode (needs Weave orbit in MS, see [`plan.md`](plan.md));
-- the final cut in MasterSelects.
 
 ## How Roman wants it
 
@@ -160,15 +143,15 @@ Episode 2 still needs:
    `DEEPGRAM_API_KEY`. Load them with `set -a && . ~/.config/agent-secrets/env && set +a` in the same
    shell command. Never print them or write them into files.
 4. The build server in the background, from the checkpoint the part continues:
-   `node scripts/tutorial-tab.mjs serve --from flamer-ep2-part3-yarn` (with the secrets loaded). It
+   `node scripts/tutorial-tab.mjs serve --from <checkpoint>` (with the secrets loaded). It
    opens the editor in a headless Chrome (2560×1440, scale 1, hardware WebGPU); nothing opens on
    Roman's desktop. After a crash or restart, `serve --keep` continues its last editor. A new `serve`
    takes over from a running one (the old one exits), so there is never more than one. Media for
    `files` steps: `--recipe <part.json>` uses that recipe's `media` names; without it, a step names a
    file in the docs footage (`tests/browser/effect-lab/footage/`) or a `--media <folder>`.
 5. Checkpoints are local (`tutorial-videos/checkpoints/`). If one is missing, rebuild it from its
-   recipe: `node scripts/tutorial-video.mjs scripts/tutorials/flamer-ep2-part2-end.json --setup-only
-   --save flamer-ep2-part2`, or take the previous part again.
+   recipe: `node scripts/tutorial-video.mjs scripts/tutorials/<part>-end.json --setup-only
+   --save <checkpoint>`, or take the previous part again.
 
 ## Making a part
 
@@ -224,8 +207,7 @@ Episode 2 still needs:
 - **A reload keeps the project, not every view.** After a checkpoint reopens, the project, the dock
   layout, the node graph's source and an expanded Weave group are back. Lost are: hidden playback
   controls, the Properties tab (Effects falls back to Transform) and the selected row in Media. The
-  part that saves the checkpoint lists the steps that bring them back in `resume`
-  (`flamer-ep2-part2-end.json` has the four for the Qualle start).
+  part that saves the checkpoint lists the steps that bring them back in `resume`.
 - **The seamless check finds what is missing.** It stops when more than 0.3 % of the first frame
   differs from the checkpoint's last frame, names the area, and writes `seam.jpg`. Add the missing
   view to `resume`, or pass `--no-seam` when the cut does not join there.
@@ -234,8 +216,7 @@ Episode 2 still needs:
 - **A failed take saves no checkpoint**; the previous one stays as it was.
 - **A part that ends while the timeline plays** is paused at the frame it reached before its checkpoint
   is saved (`settleRuntime`), so `last.png` and the playhead agree; the next part starts there and
-  plays on when its recording starts. Checkpoints saved before 2026-10-26 (`flamer-ep2-part3-yarn`)
-  kept the playhead of a later moment and differ from their `last.png`.
+  plays on when its recording starts.
 
 ### Recording and timing
 
@@ -348,7 +329,7 @@ Episode 2 still needs:
   drift.
 - **A recorded voice** (Roman's own take, or a file from the ElevenLabs site) is timed with Deepgram.
   Each scene's `say` must hold its words in spoken order. Cut a part's audio out of a longer file
-  with ffmpeg first (`flamer-ep2-part1.mp3` is 0–27.124 s of the episode 2 narration).
+  with ffmpeg first.
 
 ### Audio and ffmpeg
 
