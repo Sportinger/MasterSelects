@@ -110,26 +110,23 @@ for (const key of ['mp3Clicks', 'wavClicks'] as const) {
   });
 }
 
-test('WebM/VP9 source exports frame-exactly or stops with a named message @module:export @case:export.fast-webm-source', async ({ fast }, testInfo) => {
+test('WebM/VP9 source stops FAST export with the named container message @module:export @case:export.fast-webm-source', async ({ fast }, testInfo) => {
+  // FAST export demuxes with MP4Box (MP4/MOV only): a WebM source is refused before parsing,
+  // naming the container and the way out (fastSourceContainer.ts). This is the one outcome.
   const source = ensureFastSource(FAST_SOURCES.webmVp9);
   await arrange(fast.bridge, source, 30, 3);
   await withWorkDir(async (workDir) => {
-    let outcome: string;
-    try {
-      const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
-      await attachSummary(testInfo, result);
-      assertFrameCodes(result.read.codes, expectedCodes(source, 30, 3), 'WebM source codes');
-      outcome = 'exported';
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // A refusal must name the source and the way out; a parser error is not an answer.
-      expect(message).toMatch(/Product export failed before download/);
-      expect(message).toMatch(/WebM/);
-      expect(message).toMatch(/Precise/i);
-      expect(message).not.toMatch(/MP4Box/);
-      await expect(new ExportDriver(fast.page).panel.getByRole('alert')).toBeVisible();
-      outcome = message;
-    }
-    await testInfo.attach('fast-export-outcome', { contentType: 'text/plain', body: outcome });
+    const failure = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' })
+      .then(() => null, (error: unknown) => (error instanceof Error ? error.message : String(error)));
+    expect(failure, 'FAST export of a WebM source must be refused, not exported').not.toBeNull();
+    const message = failure ?? '';
+    await testInfo.attach('fast-export-outcome', { contentType: 'text/plain', body: message });
+    expect(message).toMatch(/^Product export failed before download: /);
+    expect(message).toContain('is a WebM/Matroska file, which FAST export cannot read');
+    expect(message).toContain('Use PRECISE (HTMLVideo) export for this clip.');
+    expect(message).not.toMatch(/MP4Box/);
+    const alert = new ExportDriver(fast.page).panel.getByRole('alert');
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText('WebM/Matroska');
   });
 });

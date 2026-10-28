@@ -140,7 +140,7 @@ test('codec lists offer only what the container and browser can encode @module:e
   await testInfo.attach('fast-export-summary', { contentType: 'application/json', body: JSON.stringify({ mp4: findings, webm: ['VP9', 'AV1'] }) });
 });
 
-test('an 8-second export contains every frame exactly once @module:export @case:export.fast.lim-frame-sequence', async ({ fast }, testInfo) => {
+test('an 8-second export contains every frame exactly once @module:export @case:export.fast.frame-sequence-8s', async ({ fast }, testInfo) => {
   const source = ensureFastSource(FAST_SOURCES.h264Eight);
   await arrange(fast.bridge, source, 30, 8);
   await withWorkDir(async (workDir) => {
