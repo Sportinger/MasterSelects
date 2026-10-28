@@ -21,6 +21,9 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import type { Effect } from '../../../types/effects';
 import type { EffectParam } from '../../../effects/types';
 import { finiteEffectNumber, isUnusableEffectNumber } from '../../../effects/_shared/effectNumberParam';
+import type { AudioEffectParams } from '../../../types/audio';
+import { checkClipAudioEffectParams, type ClipAudioParamCheck } from './clipAudioEffectParams';
+import { hasAudioEffect } from '../../../engine/audio/AudioEffectRegistry';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -119,15 +122,48 @@ export async function handleListEffects(): Promise<ToolResult> {
 /** The Volume tab's own effects of an audio clip; their parameters are keyframeable as effect.<id>.<param>. */
 const CLIP_AUDIO_EFFECT_TYPES = new Set(['audio-volume', 'audio-eq']);
 
+/** Checks audio effect parameters before anything changes: unknown names and wrong types fail with the valid names. */
+function clipAudioParamFailure(effectType: string, current: Effect['params'] | undefined, params: unknown): ToolResult | { checked?: ClipAudioParamCheck } {
+  if (params === undefined || params === null) return {};
+  if (typeof params !== 'object' || Array.isArray(params)) return { success: false, error: 'params must be an object.' };
+  const checked = checkClipAudioEffectParams(effectType, current as AudioEffectParams | undefined, params as Record<string, unknown>);
+  if (checked.unknown.length) {
+    return { success: false, error: `Unknown parameter${checked.unknown.length > 1 ? 's' : ''} for ${effectType}: ${checked.unknown.join(', ')}. Valid: ${checked.valid.join(', ')}` };
+  }
+  if (checked.invalid.length) return { success: false, error: `Invalid value${checked.invalid.length > 1 ? 's' : ''} for ${effectType}: ${checked.invalid.join('; ')}.` };
+  return { checked };
+}
+
 /** Like the Volume tab: a sound keeps one Volume and one EQ effect, created on first use. */
 function addClipAudioEffect(clip: TimelineClip, effectType: string, params: unknown): ToolResult {
   if (clip.source?.type !== 'audio') return { success: false, error: `${effectType} belongs to an audio clip; ${clip.id} is a ${clip.source?.type ?? 'clip'} clip` };
-  const { addClipEffect, updateClipEffect } = useTimelineStore.getState();
   const existing = clip.effects.find(effect => effect.type === effectType);
-  const effectId = existing?.id ?? addClipEffect(clip.id, effectType);
-  if (params && typeof params === 'object') updateClipEffect(clip.id, effectId, params as Partial<Record<string, string | number | boolean>>);
-  const effect = useTimelineStore.getState().clips.find(candidate => candidate.id === clip.id)?.effects.find(item => item.id === effectId);
-  return { success: true, data: { clipId: clip.id, effectId, effectType, reused: Boolean(existing), params: effect?.params ?? {} } };
+  const check = clipAudioParamFailure(effectType, existing?.params, params);
+  if ('success' in check) return check;
+  const mutationSnapshot = captureMutationEntitySnapshot('effect', clip.effects);
+  const effectId = existing?.id ?? useTimelineStore.getState().addClipEffect(clip.id, effectType);
+  const changed = storeClipAudioParams(clip.id, effectId, check.checked);
+  const effect = getClipEffects(clip.id).find(item => item.id === effectId);
+  return { success: true, data: { clipId: clip.id, effectId, effectType, reused: Boolean(existing), params: effect?.params ?? {},
+    ...(check.checked ? { updatedParams: changed } : {}), ...describeMutationEntities(mutationSnapshot, getClipEffects(clip.id)) } };
+}
+
+/** updateEffect on an audio effect (registry entry in engine/audio): the same checks as addEffect. */
+function updateClipAudioEffect(clip: TimelineClip, effect: Effect, params: Record<string, unknown>): ToolResult {
+  const check = clipAudioParamFailure(effect.type, effect.params, params);
+  if ('success' in check) return check;
+  const mutationSnapshot = captureMutationEntitySnapshot('effect', clip.effects);
+  const changed = storeClipAudioParams(clip.id, effect.id, check.checked);
+  return { success: true, data: { clipId: clip.id, effectId: effect.id, updatedParams: changed, ...describeMutationEntities(mutationSnapshot, getClipEffects(clip.id)) } };
+}
+
+function storeClipAudioParams(clipId: string, effectId: string, checked: ClipAudioParamCheck | undefined): string[] {
+  const names = Object.keys(checked?.params ?? {});
+  if (!checked || !names.length) return names;
+  const { updateClipEffect, invalidateCache } = useTimelineStore.getState();
+  updateClipEffect(clipId, effectId, checked.params as Partial<Record<string, string | number | boolean>>);
+  invalidateCache();
+  return names;
 }
 
 export async function handleAddEffect(
@@ -243,6 +279,7 @@ export async function handleUpdateEffect(
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) return { success: false, error: `Effect not found: ${effectId}` };
   if (!args.params || typeof args.params !== 'object') return { success: false, error: 'params must be an object.' };
+  if (!hasEffect(effect.type) && hasAudioEffect(effect.type)) return updateClipAudioEffect(clip, effect, args.params as Record<string, unknown>);
   const { params, warnings: runtimeWarnings } = withoutRuntimeParams(effect.type, normalizeNumberParams(effect.type, args.params as Record<string, unknown>));
 
   // A misspelled parameter used to be stored silently and do nothing; reject it with the valid names.
