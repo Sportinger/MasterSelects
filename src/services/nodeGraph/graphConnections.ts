@@ -77,6 +77,37 @@ export function checkGraphConnection(graph: ConnectionGraph, connection: NodeGra
   return occupying ? { ok: true, replacesEdgeId: occupying.id } : { ok: true };
 }
 
+/**
+ * Checks every edge of a saved graph against the edges before it, like `checkGraphConnection` per edge,
+ * in one pass with lookup tables (linear instead of quadratic: large recipe graphs have thousands of
+ * edges). Cycles are left to `graphHasCycle`, which checks the whole graph at once.
+ */
+export function checkGraphConnectionsInOrder(graph: ConnectionGraph): ConnectionCheck[] {
+  const nodes = new Map(graph.nodes.map(node => [node.id, node]));
+  const seen = new Set<string>(), occupied = new Map<string, ConnectionGraph['edges'][number]>();
+  return graph.edges.map(edge => {
+    const fail = (code: Extract<ConnectionCheck, { ok: false }>['code'], message: string): ConnectionCheck => ({ ok: false, code, message });
+    const key = `${edge.fromNodeId}:${edge.fromPortId}>${edge.toNodeId}:${edge.toPortId}`, target = `${edge.toNodeId}:${edge.toPortId}`;
+    const result = (): ConnectionCheck => {
+      if (edge.fromNodeId === edge.toNodeId) return fail('self-link', 'A node cannot connect to itself.');
+      const source = nodes.get(edge.fromNodeId), destination = nodes.get(edge.toNodeId);
+      if (!source || !destination) return fail('missing-node', 'Connection endpoint node does not exist.');
+      const output = source.outputs.find(port => port.id === edge.fromPortId), input = destination.inputs.find(port => port.id === edge.toPortId);
+      if (!output || !input) return fail('missing-port', `Port ${!output ? edge.fromPortId : edge.toPortId} does not exist.`);
+      if (output.metadata?.readOnly || input.metadata?.readOnly) return fail('read-only', 'This connection is a recorded dependency.');
+      if (!nodePortsCompatible(output, input)) return fail('type-mismatch', 'The port signal types or formats do not match.');
+      if (seen.has(key)) return fail('duplicate-edge', 'These ports are already connected.');
+      const occupying = input.metadata?.repeated ? undefined : occupied.get(target);
+      if (occupying?.readOnly) return fail('read-only', 'This input has a recorded dependency.');
+      return occupying ? { ok: true, replacesEdgeId: occupying.id } : { ok: true };
+    };
+    const check = result();
+    seen.add(key);
+    if (!occupied.has(target)) occupied.set(target, edge);
+    return check;
+  });
+}
+
 /** Iterative cycle detection; no call-stack limit for imported graphs. */
 export function graphHasCycle(nodes: readonly { id: string }[], edges: readonly Pick<NodeGraphEdge, 'fromNodeId' | 'toNodeId'>[]): boolean {
   const degree = new Map(nodes.map(node => [node.id, 0]));

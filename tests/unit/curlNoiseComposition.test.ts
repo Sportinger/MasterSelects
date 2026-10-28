@@ -3,7 +3,6 @@ import { geometryOwnerOperators, geometryParameterReader, validateWeaveGraph } f
 import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { evaluateFieldColumn } from '../../src/services/operators/geometry/curveFieldColumns';
-import { GEOMETRY_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
 import { migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import type { Effect } from '../../src/types/effects';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
@@ -54,7 +53,7 @@ describe('reusable Curl Noise geometry node group', () => {
     expect(saved).toEqual(original);
   });
 
-  it('uses the geometry budget for expanded compositions and still rejects overflow', () => {
+  it('expands compositions in graphs of any size (no node cap, 2026-10-28)', () => {
     const source = graph(3.5, .18, .2);
     const expansionGrowth = expandOperatorCompositions(source).nodes.length - source.nodes.length;
     const fillTo = (total: number) => {
@@ -68,9 +67,9 @@ describe('reusable Curl Noise geometry node group', () => {
     expect(validateWeaveGraph(source)).toEqual([]);
     expect(expandOperatorCompositions(source).nodes).toHaveLength(600);
     expect(compileGeometryGraph(source, geometryParameterReader({})).pointCount).toBe(4);
-    expect(() => expandOperatorCompositions({ ...source, domain: 'image' })).toThrow(/image graph budget/);
-    fillTo(GEOMETRY_EFFECT_GRAPH_LIMITS.nodes + 1);
-    expect(() => expandOperatorCompositions(source)).toThrow(/geometry graph budget/);
+    expect(expandOperatorCompositions({ ...source, domain: 'image' }).nodes).toHaveLength(600);
+    fillTo(1500);
+    expect(expandOperatorCompositions(source).nodes).toHaveLength(1500);
   });
 
   it('is discoverable, expands into supported nodes, and survives pack/save/load', () => {

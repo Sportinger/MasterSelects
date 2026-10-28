@@ -62,12 +62,13 @@ describe('Analog Signal legacy Display Resolve migration', () => {
     expect(new Set(migrated.nodes.map(item => item.id)).size).toBe(migrated.nodes.length);
   });
 
-  it('rejects unsupported decoded provenance and budget overflow instead of inventing defaults', () => {
+  it('rejects unsupported decoded provenance instead of inventing defaults and accepts large graphs', () => {
     const malformed = legacy(); malformed.edges.find(item => item.id === 'decoded')!.from = 'frame';
     expect(() => migrateAnalogSignalGraph(malformed)).toThrow(/analog\.pal-decode image predecessor/);
     const oversized = legacy();
     for (let index = 0; index < 124; index++) oversized.nodes.push(node(`filler-${index}`, 'values.number'));
-    expect(() => migrateAnalogSignalGraph(oversized)).toThrow(/exceeds its node or edge budget/);
+    // Effect graphs have no node or edge cap (effectGraphLimits.ts).
+    expect(() => migrateAnalogSignalGraph(oversized)).not.toThrow();
   });
 
   it('does not erase invalid source or version data through bypass migration', () => {

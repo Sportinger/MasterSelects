@@ -83,6 +83,8 @@ export type EffectType =
   | 'scatter-mosaic'
   | 'drift-lines'
   | 'glitch'
+  | 'block-dissolve'
+  | 'data-hud'
   | 'analog-signal-lab'
   | 'crystal'
   | 'glass-dispersion'

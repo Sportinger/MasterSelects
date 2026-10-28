@@ -1,6 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorGroup } from '../../types/operatorGraph';
 import { createAnalogDisplayResolveIsland, ANALOG_DISPLAY_PARAMETER_IDS, type AnalogDisplayParameterId } from './analogDisplayResolveGraph';
-import { effectGraphLimits } from './effectGraphLimits';
 import { getEffectOperator } from './operatorRegistry';
 
 const incoming = (graph: EffectOperatorGraph, nodeId: string, port: string) =>
@@ -79,7 +78,5 @@ export function migrateAnalogSignalGraph(graph: EffectOperatorGraph): EffectOper
   }
   const nodeIds = new Set(result.nodes.map(node => node.id)), edgeIds = new Set(result.edges.map(edge => edge.id));
   if (nodeIds.size !== result.nodes.length || edgeIds.size !== result.edges.length) throw new Error('Analog Signal migration produced duplicate ids.');
-  const limits = effectGraphLimits('analog-signal');
-  if (result.nodes.length > limits.nodes || result.edges.length > limits.edges) throw new Error('Migrated Analog Signal graph exceeds its node or edge budget.');
   return result;
 }

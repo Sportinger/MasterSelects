@@ -41,7 +41,6 @@ function compile(graph: EffectOperatorGraph): CompiledControls {
   if (graph.version !== 1 || (graph.schemaVersion !== undefined && graph.schemaVersion !== 1)) {
     throw new ParameterSourceError('Unsupported parameter graph version.');
   }
-  if (graph.nodes.length > 256 || graph.edges.length > 1024) throw new ParameterSourceError('Parameter graph exceeds its node/edge budget.');
   // Layout, group folding and viewport changes do not invalidate a program.
   const signature = JSON.stringify({ nodes: graph.nodes, edges: graph.edges });
   const semantic = semanticPrograms.get(signature);

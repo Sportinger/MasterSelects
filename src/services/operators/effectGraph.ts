@@ -1,11 +1,10 @@
-import { checkGraphConnection, graphHasCycle } from '../nodeGraph/graphConnections';
+import { checkGraphConnectionsInOrder, graphHasCycle } from '../nodeGraph/graphConnections';
 import { operatorConnectionEdge, operatorConnectionGraph } from './operatorConnectionGraph';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorBinding, OperatorEdge, OperatorValue } from '../../types/operatorGraph';
 import type { Keyframe } from '../../types/keyframes';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { getEffectOperator } from './operatorRegistry';
 import { directionFromAngles, periodicWindModulation, windForce } from './wind';
-import { effectGraphLimits } from './effectGraphLimits';
 import { expandOperatorCompositions } from './operatorComposition';
 import { resolveAdaptiveGraphConnection } from '../nodeGraph/adaptiveGraphConnections';
 import type { OperatorDefinition } from '../../types/operatorGraph';
@@ -29,12 +28,8 @@ export type OperatorParameters = Record<string, unknown>;
 export const usesLiteralNodeParameters = (domain: EffectOperatorGraph['domain']) => domain === 'image' || domain === 'audio' || domain === 'geometry';
 
 export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {
-  const limits = effectGraphLimits(graph?.domain);
   if (graph?.version !== 1 || (graph.schemaVersion !== undefined && graph.schemaVersion !== 1)
     || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout) return ['Invalid operator graph.'];
-  if (graph.nodes.length > limits.nodes || graph.edges.length > limits.edges) {
-    return [`Operator graph exceeds the ${graph.domain ?? 'legacy'} graph budget: ${graph.nodes.length}/${limits.nodes} nodes, ${graph.edges.length}/${limits.edges} edges.`];
-  }
   if (graph.nodes.some(n => !n || typeof n !== 'object') || graph.edges.some(e => !e || typeof e !== 'object')) return ['Invalid graph entries.'];
   try { graph = expandOperatorCompositions(graph); } catch (error) { return [String(error)]; }
   if (Object.values(graph.layout).some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return ['Invalid node position.'];
@@ -58,9 +53,10 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
       || (exposed.step !== undefined && exposed.step <= 0))) errors.push(`Invalid exposed value: ${n.id}.`);
   }
   const connections = operatorConnectionGraph(graph);
+  const checks = checkGraphConnectionsInOrder(connections);
   for (let index = 0; index < connections.edges.length; index++) {
     const edge = connections.edges[index];
-    const check = checkGraphConnection({ ...connections, edges: connections.edges.slice(0, index) }, edge);
+    const check = checks[index];
     const repairableVariantMismatch = allowIncomplete && !check.ok
       && (check.code === 'type-mismatch' || check.code === 'missing-port');
     const target = nodes.get(edge.toNodeId);

@@ -1,7 +1,7 @@
 import type { BoundOperatorNode, EffectOperatorGraph } from '../../types/operatorGraph';
 import { getEffectOperator } from './operatorRegistry';
 import { IMAGE_OPERATOR_PARAMETER_CAPACITY } from './imageOperatorParameters';
-import { IMAGE_EFFECT_GRAPH_LIMITS, IMAGE_SCOPED_INSTRUCTION_LIMIT } from './effectGraphLimits';
+import { IMAGE_SCOPED_INSTRUCTION_LIMIT } from './effectGraphLimits';
 import { colorToRgba } from '../../effects/_shared/catalogColor';
 import { compileImageOperatorPassPlan } from './imageOperatorPlan';
 import { emitImageOperatorWgsl } from './imageOperatorWgslEmitter';
@@ -473,11 +473,6 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
     ...(resourceInputs.includes(IMAGE_FRAME_HISTORY_RESOURCE_ID) ? { frameHistoryResource: IMAGE_FRAME_HISTORY_RESOURCE_ID } : {}) };
 }
 
-function assertImageGraphBudget(graph: EffectOperatorGraph) {
-  if (graph.nodes.length > IMAGE_EFFECT_GRAPH_LIMITS.nodes || graph.edges.length > IMAGE_EFFECT_GRAPH_LIMITS.edges) {
-    throw new Error('Image graph exceeds its node or edge budget.');
-  }
-}
 
 function assertDerivativeInputsAreRootLocal(graph: EffectOperatorGraph) {
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
@@ -502,7 +497,6 @@ function assertDerivativeInputsAreRootLocal(graph: EffectOperatorGraph) {
 
 export function compileImageOperatorGraph(graph: EffectOperatorGraph, params: Record<string, unknown> = {}, context: ImageOperatorCompileContext = {}): ImageOperatorPlan {
   graph = expandOperatorCompositions(graph);
-  assertImageGraphBudget(graph);
   assertDerivativeInputsAreRootLocal(graph);
   return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context), undefined, context);
 }
@@ -517,7 +511,6 @@ export function compileImageOperatorPreview(graph: EffectOperatorGraph, params: 
     if (!endpoint) throw new Error('Unknown composition preview port.');
     target = { ...target, nodeId: endpoint.nodeId, portId: endpoint.portId };
   }
-  assertImageGraphBudget(graph);
   assertDerivativeInputsAreRootLocal(graph);
   return compileImageOperatorPassPlan(graph, params, (singleGraph, singleParams, preview) => compileImageOperatorTarget(singleGraph, singleParams, preview, context), target, context);
 }

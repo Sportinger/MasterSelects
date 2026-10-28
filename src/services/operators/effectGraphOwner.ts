@@ -67,6 +67,8 @@ import { pinOriginalAnalogGraph } from './analogLegacyGraphs';
 import { createDefaultRibbonScanGraph } from './ribbonScanRecipe';
 import { createDefaultWaveLinesGraph } from './waveLinesEffectGraph';
 import { createDefaultGlitchGraph } from './glitchRecipe';
+import { createDefaultBlockDissolveGraph } from './blockDissolveRecipe';
+import { createDefaultDataHudGraph } from './dataHudRecipe';
 import { createDefaultFilmPrismGraph } from './filmPrismRecipe';
 import { createDefaultCrystalGraph } from './crystalEffectGraph';
 import { createDefaultGlassDispersionGraph } from './glassDispersionEffectGraph';
@@ -106,9 +108,9 @@ const PARTICLE_DISINTEGRATE = 'pixel-particle-disintegrate';
 
 const LOCAL_IMAGE_EFFECTS = new Set(['invert', 'brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize']);
 const CONTEXTUAL_IMAGE_EFFECTS = new Set(['time-stack', 'slit-scan', 'vignette', 'scanlines', 'grain', 'ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic', 'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither', 'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'acuarela', 'crt-screen', 'ribbon-scan', 'wave-lines', 'glitch', 'film-prism', 'crystal', 'glass-dispersion', 'holo', 'halftone', 'pattern-halftone', 'riso', 'riso-glow', 'dither', 'dither-studio', 'paper-print', 'pixel-poster', 'tone-geometry', 'cross-stitch', 'glitch-grid', 'scatter-mosaic', 'drift-lines', 'pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic', 'box-blur', 'gaussian-blur', 'sharpen', 'motion-blur', 'radial-blur', 'zoom-blur', 'edge-detect', 'glow', 'wave', 'twirl', 'bulge', 'kaleidoscope', 'fisheye']);
-for (const type of ['contour-map', 'crosshatch', 'kilim', 'vector-tiling', 'embroidery', 'outline', 'bricks', 'contour-type', 'chroma-key', 'rom1', 'memory-leak']) CONTEXTUAL_IMAGE_EFFECTS.add(type);
+for (const type of ['contour-map', 'crosshatch', 'kilim', 'vector-tiling', 'embroidery', 'outline', 'bricks', 'contour-type', 'chroma-key', 'rom1', 'memory-leak', 'block-dissolve', 'data-hud']) CONTEXTUAL_IMAGE_EFFECTS.add(type);
 export function isLocalImageEffectType(type: string): type is 'invert' | EditableColorEffectType | EditablePointwiseEffectType { return LOCAL_IMAGE_EFFECTS.has(type); }
-export function isImageGraphEffectType(type: string): type is 'time-stack' | 'slit-scan' | 'invert' | 'edge-detect' | 'glow' | 'fisheye' | 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' | 'word-mosaic' | 'glyph-matrix' | 'data-hatch' | 'brand-generator' | 'stitch-poster' | 'dither-text' | 'symbol-matrix' | 'pixel-dither' | 'retro-matrix' | 'capsule-cloud' | 'ui-collage' | 'matrix' | 'ascii-ghost' | 'inscribe' | 'acuarela' | 'crt-screen' | 'ribbon-scan' | 'wave-lines' | 'glitch' | 'film-prism' | 'crystal' | 'glass-dispersion' | 'holo' | 'paper-print' | 'pixel-poster' | 'tone-geometry' | 'cross-stitch' | EditableMotionHalftoneEffectType | EditableHalftoneEffectType | EditableRisoEffectType | EditableDitherEffectType | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType | EditableDirectionalBlurEffectType | EditableUvDistortEffectType | EditableGeometryFragmentEffectType | 'contour-type' | 'chroma-key' | 'rom1' | 'memory-leak' {
+export function isImageGraphEffectType(type: string): type is 'time-stack' | 'slit-scan' | 'invert' | 'edge-detect' | 'glow' | 'fisheye' | 'ascii' | 'number-field' | 'grid-glyph' | 'pixel-code' | 'word-mosaic' | 'glyph-matrix' | 'data-hatch' | 'brand-generator' | 'stitch-poster' | 'dither-text' | 'symbol-matrix' | 'pixel-dither' | 'retro-matrix' | 'capsule-cloud' | 'ui-collage' | 'matrix' | 'ascii-ghost' | 'inscribe' | 'acuarela' | 'crt-screen' | 'ribbon-scan' | 'wave-lines' | 'glitch' | 'film-prism' | 'crystal' | 'glass-dispersion' | 'holo' | 'paper-print' | 'pixel-poster' | 'tone-geometry' | 'cross-stitch' | EditableMotionHalftoneEffectType | EditableHalftoneEffectType | EditableRisoEffectType | EditableDitherEffectType | EditableColorEffectType | EditablePointwiseEffectType | EditableContextualEffectType | EditableSamplingEffectType | EditableBlockEffectType | EditableBlurEffectType | EditableDirectionalBlurEffectType | EditableUvDistortEffectType | EditableGeometryFragmentEffectType | 'contour-type' | 'chroma-key' | 'rom1' | 'memory-leak' | 'block-dissolve' | 'data-hud' {
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export const isComputeImageEffectType = (type: string) => type === 'voronoi' || type === 'pixel-sort' || type === 'quadtree-zoom' || type === 'contour';
@@ -227,6 +229,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'ribbon-scan' ? createDefaultRibbonScanGraph
         : effectType === 'wave-lines' ? createDefaultWaveLinesGraph
         : effectType === 'glitch' ? createDefaultGlitchGraph
+        : effectType === 'block-dissolve' ? createDefaultBlockDissolveGraph
+        : effectType === 'data-hud' ? createDefaultDataHudGraph
         : effectType === 'film-prism' ? createDefaultFilmPrismGraph
         : effectType === 'crystal' ? createDefaultCrystalGraph
         : effectType === 'glass-dispersion' ? createDefaultGlassDispersionGraph

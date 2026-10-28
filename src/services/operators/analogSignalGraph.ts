@@ -3,7 +3,6 @@ import { getEffectOperator } from './operatorRegistry';
 import { operatorPortsCompatible } from './portContracts';
 import { createAnalogDisplayResolveIsland } from './analogDisplayResolveGraph';
 import { IMAGE_OPERATORS } from './imageOperators';
-import { effectGraphLimits } from './effectGraphLimits';
 import { compileImageOperatorGraph, compileImageOperatorPreview, type ImageOperatorCompileContext, type ImageOperatorPlan,
   type ImageOperatorPreviewTarget } from './imageOperatorGraph';
 import { ANALOG_SIGNAL_LAB_PARAMS } from '../../effects/analog/signal-lab/parameters';
@@ -49,8 +48,6 @@ const ALLOWED = new Set(['image.frame', 'image.output', 'analog.pal-encode', 'an
 /** Returns validation errors; compilation throws the first error. */
 export function validateAnalogSignalGraph(graph: EffectOperatorGraph): string[] {
   if (graph.version !== 1 || graph.schemaVersion !== 1 || graph.domain !== 'analog-signal') return ['Invalid Analog Signal graph version or domain.'];
-  const limits = effectGraphLimits(graph.domain);
-  if (graph.nodes.length > limits.nodes || graph.edges.length > limits.edges) return ['Analog Signal graph is too large.'];
   const errors: string[] = [], nodes = new Map(graph.nodes.map(item => [item.id, item]));
   if (nodes.size !== graph.nodes.length) errors.push('Duplicate Analog Signal node ID.');
   for (const item of graph.nodes) {

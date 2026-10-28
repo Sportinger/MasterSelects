@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
-import { ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS, GEOMETRY_EFFECT_GRAPH_LIMITS, IMAGE_EFFECT_GRAPH_LIMITS, LEGACY_EFFECT_GRAPH_LIMITS, SCENE_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
+import { IMAGE_SCOPED_INSTRUCTION_LIMIT } from '../../src/services/operators/effectGraphLimits';
 import { compileImageOperatorGraph, compileImageOperatorPreview } from '../../src/services/operators/imageOperatorGraph';
 import { migrateImageOperatorGraph } from '../../src/services/operators/imageOperatorMigration';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../src/types/operatorGraph';
@@ -41,85 +41,34 @@ function nestedImageSelectionGraph(depth: number): EffectOperatorGraph {
     layout: Object.fromEntries(nodes.map((node, index) => [node.id, { x: index, y: 0 }])) };
 }
 
-describe('effect graph persisted limits', () => {
-  it('distinguishes malformed structure from a graph exceeding its domain budget', () => {
+// Effect graphs have no node or edge cap (decision 2026-10-28, user); only the compiled image plan is
+// bounded (IMAGE_SCOPED_INSTRUCTION_LIMIT), which stops runaway expansion of kernel and sequence scopes.
+describe('effect graph limits', () => {
+  it('rejects malformed structure', () => {
     const graph = largeImageGraph(0);
     expect(validateEffectGraph({ ...graph, nodes: {} as never })).toEqual(['Invalid operator graph.']);
     expect(validateEffectGraph({ ...graph, version: 2 as 1 })).toEqual(['Invalid operator graph.']);
-    graph.edges = Array(IMAGE_EFFECT_GRAPH_LIMITS.edges + 1).fill(graph.edges[0]);
-    expect(validateEffectGraph(graph)).toEqual([
-      'Operator graph exceeds the image graph budget: 4/512 nodes, 2049/2048 edges.',
-    ]);
   });
 
-  it('accepts image graphs beyond the legacy node and edge caps', () => {
-    const graph = largeImageGraph(150);
-    expect(graph.nodes.length).toBeGreaterThan(LEGACY_EFFECT_GRAPH_LIMITS.nodes);
-    expect(graph.edges.length).toBeGreaterThan(LEGACY_EFFECT_GRAPH_LIMITS.edges);
-    expect(validateEffectGraph(graph)).toEqual([]);
+  it('accepts graphs of any size in every domain', () => {
+    const graph = largeImageGraph(700);
+    expect(graph.nodes.length).toBeGreaterThan(512);
+    expect(graph.edges.length).toBeGreaterThan(1024);
+    for (const domain of ['image', 'analog-signal', 'scene', 'geometry', 'voxel', 'cables', undefined] as const)
+      expect(validateEffectGraph({ ...graph, domain })).not.toContainEqual(expect.stringContaining('budget'));
   });
 
-  it('rejects image graphs beyond either image-domain cap', () => {
-    const nodes = largeImageGraph(0);
-    while (nodes.nodes.length <= IMAGE_EFFECT_GRAPH_LIMITS.nodes) {
-      const id = `extra-${nodes.nodes.length}`; nodes.nodes.push(value(id)); nodes.layout[id] = { x: 0, y: 0 };
-    }
-    expect(validateEffectGraph(nodes)).toEqual([expect.stringContaining('graph budget:')]);
-    const edges = largeImageGraph(0);
-    edges.edges = Array.from({ length: IMAGE_EFFECT_GRAPH_LIMITS.edges + 1 }, (_, index) => ({
-      id: `overflow-${index}`, from: 'frame', output: 'image', to: 'output', input: 'image',
-    }));
-    expect(validateEffectGraph(edges)).toEqual([expect.stringContaining('graph budget:')]);
-  });
-
-  it('rejects unreachable over-budget data before full and preview compilation', () => {
-    const nodes = largeImageGraph(0);
-    while (nodes.nodes.length <= IMAGE_EFFECT_GRAPH_LIMITS.nodes) {
-      const id = `unreachable-${nodes.nodes.length}`; nodes.nodes.push(value(id)); nodes.layout[id] = { x: 0, y: 0 };
-    }
-    const edges = largeImageGraph(0);
-    edges.edges = Array.from({ length: IMAGE_EFFECT_GRAPH_LIMITS.edges + 1 }, (_, index) => ({
-      id: `unreachable-edge-${index}`, from: 'a', output: 'value', to: 'b', input: 'value',
-    }));
-    const preview = { nodeId: 'output', direction: 'input' as const, portId: 'image' };
-    expect(() => compileImageOperatorGraph(nodes)).toThrow(/node or edge budget/);
-    expect(() => compileImageOperatorPreview(nodes, {}, preview)).toThrow(/node or edge budget/);
-    expect(() => compileImageOperatorGraph(edges)).toThrow(/node or edge budget/);
-    expect(() => compileImageOperatorPreview(edges, {}, preview)).toThrow(/node or edge budget/);
+  it('compiles image graphs with more than the former 512 nodes and 2048 edges', () => {
+    const graph = largeImageGraph(1100);
+    expect(graph.edges.length).toBeGreaterThan(2048);
+    expect(() => compileImageOperatorGraph(graph)).not.toThrow();
+    expect(() => compileImageOperatorPreview(graph, {}, { nodeId: 'output', direction: 'input', portId: 'image' })).not.toThrow();
   });
 
   it('bounds scoped instruction expansion independently of persisted graph size', () => {
     const compact = compileImageOperatorGraph(nestedImageSelectionGraph(4));
     expect(compact.passes).toBeUndefined();
-    expect(() => compileImageOperatorGraph(nestedImageSelectionGraph(12))).toThrow(/exceeds 2048 instructions/);
-  });
-
-  it('retains the original cap outside the image, Analog and scene domains', () => {
-    const graph = largeImageGraph(61); // 65 nodes, below the image cap but above the legacy cap.
-    for (const domain of ['voxel', 'cables', undefined] as const)
-      expect(validateEffectGraph({ ...graph, domain })).toEqual([expect.stringContaining('graph budget:')]);
-  });
-
-  it('bounds the scene and geometry domains by their own cap', () => {
-    for (const domain of ['scene', 'geometry'] as const) {
-      const graph = { ...largeImageGraph(61), domain };
-      expect(validateEffectGraph(graph)).not.toContain('Invalid operator graph.');
-      while (graph.nodes.length <= (domain === 'geometry' ? GEOMETRY_EFFECT_GRAPH_LIMITS : SCENE_EFFECT_GRAPH_LIMITS).nodes) {
-        const id = `scene-extra-${graph.nodes.length}`;
-        graph.nodes.push(value(id)); graph.layout[id] = { x: 0, y: 0 };
-      }
-      expect(validateEffectGraph(graph)).toEqual([expect.stringContaining('graph budget:')]);
-    }
-  });
-
-  it('bounds the larger Analog domain independently', () => {
-    const graph = { ...largeImageGraph(61), domain: 'analog-signal' as const };
-    expect(validateEffectGraph(graph)).toEqual([]);
-    while (graph.nodes.length <= ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS.nodes) {
-      const id = `analog-extra-${graph.nodes.length}`;
-      graph.nodes.push(value(id)); graph.layout[id] = { x: 0, y: 0 };
-    }
-    expect(validateEffectGraph(graph)).toEqual([expect.stringContaining('graph budget:')]);
+    expect(() => compileImageOperatorGraph(nestedImageSelectionGraph(16))).toThrow(new RegExp(`exceeds ${IMAGE_SCOPED_INSTRUCTION_LIMIT} instructions`));
   });
 
   it('keeps duplicate, cycle, and malformed connection checks fail-closed', () => {
@@ -134,15 +83,11 @@ describe('effect graph persisted limits', () => {
     expect(validateEffectGraph(malformed).some(error => error.startsWith('Invalid connection:'))).toBe(true);
   });
 
-  it('allows legacy image expansion exactly through the shared image node cap', () => {
-    const migrationGraph = (count: number) => {
-      const graph = largeImageGraph(0);
-      graph.nodes.push({ id: 'legacy', operator: 'color.invert.rgb', operatorVersion: 1, bindings: {} });
-      while (graph.nodes.length < count) graph.nodes.push(value(`migration-${graph.nodes.length}`));
-      graph.layout = Object.fromEntries(graph.nodes.map((node, index) => [node.id, { x: index, y: 0 }]));
-      return graph;
-    };
-    expect(migrateImageOperatorGraph(migrationGraph(IMAGE_EFFECT_GRAPH_LIMITS.nodes - 2)).nodes).toHaveLength(IMAGE_EFFECT_GRAPH_LIMITS.nodes);
-    expect(() => migrateImageOperatorGraph(migrationGraph(IMAGE_EFFECT_GRAPH_LIMITS.nodes - 1))).toThrow(`exceeds ${IMAGE_EFFECT_GRAPH_LIMITS.nodes} nodes`);
+  it('expands legacy image nodes in graphs of any size', () => {
+    const graph = largeImageGraph(0);
+    graph.nodes.push({ id: 'legacy', operator: 'color.invert.rgb', operatorVersion: 1, bindings: {} });
+    while (graph.nodes.length < 600) graph.nodes.push(value(`migration-${graph.nodes.length}`));
+    graph.layout = Object.fromEntries(graph.nodes.map((node, index) => [node.id, { x: index, y: 0 }]));
+    expect(migrateImageOperatorGraph(graph).nodes).toHaveLength(602);
   });
 });

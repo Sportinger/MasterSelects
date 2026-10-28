@@ -16,7 +16,7 @@ export const RESOLVE_ROW_EFFECTS: ReadonlySet<string> = new Set(['gaussian-blur'
   'wave', 'twirl', 'bulge', 'kaleidoscope', 'mirror', 'rgb-split', 'pixelate', 'blockify', 'block-mosaic',
   'brightness', 'contrast', 'saturation', 'vibrance', 'exposure', 'levels', 'hue-shift', 'temperature',
   ...STYLIZE_RESOLVE_ROW_EFFECTS,
-  'crt-screen', 'glitch', 'film-prism', 'holo', 'ribbon-scan', 'analog-signal-lab', 'crystal', 'glass-dispersion', 'wave-lines', 'pixel-sort', 'quadtree-zoom', 'voronoi',
+  'crt-screen', 'glitch', 'block-dissolve', 'data-hud', 'film-prism', 'holo', 'ribbon-scan', 'analog-signal-lab', 'crystal', 'glass-dispersion', 'wave-lines', 'pixel-sort', 'quadtree-zoom', 'voronoi',
   'acuarela', 'rom1', 'sheen', 'pixel-particle-disintegrate',
   'color-wheel', 'perspective-grid', 'stick-figure',
   'weave',

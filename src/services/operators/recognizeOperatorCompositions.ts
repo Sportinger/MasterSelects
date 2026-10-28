@@ -5,7 +5,6 @@ import { SAMPLING_COMPOSITIONS } from './samplingCompositions';
 import { PROCESSING_COMPOSITIONS } from './processingCompositions';
 import { SCREEN_COMPOSITIONS } from './screenCompositions';
 import { compositionBoundary, compositionNodeMatcher, packOperatorCompositions } from './operatorComposition';
-import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
 import { getOperatorComposition } from './operatorCompositionRegistry';
 
 const cache = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
@@ -35,6 +34,8 @@ export function recognizeOperatorCompositions(source: EffectOperatorGraph): Effe
       const body = definition.composition!.graph;
       const protectedIds = new Set(graph.groups?.filter(group => revision === 1 || group.composition).flatMap(group => group.nodeIds));
       const owner = new Map(graph.groups?.flatMap(group => group.nodeIds.map(id => [id, group.id] as const)));
+      // Edge lookup by endpoints: the search tests edges thousands of times, a scan per test was quadratic.
+      const edgeKeys = new Set(graph.edges.map(edge => `${edge.from}\u0000${edge.output}\u0000${edge.to}\u0000${edge.input}`));
       const candidates = new Map(body.nodes.map(node => [node.id,
         graph.nodes.filter(actual => !protectedIds.has(actual.id) && sameCompositionNode(actual, node))]));
       if ([...candidates.values()].some(items => !items.length)) break;
@@ -51,8 +52,8 @@ export function recognizeOperatorCompositions(source: EffectOperatorGraph): Effe
           // A new shared node may live inside a user's group, but cannot cross its boundary.
           if (revision > 1 && [...used].some(id => owner.get(id) !== owner.get(candidate.id))) continue;
           ids[next.id] = candidate.id;
-          const matches = body.edges.every(edge => !ids[edge.from] || !ids[edge.to] || graph.edges.some(actual =>
-            actual.from === ids[edge.from] && actual.output === edge.output && actual.to === ids[edge.to] && actual.input === edge.input));
+          const matches = body.edges.every(edge => !ids[edge.from] || !ids[edge.to]
+            || edgeKeys.has(`${ids[edge.from]}\u0000${edge.output}\u0000${ids[edge.to]}\u0000${edge.input}`));
           if (matches) { used.add(candidate.id); const result = search(); if (result) return result; used.delete(candidate.id); }
           delete ids[next.id];
           if (remaining <= 0) break;
@@ -96,7 +97,6 @@ function extract(source: EffectOperatorGraph, definition: OperatorDefinition, ma
     ids[template.id] = id;
   }
   const boundary = compositionBoundary(graph, definition, ids);
-  if (graph.nodes.length > IMAGE_EFFECT_GRAPH_LIMITS.nodes) return;
   if (!boundary || Object.values(boundary.inputs).some(endpoints => !boundary.incoming.some(edge =>
     edge.to === endpoints[0].nodeId && edge.input === endpoints[0].portId))) return;
   const position = graph.layout[ids[first]] ?? { x: 0, y: 0 };

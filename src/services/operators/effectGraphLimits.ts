@@ -1,20 +1,27 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 
 export interface EffectGraphLimits { readonly nodes: number; readonly edges: number }
-export const LEGACY_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 64, edges: 256 };
-export const IMAGE_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 512, edges: 2048 };
-/** The canonical 140-node/209-edge Analog graph keeps bounded editing headroom. */
-export const ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 256, edges: 512 };
-export const SCENE_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 256, edges: 1024 };
-/** Multiple editable force compositions and formation stages; individual fields stay bounded below. */
-export const GEOMETRY_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 1024, edges: 4096 };
+/**
+ * Effect graphs have no node or edge cap (decision 2026-10-28, user): a recipe or a hand-built graph
+ * may be as large as its look needs. The per-domain names stay so callers keep one lookup.
+ */
+const UNLIMITED: EffectGraphLimits = { nodes: Number.POSITIVE_INFINITY, edges: Number.POSITIVE_INFINITY };
+export const LEGACY_EFFECT_GRAPH_LIMITS = UNLIMITED;
+export const IMAGE_EFFECT_GRAPH_LIMITS = UNLIMITED;
+export const ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS = UNLIMITED;
+export const SCENE_EFFECT_GRAPH_LIMITS = UNLIMITED;
+export const GEOMETRY_EFFECT_GRAPH_LIMITS = UNLIMITED;
 // Independent formation, circulation and inherited force branches need bounded headroom.
 // These are generated expressions, not a fixed-size GPU register array.
 export const GEOMETRY_FIELD_INSTRUCTION_LIMIT = 640;
-/** Expanded lexical scopes are bounded independently from the persisted graph. */
-export const IMAGE_SCOPED_INSTRUCTION_LIMIT = 2048;
+/**
+ * Instructions of one compiled image plan (the generated shader). Raised from 2048 with the node cap's
+ * removal (2026-10-28, user): large recipes such as Data HUD need several thousand; the bound only stops
+ * runaway expansion of kernel and sequence scopes.
+ */
+export const IMAGE_SCOPED_INSTRUCTION_LIMIT = 16384;
 
-/** Durable graph limits are domain-specific; non-image formats retain their original caps. */
+/** Durable graph limits by domain (all unlimited, see UNLIMITED). */
 export function effectGraphLimits(domain: EffectOperatorGraph['domain'] | undefined): EffectGraphLimits {
   return domain === 'image' || domain === 'compute-image' ? IMAGE_EFFECT_GRAPH_LIMITS
     : domain === 'analog-signal' ? ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS

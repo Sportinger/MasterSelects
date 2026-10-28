@@ -7,6 +7,8 @@ import { RIBBON_SCAN_EDGE_OPTIONS, RIBBON_SCAN_MIN_RIBBONS } from './ribbonScanL
 export { analogSignalLab } from './signal-lab';
 export { crtScreen } from './crtScreen';
 export { glitch } from './glitch';
+export { blockDissolve } from './blockDissolve';
+export { dataHud } from './dataHud';
 export { filmPrism } from './filmPrism';
 
 const NO_ANGLE = (name: string) => `${name} has no angle; the value is ignored.`;
