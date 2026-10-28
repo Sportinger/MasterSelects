@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-28",
+    "type": "new",
+    "title": "MasterSelects 3.3.6",
+    "description": "The phone editor gets a big polish. Sheets are only as tall as their content, keep a grab handle and leave the preview and the play/undo bar in view; effect and filter cards show real previews. New projects on the phone start without a folder dialog, with an opaque loading view and a diagnostics list of recent loads. The Mobile button now always opens the phone editor. One assistant request is one undo step, folder projects open far faster with fewer file operations, and torn writes on a paused folder no longer block saving. FAST export reads multi-GB phone recordings on demand, picks the right frame for phone footage with uneven timestamps and coarse timescales, and no longer repeats neighbour frames with many layers; nested small compositions and reversed clips preview correctly, and Voxel Relief keeps its framing at low height.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-27",
     "type": "new",
     "title": "MasterSelects 3.3.5",
