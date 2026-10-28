@@ -6,7 +6,7 @@ import {
   ResolveInspectorRow,
   ResolveResetIcon,
 } from '../resolveInspector/ResolveInspectorPrimitives';
-import type { CreateMidiTarget, TransformTabTransform } from './transformTabTypes';
+import type { CreateMidiTarget, TransformTabSpatialTransform } from './transformTabTypes';
 import { LabeledValue } from './ValueControls';
 import type { OperatorEndpoint } from '../../../../types/operatorGraph';
 import { TransformNodeSourceActions } from './TransformNodeSourceActions';
@@ -16,7 +16,7 @@ interface AnchorPointRowsProps {
   createMidiTarget: CreateMidiTarget;
   isEffectively3D: boolean;
   nodeSources?: ReadonlyMap<string, OperatorEndpoint>;
-  transform: TransformTabTransform;
+  transform: TransformTabSpatialTransform;
   onBatchEnd: () => void;
   onBatchStart: () => void;
   onChange: (property: 'anchor.x' | 'anchor.y' | 'anchor.z', value: number) => void;

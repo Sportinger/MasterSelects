@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from 'zustand/vanilla';
 import { withRepositoryStoreMutation } from '../../src/services/project/repository/transaction/storeMutationBoundary';
+import { withTimelineRevision } from '../../src/stores/timeline/revisionMiddleware';
 import { installEditorRepositorySession, beginEditorTransaction, runEditorTransaction, commitEditorTransaction,
   cancelEditorTransaction, ownsEditorTransaction } from '../../src/services/project/repository/transaction/editorMutationRuntime';
 import { ProjectTransactionCoordinator, type CoordinatorStorage, type TransactionToken } from '../../src/services/project/repository/transaction/ProjectTransactionCoordinator';
@@ -13,6 +14,7 @@ import * as serialization from '../../src/services/project/projectCompositionSer
 import { DEFAULT_TEXT_PROPERTIES } from '../../src/stores/timeline/constants';
 import { editTextSelection } from '../../src/components/panels/properties/textSelectionEditing';
 import { createMockClip, createMockKeyframe } from '../helpers/mockData';
+import { Logger } from '../../src/services/logger';
 
 vi.mock('../../src/services/project/repository/transaction/editorHistory', () => ({ refreshEditorHistoryAvailability: () => Promise.resolve() }));
 vi.mock('../../src/services/project/repository/transaction/editorCompositionProjection', () => ({ projectTimelineMutationToComposition: vi.fn() }));
@@ -27,10 +29,13 @@ afterEach(() => {
 function fixture(text = false) {
   const clips = ['a', 'b'].map(id => createMockClip({ id, ...(text ? { source: { type: 'text' }, textProperties: { ...DEFAULT_TEXT_PROPERTIES } } : {}) }));
   const key = createMockKeyframe({ id: 'k', clipId: 'a', easing: 'ease-in-out' });
-  const timeline = createStore<TimelineStore>()(withRepositoryStoreMutation('timeline', () => ({
+  // The same middleware stack as the real timeline store: the revision middleware adds timelineRevision to
+  // every clip write, which is exactly what the repository boundary sees for a drag sample.
+  const timeline = createStore<TimelineStore>()(withRepositoryStoreMutation('timeline', withTimelineRevision(() => ({
     clips, tracks: [], clipKeyframes: new Map([['a', [key]]]), markers: [], videoBakeRegions: [], duration: 10,
     playheadPosition: 0, inPoint: null, outPoint: null, selectedClipIds: new Set(), selectedKeyframeIds: new Set(),
-  } as unknown as TimelineStore)));
+    timelineRevision: 0,
+  } as unknown as TimelineStore))));
   createStore<MediaState>()(withRepositoryStoreMutation('media', () => ({ files: [], activeCompositionId: 'main',
     compositions: [{ id: 'main', name: 'Main', width: 1920, height: 1080, frameRate: 30, duration: 10 }],
   } as unknown as MediaState)));
@@ -114,6 +119,26 @@ describe('gesture preview persistence', () => {
     const f = fixture(), token = f.begin(); f.move(token, .7); f.move(token, f.key.value);
     commitEditorTransaction(token); await f.coordinator.flush();
     expect(f.storage.publishRevision).not.toHaveBeenCalled();
+  });
+  it('keeps every sample a preview although the revision middleware adds timelineRevision to it', () => {
+    const f = fixture(), token = f.begin(), revision = f.timeline.getState().timelineRevision;
+    for (let i = 1; i <= 20; i++) f.move(token, i / 20);
+    expect(f.timeline.getState().timelineRevision).toBe(revision + 20);
+    expect(f.encode).not.toHaveBeenCalled(); expect(f.write).not.toHaveBeenCalled();
+  });
+  it('logs once per gesture why a mixed drag write leaves the preview', () => {
+    const f = fixture();
+    const logged = () => Logger.search('Gesture preview off').filter(entry => entry.message.includes('selectedClipIds')).length;
+    const before = logged();
+    for (let gesture = 0; gesture < 2; gesture++) {
+      const token = f.begin();
+      for (let i = 0; i < 5; i++) runEditorTransaction(token, () => f.timeline.setState({
+        clipKeyframes: new Map([['a', [{ ...f.key, value: i / 10 }]]]), selectedClipIds: new Set([`a${i}`]),
+      }));
+      expect(logged()).toBe(before + gesture + 1);
+      commitEditorTransaction(token);
+    }
+    expect(Logger.search('Gesture preview off').at(-1)?.level).toBe('WARN');
   });
   it('preserves rollback ordering when structural edits precede value edits', () => {
     const f = fixture(), token = f.begin();

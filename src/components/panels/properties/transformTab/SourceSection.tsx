@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 
 import { isLiveInputUsedOutsideComposition } from '../../../../services/liveInputTimeline';
 import { connectAndPersistLiveInput } from '../../../../services/mediaRuntime/liveInputConnection';
@@ -40,7 +40,7 @@ function liveSourceName(
   return `${composition?.name ?? 'Composition'} Feedback`;
 }
 
-export function SourceSection({
+export const SourceSection = memo(function SourceSection({
   clipId,
   freeRun,
   isEffectively3D,
@@ -50,16 +50,20 @@ export function SourceSection({
   onFreeRunToggle,
   onToggle3D,
 }: SourceSectionProps) {
-  const clip = useTimelineStore((state) => state.clips.find((candidate) => candidate.id === clipId));
+  // Only the fields shown here, not the clip or clips array: a transform drag replaces both on every
+  // sample and must not re-render this memoised section.
+  const compositionId = useTimelineStore((state) => state.clips.find((candidate) => candidate.id === clipId)?.compositionId);
+  // The source object keeps its identity across transform edits (they copy the clip, not its source).
+  const clipSource = useTimelineStore((state) => state.clips.find((candidate) => candidate.id === clipId)?.source);
+  const liveInputId = clipSource?.liveInputId;
   const replaceClipSource = useTimelineStore((state) => state.replaceClipSource);
   const replaceClipSourceWithComposition = useTimelineStore((state) => state.replaceClipSourceWithComposition);
-  const clips = useTimelineStore((state) => state.clips);
   const mediaFile = useMediaStore((state) => (
     mediaFileId ? state.files.find((candidate) => candidate.id === mediaFileId) : undefined
   ));
   const composition = useMediaStore((state) => (
-    clip?.compositionId
-      ? state.compositions.find((candidate) => candidate.id === clip.compositionId)
+    compositionId
+      ? state.compositions.find((candidate) => candidate.id === compositionId)
       : undefined
   ));
   const compositions = useMediaStore((state) => state.compositions);
@@ -70,7 +74,6 @@ export function SourceSection({
     () => liveInputRuntime.getRevision(),
     () => 0,
   );
-  const liveInputId = clip?.source?.liveInputId;
   const liveInputSource = mediaFile?.liveInput;
   const isLiveInput = Boolean(liveInputId && liveInputSource);
   const isLiveInputConnected = Boolean(liveInputId && liveInputRuntime.getVideoElement(liveInputId));
@@ -148,14 +151,15 @@ export function SourceSection({
     if (!liveInputId) return;
     if (
       source.kind === 'composition-feedback' &&
-      isLiveInputUsedOutsideComposition(liveInputId, source.compositionId, activeCompositionId, clips, compositions)
+      // This clip is the active timeline's use of the live input; the check only asks whether one exists.
+      isLiveInputUsedOutsideComposition(liveInputId, source.compositionId, activeCompositionId, clipSource ? [{ source: clipSource }] : [], compositions)
     ) {
       throw new Error('This Live Input is also used in another composition. Duplicate the Media Panel item before binding it to composition feedback.');
     }
     await connectAndPersistLiveInput(liveInputId, source, updateLiveInputSource);
     setLiveSourceDialogOpen(false);
     setMessage(null);
-  }, [activeCompositionId, clips, compositions, liveInputId, updateLiveInputSource]);
+  }, [activeCompositionId, clipSource, compositions, liveInputId, updateLiveInputSource]);
 
   const sourceName = liveInputSource
     ? liveSourceName(liveInputSource, mediaFile?.name ?? '', compositions)
@@ -234,4 +238,4 @@ export function SourceSection({
       )}
     </section>
   );
-}
+});

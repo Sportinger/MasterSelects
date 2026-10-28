@@ -9,10 +9,16 @@ import {
 import {
   InvalidAdjustmentEffectParametersError,
   UnsupportedAdjustmentEffectError,
+  adjustmentEffectAdmission,
   normalizeAdjustmentEffectParameters,
-  type SupportedAdjustmentEffectType,
+  type WorkerGpuAdjustmentEffectType,
 } from './supportedEffects';
+// Installs the registry-backed admission (every admitted registry effect, own parameter rules).
+import { ensureAdjustmentEffectRegistryAdmission } from './adjustmentEffectRegistryAdmission';
 
+ensureAdjustmentEffectRegistryAdmission();
+
+/** Timeline effect types that load as a different canonical type (the retired `blur`). */
 export const MOTION_ADJUSTMENT_TIMELINE_EFFECT_TYPE_MAP = Object.freeze({
   brightness: 'brightness',
   contrast: 'contrast',
@@ -20,7 +26,7 @@ export const MOTION_ADJUSTMENT_TIMELINE_EFFECT_TYPE_MAP = Object.freeze({
   invert: 'invert',
   'gaussian-blur': 'gaussian-blur',
   blur: 'gaussian-blur',
-} as const satisfies Readonly<Record<string, SupportedAdjustmentEffectType>>);
+} as const satisfies Readonly<Record<string, WorkerGpuAdjustmentEffectType>>);
 
 export interface TimelineAdjustmentEffectInput {
   readonly id: string;
@@ -61,12 +67,14 @@ export class MotionAdjustmentSupportedEffectAdapterError extends Error {
 interface AdmittedTimelineEffect {
   readonly id: string;
   readonly enabled: boolean;
-  readonly effectType: SupportedAdjustmentEffectType;
-  readonly parameters: Readonly<Record<string, number>>;
+  readonly effectType: string;
+  readonly parameters: Readonly<JsonObject>;
 }
 
 /**
- * Maps JSON-only timeline effects into the frozen Adjustment 1.0 contract.
+ * Maps JSON-only timeline effects into the Adjustment contract: every registry effect an
+ * adjustment layer admits (adjustmentEffectClassification.ts), with its parameters validated by
+ * its own definitions (the original five keep their frozen policy).
  * Validation and normalization finish for the complete ordered list before a
  * caller-visible contract array is created.
  */
@@ -142,22 +150,25 @@ function admitEffect(
 function canonicalEffectType(
   layerId: string,
   effect: TimelineAdjustmentEffectInput,
-): SupportedAdjustmentEffectType {
+): string {
   if (Object.hasOwn(MOTION_ADJUSTMENT_TIMELINE_EFFECT_TYPE_MAP, effect.type)) {
     return MOTION_ADJUSTMENT_TIMELINE_EFFECT_TYPE_MAP[
       effect.type as keyof typeof MOTION_ADJUSTMENT_TIMELINE_EFFECT_TYPE_MAP
     ];
   }
+  const verdict = adjustmentEffectAdmission(effect.type);
+  if (verdict.admitted) return effect.type;
   throw new UnsupportedAdjustmentEffectError(
     layerId,
     effect.id,
     effect.type,
+    verdict.reason,
   );
 }
 
 function normalizeLegacyBlurParameters(
   params: JsonObject,
-): Record<string, number> {
+): JsonObject {
   const parameterNames = Object.keys(params);
   if (parameterNames.some((name) =>
     name !== 'radius' && name !== 'amount' && name !== 'samples')) {

@@ -6,9 +6,10 @@ import {
 import type { ApplyAdjustmentEffectOperation } from './contracts';
 import {
   UnsupportedAdjustmentEffectError,
-  isSupportedAdjustmentEffectType,
-  normalizeAdjustmentEffectParameters,
-  type SupportedAdjustmentEffectType,
+  WORKER_GPU_ADJUSTMENT_EFFECT_TYPES,
+  isWorkerGpuAdjustmentEffectType,
+  normalizeWorkerGpuAdjustmentEffectParameters,
+  type WorkerGpuAdjustmentEffectType,
 } from './supportedEffects';
 
 export const MOTION_ADJUSTMENT_EFFECT_ADAPTER_VERSION =
@@ -17,7 +18,7 @@ export const MOTION_ADJUSTMENT_EFFECT_ADAPTER_VERSION =
 export interface MotionAdjustmentColorMatrixEffect {
   readonly adapterVersion: typeof MOTION_ADJUSTMENT_EFFECT_ADAPTER_VERSION;
   readonly primitive: 'color-matrix-4x5';
-  readonly effectType: Exclude<SupportedAdjustmentEffectType, 'gaussian-blur'>;
+  readonly effectType: Exclude<WorkerGpuAdjustmentEffectType, 'gaussian-blur'>;
   readonly parameters: Readonly<Record<string, number>>;
   readonly matrix: readonly number[];
 }
@@ -35,7 +36,7 @@ export type MotionAdjustmentEvaluatedEffect =
   | MotionAdjustmentGaussianBlurEffect;
 
 /**
- * Converts one frozen effect operation into a renderer-neutral primitive.
+ * Converts one worker-executable effect operation into a renderer-neutral primitive.
  * The complete operation is admitted before any result object is produced.
  */
 export function planMotionAdjustmentEffectAdapter(
@@ -62,15 +63,16 @@ export function planMotionAdjustmentEffectAdapter(
   ) {
     throw new Error('Invalid motion adjustment effect adapter operation');
   }
-  if (!isSupportedAdjustmentEffectType(operation.effectType)) {
+  if (!isWorkerGpuAdjustmentEffectType(operation.effectType)) {
     throw new UnsupportedAdjustmentEffectError(
       operation.layerId,
       operation.effectId,
       operation.effectType,
+      `the worker GPU executor draws only ${WORKER_GPU_ADJUSTMENT_EFFECT_TYPES.join(', ')}; the main compositor renders this effect`,
     );
   }
 
-  const parameters = normalizeAdjustmentEffectParameters(
+  const parameters = normalizeWorkerGpuAdjustmentEffectParameters(
     operation.effectType,
     operation.parameters,
   );
@@ -97,7 +99,7 @@ export function planMotionAdjustmentEffectAdapter(
 }
 
 function createColorMatrix(
-  effectType: Exclude<SupportedAdjustmentEffectType, 'gaussian-blur'>,
+  effectType: Exclude<WorkerGpuAdjustmentEffectType, 'gaussian-blur'>,
   parameters: Readonly<Record<string, number>>,
 ): number[] {
   switch (effectType) {

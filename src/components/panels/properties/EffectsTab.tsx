@@ -39,7 +39,10 @@ import { exposedGraphValues } from '../../../services/operators/exposedGraphValu
 import { getParameterSourceTarget } from '../../../services/parameterSources/parameterSourceTargets';
 import { resolveLinkedAudioClip } from '../../../services/nodeGraph/clipGraphProjectionAudio';
 import { LandmarkTrackingControls } from './LandmarkTrackingControls';
-import { EffectCatalogPicker } from './EffectCatalogPicker';
+import { EffectCatalogPicker, type EffectCatalogGroup } from './EffectCatalogPicker';
+import { effectsDependOnPlayhead } from './effectsPlayheadDependency';
+import { MotionAdjustmentEffectNotice } from './MotionAdjustmentEffectNotice';
+import { adjustmentEffectCatalog } from './adjustmentEffectCatalog';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 import { EffectGpuFailureNotice } from './EffectGpuFailureNotice';
 import { EffectBudgetNotice } from './EffectBudgetNotice';
@@ -370,20 +373,33 @@ interface EffectsTabProps {
   isAudioClip?: boolean;
 }
 
-const MOTION_ADJUSTMENT_EFFECT_TYPES = new Set([
-  'brightness',
-  'contrast',
-  'saturation',
-  'invert',
-  'gaussian-blur',
-]);
+interface EffectsTabCatalogProps {
+  clipId: string;
+  groups: EffectCatalogGroup[];
+  footnote?: string;
+  onSelect: (effectId: string) => void;
+}
 
-export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
+/** The + Add Effect catalog. Only it follows the playhead (its tile frame), in 1/30 s steps. */
+const EffectsTabCatalog = memo(function EffectsTabCatalog({ clipId, groups, footnote, onSelect }: EffectsTabCatalogProps) {
+  const sourceFrame = useTimelineStore(state => Math.floor(state.playheadPosition * 30));
+  return <EffectCatalogPicker groups={groups} footnote={footnote} sourceFrameId={`${clipId}:${sourceFrame}`} onSelect={onSelect} />;
+});
+
+/** Memoised: the selected clip's `effects` array keeps its identity across transform edits and playhead ticks. */
+export const EffectsTab = memo(function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const [showAudioEffects, setShowAudioEffects] = useState(false);
   const audioMode = Boolean(isAudioClip || showAudioEffects);
-  // Reactive data - subscribe to specific values only
-  const playheadPosition = useTimelineStore(state => state.playheadPosition);
-  const clips = useTimelineStore(state => state.clips);
+  // Reactive data - subscribe to specific values only: this clip, its linked clip and its keyframes,
+  // not the whole clips array (an edit of another clip must not rebuild every effect's controls).
+  const clip = useTimelineStore(state => state.clips.find(c => c.id === clipId));
+  const linkedClip = useTimelineStore(state => (clip?.linkedClipId
+    ? state.clips.find(candidate => candidate.id === clip.linkedClipId)
+    : state.clips.find(candidate => candidate.linkedClipId === clipId)));
+  const clipKeyframeList = useTimelineStore(state => state.clipKeyframes?.get(clipId));
+  // The playhead matters only when something time-dependent drives the shown values.
+  const readsPlayhead = effectsDependOnPlayhead(clip, clipKeyframeList);
+  const playheadPosition = useTimelineStore(state => (readsPlayhead ? state.playheadPosition : 0));
   const effectOrbitTarget = useEngineStore(state => state.effectOrbitTarget);
   const setEffectOrbitTarget = useEngineStore(state => state.setEffectOrbitTarget);
   // Actions from getState() - stable, no subscription needed
@@ -415,13 +431,10 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
 
   const handleBatchStart = useCallback(() => startBatch('Adjust effect'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
-  const clip = clips.find(c => c.id === clipId);
-  const linkedClip = clip?.linkedClipId ? clips.find(candidate => candidate.id === clip.linkedClipId)
-    : clips.find(candidate => candidate.linkedClipId === clipId);
   const audioClip = clip ? resolveLinkedAudioClip(clip, linkedClip) : undefined;
   const hasColorEntry = Boolean(clip?.colorCorrection || clip?.nodeGraph?.forcedBuiltIns?.includes('color'));
   const isMotionAdjustmentClip = clip?.source?.type === 'motion-adjustment';
-  const clipLocalTime = clip ? playheadPosition - clip.startTime : 0;
+  const clipLocalTime = clip && readsPlayhead ? playheadPosition - clip.startTime : 0;
   let interpolatedEffects = effects, controlError = '';
   try { interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime); }
   catch (error) { controlError = error instanceof Error ? error.message : String(error); }
@@ -449,17 +462,21 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
     }
   }, [addClipEffect, addKeyframe, clip, clipId]);
 
-  // Get effects grouped by category from registry (video effects only)
-  const effectCategories = useMemo(() => {
-    const categories = getCategoriesWithEffects();
-    if (!isMotionAdjustmentClip) return categories;
-    return categories
-      .map(({ category, effects: categoryEffects }) => ({
-        category,
-        effects: categoryEffects.filter((effect) => MOTION_ADJUSTMENT_EFFECT_TYPES.has(effect.id)),
-      }))
-      .filter(({ effects: categoryEffects }) => categoryEffects.length > 0);
-  }, [isMotionAdjustmentClip]);
+  // Effects grouped by category from the registry (video effects only). Adjustment layers list every
+  // effect they admit; the few that need a source clip of their own are named under the grid.
+  const { effectCategories, unavailableNote } = useMemo(() => adjustmentEffectCatalog(getCategoriesWithEffects(), isMotionAdjustmentClip), [isMotionAdjustmentClip]);
+  const handleCatalogSelect = useCallback((effectId: string) => {
+    addClipEffect(clipId, effectId as EffectType);
+    trackEditorControlCommitted({
+      area: 'effect',
+      controlId: 'effect-catalog',
+      controlKind: 'select',
+      inputMethod: 'select',
+      interaction: 'add',
+      itemId: effectId,
+      itemKind: 'effect',
+    });
+  }, [addClipEffect, clipId]);
 
   // Video effects only (exclude audio effects from the list)
   const videoEffects = useMemo(() =>
@@ -486,22 +503,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
       </div>
       {!audioMode && clip && <LandmarkTrackingControls clipId={clipId} />}
       {!audioMode && (
-        <EffectCatalogPicker
-          groups={effectCategories}
-          sourceFrameId={`${clipId}:${Math.floor(playheadPosition * 30)}`}
-          onSelect={(effectId) => {
-            addClipEffect(clipId, effectId as EffectType);
-            trackEditorControlCommitted({
-              area: 'effect',
-              controlId: 'effect-catalog',
-              controlKind: 'select',
-              inputMethod: 'select',
-              interaction: 'add',
-              itemId: effectId,
-              itemKind: 'effect',
-            });
-          }}
-        />
+        <EffectsTabCatalog clipId={clipId} groups={effectCategories} footnote={unavailableNote} onSelect={handleCatalogSelect} />
       )}
       {!audioMode && <div className="effect-add-row">
         {!isAudioClip && (
@@ -518,7 +520,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
               </button>
             )}
             {isMotionAdjustmentClip && (
-              <span className="effect-mode-label">Adjustment-safe effects</span>
+              <span className="effect-mode-label">Effects process the layers below</span>
             )}
           </>
         )}
@@ -652,6 +654,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                   }}>×</button>
                 </div>
                 <EffectGpuFailureNotice effectType={effect.type} />
+                {isMotionAdjustmentClip && <MotionAdjustmentEffectNotice clipId={clipId} effect={interpolated} />}
                 <EffectParamRangeNotice effectType={effect.type} params={primitiveParams} graph={effect.operatorGraph} />
                 {!isCollapsed && (
                   <div className="effect-params">
@@ -673,4 +676,4 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
       )}
     </div>
   );
-}
+});

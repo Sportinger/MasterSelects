@@ -45,10 +45,16 @@ import { planMotionAdjustmentOperations } from './operationPlanner';
 import { adaptTimelineEffectsToMotionAdjustmentContracts } from './supportedEffectContractAdapter';
 import { withAdjustmentEffectGraphs } from './adjustmentEffectGraphs';
 import {
-  SUPPORTED_ADJUSTMENT_EFFECT_TYPES,
-  isSupportedAdjustmentEffectType,
+  admitAdjustmentEffectsForRender,
+  type BypassedAdjustmentEffect,
+} from './adjustmentEffectRenderAdmission';
+import {
+  adjustmentEffectAdmission,
+  isWorkerGpuAdjustmentEffectType,
   normalizeAdjustmentEffectParameters,
 } from './supportedEffects';
+import { getDefaultParams, getEffect } from '../../../effects';
+import { unknownAdjustmentEffectParameters } from './adjustmentEffectRegistryAdmission';
 
 const ADJUSTMENT_BLEND_MODES = Object.freeze([
   'normal',
@@ -76,6 +82,11 @@ export interface TimelineMotionAdjustmentSnapshot {
   readonly opacity: number;
   readonly blendMode: MotionAdjustmentBlendMode;
   readonly effects: readonly MotionAdjustmentEffectContract[];
+  /**
+   * Effects on the layer that do not render (unavailable on adjustment layers, malformed: an older
+   * or pasted project). Present only when there are any; the layer stays editable around them.
+   */
+  readonly bypassedEffects?: readonly BypassedAdjustmentEffect[];
 }
 
 export interface TimelineMotionAdjustmentMutationReceipt {
@@ -720,16 +731,7 @@ function timelineClipToAdjustmentLayer(
       [clip.id],
     );
   }
-  const effects = adaptTimelineEffectsToMotionAdjustmentContracts({
-    layerId: clip.id,
-    effects: clip.effects.map((effect) => ({
-      id: effect.id,
-      name: effect.name,
-      type: effect.type,
-      enabled: effect.enabled,
-      params: effect.params as JsonObject,
-    })),
-  });
+  const { effects } = existingAdjustmentEffectContracts(clip);
   const track = state.tracks.find((candidate) => candidate.id === clip.trackId);
   if (!track || track.type !== 'video') {
     throw mutationError(
@@ -786,10 +788,11 @@ function parseEffectList(value: unknown): ParsedEffectList {
     }
     assertAllowedKeys(effect, ['id', 'type', 'enabled', 'parameters']);
     const effectType = nonEmptyString(effect.type, `effects[${index}].type`);
-    if (!isSupportedAdjustmentEffectType(effectType)) {
+    const admission = adjustmentEffectAdmission(effectType);
+    if (!admission.admitted) {
       throw mutationError(
         'MD7_ADJUSTMENT_UNSUPPORTED_EFFECT',
-        `Unsupported Adjustment 1.0 effect: ${effectType}. Supported: ${SUPPORTED_ADJUSTMENT_EFFECT_TYPES.join(', ')}`,
+        `Unsupported adjustment effect: ${effectType}. ${admission.reason ?? ''}`.trim(),
       );
     }
     const suppliedId = effect.id === undefined
@@ -806,9 +809,24 @@ function parseEffectList(value: unknown): ParsedEffectList {
     const enabled = effect.enabled === undefined
       ? true
       : booleanValue(effect.enabled, `effects[${index}].enabled`);
+    // A misspelled name would be stored and do nothing: refuse it with the valid names, as
+    // updateEffect does on clips (the original five refuse unknown names through their policy).
+    if (!isWorkerGpuAdjustmentEffectType(effectType) && isPlainRecord(effect.parameters)) {
+      const { unknown, valid } = unknownAdjustmentEffectParameters(effectType, Object.keys(effect.parameters));
+      if (unknown.length) {
+        throw mutationError(
+          'MD7_ADJUSTMENT_INVALID_EFFECT',
+          `Unknown parameter${unknown.length > 1 ? 's' : ''} for ${effectType} (effects[${index}]): ${unknown.join(', ')}. Valid: ${valid.join(', ')}`,
+        );
+      }
+    }
+    // Registry effects store their defaults explicitly, as addClipEffect does: a missing
+    // parameter would otherwise render with its legacyDefault (the original five keep their policy).
     const parameters = normalizeAdjustmentEffectParameters(
       effectType,
-      effect.parameters ?? {},
+      isWorkerGpuAdjustmentEffectType(effectType) || !isPlainRecord(effect.parameters ?? {})
+        ? effect.parameters ?? {}
+        : { ...getDefaultParams(effectType), ...(effect.parameters as Record<string, unknown>) },
     );
     const contract: MotionAdjustmentEffectContract = {
       id: effectId,
@@ -820,7 +838,7 @@ function parseEffectList(value: unknown): ParsedEffectList {
     timelineEffects.push({
       id: effectId,
       name: adjustmentEffectName(effectType),
-      type: effectType,
+      type: effectType as Effect['type'],
       enabled,
       params: { ...parameters },
     });
@@ -900,18 +918,53 @@ function requireAdjustmentLayer(
   return layer;
 }
 
-function snapshotAdjustmentClip(clip: TimelineClip): TimelineMotionAdjustmentSnapshot {
-  const effects = adaptTimelineEffectsToMotionAdjustmentContracts({
-    layerId: clip.id,
-    effects: clip.effects.map((effect) => ({
-      id: effect.id,
-      name: effect.name,
-      type: effect.type,
-      enabled: effect.enabled,
-      params: effect.params as JsonObject,
-    })),
+/**
+ * Contracts of the effects already on an adjustment layer, admitted per effect exactly as the
+ * renderer does (adjustmentEffectRenderAdmission). An effect the renderer bypasses (unavailable on
+ * adjustment layers, malformed data from an older or pasted project) stays out of the contract the
+ * planner sees and is reported instead, so one such effect never blocks every edit of the
+ * composition's adjustment layers, including the configure that removes it. Effects an edit adds
+ * still pass the strict preflight in parseEffectList.
+ */
+function existingAdjustmentEffectContracts(clip: TimelineClip): {
+  effects: MotionAdjustmentEffectContract[];
+  bypassed: BypassedAdjustmentEffect[];
+} {
+  const admission = admitAdjustmentEffectsForRender(clip.id, clip.effects);
+  const bypassed = [...admission.bypassed];
+  const effects = admission.effects.flatMap((effect) => {
+    try {
+      return adaptTimelineEffectsToMotionAdjustmentContracts({
+        layerId: clip.id,
+        effects: [{
+          id: effect.id,
+          name: effect.name,
+          type: effect.type,
+          enabled: effect.enabled,
+          params: effect.params as JsonObject,
+        }],
+      });
+    } catch (error) {
+      // A disabled effect with malformed data, or one of the worker-executable five with a value
+      // outside its frozen policy (it still renders as set): the planner works around it.
+      const detail = error instanceof Error ? error.message : String(error);
+      bypassed.push({
+        effectId: effect.id,
+        effectType: effect.type,
+        reason: effect.enabled === false
+          ? `Disabled effect left out of the adjustment contract: ${detail}`
+          : `Renders as set, but is left out of the adjustment contract the editing tools plan with: ${detail}`,
+      });
+      return [];
+    }
   });
+  return { effects, bypassed };
+}
+
+function snapshotAdjustmentClip(clip: TimelineClip): TimelineMotionAdjustmentSnapshot {
+  const { effects, bypassed } = existingAdjustmentEffectContracts(clip);
   return {
+    ...(bypassed.length ? { bypassedEffects: bypassed } : {}),
     clipId: clip.id,
     trackId: clip.trackId,
     name: clip.name,
@@ -1093,6 +1146,10 @@ function assertAllowedKeys(value: Record<string, unknown>, allowed: readonly str
 }
 
 function adjustmentEffectName(effectType: string): string {
+  if (!isWorkerGpuAdjustmentEffectType(effectType)) {
+    const registered = getEffect(effectType)?.name;
+    if (registered) return registered;
+  }
   return effectType.split('-').map((part) => (
     `${part.charAt(0).toUpperCase()}${part.slice(1)}`
   )).join(' ');

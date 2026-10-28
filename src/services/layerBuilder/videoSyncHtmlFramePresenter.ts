@@ -5,6 +5,7 @@ import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import type { VideoSyncHtmlSeekState } from './videoSyncHtmlSeekState';
 import { recordSurfaceVideoFrameTime } from '../../engine/render/surfaceVideoFrame';
+import { nominalPresentedFrameTime } from '../videoSourceFrameRate';
 
 type VideoFrameCallbackVideo = HTMLVideoElement & {
   requestVideoFrameCallback: NonNullable<HTMLVideoElement['requestVideoFrameCallback']>;
@@ -81,8 +82,9 @@ export class VideoSyncHtmlFramePresenter {
     this.deps.htmlSeeks.setRvfcHandle(clipId, frameVideo.requestVideoFrameCallback((_now, metadata) => {
       const metadataTime = metadata?.mediaTime;
       if (typeof metadataTime === 'number') recordSurfaceVideoFrameTime(video, metadataTime);
+      // The frame's own PTS, labelled on the source grid (a jittered PTS just before k/fps is frame k).
       const presentedTime = typeof metadataTime === 'number' && Number.isFinite(metadataTime)
-        ? metadataTime
+        ? nominalPresentedFrameTime(video, metadataTime)
         : video.currentTime;
       const desiredTime = this.deps.htmlSeeks.getQueuedTarget(clipId) ??
         this.deps.htmlSeeks.getPendingTarget(clipId) ?? this.deps.htmlSeeks.getLatestTarget(clipId);
@@ -170,7 +172,7 @@ export class VideoSyncHtmlFramePresenter {
         const mediaTime = metadata?.mediaTime;
         if (typeof mediaTime === 'number') recordSurfaceVideoFrameTime(video, mediaTime);
         resolve(typeof mediaTime === 'number' && Number.isFinite(mediaTime)
-          ? mediaTime
+          ? nominalPresentedFrameTime(video, mediaTime)
           : video.currentTime || fallbackTime);
       });
     });

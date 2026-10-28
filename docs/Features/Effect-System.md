@@ -857,7 +857,10 @@ resolves each instruction's operation and the plan's context requirements once, 
 pixel, kernel tap or sequence step, which made sampled multi-pass graphs such as the Chroma
 Key edge passes about 2.5× faster on this path. A layer that mixes them with the retired `blur`
 effect is skipped as `unsupported-effects`. Adjustment layers in the worker GPU
-modes still use the motion-adjustment 4×5 colour matrix for Brightness, Contrast and
+modes draw only the original five adjustment effects; a stack with any other effect falls back to
+the main compositor with a `WorkerGpuAdjustmentFallbackError` reason
+([Motion Design](./Motion-Design.md#effects-on-adjustment-layers)). Those modes
+still use the motion-adjustment 4×5 colour matrix for Brightness, Contrast and
 Saturation (linear offset, linear contrast, Rec.709 matrix saturation), which matches
 only the original graphs: each other such effect is reported once per layer in the
 `WorkerGpuAdjustment` log and, while a worker render host mode is selected, in the

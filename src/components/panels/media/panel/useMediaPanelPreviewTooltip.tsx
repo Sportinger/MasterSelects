@@ -31,6 +31,7 @@ interface MediaPanelPreviewTooltipState {
 
 interface UseMediaPanelPreviewTooltipInput {
   activeCompositionId?: string | null;
+  /** Omit to let the composition preview read the live timeline itself, only while it is shown. */
   activeTimelineClips?: readonly TimelineClip[];
   itemsById: Map<string, ProjectItem>;
   mediaFiles?: readonly MediaFile[];
@@ -73,7 +74,7 @@ export function getMediaPanelPreviewTooltipPosition(
 
 export function useMediaPanelPreviewTooltip({
   activeCompositionId,
-  activeTimelineClips = [],
+  activeTimelineClips,
   itemsById,
   mediaFiles = [],
 }: UseMediaPanelPreviewTooltipInput): {

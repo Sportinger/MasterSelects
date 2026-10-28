@@ -281,6 +281,66 @@ MASTERSELECTS_E2E_HEADLESS=1 MASTERSELECTS_E2E_PORT=5180 MASTERSELECTS_E2E_SKIP_
 Let Playwright start Vite itself by leaving `MASTERSELECTS_E2E_SKIP_WEB_SERVER`
 unset. The clips need `ffmpeg` on the test host, like the desktop frame-code cases.
 
+## Real device
+
+The emulated phone suite missed every recent production bug of the phone editor
+(slow loads from Android folders, multi-GB recordings in export, jittered phone
+timestamps). `playwright.device.config.ts` (`npm run test:e2e:device`) runs the
+journeys on a real Android phone (the owner's Pixel 10 Pro, Android 16, Chrome)
+over wireless adb, with generated phone recordings (`fixtures/phoneFootage.ts`;
+never real media). The config refuses to load without `MASTERSELECTS_DEVICE=1`,
+and the journey file ends in `.device.ts`, so no other config picks it up.
+
+- **Connection** (`device/deviceConnection.ts`, `device/deviceAdb.ts`):
+  `adb forward tcp:<port> localabstract:chrome_devtools_remote`, then
+  `chromium.connectOverCDP` into Chrome's default context (a new context on
+  Android Chrome has no network). The run opens **one new tab** and works only
+  there; it never navigates, reloads or closes the owner's tabs and leaves its own
+  tab open. It fails fast when the phone is locked (`isKeyguardShowing`), and
+  refuses to start while a MasterSelects tab is already open on the phone (the new
+  tab restores the last project, and two tabs on one project compete for its
+  storage; override with `MASTERSELECTS_DEVICE_ALLOW_EDITOR_TABS=1`). While
+  connected it sends `KEYCODE_WAKEUP` every 20 s; no device setting is changed, no
+  input goes through `adb shell input`, and only its own port mappings are removed.
+- **Media in** (`device/deviceMedia.ts`): the page fetches the generated file and
+  sets it on the hidden media input through a `DataTransfer`. Files up to 64 MB
+  come from a Chrome route (no network); larger ones from a tiny token-protected
+  server on the PC (`device/deviceMediaServer.ts`) over `adb reverse`.
+- **Oracles:** preview frame codes from device screenshots of the preview canvas
+  (`device/devicePreview.ts`, both code rows of the phone footage); the export is
+  shared to a stubbed `navigator.share` in the test tab (nothing lands in the
+  owner's Downloads), copied to the PC and decoded with the phone footage oracle;
+  load times come from `window.__MS_PHONE_BOOT__`, `window.__MS_PROJECT_LOAD__`
+  (sanitized: phase names and milliseconds only) and the progress view. Budgets
+  are soft (`expect.soft`), the numbers are attached to each case.
+- **Journeys** (`device/device-journeys.device.ts`, serial, one catalog case per
+  test, real touch for every action under test): D1 create a project in browser
+  storage, D2 import a phone recording, D3 split at a frame-exact playhead, D4 trim
+  both ends, D5 add a title, D6 export 1080x1920 and check every frame, D7 reload
+  and reopen. Projects are always named `Device test <UTC stamp>`; the harness
+  refuses to edit or open any other project. Afterwards the phone's "last
+  project" is the Device test project; delete old ones from the phone home.
+  Pure helpers are covered by `device/deviceParsing.test.ts` (vitest).
+
+```text
+adb pair <phone-ip>:<pair-port>        # once, code from Wireless debugging
+adb connect <phone-ip>:<port>
+MASTERSELECTS_DEVICE=1 npm run test:e2e:device
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MASTERSELECTS_DEVICE` | unset | `1` enables the run |
+| `MASTERSELECTS_DEVICE_SERIAL` | the only device | adb serial (`<ip>:<port>`) |
+| `MASTERSELECTS_DEVICE_BASE_URL` | `https://www.masterselects.com` | editor origin; a LAN dev server (`npm run dev:lan`, `docs/Features/LAN-Device-Testing.md`) or `https://localhost:<port>` (port reversed automatically) |
+| `MASTERSELECTS_DEVICE_REVERSE_PORTS` | none | more PC ports to reverse (e.g. `8787,8788`) |
+| `MASTERSELECTS_DEVICE_FOOTAGE_PROFILE` | `android-h264` | profile from `fixtures/phoneFootageProfiles.ts` |
+| `MASTERSELECTS_DEVICE_MEDIA_TRANSPORT` | `auto` | `route`, `reverse` or `auto` (by size) |
+| `MASTERSELECTS_DEVICE_OUTPUT_DIR` | `<os.tmpdir()>/masterselects-device` | where exports land (checked for free space first) |
+| `MASTERSELECTS_PHONE_FOOTAGE_DIR` | see `fixtures/phoneFootage.ts` | footage cache |
+| `MASTERSELECTS_DEVICE_CDP_PORT` / `_MEDIA_PORT` | `9333` / `8099` | PC ports |
+| `MASTERSELECTS_DEVICE_*_BUDGET_MS` | 3000 phase, 6000 total, 3000 first frame, 8000 boot | soft load budgets |
+
 ## Reference-project media pack
 
 The larger reference-project sources live in

@@ -327,23 +327,11 @@ describe('Compositor motion adjustment layers', () => {
     );
   });
 
-  it('fails closed instead of partially applying a stack with an unsupported enabled effect', () => {
+  it('renders a registry effect beyond the original five (Glow) from the accumulated frame', () => {
     const harness = makeCompositorHarness();
     const adjustment = makeAdjustmentLayerData([
-      {
-        id: 'fx-brightness',
-        name: 'Brightness',
-        type: 'brightness',
-        enabled: true,
-        params: { amount: 0.4 },
-      },
-      {
-        id: 'fx-glow',
-        name: 'Glow',
-        type: 'glow',
-        enabled: true,
-        params: { radius: 12 },
-      },
+      { id: 'fx-brightness', name: 'Brightness', type: 'brightness', enabled: true, params: { amount: 0.4 } },
+      { id: 'fx-glow', name: 'Glow', type: 'glow', enabled: true, params: { radius: 12 } },
     ]);
 
     harness.compositor.composite([
@@ -351,19 +339,43 @@ describe('Compositor motion adjustment layers', () => {
       adjustment,
     ], harness.commandEncoder, harness.state);
 
-    expect(harness.createCompositeBindGroup).toHaveBeenCalledTimes(1);
-    expect(harness.updateLayerUniforms).toHaveBeenCalledTimes(1);
-    expect(harness.applyEffects).not.toHaveBeenCalled();
+    expect(harness.applyEffects).toHaveBeenCalledTimes(1);
+    const effectCall = harness.applyEffects.mock.calls[0];
+    expect((effectCall[1] as Array<{ type: string }>).map((effect) => effect.type)).toEqual(['brightness', 'glow']);
+    // The effect chain reads the accumulated lower frame (pong after the source layer), not a source texture.
+    expect((effectCall[3] as { label: string }).label).toBe('pong');
+    const adjustmentBindGroupCall = harness.createCompositeBindGroup.mock.calls[1];
+    expect((adjustmentBindGroupCall[1] as { label: string }).label).toBe('pong');
+    expect((adjustmentBindGroupCall[2] as { label: string }).label).toBe('tmp-a');
   });
 
-  it('keeps the frozen preflight strict for disabled unsupported effects', () => {
+  it('bypasses only an effect that cannot run on an adjustment layer and keeps the rest', () => {
+    const harness = makeCompositorHarness();
+    const adjustment = makeAdjustmentLayerData([
+      { id: 'fx-glow', name: 'Glow', type: 'glow', enabled: true, params: { radius: 12 } },
+      { id: 'fx-slit', name: 'Slit Scan', type: 'slit-scan', enabled: true, params: {} },
+    ]);
+
+    for (const particleQuality of ['preview', 'export'] as const) {
+      harness.applyEffects.mockClear();
+      harness.compositor.composite([
+        makeSourceLayerData('bottom', 'bottom-source'),
+        adjustment,
+      ], harness.commandEncoder, { ...harness.state, particleQuality });
+
+      expect(harness.applyEffects).toHaveBeenCalledTimes(1);
+      expect((harness.applyEffects.mock.calls[0]![1] as Array<{ type: string }>).map((effect) => effect.type)).toEqual(['glow']);
+    }
+  });
+
+  it('keeps a disabled effect that cannot run out of the way without dropping the layer', () => {
     const harness = makeCompositorHarness();
     const adjustment = makeAdjustmentLayerData([{
-      id: 'fx-disabled-glow',
-      name: 'Disabled Glow',
-      type: 'glow',
+      id: 'fx-disabled-slit',
+      name: 'Disabled Slit Scan',
+      type: 'slit-scan',
       enabled: false,
-      params: { radius: 12 },
+      params: {},
     }]);
 
     harness.compositor.composite([
@@ -371,27 +383,8 @@ describe('Compositor motion adjustment layers', () => {
       adjustment,
     ], harness.commandEncoder, harness.state);
 
-    expect(harness.createCompositeBindGroup).toHaveBeenCalledTimes(1);
-    expect(harness.updateLayerUniforms).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects an unsupported enabled effect during export', () => {
-    const harness = makeCompositorHarness();
-    const adjustment = makeAdjustmentLayerData([{
-      id: 'fx-glow',
-      name: 'Glow',
-      type: 'glow',
-      enabled: true,
-      params: { radius: 12 },
-    }]);
-
-    expect(() => harness.compositor.composite([
-      makeSourceLayerData('bottom', 'bottom-source'),
-      adjustment,
-    ], harness.commandEncoder, {
-      ...harness.state,
-      particleQuality: 'export',
-    })).toThrow('unsupported effect glow');
+    expect(harness.createCompositeBindGroup).toHaveBeenCalledTimes(2);
+    expect(harness.applyEffects).not.toHaveBeenCalled();
   });
 
   it('fails closed when a complex adjustment effect has no temporary render targets', () => {

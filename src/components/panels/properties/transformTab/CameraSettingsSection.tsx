@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../../../stores/mediaStore/types';
 import {
   MAX_CAMERA_FOV_DEGREES,
@@ -14,6 +15,7 @@ import { KeyframeToggle } from '../shared';
 import { LabeledValue } from './ValueControls';
 import type { CameraValueContext, CreateMidiTarget } from './transformTabTypes';
 import { HandleOnlyRange } from './HandleOnlyRange';
+import { usePairedDragDraft } from '../../../common/usePairedDragDraft';
 
 interface CameraSettingsSectionProps {
   camera: CameraValueContext;
@@ -28,7 +30,7 @@ interface CameraSettingsSectionProps {
   onResetLens: () => void;
 }
 
-export function CameraSettingsSection({
+export const CameraSettingsSection = memo(function CameraSettingsSection({
   camera,
   clipId,
   createMidiTarget,
@@ -40,6 +42,8 @@ export function CameraSettingsSection({
   onCameraNearChange,
   onResetLens,
 }: CameraSettingsSectionProps) {
+  // Slider and field show the same Field of View drag sample in the same paint.
+  const [shownFov, onFovDraftChange] = usePairedDragDraft(camera.settings.fov);
   return (
     <div className="resolve-camera-settings-sections">
       <ResolveInspectorSection
@@ -66,10 +70,11 @@ export function CameraSettingsSection({
               max={MAX_CAMERA_FOV_DEGREES}
               min={MIN_CAMERA_FOV_DEGREES}
               onChange={onCameraFovChange}
+              onDraftChange={onFovDraftChange}
               onDragEnd={onBatchEnd}
               onDragStart={onBatchStart}
               step={0.1}
-              value={camera.settings.fov}
+              value={shownFov}
             />
             <LabeledValue
               ariaLabel="Field of View"
@@ -87,11 +92,12 @@ export function CameraSettingsSection({
               )}
               min={MIN_CAMERA_FOV_DEGREES}
               onChange={onCameraFovChange}
+              onDraftChange={onFovDraftChange}
               onDragEnd={onBatchEnd}
               onDragStart={onBatchStart}
               sensitivity={0.5}
               suffix="deg"
-              value={camera.settings.fov}
+              value={shownFov}
             />
           </div>
         </ResolveInspectorRow>
@@ -161,4 +167,4 @@ export function CameraSettingsSection({
       </ResolveInspectorSection>
     </div>
   );
-}
+});

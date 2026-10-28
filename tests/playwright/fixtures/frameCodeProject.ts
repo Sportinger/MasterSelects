@@ -23,16 +23,19 @@ export interface FrameCodeProject {
 export interface CompositionSize { width: number; height: number; fps: number; seconds: number }
 
 export async function openFrameCodeProject(browser: Browser, baseURL: string | undefined,
-  { composition, clip: clipOptions = {}, placeClip = true, size, viewport = { width: 1920, height: 1080 } }: {
+  { composition, clip: clipOptions = {}, placeClip = true, size, viewport = { width: 1920, height: 1080 }, prepareContext }: {
     composition: string
     clip?: FrameCodeClipOptions
     placeClip?: boolean
     /** Composition settings when they differ from the clip's (a composition holding many clips, e.g. the mosaic). */
     size?: CompositionSize
     viewport?: { width: number; height: number }
+    /** Runs on the new context before the editor loads (init scripts that must exist before the app, e.g. measurement hooks). */
+    prepareContext?: (context: BrowserContext) => Promise<void>
   }): Promise<FrameCodeProject> {
   if (!baseURL) throw new Error('Playwright baseURL must be configured')
   const context = await browser.newContext({ viewport, acceptDownloads: true })
+  await prepareContext?.(context)
   const page = await context.newPage()
   await warmGpu(page, baseURL)
   const editor = await EditorPage.bootstrap(page, { baseURL, tabId: randomUUID() })

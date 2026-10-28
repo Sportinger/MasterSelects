@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { getEffectiveEditableDraggableNumberSettings, useEditableDraggableNumberSettingsRevision } from '../../../common/EditableDraggableNumberSettings';
 import { LabeledValue } from '../LabeledValue';
 import { HandleOnlyRange } from '../transformTab/HandleOnlyRange';
+import { usePairedDragDraft } from '../../../common/usePairedDragDraft';
 import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveResetIcon } from './ResolveInspectorPrimitives';
 import './ResolveInspector.css';
 import './ResolveInspectorNarrow.css';
@@ -47,6 +48,8 @@ export function ResolveInspectorNumberRow({
   onDragStart, onDragEnd, onCommit, numberMin = min, numberMax = max, hardMin = -Infinity, hardMax = Infinity, midiTarget,
 }: ResolveInspectorNumberRowProps) {
   const drag = useInspectorHistoryBatch(label, onDragStart, onDragEnd);
+  // Slider and field show the same drag sample in the same paint (no one-frame lag of the partner).
+  const [shownValue, onDraftChange] = usePairedDragDraft(value);
   useEditableDraggableNumberSettingsRevision(persistenceKey);
   const range = getEffectiveEditableDraggableNumberSettings({ persistenceKey, min, max, defaultValue });
   const effectiveMin = Math.max(hardMin, Math.min(hardMax, range.min ?? min));
@@ -61,12 +64,12 @@ export function ResolveInspectorNumberRow({
       disabled={disabled} onClick={() => { (onReset ?? change)(range.defaultValue ?? defaultValue); onCommit?.('reset'); }}><ResolveResetIcon /></ResolveInspectorIconButton>
   </>}>
     <div className="resolve-inspector-slider-value">
-      <HandleOnlyRange aria-label={`${ariaLabel} slider`} value={value} min={effectiveMin} max={effectiveMax}
-        step={step} disabled={disabled} onChange={change} onDragStart={drag.begin}
+      <HandleOnlyRange aria-label={`${ariaLabel} slider`} value={shownValue} min={effectiveMin} max={effectiveMax}
+        step={step} disabled={disabled} onChange={change} onDraftChange={onDraftChange} onDragStart={drag.begin}
         onDragEnd={() => { drag.end(); onCommit?.('drag'); }} />
       <LabeledValue label="" ariaLabel={ariaLabel} className="resolve-inspector-field resolve-inspector-field--plain"
-        value={value} defaultValue={defaultValue} min={numberMin} max={numberMax} decimals={decimals ?? (step >= 1 ? 0 : 3)} suffix={suffix}
-        sensitivity={sensitivity} maxDragStep={maxDragStep} onDragStart={drag.begin} onDragEnd={drag.end} onCommit={onCommit} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
+        value={shownValue} defaultValue={defaultValue} min={numberMin} max={numberMax} decimals={decimals ?? (step >= 1 ? 0 : 3)} suffix={suffix}
+        sensitivity={sensitivity} maxDragStep={maxDragStep} onDraftChange={onDraftChange} onDragStart={drag.begin} onDragEnd={drag.end} onCommit={onCommit} touchDragAxis="horizontal" disabled={disabled} persistenceKey={persistenceKey}
         midiTarget={midiTarget}
         onChange={change} />
     </div>

@@ -19,15 +19,18 @@ export function ExposedGraphValueControls({ clipId, effect }: {
   clipId: string;
   effect: { id: string; type?: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 }) {
-  const time = useTimelineStore(state => {
-    const clip = state.clips.find(item => item.id === clipId);
-    return clip ? state.playheadPosition - clip.startTime : 0;
-  });
-  const keys = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYS);
   const card = getEffect(effect.type ?? '')?.params ?? {};
   const sections = exposedGraphValueSections(effect.operatorGraph)
     .map(section => ({ ...section, values: section.values.filter(value => !(value.key in card)) }))
     .filter(section => section.values.length);
+  const keys = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYS);
+  // Only keyed exposed values follow the playhead; otherwise every effect card re-rendered on every tick.
+  const followsPlayhead = sections.length > 0 && keys.length > 0;
+  const time = useTimelineStore(state => {
+    if (!followsPlayhead) return 0;
+    const clip = state.clips.find(item => item.id === clipId);
+    return clip ? state.playheadPosition - clip.startTime : 0;
+  });
   if (!sections.length) return null;
   return <>{sections.map(section => <ResolveInspectorSection key={section.groupId ?? ''} title={section.label} bypassGroupId={section.groupId}>
     {section.values.map(exposed => {

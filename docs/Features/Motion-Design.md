@@ -35,7 +35,7 @@ Motion Design is native MasterSelects timeline content, not an embedded external
 - Image and frozen-video texture fills are available in the appearance editor and AI tool surface; replicated tiles reuse decoded source frames by reuse key.
 - Motion Null creation, Pick Whip parenting, and atomic create-null-and-parent operations preserve 2D child world transforms. Motion groups are not supported.
 - A rotated Motion Null turns its children rigidly in composition pixels and in the compositor's direction (positive `rotation.z` is counter-clockwise on screen). Structure evaluations carry the owning `compositionSize` (`{ width, height }`, optional, square when omitted, rejected as `MD6_PARENT_EVALUATION_INVALID` when malformed); the timeline adapter, preview transform drags, and the viewport Null handle always pass it, and the viewport handle draws its crosshair arms in the same direction.
-- Adjustment layers operate on lower layers through the shared compositor path. Brightness, Contrast, Saturation, Invert, and Gaussian Blur are the supported 1.0 effect matrix.
+- Adjustment layers operate on lower layers through the shared compositor path. They take every video effect of the registry that can work on the composite below them (see [Effects on adjustment layers](#effects-on-adjustment-layers)).
 - The shape properties tab includes reusable templates and expressions. Templates are categorized and applied with dependency validation; expressions are parsed and evaluated without arbitrary code execution.
 - Motion Design is always on.
 
@@ -45,8 +45,75 @@ Motion Design is native MasterSelects timeline content, not an embedded external
 - Replicators duplicate the rendered shape texture.
 - Appearance presets reject texture fills, and templates exclude expressions.
 - Adjustment-layer transforms and color correction are disabled.
+- Effects that need a source clip of their own or cut pixels out are unavailable on adjustment layers (see above).
 - Appearance blend modes outside the six listed modes fall back to normal in the Motion shader.
 - Path trim/dash affect stroke appearances only; open paths render no fill, and fills on closed paths ignore trim/dash.
+
+## Effects on adjustment layers
+
+An adjustment layer has no pixels of its own: its effects process the composite of the layers
+below it (the accumulated frame), and the result replaces that frame by the layer's coverage
+(opacity and masks) with its blend mode, instead of being composited over it (`composite.wgsl`,
+adjustment replace mix). Pixels an effect leaves transparent therefore stay transparent, as they
+would on a clip: Fisheye corners, a Chroma Key screen or dissolved particles no longer show the
+unprocessed frame through. Preview, nested compositions, target previews and export all render it through the same
+generic effect chain as a clip (`Compositor.ts`), so any effect that reads only its input image
+works there. `adjustmentEffectClassification.ts` sorts every registry effect into one of three
+behaviours:
+
+| Behaviour | Effects | On an adjustment layer |
+|---|---|---|
+| Accumulated frame | All color, blur, distort, stylize, halftone, analog, pixel, glyph and geometry effects, generators (Color Wheel, Perspective Grid, Stick Figure), Chroma Key, Pixel Particle Disintegrate | Works as on a clip. |
+| Previous-output feedback | Acuarela, Rom1, Voxel Relief, ASCII Ghost | Works: the history these effects read is their own previous output on this layer. |
+| Unavailable | Slit Scan, Time Stack (source-video history); Subject Highlight, Tracked Scene, HUD Tracker, CCTV, Rain Reveal, Stardust, Hand Particles, Motion Trails, Face Cables (landmarks tracked in a clip's own video); Flocking, Weave, Splat Exploration (draw into a 3D scene); AI Edge Fill (fill generated from a clip's own image) | Not offered in the pickers; when present (pasted, older project, tool) the effect alone is bypassed with its reason. |
+
+Admission is per effect (`adjustmentEffectRenderAdmission.ts`, shared by the layer builders, the
+inspector and the tools): one effect that cannot run, or carries malformed data, is bypassed on its
+own and the rest of the layer renders, in preview and export alike. The reason is shown on the
+effect card, in the adjustment tab's status ("Effects bypassed"), in the `MotionAdjustmentLayerBuilder`
+log (once per layer and effect; a replaced value once per parameter, never per frame) and in tool
+results. The compositor repeats the check for layers
+that reach it by other paths and bypasses such an effect with a `Compositor` warning instead of
+skipping the layer.
+
+Parameters are checked against each effect's own definitions by type: numbers must be finite,
+booleans, selects, colors and text must have their type, and parameters the definition does not list
+(exposed graph values, runtime travel values in saved projects) pass when they are plain values.
+Numbers are not clamped by the admission: the effect clamps to its own `renderMin`/`renderMax` as on
+a clip, so a keyframe overshoot or a node driver renders the same on an adjustment layer as on a
+clip, and the card and tool results name what renders (`paramRangeNotes`). On the render path a
+value of the wrong type renders with its default and is named; on the tool and contract paths it is
+rejected. Text values may be long (a Stick Figure choreography, Guided Perspective guides): the
+contract budget is 1 MiB per string value and 16 MiB of strings per contract, while keys keep their
+4 KB limit (`contractLimits.ts`). The original five effects (Brightness, Contrast, Saturation,
+Invert, Gaussian Blur, and the retired `blur`) keep their frozen parameter policy, so saved projects
+load exactly as before; a value outside that policy (keyframe overshoot) renders as set instead of
+dropping the effect.
+
+`editMotionAdjustment` and the generic `addEffect`/`updateEffect` tools accept every admitted
+effect; new effects store their defaults and recipe graphs as `addClipEffect` does. Unavailable
+effects fail with `MD7_ADJUSTMENT_UNSUPPORTED_EFFECT` and the reason. `editMotionAdjustment` refuses
+a parameter name the effect does not define with the valid names (`MD7_ADJUSTMENT_INVALID_EFFECT`),
+as `updateEffect` does, and its result carries `warnings` with the same parameter notes
+`updateEffect` gives (a value above the rendered range, a value the effect cannot show). An effect already on a layer
+that the renderer bypasses (older or pasted project) does not block `editMotionAdjustment`: the tool
+admits existing effects per effect like the renderer, so an agent can still move, trim or configure
+the layer, for example to replace the effect list. The receipt's `before`/`after` snapshots list such
+effects under `bypassedEffects` with their reason.
+
+The Playwright journey `tests/playwright/effects/adjustment-all-effects.spec.ts` checks every
+registry effect on an adjustment layer in the real preview: admitted effects must change the picture
+(a strength value is raised when the default does nothing on the test pattern) and match the same
+effect applied directly to the clip; unavailable ones must be missing from the picker, refused by the
+tool and, when injected, bypassed alone with a card notice and a log line. It ends with a one-second
+export of Hue Shift, Mirror and Pixelate on the layer.
+
+The opt-in worker render host modes still draw only the original five with their 4×5 color
+matrix and separable blur (`WORKER_GPU_ADJUSTMENT_EFFECT_TYPES`). A stack with any other effect
+throws `WorkerGpuAdjustmentFallbackError`: worker export frames go to the main compositor and the
+`WorkerExportHost` log names the reason once; strict worker-only frames fail with that reason, and
+the adjustment tab says so while such a mode is selected. The default render path never uses the
+worker executor.
 
 ## Inactive preview paths
 

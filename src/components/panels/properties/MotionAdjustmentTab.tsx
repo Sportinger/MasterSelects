@@ -92,16 +92,17 @@ export function MotionAdjustmentTab({
       <div className="properties-section">
         <div className="section-header">Adjustment 1.0</div>
         <div
-          className={`analysis-status ${diagnostics.compatible ? 'ready' : 'error'}`}
+          className={`analysis-status ${diagnostics.compatible && !diagnostics.bypassed ? 'ready' : 'error'}`}
           role="status"
           data-testid="motion-adjustment-diagnostics"
         >
-          <strong>{diagnostics.compatible ? 'Render compatible' : 'Render blocked'}</strong>
+          <strong>{!diagnostics.compatible ? 'Render blocked' : diagnostics.bypassed ? 'Effects bypassed' : 'Render compatible'}</strong>
           <span>{diagnostics.message}</span>
         </div>
         <p className="property-hint">
-          Supported effects: Brightness, Contrast, Saturation, Invert, and Gaussian Blur.
-          Adjustment transforms and color correction stay disabled so preview and export cannot diverge.
+          Every video effect processes the composite below, except the few that need a source clip of
+          their own; their cards say why and they are bypassed. Adjustment transforms and color
+          correction stay disabled so preview and export cannot diverge.
         </p>
       </div>
     </div>

@@ -168,6 +168,18 @@ export function effectOperatorCompileContext(effect: Pick<EffectGraphOwner, 'typ
  * Results are shared between callers and must be treated as read-only.
  */
 const resolvedImageGraphs = new WeakMap<object, Map<string, { signature: string; params: unknown; graph: EffectOperatorGraph }>>();
+/**
+ * Inspection of an effect without a stored graph does not depend on its parameter values, so it is
+ * keyed by a stable owner per type (and Acuarela's legacy recipe choice) instead of the params object.
+ * Otherwise every value change during a drag re-ran recognition for the inspector's group bypasses.
+ */
+const graphlessInspectionOwners = new Map<string, object>();
+function graphlessInspectionOwner(effectType: string, params: Record<string, unknown>): object {
+  const key = effectType === 'acuarela' && hasLegacyAcuarelaParams(params) ? `${effectType}|legacy` : effectType;
+  let owner = graphlessInspectionOwners.get(key);
+  if (!owner) graphlessInspectionOwners.set(key, owner = {});
+  return owner;
+}
 
 export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspectionOnly?: boolean } = {}): EffectOperatorGraph {
   if (effect.type === 'splat-exploration') {
@@ -270,7 +282,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'wave' || effectType === 'twirl' || effectType === 'bulge' || effectType === 'kaleidoscope'
           ? () => createDefaultUvDistortGraph(effectType)
         : () => createDefaultColorEffectGraph(effectType);
-    const source: object = effect.operatorGraph ?? effect.params;
+    const source: object = effect.operatorGraph ?? (options.inspectionOnly ? graphlessInspectionOwner(effectType, effect.params) : effect.params);
     const key = `${effectType}|${options.inspectionOnly ? 'inspect' : 'compile'}`, known = resolvedImageGraphs.get(source)?.get(key);
     const signature = effect.operatorGraph ? JSON.stringify(effect.operatorGraph) : String(effect.params[EFFECT_GRAPH_PARAM] ?? '');
     // Parameters only reach the compile check, so inspection ignores their identity.

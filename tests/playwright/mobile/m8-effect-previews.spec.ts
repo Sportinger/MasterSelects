@@ -108,9 +108,12 @@ test('effect-previews: with nothing at the playhead cards render on the sample f
   const plain = await renderedEffectCard(m1, 'brightness')
   expect(mean(invert.pixels), 'the sample frame is not black').toBeGreaterThan(20)
   expect(meanDiff(invert.pixels, plain.pixels), 'Invert differs from the plain sample frame').toBeGreaterThan(40)
-  // Glow cannot go on an adjustment layer: greyed, but still previewed.
+  // Glow works on an adjustment layer now; Slit Scan (needs a clip's own source video) cannot go
+  // there: greyed, but still previewed.
   const glow = await renderedEffectCard(m1, 'glow')
-  await expect(glow.card).toHaveAttribute('aria-disabled', 'true')
+  await expect(glow.card).not.toHaveAttribute('aria-disabled', 'true')
+  const slitScan = await renderedEffectCard(m1, 'slit-scan')
+  await expect(slitScan.card).toHaveAttribute('aria-disabled', 'true')
   await tapOn(m1, m1.page.getByTestId(IDS.sheetCancel))
   await expect(m1.sheet).toBeHidden()
 })

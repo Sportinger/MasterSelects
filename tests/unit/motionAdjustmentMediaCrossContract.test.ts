@@ -7,6 +7,7 @@ import {
   MOTION_ADJUSTMENT_MAX_JSON_DEPTH,
   MOTION_ADJUSTMENT_MAX_JSON_NODES,
   MOTION_ADJUSTMENT_MAX_JSON_STRING_LENGTH,
+  MOTION_ADJUSTMENT_MAX_JSON_STRING_VALUE_LENGTH,
   MOTION_ADJUSTMENT_MAX_LAYERS,
   MOTION_ADJUSTMENT_MAX_MASKS_PER_LAYER,
   MOTION_ADJUSTMENT_MAX_OPERATIONS,
@@ -224,12 +225,16 @@ describe('motion adjustment/media cross-contract freeze', () => {
       () => null,
     ))).toThrowError('JSON node count exceeds its hard budget');
 
+    // String values (registry text parameters) have their own, larger budget; keys keep 4 KB.
     expect(() => assertMotionAdjustmentJsonData(
-      's'.repeat(MOTION_ADJUSTMENT_MAX_JSON_STRING_LENGTH),
+      's'.repeat(MOTION_ADJUSTMENT_MAX_JSON_STRING_VALUE_LENGTH),
     )).not.toThrow();
     expect(() => assertMotionAdjustmentJsonData(
-      's'.repeat(MOTION_ADJUSTMENT_MAX_JSON_STRING_LENGTH + 1),
+      's'.repeat(MOTION_ADJUSTMENT_MAX_JSON_STRING_VALUE_LENGTH + 1),
     )).toThrowError('JSON string length exceeds its hard budget');
+    expect(() => assertMotionAdjustmentJsonData({
+      ['k'.repeat(MOTION_ADJUSTMENT_MAX_JSON_STRING_LENGTH)]: null,
+    })).not.toThrow();
     expect(() => assertMotionAdjustmentJsonData({
       ['k'.repeat(MOTION_ADJUSTMENT_MAX_JSON_STRING_LENGTH + 1)]: null,
     })).toThrowError('JSON string length exceeds its hard budget');

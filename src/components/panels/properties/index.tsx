@@ -4,7 +4,7 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { selectIsSlotGridPanelActive, useSlotGridPanelStore } from '../../../stores/slotGridPanelStore';
 import { useEngineStore } from '../../../stores/engineStore';
-import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
+import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
 import { isAudioEffect } from '../../../types';
 import type { TranscriptStatus } from '../../../types/clipMetadata';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
@@ -31,6 +31,8 @@ import { liveInputRuntime } from '../../../services/mediaRuntime/liveInputRuntim
 import { resolveClipTranscriptWords } from '../../../services/transcription/clipTranscriptResolver';
 import { getClipMediaFileId } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 import { resolveEditableHookLayerMetadata } from '../../../services/aiTools/editableHookIdentity';
+import { useStableTransform } from './transformTab/useStableTransform';
+import { useTransformParentChainSubscription } from './transformTab/useTransformParentChain';
 import { trackEditorSurfaceViewed } from '../../../services/productAnalytics';
 import './PropertiesPanel.css';
 import './EffectsTab.css';
@@ -58,6 +60,28 @@ function getSelectionKey(
   return fallbackClipId ? `clip:${fallbackClipId}` : null;
 }
 
+/**
+ * The editable-hook id of one clip. The hook metadata is resolved over all clips, so it is cached per
+ * clips/tracks version: the store selector runs on every store change (playhead ticks included).
+ */
+function createEditableHookIdSelector() {
+  let lastClips: Parameters<typeof resolveEditableHookLayerMetadata>[0] | null = null;
+  let lastTracks: Parameters<typeof resolveEditableHookLayerMetadata>[1] | null = null;
+  let lastMetadata: ReturnType<typeof resolveEditableHookLayerMetadata> | null = null;
+  return (
+    clips: Parameters<typeof resolveEditableHookLayerMetadata>[0],
+    tracks: Parameters<typeof resolveEditableHookLayerMetadata>[1],
+    clipId: string,
+  ): string | null => {
+    if (!lastMetadata || clips !== lastClips || tracks !== lastTracks) {
+      lastClips = clips;
+      lastTracks = tracks;
+      lastMetadata = resolveEditableHookLayerMetadata(clips, tracks);
+    }
+    return lastMetadata.get(clipId)?.id ?? null;
+  };
+}
+
 // The dock unmounts inactive panels. Keep this session-only view state outside the panel.
 const propertiesView = {
   selectionKey: null as string | null,
@@ -70,20 +94,18 @@ const propertiesView = {
 
 export function PropertiesPanel() {
   const openedTrackingAssetId = useTrackingEditorStore(s => s.openedAssetId);
-  // Reactive data - subscribe to specific values only
-  const clips = useTimelineStore(state => state.clips);
+  // Reactive data - subscribe to specific values only. Never the whole clips array: an inspector
+  // drag replaces it on every sample, and an edit of another clip must not re-render this panel.
   const tracks = useTimelineStore(state => state.tracks);
   const selectedClipIds = useTimelineStore(state => state.selectedClipIds);
   const primarySelectedClipId = useTimelineStore(state => state.primarySelectedClipId);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
-  const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
   const slotGridActive = useSlotGridPanelStore(selectIsSlotGridPanelActive);
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
   const effectOrbitTarget = useEngineStore(state => state.effectOrbitTarget);
   const sceneNavClipId = useEngineStore(state => state.sceneNavClipId);
   const setEffectOrbitTarget = useEngineStore(state => state.setEffectOrbitTarget);
   const setSceneNavClipId = useEngineStore(state => state.setSceneNavClipId);
-  const compositions = useMediaStore(state => state.compositions);
   const slotAssignments = useMediaStore(state => state.slotAssignments);
   const selectedSlotCompositionId = useMediaStore(state => state.selectedSlotCompositionId);
   const selectSlotComposition = useMediaStore(state => state.selectSlotComposition) as (compositionId: string | null) => void;
@@ -107,7 +129,21 @@ export function PropertiesPanel() {
   const selectedClipId = propertiesSelection?.kind === 'clip'
     ? propertiesSelection.clipId
     : propertiesSelection ? null : fallbackSelectedClipId;
-  const selectedClip = clips.find(c => c.id === selectedClipId);
+  const selectedClip = useTimelineStore(state => (
+    selectedClipId ? state.clips.find(c => c.id === selectedClipId) : undefined
+  ));
+  // Subscribe to this clip's keyframe list only (its identity changes when they change), so the
+  // interpolated values below are recomputed without subscribing to every clip's keyframes.
+  useTimelineStore(state => (selectedClipId ? state.clipKeyframes?.get(selectedClipId) : undefined));
+  const hasKeyframes = useTimelineStore(state => (
+    selectedClipId ? state.clipKeyframes?.has(selectedClipId) ?? false : false
+  ));
+  const linkedTranscriptClip = useTimelineStore(state => {
+    if (!selectedClip) return undefined;
+    return selectedClip.linkedClipId
+      ? state.clips.find(c => c.id === selectedClip.linkedClipId)
+      : state.clips.find(c => c.linkedClipId === selectedClip.id);
+  });
   // Only a selected clip reads the playhead: every playback tick re-rendered the whole
   // panel (~8 ms) even while it showed "Select a clip".
   const playheadPosition = useTimelineStore(state => (selectedClip ? state.playheadPosition : 0));
@@ -127,9 +163,9 @@ export function PropertiesPanel() {
   const selectedTransitionSelection = propertiesSelection?.kind === 'transition'
     ? propertiesSelection
     : null;
-  const selectedTransitionClip = selectedTransitionSelection
-    ? clips.find(c => c.id === selectedTransitionSelection.clipId) ?? null
-    : null;
+  const selectedTransitionClip = useTimelineStore(state => (selectedTransitionSelection
+    ? state.clips.find(c => c.id === selectedTransitionSelection.clipId) ?? null
+    : null));
   const isMasterPropertiesSelected = propertiesSelection?.kind === 'master';
   const masterAudio = masterAudioState ?? DEFAULT_MASTER_AUDIO_STATE;
   const selectionKey = getSelectionKey(propertiesSelection, fallbackSelectedClipId);
@@ -171,9 +207,9 @@ export function PropertiesPanel() {
     propertiesView.clipTabTouched = true;
     setActiveTab(tab);
   }, []);
-  const selectedSlotComposition = selectedSlotCompositionId
-    ? compositions.find(c => c.id === selectedSlotCompositionId) ?? null
-    : null;
+  const selectedSlotComposition = useMediaStore(state => (selectedSlotCompositionId
+    ? state.compositions.find(c => c.id === selectedSlotCompositionId) ?? null
+    : null));
   const selectedSlotIndex = selectedSlotComposition ? slotAssignments[selectedSlotComposition.id] : undefined;
   const isSlotMode = slotGridActive && !!selectedSlotComposition && selectedSlotIndex !== undefined;
 
@@ -190,10 +226,10 @@ export function PropertiesPanel() {
     selectedClip?.captionProperties,
   );
   const isTextClip = selectedClip?.source?.type === 'text' && !isCaptionClip;
-  const selectedHookId = useMemo(() => {
-    if (!selectedClip) return null;
-    return resolveEditableHookLayerMetadata(clips, tracks).get(selectedClip.id)?.id ?? null;
-  }, [clips, selectedClip, tracks]);
+  const selectEditableHookId = useMemo(() => createEditableHookIdSelector(), []);
+  const selectedHookId = useTimelineStore(state => (
+    selectedClip ? selectEditableHookId(state.clips, state.tracks, selectedClip.id) : null
+  ));
   const isEditableHookClip = selectedHookId !== null;
 
   // Check if it's a solid clip
@@ -415,6 +451,16 @@ export function PropertiesPanel() {
     return () => window.removeEventListener('openPropertiesTab', handler);
   }, []);
 
+  const clipLocalTime = selectedClip ? playheadPosition - selectedClip.startTime : 0;
+  // A parented clip's transform is composed with its ancestors, which live outside the selected clip.
+  useTransformParentChainSubscription(selectedClipId);
+  // Interpolated values read the store directly; the selected clip, its keyframe list, its parent
+  // chain and the playhead above are the subscriptions that keep them fresh. The transform keeps its identity
+  // while its values stay the same, so the memoised Transform tab skips unrelated re-renders.
+  const transform = useStableTransform(selectedClip
+    ? getInterpolatedTransform(selectedClip.id, clipLocalTime)
+    : DEFAULT_TRANSFORM);
+
   const handleSolidColorChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedClipId) return;
     useTimelineStore.getState().updateSolidColor(selectedClipId, e.target.value);
@@ -583,11 +629,6 @@ export function PropertiesPanel() {
     );
   }
 
-  const clipLocalTime = playheadPosition - selectedClip.startTime;
-  // clipKeyframes subscription triggers re-render when keyframes change,
-  // ensuring getInterpolatedTransform returns fresh values
-  const hasKeyframes = clipKeyframes.has(selectedClip.id);
-  const transform = getInterpolatedTransform(selectedClip.id, clipLocalTime);
   const cameraSettings = isCameraClip
     ? getInterpolatedCameraSettings(selectedClip.id, clipLocalTime)
     : undefined;
@@ -596,9 +637,6 @@ export function PropertiesPanel() {
   // Count non-audio effects for badge
   const visualEffects = (selectedClip.effects || []).filter(e => !isAudioEffect(e.type));
   const audioEditCount = selectedClipAudioEditCount;
-  const linkedTranscriptClip = selectedClip.linkedClipId
-    ? clips.find(c => c.id === selectedClip.linkedClipId)
-    : clips.find(c => c.linkedClipId === selectedClip.id);
   const selectedClipHasTranscriptState = (selectedClip.transcript?.length ?? 0) > 0
     || (selectedClip.transcriptStatus !== undefined && selectedClip.transcriptStatus !== 'none');
   const transcriptSourceClip = selectedClipHasTranscriptState

@@ -2,10 +2,12 @@
 // slider + number + reset for numbers, InspectorSelect for choices, a checkbox + reset for switches,
 // swatch + hex + reset for colours (ResolveInspectorColorRow) and a text field + reset for typed text. Effects opt in through
 // RESOLVE_ROW_EFFECTS (resolveEffectRows.ts) as their inspector is revised.
+import { useMemo } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { createEffectProperty } from '../../../types/animationProperties';
 import type { EffectParam } from '../../../effects/types';
-import { getParameterSourceTarget } from '../../../services/parameterSources/parameterSourceTargets';
+import { getParameterSourceTarget, type ParameterSourceClip } from '../../../services/parameterSources/parameterSourceTargets';
+import type { TimelineClip } from '../../../types/timeline';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 import { ResolveInspectorColorRow } from './resolveInspector/ResolveInspectorColorRow';
@@ -32,6 +34,19 @@ interface ResolveEffectParamRowProps {
     inputMethod: 'click' | 'drag' | 'keyboard' | 'reset' | 'select' | 'type') => void;
 }
 
+type StoredEffect = TimelineClip['effects'][number];
+// One wrapper per stored effect version, shared by all its rows: parameterSourceTargets caches per
+// wrapper object, so an operator-graph effect lists (compiles) its targets once per change, not per row.
+const singleEffectSourceClips = new WeakMap<StoredEffect, ParameterSourceClip>();
+function singleEffectSourceClip(effect: StoredEffect): ParameterSourceClip {
+  let clip = singleEffectSourceClips.get(effect);
+  if (!clip) {
+    clip = { effects: [effect], colorCorrection: undefined, nodeGraph: undefined, startTime: 0 };
+    singleEffectSourceClips.set(effect, clip);
+  }
+  return clip;
+}
+
 /**
  * One parameter row for the types `hasResolveEffectParamRow` accepts (callers check it first). A
  * parameter that acts only in another parameter's mode is dimmed (still keyframeable), with the
@@ -47,11 +62,16 @@ export function ResolveEffectParamRow(props: ResolveEffectParamRowProps) {
 function ResolveEffectParamControl({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit, inactive }:
   ResolveEffectParamRowProps & { inactive: boolean }) {
   const property = `effect.${effect.id}.${paramName}`;
-  // A parameter that can take a node source gets the source-aware row.
-  const sourceTarget = useTimelineStore(state => {
-    const clip = clipId && definition.type === 'number' ? state.clips.find(item => item.id === clipId) : undefined;
-    return !!clip && !!getParameterSourceTarget(clip, property);
-  });
+  // A parameter that can take a node source gets the source-aware row. Its effect.* targets come only
+  // from this effect, so select just this row's stored effect: editing another effect or the transform
+  // neither re-renders this row nor re-lists every effect's source targets on each store change.
+  const storedEffect = useTimelineStore(state => (clipId && definition.type === 'number'
+    ? state.clips.find(item => item.id === clipId)?.effects.find(item => item.id === effect.id)
+    : undefined));
+  const sourceTarget = useMemo(
+    () => !!storedEffect && !!getParameterSourceTarget(singleEffectSourceClip(storedEffect), property),
+    [property, storedEffect],
+  );
   const set = (next: Value) => onChange({ ...effect.params, [paramName]: next });
   const title = inactive ? definition.activeWhen?.note : undefined;
   if (definition.type === 'select') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title}>

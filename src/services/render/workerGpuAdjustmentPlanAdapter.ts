@@ -15,6 +15,10 @@ import type { WorkerGpuRenderIntent } from './workerGpuRuntimeCommands';
 import type { WorkerGpuVideoPresentationLayer } from './workerGpuMediaSourceRegistry';
 import { Logger } from '../logger';
 import { workerGpuAdjustmentColorDivergences } from './workerGpuAdjustmentColorParity';
+import {
+  WORKER_GPU_ADJUSTMENT_EFFECT_TYPES,
+  isWorkerGpuAdjustmentEffectType,
+} from '../motionDesign/adjustment/supportedEffects';
 
 const log = Logger.create('WorkerGpuAdjustment');
 const reportedDivergences = new Set<string>();
@@ -212,6 +216,34 @@ function resolveSourceLayer(
  * The input Layer array is top-to-bottom; the frozen adapter receives the
  * exact bottom-to-top order used by the shared compositor.
  */
+/**
+ * The adjustment stack uses effects the worker GPU executor cannot draw. Callers fall back to the
+ * main compositor (export) or report the failed worker frame (strict worker preview modes) with
+ * this message instead of drawing the stack without those effects.
+ */
+export class WorkerGpuAdjustmentFallbackError extends Error {
+  readonly code = 'WORKER_GPU_ADJUSTMENT_EFFECTS_UNSUPPORTED';
+  readonly effectTypes: readonly string[];
+
+  constructor(effectTypes: readonly string[]) {
+    super(
+      `Worker GPU adjustment executor draws only ${WORKER_GPU_ADJUSTMENT_EFFECT_TYPES.join(', ')}; `
+      + `${effectTypes.join(', ')} need${effectTypes.length === 1 ? 's' : ''} the main compositor`,
+    );
+    this.name = 'WorkerGpuAdjustmentFallbackError';
+    this.effectTypes = effectTypes;
+  }
+}
+
+/** Enabled adjustment effects of `layers` the worker GPU executor cannot draw (unique types). */
+export function workerGpuUnsupportedAdjustmentEffectTypes(layers: readonly Layer[]): string[] {
+  return [...new Set(layers
+    .filter((layer) => layer.visible && layer.source?.type === 'motion-adjustment')
+    .flatMap((layer) => layer.effects)
+    .filter((effect) => effect.enabled !== false && effect.type !== 'blur' && !isWorkerGpuAdjustmentEffectType(effect.type))
+    .map((effect) => effect.type))];
+}
+
 export function buildWorkerGpuAdjustmentExecutionPlan(
   input: BuildWorkerGpuAdjustmentPlanInput,
 ): MotionAdjustmentWorkerGpuExecutionPlan | null {
@@ -225,6 +257,8 @@ export function buildWorkerGpuAdjustmentExecutionPlan(
     .reverse()
     .filter((layer) => layer.visible && layer.opacity > 0);
   reportColorDivergences(admittedLayers);
+  const workerUnsupported = workerGpuUnsupportedAdjustmentEffectTypes(admittedLayers);
+  if (workerUnsupported.length > 0) throw new WorkerGpuAdjustmentFallbackError(workerUnsupported);
 
   // Resolve every source before invoking the frozen adapter/planners. Unsupported
   // runtime kinds and stale/conflicting bindings therefore always fail closed.

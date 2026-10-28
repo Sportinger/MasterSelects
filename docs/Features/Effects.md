@@ -35,9 +35,10 @@ effect, at its default settings, leaves the current frame as it is.
 <figcaption>1 — Open Effects. 2 — Search for blur under + Add Effect. 3 — Click Gaussian Blur to apply it. The main preview still shows the untreated clip here.</figcaption>
 </figure>
 
-On an **Adjustment Layer** the list offers only the effects that work there (Brightness, Contrast,
-Saturation, Invert and Gaussian Blur). Effects marked *Experimental* in the list work, but have
-known flaws; their card says which.
+On an **Adjustment Layer** the list offers every effect that can change the layers below it. A few
+need a clip of their own, such as Slit Scan, the tracking effects and AI Edge Fill; the list names them
+under the tiles, and if one is on the layer anyway its card says why it is skipped. Effects marked
+*Experimental* in the list work, but have known flaws; their card says which.
 
 ## Change a setting
 

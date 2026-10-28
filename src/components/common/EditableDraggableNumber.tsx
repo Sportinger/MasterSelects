@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import {
   clearEditableDraggableNumberSettings,
   dispatchEditableDraggableNumberSettingsUpdated,
@@ -41,6 +41,9 @@ export interface EditableDraggableNumberProps {
   onDragStart?: () => void;
   onDragEnd?: () => void;
   onCommit?: (method: 'drag' | 'reset' | 'type') => void;
+  /** Every drag sample as it paints, then null after the release flush: lets a paired slider follow at
+   * input rate (usePairedDragDraft). Pass a stable function, such as a state setter. */
+  onDraftChange?: (value: number | null) => void;
 }
 
 function clampValue(value: number, min?: number, max?: number): number {
@@ -111,8 +114,26 @@ export function EditableDraggableNumber({
   onDragStart,
   onDragEnd,
   onCommit,
+  onDraftChange,
 }: EditableDraggableNumberProps) {
   const { enqueue, flush } = useFrameCoalescedNumberChange(onChange);
+  // Local draft of a drag: the control paints every sample at input rate while the store commit follows
+  // once per frame. It is dropped right after the release flush, so the store value (clamped or rejected) wins.
+  const [dragValue, setDragValue] = useState<number | null>(null);
+  const enqueueDraft = useCallback((nextValue: number) => {
+    // Rendered inside the pointer event, so the draft paints in this frame (see HandleOnlyRange).
+    flushSync(() => {
+      setDragValue(nextValue);
+      onDraftChange?.(nextValue);
+    });
+    enqueue(nextValue);
+  }, [enqueue, onDraftChange]);
+  const flushAndDropDraft = useCallback(() => {
+    flush();
+    setDragValue(null);
+    onDraftChange?.(null);
+  }, [flush, onDraftChange]);
+  const displayValue = dragValue ?? value;
   const spanRef = useRef<HTMLSpanElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -319,10 +340,10 @@ export function EditableDraggableNumber({
     value,
     disabled,
     interactionBlocked: isEditing || showBoundsPopover,
-    onChange: enqueue,
+    onChange: enqueueDraft,
     onDragStart,
     onDragEnd: () => {
-      flush();
+      flushAndDropDraft();
       onDragEnd?.();
       onCommit?.('drag');
     },
@@ -423,7 +444,7 @@ export function EditableDraggableNumber({
       const unclampedValue = startValue.current + deltaValue;
       const nextValue = clampValue(unclampedValue, effectiveMin, effectiveMax);
       const preciseValue = roundValue(nextValue, decimals);
-      enqueue(preciseValue);
+      enqueueDraft(preciseValue);
     };
 
     const handleMouseUp = () => {
@@ -435,7 +456,7 @@ export function EditableDraggableNumber({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       if (dragStarted.current) {
-        flush();
+        flushAndDropDraft();
         onDragEnd?.();
         onCommit?.('drag');
       }
@@ -453,7 +474,7 @@ export function EditableDraggableNumber({
     disabled,
     effectiveMax,
     effectiveMin,
-    enqueue, flush,
+    enqueueDraft, flushAndDropDraft,
     onDragEnd,
     onCommit,
     onDragStart,
@@ -665,7 +686,7 @@ export function EditableDraggableNumber({
           aria-disabled={disabled}
           aria-valuemax={effectiveMax}
           aria-valuemin={effectiveMin}
-          aria-valuenow={value}
+          aria-valuenow={displayValue}
           role="slider"
           tabIndex={disabled ? -1 : 0}
           onKeyDown={event => {
@@ -696,7 +717,7 @@ export function EditableDraggableNumber({
           }}
           title={controlTitle}
         >
-          {value.toFixed(decimals)}{suffix}
+          {displayValue.toFixed(decimals)}{suffix}
         </span>
       )}
 

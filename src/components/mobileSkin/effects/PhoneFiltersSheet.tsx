@@ -39,7 +39,7 @@ const ORIGINAL_LOOK: LookDefinition = {
 
 /** The one status line with nothing selected; the tap-for-reason notice carries the full reason. */
 const ROOT_LINE = 'Select a clip to apply a filter';
-const ROOT_REASON = `Select a clip first: a filter changes that clip. Filters combine effects that adjustment layers cannot render yet. ${PHONE_ADJUSTMENT_SUPPORT_NOTE}`;
+const ROOT_REASON = `Select a clip first: a filter changes that clip. To change everything below a point, add an adjustment layer from Effects instead. ${PHONE_ADJUSTMENT_SUPPORT_NOTE}`;
 
 export const PhoneFiltersSheet: PhoneSheetComponent = () => {
   const closeSheet = usePhoneUiStore((state) => state.closeSheet);

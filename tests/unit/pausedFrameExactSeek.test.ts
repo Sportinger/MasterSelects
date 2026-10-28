@@ -7,13 +7,13 @@ import {
   videoHasTargetFrame,
   videoPausedOnTargetFrame,
 } from '../../src/services/layerBuilder/videoSyncFrameSelection';
-import { setVideoSourceFrameRate } from '../../src/services/videoSourceFrameRate';
+import { nominalPresentedFrameTime, setVideoSourceFrameRate } from '../../src/services/videoSourceFrameRate';
 import {
   isPausedHtmlTargetMediaTimeUsable,
   pausedHtmlTargetFrameRate,
 } from '../../src/engine/render/layerCollector/htmlVideoPausedFrameGuard';
 import { frameIndexAtTime, stepTimeByFrames } from '../../src/utils/timelineFrameQuantization';
-import { SLOT_SEEK_LEAD_SECONDS } from '../../src/engine/texture/scrubbingCache/cacheKeys';
+import { SLOT_SEEK_LEAD_SECONDS, frameIndexForTime } from '../../src/engine/texture/scrubbingCache/cacheKeys';
 import { resolveClipSourceTime, videoFrameSourceTime } from '../../src/services/timeline/retime/clipRetime';
 
 /**
@@ -177,5 +177,62 @@ describe('frame stepping on the composition grid', () => {
     expect(stepTimeByFrames(4, 1, 30, 4)).toBe(4);
     expect(stepTimeByFrames(4.01, 1, 30, 4.01)).toBe(4.01);
     expect(stepTimeByFrames(Number.NaN, 1, 25, 10)).toBe(1 / 25);
+  });
+});
+
+/**
+ * Jittered phone recordings (Android MediaMuxer, 30 fps at 1/90000 with frames up to 4 ms off k/30):
+ * the Pixel 10 Pro run of 2026-10-28 kept the paused preview one frame off in two ways. These are the
+ * real timestamps of the generated android-h264 recording (tests/playwright/fixtures/phoneFootage.ts).
+ */
+describe('presented frames of jittered phone footage', () => {
+  const PTS_TICKS: Record<number, number> = {
+    151: 453104, 152: 456257, 153: 458665, 244: 732344, 245: 734707, 246: 737767, 247: 740803,
+  };
+  const pts = (frame: number) => PTS_TICKS[frame] / 90000;
+
+  it('labels a frame stamped just before its grid point as its own frame (scrub slot, held-frame guard)', () => {
+    const video = videoAt(0, 30);
+    // Frame 246 starts 2.6 ms before 246/30: raw, it filled scrub slot 245 and passed the guard as 245.
+    expect(frameIndexForTime(pts(246))).toBe(245);
+    expect(frameIndexForTime(nominalPresentedFrameTime(video, pts(246)))).toBe(246);
+    expect(isPausedHtmlTargetMediaTimeUsable(nominalPresentedFrameTime(video, pts(246)), 245 / 30, 30)).toBe(false);
+    // Frame 245 starts 3.3 ms early: raw, the guard rejected the right frame for timeline frame 245.
+    expect(isPausedHtmlTargetMediaTimeUsable(pts(245), 245 / 30, 30)).toBe(false);
+    expect(isPausedHtmlTargetMediaTimeUsable(nominalPresentedFrameTime(video, pts(245)), 245 / 30, 30)).toBe(true);
+    // A late PTS, exact timestamps and an unknown rate keep their time.
+    expect(nominalPresentedFrameTime(video, pts(152))).toBe(pts(152));
+    expect(nominalPresentedFrameTime(video, 2 / 30)).toBe(2 / 30);
+    expect(nominalPresentedFrameTime(videoAt(0), pts(246))).toBe(pts(246));
+  });
+
+  it.each([24, 25, 30, 60])('maps every jittered frame onto its own slot and guard frame at %f fps', (fps) => {
+    const video = videoAt(0, fps);
+    for (let frame = 1; frame < 600; frame++) {
+      for (const jitterFrames of [-0.24, -0.12, -0.01, 0, 0.01, 0.12, 0.24]) {
+        const label = nominalPresentedFrameTime(video, (frame + jitterFrames) / fps);
+        expect(Math.floor(label * fps + 1e-6), `frame ${frame}${jitterFrames}`).toBe(frame);
+        expect(isPausedHtmlTargetMediaTimeUsable(label, frame / fps, pausedHtmlTargetFrameRate(video))).toBe(true);
+        if (fps === 30) expect(frameIndexForTime(label), `slot of ${frame}${jitterFrames}`).toBe(frame);
+      }
+    }
+  });
+
+  it('never takes the previous frame, stamped late, for the next target (preview stuck one step behind)', () => {
+    // The Android capture played the element from frame 152's seek to 5.0864 s; frame 152 (5.0695 s,
+    // 2.8 ms late) was presented. Stepping on to 153 must seek instead of accepting it.
+    const video = videoAt(5.086358, 30);
+    rememberPresentedSourceFrame(video, pts(152));
+    expect(samePresentedSourceFrame(video, pts(152), 153 / 30)).toBe(false);
+    expect(videoHasTargetFrame(video, 153 / 30)).toBe(false);
+    expect(videoPausedOnTargetFrame(video, 153 / 30)).toBe(false);
+    // The target's own frame, stamped early, and an averaged-VFR frame held from mid-bin still pass.
+    expect(samePresentedSourceFrame(video, pts(153), 153 / 30)).toBe(true);
+    expect(samePresentedSourceFrame(video, 152.5 / 30, 153 / 30)).toBe(true);
+    for (let frame = 1; frame < 600; frame++) {
+      for (const late of [0.01, 0.12, 0.24]) {
+        expect(samePresentedSourceFrame(video, (frame - 1 + late) / 30, frame / 30), `frame ${frame - 1}+${late}`).toBe(false);
+      }
+    }
   });
 });

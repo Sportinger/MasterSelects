@@ -15,7 +15,13 @@ export function prepareEditableOperatorGraph(graph: EffectOperatorGraph, compile
 
 const reasons = new Map<string, string | undefined>();
 export function operatorGraphPauseReason(effect: Pick<Effect, 'params' | 'operatorGraph'>): string | undefined {
-  const saved = effect.operatorGraph ? JSON.stringify(effect.operatorGraph) : effect.params.operatorGraph;
+  // A stored graph object carries its pause reason directly. Serializing it to look the reason up
+  // cost a full JSON.stringify per effect on every render and every inspector drag sample.
+  if (effect.operatorGraph) {
+    const { incomplete } = effect.operatorGraph;
+    return typeof incomplete === 'string' ? incomplete : undefined;
+  }
+  const saved = effect.params.operatorGraph;
   if (typeof saved !== 'string' || !saved) return;
   if (reasons.has(saved)) return reasons.get(saved);
   let reason: string | undefined;

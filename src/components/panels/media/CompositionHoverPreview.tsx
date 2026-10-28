@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { thumbnailRenderer } from '../../../services/thumbnailRenderer';
+import { useTimelineStore } from '../../../stores/timeline';
 import type { Composition, MediaFile } from '../../../stores/mediaStore';
 import type { SerializableClip, TimelineClip } from '../../../types/timeline';
 import { FileTypeIcon } from './FileTypeIcon';
@@ -14,11 +15,16 @@ export interface CompositionHoverPreviewSource {
 
 interface CompositionHoverPreviewProps {
   activeCompositionId?: string | null;
+  /**
+   * The active composition's live clips. When omitted, the preview subscribes to the timeline
+   * itself while it is mounted, so the Media Panel does not re-render on every clip edit.
+   */
   activeTimelineClips?: readonly TimelineClip[];
   composition: Composition;
   mediaFiles?: readonly MediaFile[];
 }
 
+const NO_TIMELINE_CLIPS: readonly TimelineClip[] = [];
 const frameCache = new Map<string, Promise<string[]>>();
 const MAX_CACHE_ENTRIES = 8;
 
@@ -113,11 +119,15 @@ function getRenderedCompositionFrames(composition: Composition): Promise<string[
 
 export function CompositionHoverPreview({
   activeCompositionId,
-  activeTimelineClips = [],
+  activeTimelineClips: activeTimelineClipsProp,
   composition,
   mediaFiles = [],
 }: CompositionHoverPreviewProps) {
   const isActiveComposition = composition.id === activeCompositionId;
+  const subscribedTimelineClips = useTimelineStore(state => (
+    activeTimelineClipsProp === undefined && isActiveComposition ? state.clips : NO_TIMELINE_CLIPS
+  ));
+  const activeTimelineClips = activeTimelineClipsProp ?? subscribedTimelineClips;
   const fallbackSources = useMemo(() => getCompositionHoverPreviewSources(
     composition,
     activeCompositionId,

@@ -10,6 +10,11 @@ export const COMPOSITOR_UNIFORM_SIZE = COMPOSITOR_UNIFORM_FLOAT_COUNT * 4;
 export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22, 29]; // blendMode, mask flags, inlineInvert, transitionType, source rotation
 /** Set on the blendMode word (low byte = blend mode) when the layer texture is premultiplied. */
 export const COMPOSITOR_PREMULTIPLIED_SOURCE_FLAG = 0x100;
+/**
+ * Set on the blendMode word for adjustment layers: their texture (the frame below after their
+ * effects) replaces the frame by the layer's coverage instead of being composited over it.
+ */
+export const COMPOSITOR_ADJUSTMENT_REPLACE_FLAG = 0x200;
 
 export interface InlineEffectParams {
   operatorProgram?: ImageOperatorProgram;
@@ -101,7 +106,8 @@ export function writeLayerUniformData(
   uniformData[0] = layer.opacity;
   // blendMode is u32 in shader: low byte = mode, bit 8 = premultiplied source texture
   uniformDataU32[1] = (BLEND_MODE_MAP[layer.blendMode] ?? 0)
-    | (layer.premultipliedAlpha ? COMPOSITOR_PREMULTIPLIED_SOURCE_FLAG : 0);
+    | (layer.premultipliedAlpha ? COMPOSITOR_PREMULTIPLIED_SOURCE_FLAG : 0)
+    | (layer.source?.type === 'motion-adjustment' ? COMPOSITOR_ADJUSTMENT_REPLACE_FLAG : 0);
   uniformData[2] = layer.position.x;
   uniformData[3] = layer.position.y;
   uniformData[4] = layer.scale.x * sourcePixelScale;

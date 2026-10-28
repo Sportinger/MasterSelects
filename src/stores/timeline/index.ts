@@ -144,12 +144,9 @@ const createTimelineStore = () => create<TimelineStore>()(
         // Don't auto-update if duration is manually locked
         if (durationLocked) return;
 
-        if (clips.length === 0) {
-          set({ duration: 60 });
-          return;
-        }
-        const maxEnd = Math.max(...clips.map(c => c.startTime + c.duration));
-        set({ duration: Math.max(60, maxEnd + 10) }); // Add 10 seconds padding
+        // Add 10 seconds padding. Unchanged durations write nothing: this runs after every effect drag sample.
+        const duration = clips.length === 0 ? 60 : Math.max(60, Math.max(...clips.map(c => c.startTime + c.duration)) + 10);
+        if (get().duration !== duration) set({ duration });
       },
 
       findAvailableAudioTrack: (startTime: number, duration: number) => {

@@ -24,10 +24,10 @@ import {
 import {
   ADJUSTMENT_EFFECT_COMPATIBILITY_MATRIX,
   InvalidAdjustmentEffectParametersError,
-  SUPPORTED_ADJUSTMENT_EFFECT_TYPES,
   UnsupportedAdjustmentEffectError,
+  WORKER_GPU_ADJUSTMENT_EFFECT_TYPES,
   normalizeAdjustmentEffectParameters,
-  type SupportedAdjustmentEffectType,
+  type WorkerGpuAdjustmentEffectType,
 } from '../../src/services/motionDesign/adjustment/supportedEffects';
 
 describe('motion adjustment contract freeze', () => {
@@ -247,6 +247,8 @@ describe('motion adjustment contract freeze', () => {
     expect(mix?.mix.masks).not.toBe(grade.mix.masks);
   });
 
+  // Without the registry admission (worker bundles) only the worker-executable effects pass; the
+  // registry-wide admission is covered in motionAdjustmentEffectAdmission.test.ts.
   it('rejects unsupported effects in preflight without mutating input', () => {
     const fixture = createTitleAdjustmentMontageFixture();
     const grade = fixture.layers.find((layer) => layer.layerId === 'grade');
@@ -286,8 +288,8 @@ describe('motion adjustment contract freeze', () => {
     }
   });
 
-  it('freezes the initial explicit effect allowlist', () => {
-    expect(SUPPORTED_ADJUSTMENT_EFFECT_TYPES).toEqual([
+  it('freezes the worker-GPU-executable effect list (the original Adjustment 1.0 set)', () => {
+    expect(WORKER_GPU_ADJUSTMENT_EFFECT_TYPES).toEqual([
       'brightness',
       'contrast',
       'saturation',
@@ -554,7 +556,7 @@ function operationLabel(operation: MotionAdjustmentCompositorOperation): string 
 }
 
 function effect(
-  effectType: SupportedAdjustmentEffectType,
+  effectType: WorkerGpuAdjustmentEffectType,
   parameters: MotionAdjustmentEffectContract['parameters'],
 ): MotionAdjustmentEffectContract {
   return {
@@ -566,7 +568,7 @@ function effect(
 }
 
 function fixtureWithEffect(
-  effectType: SupportedAdjustmentEffectType,
+  effectType: WorkerGpuAdjustmentEffectType,
   parameters: unknown,
 ): MotionAdjustmentStackContract {
   const fixture = createTitleAdjustmentMontageFixture();
