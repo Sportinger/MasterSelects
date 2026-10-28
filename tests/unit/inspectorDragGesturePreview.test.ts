@@ -27,7 +27,7 @@ import { createSerializableTimelineState } from '../../src/stores/timeline/seria
 import type { RepositorySession } from '../../src/services/project/repository/RepositorySession';
 import type { EntityDTO, RepositoryProjection } from '../../src/services/project/repository/contracts';
 import type { Composition } from '../../src/stores/mediaStore/types';
-import type { AnimatableProperty } from '../../src/types';
+import type { AnimatableProperty } from '../../src/types/animationProperties';
 
 const initialTimeline = useTimelineStore.getState();
 const initialMedia = useMediaStore.getState();

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Effect } from '../../../types';
+import type { Effect } from '../../../types/effects';
 import { classifyAdjustmentEffect } from '../../../services/motionDesign/adjustment/adjustmentEffectClassification';
 import { admitAdjustmentEffectsForRender } from '../../../services/motionDesign/adjustment/adjustmentEffectRenderAdmission';
 

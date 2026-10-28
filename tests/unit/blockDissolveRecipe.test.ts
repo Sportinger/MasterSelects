@@ -71,7 +71,7 @@ describe('Block Dissolve recipe', () => {
     const output = render({ ...plain, dither: 1, edgeDither: 1, pattern: 'bayer' }, disc);
     // Dots of the disc carry the disc colour (blue-ish), the rest is Paper.
     let own = 0;
-    for (let y = 26; y < 38; y++) for (let x = 42; x < 54; x++) { const [r, g, b] = output(x, y); if (b > .25 && b < .35 && r < .2) own++; }
+    for (let y = 26; y < 38; y++) for (let x = 42; x < 54; x++) { const [r, , b] = output(x, y); if (b > .25 && b < .35 && r < .2) own++; }
     expect(own).toBeGreaterThan(100);
   });
 

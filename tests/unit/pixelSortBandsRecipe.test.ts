@@ -96,7 +96,7 @@ describe('Pixel Sort Bands recipe', () => {
     const image = (x: number, y: number): Pixel => x < 12 ? [1, 1, 1, 1] : [y / 40, y / 40, y / 40, 1];
     const output = render({ ...everything, centre: 0.2, range: 0.2 }, image);
     expect(output(3, 5)).toEqual([1, 1, 1, 1]);
-    const cut = (x: number, y: number): Pixel => x < 12 ? [0, 0, 0, 0] : [.5, .4, .3, 1];
+    const cut = (x: number, _y: number): Pixel => x < 12 ? [0, 0, 0, 0] : [.5, .4, .3, 1];
     const transparent = render(everything, cut);
     expect(transparent(4, 4)[3]).toBe(0);
     expect(transparent(16, 4)[3]).toBe(1);

@@ -1,4 +1,4 @@
-import type { Effect } from '../../../types';
+import type { Effect } from '../../../types/effects';
 import type { JsonObject } from './contracts';
 import { classifyAdjustmentEffect } from './adjustmentEffectClassification';
 import { sanitizeAdjustmentEffectParameters } from './adjustmentEffectRegistryAdmission';
