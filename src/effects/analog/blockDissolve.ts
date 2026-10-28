@@ -2,7 +2,7 @@ import shader from './graphPassThrough.wgsl?raw';
 import type { EffectDefinition, EffectParam, EffectPreset } from '../types';
 import { clampedValueNotes } from './analogParamWarnings';
 import {
-  BLOCK_DISSOLVE_DITHER_SIZE_RANGE, BLOCK_DISSOLVE_DOT_COLOR_OPTIONS, BLOCK_DISSOLVE_EDGE_WIDTH_RANGE, BLOCK_DISSOLVE_FILL_OPTIONS, BLOCK_DISSOLVE_PATTERN_OPTIONS, BLOCK_DISSOLVE_PLACEMENT_OPTIONS, BLOCK_DISSOLVE_SLANT_OPTIONS, BLOCK_DISSOLVE_HOLE_SIZE_RANGE, OBJECT_MASK_OPTIONS,
+  BLOCK_DISSOLVE_DITHER_SIZE_RANGE, BLOCK_DISSOLVE_DOT_COLOR_OPTIONS, BLOCK_DISSOLVE_EDGE_WIDTH_RANGE, BLOCK_DISSOLVE_FILL_OPTIONS, BLOCK_DISSOLVE_PATTERN_OPTIONS, BLOCK_DISSOLVE_PLACEMENT_OPTIONS, BLOCK_DISSOLVE_SLANT_OPTIONS, BLOCK_DISSOLVE_MARK_GRID_RANGE, BLOCK_DISSOLVE_MARK_SIZE_RANGE, BLOCK_DISSOLVE_PAPER_MARK_OPTIONS, BLOCK_DISSOLVE_HOLE_SIZE_RANGE, OBJECT_MASK_OPTIONS,
   BLOCK_DISSOLVE_RATE_RANGE, BLOCK_DISSOLVE_SEED_RANGE, BLOCK_DISSOLVE_SIZE_RANGE,
 } from './blockDissolveLimits';
 
@@ -32,6 +32,10 @@ const params: Record<string, EffectParam> = {
   dotColor: { type: 'select', label: 'Dot Colour', default: 'original', options: BLOCK_DISSOLVE_DOT_COLOR_OPTIONS.map(option => ({ ...option })), group: 'Dither' },
   colorA: { type: 'color', label: 'Ink', default: '#000000', group: 'Color' },
   colorB: { type: 'color', label: 'Paper', default: '#ffffff', group: 'Color' },
+  paperMarks: { type: 'select', label: 'Paper Marks', default: 'none', options: BLOCK_DISSOLVE_PAPER_MARK_OPTIONS.map(option => ({ ...option })), group: 'Color' },
+  markGrid: { type: 'number', label: 'Mark Grid', default: 36, min: BLOCK_DISSOLVE_MARK_GRID_RANGE[0], max: 200, step: 1, animatable: true, unit: ' px', group: 'Color' },
+  markSize: { type: 'number', label: 'Mark Size', default: 3, min: BLOCK_DISSOLVE_MARK_SIZE_RANGE[0], max: BLOCK_DISSOLVE_MARK_SIZE_RANGE[1], step: 1, animatable: true, unit: ' px', group: 'Color' },
+  markColor: { type: 'color', label: 'Mark Colour', default: '#ffffff', group: 'Color' },
   fill: { type: 'select', label: 'Removed', default: 'paper', options: BLOCK_DISSOLVE_FILL_OPTIONS.map(option => ({ ...option })), group: 'Color' },
   structureRate: { type: 'number', label: 'Structure Rate', default: 1, min: BLOCK_DISSOLVE_RATE_RANGE[0], max: BLOCK_DISSOLVE_RATE_RANGE[1], step: 0.1, animatable: true,
     unit: ' /s', group: 'Motion', integratedAs: STRUCTURE_TRAVEL },
@@ -43,7 +47,7 @@ const params: Record<string, EffectParam> = {
 
 const ranges = {
   variation: [0, 1], solid: [0, 1], threshold: [0, 1], holes: [0, 1], holeSize: BLOCK_DISSOLVE_HOLE_SIZE_RANGE,
-  edgeAmount: [0, 1], edgeDither: [0, 1], dither: [0, 1], slant: [0, 1], edgeWidth: BLOCK_DISSOLVE_EDGE_WIDTH_RANGE, ditherSize: BLOCK_DISSOLVE_DITHER_SIZE_RANGE, displace: [0, 1], amount: [0, 1], seed: BLOCK_DISSOLVE_SEED_RANGE,
+  markGrid: BLOCK_DISSOLVE_MARK_GRID_RANGE, markSize: BLOCK_DISSOLVE_MARK_SIZE_RANGE, edgeAmount: [0, 1], edgeDither: [0, 1], dither: [0, 1], slant: [0, 1], edgeWidth: BLOCK_DISSOLVE_EDGE_WIDTH_RANGE, ditherSize: BLOCK_DISSOLVE_DITHER_SIZE_RANGE, displace: [0, 1], amount: [0, 1], seed: BLOCK_DISSOLVE_SEED_RANGE,
 } as const;
 
 /** Presets: only values that differ from the defaults (EffectPreset). */
@@ -51,8 +55,9 @@ const presets: readonly EffectPreset[] = [
   { id: 'data-dissolve', name: 'Data Dissolve', params: {} },
   // Nissan 350Z reel (frames 1-16): even blocks, the object itself revealed (no fill), one large hole, dithered edges.
   { id: '350z-burst', name: '350Z Burst', params: { scale: 39, variation: 0.1, holes: 0.2, holeSize: 2, edgeDither: 0.9, ditherSize: 5, pattern: 'diagonal', slant: 0.7, displace: 0.06, structureRate: 0.7, flickerRate: 2 } },
+  // Nissan 350Z reel, frames 92-101: the body flat black, a ring of original blocks at the outline, white crosses on black around it.
+  { id: 'cross-grid', name: 'Cross Grid', params: { scale: 39, variation: 0.1, solid: 1, holes: 0, edgeAmount: 1, edgeDither: 0, displace: 0, colorB: '#000000', paperMarks: 'crosses', markGrid: 36, markSize: 3, structureRate: 0.7, flickerRate: 2 } },
   { id: 'crumble', name: 'Crumble', params: { holes: 0.35, holeSize: 4, edgeDither: 0.9, dither: 0.15, displace: 0.12, flickerRate: 6 } },
-  { id: 'dither-veil', name: 'Dither Veil', params: { holes: 0.03, dither: 0.5, edgeDither: 1, pattern: 'bayer', displace: 0, structureRate: 0.5, flickerRate: 1.5 } },
   { id: 'big-blocks', name: 'Big Blocks', params: { scale: 60, variation: 0.8, holeSize: 2, holes: 0.2, ditherSize: 4, displace: 0.15 } },
 ];
 

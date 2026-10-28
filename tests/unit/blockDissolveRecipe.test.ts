@@ -117,6 +117,22 @@ describe('Block Dissolve recipe', () => {
     expect(differs(frame(render({ ...plain, edgeDither: 1, edgeAmount: 1 }, disc, .4)), source)).toBeGreaterThan(20);
   });
 
+  it('draws Paper Marks on the removed area only, in Mark Colour', () => {
+    const output = render({ ...plain, paperMarks: 'crosses', markGrid: 400, markSize: 24, markColor: '#ff0000', colorB: '#000000' }, disc);
+    // Grid points sit on the frame centre (on the disc: no mark) and every 400 px: none other in this frame.
+    // Inside blocks keep the disc; edge blocks (from about 11 px out) may be removed and carry marks.
+    const centre = output(48, 32);
+    expect(centre[0]).toBeLessThan(.2);
+    const marked = render({ ...plain, paperMarks: 'dots', markGrid: 20, markSize: 6, markColor: '#ff0000', colorB: '#000000' }, disc);
+    let red = 0, redOnDisc = 0;
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 96; x++) {
+      const [r, gr] = marked(x, y);
+      if (r > .9 && gr < .1) { red++; if (Math.hypot(x - 48, y - 32) < 11) redOnDisc++; }
+    }
+    expect(red).toBeGreaterThan(20);
+    expect(redOnDisc).toBe(0);
+  });
+
   it('turns the checker by 45° with Pattern: Diagonal', () => {
     const square = render({ ...plain, dither: 1, edgeDither: 1, ditherSize: 16 }, disc), diagonal = render({ ...plain, dither: 1, edgeDither: 1, ditherSize: 16, pattern: 'diagonal' }, disc);
     let changed = 0;

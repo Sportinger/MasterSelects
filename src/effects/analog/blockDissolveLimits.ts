@@ -3,6 +3,13 @@ export const BLOCK_DISSOLVE_SIZE_RANGE = [2, 200] as const;
 export const BLOCK_DISSOLVE_HOLE_SIZE_RANGE = [2, 16] as const;
 export const BLOCK_DISSOLVE_DITHER_SIZE_RANGE = [1, 16] as const;
 export const BLOCK_DISSOLVE_EDGE_WIDTH_RANGE = [1, 80] as const;
+export const BLOCK_DISSOLVE_MARK_GRID_RANGE = [4, 400] as const;
+export const BLOCK_DISSOLVE_MARK_SIZE_RANGE = [1, 24] as const;
+export const BLOCK_DISSOLVE_PAPER_MARK_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'dots', label: 'Dots' },
+  { value: 'crosses', label: 'Crosses' },
+] as const;
 export const BLOCK_DISSOLVE_RATE_RANGE = [0, 60] as const;
 export const BLOCK_DISSOLVE_SEED_RANGE = [0, 9999] as const;
 /** Displaced blocks copy the picture from one to this many block widths to the left or right. */

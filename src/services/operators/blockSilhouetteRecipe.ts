@@ -2,6 +2,7 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import type { GraphPort } from './blurGraphBuilder';
 import { AnalogRecipeBuilder } from './analogRecipeBuilder';
 import { chance, indexKey, keyConstants, renderedPixels, roll, seedSalt } from './seededRecipeParts';
+import { gridMarks } from './gridMarkNodes';
 import { BLOCK_SILHOUETTE_GRID_RANGE, BLOCK_SILHOUETTE_MARK_RANGE, BLOCK_SILHOUETTE_SIZE_RANGE } from '../../effects/analog/blockSilhouetteLimits';
 
 /**
@@ -16,8 +17,6 @@ import { BLOCK_SILHOUETTE_GRID_RANGE, BLOCK_SILHOUETTE_MARK_RANGE, BLOCK_SILHOUE
  * - Amount mixes the result with the original; the result is opaque.
  */
 const MASK_TAPS = [[.2, .2], [.8, .2], [.2, .8], [.8, .8], [.5, .5]] as const;
-/** A cross reaches this many Mark Sizes from its centre. */
-const CROSS_ARM = 2.5;
 const SALT = { mark: 1 } as const;
 
 function sources(g: AnalogRecipeBuilder) {
@@ -82,23 +81,13 @@ function blocks(g: AnalogRecipeBuilder) {
 function marks(g: AnalogRecipeBuilder) {
   const grid = renderedPixels(g, 'grid-px', 'grid-clamped');
   const size = renderedPixels(g, 'mark-px', 'mark-clamped');
-  // Grid points sit on the block grid's origin; distance to the nearest point along each axis.
-  const position = g.binary('mark-position', 'math.divide-ieee.vec2', 'from-origin', g.splat2('grid-vec2', grid));
-  const cell = g.unary('mark-cell', 'math.floor.vec2', g.add2('mark-position-centred', position, 'half-vec2'));
-  const offset = g.mul2('mark-offset', g.sub2('mark-local', position, cell), 'grid-vec2');
-  const [ox, oy] = g.split2('mark-offset-split', offset);
-  const dx = g.fn('mark-dx', 'abs', ox), dy = g.fn('mark-dy', 'abs', oy);
-  const halfSize = g.mul('mark-half', size, 'half');
-  const dot = g.add('mark-dot', 'math.step.scalar', { edge: g.max('mark-dot-distance', dx, dy), value: halfSize });
-  const arm = g.mul('mark-arm', size, g.number('mark-arm-share', CROSS_ARM));
-  const cross = g.mul('mark-cross', g.add('mark-cross-thin', 'math.step.scalar', { edge: g.min('mark-cross-near', dx, dy), value: halfSize }),
-    g.add('mark-cross-short', 'math.step.scalar', { edge: g.max('mark-cross-far', dx, dy), value: arm }));
-  const shape = g.mix('mark-shape', dot, cross, 'marks-cross');
+  // Grid points sit on the block grid's origin (gridMarkNodes.ts).
+  const { shape, cell } = gridMarks(g, 'mark', 'from-origin', grid, size, 'marks-cross');
   const [cx, cy] = g.split2('mark-cell-split', cell);
   const kept = chance(g, 'mark-kept', roll(g, 'mark-roll', SALT.mark, indexKey(g, 'mark-key-x', cx), indexKey(g, 'mark-key-y', cy), 'zero'), 'mark-amount-clamped');
   // Mark Area: which grid points may carry a mark, judged at the grid point itself (Ink or Paper) and one
   // block to each side (Edges: the silhouette's outline passes within a block).
-  const point = g.add2('mark-point', 'origin', g.mul2('mark-point-offset', cell, 'grid-vec2'));
+  const point = g.add2('mark-point', 'origin', g.mul2('mark-point-offset', cell, 'mark-grid-vec2'));
   const inkAt = (id: string, dx: number, dy: number) => {
     const at = dx || dy ? g.add2(`${id}-pixel`, point, g.scale2(`${id}-step`, g.vec2(`${id}-direction`, g.number(`${id}-dx`, dx), g.number(`${id}-dy`, dy)), 'block-px')) : point;
     const tone = pointTone(g, id, g.binary(`${id}-read-uv`, 'math.divide-ieee.vec2', at, ['resolution', 'value']));

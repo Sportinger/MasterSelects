@@ -3,8 +3,9 @@ import type { GraphPort } from './blurGraphBuilder';
 import { AnalogRecipeBuilder, straightSample } from './analogRecipeBuilder';
 import { objectAt, objectMap, objectMaskControls } from './objectMaskNodes';
 import { chance, indexKey, keyConstants, modulo, renderedPixels, roll, seedSalt } from './seededRecipeParts';
+import { gridMarks } from './gridMarkNodes';
 import {
-  BLOCK_DISSOLVE_DITHER_SIZE_RANGE, BLOCK_DISSOLVE_EDGE_WIDTH_RANGE, BLOCK_DISSOLVE_DISPLACE_REACH, BLOCK_DISSOLVE_HOLE_SIZE_RANGE, BLOCK_DISSOLVE_SEED_RANGE,
+  BLOCK_DISSOLVE_DITHER_SIZE_RANGE, BLOCK_DISSOLVE_EDGE_WIDTH_RANGE, BLOCK_DISSOLVE_MARK_GRID_RANGE, BLOCK_DISSOLVE_MARK_SIZE_RANGE, BLOCK_DISSOLVE_DISPLACE_REACH, BLOCK_DISSOLVE_HOLE_SIZE_RANGE, BLOCK_DISSOLVE_SEED_RANGE,
   BLOCK_DISSOLVE_SIZE_RANGE,
 } from '../../effects/analog/blockDissolveLimits';
 
@@ -29,7 +30,8 @@ import {
  *   the band just outside the real outline (Edge Width), and by Slant only one side of a diagonal cut, so
  *   straight outlines break into slanted pieces too. The background (every
  *   pixel that is not object) is always removed, so the glitch stays on the object.
- * - Removed pixels and Paper dots take the Paper colour or turn transparent (Removed). Amount mixes the
+ * - Removed pixels and Paper dots take the Paper colour or turn transparent (Removed), with Paper Marks (dots
+ *   or crosses on a Mark Grid, in Mark Colour) drawn over them. Amount mixes the
  *   result with the original.
  * - Two clocks: Structure Rate redraws blocks, holes and the inside blocks; Flicker Rate redraws the edge
  *   blocks, each at its own tempo and phase so they never change all at once; both per second of
@@ -94,6 +96,13 @@ function controls(g: AnalogRecipeBuilder) {
   g.add('dots-ink', 'math.step.scalar', { edge: 'half', value: g.bound('dot-colour', 'dotColor', 'values.choice') });
   g.add('ink-rgb', 'convert.vec4-to-rgb', { value: g.bound('ink', 'colorA', 'values.color') });
   g.add('paper-rgb', 'convert.vec4-to-rgb', { value: g.bound('paper', 'colorB', 'values.color') });
+  // Paper Marks: None 0, Dots 1, Crosses 2.
+  g.bound('paper-marks', 'paperMarks', 'values.choice');
+  g.add('paper-marks-on', 'math.step.scalar', { edge: 'half', value: 'paper-marks' });
+  g.add('paper-marks-cross', 'math.step.scalar', { edge: g.number('paper-marks-cross-edge', 1.5), value: 'paper-marks' });
+  g.clampedParam('paper-mark-grid', 'markGrid', g.number('paper-mark-grid-min', BLOCK_DISSOLVE_MARK_GRID_RANGE[0]), g.number('paper-mark-grid-max', BLOCK_DISSOLVE_MARK_GRID_RANGE[1]));
+  g.clampedParam('paper-mark-size', 'markSize', g.number('paper-mark-size-min', BLOCK_DISSOLVE_MARK_SIZE_RANGE[0]), g.number('paper-mark-size-max', BLOCK_DISSOLVE_MARK_SIZE_RANGE[1]));
+  g.add('paper-mark-rgb', 'convert.vec4-to-rgb', { value: g.bound('paper-mark-colour', 'markColor', 'values.color') });
   objectMaskControls(g);
   // Removed (Paper 0, Transparent 1) as a 0/1 weight.
   g.add('fill-transparent', 'math.step.scalar', { edge: 'half', value: 'fill' });
@@ -376,11 +385,18 @@ export function createDefaultBlockDissolveGraph(): EffectOperatorGraph {
     g.plus('shown-alpha-pieces', g.mul('dot-part-alpha', dotAlpha, dots), g.mul('displaced-part-alpha', displaced.alpha, shifted)));
   // Removed: Paper lies under everything shown, so removed pixels and the see-through part of soft
   // (alpha) edges take the Paper colour; Transparent leaves them see-through.
-  const paper = g.mul('paper-share', g.max('paper-uncovered', g.sub('paper-open', 'one', shownAlpha), 'zero'), 'fill-paper');
-  // Premultiplied: shown colour × its alpha + paper × paper share; then Amount mixes with the original.
+  const open = g.max('paper-uncovered', g.sub('paper-open', 'one', shownAlpha), 'zero');
+  // Paper Marks: dots or crosses on the removed area only (gridMarkNodes.ts), in Mark Colour; with
+  // Removed: Transparent they stand alone on transparency.
+  const markGrid = renderedPixels(g, 'paper-mark-grid-px', 'paper-mark-grid-clamped');
+  const markSize = renderedPixels(g, 'paper-mark-size-px', 'paper-mark-size-clamped');
+  const marked = g.mul('paper-mark-on', gridMarks(g, 'paper-mark', 'from-origin', markGrid, markSize, 'paper-marks-cross').shape, 'paper-marks-on');
+  const paper = g.mul('paper-share', g.mul('paper-unmarked', open, g.sub('paper-not-marked', 'one', marked)), 'fill-paper');
+  const mark = g.mul('paper-mark-share', open, marked);
+  // Premultiplied: shown colour × its alpha + paper and marks × their share; then Amount mixes with the original.
   const premultiplied = g.addRgb('effect-premultiplied-rgb', g.add('shown-premultiplied', 'math.multiply.rgb-scalar', { a: shownRgb, b: shownAlpha }),
-    g.scaleRgb('paper-premultiplied', ['paper-rgb', 'rgb'], paper));
-  const effectAlpha = g.unary('effect-alpha', 'convert.scalar-to-alpha', g.plus('effect-coverage', shownAlpha, paper));
+    g.addRgb('paper-and-marks', g.scaleRgb('paper-premultiplied', ['paper-rgb', 'rgb'], paper), g.scaleRgb('mark-premultiplied', ['paper-mark-rgb', 'rgb'], mark)));
+  const effectAlpha = g.unary('effect-alpha', 'convert.scalar-to-alpha', g.plus('effect-coverage', shownAlpha, g.plus('paper-coverage', paper, mark)));
   g.add('effect-image', 'vector.combine.rgba', { rgb: premultiplied, alpha: [effectAlpha, 'alpha'] });
   g.add('effect-vec4', 'convert.image-to-vec4', { image: ['effect-image', 'image'] });
   g.add('original', 'image.sample', { image: ['source-cache', 'image'], uv: ['uv', 'uv'] });
