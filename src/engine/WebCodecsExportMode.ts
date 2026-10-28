@@ -25,6 +25,8 @@ const log = Logger.create('WebCodecsExportMode');
 export interface ExportModePlayer {
   getDecoder(): VideoDecoder | null;
   getSamples(): Sample[];
+  /** Loads sample bytes for a decode window when the source is read on demand (fileSampleData.ts). */
+  ensureSampleData?(startIndex: number, endIndexExclusive: number): Promise<void>;
   getSampleIndex(): number;
   setSampleIndex(index: number): void;
   getVideoTrackTimescale(): number | null;

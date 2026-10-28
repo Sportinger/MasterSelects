@@ -1,6 +1,7 @@
 import { Logger } from '../../services/logger';
 import { WebCodecsExportMode } from '../WebCodecsExportMode';
 import type { ExportModePlayer } from '../WebCodecsExportMode';
+import type { FileSampleData } from '../webcodecs/fileSampleData';
 import { HtmlVideoFrameSource } from '../webcodecs/htmlVideoFrameSource';
 import { WebCodecsSampleTimeline } from '../webcodecs/sampleTimeline';
 import { getVideoTrackRotation, type VideoRotationDegrees } from '../webcodecs/videoTrackOrientation';
@@ -14,6 +15,8 @@ export abstract class WebCodecsPlayerBase implements ExportModePlayer {
   protected decoder: VideoDecoder | null = null;
   protected currentFrame: VideoFrame | null = null;
   protected samples: Sample[] = [];
+  /** Set when the samples were loaded with loadFileOnDemand(); their bytes then arrive per window. */
+  protected sampleData: FileSampleData | null = null;
   protected sampleIndex = 0;
   protected feedIndex = 0;
   protected _isPlaying = false;
@@ -172,6 +175,9 @@ export abstract class WebCodecsPlayerBase implements ExportModePlayer {
     return this.decoder;
   }
   getSamples(): Sample[] { return this.samples; }
+  ensureSampleData(startIndex: number, endIndexExclusive: number): Promise<void> {
+    return this.sampleData?.ensure(startIndex, endIndexExclusive) ?? Promise.resolve();
+  }
   getSampleIndex(): number { return this.sampleIndex; }
   setSampleIndex(index: number): void { this.sampleIndex = index; this.feedIndex = index; }
   getVideoTrackTimescale(): number | null { return this.videoTrack?.timescale ?? null; }

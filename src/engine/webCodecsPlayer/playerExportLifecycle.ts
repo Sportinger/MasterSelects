@@ -79,6 +79,7 @@ export abstract class WebCodecsPlayerExportLifecycle extends WebCodecsPlayerSeek
 
     this.mp4FileRef.current = null;
     this.samples = [];
+    this.sampleData = null;
     this.ready = false;
   }
 }

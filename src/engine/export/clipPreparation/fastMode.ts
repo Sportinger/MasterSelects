@@ -15,7 +15,8 @@ import {
   getClipMediaFileId,
 } from './admission';
 import { initializeParallelDecoding } from './parallelMode';
-import { type ClipFileDataCache, loadClipFileDataCached } from './sourceResolution';
+import type { ClipFileDataCache } from './sourceResolution';
+import { loadFastExportSource } from './fastSourceLoading';
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
 import { getClipWarmupSourceTime } from './mediaElements';
 import { collectNestedVideoClips, type NestedVideoClip } from './nestedVideoClips';
@@ -139,32 +140,8 @@ export async function initializeFastMode(
 
     let exportPlayer: WebCodecsPlayer | null = null;
     try {
-      const endLoad = log.time(`loadClipFileData "${clip.name}"`);
-      const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
-      endLoad();
-
-      if (!fileData) {
-        throw new Error(`FAST export failed: Could not load file data for clip "${clip.name}". Try PRECISE mode instead.`);
-      }
-
-      const header = new Uint8Array(fileData.slice(0, 12));
-      const isMOV = header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70 &&
-                    (header[8] === 0x71 && header[9] === 0x74);
-      const fileType = isMOV ? 'MOV' : 'MP4';
-
-      log.debug(`Loaded ${clip.name} (${(fileData.byteLength / 1024 / 1024).toFixed(1)}MB, ${fileType})`);
-
       exportPlayer = new WebCodecsPlayer({ useSimpleMode: false, loop: false });
-
-      const endParse = log.time(`loadArrayBuffer "${clip.name}"`);
-      try {
-        await exportPlayer.loadArrayBuffer(fileData);
-        endParse();
-      } catch (e) {
-        endParse();
-        const hint = isMOV ? ' MOV containers may have unsupported audio codecs.' : '';
-        throw new Error(`FAST export failed: WebCodecs/MP4Box parsing failed for clip "${clip.name}": ${e}.${hint} Try PRECISE mode instead.`);
-      }
+      await loadFastExportSource(exportPlayer, clip, mediaFile, fileDataCache);
 
       const endSeqPrep = log.time(`prepareForSequentialExport "${clip.name}"`);
       await exportPlayer.prepareForSequentialExport(clipTime);

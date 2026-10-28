@@ -1,6 +1,13 @@
 import * as MP4BoxModule from 'mp4box';
 
 import type { Sample, MP4VideoTrack, MP4ArrayBuffer, MP4File } from '../webCodecsTypes';
+import {
+  EMPTY_SAMPLE_DATA,
+  FileSampleData,
+  type FileSampleDataOptions,
+  StreamedMp4UnsupportedError,
+  scanMp4TopLevelBoxes,
+} from './fileSampleData';
 
 type LoaderLog = {
   info: (message: string, ...args: unknown[]) => void;
@@ -92,37 +99,10 @@ export function loadMp4ForWebCodecs(
         return;
       }
 
-      // Tracks with duration=0 metadata make this Infinity/NaN, which poisons
-      // every frame-tolerance computation downstream (export CTS lookups get a
-      // zero tolerance and fall into a per-frame decode-restart crawl).
-      const rawFrameRate = videoTrack.nb_samples / (videoTrack.duration / videoTrack.timescale);
-      const frameRate = Number.isFinite(rawFrameRate) && rawFrameRate > 0 && rawFrameRate <= 480
-        ? rawFrameRate
-        : 30;
-      if (frameRate !== rawFrameRate) {
-        log.warn(`Track reports unusable frame rate (${String(rawFrameRate)}); falling back to 30fps`);
-      }
-      const frameInterval = 1000 / frameRate;
-      const codec = getCodecString(videoTrack);
-      const description = extractCodecDescription(mp4File, videoTrack, log);
-      const codecConfig: VideoDecoderConfig = {
-        codec,
-        codedWidth: videoTrack.video.width,
-        codedHeight: videoTrack.video.height,
-        // Let the browser choose an available decoder unless the caller requires one.
-        hardwareAcceleration: callbacks.hardwareAcceleration ?? 'no-preference',
-        optimizeForLatency: true,
-        description,
-      };
-
-      callbacks.onTrackReady({
-        videoTrack,
-        codecConfig,
-        width: videoTrack.video.width,
-        height: videoTrack.video.height,
-        frameRate,
-        frameInterval,
-      });
+      const track = describeVideoTrack(mp4File, videoTrack, log, callbacks.hardwareAcceleration);
+      const { codecConfig, frameRate } = track;
+      const codec = codecConfig.codec;
+      callbacks.onTrackReady(track);
 
       // Set extraction options and start BEFORE codec check (to not miss samples)
       mp4File.setExtractionOptions(videoTrack.id, null, {
@@ -180,6 +160,134 @@ export function loadMp4ForWebCodecs(
       reject(new Error(`MP4Box appendBuffer failed: ${e}`));
     }
   });
+}
+
+const MAX_ON_DEMAND_MOOV_BYTES = 256 * 1024 * 1024;
+
+/**
+ * Parses only the ftyp and moov boxes of a file and returns its video samples without their
+ * bytes; the returned FileSampleData reads them on demand (see fileSampleData.ts). Fragmented
+ * files keep their sample tables in moof boxes and are refused with StreamedMp4UnsupportedError.
+ */
+export async function loadMp4FileOnDemand(
+  file: Blob,
+  callbacks: Mp4DemuxLoaderCallbacks,
+  options?: FileSampleDataOptions,
+): Promise<FileSampleData> {
+  const { log } = callbacks;
+  const endLoad = log.time('loadMp4FileOnDemand');
+  const boxes = await scanMp4TopLevelBoxes(file);
+  if (boxes.some((box) => box.type === 'moof')) {
+    throw new StreamedMp4UnsupportedError('Fragmented MP4: its sample tables are in moof boxes, not in the moov');
+  }
+  const moov = boxes.find((box) => box.type === 'moov');
+  if (!moov) {
+    throw new StreamedMp4UnsupportedError('No moov box found');
+  }
+  if (moov.size > MAX_ON_DEMAND_MOOV_BYTES) {
+    throw new StreamedMp4UnsupportedError(`moov box of ${(moov.size / 1024 / 1024).toFixed(0)}MB is too large`);
+  }
+  const metadataBoxes = [boxes.find((box) => box.type === 'ftyp'), moov]
+    .filter((box): box is NonNullable<typeof box> => Boolean(box));
+  const parts = await Promise.all(
+    metadataBoxes.map((box) => file.slice(box.start, box.start + box.size).arrayBuffer()),
+  );
+  const metadata = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+  let writeAt = 0;
+  for (const part of parts) {
+    metadata.set(new Uint8Array(part), writeAt);
+    writeAt += part.byteLength;
+  }
+  log.info(`Parsing MP4 metadata (${(moov.size / 1024).toFixed(0)}KB moov of ${(file.size / 1024 / 1024).toFixed(0)}MB), samples read on demand`);
+
+  const mp4File = MP4Box.createFile() as unknown as MP4File;
+  callbacks.onMp4FileCreated(mp4File);
+  const parsed: { info?: { videoTracks: MP4VideoTrack[] }; error?: string } = {};
+  mp4File.onReady = (info) => {
+    parsed.info = info;
+  };
+  mp4File.onError = (error) => {
+    parsed.error = String(error);
+  };
+  const metadataBuffer = metadata.buffer as MP4ArrayBuffer;
+  metadataBuffer.fileStart = 0;
+  mp4File.appendBuffer(metadataBuffer);
+  mp4File.flush();
+  if (parsed.error) {
+    throw new Error(`MP4 parsing error: ${parsed.error}`);
+  }
+  const videoTrack = parsed.info?.videoTracks[0];
+  if (!videoTrack) {
+    throw new Error('No video track found in file');
+  }
+
+  const track = describeVideoTrack(mp4File, videoTrack, log, callbacks.hardwareAcceleration);
+  const support = await VideoDecoder.isConfigSupported(track.codecConfig);
+  if (!support.supported) {
+    throw new Error(`Codec ${track.codecConfig.codec} not supported`);
+  }
+  const table = mp4File.getTrackSamplesInfo?.(videoTrack.id) ?? [];
+  if (table.length === 0) {
+    throw new StreamedMp4UnsupportedError('The moov box lists no video samples');
+  }
+  const samples: Sample[] = table.map((sample) => ({
+    number: sample.number,
+    track_id: sample.track_id,
+    data: EMPTY_SAMPLE_DATA,
+    size: sample.size,
+    cts: sample.cts,
+    dts: sample.dts,
+    duration: sample.duration,
+    is_sync: sample.is_sync,
+    timescale: sample.timescale,
+    offset: sample.offset,
+  }));
+  const sampleData = new FileSampleData(file, samples, options);
+  // decodeFirstFrame() decodes the first sample as soon as the decoder exists.
+  await sampleData.ensure(0, 1);
+
+  callbacks.onTrackReady(track);
+  callbacks.onSamples(samples);
+  callbacks.onConfigSupported();
+  endLoad();
+  log.info(
+    `Decoder configured: ${track.width}x${track.height} @ ${track.frameRate.toFixed(1)}fps, ${samples.length} samples read on demand`
+  );
+  return sampleData;
+}
+
+function describeVideoTrack(
+  mp4File: MP4File,
+  videoTrack: MP4VideoTrack,
+  log: LoaderLog,
+  hardwareAcceleration: VideoDecoderConfig['hardwareAcceleration'] | undefined,
+): Mp4TrackLoadResult {
+  // Tracks with duration=0 metadata make this Infinity/NaN, which poisons
+  // every frame-tolerance computation downstream (export CTS lookups get a
+  // zero tolerance and fall into a per-frame decode-restart crawl).
+  const rawFrameRate = videoTrack.nb_samples / (videoTrack.duration / videoTrack.timescale);
+  const frameRate = Number.isFinite(rawFrameRate) && rawFrameRate > 0 && rawFrameRate <= 480
+    ? rawFrameRate
+    : 30;
+  if (frameRate !== rawFrameRate) {
+    log.warn(`Track reports unusable frame rate (${String(rawFrameRate)}); falling back to 30fps`);
+  }
+  return {
+    videoTrack,
+    codecConfig: {
+      codec: getCodecString(videoTrack),
+      codedWidth: videoTrack.video.width,
+      codedHeight: videoTrack.video.height,
+      // Let the browser choose an available decoder unless the caller requires one.
+      hardwareAcceleration: hardwareAcceleration ?? 'no-preference',
+      optimizeForLatency: true,
+      description: extractCodecDescription(mp4File, videoTrack, log),
+    },
+    width: videoTrack.video.width,
+    height: videoTrack.video.height,
+    frameRate,
+    frameInterval: 1000 / frameRate,
+  };
 }
 
 function extractCodecDescription(

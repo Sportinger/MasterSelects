@@ -127,6 +127,18 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
   Failures remain logged. If every source is unavailable, export still fails explicitly;
   this cannot reconstruct missing or revoked media. Clips sharing a source reuse one
   preparation read per export run.
+- Sources of 512 MB and more are read on demand instead of whole. Chromium cannot read a
+  file of several GB into one ArrayBuffer (`NotReadableError`); a 4.5 GB phone recording
+  used to stop FAST export with "Could not load file data". FAST export reads only the
+  top-level box headers and the `ftyp`/`moov` boxes, then fetches sample bytes window by
+  window as the decoder consumes them: 8 MB read-ahead, at most 256 MB held per clip,
+  older bytes dropped and read again if a keyframe restart needs them. Samples beyond
+  4 GiB (64-bit `co64` offsets) work the same way. A fragmented MP4 keeps its sample
+  tables in `moof` boxes and falls back to the whole-file read; if that fails too, the
+  error names the file size and the reason. Code: `src/engine/webcodecs/fileSampleData.ts`,
+  `loadMp4FileOnDemand()` in `mp4DemuxLoader.ts`, `clipPreparation/fastSourceLoading.ts`.
+  Nightly journey: `tests/playwright/nightly/export/large-source-fast-export.spec.ts`
+  (generates a source above 4 GiB, or uses `MASTERSELECTS_LARGE_VIDEO_FIXTURE`).
 - Export canvas capture snapshots the submitted GPU image immediately, without a per-frame `queue.onSubmittedWorkDone()` round trip. The retained `VideoFrame` remains valid if canvas cleanup happens afterward; capture does not read a nullable canvas field after yielding.
 - A canvas capture failure still permits pixel readback, but disables repeated direct-capture attempts only for that export canvas. Initializing a new export retries the direct path.
 - `tests/browser/export-canvas-probe.html` is a dev-only synthetic WebGPU check: it compares immediate/waited capture, verifies alternating frame pixels, encodes H.264, and reproduces the former cleanup race without changing a project. Its timings are not whole-editor export benchmarks.
