@@ -56,6 +56,7 @@ export const PhoneSettingsSheet: PhoneSheetComponent = () => {
   const authenticated = useAccountStore((state) => state.session?.authenticated === true);
   const youtubeKeySaved = useSettingsStore((state) => state.youtubeApiKey.length > 0);
   const [draft, setDraft] = useState<PhoneSettingsDraft>(readPhoneSettingsDraft);
+  const storedTranscription = phoneTranscriptionAvailability(draft.transcriptionProvider, hosted);
   const [view, setView] = useState<View>('main');
   const [update, setUpdate] = useState<PhoneUpdateState | null>(null);
   const [checking, setChecking] = useState(false);
@@ -143,21 +144,28 @@ export const PhoneSettingsSheet: PhoneSheetComponent = () => {
         <div className="phone-settings__group" role="radiogroup" aria-label="Transcription provider">
           {PHONE_TRANSCRIPTION_PROVIDERS.map((provider) => {
             const availability = phoneTranscriptionAvailability(provider.id, hosted);
-            // One radio mark, on the engine that actually runs: a stored hosted engine without an account falls back to local.
-            const effective = phoneTranscriptionAvailability(draft.transcriptionProvider, hosted).ok ? draft.transcriptionProvider : 'local';
+            // The mark stays on the stored engine, like in Captions: a hosted one without an account is
+            // checked but greyed, and the note below says transcription waits (nothing falls back).
+            const checked = draft.transcriptionProvider === provider.id;
             return (
               <button key={provider.id} type="button" role="radio" className="phone-settings__toggle phone-settings__radio" data-testid={IDS.transcription}
-                data-provider={provider.id} aria-checked={effective === provider.id} aria-disabled={!availability.ok}
+                data-provider={provider.id} aria-checked={checked} aria-disabled={!availability.ok}
                 onClick={() => {
                   if (!availability.ok) { report({ ok: false, message: availability.reason }); return; }
                   set('transcriptionProvider', provider.id);
                 }}>
-                <span>{provider.label}<small>{provider.description}</small></span>
+                <span>{provider.label}<small>{availability.ok ? provider.description : `${provider.description} Needs sign-in.`}</small></span>
                 <span className="phone-settings__radio-mark" aria-hidden="true" />
               </button>
             );
           })}
         </div>
+        {storedTranscription.ok ? null : (
+          <p className="phone-lib__note" data-testid={IDS.transcriptionNote}>
+            {PHONE_TRANSCRIPTION_PROVIDERS.find((provider) => provider.id === draft.transcriptionProvider)?.label ?? 'This provider'} needs
+            a signed-in account, so Captions will not transcribe until you sign in or choose On this device.
+          </p>
+        )}
 
         <h3 className="phone-lib__section">Editing</h3>
         <p className="phone-lib__note">On the phone a second tap on a clip deselects it and pinch keeps the playhead in place.</p>

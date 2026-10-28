@@ -21,10 +21,21 @@ import { refreshEditorHistoryAvailability } from './editorHistory';
 import { playheadState } from '../../../layerBuilder/PlayheadState';
 import { TimelineGesturePreview } from './TimelineGesturePreview';
 import { revertFieldWrite } from './editorRollbackMerge';
+import { Logger } from '../../../logger';
+
+const log = Logger.create('EditorMutation');
 
 /** One write of a transaction: the field values before it (`patch`) and after it, for a per-item rollback. */
 interface RollbackMutation { domain: string; patch: Record<string, unknown>; after: Record<string, unknown>; }
-interface ActionScope { token: TransactionToken | null; owns: boolean; label: string; domain: string; }
+interface ActionScope {
+  token: TransactionToken | null; owns: boolean; label: string; domain: string;
+  /** Set on a write that forms its own revision with this source: its transaction begins with its first content. */
+  own?: string;
+  /** The own-revision scope this scope runs inside: it never joins an outer transaction. */
+  owner?: ActionScope;
+  /** Background result: when the project cannot take writes, it updates the editor without saving instead of throwing. */
+  tolerant?: boolean;
+}
 interface PreparedMutation { prepared: PreparedDomainMutation | null; scope: ActionScope; direct: boolean; plan: import('./domainMutationAdapter').DomainMutationPlan; }
 interface EditorRuntime {
   session: RepositorySession | null; explicit: TransactionToken | null; scopes: ActionScope[];
@@ -45,7 +56,15 @@ const runtime: EditorRuntime = import.meta.hot?.data?.editorRepositoryRuntime ??
 runtime.gestureTokens ??= new Set();
 runtime.gesturePreviews ??= new TimelineGesturePreview();
 export function getEditorRepositorySession(): RepositorySession | null { return runtime.session; }
-export function getEditorTransactionToken(): TransactionToken | null { return runtime.scopes.at(-1)?.token ?? runtime.explicit ?? getEditorGestureToken() ?? activeEditorBatch(); }
+export function getEditorTransactionToken(): TransactionToken | null {
+  const top = runtime.scopes.at(-1);
+  if (top?.token) return top.token;
+  const own = top && ownScopeOf(top);
+  // Inside a write that forms its own revision nothing outer (explicit, gesture, batch) is the transaction.
+  if (own) return own.token;
+  return runtime.explicit ?? getEditorGestureToken() ?? activeEditorBatch();
+}
+function ownScopeOf(scope: ActionScope): ActionScope | undefined { return scope.own !== undefined ? scope : scope.owner; }
 function activeEditorBatch(): TransactionToken | null { return runtime.batch && ownsEditorTransaction(runtime.batch) ? runtime.batch : null; }
 export function subscribeEditorRepositorySession(listener: () => void): () => void { runtime.sessionListeners.add(listener); return () => runtime.sessionListeners.delete(listener); }
 export function getEditorRepositoryWorkspace(): JsonValue { return domainJson(runtime.workspace); }
@@ -55,7 +74,7 @@ export function installEditorRepositorySession(session: RepositorySession, optio
   runtime.session = session; runtime.workspace = structuredClone(options.workspace ?? {}) as Record<string, unknown>;
   for (const job of runtime.sourceJobs.values()) job.controller.abort(); runtime.sourceJobs.clear();
   runtime.explicit = null; runtime.scopes = []; runtime.rollbacks.clear(); runtime.journalValues.clear(); resetFlashBoardJournalMembership();
-  runtime.pendingViews.clear(); runtime.viewError = null;
+  runtime.pendingViews.clear(); runtime.viewError = null; unsavedWarnings.clear();
   // An absent default view needs no write on every reopen. Later motion still publishes.
   const initialMedia = getRepositoryStore('media')?.getState() as MediaState | undefined;
   const initialTimeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
@@ -207,15 +226,62 @@ export function cancelEditorTransaction(token: TransactionToken): void {
   runtime.rollbacks.delete(token.owner); publishEditorContentProjection(session().coordinator.getStatus());
 }
 function beginScope(domain: string, label: string): ActionScope {
+  const top = runtime.scopes.at(-1);
+  if (top?.token) return { token: top.token, owns: false, label, domain };
+  const owner = top && ownScopeOf(top);
+  if (owner) return { token: owner.token, owns: false, label, domain, owner };
   // An active batch (runEditorBatch / captured tool batch) owns mutations made after its awaits too.
-  const parent = runtime.scopes.at(-1)?.token ?? runtime.explicit ?? getEditorGestureToken() ?? activeEditorBatch();
+  const parent = runtime.explicit ?? getEditorGestureToken() ?? activeEditorBatch();
   return { token: parent, owns: false, label, domain };
 }
 function ensureScopeToken(scope: ActionScope): TransactionToken {
   if (scope.token) return scope.token;
-  const outer = runtime.scopes[0] ?? scope;
-  if (!outer.token) { outer.token = beginEditorTransaction(outer.label, outer.domain); outer.owns = true; }
+  const outer = ownScopeOf(scope) ?? runtime.scopes[0] ?? scope;
+  if (!outer.token) { outer.token = beginEditorTransaction(outer.label, outer.own ?? outer.domain); outer.owns = true; }
   scope.token = outer.token; return outer.token;
+}
+/** Why the project cannot take a content write right now (read-only, worker failure, Undo/Redo activation, handoff), or null. */
+function contentWriteBlock(domain: string): string | null {
+  try { boundary.assertAllowed(domain); session().coordinator.assertMutable(); return null; }
+  catch (error) { return error instanceof Error ? error.message : String(error); }
+}
+const unsavedWarnings = new Set<string>();
+function warnUnsaved(label: string, reason: string): void {
+  const key = `${label}\u0000${reason}`;
+  if (unsavedWarnings.has(key)) return;
+  unsavedWarnings.add(key);
+  log.warn(`${label}: the result is shown but not saved in the project (${reason})`);
+}
+/**
+ * Runs a synchronous write that forms its own revision with `source`, whatever transaction, gesture or batch is
+ * open around it. Its transaction begins only with its first content change, so a write of runtime state only
+ * (job progress, loading flags) never opens, commits or announces a revision. With `tolerateUnavailable`
+ * (background results) a content change the project cannot take now (read-only project, storage failure,
+ * Undo/Redo activation, project handoff) still updates the editor, is not saved and is logged, and a failed
+ * commit is rolled back and logged instead of throwing into the job that reported it.
+ */
+export function runEditorOwnRevision<T>(label: string, source: string, action: () => T, options: { tolerateUnavailable?: boolean } = {}): T {
+  if (!runtime.session) return action();
+  const scope: ActionScope = { token: null, owns: false, label, domain: source, own: source, tolerant: options.tolerateUnavailable === true };
+  runtime.scopes.push(scope);
+  const leave = () => { const index = runtime.scopes.lastIndexOf(scope); if (index >= 0) runtime.scopes.splice(index, 1); };
+  let value: T;
+  try { value = action(); }
+  catch (error) {
+    leave();
+    if (scope.owns && scope.token && ownsEditorTransaction(scope.token)) cancelEditorTransaction(scope.token);
+    throw error;
+  }
+  leave();
+  if (scope.owns && scope.token && ownsEditorTransaction(scope.token)) {
+    try { commitEditorTransaction(scope.token); }
+    catch (error) {
+      if (ownsEditorTransaction(scope.token)) cancelEditorTransaction(scope.token);
+      if (!scope.tolerant) throw error;
+      log.warn(`${label}: the result could not be saved and was rolled back`, error);
+    }
+  }
+  return value;
 }
 function endScope(scope: ActionScope, error?: unknown): void {
   if (!scope.owns || !scope.token) return;
@@ -258,6 +324,13 @@ const boundary: StoreMutationBoundary = {
       }
       return false;
     });
+    const own = hasContent && !scope.token ? ownScopeOf(scope) : undefined;
+    const blocked = own?.tolerant ? contentWriteBlock(domain) : null;
+    if (own && blocked) {
+      // A background result while the project cannot take writes: the editor shows it, nothing is saved.
+      warnUnsaved(own.label, blocked);
+      return { prepared: null, scope, direct: !existing, plan: { ...plan, journals: [], views: [] }, before };
+    }
     if (hasContent) boundary.assertAllowed(domain);
     let prepared: PreparedDomainMutation | null = null;
     try { prepared = hasContent ? prepareDomainMutation(current.coordinator, ensureScopeToken(scope), plan) : null; }

@@ -161,6 +161,7 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
           <PhoneHomeResumeCard
             name={pendingName}
             busy={busy !== null}
+            reopening={busy === `Reopening ${pendingName}`}
             onReopen={() => void run(`Reopening ${pendingName}`, resumePhonePendingProject, { kind: 'resume', name: pendingName })}
           />
         ) : null}

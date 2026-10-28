@@ -13,6 +13,8 @@ import { flushEditorRepository, getActiveRepositorySession, isScratchRepository,
 import { getBrowserStorageKind, getBrowserStorageRootOf, openPersistentBrowserRoot, switchBrowserStorageToOpfs } from '../core/browserStorageRoot';
 import { fallbackStoreExists } from '../core/indexedDbEntryStore';
 import { ensurePersistentStorage, listProjectFolderNames } from '../core/projectRootAccess';
+import { rememberLastStoredProject } from '../core/projectDirectoryPersistence';
+import { forgetAndroidProjectAutoRestoreUnless } from '../androidProjectAutoRestore';
 import { addRecentOpfsProject, getRecentProjects, removeRecentProject } from '../recentProjects';
 import { copyDirectoryVerified, freeFolderName } from './verifiedDirectoryCopy';
 import { isTemporaryProjectLocation } from './permanentSaveOptions';
@@ -140,6 +142,9 @@ export async function moveActiveProjectToPersistentBrowserStorage(openCopy: Open
   await verifyProjectSwitch(session, revisionId, location => location.kind === 'opfs' && location.path === folder && location.store === 'opfs');
   switchBrowserStorageToOpfs();
   await addRecentOpfsProject(folder, readEditorRepositoryProject());
+  // The verified copy is now the project to come back to after a browser restart.
+  forgetAndroidProjectAutoRestoreUnless(folder);
+  await rememberLastStoredProject(folder);
   let removedTemporary = false;
   if (!scratch) {
     try {

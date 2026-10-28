@@ -65,7 +65,11 @@ export interface ClipDecoder {
   presentationGrid?: PresentationGrid | null;
   /** Source time of the last advanceToTime(); its direction decides which buffered side is stale. */
   lastAdvanceSourceTime?: number;
-  /** The export walks this clip's source backward (reversed clip): prune and evict the high end. */
+  /**
+   * The export walks this clip's source backward (reversed clip): prune and evict the
+   * high end. Seeded from a constant mapping at registration, then learned from the
+   * advance direction; undefined while unknown, and nothing is pruned then.
+   */
   advancingBackward?: boolean;
 }
 
@@ -102,6 +106,30 @@ export function getExpectedFrameTimestampUs(clipDecoder: ClipDecoder, sourceTime
 export function hasExpectedBufferedFrame(clipDecoder: ClipDecoder, sourceTime: number): boolean {
   const expected = getExpectedFrameTimestampUs(clipDecoder, sourceTime);
   return expected !== undefined && clipDecoder.frameBuffer.has(expected);
+}
+
+/**
+ * True when the frame shown at sourceTime was already queued on the live decoder
+ * but has not come out yet. decodeAhead() queues a whole batch synchronously, so
+ * sampleIndex counts submitted chunks, not output frames; when a decode-bound
+ * export catches up with the decoder's output edge, the target is still in the
+ * decoder. Treating it as missing made the scheduler seek: decoder.reset() dropped
+ * exactly that frame and every other queued one, and the GOP was decoded again.
+ * Output arrives in presentation order, so a target at or before the newest output
+ * that is not buffered was dropped or pruned and is really missing. After a flush,
+ * configure or pool reset (needsKeyframe) the decoder holds nothing any more.
+ */
+export function isExpectedFrameInFlight(
+  clipDecoder: ClipDecoder,
+  sourceTime: number,
+  targetSampleIndex: number,
+): boolean {
+  if (clipDecoder.decoder?.state !== 'configured' || clipDecoder.needsKeyframe) return false;
+  if (targetSampleIndex >= clipDecoder.sampleIndex) return false;
+  const expected = getExpectedFrameTimestampUs(clipDecoder, sourceTime);
+  return expected !== undefined
+    && !clipDecoder.frameBuffer.has(expected)
+    && expected > clipDecoder.newestTimestamp;
 }
 
 /**

@@ -56,6 +56,16 @@ export function timelineToSourceTime(
   return videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, source));
 }
 
+/**
+ * True when a constant mapping walks the source backward (reversed XOR negative
+ * speed, the retime contract), else undefined: a forward clip, a remap or a speed
+ * curve is learned from the export's advance direction instead.
+ */
+export function isConstantMappingBackward(clipInfo: ParallelDecodeClipWindow): true | undefined {
+  if (clipInfo.timeRemap) return undefined;
+  return (clipInfo.reversed === true) !== (clipInfo.speed < 0) ? true : undefined;
+}
+
 export function isTimeInClipRange(clipInfo: ParallelDecodeClipWindow, timelineTime: number): boolean {
   if (clipInfo.mainTimelineStart !== undefined) {
     const duration = clipInfo.mainTimelineDuration ?? clipInfo.duration;

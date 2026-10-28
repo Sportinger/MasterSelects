@@ -16,6 +16,7 @@ import {
   beginEditorGesture, finishEditorGesture, runEditorGesture,
 } from '../../../services/project/repository/transaction/editorGestureOwnership';
 import { cancelHistoryBatch, endBatch, startBatch } from '../../../stores/historyStore';
+import { registerPhoneEditTransaction } from '../sheets/phoneHistoryGuard';
 import { useTimelineStore } from '../../../stores/timeline';
 import { DEFAULT_TEXT_DURATION } from '../../../stores/timeline/constants';
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
@@ -91,6 +92,9 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
   let clipId: string | null = editClip?.id ?? null;
   let gesture: { id: number; token: TransactionToken } | null = null;
   let legacyBatch: { opened: boolean } | null = null;
+  /** Releases the docked Undo/Redo guard while this title holds its own transaction. */
+  let releaseHistoryGuard: (() => void) | null = null;
+  const releaseGuard = () => { releaseHistoryGuard?.(); releaseHistoryGuard = null; };
   let chain: Promise<void> = Promise.resolve();
   let closed = false;
   /** True once a preview may have opened a transaction or created a clip. */
@@ -105,11 +109,14 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
     if (gesture && !gestureAlive()) gesture = null;
     if (gesture || legacyBatch) return;
     if (repository()) {
-      const opened = beginEditorGesture(label);
+      // A programmatic owner, like phoneEditSession: an inner endBatch or the input that typed the text
+      // can never finish it, so Done stays one undo step.
+      const opened = beginEditorGesture(label, { explicit: true });
       if (opened.token && opened.batchId !== null) gesture = { id: opened.batchId, token: opened.token };
     } else {
       legacyBatch = { opened: startBatch(label).opened };
     }
+    if (gesture || legacyBatch?.opened) releaseHistoryGuard ??= registerPhoneEditTransaction(label);
   };
 
   const ensureClip = async () => {
@@ -170,6 +177,8 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
       log.error('Title commit failed', error);
       rollback();
       return { ok: false, message: `${label} failed: ${error instanceof Error ? error.message : String(error)}` };
+    } finally {
+      releaseGuard();
     }
   };
 
@@ -188,7 +197,7 @@ export function createPhoneTitleSession(editClip: TimelineClip | null = getSelec
     closed = true;
     // Let an in-flight create finish first so the rollback also removes that clip.
     chain = chain.then(() => {
-      try { rollback(); } catch (error) { log.error('Title cancel failed', error); }
+      try { rollback(); } catch (error) { log.error('Title cancel failed', error); } finally { releaseGuard(); }
     });
   };
 

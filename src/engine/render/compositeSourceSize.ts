@@ -43,14 +43,16 @@ export function resolveCompositeSourceSize(
  * element playing that src, so the element asking for the frame may be fresh and
  * still report 0×0 (readyState 0). Prefer the element's real size, then the
  * layer's known intrinsic size (top-level clips carry it from the media file),
- * then the cached texture's own size (same aspect, possibly downscaled).
+ * then the source size the cache recorded at capture. The cached texture's own
+ * size is only a last resort: same aspect, but downscaled to the cache's
+ * maxDimension, so it placed a 1080p frame at half size (a quarter for 4K).
  * Returns null only when no positive size exists at all; the frame cannot be
  * placed then (a 0×0 report gave a NaN aspect, NESTED_SMALL_COMP_PREVIEW).
  */
 export function resolveCachedScrubFrameSize(
   video: Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight'>,
   layer: Pick<LayerRenderData['layer'], 'source'> | null | undefined,
-  entry: { width?: number; height?: number } | null | undefined,
+  entry: { width?: number; height?: number; sourceWidth?: number; sourceHeight?: number } | null | undefined,
 ): CompositeSourceSize | null {
   if (positiveFinite(video.videoWidth) && positiveFinite(video.videoHeight)) {
     return { width: video.videoWidth, height: video.videoHeight };
@@ -58,6 +60,9 @@ export function resolveCachedScrubFrameSize(
   const source = layer?.source;
   if (positiveFinite(source?.intrinsicWidth) && positiveFinite(source?.intrinsicHeight)) {
     return { width: source.intrinsicWidth, height: source.intrinsicHeight };
+  }
+  if (positiveFinite(entry?.sourceWidth) && positiveFinite(entry?.sourceHeight)) {
+    return { width: entry.sourceWidth, height: entry.sourceHeight };
   }
   if (positiveFinite(entry?.width) && positiveFinite(entry?.height)) {
     return { width: entry.width, height: entry.height };

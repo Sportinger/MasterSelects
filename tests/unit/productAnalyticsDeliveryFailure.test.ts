@@ -44,3 +44,24 @@ it('recovers on a later delivery and does not resend acknowledged events', async
   await service.flush();
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
+
+it('releases the acknowledgement body so the request finishes (networkidle)', async () => {
+  const cancel = vi.fn(async () => undefined);
+  const fetchMock = vi.fn(async () => ({ ok: true, status: 202, body: { cancel } }));
+  vi.stubGlobal('fetch', fetchMock);
+  service = new ProductAnalyticsService();
+  service.track('app_opened');
+  await service.flush();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(cancel).toHaveBeenCalledTimes(1);
+});
+
+it('keeps an acknowledged batch delivered when releasing its body fails', async () => {
+  const fetchMock = vi.fn(async () => ({ ok: true, status: 202, body: { cancel: () => Promise.reject(new Error('locked')) } }));
+  vi.stubGlobal('fetch', fetchMock);
+  service = new ProductAnalyticsService();
+  service.track('app_opened');
+  await service.flush();
+  await service.flush();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});

@@ -13,7 +13,7 @@ import { middleTruncate } from '../transition/phoneMiddleTruncate';
 import { PhoneChipRow } from '../transition/phoneSheetPrimitives';
 import { formatPhoneCaptionTime, listPhoneSpeechSources, type PhoneSpeechSource } from './phoneCaptionModel';
 import {
-  cancelPhoneTranscription, PHONE_TRANSCRIPTION_PROVIDERS, phoneTranscribeBlocker, startPhoneTranscription, usePhoneTranscriptionReadiness,
+  cancelPhoneTranscription, PHONE_TRANSCRIPTION_PROVIDERS, phoneTranscribeBlocker, phoneTranscriptionReadiness, startPhoneTranscription, usePhoneTranscriptionReadiness,
 } from './phoneTranscription';
 import { PHONE_CAPTIONS_TEST_IDS as IDS } from './phoneCaptionsTestIds';
 
@@ -104,10 +104,11 @@ export function PhoneCaptionsGenerate({ onCreate, onSettings }: {
         </p>
         <PhoneChipRow role="radiogroup" label="Transcription provider">
           {PHONE_TRANSCRIPTION_PROVIDERS.map((entry) => {
-            // A provider that cannot run (hosted, signed out) is greyed and never shown selected, even
-            // when it is the stored editor setting; the notice and "Transcribe on this phone" say why.
-            const locked = entry.hosted && !signedIn;
-            const selected = provider === entry.id && !locked;
+            // A provider that cannot run (hosted, signed out) is greyed. The stored one keeps its mark,
+            // greyed, as in Settings (the group is never empty and nothing claims a fallback); the notice
+            // and "Transcribe on this phone" say why it waits. Same rule as the transcriber's readiness.
+            const locked = phoneTranscriptionReadiness(entry.id, signedIn).kind !== 'ready';
+            const selected = provider === entry.id;
             return (
               <button key={entry.id} type="button" role="radio" className="phone-captions__chip" aria-checked={selected}
                 aria-pressed={selected} aria-disabled={locked || undefined} data-testid={IDS.provider} data-provider={entry.id}

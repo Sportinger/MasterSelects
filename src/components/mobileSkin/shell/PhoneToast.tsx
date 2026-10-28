@@ -1,9 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { PHONE_TEST_IDS } from '../contracts';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { phoneToastDuration, phoneToastFit } from './phoneToastLayout';
 
-/** Info toasts go after 2.5 s; errors stay a little longer so they can be read. */
-const TOAST_MS = { info: 2500, error: 4000 } as const;
 /** Gap between the toast and the active tab or the screen edge, in px. */
 const GAP_PX = 8;
 /** Below this much room beside the active tab the toast takes the whole row (the tab is then the only label). */
@@ -34,26 +33,46 @@ function besideActiveTab(toast: HTMLElement): CSSProperties | null {
     : { left: 'auto', right: shellBox.right - tabLeft + GAP_PX, transform: 'none', maxWidth: leftRoom };
 }
 
+/** Row width of the toast (PhoneShell.css: max-width min(92%, 420px)). */
+const rowRoomOf = (shell: Element) => Math.min(shell.getBoundingClientRect().width * 0.92, 420);
+
+interface ToastLayout {
+  place: CSSProperties | null;
+  wrap: boolean;
+}
+
 export function PhoneToast() {
   const toast = usePhoneUiStore((state) => state.toast);
   const dismissToast = usePhoneUiStore((state) => state.dismissToast);
   const activeSheet = usePhoneUiStore((state) => state.activeSheet);
   const ref = useRef<HTMLDivElement>(null);
-  const [place, setPlace] = useState<CSSProperties | null>(null);
+  const [layout, setLayout] = useState<ToastLayout>({ place: null, wrap: false });
 
   useEffect(() => {
     if (!toast) return undefined;
-    const timer = window.setTimeout(dismissToast, toast.tone === 'error' ? TOAST_MS.error : TOAST_MS.info);
+    const timer = window.setTimeout(dismissToast, phoneToastDuration(toast));
     return () => window.clearTimeout(timer);
   }, [toast, dismissToast]);
 
-  // Errors may wrap down over the preview (they must be readable), so only info toasts move aside.
+  // Errors may wrap down over the preview (they must be readable), so only info toasts move aside, and
+  // only when they fit there on one line; otherwise they take the row and wrap too.
   // Measured again a frame later: a sheet opened in the same tap (or its tab scrolled into view) may
   // only be laid out after this commit.
   useLayoutEffect(() => {
     const measure = () => {
       const element = ref.current;
-      setPlace(element && toast?.tone !== 'error' ? besideActiveTab(element) : null);
+      const shell = element?.closest('.phone-shell');
+      if (!element || !shell || !toast || toast.tone === 'error' || !shell.querySelector('.phone-sheet')) {
+        setLayout({ place: null, wrap: false });
+        return;
+      }
+      const previous = element.style.whiteSpace;
+      element.style.whiteSpace = 'nowrap';
+      const natural = element.scrollWidth + 2; // + the 1 px border on each side
+      element.style.whiteSpace = previous;
+      const beside = besideActiveTab(element);
+      const fit = phoneToastFit(natural, beside ? Number(beside.maxWidth) : null, rowRoomOf(shell));
+      setLayout({ place: fit.placement === 'beside-tab' ? beside : null, wrap: fit.wrap });
     };
     measure();
     const frame = window.requestAnimationFrame(measure);
@@ -66,8 +85,9 @@ export function PhoneToast() {
       ref={ref}
       key={toast.id}
       className={`phone-toast phone-toast--${toast.tone}`}
-      style={place ?? undefined}
-      data-placement={place ? 'beside-tab' : 'row'}
+      style={layout.place ?? undefined}
+      data-placement={layout.place ? 'beside-tab' : 'row'}
+      data-wrap={layout.wrap ? 'true' : undefined}
       role="status"
       aria-live={toast.tone === 'error' ? 'assertive' : 'polite'}
       data-testid={PHONE_TEST_IDS.toast}

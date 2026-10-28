@@ -2,6 +2,7 @@ import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import type { MediaFile } from '../../../stores/mediaStore/types';
 import { ParallelDecodeManager } from '../../ParallelDecodeManager';
+import { FAST_EXPORT_NEIGHBOUR_TOLERANCE_MULTIPLIER } from '../../parallelDecode/frameLookup';
 import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import { getClipMediaFileId } from './admission';
 import { type ClipFileDataCache, loadClipFileData } from './sourceResolution';
@@ -10,6 +11,18 @@ import type { NestedVideoClip } from './nestedVideoClips';
 const log = Logger.create('ClipPreparation');
 
 type ParallelClipInfo = Parameters<ParallelDecodeManager['initialize']>[0][number];
+
+/**
+ * The first-frame check accepts what the per-frame export accepts: the exact frame,
+ * or a buffered neighbour within the FAST export window when the exact one never
+ * decodes (a leading open-GOP B-frame, a corrupt first frame). probeOnly: the
+ * render lookup that uses the frame reports and counts the substitution once.
+ */
+const FIRST_FRAME_LOOKUP = {
+  toleranceMultiplier: FAST_EXPORT_NEIGHBOUR_TOLERANCE_MULTIPLIER,
+  allowNeighbourFallback: true,
+  probeOnly: true,
+} as const;
 
 export async function initializeParallelDecoding(
   clips: TimelineClip[],
@@ -130,14 +143,14 @@ export async function initializeParallelDecoding(
 
       log.info(`Verifying first frame for "${clipInfo.clipName}"`);
 
-      let frame = parallelDecoder.getFrameForClip(clipInfo.clipId, clipTimeAtExportStart);
+      let frame = parallelDecoder.getFrameForClip(clipInfo.clipId, clipTimeAtExportStart, FIRST_FRAME_LOOKUP);
 
       if (!frame) {
         for (let retry = 0; retry < MAX_RETRIES && !frame; retry++) {
           log.warn(`First frame not ready for "${clipInfo.clipName}" (attempt ${retry + 1}/${MAX_RETRIES}), retrying...`);
           await new Promise(r => setTimeout(r, 200));
           await parallelDecoder.prefetchFramesForTime(clipTimeAtExportStart);
-          frame = parallelDecoder.getFrameForClip(clipInfo.clipId, clipTimeAtExportStart);
+          frame = parallelDecoder.getFrameForClip(clipInfo.clipId, clipTimeAtExportStart, FIRST_FRAME_LOOKUP);
         }
       }
 

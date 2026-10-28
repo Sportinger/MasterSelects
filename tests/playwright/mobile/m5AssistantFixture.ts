@@ -233,9 +233,13 @@ export async function signIn(m1: M1Session, net: AssistantNet): Promise<void> {
   await tapOn(m1, m1.page.getByTestId(AS.accessAction))
   const auth = m1.page.locator('.auth-dialog-signin')
   await expect(auth, 'Sign in did not open the account sign-in dialog').toBeVisible()
-  await tapOn(m1, auth.locator('.auth-dialog-dev-plan-btn').first())
   const account = m1.page.locator('.auth-dialog-wide')
-  await expect(account, 'the account dialog did not follow the sign-in').toBeVisible()
+  // The dialog animates in; a tap during that may land beside the button, so tap until the account
+  // dialog follows (a tap that already signed in is not repeated).
+  await expect(async () => {
+    if (!await account.isVisible()) await tapOn(m1, auth.locator('.auth-dialog-dev-plan-btn').first())
+    await expect(account, 'the account dialog did not follow the sign-in').toBeVisible({ timeout: 3_000 })
+  }).toPass({ timeout: 20_000 })
   await tapOn(m1, account.getByRole('button', { name: 'Close', exact: true }))
   await expect(account).toHaveCount(0)
   await expect(accessLine(m1)).toHaveAttribute('data-access-kind', 'ready')
@@ -246,9 +250,24 @@ export async function signIn(m1: M1Session, net: AssistantNet): Promise<void> {
 export async function signOut(m1: M1Session): Promise<void> {
   await openAssistant(m1)
   if (await accessLine(m1).getAttribute('data-access-kind') === 'signedOut') return
-  await tapOn(m1, m1.page.getByTestId(AS.accessAction))
+  const action = m1.page.getByTestId(AS.accessAction)
+  if (await action.getAttribute('data-dialog') !== 'account') {
+    // A guest or credit-less session (e.g. left by an earlier spec file) offers no Sign out button:
+    // arrange the signed-out start through the app's own account store instead.
+    await m1.page.evaluate(async () => {
+      const storeModule = '/src/stores/accountStore.ts'
+      const mod = await import(/* @vite-ignore */ storeModule) as { useAccountStore: { getState: () => { logout: () => Promise<void> } } }
+      await mod.useAccountStore.getState().logout()
+    })
+    await expect(accessLine(m1)).toHaveAttribute('data-access-kind', 'signedOut')
+    return
+  }
   const account = m1.page.locator('.auth-dialog-wide')
-  await expect(account).toBeVisible()
+  // The access line may still settle; tap until the account dialog opens.
+  await expect(async () => {
+    if (!await account.isVisible()) await tapOn(m1, action)
+    await expect(account).toBeVisible({ timeout: 3_000 })
+  }).toPass({ timeout: 20_000 })
   // The dialog animates in; a tap during that may land beside the button, so tap until it is gone.
   await expect(async () => {
     await tapOn(m1, account.getByRole('button', { name: 'Sign out', exact: true }))

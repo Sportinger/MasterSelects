@@ -16,15 +16,21 @@ type ScrubbingTextureEntry = {
 
 /**
  * A cached scrub frame. width/height are the uploaded texture's size (possibly
- * downscaled to maxDimension, same aspect as the source): the only size a cached
- * frame has when the element showing it has not loaded its metadata yet.
+ * downscaled to maxDimension, same aspect as the source). sourceWidth/Height are
+ * the video's own size at capture time: the size to place the frame with when the
+ * element showing it has not loaded its metadata yet. The texture size has the
+ * right aspect but a reduced scale, so it is only the last resort.
  */
 export interface ScrubCachedFrameEntry {
   view: GPUTextureView;
   mediaTime: number;
   width?: number;
   height?: number;
+  sourceWidth?: number;
+  sourceHeight?: number;
 }
+
+interface SourceSize { width: number; height: number }
 
 export interface ScrubTextureCacheSnapshot {
   count: number;
@@ -59,6 +65,8 @@ export class ScrubTextureCache {
   private playbackCapturesSkipped = 0;
   private readonly ram = new ScrubRamCache();
   private pendingUploads = new Map<string, ScrubbingTextureEntry>();
+  /** Intrinsic video size per src (captured frames may be downscaled; RAM frames carry no size). */
+  private readonly sourceSizes = new Map<string, SourceSize>();
   private generation = 0;
   private lost = false;
   private gpuFailureLimit = Infinity;
@@ -164,6 +172,8 @@ export class ScrubTextureCache {
 
     const videoSrc = video.src;
     if (!videoSrc) return;
+    const sourceSize = { width: video.videoWidth, height: video.videoHeight };
+    this.rememberSourceSize(videoSrc, sourceSize);
     const key = getScrubbingKey(videoSrc, time);
     if (this.hasFrame(videoSrc, frameIndexForTime(time)) || this.pendingCaptures.has(key)) return;
 
@@ -180,11 +190,11 @@ export class ScrubTextureCache {
       .then((bitmap) => {
         if (generation !== this.generation || this.lost) { bitmap.close(); return; }
         if (options.offMainThread) {
-          this.addBackgroundFrame(bitmap, videoSrc, time, true); // takes ownership
+          this.addBackgroundFrame(bitmap, videoSrc, time, true, sourceSize); // takes ownership
           return;
         }
         try {
-          this.addFrameFromSource(bitmap, videoSrc, time, bitmap.width, bitmap.height);
+          this.addFrameFromSource(bitmap, videoSrc, time, bitmap.width, bitmap.height, true, sourceSize);
         } finally { bitmap.close(); }
       })
       .catch(() => { /* frame unavailable - skip */ })
@@ -193,15 +203,22 @@ export class ScrubTextureCache {
       });
   }
 
+  /**
+   * width/height are the size of `source`. Pass sourceSize when `source` is an
+   * already downscaled bitmap; a video element's own size is taken as is.
+   */
   addFrameFromSource(
     source: HTMLVideoElement | ImageBitmap,
     videoSrc: string,
     time: number,
     width: number,
     height: number,
-    notify = true
+    notify = true,
+    sourceSize?: SourceSize,
   ): boolean {
     if (!videoSrc || width <= 0 || height <= 0 || this.lost) return false;
+    const knownSourceSize = sourceSize ?? ('videoWidth' in source ? { width, height } : undefined);
+    if (knownSourceSize) this.rememberSourceSize(videoSrc, knownSourceSize);
 
     const key = getScrubbingKey(videoSrc, time);
     if (this.cache.has(key)) {
@@ -219,10 +236,11 @@ export class ScrubTextureCache {
   /**
    * Background neighbour frames: the already resized bitmap goes straight to the
    * GPU, and its CPU copy is read back off the main thread. Takes ownership of
-   * the bitmap.
+   * the bitmap. sourceSize: the video's own size (the bitmap is downscaled).
    */
-  addBackgroundFrame(bitmap: ImageBitmap, videoSrc: string, time: number, notify: boolean): boolean {
+  addBackgroundFrame(bitmap: ImageBitmap, videoSrc: string, time: number, notify: boolean, sourceSize?: SourceSize): boolean {
     if (!videoSrc || bitmap.width <= 0 || bitmap.height <= 0 || this.lost) { bitmap.close(); return false; }
+    if (sourceSize) this.rememberSourceSize(videoSrc, sourceSize);
     const key = getScrubbingKey(videoSrc, time);
     if (this.cache.has(key)) { this.reuses += 1; bitmap.close(); return false; }
     const uploaded = this.upload(key, bitmap, bitmap.width, bitmap.height, notify);
@@ -241,7 +259,7 @@ export class ScrubTextureCache {
     const key = getScrubbingKey(videoSrc, time);
     const entry = this.cache.get(key);
     if (entry) {
-      return this.touchEntry(key, entry);
+      return this.touchEntry(videoSrc, key, entry);
     }
     const pixels = this.ram.get(key);
     if (pixels) this.upload(key, pixels, pixels.width, pixels.height);
@@ -275,13 +293,13 @@ export class ScrubTextureCache {
       const previousKey = getScrubbingKey(videoSrc, (baseFrame - distance) / SCRUB_CACHE_FPS);
       const previous = this.cache.get(previousKey);
       if (previous) {
-        return this.touchEntry(previousKey, previous);
+        return this.touchEntry(videoSrc, previousKey, previous);
       }
 
       const nextKey = getScrubbingKey(videoSrc, (baseFrame + distance) / SCRUB_CACHE_FPS);
       const next = this.cache.get(nextKey);
       if (next) {
-        return this.touchEntry(nextKey, next);
+        return this.touchEntry(videoSrc, nextKey, next);
       }
       if (ramUploadStarted) continue;
       for (const key of [previousKey, nextKey]) {
@@ -344,6 +362,8 @@ export class ScrubTextureCache {
     }
     this.pendingCaptures.clear();
     this.ram.clear(videoSrc);
+    if (videoSrc) this.sourceSizes.delete(videoSrc);
+    else this.sourceSizes.clear();
     for (const [key, entry] of this.pendingUploads) {
       if (videoSrc && !key.startsWith(`${videoSrc}:`)) continue;
       entry.texture.destroy();
@@ -385,18 +405,29 @@ export class ScrubTextureCache {
     return { width: scaledWidth, height: scaledHeight };
   }
 
+  private rememberSourceSize(videoSrc: string, size: SourceSize): void {
+    if (!videoSrc || !(size.width > 0) || !(size.height > 0)) return;
+    const known = this.sourceSizes.get(videoSrc);
+    if (known?.width !== size.width || known?.height !== size.height) {
+      this.sourceSizes.set(videoSrc, { width: size.width, height: size.height });
+    }
+  }
+
   private touchEntry(
+    videoSrc: string,
     key: string,
     entry: ScrubbingTextureEntry
   ): ScrubCachedFrameEntry {
     this.cache.delete(key);
     this.cache.set(key, entry);
     this.reuses += 1;
+    const sourceSize = this.sourceSizes.get(videoSrc);
     return {
       view: entry.view,
       mediaTime: getScrubbingKeyTime(key),
       width: entry.texture.width,
       height: entry.texture.height,
+      ...(sourceSize ? { sourceWidth: sourceSize.width, sourceHeight: sourceSize.height } : {}),
     };
   }
 

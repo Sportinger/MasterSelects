@@ -26,7 +26,8 @@ import {
   getBufferedTimeRangeForLog,
   hasUsableBufferedFrame,
 } from './scheduling';
-import { hasExpectedBufferedFrame, type ClipDecoder } from './clipDecoderState';
+import { hasExpectedBufferedFrame, isExpectedFrameInFlight, type ClipDecoder } from './clipDecoderState';
+import { FAST_EXPORT_NEIGHBOUR_TOLERANCE_MULTIPLIER } from './frameLookup';
 
 /**
  * Host surface the manager exposes to the coordinator. Handles (decoders,
@@ -139,8 +140,12 @@ export async function prefetchFramesForTime(
       clipDecoder.sortedTimestamps
     );
     const frameInBuffer = hasExpectedBufferedFrame(clipDecoder, sourceTime);
+    // A target already queued on the decoder is coming: never seek (reset) for it.
+    // The blocking wait below waits for its output and escalates only when it stalls.
+    const frameInFlight = !frameInBuffer && isExpectedFrameInFlight(clipDecoder, sourceTime, targetSampleIndex);
+    const frameReady = frameInBuffer || frameInFlight;
 
-    log.debug(`"${clipInfo.clipName}": Frame check - target=${sourceTime.toFixed(3)}s, buffer=${clipDecoder.frameBuffer.size} frames [${bufferStart}s-${bufferEnd}s], frameInBuffer=${frameInBuffer}`);
+    log.debug(`"${clipInfo.clipName}": Frame check - target=${sourceTime.toFixed(3)}s, buffer=${clipDecoder.frameBuffer.size} frames [${bufferStart}s-${bufferEnd}s], frameInBuffer=${frameInBuffer}, inFlight=${frameInFlight}`);
 
     // Trigger decode ahead - ALWAYS await if we're behind the target sample
     // Also need to decode if frame is not in buffer (we might be too far ahead and need to seek back)
@@ -148,7 +153,7 @@ export async function prefetchFramesForTime(
       sampleIndex: clipDecoder.sampleIndex,
       targetSampleIndex,
       frameBufferSize: clipDecoder.frameBuffer.size,
-      frameInBuffer,
+      frameInBuffer: frameReady,
     });
     const {
       decodeTarget,
@@ -164,7 +169,7 @@ export async function prefetchFramesForTime(
       // Decode WITHOUT flush first — let output callback deliver frames async.
       // This avoids the expensive flush→needsKeyframe→reset→re-decode-from-keyframe cycle.
       // The retry loop below will flush only if the frame hasn't appeared.
-      if (!frameInBuffer) {
+      if (!frameReady) {
         const decodePromise = deps.decodeAhead(
           clipDecoder,
           decodeTarget,
@@ -201,8 +206,8 @@ export async function prefetchFramesForTime(
           });
         }
       } else {
-        // Frame already in buffer - background decode for future frames
-        log.debug(`"${clipInfo.clipName}": Background decode (frame in buffer)`);
+        // Frame buffered or still decoding - background decode for future frames
+        log.debug(`"${clipInfo.clipName}": Background decode (frame ${frameInBuffer ? 'in buffer' : 'in flight'})`);
         void deps.decodeAhead(clipDecoder, decodeTarget, false).catch(error => {
           log.warn(`"${clipDecoder.clipName}": background decode failed`, error);
         });
@@ -272,6 +277,53 @@ export async function prefetchFramesForTime(
   }
 }
 
+/** Longest time an in-flight target may go without decoder progress before the wait flushes. */
+export const IN_FLIGHT_STALL_MS = 750;
+/** Longest total wait for an in-flight target before the flush/re-decode escalation. */
+export const IN_FLIGHT_WAIT_BUDGET_MS = 3_000;
+const IN_FLIGHT_POLL_MS = 4;
+
+type InFlightWaitOutcome = 'aborted' | 'done' | 'stalled';
+
+/**
+ * Wait for a target that is still queued on the decoder, as long as the decoder
+ * makes progress (queue shrinks or new frames arrive). A flush waits for the whole
+ * queue as well and then forces a keyframe rewind on the next pass, and a seek
+ * drops the queued frames; both are only right once the decoder has stalled or the
+ * budget is spent. Frames held back for reordering with an empty queue need the
+ * flush, so this only waits while chunks are queued.
+ */
+async function waitForInFlightFrame(
+  deps: ParallelDecodePrefetchDeps,
+  clipDecoder: ClipDecoder,
+  sourceTime: number,
+  targetSampleIndex: number,
+): Promise<InFlightWaitOutcome> {
+  const started = performance.now();
+  let lastProgressAt = started;
+  let lastNewest = clipDecoder.newestTimestamp;
+  let lastQueue = clipDecoder.decoder?.decodeQueueSize ?? 0;
+  while (
+    (clipDecoder.decoder?.decodeQueueSize ?? 0) > 0
+    && isExpectedFrameInFlight(clipDecoder, sourceTime, targetSampleIndex)
+  ) {
+    if (!deps.isActive()) return 'aborted';
+    const now = performance.now();
+    if (now - lastProgressAt >= IN_FLIGHT_STALL_MS || now - started >= IN_FLIGHT_WAIT_BUDGET_MS) {
+      log.warn(`"${clipDecoder.clipName}": frame at ${sourceTime.toFixed(4)}s is still queued after ${(now - started).toFixed(0)}ms (queue=${lastQueue}); escalating to flush`);
+      return 'stalled';
+    }
+    await new Promise(r => setTimeout(r, IN_FLIGHT_POLL_MS));
+    const queue = clipDecoder.decoder?.decodeQueueSize ?? 0;
+    if (queue !== lastQueue || clipDecoder.newestTimestamp !== lastNewest) {
+      lastProgressAt = performance.now();
+      lastQueue = queue;
+      lastNewest = clipDecoder.newestTimestamp;
+    }
+  }
+  return 'done';
+}
+
 export interface ExactFrameWaitResult {
   /** The active export stopped while waiting. */
   aborted: boolean;
@@ -281,13 +333,15 @@ export interface ExactFrameWaitResult {
   attempts: number;
 }
 
-/** Same window as the export layer lookup (videoLayers.ts FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER). */
-export const NEIGHBOUR_FALLBACK_TOLERANCE_MULTIPLIER = 3;
+/** Same window as the export layer lookup and the first-frame check (frameLookup.ts). */
+export const NEIGHBOUR_FALLBACK_TOLERANCE_MULTIPLIER = FAST_EXPORT_NEIGHBOUR_TOLERANCE_MULTIPLIER;
 export const EXACT_FRAME_WAIT_ATTEMPTS = 10;
 
 /**
  * Blocking wait for exactly the frame shown at sourceTime, with an escalating
- * strategy: wait for the async output callback, flush (queued chunks, and once
+ * strategy: wait for a target still queued on the decoder while it makes progress
+ * (bounded by IN_FLIGHT_STALL_MS / IN_FLIGHT_WAIT_BUDGET_MS), wait for the async
+ * output callback, flush (queued chunks, and once
  * frames the decoder holds back for reordering even with an empty queue), then
  * re-decode from the keyframe. Shared by the per-time prefetch and the per-clip
  * source-time prefetch so both treat a sample that never decodes the same way:
@@ -303,6 +357,12 @@ export async function waitForExactBufferedFrame(
 ): Promise<ExactFrameWaitResult> {
   let flushedHeldFrames = false;
   let attempts = 0;
+  if (clipDecoder.pendingDecode) {
+    await clipDecoder.pendingDecode;
+  }
+  if (await waitForInFlightFrame(deps, clipDecoder, sourceTime, targetSampleIndex) === 'aborted') {
+    return { aborted: true, exactFound: false, neighbourFound: false, attempts };
+  }
   for (let attempt = 0; attempt < EXACT_FRAME_WAIT_ATTEMPTS; attempt++) {
     if (!deps.isActive()) return { aborted: true, exactFound: false, neighbourFound: false, attempts };
     attempts = attempt + 1;

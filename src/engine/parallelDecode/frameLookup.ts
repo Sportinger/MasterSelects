@@ -1,3 +1,9 @@
+/**
+ * FAST export neighbour window (x frame tolerance): the per-frame layer lookup, the
+ * prefetch wait and the first-frame check all accept a counted neighbour within it.
+ */
+export const FAST_EXPORT_NEIGHBOUR_TOLERANCE_MULTIPLIER = 3;
+
 export interface ParallelDecodeFrameLookupOptions {
   /** Widens the neighbour-frame window (only used with allowNeighbourFallback). */
   toleranceMultiplier?: number;
@@ -8,6 +14,12 @@ export interface ParallelDecodeFrameLookupOptions {
    * previous-frame fallback); without this flag the lookup is exact.
    */
   allowNeighbourFallback?: boolean;
+  /**
+   * Availability check only (export start verification): a neighbour substitution
+   * is neither logged nor reported here, because the render lookup that actually
+   * uses the frame reports it. Counting it twice would inflate the diagnostics.
+   */
+  probeOnly?: boolean;
 }
 
 /** A buffered neighbour stood in for the frame that should show at the target. */

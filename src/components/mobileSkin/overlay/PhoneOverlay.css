@@ -5,14 +5,15 @@
   gap: 12px;
 }
 
-/* 3x3 position grid, 120 x 120 px: a frame with five tappable spots. */
+/* 3x3 position grid of 44 px cells (134 px with its border): a frame with five tappable spots. */
 .mobile-skin .phone-overlay-grid {
-  flex: 0 0 132px;
+  /* Three 44 px cells inside a 1 px border: 134 px border box (box-sizing is border-box globally). */
+  flex: 0 0 134px;
   display: grid;
   grid-template-columns: repeat(3, 44px);
   grid-template-rows: repeat(3, 44px);
-  width: 132px;
-  height: 132px;
+  width: 134px;
+  height: 134px;
   border: 1px solid var(--phone-border);
   border-radius: 12px;
   background: var(--phone-surface);
@@ -39,7 +40,7 @@
 .mobile-skin .phone-overlay-size {
   flex: 1 1 auto;
   display: grid;
-  grid-template-rows: repeat(3, minmax(40px, 1fr));
+  grid-template-rows: repeat(3, minmax(44px, 1fr));
   gap: 4px;
   min-width: 0;
 }
@@ -47,7 +48,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--phone-border);
   border-radius: 10px;

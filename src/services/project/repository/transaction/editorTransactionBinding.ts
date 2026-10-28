@@ -1,6 +1,9 @@
 import type { TransactionToken } from './ProjectTransactionCoordinator';
-import { beginEditorTransaction, cancelEditorTransaction, commitEditorTransaction, getEditorRepositorySession,
-  getEditorTransactionToken, ownsEditorTransaction, runEditorTransaction } from './editorMutationRuntime';
+import { getEditorRepositorySession, getEditorTransactionToken, ownsEditorTransaction, runEditorOwnRevision,
+  runEditorTransaction } from './editorMutationRuntime';
+import { Logger } from '../../../logger';
+
+const log = Logger.create('EditorTransactionBinding');
 
 /**
  * Explicit transaction binding for work that continues after an await.
@@ -18,11 +21,13 @@ export interface EditorTransactionBinding {
   /**
    * Runs a synchronous write phase in the captured transaction. When it has closed meanwhile (or there was none),
    * the phase runs as its own revision with `fallbackSource` (or, without one, as the usual untokened edit).
+   * Throws an AbortError when another project was opened since the capture.
    */
   run<T>(action: () => T): T;
   /**
    * For late results of work the captured transaction started (media loads, waveforms): they join it while it
-   * is open (it may hold the same entities), and afterwards land as their own background revision.
+   * is open (it may hold the same entities), and afterwards land as their own background revision. A late
+   * result for a project that is no longer open is dropped.
    */
   runLate<T>(action: () => T): T;
 }
@@ -32,15 +37,23 @@ export function captureEditorTransactionBinding(label: string, options: { fallba
   const token = getEditorTransactionToken();
   const session = getEditorRepositorySession();
   const isOpen = () => token !== null && getEditorRepositorySession() === session && ownsEditorTransaction(token);
+  // A later write belongs to the project that was open at capture time, never to one opened during the await.
+  const isSameProject = () => getEditorRepositorySession() === session;
   return {
     token,
     isOpen,
     run(action) {
       if (token && isOpen()) return runEditorTransaction(token, action);
-      return options.fallbackSource ? runOwnEditorTransaction(label, options.fallbackSource, action) : action();
+      if (!isSameProject()) throw new DOMException(`${label} belongs to a project that is no longer open`, 'AbortError');
+      return options.fallbackSource ? runEditorOwnRevision(label, options.fallbackSource, action) : action();
     },
-    runLate(action) {
-      return token && isOpen() ? runEditorTransaction(token, action) : runOwnEditorTransaction(label, 'background', action);
+    runLate<T>(action: () => T): T {
+      if (token && isOpen()) return runEditorTransaction(token, action);
+      if (!isSameProject()) {
+        log.debug(`${label}: a late result for a project that is no longer open was dropped`);
+        return undefined as T;
+      }
+      return runEditorOwnRevision(label, 'background', action, { tolerateUnavailable: true });
     },
   };
 }
@@ -48,21 +61,10 @@ export function captureEditorTransactionBinding(label: string, options: { fallba
 /**
  * Runs late results of background work (proxy completion, analysis results, scene descriptions) as their own
  * revision with source 'background': durable, never an Undo/Redo step, and never part of a user's or an
- * assistant's open transaction, whatever is running when the result arrives.
+ * assistant's open transaction, whatever is running when the result arrives. A write of runtime state only
+ * (progress, job flags) opens no transaction at all, and a content change while the project cannot take writes
+ * (read-only, Undo/Redo activation, handoff) updates the editor without saving instead of throwing into the job.
  */
 export function runEditorBackgroundWrite<T>(label: string, action: () => T): T {
-  return runOwnEditorTransaction(label, 'background', action);
-}
-
-function runOwnEditorTransaction<T>(label: string, source: string, action: () => T): T {
-  if (!getEditorRepositorySession()) return action();
-  const token = beginEditorTransaction(label, source);
-  let value: T;
-  try { value = runEditorTransaction(token, action); }
-  catch (error) { if (ownsEditorTransaction(token)) cancelEditorTransaction(token); throw error; }
-  if (ownsEditorTransaction(token)) {
-    try { commitEditorTransaction(token); }
-    catch (error) { if (ownsEditorTransaction(token)) cancelEditorTransaction(token); throw error; }
-  }
-  return value;
+  return runEditorOwnRevision(label, 'background', action, { tolerateUnavailable: true });
 }

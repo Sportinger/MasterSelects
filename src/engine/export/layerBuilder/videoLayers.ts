@@ -2,6 +2,7 @@ import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import type { Layer } from '../../../types/layers';
 import type { ParallelDecodeManager } from '../../ParallelDecodeManager';
+import { FAST_EXPORT_NEIGHBOUR_TOLERANCE_MULTIPLIER } from '../../parallelDecode/frameLookup';
 import type { BaseLayerPropsLike, ExportClipStateLike } from './contracts';
 import {
   getLiveInputExportCanvas,
@@ -14,7 +15,7 @@ const log = Logger.create('ExportLayerBuilder');
 // The parallel decoder returns exactly the frame that shows at the source time.
 // Only when prefetch could not decode it does a neighbour within this window stand
 // in, and the decoder counts that as a previous-frame fallback in export diagnostics.
-const FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER = 3;
+const FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER = FAST_EXPORT_NEIGHBOUR_TOLERANCE_MULTIPLIER;
 
 function getExportSourceClipId(clip: TimelineClip): string {
   return (clip as TimelineClip & { exportSourceClipId?: string }).exportSourceClipId ?? clip.id;

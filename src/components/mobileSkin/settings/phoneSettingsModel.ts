@@ -6,6 +6,7 @@ import {
   type GuidedActionReplayCompressionMode, type GuidedActionReplayVisualizationMode, type ThemeMode, type TimelineZoomAnchor,
   type TranscriptionProvider,
 } from '../../../stores/settings/settingsOptions';
+import { phoneTranscriptionReadiness } from '../captions/phoneTranscription';
 
 export interface PhoneSettingsDraft {
   theme: ThemeMode;
@@ -127,9 +128,13 @@ export function applyPhoneSettingsDraft(draft: PhoneSettingsDraft): number {
   return written;
 }
 
-/** Hosted providers need a signed-in (or guest) hosted session; otherwise local is used. */
+/**
+ * Whether a provider can transcribe now. Hosted providers need a signed-in (or guest) hosted session.
+ * The decision is the transcriber's own (phoneTranscriptionReadiness, which Captions uses): a stored
+ * hosted provider without a session does NOT fall back to local; transcription waits until the user
+ * signs in or picks On this device.
+ */
 export function phoneTranscriptionAvailability(provider: TranscriptionProvider, hostedSession: boolean): { ok: true } | { ok: false; reason: string } {
-  const entry = PHONE_TRANSCRIPTION_PROVIDERS.find((candidate) => candidate.id === provider);
-  if (!entry?.hosted || hostedSession) return { ok: true };
+  if (phoneTranscriptionReadiness(provider, hostedSession).kind === 'ready') return { ok: true };
   return { ok: false, reason: 'Sign in under Account to use hosted transcription. On this device works without an account.' };
 }

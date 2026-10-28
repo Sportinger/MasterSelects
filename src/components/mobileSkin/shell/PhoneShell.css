@@ -371,8 +371,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* An error must stay readable: it may wrap down over the top of the preview. */
-.mobile-skin .phone-shell:has(.phone-sheet) .phone-toast--error {
+/* An error, and an info message too long for one line (PhoneToast measures it), must stay readable:
+   it wraps down over the top of the preview instead of ending in an ellipsis. */
+.mobile-skin .phone-shell:has(.phone-sheet) .phone-toast--error,
+.mobile-skin .phone-shell:has(.phone-sheet) .phone-toast[data-wrap='true'] {
   max-height: none;
   white-space: normal;
 }

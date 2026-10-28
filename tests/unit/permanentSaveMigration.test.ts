@@ -69,7 +69,7 @@ vi.mock('../../src/services/project/repository/lifecycle/exportProjectArchive', 
 }));
 // The real project core is used; its unrelated collaborators stay out of the module graph.
 vi.mock('../../src/services/projectDB', () => ({ projectDB: {} }));
-vi.mock('../../src/services/project/androidProjectAutoRestore', () => ({ isAndroidAutoRestoreProjectHandle: () => false }));
+vi.mock('../../src/services/project/androidProjectAutoRestore', () => ({ isAndroidAutoRestoreProjectHandle: () => false, forgetAndroidProjectAutoRestoreUnless: () => undefined }));
 vi.mock('../../src/services/project/legacyImportTarget', () => ({ requestLegacyImportTarget: vi.fn() }));
 vi.mock('../../src/services/project/mediaSourceRootAccess', () => ({ requestMediaSourceRootAccess: vi.fn() }));
 vi.mock('../../src/services/project/repository/transaction/editorRepositorySession', () => ({ updateEditorRepositoryProjectFields: vi.fn() }));
@@ -123,7 +123,7 @@ function fakeSession(location: Record<string, unknown>, options: { writable?: bo
 
 beforeEach(async () => {
   vi.resetModules();
-  sessionStorage.clear();
+  sessionStorage.clear(); localStorage.clear();
   vi.stubGlobal('File', NodeFile);
   vi.stubGlobal('Blob', NodeBlob);
   vi.stubGlobal('FileSystemFileHandle', class { createWritable() { return null; } });
@@ -223,6 +223,8 @@ describe('moving the open temporary project', () => {
     const copy = await persistentRoot.getDirectoryHandle('My Project');
     const thumbnail = await (await (await (await copy.getDirectoryHandle('Cache')).getDirectoryHandle('thumbnails')).getFileHandle('t1.jpg')).getFile();
     expect(thumbnail.size).toBe(5);
+    // After a browser restart the verified copy is the project restored, not an older one.
+    expect((await import('../../src/services/project/tabProjectPersistence')).readLastOpfsProjectName()).toBe('My Project');
   });
 
   it('keeps the temporary copy and the fallback when the copy lacks the saved revision', async () => {

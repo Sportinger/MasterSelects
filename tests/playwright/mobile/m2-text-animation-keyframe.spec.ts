@@ -315,3 +315,15 @@ test('keyframe sheet: lists properties, jumps between keys, deletes one; Cancel 
   await expect.poll(() => previewCode(m1), { message: 'one Undo did not bring the opacity-0 key back' }).toBeNull()
   expect(keySignature(await readKeyframes(m1, clip.id))).toEqual(arranged)
 })
+
+test('sheet-growth: a style tab opened after the sheet settled grows the sheet instead of opening below the fold @phone', async ({ m1 }) => {
+  await importA(m1, 1)
+  await openTitleSheet(m1, 'GROW')
+  // Past the 400 ms in which a content-fit sheet follows its content: its height is locked now.
+  await expect.poll(async () => m1.sheet.evaluate(element => (element as HTMLElement).style.height), { message: 'the sheet height did not lock' }).toMatch(/px$/)
+  await m1.page.getByTestId(M1_IDS.titleInput).blur()
+  const before = (await m1.sheet.boundingBox())!.height
+  await openTextTab(m1, 'shadow')
+  await expect.poll(async () => (await m1.sheet.boundingBox())!.height, { message: 'the sheet grew for the opened panel' }).toBeGreaterThan(before + 30)
+  await tapCancel(m1)
+})

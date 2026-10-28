@@ -61,6 +61,7 @@ function getBufferedFrameForSourceTimestamp(
     expectedFrameTime: expected === undefined ? null : expected / 1_000_000,
     usedFrameTime: lookupResult.timestamp / 1_000_000,
   };
+  if (options.probeOnly) return decodedFrame.frame;
   log.warn(`${clipDecoder.clipName}: frame for ${fallback.sourceTime.toFixed(4)}s is not decoded; showing neighbour ${fallback.usedFrameTime.toFixed(4)}s`, fallback);
   onNeighbourFallback?.(fallback);
   return decodedFrame.frame;

@@ -4,11 +4,14 @@ import { PHONE_HOME_TEST_IDS } from './phoneHomeTestIds';
 
 interface PhoneHomeResumeCardProps {
   name: string;
+  /** Any project action runs: the button waits (aria-disabled). */
   busy: boolean;
+  /** This card's own reopen runs: only then the button says so. */
+  reopening: boolean;
   onReopen: () => void;
 }
 
-export function PhoneHomeResumeCard({ name, busy, onReopen }: PhoneHomeResumeCardProps) {
+export function PhoneHomeResumeCard({ name, busy, reopening, onReopen }: PhoneHomeResumeCardProps) {
   return (
     <section className="phone-home__resume" aria-label="Reopen last project" data-testid={PHONE_HOME_TEST_IDS.resumeCard} data-project-name={name}>
       <p className="phone-home__resume-label">Last project</p>
@@ -21,7 +24,7 @@ export function PhoneHomeResumeCard({ name, busy, onReopen }: PhoneHomeResumeCar
         data-testid={PHONE_HOME_TEST_IDS.resume}
         onClick={onReopen}
       >
-        {busy ? 'Reopening…' : `Reopen ${name} · allow folder access`}
+        {reopening ? 'Reopening…' : `Reopen ${name} · allow folder access`}
       </button>
     </section>
   );

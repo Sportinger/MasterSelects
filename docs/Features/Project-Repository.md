@@ -53,16 +53,28 @@ phase through it; async store actions such as `addTextClip`, `addCompClip`, `add
 deletion capture their caller's transaction the same way and commit after preparing. Nothing else joins
 a tool's transaction: a background result, a timer or a user edit during the await (also from drop,
 paste or double-click) keeps its own revision, and a second tool running meanwhile (the dev bridge next
-to a chat) keeps its own step. Late job results (proxy generation, clip analysis, scene descriptions)
-are background revisions that never form an Undo step, also when they arrive inside a store action
-that started during a sheet's or a batch's await: the innermost transaction entered decides, not the
-enclosing action. A failing tool, a cancelled phone sheet or a cancelled drag takes back only its own
+to a chat) keeps its own step. Inside `executeBatch` and editor streams every step's writes after its
+own awaits join the batch the same way (`addClipSegment` trims and de-clicks the inserted clip in it).
+A tool write after the tool's transaction already closed (a timed-out tool that kept going) is its own
+assistant step of the running request and never joins a user's sheet or gesture that is open then. A
+captured binding writes only into the project open at capture time: after another project was opened
+during the await, a later write is refused (AbortError) and a late result is dropped. Late job results
+(proxy generation, clip analysis, scene descriptions) are background revisions that never form an Undo
+step, also when they arrive inside a store action that started during a sheet's or a batch's await: the
+innermost transaction entered decides, not the enclosing action. A background write begins its
+transaction only with its first content change, so job progress and loading flags open, commit and
+announce nothing; and while the project cannot take writes (read-only, storage failure, Undo/Redo
+activation, handoff) a content result still updates the editor, is not saved and is logged
+(`EditorMutation`) instead of throwing into the job. A failing tool, a cancelled phone sheet or a cancelled drag takes back only its own
 writes: the runtime keeps one rollback entry per run of its own writes to a field (a write after another
 transaction changed that field starts a new entry), reverts the items each entry changed and keeps what
 other transactions changed in the same store fields meanwhile, so store and repository stay identical
 (`transaction/editorRollbackMerge.ts`). Lists of `{ id }` items, Maps, Sets, lists of unique values and
-plain records are reverted per item or key; where that is ambiguous (repeated values, a pure reorder, a key
-another transaction changed too) the later value stays and the conflict is logged (`EditorRollback`). A Codex Direct request passes its request
+plain records are reverted per item or key; in a `{ id }` item another write replaced since (a load
+result on the same clip) only the keys this write changed return, an item another write removed since
+stays removed, and a pure reorder is taken back when nobody reordered the list since. Where a revert is
+ambiguous (repeated values, a reorder changed again, a key another transaction changed too) the later
+value stays and the conflict is logged (`EditorRollback`). A Codex Direct request passes its request
 id with every tool call, and its scene-stream bookkeeping (removing a replaced run, storing the scene
 document) runs as explicit writes of that request, so the whole request is one Undo step.
 

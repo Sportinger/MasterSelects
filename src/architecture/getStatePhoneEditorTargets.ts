@@ -128,4 +128,5 @@ export const phoneEditorGetStateHardTargets = [
   { path: 'src/components/mobileSkin/effects/usePhonePreviewSource.ts', maxCurrentHits: 2 },
   { path: 'src/components/mobileSkin/runtime/phoneProjectOperation.ts', maxCurrentHits: 1 },
   { path: 'src/components/mobileSkin/timelineTools/phoneSelectAtPlayhead.ts', maxCurrentHits: 2 },
+  { path: 'src/components/mobileSkin/sheets/phoneHistoryGuard.ts', maxCurrentHits: 1 },
 ] as const;

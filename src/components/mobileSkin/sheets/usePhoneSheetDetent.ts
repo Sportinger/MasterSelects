@@ -4,7 +4,7 @@
 
 import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 import {
-  PHONE_SHEET_LAYOUT, phoneSheetCap, phoneSheetCaps, phoneSheetSettle, phoneSheetStep, phoneSheetStops, phoneSheetToggle,
+  PHONE_SHEET_LAYOUT, phoneSheetCap, phoneSheetCaps, phoneSheetGrowth, phoneSheetSettle, phoneSheetStep, phoneSheetStops, phoneSheetToggle,
   rememberPhoneSheetDetent, rememberedPhoneSheetDetent, type PhoneSheetCaps, type PhoneSheetDetent, type PhoneSheetSize,
 } from './phoneSheetSizing';
 
@@ -27,8 +27,18 @@ interface DragState {
   natural: number;
 }
 
+/** The keyboard's cover of the shell (--phone-keyboard-inset, usePhoneViewport): the sheet sits above it. */
+function keyboardInsetOf(shell: HTMLElement | null): number {
+  if (!shell) return 0;
+  const value = Number.parseFloat(getComputedStyle(shell).getPropertyValue('--phone-keyboard-inset'));
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 function measureCaps(shell: HTMLElement | null): PhoneSheetCaps {
-  const viewport = shell?.getBoundingClientRect().height || window.visualViewport?.height || window.innerHeight;
+  const shellHeight = shell?.getBoundingClientRect().height || window.visualViewport?.height || window.innerHeight;
+  // The same room the layout uses (PhoneSheet.css): the sheet, transport and preview share what the
+  // keyboard leaves, so the preview keeps its minimum share while typing too.
+  const viewport = Math.max(0, shellHeight - keyboardInsetOf(shell));
   const topBar = shell?.querySelector<HTMLElement>('[data-testid="phone-top-bar"]');
   const shellTop = shell?.getBoundingClientRect().top ?? 0;
   const topStrips = topBar ? Math.max(0, topBar.getBoundingClientRect().bottom - shellTop) : 85;
@@ -82,7 +92,7 @@ export function usePhoneSheetDetent(
 
   const shellOf = () => panelRef.current?.closest<HTMLElement>('.phone-shell') ?? null;
 
-  // Caps follow the visual viewport (keyboard, rotation, browser chrome).
+  // Caps follow the visual viewport (keyboard, rotation, browser chrome) and the keyboard inset.
   useLayoutEffect(() => {
     const shell = shellOf();
     const update = () => setCaps((previous) => {
@@ -93,7 +103,13 @@ export function usePhoneSheetDetent(
     if (!shell || typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(update);
     observer.observe(shell);
-    return () => observer.disconnect();
+    // The keyboard inset is a style variable on the shell: a change of it alone resizes nothing.
+    const styleObserver = typeof MutationObserver === 'undefined' ? null : new MutationObserver(update);
+    styleObserver?.observe(shell, { attributes: true, attributeFilter: ['style'] });
+    return () => {
+      observer.disconnect();
+      styleObserver?.disconnect();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the shell of a mounted sheet does not change
   }, []);
 
@@ -102,7 +118,8 @@ export function usePhoneSheetDetent(
   // Content-fit sheets get a max-height, 'fill' sheets a fixed height. A content-fit sheet takes its
   // content height while it opens (LOCK_AFTER_MS) and then keeps it while the user works in it: a value
   // label, a Reset button or a status line that comes and goes must not resize the preview being judged.
-  // New content scrolls instead. Only a detent or viewport change measures again. A drag overrides inline.
+  // A detent or viewport change measures again; larger content a tap adds grows it (below). A drag
+  // overrides inline.
   const lockRef = useRef<number | null>(null);
   const applySize = useCallback((nextCap: number, natural?: number) => {
     const panel = panelRef.current;
@@ -135,6 +152,43 @@ export function usePhoneSheetDetent(
     }, LOCK_AFTER_MS);
     return () => window.clearTimeout(timer);
   }, [panelRef, size]);
+
+  // Content a tap adds after the lock (a style tab's panel, a "More" section) grows the sheet towards its
+  // cap instead of opening below the fold (phoneSheetGrowth). Small changes keep the height.
+  const capRef = useRef(cap);
+  capRef.current = cap;
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const body = bodyRef.current;
+    if (size === 'fill' || !panel || !body || typeof MutationObserver === 'undefined') return undefined;
+    let lastInput = -Infinity;
+    let frame = 0;
+    const markInput = () => { lastInput = performance.now(); };
+    const check = () => {
+      frame = 0;
+      if (lockRef.current === null || drag.current) return;
+      const next = phoneSheetGrowth({
+        lock: lockRef.current,
+        natural: naturalHeight(panel, body),
+        cap: capRef.current,
+        sinceInputMs: performance.now() - lastInput,
+      });
+      if (next === null) return;
+      lockRef.current = next;
+      panel.style.height = `${next}px`;
+    };
+    const schedule = () => { if (frame === 0) frame = window.requestAnimationFrame(check); };
+    const observer = new MutationObserver(schedule);
+    observer.observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'aria-expanded'] });
+    panel.addEventListener('pointerup', markInput, true);
+    panel.addEventListener('keydown', markInput, true);
+    return () => {
+      observer.disconnect();
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+      panel.removeEventListener('pointerup', markInput, true);
+      panel.removeEventListener('keydown', markInput, true);
+    };
+  }, [panelRef, bodyRef, size]);
 
   // Publish the rendered height to the shell: the preview and transport lay out above it.
   useLayoutEffect(() => {

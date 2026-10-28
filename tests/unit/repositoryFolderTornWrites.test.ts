@@ -94,21 +94,43 @@ describe('torn commit files on folder backends', () => {
     expect([...commitsOf(root)!.files.keys()].toSorted()).toEqual(['c1.json', 'c2.json', 'c3.json']);
   });
 
-  it('ignores an empty foreign commit file for head selection and removes it; a failing removal never blocks the save', async () => {
+  it('ignores an empty commit file it did not write for head selection and never deletes it', async () => {
     stubBrowser();
-    const faults: Faults = { failRemove: /^stale\.json$/ };
-    const root = memoryFolder(faults);
+    const root = memoryFolder();
     const backend = directoryBackend(root, 'torn-foreign');
     const owner = (await backend.acquireOwner('repository'))!;
     const first = await commit('c1', 1), second = await commit('c2', 2), third = await commit('c3', 3);
     await backend.publishCommit!(first.path, first.bytes, null, owner);
-    commitsOf(root)!.files.set('stale.json', new Uint8Array());
-    // Removal fails (folder paused): the save still succeeds and the torn file stays for a later attempt.
+    // A commit another device is still syncing in (0-byte placeholder), or another origin mid-write.
+    commitsOf(root)!.files.set('synced.json', new Uint8Array());
     await backend.publishCommit!(second.path, second.bytes, first.reference, owner);
-    expect(commitsOf(root)!.files.has('stale.json')).toBe(true);
+    await backend.publishCommit!(third.path, third.bytes, second.reference, owner);
+    expect(commitsOf(root)!.files.has('synced.json')).toBe(true);
+    // Once its bytes arrive it is a normal commit again (the empty read was not cached).
+    const synced = await commit('synced', 4);
+    commitsOf(root)!.files.set('synced.json', synced.bytes);
+    const fourth = await commit('c4', 4);
+    await expect(backend.publishCommit!(fourth.path, fourth.bytes, third.reference, owner)).rejects.toMatchObject({ code: 'conflict' });
+  });
+
+  it('removes its own torn empty commit at the next head check; a failing removal never blocks the save', async () => {
+    stubBrowser();
+    const faults: Faults = {};
+    const root = memoryFolder(faults);
+    const backend = directoryBackend(root, 'torn-own-empty');
+    const owner = (await backend.acquireOwner('repository'))!;
+    const first = await commit('c1', 1), lost = await commit('lost', 2), second = await commit('c2', 2), third = await commit('c3', 3);
+    await backend.publishCommit!(first.path, first.bytes, null, owner);
+    faults.failCreate = /^lost\.json$/; faults.failRemove = /^lost\.json$/;
+    await expect(backend.publishCommit!(lost.path, lost.bytes, first.reference, owner)).rejects.toBeTruthy();
+    expect(commitsOf(root)!.files.get('lost.json')?.length).toBe(0);
+    // Still paused for removal: the next save succeeds anyway and keeps the leftover for a later attempt.
+    delete faults.failCreate;
+    await backend.publishCommit!(second.path, second.bytes, first.reference, owner);
+    expect(commitsOf(root)!.files.has('lost.json')).toBe(true);
     delete faults.failRemove;
     await backend.publishCommit!(third.path, third.bytes, second.reference, owner);
-    expect(commitsOf(root)!.files.has('stale.json')).toBe(false);
+    expect(commitsOf(root)!.files.has('lost.json')).toBe(false);
   });
 
   it('removes and rewrites its own half-written commit instead of refusing every retry', async () => {

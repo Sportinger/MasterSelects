@@ -89,6 +89,24 @@ test('INV6/transcription-provider-settings: Cancel keeps, Done saves an allowed 
   expect((await settingsState(m1.page)).transcriptionProvider).toBe(original)
 })
 
+test('INV6/transcription-provider-settings: a stored hosted provider without account stays marked, greyed, and says transcription waits @phone', async ({ m1 }) => {
+  const original = (await settingsState(m1.page)).transcriptionProvider
+  const option = (id: string) => m1.page.locator(`[data-testid="${SET.transcription}"][data-provider="${id}"]`)
+  try {
+    await restoreSettings(m1.page, { transcriptionProvider: 'hybrid' })
+    await openSettings(m1)
+    test.skip(await option('hybrid').getAttribute('aria-disabled') !== 'true', 'a hosted session is active: hosted providers can run')
+    // Same truth as Captions: nothing falls back to On this device, so that option is not marked.
+    await expect(option('hybrid')).toHaveAttribute('aria-checked', 'true')
+    await expect(option('local')).toHaveAttribute('aria-checked', 'false')
+    await expect(m1.page.getByTestId(SET.transcriptionNote)).toContainText('sign in')
+    await tapCancel(m1)
+    await expect(m1.sheet).toBeHidden()
+  } finally {
+    await restoreSettings(m1.page, { transcriptionProvider: original })
+  }
+})
+
 test('INV6/keyboard-shortcuts: stays visible, greyed, and says it needs a keyboard @phone', async ({ m1 }) => {
   await openSettings(m1)
   const row = m1.page.getByTestId(SET.shortcuts)

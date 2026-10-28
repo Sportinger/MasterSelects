@@ -1,6 +1,7 @@
 import { useTimelineStore } from '../../../../stores/timeline';
 import { useMediaStore } from '../../../../stores/mediaStore';
 import type { ToolResult } from '../../types.ts';
+import { captureToolTransaction } from '../../toolTransaction';
 import {
   captureMutationEntitySnapshot,
   describeMutationEntities,
@@ -101,6 +102,9 @@ export async function handleAddClipSegment(
     };
   }
 
+  // Writes after the awaits below (track, clip, trim, de-click) belong to this tool's (or batch's) transaction.
+  const transaction = captureToolTransaction('addClipSegment');
+  const timeline = () => transaction.bindStore(useTimelineStore.getState());
   const mediaStore = useMediaStore.getState();
 
   // Find media file
@@ -116,7 +120,7 @@ export async function handleAddClipSegment(
   if (!mediaFile.file) {
     return { success: false, error: `File object not available for media: ${mediaFileId}. Try re-importing the file.` };
   }
-  const timelineStore = useTimelineStore.getState();
+  const timelineStore = timeline();
 
   // A null track id is the deterministic runtime binding used by private
   // kernel edit programs after creating and opening a destination composition.
@@ -131,7 +135,7 @@ export async function handleAddClipSegment(
   let createdTrackId: string | undefined;
   if (requestedTrackId === null && trackId
     && findOverlappingClip(timelineStore.clips, trackId, startTime, startTime + duration)) {
-    createdTrackId = useTimelineStore.getState().addTrack(preferredTrackType);
+    createdTrackId = timeline().addTrack(preferredTrackType);
     trackId = createdTrackId;
   }
   if (!trackId) {
@@ -184,7 +188,7 @@ export async function handleAddClipSegment(
       if (clip.linkedClipId) trimmedClipIds.add(clip.linkedClipId);
       continue;
     }
-    const trimResult = useTimelineStore.getState().applyTimelineEditOperation({
+    const trimResult = timeline().applyTimelineEditOperation({
       id: `ai-insert-media-trim:${clip.id}:${inPoint}:${outPoint}`,
       type: 'trim-clip',
       clipId: clip.id,
@@ -213,7 +217,7 @@ export async function handleAddClipSegment(
         .filter((candidate) => candidate.type === 'audio')
         .map((candidate) => candidate.id),
     );
-    useTimelineStore.setState((state) => ({
+    transaction.run(() => useTimelineStore.setState((state) => ({
       clips: state.clips.map((clip) => {
         if (!newClipIds.has(clip.id) || !audioTrackIds.has(clip.trackId)) return clip;
         const operations = (['in', 'out'] as const)
@@ -234,7 +238,7 @@ export async function handleAddClipSegment(
           },
         });
       }),
-    }));
+    })));
     if (deClickFadesApplied > 0) useTimelineStore.getState().invalidateCache();
   }
 

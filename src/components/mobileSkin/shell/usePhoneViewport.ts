@@ -7,8 +7,14 @@ export const PHONE_VIEWPORT_VARS = {
   keyboardInset: '--phone-keyboard-inset',
 } as const;
 
-export function computeKeyboardInset(layoutHeight: number, viewportHeight: number, offsetTop: number): number {
-  return Math.max(0, Math.round(layoutHeight - viewportHeight - offsetTop));
+/**
+ * The part of the shell the on-screen keyboard covers: how far the shell's bottom reaches below the
+ * visible area's bottom (visualViewport.offsetTop + height), in px. The shell is already sized to the
+ * visual viewport, so this is usually 0; counting the whole keyboard height again (layout height minus
+ * visual height) lifted sheets a second keyboard height and squeezed the preview to nothing.
+ */
+export function computeKeyboardInset(shellBottom: number, visibleBottom: number): number {
+  return Math.max(0, Math.round(shellBottom - visibleBottom));
 }
 
 export function usePhoneViewport(rootRef: RefObject<HTMLElement | null>): void {
@@ -21,8 +27,11 @@ export function usePhoneViewport(rootRef: RefObject<HTMLElement | null>): void {
     const apply = () => {
       frame = 0;
       const height = viewport ? viewport.height : window.innerHeight;
-      const inset = viewport ? computeKeyboardInset(window.innerHeight, viewport.height, viewport.offsetTop) : 0;
       root.style.setProperty(PHONE_VIEWPORT_VARS.height, `${Math.round(height)}px`);
+      // Measured after the height applies (a fallback max-height may keep the shell taller).
+      const inset = viewport
+        ? computeKeyboardInset(root.getBoundingClientRect().bottom, viewport.offsetTop + viewport.height)
+        : 0;
       root.style.setProperty(PHONE_VIEWPORT_VARS.keyboardInset, `${inset}px`);
     };
     const schedule = () => {

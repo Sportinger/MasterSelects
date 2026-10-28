@@ -43,6 +43,7 @@ vi.mock('../../src/services/project/legacyImportTarget', () => ({
 }));
 vi.mock('../../src/services/project/androidProjectAutoRestore', () => ({
   isAndroidAutoRestoreProjectHandle: () => false,
+  forgetAndroidProjectAutoRestoreUnless: () => undefined,
 }));
 vi.mock('../../src/services/project/mediaSourceRootAccess', () => ({
   requestMediaSourceRootAccess: vi.fn(async () => undefined),

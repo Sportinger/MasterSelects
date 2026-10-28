@@ -24,6 +24,18 @@ test.beforeAll(async ({ world }) => {
   }
 })
 
+test.afterAll(async ({ world }) => {
+  // Leave the world signed out, as m5-assistant-models does: later spec files (Captions, Settings)
+  // expect no hosted session and must not inherit this file's account.
+  startAssistantCase(world.page)
+  await world.page.evaluate(async () => {
+    const storeModule = '/src/stores/accountStore.ts'
+    const mod = await import(/* @vite-ignore */ storeModule) as { useAccountStore: { getState: () => { logout: () => Promise<void> } } }
+    await mod.useAccountStore.getState().logout()
+  }).catch(() => undefined)
+  endAssistantCase(world.page)
+})
+
 test.afterEach(async ({ m1 }, testInfo) => {
   const frames = endAssistantCase(m1.page)
   if (testInfo.status !== testInfo.expectedStatus && frames.length > 0) {

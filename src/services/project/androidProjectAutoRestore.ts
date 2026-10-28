@@ -37,8 +37,19 @@ export function markAndroidProjectAutoRestoreReady(handle: FileSystemDirectoryHa
   if (!supported()) return; knownMirrorHandles.add(handle); localStorage.setItem(READY_PROJECT_KEY, handle.name);
 }
 export function isAndroidAutoRestoreProjectHandle(handle: FileSystemDirectoryHandle | null): boolean { return Boolean(handle && knownMirrorHandles.has(handle)); }
+/** Another project became the last project: the mirror must not take its place at the next start. */
+export function forgetAndroidProjectAutoRestoreUnless(path: string | null): void {
+  try { if (localStorage.getItem(READY_PROJECT_KEY) !== path) localStorage.removeItem(READY_PROJECT_KEY); }
+  catch { /* storage unavailable: nothing is remembered either */ }
+}
 export async function getAndroidProjectAutoRestoreHandle(): Promise<FileSystemDirectoryHandle | null> {
   if (!supported()) return null; const path = localStorage.getItem(READY_PROJECT_KEY); if (!path) return null;
+  // This tab's live session is a different browser project (a reload): that one is restored, not the mirror.
+  let current: string | null = null; try { current = sessionStorage.getItem('ms.repository.last-opfs-path'); } catch { /* unavailable */ }
+  if (current && current !== path) {
+    log.info('Android mirror is not the last project of this tab; not restored', { mirror: path, current });
+    localStorage.removeItem(READY_PROJECT_KEY); return null;
+  }
   try { const root = await navigator.storage.getDirectory(); const handle = await root.getDirectoryHandle(path, { create: false });
     knownMirrorHandles.add(handle); return handle; }
   catch (error) { log.warn('Stored Android repository is unavailable', error); localStorage.removeItem(READY_PROJECT_KEY); return null; }

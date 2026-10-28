@@ -69,4 +69,46 @@ describe('revertFieldWrite: a cancelled write keeps what others changed meanwhil
       expect(warning?.message).toContain('s2');
     });
   });
+
+  describe('identified lists changed by another transaction too', () => {
+    beforeEach(() => Logger.clear());
+    const warnings = (text: string) => Logger.search(text).filter(entry => entry.level === 'WARN');
+    type Clip = { id: string; opacity: number; waveform?: string; isLoading?: boolean };
+    const clip: Clip = { id: 'c', opacity: 1, isLoading: true };
+
+    it('reverts only the keys the write changed in an item a later write replaced (a load result stays)', () => {
+      const byTool = { ...clip, opacity: 0.5 };
+      // During the tool's await a load result replaced the clip with its runtime fields.
+      const loaded = { ...byTool, waveform: 'peaks', isLoading: false };
+      expect(revertFieldWrite([loaded], [clip], [byTool], 'timeline.clips'))
+        .toEqual([{ id: 'c', opacity: 1, waveform: 'peaks', isLoading: false }]);
+      expect(warnings('timeline.clips')).toHaveLength(0);
+    });
+
+    it('keeps a key another write changed too and logs it', () => {
+      const byTool = { ...clip, opacity: 0.5 };
+      const byUser = { ...byTool, opacity: 0.8, waveform: 'peaks' };
+      expect(revertFieldWrite([byUser], [clip], [byTool], 'timeline.clips')).toEqual([byUser]);
+      expect(warnings('timeline.clips')[0]?.message).toContain('opacity');
+    });
+
+    it('leaves an item removed by a later write removed', () => {
+      const a = { id: 'a', opacity: 1 }, b = { id: 'b', opacity: 1 };
+      const byTool = { ...b, opacity: 0.2 };
+      // The tool changed b; the user deleted b afterwards, and also edited a.
+      expect(revertFieldWrite([{ ...a, opacity: 0.4 }], [a, b], [a, byTool])).toEqual([{ ...a, opacity: 0.4 }]);
+    });
+
+    it('takes back a pure reorder when a later write changed items but not the order', () => {
+      const a = { id: 'a', opacity: 1 }, b = { id: 'b', opacity: 1 };
+      const loadedA = { ...a, waveform: 'peaks' };
+      expect(revertFieldWrite([b, loadedA], [a, b], [b, a], 'timeline.tracks')).toEqual([loadedA, b]);
+    });
+
+    it('keeps a reorder another write reordered again and logs it', () => {
+      const a = { id: 'a', opacity: 1 }, b = { id: 'b', opacity: 1 }, c = { id: 'c', opacity: 1 };
+      expect(revertFieldWrite([c, b, a], [a, b, c], [b, a, c], 'timeline.tracks')).toEqual([c, b, a]);
+      expect(warnings('timeline.tracks')).toHaveLength(1);
+    });
+  });
 });

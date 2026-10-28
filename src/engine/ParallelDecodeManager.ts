@@ -24,6 +24,7 @@ import {
   getClipMainTimelineDuration,
   getClipMainTimelineStart,
   getPrefetchTargetForClip,
+  isConstantMappingBackward,
   isTimeInClipRange,
   timelineToSourceTime,
   type ParallelDecodeClipInfo as ClipInfo,
@@ -53,6 +54,7 @@ import {
   clearFrameBufferState,
   getResumeSampleIndexAfterReset,
   hasExpectedBufferedFrame,
+  isExpectedFrameInFlight,
   refreshBufferedTimestampBounds,
   removeBufferedTimestamp,
   selectEvictionTimestamp,
@@ -156,6 +158,9 @@ export class ParallelDecodeManager {
       isDecoding: false,
       pendingDecode: null,
       needsKeyframe: true, // Decoder was just configure()'d — first chunk must be a keyframe
+      // A reversed clip needs the frames below its first target next: knowing that
+      // before the first advance keeps that advance from pruning them.
+      advancingBackward: isConstantMappingBackward(clipInfo),
     };
 
     this.clipDecoders.set(clipInfo.clipId, clipDecoder);
@@ -404,8 +409,11 @@ export class ParallelDecodeManager {
       clipDecoder.presentationOffsetSeconds
     );
     const frameInBuffer = hasExpectedBufferedFrame(clipDecoder, clampedSourceTime);
+    // Already queued on the decoder: wait for it below instead of seeking, which
+    // would reset the decoder and drop exactly that frame.
+    const frameInFlight = !frameInBuffer && isExpectedFrameInFlight(clipDecoder, clampedSourceTime, targetSampleIndex);
 
-    if (!frameInBuffer && !clipDecoder.isDecoding) {
+    if (!frameInBuffer && !frameInFlight && !clipDecoder.isDecoding) {
       const decodePlan = createDecodeSchedulingPlan({
         sampleIndex: clipDecoder.sampleIndex,
         targetSampleIndex,
@@ -823,7 +831,11 @@ export class ParallelDecodeManager {
         clipDecoder.advancingBackward = sourceTime < clipDecoder.lastAdvanceSourceTime;
       }
       clipDecoder.lastAdvanceSourceTime = sourceTime;
-      const movingBackward = clipDecoder.advancingBackward === true;
+      // Direction still unknown (first advance of a forward, remapped or held clip):
+      // prune nothing. Assuming forward closed the frames a reversed walk needs next
+      // and forced a seek plus GOP re-decode; the buffer cap still bounds memory.
+      if (clipDecoder.advancingBackward === undefined) continue;
+      const movingBackward = clipDecoder.advancingBackward;
 
       // Clean up frames that are significantly behind current position (> 200ms behind)
       const timestampsToRemove: number[] = [];

@@ -1,4 +1,7 @@
 import { captureEditorTransactionBinding } from '../project/repository/transaction/editorTransactionBinding';
+import { getEditorTransactionToken } from '../project/repository/transaction/editorMutationRuntime';
+import { agentRequestRevisionSource } from '../project/repository/transaction/historyNavigationPlan';
+import { getActiveAgentRequestId } from './agentTransaction';
 import { Logger } from '../logger';
 
 const log = Logger.create('ToolTransaction');
@@ -18,10 +21,14 @@ export interface ToolTransaction {
  * picks up exactly that transaction. Writes after an await join it only through `run` / `bindStore`; a timer,
  * a background result or a user edit during the await keeps its own transaction and is never rolled back
  * with a failing tool. A late write after the tool's transaction closed (a timed-out tool that kept going)
- * is recorded as its own step and logged.
+ * is recorded as its own assistant step (of the running request, if any) and logged: it never joins a user's
+ * gesture or sheet batch that happens to be open then.
  */
 export function captureToolTransaction(label: string): ToolTransaction {
-  const binding = captureEditorTransactionBinding(label);
+  const bound = getEditorTransactionToken() !== null;
+  const requestId = bound ? getActiveAgentRequestId() : null;
+  const binding = captureEditorTransactionBinding(label, bound
+    ? { fallbackSource: requestId ? agentRequestRevisionSource(requestId) : 'agent' } : {});
   let warned = false;
   const run = <T>(action: () => T): T => {
     if (binding.token && !binding.isOpen() && !warned) {

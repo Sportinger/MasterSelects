@@ -170,6 +170,29 @@ export function phoneSheetSettle(input: {
   return best.detent;
 }
 
+/**
+ * Growth of a content-fit sheet whose height already locked (usePhoneSheetDetent). Content a tap adds
+ * (a style tab's panel, a "More" section, a settings sub-page) must not open below the fold, so the
+ * sheet grows towards its cap; small changes (a value label, a Reset button, a status line) and anything
+ * shrinking keep the height, so the preview being judged does not jump.
+ */
+export const PHONE_SHEET_GROWTH = {
+  /** Growth right after a tap or key in the sheet (ms window) needs at least this many px. */
+  afterInputPx: 40,
+  /** How long after a tap or key in the sheet new content counts as asked for, in ms. */
+  inputWindowMs: 1000,
+  /** Growth without a recent tap or key needs at least this many px. */
+  unpromptedPx: 120,
+} as const;
+
+/** The new locked height, or null when the sheet keeps its height. Never shrinks, never passes the cap. */
+export function phoneSheetGrowth(input: { lock: number; natural: number; cap: number; sinceInputMs: number }): number | null {
+  const target = Math.round(Math.min(input.natural, input.cap));
+  const growth = target - input.lock;
+  const needed = input.sinceInputMs <= PHONE_SHEET_GROWTH.inputWindowMs ? PHONE_SHEET_GROWTH.afterInputPx : PHONE_SHEET_GROWTH.unpromptedPx;
+  return growth >= needed ? target : null;
+}
+
 /** The detent each sheet id was left at, for the rest of the session (not persisted). */
 const remembered = new Map<string, PhoneSheetDetent>();
 

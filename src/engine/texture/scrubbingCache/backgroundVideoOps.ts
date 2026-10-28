@@ -83,7 +83,8 @@ export async function cacheBackgroundVideoFrame(
       if (session.disposed) return false;
       const owned = bitmap;
       bitmap = null;
-      return scrubCache.addBackgroundFrame(owned, session.videoSrc, targetTime, notify);
+      return scrubCache.addBackgroundFrame(owned, session.videoSrc, targetTime, notify,
+        { width: video.videoWidth, height: video.videoHeight });
     } catch {
       return false;
     } finally {

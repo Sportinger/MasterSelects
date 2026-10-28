@@ -58,20 +58,23 @@ export function PhoneShell({ preview, timeline, home }: PhoneShellProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   usePhoneViewport(rootRef);
   const workspace = usePhoneUiStore((state) => state.workspace);
+  // An open sheet keeps only the docked transport (and the preview, which some sheets draw on) in reach
+  // for keyboard and screen-reader users; the strips it covers leave the focus order (PhoneSheet.tsx).
+  const sheetCovers = usePhoneUiStore((state) => state.activeSheet !== null) && !home;
 
   return (
     <div ref={rootRef} className="phone-shell" data-touch-goo="off">
       {/* While the home shows, the strips behind it are out of the focus order and the a11y tree. */}
       <div className="phone-shell__strips" inert={home ? true : undefined}>
-        <PhoneTopBar />
+        <PhoneTopBar inert={sheetCovers} />
         <section className="phone-shell__preview" aria-label="Preview area">
           {preview}
         </section>
         <PhoneTransport />
-        <section className="phone-shell__timeline" aria-label="Timeline area">
+        <section className="phone-shell__timeline" aria-label="Timeline area" inert={sheetCovers || undefined}>
           {timeline}
         </section>
-        <PhoneContextToolbar />
+        <PhoneContextToolbar inert={sheetCovers} />
       </div>
       {home}
       {workspace && !home ? (

@@ -410,7 +410,14 @@ test('colour-basic-adjustments: Brightness and Exposure change the picture; Rese
   const openBefore = await openPicture(m1)
   await dragSlider(m1, 0.3)
   await expect.poll(() => sliderValue(m1), { message: 'Brightness moved' }).toBeGreaterThan(0.2)
-  await pixelsWhere(m1, pixels => luma(pixels) > luma(openBefore) + 8, 'Brightness brightens the preview', 15_000, openBefore)
+  const brightened = await pixelsWhere(m1, pixels => luma(pixels) > luma(openBefore) + 8, 'Brightness brightens the preview', 15_000, openBefore)
+  // The docked Undo waits for Done or Cancel while the sheet holds its changes: greyed, and a tap says why.
+  const undo = m1.page.getByTestId(IDS.undo)
+  await expect(undo, 'Undo looks disabled while the sheet holds its changes').toHaveAttribute('aria-disabled', 'true')
+  await tapOn(m1, undo)
+  await expect(m1.page.getByTestId(IDS.toast), 'a tap on Undo explains why it waits').toContainText('Done')
+  await expect(m1.sheet, 'the sheet stays open').toBeVisible()
+  await pixelsWhere(m1, pixels => looksLike(pixels, brightened), 'the live change stays after the tap on Undo', 15_000, brightened)
   // Reset of the value returns the picture.
   await tapOn(m1, m1.sheet.getByTestId(FX.sliderReset))
   await pixelsWhere(m1, pixels => sameAs(pixels, openBefore), 'Reset returns to the original picture', 15_000, openBefore)
@@ -423,6 +430,7 @@ test('colour-basic-adjustments: Brightness and Exposure change the picture; Rese
   await shot(m1, testInfo, 'adjust-sheet')
   await done(m1)
   await pixelsWhere(m1, pixels => looksLike(pixels, exposed), 'Done keeps the adjusted picture', 15_000, exposed)
+  await expect(m1.page.getByTestId(IDS.undo), 'Done gives Undo back').not.toHaveAttribute('aria-disabled', 'true')
   await undoOnce(m1)
   await pixelsWhere(m1, pixels => sameAs(pixels, before), 'one Undo returns to the exact before picture', 15_000, before)
 

@@ -82,7 +82,9 @@ tap empty space (or the clip again) to deselect.
 Sheets (media, text, export, projects) rise from the bottom with **Cancel** and **Done**. Cancel
 throws the draft away and never changes your project; **Done** commits it as one undo step.
 A sheet is only as tall as its content, and the transport (play, time, keyframe, Undo, Redo) stays
-docked right above it, so the preview keeps the rest of the screen. Drag the **grab handle** (or the
+docked right above it, so the preview keeps the rest of the screen. While a sheet holds changes,
+Undo and Redo wait for its Done or Cancel: they look greyed, and a tap says so. A sheet whose tab or
+section you open later grows to show it. Drag the **grab handle** (or the
 sheet's header) to make it smaller or taller, tap it to switch sizes, or drag it down to close; the
 sheet keeps that size until the page reloads. A tap on the top bar also closes it, a touch on the
 preview never does. Rows of choices that do not fit scroll sideways: the cut edge fades out, and the
@@ -211,7 +213,8 @@ file or video link. Import, move, duplicate or delete several items at once; bef
 you which clips use an item, and one Undo brings everything back. Missing media show up in red and one
 tap relinks them. **Web sources** searches YouTube, Instagram or TikTok, and **Storage and sequences**
 imports numbered 3D model or splat files as one item. Tap the project name, then **Settings**, for the
-theme, the transcription provider, **Touch and input** (a ring under every finger for screen
+theme, the transcription provider (a hosted one stays marked but greyed while you are signed out:
+Captions then waits until you sign in or choose On this device), **Touch and input** (a ring under every finger for screen
 recordings), **Assistant**, **Integrations**, your account, the version and a cache reset that says
 exactly what it clears. **Diagnostics** also lists the **Recent project loads** since the page
 loaded: each open, create or save with its time per step in seconds, the first frame after loading and
@@ -338,7 +341,8 @@ do what the modifier keys do in the full editor.
 
 Every control has a name for screen readers, and timeline clips read as "name, starts at …, … long".
 A keyboard reaches everything: Tab moves through top bar, transport, timeline and tools in screen
-order, stays inside an open sheet, and Escape closes it and returns focus. Buttons you tap often are at
+order; with a sheet open it cycles through the sheet and the transport docked above it (Play,
+Keyframe, Undo, Redo, Fullscreen), and Escape closes the sheet and returns focus. Buttons you tap often are at
 least 44 px, sheets open without animation when the system asks for reduced motion, and the phone
 follows the editor theme: it is light for Light, for System while the device is light, and for a
 Custom theme brighter than 50.
@@ -400,6 +404,14 @@ has no folder picker, and reading text in pictures (MasterSelects has no OCR eng
   (`usePhoneSheetDetent.ts`, remembered per sheet for the session, arrow keys step); even `full`
   leaves the preview 30 % (at least 200 px). The settled and live heights are published as
   `--phone-sheet-h` and `--phone-sheet-live-h`, and the 48 px transport docks above the sheet.
+  `--phone-keyboard-inset` is only the part of the shell the keyboard covers (the shell is already
+  sized to the visual viewport, `shell/usePhoneViewport.ts`), and the caps subtract it too. A
+  content-fit sheet locks its height 400 ms after opening; content a tap adds later grows it towards
+  the cap (`phoneSheetGrowth`), small changes never move it. `sheets/phoneHistoryGuard.ts` greys
+  the docked Undo/Redo while an edit session holds changes and explains a tap; the shell strips a
+  sheet covers are `inert`, so Tab and screen readers reach the sheet and the transport. Toast rules
+  (`shell/phoneToastLayout.ts`): with a sheet open an info toast goes beside the active composition
+  tab only when it fits on one line there, otherwise it wraps; long messages stay longer.
   `transition/phoneSheetPrimitives.tsx` holds the shared `PhoneChipRow` (edge fade, selected chip
   kept in view) and `PhoneEmptyState`. `sheets/PhoneSheetHost.tsx` renders
   `usePhoneUiStore().activeSheet` from the lazy `sheets/phoneSheetRegistry.tsx`: `projects`, `media`,

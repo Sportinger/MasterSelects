@@ -46,3 +46,11 @@ export function clearLastOpfsProjectName(tabId = browserTabId): void {
   if (!storage) return;
   storage.removeItem(getTabOpfsLastProjectNameKey(tabId));
 }
+
+/** Forgets this tab's and the shared last browser-storage project, so a newer folder project wins the restore. */
+export function forgetLastOpfsProjectName(tabId = browserTabId): void {
+  const storage = getLocalStorage();
+  if (!storage) return;
+  storage.removeItem(getTabOpfsLastProjectNameKey(tabId));
+  storage.removeItem(LEGACY_OPFS_LAST_PROJECT_NAME_KEY);
+}

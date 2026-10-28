@@ -9,13 +9,14 @@ const log = Logger.create('EditorRollback');
  * the current value must not throw away what other transactions changed in the same field meanwhile (a background
  * result, a user edit during an assistant tool's await): they are committed revisions of their own. So the write is
  * taken back per item (arrays of `{ id }` items, Maps, Sets, arrays of unique primitive values, plain records):
- * only the items this write changed return to their earlier value. A plain value returns only when nobody else
+ * only the items this write changed return to their earlier value, and inside a changed `{ id }` item only the
+ * keys nobody changed since. A plain value returns only when nobody else
  * changed it since; otherwise the later value stays. Where a per-item revert would be ambiguous (duplicates, a
  * reorder, a key another transaction changed too) the later value stays and the conflict is logged.
  */
 export function revertFieldWrite(current: unknown, before: unknown, after: unknown, field = 'field'): unknown {
   if (Object.is(current, after) || shallowEqual(current, after)) return before;
-  if (isIdentifiedList(before) && isIdentifiedList(after) && isIdentifiedList(current)) return revertList(current, before, after);
+  if (isIdentifiedList(before) && isIdentifiedList(after) && isIdentifiedList(current)) return revertList(current, before, after, field);
   if (before instanceof Map && after instanceof Map && current instanceof Map) return revertMap(current, before, after);
   if (before instanceof Set && after instanceof Set && current instanceof Set) return revertSet(current, before, after);
   if (isPrimitiveList(before) && isPrimitiveList(after) && isPrimitiveList(current)) return revertPrimitiveList(current, before, after, field);
@@ -30,24 +31,53 @@ function isIdentifiedList(value: unknown): value is Identified[] {
   return Array.isArray(value) && value.every(item => item !== null && typeof item === 'object' && typeof (item as Identified).id === 'string');
 }
 
-function revertList(current: Identified[], before: Identified[], after: Identified[]): Identified[] {
+/**
+ * Per item: items the write added go, items it removed come back at their place, and an item it changed returns
+ * per key: a key another write changed since (a load result, a waveform, a background status on the same clip)
+ * keeps the later value. An item another write removed since stays removed. A pure reorder by the write is
+ * taken back when nobody reordered the list since.
+ */
+function revertList(current: Identified[], before: Identified[], after: Identified[], field: string): Identified[] {
   const beforeById = new Map(before.map((item, index) => [item.id, { item, index }]));
   const afterById = new Map(after.map(item => [item.id, item]));
   const changed = new Set<string>();
   for (const id of new Set([...beforeById.keys(), ...afterById.keys()])) {
     if (beforeById.get(id)?.item !== afterById.get(id)) changed.add(id);
   }
-  if (!changed.size) return current;
-  // Items this write added go; items it changed or removed come back as they were.
-  const result = current.filter(item => !changed.has(item.id) || beforeById.has(item.id))
-    .map(item => (changed.has(item.id) ? beforeById.get(item.id)!.item : item));
+  const sameIds = before.length === after.length && before.every(item => afterById.has(item.id));
+  const reordered = sameIds && before.some((item, index) => after[index]!.id !== item.id);
+  if (!changed.size && !reordered) return current;
+  const result: Identified[] = [];
+  for (const item of current) {
+    if (!changed.has(item.id)) { result.push(item); continue; }
+    const original = beforeById.get(item.id)?.item;
+    const written = afterById.get(item.id);
+    if (!original) continue; // added by the cancelled write
+    if (!written) { result.push(item); continue; } // removed by it and added again by someone else since: theirs
+    result.push(item === written ? original : revertItem(item, original, written, `${field}[${item.id}]`));
+  }
   const present = new Set(result.map(item => item.id));
   for (const id of changed) {
     const original = beforeById.get(id);
-    if (!original || present.has(id)) continue;
+    // Only what this write removed comes back; an item someone else removed since stays removed.
+    if (!original || present.has(id) || afterById.has(id)) continue;
     result.splice(Math.min(original.index, result.length), 0, original.item);
   }
-  return result;
+  if (!reordered) return result;
+  if (current.length !== after.length || current.some((item, index) => item.id !== after[index]!.id)) {
+    log.warn(`Cancel keeps the order of ${field}: the cancelled write reordered it and another transaction changed it since`);
+    return result;
+  }
+  const byId = new Map(result.map(item => [item.id, item]));
+  return before.map(item => byId.get(item.id)!);
+}
+
+function revertItem(current: Identified, before: Identified, after: Identified, field: string): Identified {
+  if (isPlainRecord(current) && isPlainRecord(before) && isPlainRecord(after)) {
+    return revertRecord(current, before, after, field) as Identified;
+  }
+  log.warn(`Cancel keeps ${field}: another transaction replaced it after the cancelled write`);
+  return current;
 }
 
 function revertMap(current: Map<unknown, unknown>, before: Map<unknown, unknown>, after: Map<unknown, unknown>): Map<unknown, unknown> {

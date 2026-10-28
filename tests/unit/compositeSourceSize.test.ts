@@ -39,6 +39,13 @@ describe('resolveCachedScrubFrameSize', () => {
     expect(resolveCachedScrubFrameSize({ videoWidth: 0, videoHeight: 0 }, layer({ type: 'video' }), { width: 960, height: 540 }))
       .toEqual({ width: 960, height: 540 });
   });
+  it('places a downscaled cached texture with the source size recorded at capture, not the texture size', () => {
+    // 1080p frame cached at the 960 px cache dimension; nested layers carry no intrinsic size.
+    expect(resolveCachedScrubFrameSize({ videoWidth: 0, videoHeight: 0 }, layer({ type: 'video' }),
+      { width: 960, height: 540, sourceWidth: 1920, sourceHeight: 1080 })).toEqual({ width: 1920, height: 1080 });
+    expect(resolveCachedScrubFrameSize({ videoWidth: 0, videoHeight: 0 }, layer({ type: 'video', intrinsicWidth: 3840, intrinsicHeight: 2160 }),
+      { width: 960, height: 540, sourceWidth: 1920, sourceHeight: 1080 })).toEqual({ width: 3840, height: 2160 });
+  });
   it('returns null only when no positive size exists at all', () => {
     expect(resolveCachedScrubFrameSize({ videoWidth: 0, videoHeight: 0 }, layer({ type: 'video', intrinsicWidth: 0 }), { width: 0, height: 540 })).toBeNull();
     expect(resolveCachedScrubFrameSize({ videoWidth: 0, videoHeight: 0 }, null, null)).toBeNull();

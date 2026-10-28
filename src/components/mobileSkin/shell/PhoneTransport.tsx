@@ -7,6 +7,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { usePhoneRuntime } from '../runtime/PhoneRuntimeContext';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneKeyframeButton } from '../keyframe/PhoneKeyframeButton';
+import { runPhoneHistoryTap, usePhoneHistoryBlockReason } from '../sheets/phoneHistoryGuard';
 import { PHONE_PREVIEW_TEST_IDS, usePhonePreviewModeStore } from '../preview/phonePreviewMode';
 import { PhoneIcon } from './phoneIcons';
 
@@ -73,6 +74,9 @@ export function PhoneTransport() {
   const { history } = usePhoneRuntime();
   const isPlaying = useTimelineStore((state) => state.isPlaying);
   const showToast = usePhoneUiStore((state) => state.showToast);
+  // While an edit sheet holds its own changes, Undo/Redo wait for its Done or Cancel (phoneHistoryGuard).
+  const undoBlocked = usePhoneHistoryBlockReason('undo');
+  const redoBlocked = usePhoneHistoryBlockReason('redo');
 
   const togglePlay = async () => {
     const timeline = useTimelineStore.getState();
@@ -104,11 +108,11 @@ export function PhoneTransport() {
           type="button"
           className="phone-icon-button"
           aria-label="Undo"
-          aria-disabled={!history.canUndo}
+          aria-disabled={!history.canUndo || undoBlocked !== null}
+          data-blocked={undoBlocked !== null ? 'true' : undefined}
+          title={undoBlocked ?? undefined}
           data-testid={PHONE_TEST_IDS.undo}
-          onClick={() => {
-            if (history.canUndo) history.undo();
-          }}
+          onClick={() => runPhoneHistoryTap('undo', history)}
         >
           <PhoneIcon name="undo" size={22} />
         </button>
@@ -116,11 +120,11 @@ export function PhoneTransport() {
           type="button"
           className="phone-icon-button"
           aria-label="Redo"
-          aria-disabled={!history.canRedo}
+          aria-disabled={!history.canRedo || redoBlocked !== null}
+          data-blocked={redoBlocked !== null ? 'true' : undefined}
+          title={redoBlocked ?? undefined}
           data-testid={PHONE_TEST_IDS.redo}
-          onClick={() => {
-            if (history.canRedo) history.redo();
-          }}
+          onClick={() => runPhoneHistoryTap('redo', history)}
         >
           <PhoneIcon name="redo" size={22} />
         </button>

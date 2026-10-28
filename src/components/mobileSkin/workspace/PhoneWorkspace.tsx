@@ -20,6 +20,7 @@ import {
 import { PHONE_WORKSPACE_TEST_IDS as IDS } from './phoneWorkspaceTestIds';
 import { renderPhoneWorkspaceCustom } from './phoneWorkspaceCustomViews';
 import { usePhoneWorkspaceBackGesture } from './usePhoneWorkspaceBackGesture';
+import { runPhoneHistoryTap } from '../sheets/phoneHistoryGuard';
 import './PhoneWorkspace.css';
 import './PhoneWorkspaceEditors.css';
 
@@ -180,7 +181,7 @@ function HistoryButtons() {
         data-testid={IDS.undo}
         aria-label="Undo"
         aria-disabled={!history.canUndo}
-        onClick={() => { if (history.canUndo) history.undo(); }}
+        onClick={() => runPhoneHistoryTap('undo', history)}
         onPointerUp={(event) => { if (event.pointerType !== 'mouse') event.currentTarget.blur(); }}
       >
         <PhoneIcon name="undo" size={20} />
@@ -191,7 +192,7 @@ function HistoryButtons() {
         data-testid={IDS.redo}
         aria-label="Redo"
         aria-disabled={!history.canRedo}
-        onClick={() => { if (history.canRedo) history.redo(); }}
+        onClick={() => runPhoneHistoryTap('redo', history)}
         onPointerUp={(event) => { if (event.pointerType !== 'mouse') event.currentTarget.blur(); }}
       >
         <PhoneIcon name="redo" size={20} />

@@ -7,6 +7,8 @@ export const PHONE_SETTINGS_TEST_IDS = {
   customBrightness: 'phone-settings-custom-brightness',
   /** One option per provider; data-provider is the provider id. */
   transcription: 'phone-settings-transcription',
+  /** Shown when the stored provider cannot run now (hosted, no account). */
+  transcriptionNote: 'phone-settings-transcription-note',
   repeatDeselect: 'phone-settings-repeat-deselect',
   zoomAnchor: 'phone-settings-zoom-anchor',
   autoMobileLayout: 'phone-settings-auto-mobile-layout',

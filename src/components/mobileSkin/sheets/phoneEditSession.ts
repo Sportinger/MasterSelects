@@ -23,6 +23,7 @@ import {
 import { cancelHistoryBatch, endBatch, startBatch } from '../../../stores/historyStore';
 import type { PhoneActionResult } from '../contracts';
 import { usePhoneUiStore } from '../state/phoneUiStore';
+import { registerPhoneEditTransaction } from './phoneHistoryGuard';
 
 const log = Logger.create('PhoneEditSession');
 
@@ -54,6 +55,10 @@ export function createPhoneEditSession(label: string, options: PhoneEditSessionO
   let chain: Promise<void> = Promise.resolve();
   let changed = false;
   let closed = false;
+  // While the session holds changes, the docked Undo/Redo explain that Done or Cancel comes first.
+  let releaseHistoryGuard: (() => void) | null = null;
+  const holdHistoryGuard = () => { releaseHistoryGuard ??= registerPhoneEditTransaction(label); };
+  const releaseGuard = () => { releaseHistoryGuard?.(); releaseHistoryGuard = null; };
 
   const repository = () => getEditorRepositorySession() !== null;
   const gestureAlive = () => gesture !== null && ownsEditorTransaction(gesture.token);
@@ -91,6 +96,7 @@ export function createPhoneEditSession(label: string, options: PhoneEditSessionO
       if (closed) return;
       open();
       changed = true;
+      holdHistoryGuard();
       await runInside(change);
     }).catch((error) => {
       log.warn(`${label}: live change failed`, error);
@@ -112,6 +118,7 @@ export function createPhoneEditSession(label: string, options: PhoneEditSessionO
     closed = true;
     const lost = changed && gesture !== null && !gestureAlive();
     if (lost && !finalChange) {
+      releaseGuard();
       log.warn(`${label}: the open transaction was lost before Done; nothing to keep`);
       return { ok: false, message: `${label}: the changes were discarded before Done. Please make them again.` };
     }
@@ -132,6 +139,8 @@ export function createPhoneEditSession(label: string, options: PhoneEditSessionO
       log.error(`${label}: commit failed`, error);
       try { rollback(); } catch (rollbackError) { log.error(`${label}: rollback failed`, rollbackError); }
       return { ok: false, message: `${label} failed: ${error instanceof Error ? error.message : String(error)}` };
+    } finally {
+      releaseGuard();
     }
   };
 
@@ -141,7 +150,7 @@ export function createPhoneEditSession(label: string, options: PhoneEditSessionO
     if (!changed) return;
     // Let an in-flight change finish first so the rollback covers it too.
     chain = chain.then(() => {
-      try { rollback(); } catch (error) { log.error(`${label}: cancel failed`, error); }
+      try { rollback(); } catch (error) { log.error(`${label}: cancel failed`, error); } finally { releaseGuard(); }
     });
   };
 

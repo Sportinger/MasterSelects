@@ -4,6 +4,7 @@ import type { ToolResult } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { MediaFile } from '../../../stores/mediaStore/types';
+import { captureToolTransaction } from '../toolTransaction';
 
 type GaussianRendererDebugAccess = {
   currentAvatarUrl?: string | null;
@@ -409,6 +410,8 @@ export async function handleTestGaussianRenderer(args: Record<string, unknown>):
 export async function handleTestGaussianImportPipeline(): Promise<ToolResult> {
   const steps: Array<{ step: string; ok: boolean; detail: string; ms?: number }> = [];
   const t0 = performance.now();
+  // The import and the clip happen after awaits: they belong to this tool's transaction explicitly.
+  const transaction = captureToolTransaction('testGaussianImportPipeline');
 
   try {
     // Step 1: Fetch the bundled avatar zip as a File object
@@ -436,7 +439,7 @@ export async function handleTestGaussianImportPipeline(): Promise<ToolResult> {
 
     // Step 2: Import into media store
     const importStart = performance.now();
-    const mediaStore = useMediaStore.getState() as GaussianImportMediaStore;
+    const mediaStore = transaction.bindStore(useMediaStore.getState() as GaussianImportMediaStore);
     let mediaFile: MediaFile;
     try {
       mediaFile = await mediaStore.importGaussianAvatar(avatarFile);
@@ -466,7 +469,7 @@ export async function handleTestGaussianImportPipeline(): Promise<ToolResult> {
 
     // Step 4: Add clip to timeline
     const addClipStart = performance.now();
-    const timelineStore = useTimelineStore.getState();
+    const timelineStore = transaction.bindStore(useTimelineStore.getState());
     const { tracks } = timelineStore;
     const videoTrack = tracks.find(t => t.type === 'video') || tracks[0];
     if (!videoTrack) {

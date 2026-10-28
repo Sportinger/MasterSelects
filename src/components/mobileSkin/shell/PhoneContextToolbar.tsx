@@ -10,7 +10,8 @@ import { usePhoneScrollEdges } from './usePhoneScrollEdges';
 
 const log = Logger.create('PhoneToolbar');
 
-export function PhoneContextToolbar() {
+/** `inert`: out of the focus order and the a11y tree while an open sheet covers it (PhoneShell). */
+export function PhoneContextToolbar({ inert = false }: { inert?: boolean } = {}) {
   const { status } = usePhoneRuntime();
   const selected = useTimelineStore((state) => state.selectedClipIds);
   // While playing, the playhead moves every frame: the toolbar keeps the time where playback
@@ -77,7 +78,7 @@ export function PhoneContextToolbar() {
   };
 
   return (
-    <nav className="phone-toolbar" aria-label="Tools" data-testid={PHONE_TEST_IDS.toolbar} data-scope={scope}>
+    <nav className="phone-toolbar" aria-label="Tools" data-testid={PHONE_TEST_IDS.toolbar} data-scope={scope} inert={inert || undefined}>
       {scope === 'clip' ? (
         <button
           type="button"

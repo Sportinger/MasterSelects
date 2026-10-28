@@ -102,6 +102,10 @@ test('INV6/transcription-provider-settings: signed out, hosted providers are gre
     await expect(account).toHaveAttribute('data-ready', 'false')
     const hosted = m1.page.locator(`[data-testid="${CAP.provider}"][data-provider="deepgram"]`)
     await expect(hosted).toHaveAttribute('aria-disabled', 'true')
+    // The stored provider keeps its mark, greyed, as in Settings: the radio group is never empty.
+    const stored = m1.page.locator(`[data-testid="${CAP.provider}"][data-provider="hybrid"]`)
+    await expect(stored).toHaveAttribute('aria-checked', 'true')
+    await expect(stored).toHaveAttribute('aria-disabled', 'true')
     await tapOn(m1, hosted)
     const notice = m1.page.getByTestId(IDS.unavailableNotice)
     await expect(notice, 'a hosted provider explains what it needs').toContainText('signed-in account')

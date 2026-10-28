@@ -64,6 +64,8 @@ export const MODIFYING_TOOLS = new Set([
   // Media tools
   'createMediaFolder', 'renameMediaItem', 'deleteMediaItem', 'moveMediaItems',
   'createComposition', 'duplicateComposition', 'importLocalFiles', 'addCompositionClip',
+  // Clip insertion: its track, clip, trim and de-click writes (some after awaits) are one transaction.
+  'addClipSegment',
   'createStressTestProjectFixture',
   'executeBatch',
   'addStoryboardScene', 'updateStoryboardScene',

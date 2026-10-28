@@ -143,7 +143,8 @@ function CompositionTabs() {
   );
 }
 
-export function PhoneTopBar() {
+/** `inert`: out of the focus order and the a11y tree while an open sheet covers it (PhoneShell). */
+export function PhoneTopBar({ inert = false }: { inert?: boolean } = {}) {
   const projectName = useMediaStore((state) => state.currentProjectName);
   const hasClips = useTimelineStore((state) => state.clips.length > 0);
   const openSheet = usePhoneUiStore((state) => state.openSheet);
@@ -159,7 +160,7 @@ export function PhoneTopBar() {
   };
 
   return (
-    <header className="phone-top-bar" data-testid={PHONE_TEST_IDS.topBar}>
+    <header className="phone-top-bar" data-testid={PHONE_TEST_IDS.topBar} inert={inert || undefined}>
       <div className="phone-top-bar__row">
         <TopBarButton actionId="projects" label="Projects" icon="back" onPress={requestPhoneHome} />
         <button

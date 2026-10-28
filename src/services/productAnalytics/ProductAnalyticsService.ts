@@ -151,6 +151,9 @@ export class ProductAnalyticsService {
         keepalive,
         method: 'POST',
       });
+      // The acknowledgement carries nothing we use. An unread body keeps the request open in
+      // Chrome (no loadingFinished in DevTools), so release it right away.
+      void response.body?.cancel().catch(() => undefined);
       if (!response.ok && response.status >= 500) {
         this.requeue(batch);
       }

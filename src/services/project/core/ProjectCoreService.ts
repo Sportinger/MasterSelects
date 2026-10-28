@@ -1,14 +1,14 @@
 import { updateEditorRepositoryProjectFields } from '../repository/transaction/editorRepositorySession';
-import { isAndroidAutoRestoreProjectHandle } from '../androidProjectAutoRestore';
+import { forgetAndroidProjectAutoRestoreUnless, isAndroidAutoRestoreProjectHandle } from '../androidProjectAutoRestore';
 import { Logger } from '../../logger';
 import { projectDB } from '../../projectDB';
 import type { FileStorageService } from './FileStorageService';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 import { acquireProjectRoot, getProjectWriteSupportError, resolveProjectRootMode, listProjectFolderNames } from './projectRootAccess';
-import { directoryHandleExists, rememberLastProject, rememberProjectParent } from './projectDirectoryPersistence';
+import { directoryHandleExists, rememberLastProject, rememberLastStoredProject, rememberProjectParent } from './projectDirectoryPersistence';
 import { addRecentFsaProject, addRecentOpfsProject, getRecentFsaProjectMediaFileIds, getRecentFsaProjectMediaSourceRootIds } from '../recentProjects';
 import { requestMediaFileAccess, requestMediaSourceRootAccess } from '../mediaSourceRootAccess';
-import { getTabLastProjectHandleKey, LEGACY_LAST_PROJECT_HANDLE_KEY, readLastOpfsProjectName } from '../tabProjectPersistence';
+import { getTabLastProjectHandleKey, getTabOpfsLastProjectNameKey, LEGACY_LAST_PROJECT_HANDLE_KEY, LEGACY_OPFS_LAST_PROJECT_NAME_KEY } from '../tabProjectPersistence';
 import { openRepositoryProject, createRepositoryAt, renameRepositoryProject, createIndependentProjectBackup, repositoryHasUnsavedChanges } from '../repository/lifecycle/repositoryProjectOperations';
 import { closeEditorRepository, flushEditorRepository, getActiveRepositorySession, readEditorRepositoryProject, isScratchRepository } from '../repository/lifecycle/editorRepositoryLifecycle';
 import { directoryForOpfs, isLegacyProjectLocation, opfsLocationExists } from '../repository/lifecycle/repositoryLocations';
@@ -18,6 +18,9 @@ import { RepositoryError } from '../repository/contracts';
 import type { NewProjectComposition } from '../repository/lifecycle/defaultProject';
 
 const log = Logger.create('ProjectCore');
+function readStoredName(key: string): string | null {
+  try { return localStorage.getItem(key)?.trim() || null; } catch { return null; }
+}
 export class ProjectCoreService {
   private projectHandle: FileSystemDirectoryHandle | null = null;
   private pendingHandle: FileSystemDirectoryHandle | null = null;
@@ -93,41 +96,63 @@ export class ProjectCoreService {
     if (!handle) throw new Error('Repository activation has no project directory');
     this.projectHandle = handle; this.pendingHandle = null;
     if (!remember) return;
-    if (session.location.kind === 'opfs') await addRecentOpfsProject(session.location.path, this.getProjectData(), session.location.store);
-    else { await rememberLastProject(handle); await addRecentFsaProject(handle, this.getProjectData()); }
+    // The last opened project is restored next time, whatever its backend (see rememberLastProject).
+    forgetAndroidProjectAutoRestoreUnless(session.location.kind === 'opfs' ? session.location.path : null);
+    if (session.location.kind === 'opfs') {
+      await rememberLastStoredProject(session.location.path);
+      await addRecentOpfsProject(session.location.path, this.getProjectData(), session.location.store);
+    } else { await rememberLastProject(handle); await addRecentFsaProject(handle, this.getProjectData()); }
   }
   async saveProject(): Promise<boolean> { return flushEditorRepository(); }
   async closeProject(): Promise<void> { await closeEditorRepository(); this.projectHandle = null; }
   async createBackup(): Promise<boolean> { return createIndependentProjectBackup(); }
   async renameProject(name: string): Promise<boolean> { return renameRepositoryProject(name); }
+  /**
+   * Restores the newest opened project: this tab's live browser project, then this tab's last project, then
+   * the last project of any tab. Opening a project replaces the record of the other backend (adoptSession),
+   * so within one level a browser-storage name and a folder handle only coexist in records from older
+   * versions; the browser-storage name, which needs no permission, is tried first.
+   */
   async restoreLastProject(): Promise<boolean> {
-    const repositoryPath = sessionStorage.getItem('ms.repository.last-opfs-path');
-    const lastStored = repositoryPath ?? (resolveProjectRootMode() === 'opfs' ? readLastOpfsProjectName() : null);
-    if (lastStored) {
-      // A project removed from browser storage since then is simply not restored.
-      if (await opfsLocationExists(lastStored)) return this.openStoredProject(lastStored);
-      log.info('Last stored project no longer exists; nothing restored', { name: lastStored }); return false;
+    const live = sessionStorage.getItem('ms.repository.last-opfs-path');
+    if (live) return this.restoreStoredProject(live);
+    const levels: Array<{ name: string | null; handleKey: string }> = [
+      { name: readStoredName(getTabOpfsLastProjectNameKey()), handleKey: getTabLastProjectHandleKey() },
+      { name: readStoredName(LEGACY_OPFS_LAST_PROJECT_NAME_KEY), handleKey: LEGACY_LAST_PROJECT_HANDLE_KEY },
+    ];
+    for (const { name, handleKey } of levels) {
+      if (name) return this.restoreStoredProject(name);
+      if (resolveProjectRootMode() === 'opfs') continue;
+      const outcome = await this.restoreFolderProject(handleKey);
+      if (outcome !== 'none') return outcome === 'opened';
     }
-    if (resolveProjectRootMode() === 'opfs') return false;
+    return false;
+  }
+  private async restoreStoredProject(name: string): Promise<boolean> {
+    // A project removed from browser storage since then is simply not restored.
+    if (await opfsLocationExists(name)) return this.openStoredProject(name);
+    log.info('Last stored project no longer exists; nothing restored', { name }); return false;
+  }
+  /** 'none': no folder is remembered under this key, so a broader level may still apply. */
+  private async restoreFolderProject(storedKey: string): Promise<'opened' | 'not-opened' | 'none'> {
+    let handle: FileSystemDirectoryHandle;
     try {
-      const tabKey = getTabLastProjectHandleKey();
-      const tabStored = await projectDB.getStoredHandle(tabKey);
-      const storedKey = tabStored ? tabKey : LEGACY_LAST_PROJECT_HANDLE_KEY;
-      const stored = tabStored ?? await projectDB.getStoredHandle(storedKey);
-      if (!stored || stored.kind !== 'directory') return false;
-      const handle = stored as FileSystemDirectoryHandle;
+      const stored = await projectDB.getStoredHandle(storedKey);
+      if (!stored || stored.kind !== 'directory') return 'none';
+      handle = stored as FileSystemDirectoryHandle;
       // Chrome keeps folder access only for the browsing session: after a browser restart the stored
       // handle asks again. It stays the same project; one click re-grants it (see requestPendingPermission).
       const permission = await handle.queryPermission({ mode: 'readwrite' });
-      if (permission !== 'granted') { this.pendingHandle = handle; log.info('Last project needs folder access again', { name: handle.name, permission }); return false; }
+      if (permission !== 'granted') { this.pendingHandle = handle; log.info('Last project needs folder access again', { name: handle.name, permission }); return 'not-opened'; }
       // Like a removed browser-storage project: a folder deleted or moved on disk is simply not restored.
       if (!await directoryHandleExists(handle)) {
         log.info('Last project folder no longer exists; nothing restored', { name: handle.name });
         await projectDB.deleteHandle(storedKey).catch(error => log.warn('Could not forget the missing last project folder', error));
-        return false;
+        return 'not-opened';
       }
-      return this.loadProject(handle);
-    } catch (error) { log.warn('Repository restore failed; previous session retained', error); return false; }
+    } catch (error) { log.warn('Repository restore failed; previous session retained', error); return 'not-opened'; }
+    // Opening failures still reach the caller, which reports them (as before this split).
+    return await this.loadProject(handle) ? 'opened' : 'not-opened';
   }
   updateProjectData(updates: Partial<ProjectFile>): void { const session = getActiveRepositorySession(); if (session) updateEditorRepositoryProjectFields(session, updates); }
   updateMedia(media: ProjectMediaFile[]): void { this.updateProjectData({ media }); }

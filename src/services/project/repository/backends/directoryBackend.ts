@@ -39,6 +39,7 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
   // Commit paths whose write failed in this session after the file may have been created. If the cleanup
   // failed too (a paused SAF folder fails both), what is left is this session's own torn write.
   const failedCommitWrites = new Set<string>();
+  const reportedForeignEmptyCommits = new Set<string>();
   // Runtime handles only. Hundreds of history files share the same two directories.
   const directories = new Map<string, Promise<FileSystemDirectoryHandle>>();
   // A cursor continues one fresh directory discovery, rather than scanning every
@@ -124,13 +125,24 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
     try { await owner.assertOwned(); return hit; } catch { files.forgetContent(path); return undefined; }
   }
   /**
-   * A commit file that can never become a valid commit: empty (created, then the write failed before any
-   * byte landed and its cleanup failed as well), or this session's own failed write that does not parse.
+   * This session's own failed commit write that can never become a valid commit: empty (created, then the
+   * write failed before any byte landed and its cleanup failed as well), or written but not parseable.
    * Such a file is not referenced by any valid chain: a successor is only written after its predecessor was
    * published and verified. It is ignored for head selection and removed under the held writer locks
    * (inside the serialized write queue, so no write of ours is in flight on it). Failing removal is logged
    * and retried at the next head check; it never blocks a save.
    */
+  /**
+   * An empty commit file this session did not create is never deleted: it may be a commit another device is
+   * still syncing in (a 0-byte placeholder of a Drive/Dropbox/SAF provider) or one another origin is writing
+   * right now; navigator.locks only exclude writers of this origin. Deleting it could sync back and destroy
+   * that commit. It is only skipped for head selection (recovery skips it too) and logged once per session.
+   */
+  function noteForeignEmptyCommit(commitPath: string): void {
+    if (reportedForeignEmptyCommits.has(commitPath)) return;
+    reportedForeignEmptyCommits.add(commitPath);
+    log.info(`Empty commit file not written by this session ignored and left in place: ${commitPath}`);
+  }
   async function removeTornCommit(commitPath: string, size: number): Promise<boolean> {
     files.forget(commitPath); commitSummaries.delete(commitPath);
     try {
@@ -180,10 +192,14 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
               if (summary === undefined) {
                 const bytes = await backend.read(commitPath, 0, undefined, signal);
                 summary = bytes.length ? await summarizeCommit(bytes) : null;
-                if (!bytes.length || (!summary && failedCommitWrites.has(commitPath))) {
-                  // Torn write: never cached (a retry may still finish this path) and never a head candidate.
-                  // Our own empty target is left in place: the write below finishes it.
-                  const removed = commitPath === path && !bytes.length ? false : await removeTornCommit(commitPath, bytes.length);
+                const ownTorn = failedCommitWrites.has(commitPath) && (!bytes.length || !summary);
+                if (!bytes.length || ownTorn) {
+                  // Torn or still-arriving: never cached (a retry or a sync may still finish this path) and never
+                  // a head candidate. Only this session's own failed writes are removed. Our own empty target is
+                  // left in place: the write below finishes it.
+                  const removed = commitPath === path && !bytes.length ? false
+                    : ownTorn ? await removeTornCommit(commitPath, bytes.length)
+                    : (noteForeignEmptyCommit(commitPath), false);
                   if (commitPath === path && !removed) listedSelf = true;
                   continue;
                 }
