@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-29",
+    "type": "new",
+    "title": "MasterSelects 3.3.7",
+    "description": "Adjustment layers now take every video effect that can work on the picture below (95 of 110); the few that need their own source say so on the effect card. Dragging values in the Transform and effect inspectors stays smooth: the number follows at once and the preview catches up without blocking, about three times the frame rate on clips with effects. New texture effects: Block Dissolve, Block Silhouette, Data HUD, Pixel Sort Bands, Block Cloud and Flow Mosh. On the phone an imported clip lands on the timeline at once while the copy into the project finishes in the background, many times faster than before, and the copy note no longer covers controls; switching projects waits for running copies with progress and a way to continue. Phone footage with uneven timestamps shows the right frame at cuts. FAST export refuses WebM, AVI and Ogg sources with a clear message, Flocking runs on Safari, and the loop toggle survives reopening a project.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-28",
     "type": "new",
     "title": "MasterSelects 3.3.6",
