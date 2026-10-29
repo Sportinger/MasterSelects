@@ -9,6 +9,13 @@
  * pipelines, and makes render/compute passes and render bundles skip their
  * `setPipeline`, draws, dispatches and derived bind groups. The feature is
  * missing; the rest of the frame renders, and the failure is reported.
+ *
+ * The verdict arrives asynchronously. Work encoded with a pipeline before its
+ * verdict is known is not protected: on Safari a pass that set a failed pipeline
+ * leaves its command encoder locked, the next `beginComputePass` reports
+ * "encoder state is invalid", and the whole command buffer is lost. Features that
+ * encode right after creating a pipeline must wait for `gpuPipelineSettled`
+ * (as the effect pipeline cache and the flock session gate do).
  */
 import { Logger } from '../../services/logger';
 import {
@@ -40,6 +47,8 @@ const failedPipelines = new WeakSet<object>();
 let failedPipelineCount = 0;
 const settledPipelines = new WeakMap<object, Promise<PipelineCreationFailure | null>>();
 const layoutOwners = new WeakMap<object, object>();
+/** Pipelines whose owner switches to another implementation when they fail. */
+const fallbacks = new WeakMap<object, string>();
 const bindGroupLayouts = new WeakMap<object, object>();
 /** Replaced, never mutated, so it works as a `useSyncExternalStore` snapshot. */
 let records: readonly GpuPipelineFailureRecord[] = [];
@@ -56,6 +65,23 @@ const FEATURES: ReadonlyArray<[RegExp, string]> = [
   [/composit|copy|output|slice|mask/i, 'Compositing'],
   [/thumbnail|look/i, 'Thumbnail'],
 ];
+
+const MAX_REPORTED_MESSAGE = 1200;
+
+/**
+ * Driver messages can be huge: WebKit puts the whole generated Metal source in
+ * front of the compiler log ("Failed to compile the shader source, generated
+ * metal: ..."), so a capped diagnostic shows only boilerplate. Keep the first
+ * line and the compiler's error lines, which name the failing construct.
+ */
+export function condenseGpuPipelineMessage(message: string): string {
+  if (message.length <= MAX_REPORTED_MESSAGE) return message;
+  const lines = message.split('\n').map(line => line.trim()).filter(Boolean);
+  const errors = lines.slice(1).filter(line => /\berror\b|program_source:\d+|^\d+:\d+:/i.test(line));
+  const condensed = [lines[0] ?? '', ...errors.slice(0, 8)].join(' | ');
+  const text = errors.length ? condensed : `${lines[0] ?? ''} | ... ${message.slice(-600).replace(/\s+/g, ' ')}`;
+  return `${text.slice(0, MAX_REPORTED_MESSAGE)} [${message.length} chars]`;
+}
 
 export function gpuFeatureName(label: string): string {
   return FEATURES.find(([pattern]) => pattern.test(label))?.[1] ?? 'GPU rendering';
@@ -97,8 +123,18 @@ export function gpuPipelineSettled(pipeline: object): Promise<PipelineCreationFa
 }
 
 /**
+ * Declare that the owner of `pipeline` switches to another implementation when the
+ * driver rejects it. The failure is then logged as a warning naming `note`, and no
+ * "feature skipped" notice is raised, because the feature still works.
+ */
+export function markGpuPipelineFallback(pipeline: object, note: string): void {
+  fallbacks.set(pipeline, note);
+}
+
+/**
  * Build a pipeline and learn whether the driver accepted it. Uses the device guard
  * when installed (no second, competing error scope), else scopes the call itself.
+ * Either way `gpuPipelineSettled` returns the verdict afterwards.
  */
 export function createCheckedPipeline<P extends object>(device: GPUDevice, create: () => P): { pipeline: P; settled: Promise<PipelineCreationFailure | null> } {
   if (guardedDevices.has(device)) {
@@ -110,12 +146,20 @@ export function createCheckedPipeline<P extends object>(device: GPUDevice, creat
   let pipeline: P;
   let settled: Promise<PipelineCreationFailure | null>;
   try { pipeline = create(); } finally { settled = popPipelineErrorScopes(device); }
-  return { pipeline, settled: settled.catch(() => null) };
+  const verdict = settled.catch(() => null);
+  settledPipelines.set(pipeline, verdict);
+  return { pipeline, settled: verdict };
 }
 
-function report(source: string, label: string, stage: 'render' | 'compute', failure: PipelineCreationFailure): void {
-  const record = { feature: gpuFeatureName(label), label, stage, kind: failure.kind, message: failure.message, source };
-  if (!records.some(item => item.source === source && item.label === label && item.message === failure.message)) {
+function report(source: string, pipeline: object, label: string, stage: 'render' | 'compute', failure: PipelineCreationFailure): void {
+  const message = condenseGpuPipelineMessage(failure.message);
+  const record = { feature: gpuFeatureName(label), label, stage, kind: failure.kind, message, source };
+  const fallback = fallbacks.get(pipeline);
+  if (fallback) {
+    log.warn(`GPU could not build ${record.feature} (${label}, ${failure.kind}); ${fallback}`, record);
+    return;
+  }
+  if (!records.some(item => item.source === source && item.label === label && item.message === message)) {
     records = [...records, record];
     for (const listener of listeners) listener();
   }
@@ -170,7 +214,7 @@ function wrapPipelineFactory(device: GPUDevice, source: string, name: 'createRen
       return layout;
     };
     settledPipelines.set(pipeline, verdict.then(failure => {
-      if (failure) { failedPipelines.add(pipeline); failedPipelineCount += 1; report(source, label, stage, failure); }
+      if (failure) { failedPipelines.add(pipeline); failedPipelineCount += 1; report(source, pipeline, label, stage, failure); }
       return failure;
     }, () => null));
     return pipeline;

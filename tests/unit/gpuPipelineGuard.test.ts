@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearGpuPipelineFailures,
+  condenseGpuPipelineMessage,
   createCheckedPipeline,
   getGpuPipelineFailures,
   gpuFeatureName,
   guardGpuDevice,
+  gpuPipelineSettled,
   isGpuPipelineFailed,
+  markGpuPipelineFallback,
 } from '../../src/engine/core/gpuPipelineGuard';
 import { HapGpuBlockEncoder } from '../../src/engine/hap/HapGpuBlockEncoder';
 
@@ -102,6 +105,39 @@ describe('device-wide GPU pipeline guard', () => {
     const { settled } = createCheckedPipeline(device, () => device.createComputePipeline({ label: 'hap-encode-bc1' } as GPUComputePipelineDescriptor));
     await expect(settled).resolves.toEqual({ kind: 'internal', message: DRIVER_FAILURE });
     expect(uncaptured).toEqual([]);
+  });
+
+  it('records the verdict of an unguarded checked pipeline for later waiters', async () => {
+    const { device } = fakeDevice(/hap/);
+    const { pipeline } = createCheckedPipeline(device, () => device.createComputePipeline({ label: 'hap-encode-bc1' } as GPUComputePipelineDescriptor));
+    await expect(gpuPipelineSettled(pipeline)).resolves.toEqual({ kind: 'internal', message: DRIVER_FAILURE });
+  });
+
+  it('logs a pipeline with a declared fallback as a warning without a skipped-feature notice', async () => {
+    const { device, calls } = fakeDevice(/flock-fluidP2GBlock/);
+    guardGpuDevice(device, 'editor');
+    const block = device.createComputePipeline({ label: 'flock-fluidP2GBlock' } as GPUComputePipelineDescriptor);
+    markGpuPipelineFallback(block, 'the reference transfer runs instead');
+    await flush();
+    expect(isGpuPipelineFailed(block)).toBe(true);
+    expect(getGpuPipelineFailures()).toEqual([]);
+    const pass = device.createCommandEncoder().beginComputePass();
+    pass.setPipeline(block);
+    pass.dispatchWorkgroups(1);
+    pass.end();
+    expect(calls).toEqual(['end']);
+  });
+
+  // Production (Safari): WebKit's message starts with the whole generated Metal source,
+  // so the capped diagnostic never reached the compiler error.
+  it('keeps the compiler error lines of a huge WebKit shader message', () => {
+    const message = `Failed to compile the shader source, generated metal:\n${'struct PackedVec3 { float x; };\n'.repeat(500)}program_source:812:21: error: no matching function for call to 'foo'\nprogram_source:900:3: note: candidate`;
+    const condensed = condenseGpuPipelineMessage(message);
+    expect(condensed.length).toBeLessThan(1300);
+    expect(condensed).toContain('Failed to compile the shader source');
+    expect(condensed).toContain("program_source:812:21: error: no matching function for call to 'foo'");
+    expect(condensed).not.toContain('PackedVec3');
+    expect(condenseGpuPipelineMessage(DRIVER_FAILURE)).toBe(DRIVER_FAILURE);
   });
 
   it('names features in the preview notice by their pipeline labels', () => {

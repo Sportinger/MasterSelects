@@ -12,6 +12,7 @@ import { FLOCK_AFFINE_BYTES, FLOCK_PARTICLE_BYTES, type FlockProgram } from '../
 import { prepareCpuStepParams } from '../cpu/flockCpuStepParams';
 import { buildInitialFlockState } from '../shared/flockInitialState';
 import type { FlockGpuPipelines } from './FlockGpuPipelines';
+import { FlockPipelineGate, type FlockPipelineFailure, type FlockPipelineGateState } from './flockPipelineGate';
 import {
   SORT_PARAMS_STRIDE,
   STEP_BLOCK_STRIDE,
@@ -128,6 +129,9 @@ export class FlockGpuSession {
   private readonly checkpoints: FlockGpuCheckpoints;
   private stampCounter = 1;
   private disposed = false;
+  private readonly gate: FlockPipelineGate;
+  /** Particle-order reset requested before the pipeline verdicts arrived. */
+  private orderResetPending = false;
 
   constructor(device: GPUDevice, pipelines: FlockGpuPipelines, program: FlockProgram, context: FlockEvaluationContext, options: { spatialOrder?: boolean; dispatchWidth?: number } = {}) {
     this.device = device;
@@ -245,6 +249,11 @@ export class FlockGpuSession {
       return { slotCount: slotIndices.length, samples: trail.samples, interval: trail.interval, slots, ring, bindGroups: [trailGroup(0), trailGroup(1)] };
     });
 
+    this.gate = new FlockPipelineGate([
+      ...pipelines.simulationChecks(),
+      ...(this.order?.pipelineChecks() ?? []),
+      ...(this.fluid?.pipelineChecks() ?? []),
+    ]);
     this.checkpoints = new FlockGpuCheckpoints(device, stateBytes, this.fluid ? [this.fluid.affine] : [], this.trails.map(trail => trail.ring), (checkpointBytes, checkpointSteps) => {
       this.stats = { ...this.stats, checkpointBytes, checkpointSteps };
     });
@@ -270,6 +279,38 @@ export class FlockGpuSession {
     return this.disposed;
   }
 
+  /**
+   * Nothing is encoded until every compute pipeline of this session has a driver
+   * verdict: a rejected pipeline would invalidate the frame's command buffer.
+   */
+  get pipelineState(): FlockPipelineGateState { return this.gate.state; }
+  /** Required pipeline the driver rejected; the simulation does not run. */
+  get pipelineFailure(): FlockPipelineFailure | null { return this.gate.failure; }
+  /** Optional pipelines that failed; their equivalent fallback runs instead. */
+  get pipelineFallbacks(): readonly FlockPipelineFailure[] { return this.gate.fallbacks; }
+  whenPipelinesSettled(): Promise<FlockPipelineGateState> { return this.gate.settled; }
+
+  private gpuReady(): boolean {
+    if (this.disposed || this.gate.state !== 'ready') return false;
+    if (this.orderResetPending) {
+      this.orderResetPending = false;
+      const encoder = this.device.createCommandEncoder({ label: 'flock-order-reset' });
+      this.order?.reset(encoder);
+      this.device.queue.submit([encoder.finish()]);
+    }
+    return true;
+  }
+
+  private requireGpu(action: string): void {
+    if (!this.gpuReady()) throw new Error(`Flock GPU pipelines are ${this.gate.state}; cannot ${action}`);
+  }
+
+  private encodeOrderReset(encoder: GPUCommandEncoder): void {
+    if (!this.order) return;
+    if (this.gate.state === 'ready') this.order.reset(encoder);
+    else this.orderResetPending = true;
+  }
+
   setContext(program: FlockProgram, context: FlockEvaluationContext): void {
     this.program = program;
     this.context = context;
@@ -285,7 +326,7 @@ export class FlockGpuSession {
 
   /** Advances toward `targetStep` using at most `maxSteps`; returns whether it arrived. */
   advanceTo(targetStep: number, maxSteps: number, boundedPreview = false, submissionWindow: 1 | 2 = 1): boolean {
-    if (this.disposed) return false;
+    if (!this.gpuReady()) return false;
     if (boundedPreview && this.previewSubmissionPending) return this.step === targetStep;
     if (targetStep < this.step) this.restoreAtOrBefore(targetStep);
     let remaining = Math.min(targetStep - this.step, Math.max(0, Math.floor(maxSteps)));
@@ -418,6 +459,7 @@ export class FlockGpuSession {
   /** Rebuilds the spatial index for the current state (links after a restore). */
   encodeGridOnly(encoder: GPUCommandEncoder): void {
     if (!this.hasNeighborGrid) throw new Error('This flock graph has no neighbor-grid consumer');
+    this.requireGpu('rebuild the neighbor grid');
     const params = prepareCpuStepParams(resolveFlockStep(this.program, Math.max(0, this.step - 1), this.context));
     const stamp = this.stampCounter;
     this.stampCounter = (this.stampCounter + 1) >>> 0 || 1;
@@ -441,6 +483,7 @@ export class FlockGpuSession {
 
   /** Encodes neighbor-link extraction for one render branch into `encoder`; returns its buffer. */
   encodeLinks(encoder: GPUCommandEncoder, request: FlockLinkRequest): { buffer: GPUBuffer; perParticle: number } {
+    this.requireGpu('build links');
     const perParticle = Math.max(1, Math.min(8, Math.round(request.perParticle)));
     let resources = this.links.get(request.branchIndex);
     if (!resources || resources.perParticle !== perParticle) {
@@ -507,6 +550,7 @@ export class FlockGpuSession {
 
   /** Bounded identity-ordered sample, optionally from the previous interpolation state. */
   async sampleParticles(maxCount: number, state: 'current' | 'previous' = 'current'): Promise<Float32Array> {
+    this.requireGpu('sample particles');
     const count = Math.max(1, Math.min(this.capacity, maxCount));
     const size = count * FLOCK_PARTICLE_BYTES;
     const staging = this.device.createBuffer({ size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST, label: 'flock-sample-readback' });
@@ -546,7 +590,7 @@ export class FlockGpuSession {
     if (best > 0) {
       const encoder = this.device.createCommandEncoder({ label: 'flock-restore' });
       this.checkpoints.restore(encoder, best, this.states);
-      this.order?.reset(encoder);
+      this.encodeOrderReset(encoder);
       this.device.queue.submit([encoder.finish()]);
       this.step = best;
     } else {
@@ -562,7 +606,7 @@ export class FlockGpuSession {
     this.device.queue.writeBuffer(this.states[1], 0, initialBytes, initial.byteOffset, initial.byteLength);
     if (this.order || this.fluid) {
       const encoder = this.device.createCommandEncoder();
-      this.order?.reset(encoder);
+      this.encodeOrderReset(encoder);
       if (this.fluid) encoder.clearBuffer(this.fluid.affine);
       this.device.queue.submit([encoder.finish()]);
     }

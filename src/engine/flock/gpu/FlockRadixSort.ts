@@ -1,6 +1,7 @@
 import { FLOCK_RADIX_BITS, FLOCK_RADIX_SORT_WGSL, FLOCK_RADIX_WORKGROUP } from '../shaders/flockRadixSortWgsl';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
 import { flockGpuTimings } from './FlockGpuTimings';
+import { createFlockComputePipeline, type FlockPipelineCheck } from './flockPipelineGate';
 
 type Entry = 'histogram' | 'scanHistogram' | 'scatter';
 interface Pipelines { layout: GPUBindGroupLayout; entries: Record<Entry, GPUComputePipeline> }
@@ -17,7 +18,7 @@ function getPipelines(device: GPUDevice): Pipelines {
   const module = createCheckedModule(device, FLOCK_RADIX_SORT_WGSL, 'flock-radix-sort');
   const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
   const entries = Object.fromEntries((['histogram', 'scanHistogram', 'scatter'] as Entry[]).map(entryPoint => [entryPoint,
-    device.createComputePipeline({ label: `flock-radix-${entryPoint}`, layout: pipelineLayout, compute: { module, entryPoint } }),
+    createFlockComputePipeline(device, { label: `flock-radix-${entryPoint}`, layout: pipelineLayout, compute: { module, entryPoint } }),
   ])) as Record<Entry, GPUComputePipeline>;
   const pipelines = { layout, entries };
   byDevice.set(device, pipelines);
@@ -86,6 +87,8 @@ export class FlockRadixSort {
     pass.end();
     return this.output;
   }
+
+  pipelineChecks(): FlockPipelineCheck[] { return Object.values(this.pipelines.entries).map(pipeline => ({ pipeline })); }
 
   dispose(): void { for (const buffer of this.buffers) buffer.destroy(); }
 }

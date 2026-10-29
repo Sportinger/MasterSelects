@@ -5,7 +5,7 @@ function fixture() {
   let finish!: () => void;
   const completed = new Promise<void>(resolve => { finish = resolve; });
   const session = Object.assign(Object.create(FlockGpuSession.prototype) as FlockGpuSession, {
-    step: 0, capacity: 262144, fluid: {}, disposed: false, previewSubmissionPending: false,
+    step: 0, capacity: 262144, fluid: {}, disposed: false, previewSubmissionPending: false, gate: { state: 'ready' },
     device: { queue: { onSubmittedWorkDone: vi.fn(() => completed) } },
   });
   const batches: number[] = [];

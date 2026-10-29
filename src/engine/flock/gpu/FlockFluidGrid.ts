@@ -7,6 +7,7 @@ import { FlockFluidSeparation } from './FlockFluidSeparation';
 import type { FlockFluidRegularization } from '../shared/flockFluidRegularization';
 import { flockFluidBlockTransferWgsl } from '../shaders/flockFluidTransferWgsl';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
+import { createFlockComputePipeline, flockPipelineFailure, type FlockPipelineCheck } from './flockPipelineGate';
 import {
   FLOCK_FLUID_PARAMS_STRIDE,
   flockFluidWgsl,
@@ -44,11 +45,13 @@ function fluidPipelines(device: GPUDevice, layoutKind: FlockParticleLayout): Flu
   const module = createCheckedModule(device, flockFluidWgsl(layoutKind), 'flock-fluid');
   const blockModule = createCheckedModule(device, flockFluidBlockTransferWgsl(layoutKind), 'flock-fluid-block-transfer');
   const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout], label: 'flock-fluid-pipeline-layout' });
-  const pipelines = Object.fromEntries(ENTRIES.map((entryPoint) => [entryPoint, device.createComputePipeline({
+  // The workgroup transfer is an optimization of fluidP2G with the identical
+  // fixed-point result, so a driver that rejects it costs speed, not the liquid.
+  const pipelines = Object.fromEntries(ENTRIES.map((entryPoint) => [entryPoint, createFlockComputePipeline(device, {
     label: `flock-${entryPoint}`,
     layout: pipelineLayout,
     compute: { module: entryPoint === 'fluidP2GBlock' ? blockModule : module, entryPoint },
-  })])) as Record<FluidEntry, GPUComputePipeline>;
+  }, entryPoint === 'fluidP2GBlock' ? 'the liquid uses the reference particle-to-grid transfer instead (same result, slower)' : undefined)])) as Record<FluidEntry, GPUComputePipeline>;
   const created = { layout, pipelines };
   const variants = pipelinesByDevice.get(device) ?? new Map();
   variants.set(layoutKind, created); pipelinesByDevice.set(device, variants);
@@ -131,6 +134,21 @@ export class FlockFluidGrid {
     }));
   }
 
+  /** Pipelines a session must have verdicts for; the block transfer has a fallback. */
+  pipelineChecks(): FlockPipelineCheck[] {
+    return [
+      ...ENTRIES.map(entry => ({ pipeline: this.pipelines.pipelines[entry], optional: entry === 'fluidP2GBlock' })),
+      ...this.pressure.pipelineChecks(),
+      ...this.separation.pipelineChecks(),
+      ...(this.ownedOrder?.pipelineChecks() ?? []),
+    ];
+  }
+
+  /** Transfer actually encoded: the block kernel unless disabled or rejected by the driver. */
+  get transferEntry(): 'fluidP2GBlock' | 'fluidP2G' {
+    return this.blockTransfer && !flockPipelineFailure(this.pipelines.pipelines.fluidP2GBlock) ? 'fluidP2GBlock' : 'fluidP2G';
+  }
+
   /** Stages the per-step uniform for batch slot `slot`. */
   stageParams(slot: number, input: { count: number; affineStrength: number; dt: number } & Partial<FlockFluidRegularization>): void {
     const f = new Float32Array(this.paramData, slot * FLOCK_FLUID_PARAMS_STRIDE, 16);
@@ -175,7 +193,7 @@ export class FlockFluidGrid {
     run('fluidClear', Math.max(this.faceTotal * 2, this.cellTotal * 5));
     run('fluidTransferBounds', particleCount);
     run('fluidTransferScales', this.faceTotal);
-    run(this.blockTransfer ? 'fluidP2GBlock' : 'fluidP2G', particleCount);
+    run(this.transferEntry, particleCount);
     run('fluidNormalize', this.faceTotal);
     run('fluidExtrapolateAB', this.faceTotal);
     run('fluidExtrapolateBA', this.faceTotal);

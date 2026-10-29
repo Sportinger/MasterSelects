@@ -4,6 +4,7 @@ import { flockParticleOrderWgsl } from '../shaders/flockParticleOrderWgsl';
 import { FlockRadixSort } from './FlockRadixSort';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
 import { flockGpuTimings } from './FlockGpuTimings';
+import { createFlockComputePipeline, type FlockPipelineCheck } from './flockPipelineGate';
 
 type Entry = 'keys' | 'reorder' | 'canonical' | 'updateMapping' | 'resetMapping';
 interface Pipelines { layout: GPUBindGroupLayout; entries: Record<Entry, GPUComputePipeline> }
@@ -19,7 +20,7 @@ function pipelines(device: GPUDevice, layoutKind: FlockParticleLayout): Pipeline
   const module = createCheckedModule(device, flockParticleOrderWgsl(layoutKind), 'flock-particle-order');
   const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
   const entries = Object.fromEntries((['keys', 'reorder', 'canonical', 'updateMapping', 'resetMapping'] as Entry[]).map(entryPoint => [entryPoint,
-    device.createComputePipeline({ layout: pipelineLayout, compute: { module, entryPoint } }),
+    createFlockComputePipeline(device, { label: `flock-order-${entryPoint}`, layout: pipelineLayout, compute: { module, entryPoint } }),
   ])) as Record<Entry, GPUComputePipeline>;
   const result = { layout, entries }; const variants = byDevice.get(device) ?? new Map();
   variants.set(layoutKind, result); byDevice.set(device, variants); finish(); return result;
@@ -106,6 +107,10 @@ export class FlockParticleOrder {
     const pass = encoder.beginComputePass({ label: `flock-order-${entry}`, timestampWrites: timed ? flockGpuTimings(this.device).writes(encoder, `order-${entry}`) : undefined });
     pass.setPipeline(this.pipelines.entries[entry]); pass.setBindGroup(0, group);
     const groups = Math.ceil(count / 256); pass.dispatchWorkgroups(Math.min(groups, this.width), Math.ceil(groups / this.width)); pass.end();
+  }
+
+  pipelineChecks(): FlockPipelineCheck[] {
+    return [...Object.values(this.pipelines.entries).map(pipeline => ({ pipeline })), ...this.sort.pipelineChecks()];
   }
 
   dispose(): void { this.sort.dispose(); this.mapping.destroy(); this.scratch.destroy(); this.params.destroy(); }

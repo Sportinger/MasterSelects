@@ -114,17 +114,26 @@ installed right after every `requestDevice` that renders: the editor
 guide preview. It scopes every synchronous pipeline creation for all three
 error kinds and remembers failed pipelines. Once one failed, render passes,
 compute passes and render bundles skip its `setPipeline`, draws, dispatches and
-bind groups derived from it, so only that feature is missing (one frame can
-still be lost before the verdict arrives). Healthy devices pay nothing: passes
+bind groups derived from it, so only that feature is missing. Work encoded with
+a pipeline before its verdict arrives is not protected: Chrome loses that
+command buffer, and Safari keeps an encoder locked after a pass that set the
+failed pipeline, so its next `beginComputePass` fails with `encoder state is
+invalid`. Features that encode right after creating pipelines wait for
+`gpuPipelineSettled` first (effect pipeline cache, flock session gate). Healthy devices pay nothing: passes
 are only wrapped after a failure. Each failure is logged with feature, label,
-kind and driver message; the preview shows "Not supported by this graphics
+kind and driver message (huge messages are condensed to their first line and
+compiler error lines: WebKit prefixes the whole generated Metal source); the preview shows "Not supported by this graphics
 driver" with the affected features (`PreviewGpuFailureNotice`, full messages as
 tooltip). A new device clears the records of its source.
 
 Callers that must react themselves use `createCheckedPipeline(device, create)`,
 which returns the pipeline and its verdict without opening competing error
 scopes on a guarded device: effects skip and report themselves in the effect
-card, and the HAP export encoder falls back to its CPU encoder.
+card, and the HAP export encoder falls back to its CPU encoder. On an unguarded
+device `createCheckedPipeline` also records the verdict for `gpuPipelineSettled`.
+`markGpuPipelineFallback(pipeline, note)` declares that the owner switches to an
+equivalent implementation when the pipeline fails: the failure is logged as a
+warning naming the fallback and raises no "not supported" notice.
 
 ### Per-Draw GPU Buffers (Shared Uniform Ring)
 

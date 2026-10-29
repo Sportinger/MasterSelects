@@ -181,6 +181,20 @@ keyframeable; animate *Active Fraction* or *Lifetime* to change population.
 - Buffer sizes are admitted against device limits; an oversized swarm is
   reported as `unsupported` rather than silently reduced. GPU device loss
   rebuilds sessions from source/checkpoints.
+- A session encodes nothing until the driver has accepted every compute
+  pipeline it uses (`FlockPipelineGate`, `src/engine/flock/gpu/flockPipelineGate.ts`).
+  The pipelines are built synchronously but their verdict arrives later; a frame
+  that encoded a rejected pipeline would lose its whole command buffer, and on
+  Safari the pass that set it leaves the encoder locked, so the next pass fails
+  with `encoder state is invalid`. While verdicts are pending the clip shows
+  `compiling` ("Preparing GPU pipelines…") for a frame and re-renders when they
+  arrive; export and precompute wait for them. If a required pipeline is rejected
+  the clip turns `unsupported` with an error diagnostic naming the pipeline and
+  the driver's compiler error, the warning is logged once per session, and no
+  simulation work is encoded. The workgroup particle-to-grid transfer
+  (`fluidP2GBlock`) is optional: if the driver rejects it, the liquid runs the
+  reference `fluidP2G` transfer (same fixed-point sums, slower), shows an info
+  diagnostic and logs a warning instead of a skipped-feature notice.
 
 ### Precompute and cache
 
@@ -334,8 +348,15 @@ enables the key light.
 Fluid sessions keep both simulation/interpolation states in a stable spatial order,
 refreshed every four steps with a GPU cell-key radix sort. Forward and inverse
 identity maps preserve spawning, pigment UVs, sub-particle neighbors, boid rules,
-links and trails. Workgroups combine fixed-point face contributions before global
-atomics, with bounded-probe fallback when their local table fills. Checkpoints and
+links and trails. Workgroups combine fixed-point face contributions in 1024
+workgroup slots (12 KiB, within the 16 KiB spec default) before global atomics.
+Slots are claimed in a separate phase with `atomicMin` (the smallest face hashed
+to a slot owns it); contributions whose slot belongs to another face go straight
+to the global sums. Every contribution is the same integer either way, so the
+result is bit-identical to `fluidP2G`. The earlier compare-exchange hash table
+failed to compile on Safari (WebKit's Metal backend, production 2026-10-29);
+`tests/unit/flockWgslPortability.test.ts` keeps all flock compute shaders within
+the default workgroup limits and free of `atomicCompareExchangeWeak`. Checkpoints and
 diagnostic samples retain canonical identity order; checkpoint restore resets the
 maps and rebuilds the spatial order. Ordinary substeps do not copy the complete
 state into and out of an intermediate transfer buffer. On sort steps, only the

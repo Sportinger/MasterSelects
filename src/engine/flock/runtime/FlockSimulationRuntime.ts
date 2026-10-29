@@ -15,6 +15,7 @@ import type { SceneFlockLayer } from '../../scene/types';
 import { FlockBranchRenderer, type FlockDrawPlan, type FlockLinkBinding } from '../gpu/FlockBranchRenderer';
 import { getFlockGpuPipelines } from '../gpu/FlockGpuPipelines';
 import { FlockGpuSession, estimateFlockSessionBuffers } from '../gpu/FlockGpuSession';
+import { awaitFlockPipelines, flockPipelineFailureMessage, type FlockPipelineGateState } from '../gpu/flockPipelineGate';
 import { flockCheckpointStore } from './flockCheckpointStore';
 import { buildFlockRuntimeStatus } from './flockRuntimeStatus';
 import {
@@ -51,6 +52,8 @@ export interface FlockSessionEntry {
   lastState: string;
   audioRevision: number;
   audioFingerprint: string;
+  /** Pipeline state already published for this entry, so it is reported once. */
+  pipelineReported?: FlockPipelineGateState;
 }
 
 function keyframeEntrySignature(keyframe: Keyframe): string {
@@ -273,6 +276,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
     }
     const entry = this.acquire(device, data.clipId, data.consumer, program, data.keyframes);
     if (!entry) return null;
+    if (!this.pipelinesReady(entry)) return null;
     entry.stale = !data.program;
     const sample = flockStepForSourceTime(program, data.sourceTime);
     const targetStep = sample.step + 1;
@@ -289,7 +293,11 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
     const render = resolveFlockRender(program, sample.sourceTime, context);
     const links = new Map<number, FlockLinkBinding>();
     const linksStarted = performance.now();
-    const runtimeDiagnostics: FlockDiagnostic[] = [];
+    const runtimeDiagnostics: FlockDiagnostic[] = entry.session.pipelineFallbacks.map((failure) => ({
+      code: 'gpu-pipeline-fallback',
+      severity: 'info',
+      message: `This GPU could not build ${failure.label}; the liquid uses the reference particle-to-grid transfer instead (same result, slower).`,
+    }));
     for (const branch of render.branches) {
       if (branch.spec.kind === 'instances' && branch.p.e.mesh === 'model') {
         const model = this.host.modelState(branch.p.a.model ?? '');
@@ -341,6 +349,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
       if (!entry) {
         throw new Error(this.host.status.getStatus(data.clipId)?.message ?? 'Flock simulation is not supported on this GPU.');
       }
+      await awaitFlockPipelines(entry.session);
       const targetStep = flockStepForSourceTime(data.program, data.sourceTime).step + 1;
       const audioFingerprint = entry.audioFingerprint;
       const assertAudioCurrent = () => {
@@ -359,6 +368,36 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
       }
       entry.lastUsedAt = performance.now();
     }
+  }
+
+  /**
+   * A session draws nothing until its pipeline verdicts are in. Pending and failed
+   * states are published once per entry (not every frame); a failure stays visible
+   * in the flock status and diagnostics and is logged once.
+   */
+  private pipelinesReady(entry: FlockSessionEntry): boolean {
+    const state = entry.session.pipelineState;
+    if (state === 'ready') return true;
+    entry.lastUsedAt = performance.now();
+    if (entry.pipelineReported === state) return false;
+    entry.pipelineReported = state;
+    if (state === 'pending') {
+      void entry.session.whenPipelinesSettled().then(() => this.host.requestRender(), () => undefined);
+      if (entry.consumer === 'preview') {
+        this.host.status.publishStatus(buildFlockRuntimeStatus({ clipId: entry.clipId, state: 'compiling', message: 'Preparing GPU pipelines…', program: entry.program, entry }));
+      }
+      return false;
+    }
+    const message = flockPipelineFailureMessage(entry.session.pipelineFailure!);
+    log.warn(`Flock simulation skipped for clip ${entry.clipId}`, { failure: entry.session.pipelineFailure });
+    if (entry.consumer === 'preview') {
+      entry.lastState = 'unsupported';
+      this.host.status.publishStatus(buildFlockRuntimeStatus({
+        clipId: entry.clipId, state: 'unsupported', message, program: entry.program, entry,
+        diagnostics: [{ code: 'gpu-pipeline-failed', severity: 'error', message }],
+      }));
+    }
+    return false;
   }
 
   private publishEntryStatus(entry: FlockSessionEntry, data: FlockLayerSourceData): void {
@@ -419,7 +458,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
 
   async sampleParticles(clipId: string, options: { maxCount: number }): Promise<FlockParticleSample | null> {
     const entry = this.entries.get(`${clipId}|preview`);
-    if (!entry || entry.session.isDisposed) return null;
+    if (!entry || entry.session.isDisposed || entry.session.pipelineState !== 'ready') return null;
     const raw = await entry.session.sampleParticles(options.maxCount);
     const count = raw.length / 16;
     const values: number[] = [];

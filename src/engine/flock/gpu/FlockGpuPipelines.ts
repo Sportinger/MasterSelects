@@ -21,6 +21,8 @@ import { FLOCK_POINTS_CACHE_COMPUTE_WGSL, FLOCK_POINTS_CACHED_WGSL, FLOCK_POINTS
 import { FLOCK_ROOM_WGSL } from '../shaders/flockRoomWgsl';
 import { FLOCK_POINTS_PATH_TRACE_WGSL } from '../shaders/flockPathTraceWgsl';
 
+import { createFlockComputePipeline, type FlockPipelineCheck } from './flockPipelineGate';
+
 const log = Logger.create('FlockGpuPipelines');
 
 export type FlockRenderKind = 'points' | 'pointsCached' | 'instances' | 'links' | 'vectors' | 'curves' | 'glyphs' | 'glyphCubes' | 'room';
@@ -118,6 +120,12 @@ export class FlockGpuPipelines {
   private readonly device: GPUDevice;
   private pointCacheModule: GPUShaderModule | null = null;
 
+  /** Compute pipelines every simulation step can use; a session waits for their verdict. */
+  simulationChecks(): FlockPipelineCheck[] {
+    return [this.hashPipeline, this.sortPipeline, this.cellsPipeline, this.simulatePipeline, this.trailPipeline, this.linksPipeline]
+      .map(pipeline => ({ pipeline }));
+  }
+
   constructor(device: GPUDevice) {
     this.device = device;
     const C = GPUShaderStage.COMPUTE;
@@ -146,7 +154,7 @@ export class FlockGpuPipelines {
       label: 'flock-links-layout',
       entries: [storage(0, C, true), storage(1, C, true), storage(2, C, true), storage(3, C, false), uniform(4, C, false), storage(5, C, true)],
     });
-    const compute = (code: string, entryPoint: string, layout: GPUBindGroupLayout, label: string) => device.createComputePipeline({
+    const compute = (code: string, entryPoint: string, layout: GPUBindGroupLayout, label: string) => createFlockComputePipeline(device, {
       label,
       layout: device.createPipelineLayout({ bindGroupLayouts: [layout], label: `${label}-layout` }),
       compute: { module: createCheckedModule(device, code, label), entryPoint },
