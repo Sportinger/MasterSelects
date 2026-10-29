@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-10-29",
+    "type": "new",
+    "title": "MasterSelects 3.3.9",
+    "description": "MasterSelects now tells you when a new version is live while you work: the MasterSelects name and version at the bottom left glow turquoise, and on the phone a glowing update button appears next to the project name. One click saves your work, waits for running copies and an active export, and then loads the new version. Only one open tab checks for updates and tells the others.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-29",
     "type": "fix",
     "title": "MasterSelects 3.3.8",
     "description": "Playback no longer drops into black after a gap: the next clip shows its first frame right away instead of staying black for a second or more, also with changed clip speeds and on the phone. The upcoming clip is warmed up while the gap plays, pausing inside a gap stops it, and long gaps or audio-only playback run at a low rate until a clip comes close.",
