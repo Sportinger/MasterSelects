@@ -43,6 +43,8 @@ function setup(answer: () => Promise<Response>) {
     isEnabled: () => true,
     doc: doc as unknown as Document,
     win: win as unknown as Window,
+    // One tab on its own (the fallback without Web Locks or BroadcastChannel); appUpdateTabs.test.ts covers several.
+    coordination: null,
   });
   const advance = async (ms: number) => { clock += ms; await vi.advanceTimersByTimeAsync(ms); };
   return { fetcher, doc, win, checker, advance };

@@ -104,3 +104,31 @@ test('a newly deployed version makes the brand glow; a click saves and reloads i
     expect(JSON.stringify(media)).toContain(MARKER_COMPOSITION)
   })
 })
+
+// Two editor tabs of one browser (real Web Locks and BroadcastChannel): one tab polls for both, and the
+// answer it gets makes both glow. The second tab asks for the check the way a returning connection does.
+test('several editor tabs share one check: one request, every tab glows @module:platform', async ({ page }) => {
+  const buildInfoRequests: string[] = []
+  await page.context().route('**/build-info.json*', async (route) => {
+    buildInfoRequests.push(route.request().url())
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(NEWER_BUILD) })
+  })
+  await page.evaluate(() => window.localStorage.setItem('ms.updateCheck.enabled', 'true'))
+  const second = await page.context().newPage()
+  await second.goto(new URL('/editor', page.url()).toString(), { waitUntil: 'domcontentloaded' })
+  await expect(second.locator('.workspace-bar-brand-slot')).toBeVisible({ timeout: 90_000 })
+
+  await test.step('one tab holds the polling lock, the other waits for it', async () => {
+    await expect.poll(() => page.evaluate(async (name) => {
+      const state = await navigator.locks.query()
+      return { held: state.held?.filter(lock => lock.name === name).length, waiting: state.pending?.filter(lock => lock.name === name).length }
+    }, 'masterselects-app-update-leader'), { timeout: 30_000 }).toEqual({ held: 1, waiting: 1 })
+  })
+
+  await test.step('a check asked for by the waiting tab reaches both tabs with one request', async () => {
+    await second.evaluate(() => window.dispatchEvent(new Event('online')))
+    await expect(page.getByRole('button', { name: 'New version 99.0.0 available – click to update' })).toBeVisible()
+    await expect(second.getByRole('button', { name: 'New version 99.0.0 available – click to update' })).toBeVisible()
+    expect(buildInfoRequests).toHaveLength(1)
+  })
+})

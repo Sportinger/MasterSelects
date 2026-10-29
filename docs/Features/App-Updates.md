@@ -41,6 +41,9 @@ by hand and offers **Save and reload**.
 
 - The editor looks for a new version about every five minutes while its tab is in front, and right away
   when you come back to the tab or your connection returns. A tab in the background does not check.
+- With several MasterSelects tabs open in one browser, only one visible tab asks the server and tells the
+  others, so every tab glows at the same time. When that tab is closed or goes to the background, another
+  visible tab takes over.
 - Without a connection it simply tries again later; a version it already found stays announced.
 - If the project cannot be saved, the editor does not reload and tells you why.
 - Work that has no project or browser recovery behind it is still guarded by the browser's own
@@ -54,6 +57,15 @@ by hand and offers **Save and reload**.
   `releaseId` (version and commit), so redeploying the same commit is not an update; local builds fall
   back to `buildId`. An answer that is not JSON build info (dev server, SPA fallback) is "unknown", never
   an update. Failures are logged once per failure streak (`Logger.enable('AppUpdateCheck')`).
+- **Several tabs** (`appUpdateTabs.ts`): only the visible tab holding the Web Lock
+  `masterselects-app-update-leader` polls. A tab asks for the lock only while it is visible and releases it
+  when it is hidden or stops, so a closed, hidden or frozen leader hands over to the next visible tab in the
+  lock queue (no stealing); the new leader keeps the previous tab's rhythm. Every answer goes out on the
+  BroadcastChannel `masterselects-app-update` as the served build (`version`, `buildId`, `releaseId`), and each
+  tab compares it with the build it runs itself, so tabs of different versions stay correct. A tab that
+  comes back or reconnects posts `check`; the leader checks unless any tab checked within the last minute,
+  and otherwise re-sends its last answer (a tab that was frozen catches up). A new tab posts `hello` and gets
+  the last answer. Without Web Locks or BroadcastChannel every tab checks on its own as before.
 - **Dev server**: the check is off, because Vite serves no build info. `localStorage['ms.updateCheck.enabled'] = 'true'`
   turns it on there; `'false'` turns it off in a built editor.
 - **Safe reload** (`updateReloadFlow.ts`, wired in `reloadForAppUpdate.ts`): asks while
@@ -68,6 +80,8 @@ by hand and offers **Save and reload**.
   `src/components/mobileSkin/shell/PhoneUpdateButton.tsx` (phone) share `src/hooks/useAppUpdate.ts`.
   Colours are the `--update-available` tokens in `src/styles/tokens.css`; the pulse animates only the
   opacity of a glow layer.
-- **Tests**: `tests/unit/appUpdateCheck.test.ts`, `tests/unit/updateReloadFlow.test.ts` and the journey
+- **Tests**: `tests/unit/appUpdateCheck.test.ts`, `tests/unit/appUpdateTabs.test.ts` (simulated tabs: one
+  request, every tab glows, handover, fallback), `tests/unit/updateReloadFlow.test.ts` and the journey
   `tests/playwright/platform/app-update.spec.ts` (routes `/build-info.json` to a newer release, checks the
-  glow, clicks it and checks that a change made just before survived the reload).
+  glow, clicks it and checks that a change made just before survived the reload; a second case opens two
+  editor tabs and checks one request and two glowing brands).
