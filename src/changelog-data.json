@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-10-29",
+    "type": "fix",
+    "title": "MasterSelects 3.4.1",
+    "description": "Exports on the phone are much faster: a 14-second phone edit now exports in about 15 seconds instead of stalling for many minutes, because the export no longer holds more decoded frames than the phone's hardware decoder can give out. Effects such as Pixel Sort on an adjustment layer no longer break the export after being switched off and on again, colour grades now work on adjustment layers, and anything an adjustment layer cannot render is skipped with a visible note instead of aborting the export or silently dropping the layer from the preview.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-29",
     "type": "new",
     "title": "MasterSelects 3.4.0",
     "description": "A maintenance release that rolls out the new update notice: if you had MasterSelects open while this version went live, the MasterSelects name at the bottom left (or the update button on the phone) now glows, and one click loads the new version. No other changes.",
