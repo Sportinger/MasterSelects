@@ -102,4 +102,6 @@ export const classifiedFeatureGetStateHardTargets = [
   // applied effect after a preset and the keyframe actions after a style change.
   { path: 'src/components/panels/properties/EffectPresetRow.tsx', maxCurrentHits: 1 },
   { path: 'src/services/effects/effectStyles.ts', maxCurrentHits: 1 },
+  // 2026-10-29 app update: one action-time read of isExporting before the update reload.
+  { path: 'src/services/appUpdate/reloadForAppUpdate.ts', maxCurrentHits: 1 },
 ] as const;
