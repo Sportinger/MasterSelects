@@ -81,12 +81,23 @@ function parseExtraAllowedRoots(): string[] {
     .filter(Boolean)
 }
 
+/**
+ * The shared cache of generated test media (tests/playwright/fixtures/testMediaStore.ts), which
+ * the Playwright journeys import from: MASTERSELECTS_TEST_MEDIA_DIR or ~/.cache/masterselects-test-media.
+ */
+function testMediaCacheRoot(home: string): string {
+  const configured = process.env.MASTERSELECTS_TEST_MEDIA_DIR?.trim()
+  if (configured) return path.resolve(configured)
+  return home ? path.join(home, '.cache', 'masterselects-test-media') : ''
+}
+
 function buildAllowedFileRoots(): string[] {
   const home = os.homedir()
   const defaults = [
     devBridgeRoot,
     process.env.MASTERSELECTS_PROJECT_ROOT ?? '',
     os.tmpdir(),
+    testMediaCacheRoot(home),
     home ? path.join(home, 'Desktop') : '',
     home ? path.join(home, 'Documents') : '',
     home ? path.join(home, 'Downloads') : '',

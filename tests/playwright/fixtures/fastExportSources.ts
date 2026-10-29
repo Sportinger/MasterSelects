@@ -1,13 +1,13 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { rmSync } from 'node:fs';
 import { frameCodeFilter } from './frameCodeMedia';
+import { ensureTestMedia } from './testMediaStore';
 
 // Synthetic sources for the Fast export journeys. Every recipe is rendered with ffmpeg into the
-// OS temp folder, addressed by a hash of the recipe, so hosts generate each clip once and no
-// large file lands in the test evidence. Video frames are the frame-code chart of
+// shared test media store (fixtures/testMediaStore.ts, key `fast-export/<name>-<hash>`),
+// addressed by a hash of the recipe, so each clip is generated once (or fetched from the remote)
+// and no large file lands in the test evidence. Video frames are the frame-code chart of
 // fixtures/frameCodeMedia.ts (v1: frame number in 16 blocks with a check nibble, colour bars,
 // grey ramp, printed number), read back by assertions/frameCodeOracle.ts, plus a white flash
 // square in the lower right corner on every whole second; audio carries a 10 ms 1 kHz click on
@@ -82,10 +82,6 @@ export const FAST_SOURCES = {
 
 export function ffmpegExecutable(): string {
   return process.env.MASTERSELECTS_E2E_FFMPEG?.trim() || 'ffmpeg';
-}
-
-function cacheDirectory(): string {
-  return path.join(os.tmpdir(), 'masterselects-e2e-fixtures', 'fast-export');
 }
 
 function runFfmpeg(args: string[]): void {
@@ -196,21 +192,10 @@ function render(recipe: FastSourceRecipe, target: string): void {
   }
 }
 
-/** Renders (once per host) and returns the source for a recipe. */
-export function ensureFastSource(recipe: FastSourceRecipe): FastSource {
+/** Renders (once, or fetches from the test media remote) and returns the source for a recipe. */
+export async function ensureFastSource(recipe: FastSourceRecipe): Promise<FastSource> {
   const hash = createHash('sha256').update(JSON.stringify({ GENERATOR_VERSION, recipe })).digest('hex').slice(0, 16);
-  const directory = cacheDirectory();
-  const target = path.join(directory, `${recipe.name}-${hash}.${recipe.container}`);
-  if (!existsSync(target)) {
-    mkdirSync(directory, { recursive: true });
-    const partial = path.join(directory, `.partial-${process.pid}-${recipe.name}-${hash}.${recipe.container}`);
-    try {
-      render(recipe, partial);
-      renameSync(partial, target);
-    } finally {
-      rmSync(partial, { force: true });
-    }
-  }
+  const { path: target } = await ensureTestMedia(`fast-export/${recipe.name}-${hash}.${recipe.container}`, async (partial) => render(recipe, partial));
   const layout = recipe.video ? frameLayout(recipe.video) : { timestamps: [], codes: [] };
   const width = recipe.video?.width ?? recipe.still?.width ?? 0;
   const height = recipe.video?.height ?? recipe.still?.height ?? 0;

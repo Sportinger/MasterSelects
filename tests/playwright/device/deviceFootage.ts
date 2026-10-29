@@ -3,8 +3,9 @@ import { PHONE_FOOTAGE_PROFILES, type PhoneFootageProfileId } from '../fixtures/
 
 /**
  * The phone footage the journeys import, from the footage fixture (fixtures/phoneFootage.ts): generated
- * on the PC with ffmpeg, cached (MASTERSELECTS_PHONE_FOOTAGE_DIR; the 10-minute and multi-GB
- * profiles default to os.tmpdir()), never real recordings.
+ * on the PC with ffmpeg and kept in the shared test media store (fixtures/testMediaStore.ts:
+ * local cache plus the optional remote; MASTERSELECTS_PHONE_FOOTAGE_DIR overrides the local
+ * folder), never real recordings.
  */
 export type { PhoneFootage }
 

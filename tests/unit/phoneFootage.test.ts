@@ -1,9 +1,10 @@
 import { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  assertFreeSpace, PHONE_FOOTAGE_DIR, PHONE_FOOTAGE_HEAVY_DIR, phoneFootage, phoneFootageDirectory, phoneFootageProfile, phoneFrameCodeFilter,
+  assertFreeSpace, phoneFootage, phoneFootageDirectory, phoneFootageProfile, phoneFrameCodeFilter,
 } from '../playwright/fixtures/phoneFootage'
 import {
   footageExpectation, frameIndexAt, frameTime, intervalStats, PHONE_FOOTAGE_PROFILES, setptsExpression,
@@ -85,19 +86,17 @@ describe('phone footage expectation models (full size)', () => {
 describe('phone footage cache location', () => {
   afterEach(() => { vi.unstubAllEnvs() })
 
-  it('keeps short profiles in test-results and sends the 10-minute and multi-GB files to os.tmpdir()', () => {
+  it('keeps every profile, the 10-minute and multi-GB ones included, in the shared test media cache on disk', () => {
     vi.stubEnv('MASTERSELECTS_PHONE_FOOTAGE_DIR', '')
-    expect(phoneFootageDirectory(PHONE_FOOTAGE_PROFILES['android-60'])).toBe(PHONE_FOOTAGE_DIR)
-    expect(phoneFootageDirectory(phoneFootageProfile('multi-gb', 'small'))).toBe(PHONE_FOOTAGE_DIR)
-    expect(phoneFootageDirectory(PHONE_FOOTAGE_PROFILES['long-10min'])).toBe(PHONE_FOOTAGE_HEAVY_DIR)
-    expect(phoneFootageDirectory(PHONE_FOOTAGE_PROFILES['multi-gb'])).toBe(PHONE_FOOTAGE_HEAVY_DIR)
-    expect(PHONE_FOOTAGE_HEAVY_DIR.startsWith(os.tmpdir())).toBe(true)
+    vi.stubEnv('MASTERSELECTS_TEST_MEDIA_DIR', '')
+    expect(phoneFootageDirectory()).toBe(path.join(os.homedir(), '.cache', 'masterselects-test-media', 'phone-footage'))
+    vi.stubEnv('MASTERSELECTS_TEST_MEDIA_DIR', '/mnt/cache/media')
+    expect(phoneFootageDirectory()).toBe(path.resolve('/mnt/cache/media/phone-footage'))
   })
 
   it('lets MASTERSELECTS_PHONE_FOOTAGE_DIR move every profile', () => {
     vi.stubEnv('MASTERSELECTS_PHONE_FOOTAGE_DIR', '/mnt/big/footage')
-    expect(phoneFootageDirectory(PHONE_FOOTAGE_PROFILES['multi-gb'])).toBe('/mnt/big/footage')
-    expect(phoneFootageDirectory(PHONE_FOOTAGE_PROFILES['android-h264'])).toBe('/mnt/big/footage')
+    expect(phoneFootageDirectory()).toBe(path.resolve('/mnt/big/footage'))
   })
 
   it('refuses to generate when the disk cannot hold the file, with a message that names the fix', async () => {

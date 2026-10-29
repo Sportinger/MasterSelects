@@ -2,9 +2,9 @@ import { execFile } from 'node:child_process'
 import { access, mkdir, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { FRAME_CODE_LAYOUT } from './frameCodeMedia.ts'
+import { ensureTestMedia, testMediaDir } from './testMediaStore.ts'
 import {
   footageExpectation, nominalFrameTicks, PHONE_FOOTAGE_PROFILES, PHONE_HIGH_ROW, setptsExpression, smallProfile,
   type FootageExpectation, type PhoneFootageProfile, type PhoneFootageProfileId,
@@ -15,10 +15,10 @@ const run = promisify(execFile)
 /**
  * Generates realistic phone recordings (profiles in phoneFootageProfiles.ts)
  * with ffmpeg on demand. No media is checked in and nothing comes from a real
- * phone: every file is synthetic and cached (phoneFootageDirectory) under
- * test-results/playwright/phone-footage/ (gitignored) or, for the heavy
- * profiles, under os.tmpdir(), keyed by all of its parameters, next to a
- * `.expect.json` sidecar with the expectation model.
+ * phone: every file is synthetic and kept in the shared test media store
+ * (fixtures/testMediaStore.ts: local cache `phone-footage/` folder, fetched
+ * from or uploaded to the remote when one is configured), keyed by all of its
+ * parameters, next to a `.expect.json` sidecar with the expectation model.
  *
  * The picture is the v1 frame-code chart (fixtures/frameCodeMedia.ts, read by
  * assertions/frameCodeOracle.ts) plus a second code row for frame numbers above
@@ -42,23 +42,15 @@ const run = promisify(execFile)
  *   iphone-hevc-30        mov   15.5 MB      450     9.8 s     4.5 s
  *   iphone-h264-2997      mp4   28.3 MB      450     7.7 s     3.9 s
  *   iphone-hevc-2997      mov   15.5 MB      450     8.9 s     4.3 s
- *   long-10min            mp4   1154 MB    18000   156 s       18 s   (tmpfs; +1.15 GB segments while building)
- *   multi-gb              mp4   2769 MB    43200   229 s *     44 s   (tmpfs; * reusing long-10min's 10 segments)
+ *   long-10min            mp4   1154 MB    18000   156 s       18 s   (+1.15 GB segments while building)
+ *   multi-gb              mp4   2769 MB    43200   229 s *     44 s   (* reusing long-10min's 10 segments)
  *
  * The small unit-test versions (180x320, 3-4 s) take well under a second each.
  */
 export const PHONE_FOOTAGE_REVISION = 1
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-/** Default cache for the short profiles (gitignored). */
-export const PHONE_FOOTAGE_DIR = path.join(REPO_ROOT, 'test-results', 'playwright', 'phone-footage')
-/**
- * Default cache for heavy files (the 10-minute and multi-GB recordings): a
- * directory under os.tmpdir(), on most Linux hosts a tmpfs, so a multi-GB
- * fixture never fills the repository disk. Files above this size go there.
- */
-export const PHONE_FOOTAGE_HEAVY_DIR = path.join(os.tmpdir(), 'masterselects-phone-footage')
-export const PHONE_FOOTAGE_HEAVY_BYTES = 256 * 1024 ** 2
+/** Folder of the phone footage inside the test media store (key prefix and local cache folder). */
+export const PHONE_FOOTAGE_KEY_PREFIX = 'phone-footage'
 
 export interface PhoneFootageOptions {
   /** `small`: the unit-test version of the profile (180x320, a few seconds, same timing). */
@@ -76,6 +68,8 @@ export interface PhoneFootage {
   bytes: number
   /** Wall time of the generation in ms; 0 when the file came from the cache. */
   generatedMs: number
+  /** Background upload to the test media remote (true when it arrived), null when none was started. */
+  upload: Promise<boolean> | null
 }
 
 export function phoneFootageProfile(id: PhoneFootageProfileId, size: 'full' | 'small' = 'full'): PhoneFootageProfile {
@@ -183,11 +177,11 @@ export async function assertFreeSpace(directory: string, bytes: number, what: st
   const free = info.bavail * info.bsize, margin = 1024 ** 3
   if (free < bytes + margin) {
     throw new Error(`${what} needs about ${(bytes / 1e9).toFixed(2)} GB plus 1 GB headroom, but only ${(free / 1e9).toFixed(2)} GB are free in ${directory}. `
-      + 'Free disk space or point MASTERSELECTS_PHONE_FOOTAGE_DIR at a larger disk.')
+      + 'Free disk space or point MASTERSELECTS_TEST_MEDIA_DIR (or MASTERSELECTS_PHONE_FOOTAGE_DIR) at a larger disk.')
   }
   if (info.type === TMPFS_MAGIC && os.freemem() < bytes + 2 * margin) {
     throw new Error(`${what} needs about ${(bytes / 1e9).toFixed(2)} GB in ${directory}, a tmpfs (RAM), but only ${(os.freemem() / 1e9).toFixed(2)} GB of memory are available. `
-      + 'Point MASTERSELECTS_PHONE_FOOTAGE_DIR at a disk with enough space.')
+      + 'Point MASTERSELECTS_TEST_MEDIA_DIR (or MASTERSELECTS_PHONE_FOOTAGE_DIR) at a disk with enough space.')
   }
 }
 
@@ -195,14 +189,14 @@ export async function assertFreeSpace(directory: string, bytes: number, what: st
 export const expectedBytes = (profile: PhoneFootageProfile) => (profile.videoKbps + profile.audio.kbps) * 125 * profile.seconds * 1.05
 
 /**
- * Where a profile is cached: MASTERSELECTS_PHONE_FOOTAGE_DIR when set, else
- * PHONE_FOOTAGE_HEAVY_DIR (tmpfs) for files above PHONE_FOOTAGE_HEAVY_BYTES
- * and test-results/playwright/phone-footage for the rest.
+ * Where the footage is cached locally: MASTERSELECTS_PHONE_FOOTAGE_DIR when
+ * set, else the `phone-footage` folder of the shared test media cache
+ * (MASTERSELECTS_TEST_MEDIA_DIR, default ~/.cache/masterselects-test-media),
+ * on disk for every profile, the multi-GB ones included.
  */
-export function phoneFootageDirectory(profile: PhoneFootageProfile): string {
-  const configured = process.env.MASTERSELECTS_PHONE_FOOTAGE_DIR
-  if (configured) return path.resolve(configured)
-  return expectedBytes(profile) > PHONE_FOOTAGE_HEAVY_BYTES ? PHONE_FOOTAGE_HEAVY_DIR : PHONE_FOOTAGE_DIR
+export function phoneFootageDirectory(): string {
+  const configured = process.env.MASTERSELECTS_PHONE_FOOTAGE_DIR?.trim()
+  return configured ? path.resolve(configured) : path.join(testMediaDir(), PHONE_FOOTAGE_KEY_PREFIX)
 }
 
 /** Generates (or reuses) a phone footage file and its expectation sidecar. */
@@ -213,32 +207,33 @@ export async function phoneFootage(id: PhoneFootageProfileId, options: PhoneFoot
 /** Same for a custom profile (e.g. a derived one with another size or length); the cache name covers every parameter. */
 export async function generatePhoneFootage(profile: PhoneFootageProfile, options: Omit<PhoneFootageOptions, 'size'> = {}): Promise<PhoneFootage> {
   const model = footageExpectation(profile)
-  const directory = phoneFootageDirectory(profile)
   const name = phoneFootageName(profile)
-  const file = path.join(directory, `${name}.${profile.container}`)
-  const expectPath = path.join(directory, `${name}.expect.json`)
-  if (await exists(file) && await exists(expectPath)) return { path: file, expectPath, model, bytes: (await stat(file)).size, generatedMs: 0 }
-  await mkdir(directory, { recursive: true })
-  options.log?.(`${profile.id}: generating into ${directory}`)
-  const started = Date.now()
-  const temporary = `${file}.${process.pid}.tmp.${profile.container}`
-  try {
-    if (profile.segmentSeconds) await renderSegmented(profile, model, directory, temporary, options)
-    else await renderDirect(profile, model, directory, temporary)
+  const configured = process.env.MASTERSELECTS_PHONE_FOOTAGE_DIR?.trim()
+  const media = await ensureTestMedia(`${PHONE_FOOTAGE_KEY_PREFIX}/${name}.${profile.container}`, async target => {
+    const directory = path.dirname(target)
+    options.log?.(`${profile.id}: generating into ${directory}`)
+    if (profile.segmentSeconds) await renderSegmented(profile, model, directory, target, options)
+    else await renderDirect(profile, model, directory, target)
     if (profile.rotation) {
-      const rotated = `${temporary}.rot.${profile.container}`
-      await ffmpeg(['-display_rotation:v:0', String(profile.rotation), '-i', temporary, '-map', '0', '-c', 'copy', ...containerArgs(profile), rotated], 'write the rotation matrix')
-      await rename(rotated, temporary)
+      const rotated = `${target}.rot.${profile.container}`
+      try {
+        await ffmpeg(['-display_rotation:v:0', String(profile.rotation), '-i', target, '-map', '0', '-c', 'copy', ...containerArgs(profile), rotated], 'write the rotation matrix')
+        await rename(rotated, target)
+      } finally {
+        await rm(rotated, { force: true })
+      }
     }
-    const bytes = (await stat(temporary)).size
+    const bytes = (await stat(target)).size
     if (profile.minBytes && bytes < profile.minBytes) throw new Error(`${profile.id} came out at ${bytes} bytes, below its ${profile.minBytes}-byte minimum`)
-    await writeFile(expectPath, JSON.stringify({ revision: PHONE_FOOTAGE_REVISION, file: path.basename(file), ...model }, null, 1))
-    await rename(temporary, file)
-    return { path: file, expectPath, model, bytes, generatedMs: Date.now() - started }
-  } catch (error) {
-    await rm(temporary, { force: true })
-    throw error
+  }, { directory: configured ? path.resolve(configured) : undefined, log: options.log })
+  // The expectation is derived from the profile alone, so a fetched file gets it written here.
+  const expectPath = path.join(path.dirname(media.path), `${name}.expect.json`)
+  if (!await exists(expectPath)) {
+    const temporary = `${expectPath}.${process.pid}.tmp`
+    await writeFile(temporary, JSON.stringify({ revision: PHONE_FOOTAGE_REVISION, file: path.basename(media.path), ...model }, null, 1))
+    await rename(temporary, expectPath)
   }
+  return { path: media.path, expectPath, model, bytes: media.bytes, generatedMs: media.generatedMs, upload: media.upload }
 }
 
 const durationSeconds = (model: FootageExpectation) => model.endTicks / model.profile.timescale

@@ -121,7 +121,7 @@ The bridge also serves authenticated local-file endpoints:
 - `/api/local-file`
 - `/api/local-files`
 
-Authenticated bridge routes check a bearer token. Browser requests with an `Origin` header must use `localhost` or `127.0.0.1`; CORS headers are issued only for those origins. File routes require an existing absolute non-UNC path that resolves inside an allowed root. Default roots are the repository, optional project root, system temp directory, and the user's Desktop, Documents, Downloads, and Videos directories; `MASTERSELECTS_ALLOWED_FILE_ROOTS` can add roots.
+Authenticated bridge routes check a bearer token. Browser requests with an `Origin` header must use `localhost` or `127.0.0.1`; CORS headers are issued only for those origins. File routes require an existing absolute non-UNC path that resolves inside an allowed root. Default roots are the repository, optional project root, system temp directory, the generated test media cache (`MASTERSELECTS_TEST_MEDIA_DIR`, default `~/.cache/masterselects-test-media`), and the user's Desktop, Documents, Downloads, and Videos directories; `MASTERSELECTS_ALLOWED_FILE_ROOTS` can add roots.
 
 ### Native Helper
 

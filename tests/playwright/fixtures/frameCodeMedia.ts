@@ -1,8 +1,6 @@
 import { execFile } from 'node:child_process'
-import { access, mkdir, rename } from 'node:fs/promises'
-import path from 'node:path'
 import { promisify } from 'node:util'
-import { DEFAULT_REPO_ROOT } from './bridgeClient'
+import { ensureTestMedia } from './testMediaStore'
 
 const run = promisify(execFile)
 
@@ -16,7 +14,9 @@ const run = promisify(execFile)
  * Layout constants are shared with assertions/frameCodeOracle.ts.
  *
  * The clips are generated with ffmpeg at test time (no binary media in the
- * repository, no redistribution question) and cached by their parameters.
+ * repository, no redistribution question) and cached by their parameters in
+ * the shared test media store (fixtures/testMediaStore.ts, key
+ * `frame-code-media/<name>`), which also fetches them from the remote.
  */
 export const FRAME_CODE_LAYOUT = {
   blocks: 16,
@@ -55,8 +55,6 @@ export interface FrameCodeClip {
   codec: 'h264' | 'vp9'
 }
 
-const CACHE_DIR = path.join(DEFAULT_REPO_ROOT, 'test-results', 'playwright', 'frame-code-media')
-
 export function frameCodeFilter(width: number, height: number): string {
   const { blocks, numberBits, codeBand, barBand, rampBand, bars, black, white, background } = FRAME_CODE_LAYOUT
   const nibble = (k: number) => `mod(floor(N/${16 ** k}),16)`
@@ -78,8 +76,8 @@ export async function frameCodeClip(options: FrameCodeClipOptions = {}): Promise
   const { width = 640, height = 360, fps = 30, seconds = 4, codec = 'h264' } = options
   const frames = Math.round(fps * seconds)
   const extension = codec === 'vp9' ? 'webm' : 'mp4'
-  const file = path.join(CACHE_DIR, `frame-code-v1-${width}x${height}-${fps}fps-${frames}f-${codec}.${extension}`)
-  await renderClip(file, { width, height, fps, seconds, frames, codec }, frameCodeFilter(width, height))
+  const file = await renderClip(`frame-code-v1-${width}x${height}-${fps}fps-${frames}f-${codec}.${extension}`, { width, height, fps, seconds, frames, codec },
+    frameCodeFilter(width, height))
   return { path: file, width, height, fps, frames, codec }
 }
 
@@ -178,30 +176,32 @@ export async function frameCodeClipV2(options: FrameCodeV2Options): Promise<Fram
   const { width = 352, height = 224, fps = 30, seconds = 4, codec = 'h264', chart = 'tile', sourceId, variant = 0 } = options
   const frames = Math.round(fps * seconds)
   const extension = codec === 'vp9' ? 'webm' : 'mp4'
-  const file = path.join(CACHE_DIR, `frame-code-v2r${FRAME_CODE_V2.revision}-${chart}-id${sourceId}-v${variant}-${width}x${height}-${fps}fps-${frames}f-${codec}.${extension}`)
-  await renderClip(file, { width, height, fps, seconds, frames, codec }, frameCodeFilterV2(width, height, { chart, sourceId, variant }), BT709_TAGS)
+  const file = await renderClip(`frame-code-v2r${FRAME_CODE_V2.revision}-${chart}-id${sourceId}-v${variant}-${width}x${height}-${fps}fps-${frames}f-${codec}.${extension}`,
+    { width, height, fps, seconds, frames, codec }, frameCodeFilterV2(width, height, { chart, sourceId, variant }), BT709_TAGS)
   return { path: file, width, height, fps, frames, codec, chart, sourceId, variant }
 }
 
 const BT709_TAGS = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv']
 
-async function renderClip(file: string, { width, height, fps, seconds, frames, codec }: Omit<FrameCodeClip, 'path'> & { seconds: number }, filter: string,
-  tags: string[] = []): Promise<void> {
-  if (await access(file).then(() => true, () => false)) return
-  await mkdir(CACHE_DIR, { recursive: true })
-  const extension = path.extname(file).slice(1)
+/** Returns the cached (or fetched, or freshly rendered) clip `name`; the name holds every parameter of the picture. */
+async function renderClip(name: string, { width, height, fps, seconds, frames, codec }: Omit<FrameCodeClip, 'path'> & { seconds: number }, filter: string,
+  tags: string[] = []): Promise<string> {
+  const media = await ensureTestMedia(`frame-code-media/${name}`, target => encodeClip(target, { width, height, fps, seconds, frames, codec }, filter, tags))
+  return media.path
+}
+
+async function encodeClip(target: string, { width, height, fps, seconds, frames, codec }: Omit<FrameCodeClip, 'path'> & { seconds: number }, filter: string,
+  tags: string[]): Promise<void> {
   const encoder = codec === 'vp9'
     ? ['-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '20', '-g', String(fps), '-row-mt', '1']
     : ['-c:v', 'libx264', '-profile:v', 'high', '-crf', '14', '-g', String(fps), '-bf', '2', '-movflags', '+faststart']
-  const temporary = `${file}.${process.pid}.tmp.${extension}`
   try {
     await run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=${fps}:d=${seconds}`,
-      '-vf', filter, '-frames:v', String(frames), ...encoder, ...tags, temporary], { maxBuffer: 16 * 1024 * 1024 })
+      '-vf', filter, '-frames:v', String(frames), ...encoder, ...tags, target], { maxBuffer: 16 * 1024 * 1024 })
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     throw new Error(code === 'ENOENT'
       ? 'ffmpeg is not installed on this test host; the frame-code clips are generated with it (install ffmpeg and rerun).'
       : `ffmpeg could not generate the frame-code clip: ${(error as Error).message}`)
   }
-  await rename(temporary, file)
 }

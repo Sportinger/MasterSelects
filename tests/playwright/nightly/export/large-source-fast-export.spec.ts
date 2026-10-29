@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { statSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,6 +7,7 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/test';
 import { ExportDriver } from '../../drivers/ExportDriver';
 import { inspectMediaArtifact } from '../../assertions/mediaArtifactAssertions';
+import { assertCacheSpace, ensureTestMedia } from '../../fixtures/testMediaStore';
 
 // FAST (WebCodecs) export from a source larger than Chromium reads into one ArrayBuffer:
 // Blob.arrayBuffer() of a 4.48 GB phone recording failed with NotReadableError and the export
@@ -15,9 +16,9 @@ import { inspectMediaArtifact } from '../../assertions/mediaArtifactAssertions';
 // timeline as a disk-backed File (as from the OS), trims the clip to the end of the source and
 // exports from there, so the samples also sit beyond 32-bit file offsets (co64).
 // The source is a high-bitrate testsrc2 segment with audio, generated once and concatenated
-// without re-encoding; MASTERSELECTS_LARGE_VIDEO_FIXTURE uses a real file instead. It stays in
-// the OS temp folder, the export is deleted after the checks; a JSON summary and three exported
-// frames are attached.
+// without re-encoding; MASTERSELECTS_LARGE_VIDEO_FIXTURE uses a real file instead. It lives in
+// the shared test media store (fixtures/testMediaStore.ts), the export in the OS temp folder
+// (deleted after the checks); a JSON summary and three exported frames are attached.
 
 // Above 2^32 bytes the moov needs 64-bit chunk offsets (co64); the generated source adds margin.
 const OVER_32_BIT_OFFSETS = 2 ** 32;
@@ -35,23 +36,29 @@ function ffmpeg(args: string[]): string {
   return run('ffmpeg', ['-hide_banner', '-y', ...args]);
 }
 
-function largeVideoFixture(): string {
+async function largeVideoFixture(): Promise<string> {
   const own = process.env.MASTERSELECTS_LARGE_VIDEO_FIXTURE?.trim();
   if (own) return path.resolve(own);
-  const directory = path.join(os.tmpdir(), 'masterselects-e2e-fixtures');
-  const file = path.join(directory, 'large-source-over-4gib.mp4');
-  if (existsSync(file) && statSync(file).size >= MIN_SOURCE_BYTES) return file;
-  mkdirSync(directory, { recursive: true });
-  const segment = path.join(directory, 'large-source-segment.mp4');
-  ffmpeg(['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=30:duration=20',
-    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=20',
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '1', '-g', '30', '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-b:a', '128k', '-shortest', segment]);
-  const copies = Math.ceil(MIN_SOURCE_BYTES / statSync(segment).size) + 1;
-  const list = path.join(directory, 'large-source-segments.txt');
-  writeFileSync(list, Array.from({ length: copies }, () => `file '${segment.replaceAll("'", "'\\''")}'`).join('\n'));
-  ffmpeg(['-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', file]);
-  return file;
+  // The file name is the cache key: rename it whenever the recipe below changes.
+  const media = await ensureTestMedia('nightly/large-source-over-4gib.mp4', async (target) => {
+    await assertCacheSpace(path.dirname(target), MIN_SOURCE_BYTES * 1.15, 'the large FAST export source');
+    const segment = `${target}.segment.mp4`;
+    const list = `${target}.segments.txt`;
+    try {
+      ffmpeg(['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=30:duration=20',
+        '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=20',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '1', '-g', '30', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', '128k', '-shortest', segment]);
+      const copies = Math.ceil(MIN_SOURCE_BYTES / statSync(segment).size) + 1;
+      writeFileSync(list, Array.from({ length: copies }, () => `file '${segment.replaceAll("'", "'\\''")}'`).join('\n'));
+      ffmpeg(['-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-f', 'mp4', target]);
+      if (statSync(target).size < MIN_SOURCE_BYTES) throw new Error(`the large source came out below ${MIN_SOURCE_BYTES} bytes`);
+    } finally {
+      await rm(segment, { force: true });
+      await rm(list, { force: true });
+    }
+  });
+  return media.path;
 }
 
 interface TimelineClip { id: string; startTime: number; duration: number; inPoint?: number; outPoint?: number }
@@ -88,7 +95,7 @@ async function dropOntoTimeline(page: Page, state: TimelineState, file: string):
 test.describe.configure({ timeout: 900_000 });
 
 test('FAST export reads a source above 4 GiB on demand and exports from its end @module:export', async ({ page, bridge }, testInfo) => {
-  const source = largeVideoFixture();
+  const source = await largeVideoFixture();
   const sourceBytes = statSync(source).size;
   expect(sourceBytes).toBeGreaterThan(OVER_32_BIT_OFFSETS);
   const exportDir = await mkdtemp(path.join(os.tmpdir(), 'masterselects-large-source-'));
