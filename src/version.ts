@@ -1,3 +1,3 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '3.3.9';
+export const APP_VERSION = '3.4.0';

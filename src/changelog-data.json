@@ -2,6 +2,13 @@
   {
     "date": "2026-10-29",
     "type": "new",
+    "title": "MasterSelects 3.4.0",
+    "description": "A maintenance release that rolls out the new update notice: if you had MasterSelects open while this version went live, the MasterSelects name at the bottom left (or the update button on the phone) now glows, and one click loads the new version. No other changes.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-29",
+    "type": "new",
     "title": "MasterSelects 3.3.9",
     "description": "MasterSelects now tells you when a new version is live while you work: the MasterSelects name and version at the bottom left glow turquoise, and on the phone a glowing update button appears next to the project name. One click saves your work, waits for running copies and an active export, and then loads the new version. Only one open tab checks for updates and tells the others.",
     "section": "Release"
