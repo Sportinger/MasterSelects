@@ -1,12 +1,23 @@
-// The "MasterSelects <version>" brand at the left of the workspace bar. When a new version is deployed
-// while the editor is open it glows turquoise and becomes a button: a click saves everything and reloads
-// into the new version (services/appUpdate). A running export is never interrupted; the person is asked.
+// The "MasterSelects <version>" brand at the left of the workspace bar. A click checks for a new version
+// right away and says the answer in a small note above the brand. When a new version is deployed while the
+// editor is open the brand glows turquoise: a click then saves everything and reloads into the new version
+// (services/appUpdate). A running export is never interrupted; the person is asked.
 
 import { useCallback, useEffect, useRef } from 'react';
 
-import { useAppUpdateAvailability, useAppUpdateReload } from '../../hooks/useAppUpdate';
+import {
+  useAppUpdateAvailability, useAppUpdateManualCheck, useAppUpdateReload, type AppUpdateCheckFeedback,
+} from '../../hooks/useAppUpdate';
 import { APP_VERSION } from '../../version';
 import './WorkspaceBarBrand.css';
+
+const CHECK_FEEDBACK_TEXT: Record<AppUpdateCheckFeedback['kind'], string> = {
+  idle: '',
+  checking: 'Checking…',
+  current: `Up to date (${APP_VERSION})`,
+  failed: 'Check failed',
+  disabled: 'Update checks are off',
+};
 
 function BrandContent() {
   return (
@@ -22,6 +33,7 @@ function BrandContent() {
 export function WorkspaceBarBrand() {
   const update = useAppUpdateAvailability();
   const { phase, start, updateAfterExport, dismiss } = useAppUpdateReload();
+  const { feedback, checkNow } = useAppUpdateManualCheck();
   const rootRef = useRef<HTMLDivElement>(null);
   const brandRef = useRef<HTMLButtonElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -53,24 +65,21 @@ export function WorkspaceBarBrand() {
     };
   }, [busy, close, dismiss, promptOpen]);
 
-  // The slot is the grid cell in both states, so the bar keeps its columns when the brand turns into a button.
-  if (!update.available) {
-    return (
-      <div className="workspace-bar-brand-slot">
-        <div aria-hidden="true" className="workspace-bar-brand"><BrandContent /></div>
-      </div>
-    );
-  }
-
-  const label = `New version ${update.version ?? 'newer'} available – click to update`;
+  // One button in both states, so keyboard focus stays on it when a check finds a new version. The slot is
+  // the grid cell and the note floats above it, so the bar keeps its columns.
+  const available = update.available;
+  const label = available
+    ? `New version ${update.version ?? 'newer'} available – click to update`
+    : `MasterSelects ${APP_VERSION} – check for updates`;
+  const note = available ? '' : CHECK_FEEDBACK_TEXT[feedback.kind];
   return (
-    <div className="workspace-bar-brand-slot" data-update-available="true" ref={rootRef}>
+    <div className="workspace-bar-brand-slot" data-update-available={available ? 'true' : undefined} ref={rootRef}>
       <button
-        aria-busy={busy || undefined}
+        aria-busy={(available ? busy : feedback.kind === 'checking') || undefined}
         aria-label={label}
-        className="workspace-bar-brand workspace-bar-brand--update"
-        data-update-version={update.version ?? ''}
-        onClick={start}
+        className={`workspace-bar-brand workspace-bar-brand--button${available ? ' workspace-bar-brand--update' : ''}`}
+        data-update-version={available ? update.version ?? '' : undefined}
+        onClick={available ? start : checkNow}
         onPointerUp={(event) => event.currentTarget.blur()}
         ref={brandRef}
         title={label}
@@ -78,6 +87,9 @@ export function WorkspaceBarBrand() {
       >
         <BrandContent />
       </button>
+
+      {/* Always mounted, so screen readers announce each new answer. */}
+      <span className="workspace-bar-brand-check" data-check-state={available ? 'idle' : feedback.kind} role="status">{note}</span>
 
       {promptOpen && (
         <div

@@ -2,7 +2,8 @@
 // /build-info.json (written by vite.config.ts) and publishes "a new version is available" for the
 // workspace bar brand and the phone top bar. It checks every few minutes with jitter, and when the tab
 // comes back into view or the browser goes online again; a hidden tab never polls. With several tabs open,
-// one visible tab polls for all of them (appUpdateTabs.ts). The dev server serves no build-info, so the
+// one visible tab polls for all of them (appUpdateTabs.ts). A click on the brand (or the phone's Check for
+// update) checks at once in any tab and shares the answer. The dev server serves no build-info, so the
 // check stays off there unless localStorage `ms.updateCheck.enabled` is 'true'.
 
 import { APP_BUILD_ID, APP_RELEASE_ID } from '../appBuild';
@@ -28,6 +29,9 @@ const FETCH_TIMEOUT_MS = 15_000;
 export const UPDATE_CHECK_FLAG_KEY = 'ms.updateCheck.enabled';
 /** How long a tab return waits for a polling tab to take it over before it is dropped. */
 const RETURN_HANDOVER_MS = 10_000;
+/** A check the person asks for again this soon after an answer gets that answer (a double click asks once). */
+export const MANUAL_CHECK_REPEAT_MS = 2_000;
+const MANUAL_REASON = 'manual';
 
 export interface AppBuildIdentity {
   version: string | null;
@@ -93,6 +97,15 @@ function safeLocalStorage(): Storage | null {
   try { return globalThis.localStorage ?? null; } catch { return null; }
 }
 
+/** Answer of one check, for a check the person asked for. */
+export type AppUpdateCheckOutcome =
+  | { kind: 'current' }
+  | { kind: 'available'; version: string }
+  /** `unreachable`: offline, timed out or refused; `no-build-info`: the server answered without build info. */
+  | { kind: 'failed'; cause: 'unreachable' | 'no-build-info'; message: string }
+  /** `ms.updateCheck.enabled` keeps checks off in this browser (the default in the dev server). */
+  | { kind: 'disabled' };
+
 export interface AppUpdateSnapshot {
   /** The served build differs from the running one. */
   available: boolean;
@@ -115,8 +128,14 @@ export interface AppUpdateCheckerDeps {
 export interface AppUpdateChecker {
   start(): void;
   stop(): void;
-  /** One check now, unless one is already running; resolves when it settled. */
-  check(reason: string): Promise<void>;
+  /** One check now, unless one is already running; resolves with its answer when it settled. */
+  check(reason: string): Promise<AppUpdateCheckOutcome>;
+  /**
+   * A check the person asked for: runs at once past the minimum gap, also in a tab that does not poll, and
+   * tells the other tabs like every check. A running check is reused, and a repeat within
+   * MANUAL_CHECK_REPEAT_MS of an answer gets that answer again (after a failure it asks again).
+   */
+  checkNow(): Promise<AppUpdateCheckOutcome>;
   getSnapshot(): AppUpdateSnapshot;
   subscribe(listener: () => void): () => void;
 }
@@ -139,7 +158,9 @@ export function createAppUpdateChecker(deps: AppUpdateCheckerDeps = {}): AppUpda
   let missedWhileHidden = false;
   /** Latest check of any tab: tab returns and other tabs' requests keep the one-minute gap across tabs. */
   let lastCheckAt = Number.NEGATIVE_INFINITY;
-  let inFlight: Promise<void> | null = null;
+  let inFlight: Promise<AppUpdateCheckOutcome> | null = null;
+  /** This tab's latest answer, so a double click on the brand sends one request. */
+  let lastAnswer: { at: number; outcome: AppUpdateCheckOutcome } | null = null;
   let failing = false;
   let channel: BroadcastChannelLike | null = null;
   let lastResult: ResultMessage | null = null;
@@ -192,37 +213,60 @@ export function createAppUpdateChecker(deps: AppUpdateCheckerDeps = {}): AppUpda
     void check('interval');
   }
 
-  const runCheck = async (reason: string) => {
+  const askServer = async (checkedAt: number): Promise<{ served: unknown; outcome: AppUpdateCheckOutcome }> => {
+    let served: unknown;
+    try {
+      served = await fetchServerBuildInfo(fetcher, checkedAt);
+    } catch (error) {
+      return { served: null, outcome: { kind: 'failed', cause: 'unreachable', message: error instanceof Error ? error.message : String(error) } };
+    }
+    const comparison = compareAppBuild(running, served);
+    if (comparison.kind === 'unknown') return { served, outcome: { kind: 'failed', cause: 'no-build-info', message: comparison.reason } };
+    return { served, outcome: comparison.kind === 'available' ? { kind: 'available', version: comparison.version } : { kind: 'current' } };
+  };
+
+  const runCheck = async (reason: string): Promise<AppUpdateCheckOutcome> => {
     const checkedAt = now();
     lastCheckAt = checkedAt;
     try {
-      const served = await fetchServerBuildInfo(fetcher, checkedAt);
-      const comparison = compareAppBuild(running, served);
-      if (comparison.kind === 'unknown') throw new Error(comparison.reason);
+      const { served, outcome } = await askServer(checkedAt);
+      lastAnswer = { at: now(), outcome };
+      if (outcome.kind === 'failed') {
+        // Offline or a server without build info: say so once per failure streak (and whenever the person
+        // asked), keep the last answer.
+        if (reason === MANUAL_REASON) log.warn('Update check failed', outcome.message);
+        else if (!failing) log.warn(`Update check failed (${reason}); retrying quietly`, outcome.message);
+        else log.debug('Update check failed again', outcome.message);
+        failing = true;
+        post({ v: 1, type: 'result', checkedAt, build: null });
+        return outcome;
+      }
       if (failing) log.info('Update check works again');
       failing = false;
-      publishComparison(comparison);
+      publish(outcome.kind === 'available' ? { available: true, version: outcome.version } : { available: false, version: null });
       lastResult = { v: 1, type: 'result', checkedAt, build: readBuildIdentity(served) };
       post(lastResult);
-    } catch (error) {
-      // Offline or a server without build info: say so once per failure streak, keep the last answer.
-      if (!failing) log.warn(`Update check failed (${reason}); retrying quietly`, error instanceof Error ? error.message : error);
-      else log.debug('Update check failed again', error);
-      failing = true;
-      post({ v: 1, type: 'result', checkedAt, build: null });
+      return outcome;
     } finally {
       if (started && polls()) schedule();
     }
   };
 
-  function check(reason: string): Promise<void> {
+  function check(reason: string): Promise<AppUpdateCheckOutcome> {
     if (!isEnabled()) {
       if (started && timer === null && polls()) schedule();
-      return Promise.resolve();
+      return Promise.resolve({ kind: 'disabled' });
     }
     missedWhileHidden = false;
     inFlight ??= runCheck(reason).finally(() => { inFlight = null; });
     return inFlight;
+  }
+
+  function checkNow(): Promise<AppUpdateCheckOutcome> {
+    if (!inFlight && isEnabled() && lastAnswer && lastAnswer.outcome.kind !== 'failed' && now() - lastAnswer.at < MANUAL_CHECK_REPEAT_MS) {
+      return Promise.resolve(lastAnswer.outcome);
+    }
+    return check(MANUAL_REASON);
   }
 
   /** Checks unless a check (of any tab) ran within the last minute; true when it checks. */
@@ -319,6 +363,7 @@ export function createAppUpdateChecker(deps: AppUpdateCheckerDeps = {}): AppUpda
       clearTimer();
     },
     check,
+    checkNow,
     getSnapshot: () => snapshot,
     subscribe(listener) {
       listeners.add(listener);

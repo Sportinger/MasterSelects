@@ -212,6 +212,29 @@ describe('update check shared by several tabs', () => {
     expect(a.fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it('lets a tab that does not poll check itself on a click and tells every tab', async () => {
+    const { openTab, advance } = browser();
+    const a = openTab();
+    await advance(0);
+    const b = openTab();
+    const c = openTab();
+    await advance(30_000);
+
+    await expect(b.checker.checkNow()).resolves.toEqual({ kind: 'available', version: '3.3.9' });
+    await advance(0);
+    expect(b.fetcher).toHaveBeenCalledTimes(1);
+    expect(a.fetcher).not.toHaveBeenCalled();
+    expect(a.checker.getSnapshot()).toEqual({ available: true, version: '3.3.9' });
+    expect(c.checker.getSnapshot()).toEqual({ available: true, version: '3.3.9' });
+
+    // The polling tab counts the click as its latest check and goes on from there.
+    await advance(INTERVAL - 30_000);
+    expect(a.fetcher).not.toHaveBeenCalled();
+    await advance(30_000);
+    expect(a.fetcher).toHaveBeenCalledTimes(1);
+    expect(b.fetcher.mock.calls.length + c.fetcher.mock.calls.length).toBe(1);
+  });
+
   it('keeps one check per tab without Web Locks or BroadcastChannel', async () => {
     const { openTab, advance } = browser();
     const a = openTab({ coordinated: false });

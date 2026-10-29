@@ -7,6 +7,7 @@ import {
   compareAppBuild,
   createAppUpdateChecker,
   isAppUpdateCheckEnabled,
+  MANUAL_CHECK_REPEAT_MS,
   UPDATE_CHECK_FLAG_KEY,
   UPDATE_CHECK_INTERVAL_MS,
   UPDATE_CHECK_JITTER_MS,
@@ -30,7 +31,7 @@ class FakeDocument extends EventTarget {
   }
 }
 
-function setup(answer: () => Promise<Response>) {
+function setup(answer: () => Promise<Response>, options: { enabled?: () => boolean } = {}) {
   const fetcher = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => answer());
   const doc = new FakeDocument();
   const win = new EventTarget();
@@ -40,7 +41,7 @@ function setup(answer: () => Promise<Response>) {
     now: () => clock,
     random: () => 0.5,
     running: RUNNING,
-    isEnabled: () => true,
+    isEnabled: options.enabled ?? (() => true),
     doc: doc as unknown as Document,
     win: win as unknown as Window,
     // One tab on its own (the fallback without Web Locks or BroadcastChannel); appUpdateTabs.test.ts covers several.
@@ -186,6 +187,73 @@ describe('app update checker', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(checker.getSnapshot().available).toBe(true);
     checker.stop();
+  });
+
+  it('checks at once when the person asks, past the minimum gap of tab returns', async () => {
+    const { checker, fetcher, win, advance } = setup(async () => jsonResponse(SAME));
+    checker.start();
+    win.dispatchEvent(new Event('online'));
+    await advance(0);
+    await advance(MANUAL_CHECK_REPEAT_MS);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    // Well within the minute in which tab returns and reconnects are skipped.
+    await expect(checker.checkNow()).resolves.toEqual({ kind: 'current' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    checker.stop();
+  });
+
+  it('answers a double click with one request', async () => {
+    let answer!: (response: Response) => void;
+    const { checker, fetcher, advance } = setup(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    const first = checker.checkNow();
+    const second = checker.checkNow();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    answer(jsonResponse(NEWER));
+    await expect(first).resolves.toEqual({ kind: 'available', version: '3.3.9' });
+    await expect(second).resolves.toEqual({ kind: 'available', version: '3.3.9' });
+    expect(checker.getSnapshot()).toEqual({ available: true, version: '3.3.9' });
+
+    // A click right after the answer gets it again; a later one asks the server.
+    await expect(checker.checkNow()).resolves.toEqual({ kind: 'available', version: '3.3.9' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await advance(MANUAL_CHECK_REPEAT_MS);
+    const third = checker.checkNow();
+    answer(jsonResponse(NEWER));
+    await third;
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses a background check that is already running', async () => {
+    let answer!: (response: Response) => void;
+    const { checker, fetcher } = setup(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    const background = checker.check('interval');
+    const manual = checker.checkNow();
+    answer(jsonResponse(SAME));
+    await background;
+    await expect(manual).resolves.toEqual({ kind: 'current' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('says why a check the person asked for failed, logs every one and asks again on the next click', async () => {
+    let online = false;
+    const { checker, fetcher } = setup(async () => {
+      if (!online) throw new TypeError('Failed to fetch');
+      return new Response('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html' } });
+    });
+    await expect(checker.checkNow()).resolves.toEqual({ kind: 'failed', cause: 'unreachable', message: 'Failed to fetch' });
+    online = true;
+    await expect(checker.checkNow()).resolves.toMatchObject({ kind: 'failed', cause: 'no-build-info' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(logs.warn).toHaveBeenCalledTimes(2);
+    expect(logs.warn).toHaveBeenCalledWith('Update check failed', 'Failed to fetch');
+  });
+
+  it('keeps update checks off when the flag turns them off, also for a click', async () => {
+    const { checker, fetcher } = setup(async () => jsonResponse(NEWER), { enabled: () => false });
+    await expect(checker.checkNow()).resolves.toEqual({ kind: 'disabled' });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(checker.getSnapshot().available).toBe(false);
   });
 
   it('does nothing after stop', async () => {

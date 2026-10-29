@@ -1,9 +1,9 @@
 import { test, expect } from '../fixtures/test'
 
 // A deploy while the editor is open (docs/Features/App-Updates.md): the served /build-info.json is
-// routed to a newer release, the workspace bar brand must glow and name it, and a click must save the
-// project and reload the page. The dev server has no build info and keeps the check off unless the
-// `ms.updateCheck.enabled` flag is set, so the case sets it; the check itself is the product's own code.
+// routed to a newer release, a click on the brand checks at once, the brand must glow and name it, and a
+// click must save the project and reload the page. The dev server has no build info and keeps the check off
+// unless the `ms.updateCheck.enabled` flag is set, so the case sets it; the check itself is the product's own code.
 
 const REVISION = 'f'.repeat(40)
 const NEWER_BUILD = {
@@ -18,22 +18,50 @@ const MARKER_COMPOSITION = 'Saved before the update reload'
 
 test('a newly deployed version makes the brand glow; a click saves and reloads into it @module:platform', async ({ page, bridge, editorPage }, testInfo) => {
   const slot = page.locator('.workspace-bar-brand-slot')
+  const brand = slot.locator('button.workspace-bar-brand')
+  const note = slot.locator('.workspace-bar-brand-check')
   const updateButton = page.getByRole('button', { name: 'New version 99.0.0 available – click to update' })
   const buildInfoRequests: string[] = []
 
-  await test.step('the running build shows the plain brand', async () => {
+  await test.step('the running build shows the plain brand as a check button', async () => {
     await expect(slot).toBeVisible()
     await expect(slot).not.toHaveAttribute('data-update-available', 'true')
+    await expect(brand).toHaveAttribute('aria-label', /^MasterSelects \S+ – check for updates$/)
   })
 
-  await test.step('the server starts serving a newer release', async () => {
+  await test.step('a click says when update checks are off, without moving the bar', async () => {
+    const before = (await page.locator('.workspace-bar-modes').boundingBox())!
+    await brand.click()
+    await expect(note).toHaveText('Update checks are off')
+    expect((await page.locator('.workspace-bar-modes').boundingBox())!.x).toBe(before.x)
+    expect(await brand.evaluate(element => document.activeElement === element), 'a click leaves no focus behind').toBe(false)
+    await expect(note).toBeEmpty({ timeout: 5_000 })
+  })
+
+  await test.step('the keyboard reaches the brand, shows its focus ring and checks with Enter', async () => {
+    await brand.focus()
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Tab')
+    await expect(brand).toBeFocused()
+    expect(await brand.evaluate(element => element.matches(':focus-visible') && getComputedStyle(element).outlineStyle)).toBe('solid')
+    await page.keyboard.press('Enter')
+    await expect(note).toHaveText('Update checks are off')
+    await expect(brand).toBeFocused()
+    await brand.blur()
+  })
+
+  await test.step('a click asks the server at once; an answer without build info says the check failed', async () => {
+    await page.evaluate(() => window.localStorage.setItem('ms.updateCheck.enabled', 'true'))
+    await brand.click()
+    await expect(note).toHaveText('Check failed')
+  })
+
+  await test.step('the server starts serving a newer release and a click finds it', async () => {
     await page.route('**/build-info.json*', async (route) => {
       buildInfoRequests.push(route.request().url())
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(NEWER_BUILD) })
     })
-    await page.evaluate(() => window.localStorage.setItem('ms.updateCheck.enabled', 'true'))
-    // The check runs when the browser comes back online (also on tab return and every few minutes).
-    await page.evaluate(() => window.dispatchEvent(new Event('online')))
+    await brand.click()
   })
 
   await test.step('the brand glows and names the new version', async () => {
