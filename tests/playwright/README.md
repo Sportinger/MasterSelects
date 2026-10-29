@@ -185,6 +185,17 @@ the user sees. Build new cases the same way:
    the fix lands, Playwright reports the case as unexpectedly passing and the
    marker goes.
 
+**Playback across a gap** (`playback/gap-speed-playback.spec.ts`) times a clip entry during
+playback. A screenshot per read takes 100-300 ms, too slow for that, so an in-page recorder copies
+the preview canvas into a small 2D canvas on every animation frame together with the store's
+playhead and the copies are decoded in Node with the same oracle (the recorder must first read the
+screenshot's paused frame). Each case builds its own composition of two frame-code clips with linked
+audio (`frameCodeClip` options `firstCode` 500 tells the second clip's frames apart, `audioHz` adds a
+tone, `keyframeSeconds` sets a long GOP) at changed speeds, plays through the gap with the Play button
+and requires the second clip's correct frame within 100 ms of the playhead entering it, nothing black
+or wrong after it, and steady advance. A failure prints the frames around the entry and a log of the
+video elements' seeks, loads, play and pause calls (inspection only).
+
 **Dropping files from outside** (`foundation/drop-import.spec.ts`) is tested in
 stages: stage 1 replays the drop inside the page (a `DataTransfer` with a real
 `File`), stage 2 sends the drag through Chrome's own pipeline with a real file

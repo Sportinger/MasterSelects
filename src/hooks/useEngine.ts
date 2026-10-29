@@ -208,6 +208,14 @@ export function useEngine() {
             renderMs += performance.now() - renderStart;
             lastNoDemandFrameWasCleared = true;
           }
+          if (timelineState.isPlaying && !isInteractiveScrub) {
+            // The playhead crosses a gap: nothing to draw, but the video sync must keep warming,
+            // positioning and pre-rolling the clips ahead (and pause the one that ended), so the
+            // next clip enters decoded instead of seeking from cold.
+            const syncVideoStart = performance.now();
+            layerBuilder.syncVideoElements(layerBuilder.captureFrameContext(currentPlayhead));
+            syncVideoMs += performance.now() - syncVideoStart;
+          }
           if (!timelineState.isPlaying) {
             const syncAudioStart = performance.now();
             layerBuilder.syncAudioElements();

@@ -128,7 +128,16 @@ The source monitor shows a raw media file in the preview panel instead of the co
 
 The engine render loop is RAF-based and has three important behaviors:
 
-- It idles after about 1 second of inactivity.
+- It idles after about 1 second of inactivity, and at once on a static preview without video. It never
+  idles during playback: while the playhead crosses a gap (no visual clip under it) the loop still runs
+  the render callback once per display frame. The callback draws the gap black, sees the playhead enter
+  the next clip on the first frame inside it, and keeps the video sync running, which warms, positions
+  and pre-rolls the clip ahead and pauses the one that ended. Before this the loop went idle in every
+  gap (since 56cb1a8a1, "idle static previews"); only an unrelated wake, often the ended clip's last
+  presented frames, noticed the next clip, so after a clip that ran to the end of its source the next
+  one stayed black for a second or more and entered cold (owner report 2026-10-29, journey
+  `tests/playwright/playback/gap-speed-playback.spec.ts`, unit tests in `tests/unit/renderLoop.test.ts`
+  and `tests/unit/useEngineExactFrameContext.test.tsx`).
 - While paused on a video clip, the held frame is re-presented every 250 ms. A requested render (a paused seek, the decoded frame it asked for, a capture) runs at display cadence instead; a request held back by a frame limiter stays pending for the next allowed tick rather than being dropped.
 - Idle detection is suppressed until the first play event so browser video surfaces can warm up after reload.
 - A watchdog checks for stalls and restarts the loop if it dies while the engine is expected to render.

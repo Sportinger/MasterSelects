@@ -291,6 +291,43 @@ describe('RenderLoop watchdog', () => {
     } finally { loop.stop(); vi.unstubAllGlobals(); }
   });
 
+  it('keeps calling the render callback while playback crosses a gap and renders the next clip at once', () => {
+    // Owner report 2026-10-29: the loop went idle in a gap (no visual clip, no active video) and only an
+    // unrelated wake noticed that the playhead had entered the next clip, so it stayed black for seconds.
+    const callbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callbacks.push(cb); return callbacks.length; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const onRender = vi.fn();
+    const loop = new RenderLoop({ recordRafGap: vi.fn(), resetPerSecondCounters: vi.fn() } as never,
+      { isRecovering: () => false, isExporting: () => false, onRender });
+    const tick = () => { now += 1000 / 60; callbacks.shift()!(now); };
+    try {
+      loop.start();
+      loop.setTimelineVisualDemand(false);
+      loop.setHasActiveVideo(false);
+      loop.setIsPlaying(true);
+      for (let i = 0; i < 90; i++) tick();
+      // One callback per display frame through 1.5 s of gap, never idle.
+      expect(onRender.mock.calls.length).toBeGreaterThanOrEqual(88);
+      expect(loop.getIsIdle()).toBe(false);
+      // The callback reports the next clip; the very next frame renders it.
+      const before = onRender.mock.calls.length;
+      loop.setTimelineVisualDemand(true);
+      tick();
+      expect(onRender.mock.calls.length).toBe(before + 1);
+      // Paused in a gap the loop still idles (the static-preview rule stays).
+      loop.setTimelineVisualDemand(false);
+      loop.setIsPlaying(false);
+      for (let i = 0; i < 120; i++) tick();
+      const paused = onRender.mock.calls.length;
+      for (let i = 0; i < 60; i++) tick();
+      expect(onRender.mock.calls.length).toBe(paused);
+      expect(loop.getIsIdle()).toBe(true);
+    } finally { loop.stop(); vi.unstubAllGlobals(); }
+  });
+
   it('allows a paused active video preview hold to enter idle after the timeout', () => {
     const rafCallbacks: FrameRequestCallback[] = [];
     const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {

@@ -128,6 +128,11 @@ export class RenderLoop {
 
       const playbackRenderActive = this.isPlaying && this.timelineVisualDemand;
       const scrubRenderActive = this.isScrubbing && this.timelineVisualDemand;
+      // Playback crossing a gap (no visual clip at the playhead) keeps calling the render callback:
+      // the composite is black, but only the callback sees the playhead enter the next clip, and its
+      // video sync warms and positions that clip meanwhile. An idle loop here waited for an unrelated
+      // wake and kept the next clip black for up to seconds (owner report 2026-10-29).
+      const playbackGapActive = this.isPlaying && !this.timelineVisualDemand;
       const measureCadence = (playbackRenderActive || scrubRenderActive || this.continuousRender)
         && (typeof document === 'undefined' || !document.hidden);
       if (!measureCadence) this.lastCadenceRender = 0;
@@ -147,7 +152,7 @@ export class RenderLoop {
         this.playbackNextRenderTime = 0;
       }
 
-      if (this.continuousRender || playbackRenderActive || scrubRenderActive) {
+      if (this.continuousRender || playbackRenderActive || scrubRenderActive || playbackGapActive) {
         this.isIdle = false;
         this.lastActivityTime = timestamp;
       } else if (!this.idleSuppressed) {
@@ -167,7 +172,7 @@ export class RenderLoop {
       // Text, images and solids have no decoder to settle. A wake needs one
       // frame, not a full second of redundant composites. Periodic UI updates
       // used to keep this grace period alive indefinitely at display cadence.
-      if (!playbackRenderActive && !scrubRenderActive && !this.continuousRender
+      if (!playbackRenderActive && !scrubRenderActive && !playbackGapActive && !this.continuousRender
         && !this.idleSuppressed && !this.hasActiveVideo && this.renderCount > 0
         && !this.renderRequested) {
         this.isIdle = true;
@@ -204,7 +209,7 @@ export class RenderLoop {
       // Without this, a 30fps video on a 120Hz display causes hasActiveVideo
       // to oscillate (75% cache-hits → false), disabling the limiter and
       // rendering at 120fps — double the GPU work for zero visual benefit.
-      if (this.hasActiveVideo || playbackRenderActive || scrubRenderActive || this.continuousRender) {
+      if (this.hasActiveVideo || playbackRenderActive || scrubRenderActive || playbackGapActive || this.continuousRender) {
         const previousRenderTime = this.lastRenderTime;
         const timeSinceLastRender = timestamp - previousRenderTime;
         // A frame held back by the limiter keeps its request: the next allowed
@@ -240,6 +245,12 @@ export class RenderLoop {
           // for) used to be consumed here and wait up to 250 ms for that tick.
           const pausedFrameTime = pendingRequest ? this.VIDEO_FRAME_TIME : this.PAUSED_PREVIEW_HOLD_FRAME_TIME;
           if (timeSinceLastRender < pausedFrameTime) {
+            holdForLimiter();
+            return;
+          }
+        } else if (playbackGapActive) {
+          // One callback per display frame: it only re-checks the playhead and syncs upcoming videos.
+          if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
             holdForLimiter();
             return;
           }
@@ -400,7 +411,8 @@ export class RenderLoop {
     // expected idle state. This can happen in background/unfocused tabs before
     // the RAF loop gets a chance to flip `isIdle` itself.
     const hasRenderDemand =
-      (this.isPlaying && this.timelineVisualDemand) ||
+      // Playback needs frames even in a gap (see playbackGapActive in the loop).
+      this.isPlaying ||
       (this.isScrubbing && this.timelineVisualDemand) ||
       this.continuousRender ||
       this.renderRequested ||

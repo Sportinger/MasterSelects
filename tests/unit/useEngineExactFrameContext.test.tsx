@@ -32,6 +32,7 @@ const hoisted = vi.hoisted(() => ({
   setActiveCompLayers: vi.fn(),
   render: vi.fn(),
   renderLoopCallback: null as (() => void) | null,
+  visualDemand: true,
 }));
 
 vi.mock('../../src/stores/engineStore', () => ({
@@ -84,7 +85,7 @@ vi.mock('../../src/services/logger', () => ({
 }));
 
 vi.mock('../../src/services/timeline/timelineVisualDemand', () => ({
-  hasActiveTimelineVisualClip: () => true,
+  hasActiveTimelineVisualClip: () => hoisted.visualDemand,
 }));
 
 vi.mock('../../src/services/render/renderHostPort', () => ({
@@ -134,6 +135,8 @@ describe('useEngine exact producer frame context', () => {
   afterEach(() => {
     vi.clearAllMocks();
     hoisted.renderLoopCallback = null;
+    hoisted.visualDemand = true;
+    hoisted.timelineState.isPlaying = true;
   });
 
   it('uses one captured time for video sync, layer evaluation, scheduler, and render host', () => {
@@ -170,6 +173,33 @@ describe('useEngine exact producer frame context', () => {
     expect(hoisted.setActiveCompLayers).toHaveBeenCalledWith(layers, schedulerContext);
     expect(hoisted.render).toHaveBeenCalledWith(layers, schedulerContext);
 
+    hook.unmount();
+  });
+
+  it('keeps syncing videos while playback crosses a gap, so the next clip is warmed before it starts', () => {
+    // Owner report 2026-10-29: in a gap the callback returned before the video sync, so the clip
+    // after the gap was never warmed or positioned and entered cold (black until its seek finished).
+    const gapContext = { activeCompId: 'comp-exact', compositionById: new Map(), playheadPosition: 3.2, isPlaying: true } as unknown as FrameContext;
+    hoisted.visualDemand = false;
+    hoisted.getPlayheadPosition.mockReturnValue(3.2);
+    hoisted.captureFrameContext.mockReturnValue(gapContext);
+
+    const hook = renderHook(() => useEngine());
+    hoisted.renderLoopCallback?.();
+    hoisted.renderLoopCallback?.();
+
+    expect(hoisted.captureFrameContext).toHaveBeenCalledWith(3.2);
+    expect(hoisted.syncVideoElements).toHaveBeenCalledTimes(2);
+    expect(hoisted.syncVideoElements).toHaveBeenCalledWith(gapContext);
+    // The gap is drawn black once; nothing is built or rendered with layers.
+    expect(hoisted.render).toHaveBeenCalledTimes(1);
+    expect(hoisted.render.mock.calls[0]?.[0]).toEqual([]);
+    expect(hoisted.buildLayersFromStore).not.toHaveBeenCalled();
+
+    // Paused in a gap there is nothing ahead to prepare.
+    hoisted.timelineState.isPlaying = false;
+    hoisted.renderLoopCallback?.();
+    expect(hoisted.syncVideoElements).toHaveBeenCalledTimes(2);
     hook.unmount();
   });
 });
