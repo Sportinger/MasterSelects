@@ -107,7 +107,8 @@ file is resolved in this order:
 3. **Generation** with ffmpeg into the local cache. The file gets its sidecar and
    is uploaded to the remote in the background (file first, sidecar last). An
    upload never fails a test; a failure is logged once per process, and the file
-   is offered again on its next use in a later run.
+   is offered again on its next use in a later run. A cached file is uploaded only
+   while it still matches its sidecar; a mismatch is logged and nothing goes up.
 
 The remote is `MASTERSELECTS_TEST_MEDIA_REMOTE`, else the first line of
 `~/.config/masterselects/test-media-remote`, written as `<ssh-host>:<path>`
@@ -116,12 +117,26 @@ host and path stay out of the repository; without a remote (CI, Windows hosts,
 no VPN) a single probe of a few seconds per process fails and every file is
 generated locally, with one log line. Unit tests (vitest) use the remote only
 when the environment variable names one. The ssh user needs write access to the
-remote folder and rsync on both ends.
+remote folder and rsync on both ends; the probe also checks rsync and sh on this
+host and turns the remote off (one log line) when either is missing.
 
-A lock file next to the target (`<file>.lock`, refreshed while its owner runs,
-taken over when that process died) keeps two workers or worktrees from
-generating the same file twice; every file appears by an atomic rename either way.
-Log lines start with `[test-media]`.
+A lock file next to the target (`<file>.lock`, `fixtures/testMediaLock.ts`) keeps
+two workers, worktrees or hosts from generating the same file twice; every file
+appears by an atomic rename either way. Its heartbeat comes from a small separate
+process, so a generator that blocks the event loop (spawnSync) keeps it fresh. A
+lock is taken over when its process died, when its PID now belongs to another
+process (start time from `/proc`), when its heartbeat stopped for 10 minutes on
+this host without a start time to compare, or for 30 s on another host. Takeover
+moves the lock to a unique name and checks it moved the stale one (a fresh lock
+of another waiter is put back), and each holder releases only its own lock.
+Under the lock, the temporaries an interrupted run left next to the file (killed
+generator or download: `<file>.<pid>-<hex>.tmp…`, `.part`, rsync's hidden
+`.<file>.….part.*`, lock leftovers) are removed first, once their process is gone
+or after an hour without writes, never in their first minute; one log line per
+cleanup. The phone footage's shared segment folder (`segments/<name>/`, used by
+`long-10min` and `multi-gb`) has its own lock; finished segments of an interrupted
+run are reused by the next generation, and otherwise removed on the next call
+unless a `keepSegments` run marked them kept. Log lines start with `[test-media]`.
 
 - **Seed the remote** by running the generators with the remote configured, for
   example `node scripts/generate-phone-footage.mjs all` or the journeys that use

@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process'
-import { access, mkdir, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
+import { access, lstat, mkdir, readdir, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { FRAME_CODE_LAYOUT } from './frameCodeMedia.ts'
-import { ensureTestMedia, testMediaDir } from './testMediaStore.ts'
+import { uniqueSuffix, withFileLock, withFileLockIfFree } from './testMediaLock.ts'
+import { ensureTestMedia, removeLeftovers, testMediaDir, testMediaLog } from './testMediaStore.ts'
 import {
   footageExpectation, nominalFrameTicks, PHONE_FOOTAGE_PROFILES, PHONE_HIGH_ROW, setptsExpression, smallProfile,
   type FootageExpectation, type PhoneFootageProfile, type PhoneFootageProfileId,
@@ -55,7 +56,10 @@ export const PHONE_FOOTAGE_KEY_PREFIX = 'phone-footage'
 export interface PhoneFootageOptions {
   /** `small`: the unit-test version of the profile (180x320, a few seconds, same timing). */
   size?: 'full' | 'small'
-  /** Keep the MPEG-TS segments of a segmented profile (they let multi-gb reuse long-10min's encode). Default false. */
+  /**
+   * Keep the MPEG-TS segments of a segmented profile (they let multi-gb reuse long-10min's encode). Default false:
+   * the segments are removed after the remux, and segments an interrupted run left behind are removed on the next call.
+   */
   keepSegments?: boolean
   /** Progress lines for the CLI. */
   log?: (line: string) => void
@@ -225,15 +229,55 @@ export async function generatePhoneFootage(profile: PhoneFootageProfile, options
     }
     const bytes = (await stat(target)).size
     if (profile.minBytes && bytes < profile.minBytes) throw new Error(`${profile.id} came out at ${bytes} bytes, below its ${profile.minBytes}-byte minimum`)
-  }, { directory: configured ? path.resolve(configured) : undefined, log: options.log })
+  }, { directory: configured ? path.resolve(configured) : undefined, log: options.log, companions: [`${name}.expect.json`] })
   // The expectation is derived from the profile alone, so a fetched file gets it written here.
   const expectPath = path.join(path.dirname(media.path), `${name}.expect.json`)
-  if (!await exists(expectPath)) {
-    const temporary = `${expectPath}.${process.pid}.tmp`
-    await writeFile(temporary, JSON.stringify({ revision: PHONE_FOOTAGE_REVISION, file: path.basename(media.path), ...model }, null, 1))
-    await rename(temporary, expectPath)
+  let writing = expectWrites.get(expectPath)
+  if (!writing) {
+    writing = writeExpectation(expectPath, { revision: PHONE_FOOTAGE_REVISION, file: path.basename(media.path), ...model }).finally(() => expectWrites.delete(expectPath))
+    expectWrites.set(expectPath, writing)
+  }
+  await writing
+  if (profile.segmentSeconds && media.source !== 'generated' && !options.keepSegments) {
+    await removeInterruptedSegments(profile, segmentDirectory(profile, path.dirname(media.path)), options.log ?? testMediaLog)
   }
   return { path: media.path, expectPath, model, bytes: media.bytes, generatedMs: media.generatedMs, upload: media.upload }
+}
+
+/** Concurrent calls of one profile in this process share one write. */
+const expectWrites = new Map<string, Promise<void>>()
+
+/** Once per file: a unique temporary name, renamed into place, so concurrent processes never collide either. */
+async function writeExpectation(expectPath: string, content: object): Promise<void> {
+  if (await exists(expectPath)) return
+  const temporary = `${expectPath}.${uniqueSuffix()}.tmp`
+  try {
+    await writeFile(temporary, JSON.stringify(content, null, 1))
+    await rename(temporary, expectPath)
+  } finally {
+    await rm(temporary, { force: true })
+  }
+}
+
+/** Marks a segment folder kept on purpose (keepSegments); one without it is the leftover of an interrupted run. */
+export const SEGMENTS_KEPT_MARKER = 'kept'
+
+/** The segment folder: shared by every profile with the same picture and timing (multi-gb reuses long-10min's). */
+export function segmentDirectory(profile: PhoneFootageProfile, directory: string): string {
+  return path.join(directory, 'segments', phoneFootageName({ ...profile, id: 'long-10min', seconds: 0, minBytes: undefined }))
+}
+
+/** Removes a segment folder an interrupted run left behind, unless it was kept on purpose or another run uses it right now. */
+async function removeInterruptedSegments(profile: PhoneFootageProfile, segmentDir: string, log: (line: string) => void): Promise<void> {
+  if (!await exists(segmentDir) || await exists(path.join(segmentDir, SEGMENTS_KEPT_MARKER))) return
+  await withFileLockIfFree(`${segmentDir}.lock`, async () => {
+    if (await exists(path.join(segmentDir, SEGMENTS_KEPT_MARKER))) return
+    const names = await readdir(segmentDir).catch(() => [] as string[])
+    let bytes = 0
+    for (const name of names) bytes += (await lstat(path.join(segmentDir, name)).catch(() => null))?.size ?? 0
+    await rm(segmentDir, { recursive: true, force: true })
+    log(`${profile.id}: removed the segments an interrupted run left behind (${names.length} file${names.length === 1 ? '' : 's'}, ${(bytes / 1e6).toFixed(1)} MB) from ${segmentDir}`)
+  }, { log })
 }
 
 const durationSeconds = (model: FootageExpectation) => model.endTicks / model.profile.timescale
@@ -252,15 +296,28 @@ async function renderDirect(profile: PhoneFootageProfile, model: FootageExpectat
  * Long recordings: GOP-aligned MPEG-TS segments (90 kHz, absolute timestamps,
  * encoded in parallel), joined with the concat protocol and remuxed into MP4
  * with -c copy, i.e. without re-encoding. The segment cache is shared by every
- * profile with the same picture and timing, so multi-gb reuses long-10min.
+ * profile with the same picture and timing, so multi-gb reuses long-10min; a lock
+ * on the segment folder keeps the two from encoding into it, or removing it, at
+ * once. Finished segments of an interrupted run are reused, its temporaries removed.
  */
 async function renderSegmented(profile: PhoneFootageProfile, model: FootageExpectation, directory: string, output: string, options: PhoneFootageOptions): Promise<void> {
   if (profile.timing.kind !== 'grid' || profile.timescale !== 90_000) throw new Error(`${profile.id}: segmented generation needs a 90 kHz grid profile`)
   const perSegment = Math.round(profile.segmentSeconds! * profile.timing.fps[0] / profile.timing.fps[1])
   if (perSegment % profile.gop !== 0) throw new Error(`${profile.id}: a segment (${perSegment} frames) must hold whole GOPs of ${profile.gop}`)
   const count = Math.ceil(model.pts.length / perSegment)
-  const segmentDir = path.join(directory, 'segments', phoneFootageName({ ...profile, id: 'long-10min', seconds: 0, minBytes: undefined }))
-  await mkdir(segmentDir, { recursive: true })
+  const segmentDir = segmentDirectory(profile, directory)
+  const log = options.log ?? testMediaLog
+  await mkdir(path.dirname(segmentDir), { recursive: true })
+  await withFileLock(`${segmentDir}.lock`, async () => {
+    await removeLeftovers(path.dirname(segmentDir), [path.basename(segmentDir)], `the segments of ${profile.id}`, log)
+    await mkdir(segmentDir, { recursive: true })
+    await removeLeftovers(segmentDir, /seg-\d+-\d+\.ts/, `the segments of ${profile.id}`, log)
+    await encodeAndJoinSegments(profile, model, directory, segmentDir, perSegment, count, output, options)
+  }, { onWait: owner => log(`${profile.id}: waiting for the shared segments in ${segmentDir}, used by ${owner}`), log })
+}
+
+async function encodeAndJoinSegments(profile: PhoneFootageProfile, model: FootageExpectation, directory: string, segmentDir: string,
+  perSegment: number, count: number, output: string, options: PhoneFootageOptions): Promise<void> {
   const segments = Array.from({ length: count }, (_, index) => ({
     index, first: index * perSegment, frames: Math.min(perSegment, model.pts.length - index * perSegment),
     file: path.join(segmentDir, `seg-${String(index).padStart(4, '0')}-${perSegment}.ts`),
@@ -272,11 +329,15 @@ async function renderSegmented(profile: PhoneFootageProfile, model: FootageExpec
   let next = 0, done = count - missing.length
   const worker = async () => {
     while (next < missing.length) {
-      const segment = missing[next++], temporary = `${segment.file}.${process.pid}.tmp.ts`
-      await ffmpeg(['-f', 'lavfi', '-i', `color=c=black:s=${canvasWidth}x${canvasHeight}:r=${sourceRate(profile)}`, '-vf', phoneFrameCodeFilter(profile, segment.first),
-        '-frames:v', String(segment.frames), '-fps_mode', 'passthrough', '-enc_time_base', '1:90000', ...encoderArgs(profile), ...BT709,
-        '-mpegts_copyts', '1', '-muxdelay', '0', '-muxpreload', '0', '-f', 'mpegts', temporary], `encode segment ${segment.index} of ${profile.id}`)
-      await rename(temporary, segment.file)
+      const segment = missing[next++], temporary = `${segment.file}.${uniqueSuffix()}.tmp.ts`
+      try {
+        await ffmpeg(['-f', 'lavfi', '-i', `color=c=black:s=${canvasWidth}x${canvasHeight}:r=${sourceRate(profile)}`, '-vf', phoneFrameCodeFilter(profile, segment.first),
+          '-frames:v', String(segment.frames), '-fps_mode', 'passthrough', '-enc_time_base', '1:90000', ...encoderArgs(profile), ...BT709,
+          '-mpegts_copyts', '1', '-muxdelay', '0', '-muxpreload', '0', '-f', 'mpegts', temporary], `encode segment ${segment.index} of ${profile.id}`)
+        await rename(temporary, segment.file)
+      } finally {
+        await rm(temporary, { force: true })
+      }
       options.log?.(`${profile.id}: segment ${++done}/${count}`)
     }
   }
@@ -293,4 +354,5 @@ async function renderSegmented(profile: PhoneFootageProfile, model: FootageExpec
     await rm(audio, { force: true })
     if (!options.keepSegments) await rm(segmentDir, { recursive: true, force: true })
   }
+  if (options.keepSegments) await writeFile(path.join(segmentDir, SEGMENTS_KEPT_MARKER), `${profile.id}\n`)
 }

@@ -1,6 +1,6 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -211,4 +211,87 @@ describe('test media store fallbacks and locking', () => {
     expect((await readFile(counter, 'utf8')).trim().split('\n')).toHaveLength(1)
     expect(await readFile(path.join(cache, 'shared.mp4'), 'utf8')).toBe('x'.repeat(100000))
   }, 30_000)
+})
+
+describe('test media store: leftovers of interrupted runs', () => {
+  const backdate = async (file: string, ms: number) => { const time = new Date(Date.now() - ms); await utimes(file, time, time) }
+
+  it('removes the temporaries of a killed generator or download under the lock, with one log line, and keeps live ones', async () => {
+    const dead = spawnSync(process.execPath, ['-e', '']).pid!
+    await mkdir(cache, { recursive: true })
+    const orphans = [
+      `m.mp4.${dead}-a1b2c3.tmp.mp4`, `m.mp4.${dead}-a1b2c3.tmp.mp4.rot.mp4`, `m.mp4.${dead}-d4e5f6.part`, `m.mp4.sha256.${dead}-d4e5f6.part`,
+      `.m.mp4.${dead}-d4e5f6.part.Xy12Ab`, `m.mp4.lock.${dead}-0a0b0c`, `m.mp4.lock.${dead}-0a0b0c.stale`, `m.mp4.uploaded.${dead}.log`,
+      `m.expect.json.${dead}-0d0e0f.tmp`,
+      // A PID that is alive again (here: this process) after an hour without writes.
+      `m.mp4.${process.pid}-111111.part`,
+    ]
+    const kept = [
+      `m.mp4.${process.pid}-222222.part`, // alive, written 10 minutes ago
+      `m.mp4.${dead}-333333.part`, // within its first minute
+      `other.mp4.${dead}-444444.part`, // another key
+      'm.mp4.uploading',
+    ]
+    for (const name of [...orphans, ...kept]) await writeFile(path.join(cache, name), 'partial')
+    for (const name of orphans.slice(0, -1)) await backdate(path.join(cache, name), 5 * 60_000)
+    await backdate(path.join(cache, orphans.at(-1)!), 2 * 60 * 60_000)
+    await backdate(path.join(cache, kept[0]), 10 * 60_000)
+    await backdate(path.join(cache, kept[2]), 5 * 60_000)
+    // The upload log stays while an upload is marked as running (the detached shell may outlive the PID in its name).
+    await backdate(path.join(cache, 'm.mp4.uploading'), 60_000)
+    const first = await ensureTestMedia('clips/m.mp4', generator('fresh').generate, { directory: cache, transport: null, log, companions: ['m.expect.json'] })
+    expect(first.source).toBe('generated')
+    expect(existsSync(path.join(cache, `m.mp4.uploaded.${dead}.log`))).toBe(true)
+    const removals = lines.filter(line => line.startsWith('removed '))
+    expect(removals).toHaveLength(1)
+    expect(removals[0]).toMatch(/^removed 9 leftovers of an interrupted run of clips\/m\.mp4 \(/)
+    for (const name of orphans.filter(name => !name.includes('uploaded'))) expect(existsSync(path.join(cache, name)), name).toBe(false)
+    for (const name of kept) expect(existsSync(path.join(cache, name)), name).toBe(true)
+    expect((await readdir(cache)).toSorted()).toEqual(['m.mp4', 'm.mp4.sha256', `m.mp4.uploaded.${dead}.log`, ...kept].toSorted())
+  })
+})
+
+describe('test media store: uploads and the remote probe', () => {
+  function recordingTransport() {
+    const uploads: string[] = []
+    const transport: TestMediaTransport = {
+      label: 'recording',
+      probe: async () => null,
+      download: async () => false,
+      upload: async (_file, key) => { uploads.push(key) },
+    }
+    return { uploads, transport }
+  }
+
+  it('uploads a cached file only when it still matches its sidecar', async () => {
+    await ensureTestMedia('clips/ok.mp4', generator('intact bytes').generate, { directory: cache, transport: null, log })
+    await ensureTestMedia('clips/bad.mp4', generator('intact bytes').generate, { directory: cache, transport: null, log })
+    await writeFile(path.join(cache, 'bad.mp4'), 'broken bytes')
+    const { uploads, transport } = recordingTransport()
+    const intact = await ensureTestMedia('clips/ok.mp4', generator('unused').generate, { directory: cache, transport, log })
+    const broken = await ensureTestMedia('clips/bad.mp4', generator('unused').generate, { directory: cache, transport, log })
+    expect([intact.source, broken.source]).toEqual(['local', 'local'])
+    expect(await intact.upload).toBe(true)
+    expect(await broken.upload).toBe(false)
+    expect(uploads).toEqual(['clips/ok.mp4'])
+    expect(lines.filter(line => line.includes('clips/bad.mp4 does not match its sidecar'))).toHaveLength(1)
+    expect(existsSync(path.join(cache, 'bad.mp4.uploaded'))).toBe(false)
+  })
+
+  it.skipIf(!hasRsync)('turns the remote off with one log line when this host lacks rsync or sh', async () => {
+    const bin = path.join(root, 'bin')
+    await mkdir(bin)
+    vi.stubEnv('PATH', bin)
+    const transport = rsyncTransport(remote)
+    expect(await transport.probe()).toMatch(/^rsync is not usable on this host/)
+    const media = await ensureTestMedia('clips/n.mp4', generator('local only').generate, { directory: cache, transport, log })
+    expect(media.source).toBe('generated')
+    expect(media.upload).toBeNull()
+    await ensureTestMedia('clips/o.mp4', generator('local only').generate, { directory: cache, transport, log })
+    expect(lines.filter(line => line.includes('is unreachable (rsync is not usable on this host'))).toHaveLength(1)
+    // rsync alone is not enough: the upload runs in sh.
+    const rsync = execFileSync('sh', ['-c', 'command -v rsync'], { env: { ...process.env, PATH: '/usr/local/bin:/usr/bin:/bin' }, encoding: 'utf8' }).trim()
+    await symlink(rsync, path.join(bin, 'rsync'))
+    expect(await rsyncTransport(remote).probe()).toMatch(/^sh is not usable on this host/)
+  })
 })

@@ -1,9 +1,10 @@
 import { execFile, spawn } from 'node:child_process'
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { createReadStream, readFileSync } from 'node:fs'
-import { access, constants, mkdir, open, readFile, rename, rm, stat, statfs, utimes, writeFile } from 'node:fs/promises'
+import { access, constants, lstat, mkdir, readdir, readFile, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { processAlive, uniqueSuffix, withFileLock } from './testMediaLock.ts'
 
 /**
  * One store for every generated test medium (frame-code clips, phone footage, Fast export and
@@ -19,10 +20,11 @@ import path from 'node:path'
  *    uploaded to the remote in the background (best effort: a failure is logged once and never
  *    fails a test; the upload survives the worker process).
  *
- * An unreachable remote costs one short probe per process and falls back to generation with a log
- * line. A lock file next to the target (heartbeat, taken over when its owner died) keeps two
- * workers or worktrees from generating the same file twice; every file appears by an atomic
- * rename, so a reader never sees a partial file either way.
+ * An unreachable remote (or a host without rsync or sh) costs one short probe per process and falls
+ * back to generation with a log line. A lock file next to the target (fixtures/testMediaLock.ts)
+ * keeps two workers, worktrees or hosts from generating the same file twice; every file appears by
+ * an atomic rename, so a reader never sees a partial file either way. Under that lock, the
+ * temporaries an interrupted run left behind (a killed generator or download) are removed first.
  */
 
 export const TEST_MEDIA_REMOTE_CONFIG = path.join(os.homedir(), '.config', 'masterselects', 'test-media-remote')
@@ -83,6 +85,15 @@ function runTool(command: string, args: string[], timeoutMs?: number): Promise<{
   })
 }
 
+/** Download and upload run rsync and sh on this host: the remote is off when either is missing. */
+async function missingLocalTool(): Promise<string | null> {
+  const checks = await Promise.all([['rsync', ['--version']], ['sh', ['-c', 'exit 0']]].map(async ([command, args]) => {
+    const result = await runTool(command as string, args as string[], 4_000)
+    return result.code === 0 ? null : `${command} is not usable on this host: ${result.stderr.trim().split('\n').pop() || `exit ${result.code}`}`
+  }))
+  return checks.find(Boolean) ?? null
+}
+
 /** rsync over ssh (or to a local directory): partial-safe on both sides, since rsync writes into a temporary name and renames. */
 export function rsyncTransport(spec: string): TestMediaTransport {
   const remote = parseTestMediaRemote(spec)
@@ -93,6 +104,8 @@ export function rsyncTransport(spec: string): TestMediaTransport {
   return {
     label: spec,
     async probe() {
+      const missing = await missingLocalTool()
+      if (missing) return missing
       if (remote.kind === 'local') {
         try {
           await mkdir(remote.root, { recursive: true })
@@ -141,6 +154,8 @@ export interface EnsureTestMediaOptions {
   /** Remote transport; default from MASTERSELECTS_TEST_MEDIA_REMOTE / the config file; null disables it. */
   transport?: TestMediaTransport | null
   log?: (line: string) => void
+  /** Names of further files the caller keeps next to the file; their interrupted temporaries are removed with the file's. */
+  companions?: readonly string[]
 }
 
 export interface TestMedia {
@@ -153,7 +168,7 @@ export interface TestMedia {
   upload: Promise<boolean> | null
 }
 
-const defaultLog = (line: string) => console.log(`[test-media] ${line}`)
+export const testMediaLog = (line: string) => console.log(`[test-media] ${line}`)
 const transports = new Map<string, TestMediaTransport>()
 const probes = new WeakMap<TestMediaTransport, Promise<boolean>>()
 const failedUploads = new WeakSet<TestMediaTransport>()
@@ -190,7 +205,7 @@ export const sidecarPath = (file: string) => `${file}.sha256`
 export const markerPath = (file: string) => `${file}.uploaded`
 /** Present while an upload runs, so other processes do not start a second one. */
 export const uploadingPath = (file: string) => `${file}.uploading`
-const unique = () => `${process.pid}-${randomBytes(3).toString('hex')}`
+const UPLOADING_STALE_MS = 2 * 60 * 60 * 1000
 const sizeOf = (file: string) => stat(file).then(info => info.isFile() && info.size > 0 ? info.size : 0, () => 0)
 const megabytes = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`
 
@@ -215,7 +230,7 @@ export function parseSidecar(text: string): { sha256: string; bytes: number } | 
 }
 
 async function writeSidecar(file: string, digest: { sha256: string; bytes: number }): Promise<void> {
-  const temporary = `${sidecarPath(file)}.${unique()}.part`
+  const temporary = `${sidecarPath(file)}.${uniqueSuffix()}.part`
   await writeFile(temporary, formatSidecar(path.basename(file), digest))
   await rename(temporary, sidecarPath(file))
 }
@@ -230,59 +245,48 @@ export async function assertCacheSpace(directory: string, bytes: number, what: s
   }
 }
 
-const LOCK_STALE_MS = 30_000
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+const LEFTOVER_GRACE_MS = 60_000
+const LEFTOVER_MAX_AGE_MS = 60 * 60_000
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
- * A lock of this host is stale only when its process is gone (a generator that blocks the event
- * loop with spawnSync cannot refresh it); a lock of another host sharing the cache folder, or one
- * whose owner cannot be read, is stale when its heartbeat stopped.
+ * Removes what an interrupted run left in `directory` for the files named `bases` (names, or a
+ * pattern for them): generator and download temporaries (`<file>.<pid>-<hex>.tmp…`, `.part`, the
+ * sidecar's `.part`, rsync's hidden `.<file>.….part.XXXXXX`), lock leftovers and upload error logs.
+ * Callers hold the file's lock, so no live run writes them any more; still, an entry is removed
+ * only after its first minute, and only when the process in its name is gone from this host or it
+ * was not written for an hour (a PID that came back). One log line per cleanup.
  */
-async function lockIsStale(lock: string): Promise<boolean> {
-  const info = await stat(lock).catch(() => null)
-  if (!info) return false
-  const owner = await readFile(lock, 'utf8').then(text => JSON.parse(text) as { pid: number; host: string }, () => null)
-  if (owner && owner.host === os.hostname()) {
-    try {
-      process.kill(owner.pid, 0)
-      return false
-    } catch (error) {
-      return (error as NodeJS.ErrnoException).code === 'ESRCH'
-    }
+export async function removeLeftovers(directory: string, bases: readonly string[] | RegExp, what: string, log: (line: string) => void = testMediaLog): Promise<number> {
+  const names = await readdir(directory).catch(() => [] as string[])
+  if (!names.length) return 0
+  const base = bases instanceof RegExp ? bases.source : bases.map(escapeRegExp).join('|')
+  const patterns = [
+    new RegExp(`^\\.?(?<base>${base})\\.(?:sha256\\.)?(?<pid>\\d+)(?:-[0-9a-f]+)?\\.(?:tmp|part)(?:\\.|$)`),
+    new RegExp(`^(?<base>${base})\\.lock\\.(?:stale-)?(?<pid>\\d+)-[0-9a-f]+(?:\\.(?:stale|release))?$`),
+    new RegExp(`^(?<base>${base})\\.uploaded\\.(?<pid>\\d+)\\.log(?<log>)$`),
+  ]
+  const removed: string[] = []
+  let bytes = 0
+  for (const name of names) {
+    const groups = patterns.map(pattern => pattern.exec(name)?.groups).find(Boolean)
+    if (!groups) continue
+    const entry = path.join(directory, name)
+    const info = await lstat(entry).catch(() => null)
+    const age = info ? Date.now() - info.mtimeMs : 0
+    if (!info || age < LEFTOVER_GRACE_MS || (processAlive(Number(groups.pid)) && age < LEFTOVER_MAX_AGE_MS)) continue
+    // The detached upload shell writes its error log while it runs and can outlive the PID in the name.
+    const uploading = groups.log === undefined ? null : await stat(path.join(directory, uploadingPath(groups.base))).catch(() => null)
+    if (uploading && Date.now() - uploading.mtimeMs < UPLOADING_STALE_MS) continue
+    await rm(entry, { recursive: true, force: true })
+    removed.push(name)
+    bytes += info.isFile() ? info.size : 0
   }
-  return Date.now() - info.mtimeMs > LOCK_STALE_MS
-}
-
-/** Runs `work` while holding `lock` (created exclusively, refreshed every few seconds, taken over when stale). */
-export async function withFileLock<T>(lock: string, work: () => Promise<T>, onWait?: (owner: string) => void): Promise<T> {
-  let announced = false
-  for (;;) {
-    try {
-      const handle = await open(lock, 'wx')
-      await handle.writeFile(JSON.stringify({ pid: process.pid, host: os.hostname(), started: new Date().toISOString() }))
-      await handle.close()
-      break
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-    }
-    if (await lockIsStale(lock)) {
-      // Rename first: of two waiters that both saw the stale lock, only one removes it.
-      const moved = `${lock}.stale-${unique()}`
-      if (await rename(lock, moved).then(() => true, () => false)) await rm(moved, { force: true })
-      continue
-    }
-    if (!announced && onWait) onWait(await readFile(lock, 'utf8').catch(() => 'another process'))
-    announced = true
-    await sleep(200 + Math.random() * 300)
+  if (removed.length) {
+    log(`removed ${removed.length} leftover${removed.length === 1 ? '' : 's'} of an interrupted run of ${what} (${megabytes(bytes)}): `
+      + `${removed.slice(0, 4).join(', ')}${removed.length > 4 ? ', …' : ''}`)
   }
-  const heartbeat = setInterval(() => { void utimes(lock, new Date(), new Date()).catch(() => undefined) }, LOCK_STALE_MS / 6)
-  heartbeat.unref()
-  try {
-    return await work()
-  } finally {
-    clearInterval(heartbeat)
-    await rm(lock, { force: true })
-  }
+  return removed.length
 }
 
 /**
@@ -303,7 +307,7 @@ export function ensureTestMedia(key: string, generate: (target: string) => Promi
 }
 
 async function resolveTestMedia(key: string, file: string, generate: (target: string) => Promise<void>, options: EnsureTestMediaOptions): Promise<TestMedia> {
-  const log = options.log ?? defaultLog
+  const log = options.log ?? testMediaLog
   const transport = options.transport === undefined ? defaultTransport() : options.transport
   const cached = async (): Promise<TestMedia | null> => {
     const bytes = await sizeOf(file)
@@ -313,6 +317,7 @@ async function resolveTestMedia(key: string, file: string, generate: (target: st
   if (hit) return hit
   await mkdir(path.dirname(file), { recursive: true })
   return withFileLock(`${file}.lock`, async () => {
+    await removeLeftovers(path.dirname(file), [path.basename(file), ...options.companions ?? []], key, log)
     const again = await cached()
     if (again) return again
     const online = transport && await reachable(transport, log) ? transport : null
@@ -322,7 +327,7 @@ async function resolveTestMedia(key: string, file: string, generate: (target: st
     }
     const started = Date.now()
     const extension = path.extname(file)
-    const temporary = `${file}.${unique()}.tmp${extension}`
+    const temporary = `${file}.${uniqueSuffix()}.tmp${extension}`
     try {
       await generate(temporary)
       const digest = await digestFile(temporary).catch(() => ({ sha256: '', bytes: 0 }))
@@ -335,13 +340,13 @@ async function resolveTestMedia(key: string, file: string, generate: (target: st
     } finally {
       await rm(temporary, { force: true })
     }
-  }, owner => log(`waiting for ${key}, generated by ${owner}`))
+  }, { onWait: owner => log(`waiting for ${key}, generated by ${owner}`), log })
 }
 
 /** Downloads `key` and its sidecar into temporary names; renames them into place only when size and hash match. */
 async function fetchFromRemote(key: string, file: string, transport: TestMediaTransport, log: (line: string) => void): Promise<number> {
-  const sidecarTemp = `${sidecarPath(file)}.${unique()}.part`
-  const dataTemp = `${file}.${unique()}.part`
+  const sidecarTemp = `${sidecarPath(file)}.${uniqueSuffix()}.part`
+  const dataTemp = `${file}.${uniqueSuffix()}.part`
   try {
     let expected: { sha256: string; bytes: number } | null = null
     try {
@@ -391,7 +396,6 @@ function startUpload(key: string, file: string, bytes: number, transport: TestMe
   }).finally(() => rm(uploadingPath(file), { force: true }))
 }
 
-const UPLOADING_STALE_MS = 2 * 60 * 60 * 1000
 
 /** A cached file that never reached this remote (offline when it was made, or copied in by hand) is uploaded once per process. */
 function uploadIfMissing(key: string, file: string, transport: TestMediaTransport, log: (line: string) => void): Promise<boolean> | null {
@@ -403,12 +407,15 @@ function uploadIfMissing(key: string, file: string, transport: TestMediaTranspor
     const uploading = await stat(uploadingPath(file)).catch(() => null)
     if (uploading && Date.now() - uploading.mtimeMs < UPLOADING_STALE_MS) return false
     if (!await reachable(transport, log)) return false
-    let bytes = parseSidecar(await readFile(sidecarPath(file), 'utf8').catch(() => ''))?.bytes
-    if (!bytes) {
-      const digest = await digestFile(file)
-      await writeSidecar(file, digest)
-      bytes = digest.bytes
+    // The remote trusts a file with a sidecar: only a cached file that still matches its sidecar goes up.
+    const expected = parseSidecar(await readFile(sidecarPath(file), 'utf8').catch(() => ''))
+    const digest = await digestFile(file)
+    if (!expected) await writeSidecar(file, digest)
+    else if (expected.bytes !== digest.bytes || expected.sha256 !== digest.sha256) {
+      log(`the cached ${key} does not match its sidecar (${digest.bytes} of ${expected.bytes} bytes, sha256 ${digest.sha256.slice(0, 12)} instead of ${expected.sha256.slice(0, 12)}); `
+        + `not uploaded. Delete ${file} to have it generated again`)
+      return false
     }
-    return startUpload(key, file, bytes, transport, log)
+    return startUpload(key, file, digest.bytes, transport, log)
   })().catch(() => false)
 }

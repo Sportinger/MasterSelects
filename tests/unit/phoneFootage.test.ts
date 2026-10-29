@@ -1,11 +1,15 @@
 import { execFile, execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  assertFreeSpace, phoneFootage, phoneFootageDirectory, phoneFootageProfile, phoneFrameCodeFilter,
+  assertFreeSpace, phoneFootage, phoneFootageDirectory, phoneFootageName, phoneFootageProfile, phoneFrameCodeFilter, segmentDirectory,
+  SEGMENTS_KEPT_MARKER,
 } from '../playwright/fixtures/phoneFootage'
+import { withFileLock } from '../playwright/fixtures/testMediaLock'
 import {
   footageExpectation, frameIndexAt, frameTime, intervalStats, PHONE_FOOTAGE_PROFILES, setptsExpression,
   type PhoneFootageProfileId,
@@ -143,4 +147,96 @@ describe.skipIf(!hasFfmpeg)('generated phone footage, small versions (ffprobe pr
       }
     }
   }, 60_000)
+})
+
+/** Phone footage in a temporary folder (MASTERSELECTS_PHONE_FOOTAGE_DIR), with its log lines. */
+function footageFolder() {
+  const state = { dir: '', lines: [] as string[], log: (line: string) => { state.lines.push(line) } }
+  beforeEach(async () => {
+    state.dir = await mkdtemp(path.join(os.tmpdir(), 'phone-footage-'))
+    state.lines = []
+    vi.stubEnv('MASTERSELECTS_PHONE_FOOTAGE_DIR', state.dir)
+  })
+  afterEach(async () => {
+    vi.unstubAllEnvs()
+    await rm(state.dir, { recursive: true, force: true })
+  })
+  return state
+}
+
+/** Holds `lock` from this process until the returned release is called. */
+async function holdLock(lock: string): Promise<{ release: () => Promise<void> }> {
+  let release!: () => void
+  let held!: () => void
+  const holding = new Promise<void>(resolve => { held = resolve })
+  const holder = withFileLock(lock, () => { held(); return new Promise<void>(resolve => { release = resolve }) }, { log: () => {} })
+  await holding
+  return { release: async () => { release(); await holder } }
+}
+
+describe('phone footage in the cache: expectation sidecar and leftover segments', () => {
+  const folder = footageFolder()
+  /** A cached footage file (any bytes): the call is a local hit and needs no ffmpeg. */
+  const seed = async (id: PhoneFootageProfileId) => {
+    const profile = phoneFootageProfile(id, 'small')
+    await writeFile(path.join(folder.dir, `${phoneFootageName(profile)}.${profile.container}`), 'cached')
+    return profile
+  }
+
+  it('writes the expectation once when one profile is asked for several times at once', async () => {
+    await seed('android-h264')
+    const results = await Promise.all(Array.from({ length: 4 }, () => phoneFootage('android-h264', { size: 'small', log: folder.log })))
+    expect(new Set(results.map(result => result.expectPath)).size).toBe(1)
+    const written = JSON.parse(await readFile(results[0].expectPath, 'utf8')) as { file: string; pts: number[] }
+    expect(written.file).toBe(path.basename(results[0].path))
+    expect(written.pts).toEqual(results[0].model.pts)
+    expect((await readdir(folder.dir)).filter(name => name.includes('.tmp'))).toEqual([])
+  })
+
+  it('removes the segments an interrupted run left behind on the next call, unless kept on purpose or in use', async () => {
+    const profile = await seed('long-10min')
+    const segments = segmentDirectory(profile, folder.dir)
+    await mkdir(segments, { recursive: true })
+    await writeFile(path.join(segments, 'seg-0000-30.ts'), 'x'.repeat(1000))
+    // In use by another run: left alone, without waiting for it.
+    const user = await holdLock(`${segments}.lock`)
+    await phoneFootage('long-10min', { size: 'small', log: folder.log })
+    expect(existsSync(segments)).toBe(true)
+    await user.release()
+    // Kept on purpose by an earlier keepSegments run, or wanted by this call: left for reuse.
+    await writeFile(path.join(segments, SEGMENTS_KEPT_MARKER), 'long-10min\n')
+    await phoneFootage('long-10min', { size: 'small', log: folder.log })
+    await rm(path.join(segments, SEGMENTS_KEPT_MARKER))
+    await phoneFootage('long-10min', { size: 'small', log: folder.log, keepSegments: true })
+    expect(existsSync(segments)).toBe(true)
+    await phoneFootage('long-10min', { size: 'small', log: folder.log })
+    expect(existsSync(segments)).toBe(false)
+    expect(folder.lines.filter(line => line.includes('removed the segments an interrupted run left behind (1 file,'))).toHaveLength(1)
+  })
+})
+
+describe.skipIf(!hasFfmpeg)('segmented phone footage sharing one segment folder (small versions)', () => {
+  const folder = footageFolder()
+
+  it('waits for the lock of the segment folder while another run uses it', async () => {
+    const profile = phoneFootageProfile('long-10min', 'small')
+    const segments = segmentDirectory(profile, folder.dir)
+    await mkdir(path.dirname(segments), { recursive: true })
+    const user = await holdLock(`${segments}.lock`)
+    const pending = phoneFootage('long-10min', { size: 'small', log: folder.log })
+    await vi.waitFor(() => expect(folder.lines.some(line => line.includes('waiting for the shared segments'))).toBe(true), { timeout: 10_000, interval: 20 })
+    expect(existsSync(segments), 'nothing encoded into the folder in use').toBe(false)
+    await user.release()
+    const footage = await pending
+    expect(footage.generatedMs).toBeGreaterThan(0)
+    expect(existsSync(segments)).toBe(false)
+  }, 60_000)
+
+  it('builds long-10min and multi-gb at once from the shared segments', async () => {
+    const [long, multi] = await Promise.all((['long-10min', 'multi-gb'] as const).map(id => phoneFootage(id, { size: 'small', log: folder.log })))
+    for (const footage of [long, multi]) {
+      expect(checkFootageProbe(footage.model, await probeFootage(footage.path, { source: 'packets' })).problems, footage.model.profile.id).toEqual([])
+    }
+    expect(existsSync(segmentDirectory(long.model.profile, folder.dir))).toBe(false)
+  }, 120_000)
 })
