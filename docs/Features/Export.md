@@ -561,7 +561,8 @@ Three rules keep the requested frame safe when the export holds few frames:
 - An empty buffer with the request behind the decode cursor counts as a backward jump only when
   the decoder already put that frame out (`missingFrameRestartReason` in
   `exportSamplePlanning.ts`). After a stall released every held frame, the request is still
-  queued in the decoder.
+  queued in the decoder. A frame the decoder never puts out (a lost output) still gets one
+  keyframe restart before the export fails.
 - During a foreground seek the background decode-ahead schedules nothing, and every decode window
   skips samples another window submitted while it waited. No sample is decoded twice, so no twin
   replaces a frame that is being rendered.

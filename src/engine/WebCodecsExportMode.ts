@@ -17,7 +17,7 @@ import {
 
 import { ExportDecoderPump } from './webCodecsExport/exportDecoderPump';
 import { ExportSourceStride } from './webCodecsExport/exportSourceStride';
-import { ExportSurfaceBudget, countHeldFrames, releaseFramesBefore } from './webCodecsExport/exportSurfaceBudget';
+import { ExportSurfaceBudget, countHeldFrames, releaseHeldFrames } from './webCodecsExport/exportSurfaceBudget';
 
 const log = Logger.create('WebCodecsExportMode');
 
@@ -125,16 +125,10 @@ export class WebCodecsExportMode {
    * everything before the requested frame.
    */
   private relieveSurfaceStall(stalled: boolean): 'released' | 'exhausted' | 'idle' {
-    const held = this.heldFrameCount();
+    const { held, released, shownReleased } = releaseHeldFrames(this.exportFrameBuffer,
+      this.player.getCurrentFrame(), this.foregroundTargetCtsUs, this.getFrameToleranceUs(0.5));
     if (held === 0) return 'idle';
     if (stalled) exportDiagnostics.recordDecoder({ surfaceStalls: 1, heldFrames: held });
-    const currentFrame = this.player.getCurrentFrame();
-    // Frame timestamps are whole microseconds, a requested CTS is not (33333.33 us): keep half a frame.
-    const releaseBeforeCtsUs = this.foregroundTargetCtsUs !== null
-      ? this.foregroundTargetCtsUs - this.getFrameToleranceUs(0.5) : currentFrame?.timestamp ?? null;
-    const { released, shownReleased } = releaseBeforeCtsUs === null
-      ? { released: 0, shownReleased: false }
-      : releaseFramesBefore(this.exportFrameBuffer, releaseBeforeCtsUs, currentFrame, this.foregroundTargetCtsUs !== null);
     if (shownReleased) this.player.setCurrentFrame(null);
     if (released === 0) {
       if (stalled) this.learnSurfaceBudget(held);
@@ -661,6 +655,7 @@ export class WebCodecsExportMode {
       skippedTarget: this.sourceStride.wasDiscarded(targetCts),
       maxContinuousForwardGap: WebCodecsExportMode.MAX_CONTINUOUS_FORWARD_GAP_SAMPLES,
     });
+    let restarted = reason !== null;
     try {
       if (reason) {
         log.info(`Restarting FAST decode window around ${timeSeconds.toFixed(3)}s (${reason})`);
@@ -695,9 +690,17 @@ export class WebCodecsExportMode {
       );
       await this.restartFromKeyframe(targetSampleIndex, 'decoder failure');
       await this.decoderPump.waitForBufferedTarget(targetCts, 1200, 1, false);
+      restarted = true;
     }
 
     bestIndex = this.findBufferedFrameIndex(targetCts, 1);
+    if (bestIndex < 0 && !restarted) {
+      // The decoder never put the frame out (a lost output): one keyframe restart before failing.
+      log.warn(`FAST export frame at ${timeSeconds.toFixed(3)}s never came out of the decoder; restarting from its keyframe`);
+      await this.restartFromKeyframe(targetSampleIndex, 'frame never decoded');
+      await this.decoderPump.waitForBufferedTarget(targetCts, 1200, 1, false);
+      bestIndex = this.findBufferedFrameIndex(targetCts, 1);
+    }
     if (bestIndex >= 0 && bestIndex < this.exportFramesCts.length) {
       this.presentBufferedFrame(bestIndex);
       this.scheduleStridedWarm(targetSampleIndex, targetCts);

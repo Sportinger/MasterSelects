@@ -81,11 +81,25 @@ export function countHeldFrames(buffer: ReadonlyMap<number, VideoFrame>, shown: 
 }
 
 /**
- * Closes and removes the buffered frames before `beforeCtsUs`. The shown frame is closed only with
- * `releaseShown` (a foreground seek: it was rendered already). Returns how many were closed and
- * whether the shown frame was among them.
+ * Closes what a surface stall may release. During a foreground seek that is every frame more than
+ * half a frame before the request: the shown frame was rendered, and frame timestamps are whole
+ * microseconds while a requested CTS is not (33333.33 us), so a strict "before" would close the
+ * requested frame itself. Otherwise only frames behind the shown one. `held` counts before closing.
  */
-export function releaseFramesBefore(
+export function releaseHeldFrames(
+  buffer: Map<number, VideoFrame>,
+  shown: VideoFrame | null,
+  foregroundTargetCtsUs: number | null,
+  halfFrameUs: number,
+): { held: number; released: number; shownReleased: boolean } {
+  const held = countHeldFrames(buffer, shown);
+  const beforeCtsUs = foregroundTargetCtsUs !== null ? foregroundTargetCtsUs - halfFrameUs : shown?.timestamp ?? null;
+  if (held === 0 || beforeCtsUs === null) return { held, released: 0, shownReleased: false };
+  return { held, ...releaseFramesBefore(buffer, beforeCtsUs, shown, foregroundTargetCtsUs !== null) };
+}
+
+/** Closes and removes the buffered frames before `beforeCtsUs`; the shown one only with `releaseShown`. */
+function releaseFramesBefore(
   buffer: Map<number, VideoFrame>,
   beforeCtsUs: number,
   shown: VideoFrame | null,

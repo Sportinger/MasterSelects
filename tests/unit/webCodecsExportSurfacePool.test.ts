@@ -45,6 +45,8 @@ class SurfacePoolDecoder extends EventTarget {
     private readonly poolSize: number,
     private readonly onOutput: (frame: VideoFrame) => void,
     private readonly firstOutputDelayMs = 1,
+    /** Timestamps whose first output is lost, as a hardware decoder sometimes drops a chunk. */
+    private readonly lostOnce = new Set<number>(),
   ) {
     super();
   }
@@ -70,6 +72,10 @@ class SurfacePoolDecoder extends EventTarget {
       this.scheduled = false;
       if (this.queue.length === 0 || this.open >= this.poolSize || this.state === 'closed') return;
       const timestamp = this.queue.shift()!;
+      if (this.lostOnce.delete(timestamp)) {
+        this.pump();
+        return;
+      }
       this.open += 1;
       this.maxOpen = Math.max(this.maxOpen, this.open);
       this.decoded += 1;
@@ -113,13 +119,14 @@ interface DecoderSummary {
   surfaceStalls: number;
   surfaceBudget: number | null;
   restarts: number;
+  restartReasons: Record<string, number>;
 }
 
 /** Exports the given source frames in order; between seeks the shown frame is "rendered" for a moment. */
-async function exportFrames(poolSize: number, frameList: readonly number[], sampleCount = 120, firstOutputDelayMs = 1) {
+async function exportFrames(poolSize: number, frameList: readonly number[], sampleCount = 120, firstOutputDelayMs = 1, lostOnce = new Set<number>()) {
   const samples = createSamples(sampleCount);
   // Outputs only arrive after the first decode call, when `mode` exists.
-  const decoder = new SurfacePoolDecoder(poolSize, frame => mode.handleDecoderOutput(frame), firstOutputDelayMs);
+  const decoder = new SurfacePoolDecoder(poolSize, frame => mode.handleDecoderOutput(frame), firstOutputDelayMs, lostOnce);
   const { player, current } = createPlayer(samples, () => decoder);
   const mode = new WebCodecsExportMode(player);
   const shown: number[] = [];
@@ -205,6 +212,15 @@ describe('FAST export on a decoder with a small output surface pool', () => {
     expect(run.closedWhileShown).toEqual([]);
     expect(run.decoderStats.restarts).toBe(1);
     expect(run.decoderStats.outputWaitTimeouts).toBe(0);
+  }, 20_000);
+
+  // The stall release made an empty buffer behind the cursor a normal state, so only a frame the
+  // decoder already put out counts as a backward jump; a frame it lost still gets one restart.
+  it('recovers a frame the decoder lost with one keyframe restart', async () => {
+    const run = await exportFrames(3, range(0, 20), 120, 1, new Set([Math.trunc(10 * 1e6 / 30)]));
+
+    expect(run.shown).toEqual(range(0, 20));
+    expect(run.decoderStats.restartReasons).toEqual({ 'frame never decoded': 1 });
   }, 20_000);
 
   it('leaves a decoder with a large pool alone (no stall, no budget)', async () => {
