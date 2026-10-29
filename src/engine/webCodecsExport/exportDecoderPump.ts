@@ -1,18 +1,32 @@
 // Decoder lifecycle, chunk submission/backpressure and EOF draining for FAST export.
 // Frame selection and retained VideoFrame ownership remain in WebCodecsExportMode.
 import { Logger } from '../../services/logger';
+import { exportDiagnostics } from '../../services/export/exportDiagnostics';
 import type { ExportModePlayer } from '../WebCodecsExportMode';
 import type { Sample } from '../webCodecsTypes';
 import { frameToleranceUs } from './exportSamplePlanning';
+import { SURFACE_STALL_MS } from './exportSurfaceBudget';
 
 const log = Logger.create('WebCodecsExportMode');
 
 interface ExportDecoderPumpHooks {
   sampleTimestampUs(sample: Sample): number;
   onSamplesSubmitted(endIndexExclusive: number): number;
+  /** End of the samples any window has submitted since the last configure (the decode cursor). */
+  submittedEnd(): number;
   findBufferedFrameIndex(targetCtsUs: number, toleranceUs: number): number;
   refreshBufferedFrameIndex(): void;
   getBufferedFrameCount(): number;
+  /**
+   * The decoder holds pending samples but emits nothing while the export holds decoded frames
+   * (exportSurfaceBudget.ts). `released`: frames were closed, an output can follow; `exhausted`:
+   * every held frame is still needed, so this wait cannot end before the export moves on;
+   * `idle`: nothing is held, the decoder is only slow. `stalled` is false when the learnt budget
+   * says the surfaces are full before any stall could be seen.
+   */
+  relieveSurfaceStall(stalled: boolean): 'released' | 'exhausted' | 'idle';
+  /** The export holds as many frames as the learnt surface budget allows. */
+  surfacesFull(): boolean;
 }
 
 export class ExportDecoderPump {
@@ -25,6 +39,11 @@ export class ExportDecoderPump {
   private player: ExportModePlayer;
   private hooks: ExportDecoderPumpHooks;
   private progressWaiters = new Set<() => void>();
+  // Samples submitted since the last configure that have not come out yet, and since when the
+  // decoder has been quiet with such samples pending.
+  private pendingOutputs = 0;
+  private quietSinceMs = 0;
+  private outputsSinceConfigure = 0;
 
   constructor(player: ExportModePlayer, hooks: ExportDecoderPumpHooks) {
     this.player = player;
@@ -42,9 +61,33 @@ export class ExportDecoderPump {
     return decoder;
   }
 
-  /** Wakes pending waits as soon as the decoder emits a frame. */
-  notifyDecoderProgress(): void {
+  /** Counts a decoder output (kept or discarded) and wakes pending waits. */
+  notifyDecoderOutput(): void {
+    this.pendingOutputs = Math.max(0, this.pendingOutputs - 1);
+    this.outputsSinceConfigure += 1;
+    this.quietSinceMs = performance.now();
     for (const wake of [...this.progressWaiters]) wake();
+  }
+
+  private noteSubmitted(): void {
+    if (this.pendingOutputs === 0) this.quietSinceMs = performance.now();
+    this.pendingOutputs += 1;
+    exportDiagnostics.recordDecoder({ samplesSubmitted: 1 });
+  }
+
+  /**
+   * Checks for a surface stall and lets the export release frames. Returns false when the wait
+   * should end now because every held frame is still needed.
+   */
+  private relieveIfStalled(): boolean {
+    if (this.pendingOutputs === 0) return true;
+    // With a learnt budget a full pool needs no stall to be seen first.
+    const full = this.hooks.surfacesFull();
+    const quietMs = performance.now() - this.quietSinceMs;
+    if (!full && (this.outputsSinceConfigure === 0 || quietMs < SURFACE_STALL_MS)) return true;
+    const outcome = this.hooks.relieveSurfaceStall(!full);
+    this.quietSinceMs = performance.now();
+    return outcome !== 'exhausted';
   }
 
   /**
@@ -76,10 +119,17 @@ export class ExportDecoderPump {
     let previousBufferSize = this.hooks.getBufferedFrameCount();
     let stablePolls = 0;
     let lastWaitTimedOut = true;
+    const done = (timedOut: boolean) => exportDiagnostics.recordDecoder({
+      outputWaitMs: performance.now() - startTime,
+      outputWaitTimeouts: timedOut ? 1 : 0,
+    });
 
     while (performance.now() - startTime < timeoutMs) {
       this.hooks.refreshBufferedFrameIndex();
-      if (this.hooks.findBufferedFrameIndex(targetCtsUs, toleranceUs) >= 0) return;
+      if (this.hooks.findBufferedFrameIndex(targetCtsUs, toleranceUs) >= 0) {
+        done(false);
+        return;
+      }
 
       const decoder = this.getConfiguredDecoderOrThrow('waitForBufferedTarget');
       const bufferSize = this.hooks.getBufferedFrameCount();
@@ -89,9 +139,12 @@ export class ExportDecoderPump {
       } else if (allowIdleExit && lastWaitTimedOut && ++stablePolls >= 4) {
         break;
       }
+      if (!this.relieveIfStalled()) break;
       lastWaitTimedOut = await this.waitForDecoderProgress(decoder, 10);
     }
     this.hooks.refreshBufferedFrameIndex();
+    // Idle and stall exits end early on purpose; only a wait that used its whole limit timed out.
+    done(this.hooks.findBufferedFrameIndex(targetCtsUs, toleranceUs) < 0 && performance.now() - startTime >= timeoutMs);
   }
 
   /** Waits for lazily loaded samples; returns false after the timeout. */
@@ -151,6 +204,9 @@ export class ExportDecoderPump {
   ): Promise<void> {
     let decoder = this.player.getDecoder();
     let recreatedDecoder = false;
+    // A fresh or reset decoder owes no outputs for earlier samples.
+    this.pendingOutputs = 0;
+    this.outputsSinceConfigure = 0;
 
     // Android's hardware HEVC decoder can remain "configured" after reset()
     // while silently dropping every subsequently submitted chunk. Start each
@@ -204,6 +260,7 @@ export class ExportDecoderPump {
     }
 
     const decoder = this.getConfiguredDecoderOrThrow(`decodeSampleWindow ${startIndex}-${endIndexExclusive}`);
+    let submittedEnd = startIndex;
     // Sources read on demand carry no bytes until their window is requested. Hold this window's
     // bytes: a later window may drop them from the samples while this loop waits on the decoder.
     await this.player.ensureSampleData?.(startIndex, Math.min(endIndexExclusive, samples.length));
@@ -217,6 +274,8 @@ export class ExportDecoderPump {
       // arrives; the queue then never drains, so feed it once it stops moving.
       let backpressureGuard = 0;
       let stalledWaits = 0;
+      let surfacesExhausted = false;
+      const backpressureStart = performance.now();
       while (
         decoder.decodeQueueSize >= ExportDecoderPump.MAX_DECODE_QUEUE &&
         backpressureGuard < 500 &&
@@ -226,8 +285,23 @@ export class ExportDecoderPump {
         if (decoder.state === 'closed') {
           throw new Error(`FAST export decoder closed during decodeSampleWindow ${startIndex}-${endIndexExclusive}`);
         }
+        // A decoder without a free output surface does not drain its queue; waiting for it
+        // would only end at the guard. Stop feeding it until the export releases a frame.
+        if (!this.relieveIfStalled()) {
+          surfacesExhausted = true;
+          break;
+        }
         stalledWaits = await this.waitForDecoderProgress(decoder, 4) ? stalledWaits + 1 : 0;
         backpressureGuard++;
+      }
+      if (backpressureGuard > 0) exportDiagnostics.recordDecoder({ backpressureWaitMs: performance.now() - backpressureStart });
+      if (surfacesExhausted) break;
+      // A background decode-ahead and a foreground seek can feed the decoder at once. A sample the
+      // other one submitted while this one waited would come out twice and replace its own twin,
+      // closing a frame the export may be rendering.
+      if (i < this.hooks.submittedEnd()) {
+        submittedEnd = i + 1;
+        continue;
       }
 
       const sample = samples[i];
@@ -240,6 +314,9 @@ export class ExportDecoderPump {
 
       try {
         decoder.decode(chunk);
+        this.noteSubmitted();
+        submittedEnd = i + 1;
+        this.hooks.onSamplesSubmitted(submittedEnd);
       } catch (e) {
         const errorRecord = typeof e === 'object' && e !== null
           ? e as { name?: unknown; message?: unknown }
@@ -268,7 +345,11 @@ export class ExportDecoderPump {
       }
     }
 
-    this.player.setSampleIndex(this.hooks.onSamplesSubmitted(endIndexExclusive));
+    this.player.setSampleIndex(this.hooks.onSamplesSubmitted(submittedEnd));
+    if (submittedEnd < endIndexExclusive) {
+      this.hooks.refreshBufferedFrameIndex();
+      return;
+    }
 
     // Flushing mid-stream can cut a GOP and trigger a decoder failure.
     // Only drain with flush when we truly reached the end of the source.
@@ -294,31 +375,42 @@ export class ExportDecoderPump {
     const startTime = performance.now();
     const startBufferSize = this.hooks.getBufferedFrameCount();
     let flushError: unknown = null;
+    let flushed = false;
 
-    const flushPromise = decoder.flush().catch(e => {
+    const flushPromise = decoder.flush().then(() => {
+      flushed = true;
+    }, e => {
+      flushed = true;
       flushError = e;
       log.warn(`Flush error: ${e}`);
     });
 
-    const timeoutPromise = new Promise<void>((resolve) => {
-      setTimeout(resolve, timeoutMs);
-    });
-
-    await Promise.race([flushPromise, timeoutPromise]);
+    // A decoder without a free output surface cannot emit its last frames, so flush() waits for
+    // the export to close one: release what is no longer needed, or stop waiting when every held
+    // frame is still to be shown (the flush then completes as the export moves on).
+    let surfacesExhausted = false;
+    while (!flushed && performance.now() - startTime < timeoutMs) {
+      if (!this.relieveIfStalled()) {
+        surfacesExhausted = true;
+        break;
+      }
+      await Promise.race([flushPromise, this.waitForDecoderProgress(decoder, 10)]);
+    }
 
     const decoderAfter = this.player.getDecoder();
     if (!decoderAfter || decoderAfter.state === 'closed') {
       throw new Error('FAST export decoder closed during flush');
     }
 
-    if (decoderAfter.decodeQueueSize > 0) {
+    if (!surfacesExhausted && decoderAfter.decodeQueueSize > 0) {
       log.warn(`Flush timeout, waiting for queue (${decoderAfter.decodeQueueSize} remaining)...`);
       let waitCount = 0;
       while (
         this.player.getDecoder() &&
         this.player.getDecoder()!.state !== 'closed' &&
         this.player.getDecoder()!.decodeQueueSize > 0 &&
-        waitCount < 100
+        waitCount < 100 &&
+        this.relieveIfStalled()
       ) {
         await new Promise(r => setTimeout(r, 20));
         waitCount++;

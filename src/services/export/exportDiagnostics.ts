@@ -70,6 +70,7 @@ interface ExportRunState {
   seekTimeouts: number;
   previousFrameFallbacks: number;
   fallbackSamples: ExportSeekTimeout[];
+  decoder: ExportDecoderStats;
 }
 
 /** A precise-mode seek that exceeded its budget during export. */
@@ -87,6 +88,38 @@ export interface ExportSeekTimeout {
 }
 
 const MAX_SEEK_FALLBACK_SAMPLES = 20;
+
+/**
+ * FAST (WebCodecs) sequential decoder work of one export run: how long the export waited on the
+ * decoder and why. A decoder that owns only a few output surfaces (Android hardware decoders) shows
+ * up as `surfaceStalls`: it held queued samples while the export held every surface it had.
+ */
+export interface ExportDecoderStats {
+  samplesSubmitted: number;
+  framesBuffered: number;
+  framesDiscarded: number;
+  restarts: number;
+  restartReasons: Record<string, number>;
+  /** Time spent waiting for the decoder queue to drain before submitting more samples. */
+  backpressureWaitMs: number;
+  /** Time spent waiting for a requested frame to come out of the decoder. */
+  outputWaitMs: number;
+  /** Output waits that ended on their time limit instead of the frame. */
+  outputWaitTimeouts: number;
+  /** Most decoded frames the export held open at once (the decoder surfaces it occupied). */
+  maxHeldFrames: number;
+  /** Times the decoder held queued samples without output while the export held its surfaces. */
+  surfaceStalls: number;
+  /** The surface budget learnt from a stall (frames the decoder could hand out), or null. */
+  surfaceBudget: number | null;
+}
+
+function createDecoderStats(): ExportDecoderStats {
+  return {
+    samplesSubmitted: 0, framesBuffered: 0, framesDiscarded: 0, restarts: 0, restartReasons: {},
+    backpressureWaitMs: 0, outputWaitMs: 0, outputWaitTimeouts: 0, maxHeldFrames: 0, surfaceStalls: 0, surfaceBudget: null,
+  };
+}
 
 const MAX_SLOW_FRAMES = 40;
 const MAX_CUT_FRAMES = 80;
@@ -193,6 +226,12 @@ function summarizeRun(run: ExportRunState): Record<string, unknown> {
       previousFrameFallbacks: run.previousFrameFallbacks,
       fallbackSamples: run.fallbackSamples.map(sample => ({ ...sample, exportTime: round(sample.exportTime), sourceTime: round(sample.sourceTime) })),
     },
+    decoder: {
+      ...run.decoder,
+      restartReasons: { ...run.decoder.restartReasons },
+      backpressureWaitMs: round(run.decoder.backpressureWaitMs),
+      outputWaitMs: round(run.decoder.outputWaitMs),
+    },
     slowFrames: run.slowFrames.map(compactFrame),
     cutFrames: run.cutFrames.slice(-20).map(compactFrame),
     progressSamples: run.progressSamples,
@@ -224,6 +263,7 @@ class ExportDiagnosticsService {
       seekTimeouts: 0,
       previousFrameFallbacks: 0,
       fallbackSamples: [],
+      decoder: createDecoderStats(),
     };
     log.info('Export diagnostics started', { runId, settings });
     return runId;
@@ -358,6 +398,26 @@ class ExportDiagnosticsService {
     }
   }
 
+  /** Counts FAST sequential decoder work of the running export (no-op outside an export). */
+  recordDecoder(update: Partial<Pick<ExportDecoderStats,
+    'samplesSubmitted' | 'framesBuffered' | 'framesDiscarded' | 'backpressureWaitMs' | 'outputWaitMs' | 'outputWaitTimeouts' | 'surfaceStalls'
+  >> & { restartReason?: string; heldFrames?: number; surfaceBudget?: number }): void {
+    const decoder = this.currentRun?.decoder;
+    if (!decoder) return;
+    for (const key of ['samplesSubmitted', 'framesBuffered', 'framesDiscarded', 'backpressureWaitMs', 'outputWaitMs', 'outputWaitTimeouts', 'surfaceStalls'] as const) {
+      const value = update[key];
+      if (typeof value === 'number' && Number.isFinite(value)) decoder[key] += value;
+    }
+    if (update.restartReason) {
+      decoder.restarts += 1;
+      decoder.restartReasons[update.restartReason] = (decoder.restartReasons[update.restartReason] ?? 0) + 1;
+    }
+    if (typeof update.heldFrames === 'number') decoder.maxHeldFrames = Math.max(decoder.maxHeldFrames, update.heldFrames);
+    if (typeof update.surfaceBudget === 'number') {
+      decoder.surfaceBudget = decoder.surfaceBudget === null ? update.surfaceBudget : Math.min(decoder.surfaceBudget, update.surfaceBudget);
+    }
+  }
+
   finish(status: Exclude<ExportRunStatus, 'running'>, error?: unknown): void {
     if (!this.currentRun) {
       return;
@@ -378,6 +438,7 @@ class ExportDiagnosticsService {
     }
 
     this.lastRun = summarizeRun(this.currentRun);
+    publishExportDiagnostics(this.lastRun);
     log.info('Export diagnostics finished', {
       runId: this.currentRun.runId,
       status,
@@ -395,6 +456,28 @@ class ExportDiagnosticsService {
       last: this.lastRun,
     };
   }
+}
+
+type ExportDiagnosticsWindow = typeof globalThis & { __MS_EXPORT_DIAGNOSTICS__?: Record<string, unknown> };
+
+/**
+ * The last run's numbers as window.__MS_EXPORT_DIAGNOSTICS__, so a remote-debugged phone (the
+ * real-device harness) reads the decoder and phase timings without the Dev Bridge. Clip names and
+ * ids stay out: the same origin holds the user's real projects.
+ */
+function publishExportDiagnostics(summary: Record<string, unknown>): void {
+  const { slowFrames, cutFrames, seeks, ...rest } = summary;
+  const numbersOnly = (frames: unknown) => (Array.isArray(frames) ? frames : []).map((frame: Record<string, unknown>) => {
+    const { activeClipIds: _ids, activeClipNames: _names, ...numbers } = frame;
+    return numbers;
+  });
+  const seekSummary = (seeks ?? {}) as Record<string, unknown>;
+  (globalThis as ExportDiagnosticsWindow).__MS_EXPORT_DIAGNOSTICS__ = {
+    ...rest,
+    seeks: { timeouts: seekSummary.timeouts, previousFrameFallbacks: seekSummary.previousFrameFallbacks },
+    slowFrames: numbersOnly(slowFrames),
+    cutFrames: numbersOnly(cutFrames),
+  };
 }
 
 export const exportDiagnostics = new ExportDiagnosticsService();

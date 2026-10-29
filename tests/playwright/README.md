@@ -372,6 +372,15 @@ real-device gate.
   stubs to prove the download fallback. Export cases need `ffmpeg`/`ffprobe` and a
   headless Chromium that can encode (H.264 or the VP9 fallback). Run:
 
+- `mobile/m3-export-decoder-surfaces.spec.ts`: watches for the phone export that
+  seeks for seconds per frame. For the export of a 2 s 1080x1920 phone recording
+  it replaces `window.VideoDecoder` with the Android decoder model
+  (`fixtures/androidDecoderModel.ts`: four output surfaces, as the Pixel 10 Pro's
+  H.264 decoder; a sample is decoded only while one is free) and throttles the CPU
+  4x (`MASTERSELECTS_E2E_CPU_THROTTLE`). Verdict: at most half of the export spent
+  seeking (ExportDiagnostics phase totals through the bridge) and every frame checked
+  with the phone footage oracle; the export log is attached
+  (`MASTERSELECTS_E2E_EXPORT_DEBUG=1` adds the decoder's debug lines).
 - `mobile/m5-assistant.spec.ts`: the assistant sheet opens the chat composer and
   closes again (no live chat run). `mobile/m6-entry.spec.ts`: a phone opening
   `/editor` lands on `/m`, **Full editor** opens and keeps the desktop editor across
@@ -441,6 +450,9 @@ and the journey file ends in `.device.ts`, so no other config picks it up.
   succeed, so the later cases and the reopen use the durable copy; the export is
   shared to a stubbed `navigator.share` in the test tab (nothing lands in the
   phone's Downloads), copied to the PC and decoded with the phone footage oracle;
+  D6 also records the export's slow-frame warnings and `window.__MS_EXPORT_DIAGNOSTICS__` (phase
+  totals and the FAST decoder counters, numbers only; docs/Features/Export.md, "Decoder surface
+  budget");
   load times come from `window.__MS_PHONE_BOOT__`, `window.__MS_PROJECT_LOAD__`,
   `window.__MS_MEDIA_IMPORT__` (sanitized: phase names and milliseconds only) and
   the progress view. Budgets are soft (`expect.soft`), the numbers are attached to
@@ -497,6 +509,7 @@ MASTERSELECTS_DEVICE=1 npm run test:e2e:device
 | `MASTERSELECTS_DEVICE_MEDIA_TRANSPORT` | `auto` | `route`, `reverse` or `auto` (by size) |
 | `MASTERSELECTS_DEVICE_OUTPUT_DIR` | `<os.tmpdir()>/masterselects-device` | where exports land (checked for free space first) |
 | `MASTERSELECTS_PHONE_FOOTAGE_DIR` | `phone-footage/` in the [test media cache](#test-media-cache) | local footage folder |
+| `MASTERSELECTS_DEVICE_EXPORT_LOG` | unset | `1` raises the page's Logger to INFO during the D6 export and attaches the export and decoder log lines (the level is restored afterwards) |
 | `MASTERSELECTS_DEVICE_CDP_PORT` / `_MEDIA_PORT` | `9333` / `8099` | PC ports |
 | `MASTERSELECTS_DEVICE_*_BUDGET_MS` | 3000 phase, 6000 total, 3000 first frame, 8000 boot, 10000 import | soft budgets (import: Done to clip tile, page clock) |
 

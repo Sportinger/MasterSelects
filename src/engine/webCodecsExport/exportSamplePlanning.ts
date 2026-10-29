@@ -118,3 +118,40 @@ export function findBufferedFrameIndex(
 
   return Math.abs(sortedCts[bestIndex] - targetCtsUs) <= toleranceUs ? bestIndex : -1;
 }
+
+/** What FAST export knows when the requested frame is not buffered. */
+export interface MissingFrameState {
+  decoderClosed: boolean;
+  targetSampleIndex: number;
+  targetCtsUs: number;
+  decodeCursorIndex: number;
+  /** Oldest buffered CTS, or 0 when nothing is buffered. */
+  minBufferedCtsUs: number;
+  bufferedFrames: number;
+  /** Newest CTS the decoder has put out since its configure (kept or discarded). */
+  newestOutputCtsUs: number;
+  /** Keyframe at or before the target. */
+  keyframeIndex: number;
+  /** The target was decoded and closed as skipped by a strided decode. */
+  skippedTarget: boolean;
+  maxContinuousForwardGap: number;
+}
+
+/**
+ * Why the decoder must restart from a keyframe for the requested frame, or null to keep decoding
+ * forward. An empty buffer with the target behind the cursor is a backward jump only when the
+ * decoder already put the target out: after a surface stall released every held frame, the target
+ * is still queued in the decoder and a restart would throw that work away.
+ */
+export function missingFrameRestartReason(state: MissingFrameState): string | null {
+  const forwardGap = state.targetSampleIndex - state.decodeCursorIndex;
+  if (state.decoderClosed) return 'decoder closed — recovering';
+  if (forwardGap > state.maxContinuousForwardGap && state.keyframeIndex > state.decodeCursorIndex) {
+    return `forward source jump of ${forwardGap} samples`;
+  }
+  if (state.skippedTarget) return 'target skipped by strided decode';
+  const alreadyPutOut = state.targetCtsUs <= state.newestOutputCtsUs + 1;
+  if (state.bufferedFrames > 0 && state.targetCtsUs < state.minBufferedCtsUs) return 'backward source jump';
+  if (state.bufferedFrames === 0 && forwardGap < 0 && alreadyPutOut) return 'backward source jump';
+  return null;
+}
