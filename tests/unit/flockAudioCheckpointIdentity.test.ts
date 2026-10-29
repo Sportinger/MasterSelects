@@ -38,7 +38,7 @@ describe('audio simulation checkpoint identity', () => {
       audioRevision: () => 0, audioFingerprint: () => fingerprint, audioSampler: () => () => 0.5, modelState: () => null,
       status: { getStatus: () => null, publishStatus: () => {}, clearStatus: () => {} } };
     const runtime = new FlockSimulationRuntime(host), graph = program();
-    const session = { step: 0, isDisposed: false, seekCheckpoint: vi.fn(),
+    const session = { whenPipelinesSettled: () => Promise.resolve('ready' as const), pipelineFailure: null, step: 0, isDisposed: false, seekCheckpoint: vi.fn(),
       advanceTo: vi.fn((step: number) => { session.step = step; }) };
     const entry = { session, audioFingerprint: 'before' };
     const changeAudio = () => {

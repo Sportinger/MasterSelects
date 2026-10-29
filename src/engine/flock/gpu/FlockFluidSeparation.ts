@@ -5,6 +5,7 @@ import { FLOCK_FLUID_PARAMS_STRIDE } from '../shaders/flockFluidWgsl';
 import { FlockParticleOrder } from './FlockParticleOrder';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
 import { flockGpuTimings } from './FlockGpuTimings';
+import { createFlockComputePipeline, type FlockPipelineCheck } from './flockPipelineGate';
 
 const entries = ['clearRanges', 'buildRanges', 'computeCorrections', 'applyCorrections'] as const;
 interface Pipelines { layout: GPUBindGroupLayout; passes: GPUComputePipeline[] }
@@ -20,7 +21,7 @@ function pipelines(device: GPUDevice, layoutKind: FlockParticleLayout): Pipeline
   ] });
   const module = createCheckedModule(device, flockFluidSeparationWgsl(layoutKind), 'flock-fluid-separation');
   const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
-  const passes = entries.map(entryPoint => device.createComputePipeline({ layout: pipelineLayout, compute: { module, entryPoint } }));
+  const passes = entries.map(entryPoint => createFlockComputePipeline(device, { label: `flock-separation-${entryPoint}`, layout: pipelineLayout, compute: { module, entryPoint } }));
   const result = { layout, passes }; const variants = cache.get(device) ?? new Map();
   variants.set(layoutKind, result); cache.set(device, variants); finish(); return result;
 }
@@ -63,6 +64,8 @@ export class FlockFluidSeparation {
     });
     pass.end();
   }
+
+  pipelineChecks(): FlockPipelineCheck[] { return this.pipelines.passes.map(pipeline => ({ pipeline })); }
 
   dispose(): void { this.ranges.destroy(); }
 }

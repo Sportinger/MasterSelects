@@ -4,6 +4,7 @@ import { flockCheckpointStore } from './flockCheckpointStore';
 import type { FlockPrecomputeResult } from './flockRuntimeApi';
 import { buildFlockRuntimeStatus } from './flockRuntimeStatus';
 import type { FlockSimulationRuntime } from './FlockSimulationRuntime';
+import { awaitFlockPipelines } from '../gpu/flockPipelineGate';
 
 const log = Logger.create('FlockPrecompute');
 const CHUNK_STEPS = 4;
@@ -85,6 +86,7 @@ export async function runFlockPrecompute(
   };
 
   try {
+    await awaitFlockPipelines(worker.session);
     while (worker.session.step < endStep && inputsCurrent() && !worker.session.isDisposed) {
       const nextCheckpoint = (Math.floor(worker.session.step / worker.session.checkpointInterval) + 1) * worker.session.checkpointInterval;
       const chunkEnd = Math.min(endStep, worker.session.step + CHUNK_STEPS, options.persist ? nextCheckpoint : Infinity);

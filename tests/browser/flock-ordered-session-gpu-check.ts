@@ -33,6 +33,8 @@ export async function checkOrderedSessions(device: GPUDevice) {
     for (let i = 0; i < a.length; i++) if (!Number.isFinite(c[i]) || Math.abs(a[i] - c[i]) > 1e-5) throw new Error(`${label}/${i}: ${a[i]} != ${c[i]}`);
   };
   try {
+    // Sessions encode nothing until every pipeline verdict is known.
+    await Promise.all(sessions.map(session => session.whenPipelinesSettled()));
     for (const step of [1, 4, 5, 9, 12]) {
       canonical.advanceTo(step, 24); sorted.advanceTo(step, 24);
       compare(await canonical.sampleParticles(257), await sorted.sampleParticles(257), `step ${step}`);

@@ -68,6 +68,9 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
         const encoder = device.createCommandEncoder();
         const [plan] = scenePass.prepare(device, encoder, scenePass.collect([layer]), false);
         device.queue.submit([encoder.finish()]); await device.queue.onSubmittedWorkDone();
+        // A new session draws nothing until its pipeline verdicts are known.
+        const pending = runtime.entries.get('worker-probe|preview')?.session;
+        if (!plan && pending?.pipelineState === 'pending') { await pending.whenPipelinesSettled(); continue; }
         if (!plan) throw new Error('Runtime did not prepare the worker layer');
         if (runtime.entries.get('worker-probe|preview')?.caughtUp) return plan;
       }

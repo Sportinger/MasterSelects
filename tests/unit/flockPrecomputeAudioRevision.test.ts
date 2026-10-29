@@ -14,7 +14,7 @@ describe('audio changes during asynchronous precompute', () => {
     if (layer.kind !== 'flock') throw new Error('Invalid fixture');
     const program = compileFlockDefinition(layer.definition).program!;
     let fingerprint = 'before';
-    const session = { step: 0, checkpointInterval: 1, isDisposed: false, dispose: vi.fn(),
+    const session = { whenPipelinesSettled: () => Promise.resolve('ready' as const), pipelineFailure: null, step: 0, checkpointInterval: 1, isDisposed: false, dispose: vi.fn(),
       advanceTo(step: number) { this.step = step; }, listCheckpointSteps: () => [15],
       readCheckpoint: async () => { if (boundary === 'readback') fingerprint = 'after'; return { state: new ArrayBuffer(4), rings: [] }; } };
     const worker = { session, audioFingerprint: 'before', cacheKey: 'old-key', key: 'flock|precompute' };

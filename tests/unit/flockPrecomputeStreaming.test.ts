@@ -13,6 +13,7 @@ import type { FlockSimulationRegistry } from '../../src/engine/flock/runtime/Flo
 function fixture() {
   const program = neighborFixture('none');
   const session = {
+    whenPipelinesSettled: () => Promise.resolve('ready' as const), pipelineFailure: null,
     step: 0, checkpointInterval: 15, isDisposed: false, latest: 0,
     advanceTo(step: number) { this.step = step; this.latest = Math.floor(step / this.checkpointInterval) * this.checkpointInterval; },
     listCheckpointSteps() { return this.latest ? [this.latest] : []; },

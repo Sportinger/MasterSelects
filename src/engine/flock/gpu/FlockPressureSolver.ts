@@ -2,6 +2,7 @@ import type { FlockVec3 } from '../../../types/flock';
 import { flockPressureLevels, type FlockPressureLevel } from '../shared/flockPressureLayout';
 import { FLOCK_PRESSURE_WGSL } from '../shaders/flockPressureWgsl';
 import { createCheckedModule, watchValidation } from './FlockGpuPipelines';
+import { createFlockComputePipeline, type FlockPipelineCheck } from './flockPipelineGate';
 
 const ENTRIES = ['pressureInit', 'pressureCoarsen', 'pressureSmoothAB', 'pressureSmoothBA', 'pressureRestrict',
   'pressureProlong', 'pressureCoarseSolve', 'pressureRho', 'pressureReduceRho', 'pressureDirection', 'pressureProduct', 'pressureReduceAlpha', 'pressureUpdate'] as const;
@@ -23,7 +24,7 @@ function pipelines(device: GPUDevice): Pipelines {
   const controlLayout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }] });
   const controlPipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout, controlLayout] });
   const entries = Object.fromEntries(ENTRIES.map(entryPoint => [entryPoint,
-    device.createComputePipeline({ layout: CONTROLS.has(entryPoint) ? controlPipelineLayout : pipelineLayout, compute: { module, entryPoint } }),
+    createFlockComputePipeline(device, { label: `flock-${entryPoint}`, layout: CONTROLS.has(entryPoint) ? controlPipelineLayout : pipelineLayout, compute: { module, entryPoint } }),
   ])) as Record<Entry, GPUComputePipeline>;
   const value = { layout, controlLayout, entries }; byDevice.set(device, value); finish(); return value;
 }
@@ -88,6 +89,8 @@ export class FlockPressureSolver {
     }
     pass.setBindGroup(1, null);
   }
+
+  pipelineChecks(): FlockPipelineCheck[] { return Object.values(this.pipelines.entries).map(pipeline => ({ pipeline })); }
 
   dispose(): void { for (const buffer of this.buffers) buffer.destroy(); }
 }

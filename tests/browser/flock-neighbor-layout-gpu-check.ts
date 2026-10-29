@@ -9,6 +9,8 @@ export async function checkNeighborLayouts(device: GPUDevice) {
   const rules = new FlockGpuSession(device, pipelines, neighborFixture('rules'), context);
   const links = new FlockGpuSession(device, pipelines, neighborFixture('links'), context, { dispatchWidth: 1 });
   try {
+    // Sessions encode nothing until every pipeline verdict is known.
+    await Promise.all([plain, rules, links].map(session => session.whenPipelinesSettled()));
     if (plain.hasNeighborGrid || !rules.hasNeighborGrid || !links.hasNeighborGrid) throw new Error('Wrong neighbor storage demand');
     for (const session of [plain, rules, links]) session.advanceTo(5, 5);
     const expected = await plain.sampleParticles(257);
