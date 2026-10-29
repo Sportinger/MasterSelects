@@ -1,5 +1,5 @@
 /* Brand of the workspace bar (WorkspaceBarBrand.tsx). The base brand look lives in WorkspaceBar.css;
-   this file adds the slot and the turquoise "new version available" state. */
+   this file adds the slot, the button, the check note and the turquoise "new version available" state. */
 @layer components {
 .workspace-bar-brand-slot {
   position: relative;
@@ -8,17 +8,71 @@
   min-width: 0;
 }
 
-.workspace-bar-brand.workspace-bar-brand--update {
-  position: relative;
-  isolation: isolate;
+.workspace-bar-brand.workspace-bar-brand--button {
   margin: 0;
   border: 0;
   background: transparent;
-  color: var(--update-available);
   cursor: pointer;
   font-family: inherit;
+  line-height: inherit;
   text-align: left;
   -webkit-tap-highlight-color: transparent;
+}
+
+.workspace-bar-brand.workspace-bar-brand--button[aria-busy='true'] {
+  cursor: progress;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-bar-brand.workspace-bar-brand--button:not(.workspace-bar-brand--update):hover {
+    color: var(--text-secondary);
+  }
+}
+
+.workspace-bar-brand.workspace-bar-brand--button:focus {
+  outline: none;
+}
+
+/* One ring: the outline replaces the base focus shadow, which would draw a second one around it. */
+.workspace-bar-brand.workspace-bar-brand--button:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+/* The answer of a click floats above the brand, so the bar never changes its layout. */
+.workspace-bar-brand-check {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 8px;
+  z-index: 10;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
+  text-transform: none;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.workspace-bar-brand-check:empty {
+  display: none;
+}
+
+.workspace-bar-brand-check[data-check-state='failed'] {
+  border-color: var(--danger);
+}
+
+.workspace-bar-brand.workspace-bar-brand--update {
+  position: relative;
+  isolation: isolate;
+  color: var(--update-available);
 }
 
 /* The glow is a blurred layer that only fades (opacity runs on the compositor, no repaint per frame). */
@@ -46,18 +100,10 @@
   box-shadow: 0 0 6px var(--update-available-glow);
 }
 
-.workspace-bar-brand.workspace-bar-brand--update[aria-busy='true'] {
-  cursor: progress;
-}
-
 @media (hover: hover) and (pointer: fine) {
   .workspace-bar-brand.workspace-bar-brand--update:hover::before {
     opacity: 0.9;
   }
-}
-
-.workspace-bar-brand.workspace-bar-brand--update:focus {
-  outline: none;
 }
 
 .workspace-bar-brand.workspace-bar-brand--update:focus-visible {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.unmock('../../src/stores/settingsStore');
-import { comparePhoneBuild, sanitizePhoneLogLine } from '../../src/components/mobileSkin/settings/phoneAppInfo';
+import { checkPhoneAppUpdate, describePhoneUpdateOutcome, sanitizePhoneLogLine } from '../../src/components/mobileSkin/settings/phoneAppInfo';
 import { applyPhoneSettingsDraft, phoneTranscriptionAvailability, readPhoneSettingsDraft } from '../../src/components/mobileSkin/settings/phoneSettingsModel';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { CACHE_RESET_DATABASES, clearAllCacheAndReload } from '../../src/components/common/toolbar/cacheActions';
@@ -25,10 +25,18 @@ describe('phone settings draft', () => {
 });
 
 describe('phone app info', () => {
-  it('compares the loaded build with the server build info', () => {
-    expect(comparePhoneBuild({ version: '3.3.4', buildId: 'b1' }, { version: '3.3.4', buildId: 'b1' }).kind).toBe('current');
-    expect(comparePhoneBuild({ version: '3.3.4', buildId: 'b1' }, { version: '3.3.5', buildId: 'b2' })).toMatchObject({ kind: 'available', serverVersion: '3.3.5' });
-    expect(comparePhoneBuild({ version: '3.3.4', buildId: 'b1' }, null).kind).toBe('unknown');
+  it('describes each answer of the shared update check', () => {
+    expect(describePhoneUpdateOutcome({ kind: 'current' }, '3.3.4')).toEqual({ kind: 'current', message: 'You have the latest version (3.3.4).' });
+    expect(describePhoneUpdateOutcome({ kind: 'available', version: '3.3.5' })).toMatchObject({ kind: 'available', serverVersion: '3.3.5' });
+    expect(describePhoneUpdateOutcome({ kind: 'failed', cause: 'no-build-info', message: 'x' }).message).toContain('no build info');
+    expect(describePhoneUpdateOutcome({ kind: 'failed', cause: 'unreachable', message: 'x' }).message).toContain('needs a connection');
+    expect(describePhoneUpdateOutcome({ kind: 'disabled' })).toEqual({ kind: 'unknown', message: 'Update checks are off in this browser.' });
+  });
+
+  it('checks through the shared checker, so a found version reaches the top bar and the other tabs', async () => {
+    const checkNow = vi.fn(async () => ({ kind: 'available', version: '3.3.5' }) as const);
+    await expect(checkPhoneAppUpdate({ checkNow })).resolves.toMatchObject({ kind: 'available', serverVersion: '3.3.5' });
+    expect(checkNow).toHaveBeenCalledTimes(1);
   });
 
   it('removes query strings, tokens and long ids from diagnostics lines', () => {

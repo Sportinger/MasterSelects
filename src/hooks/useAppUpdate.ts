@@ -1,7 +1,9 @@
 // Shared state of "a new version is deployed" for the workspace bar brand (desktop) and the phone top bar.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { getAppUpdateChecker, retainAppUpdateChecker, type AppUpdateSnapshot } from '../services/appUpdate/appUpdateCheck';
+import {
+  getAppUpdateChecker, retainAppUpdateChecker, type AppUpdateCheckOutcome, type AppUpdateSnapshot,
+} from '../services/appUpdate/appUpdateCheck';
 import { reloadForAppUpdate } from '../services/appUpdate/reloadForAppUpdate';
 
 /** Whether the server serves another build; keeps the background check running while mounted. */
@@ -9,6 +11,59 @@ export function useAppUpdateAvailability(): AppUpdateSnapshot {
   const checker = getAppUpdateChecker();
   useEffect(() => retainAppUpdateChecker(), []);
   return useSyncExternalStore(checker.subscribe, checker.getSnapshot, checker.getSnapshot);
+}
+
+/** How long the brand shows the answer of a check the person asked for. */
+export const MANUAL_CHECK_FEEDBACK_MS = 2000;
+
+/** What the brand says after a click: a found version needs no note, the brand glows instead. */
+export type AppUpdateCheckFeedback =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: Exclude<AppUpdateCheckOutcome['kind'], 'available'> };
+
+export interface AppUpdateManualCheck {
+  feedback: AppUpdateCheckFeedback;
+  /** Checks right away (a running check is shared) and shows the answer for MANUAL_CHECK_FEEDBACK_MS. */
+  checkNow(): void;
+}
+
+export function useAppUpdateManualCheck(): AppUpdateManualCheck {
+  const [feedback, setFeedback] = useState<AppUpdateCheckFeedback>({ kind: 'idle' });
+  const requestRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTimer = () => {
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = null;
+  };
+
+  useEffect(() => () => {
+    requestRef.current += 1;
+    clearTimer();
+  }, []);
+
+  const checkNow = useCallback(() => {
+    const request = requestRef.current + 1;
+    requestRef.current = request;
+    clearTimer();
+    setFeedback({ kind: 'checking' });
+    // Only the latest click shows its answer; an earlier one shares the same request anyway.
+    const show = (outcome: AppUpdateCheckOutcome) => {
+      if (requestRef.current !== request) return;
+      if (outcome.kind === 'available') { setFeedback({ kind: 'idle' }); return; }
+      setFeedback({ kind: outcome.kind });
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        setFeedback({ kind: 'idle' });
+      }, MANUAL_CHECK_FEEDBACK_MS);
+    };
+    getAppUpdateChecker().checkNow().then(show, (error: unknown) => {
+      show({ kind: 'failed', cause: 'unreachable', message: error instanceof Error ? error.message : String(error) });
+    });
+  }, []);
+
+  return { feedback, checkNow };
 }
 
 const STILL_HERE_AFTER_RELOAD_MS = 8000;

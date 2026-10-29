@@ -1,10 +1,11 @@
 // App version, update check and a short, sanitized diagnostics report for the phone Settings sheet.
-// The update check compares the loaded build with the server's /build-info.json (services/appUpdate);
-// a build without that file (the dev server) says so instead of claiming to be current.
+// The update check is the shared one of the workspace bar brand (services/appUpdate): it compares the loaded
+// build with the server's /build-info.json, and a version it finds also lights the top bar's Update button
+// and every other open tab. A build without that file (the dev server) says so instead of claiming to be current.
 
 import { APP_VERSION } from '../../../version';
-import { APP_BUILD_ID, APP_RELEASE_ID, APP_SOURCE_REVISION } from '../../../services/appBuild';
-import { compareAppBuild, fetchServerBuildInfo } from '../../../services/appUpdate/appUpdateCheck';
+import { APP_RELEASE_ID, APP_SOURCE_REVISION } from '../../../services/appBuild';
+import { getAppUpdateChecker, type AppUpdateCheckOutcome, type AppUpdateChecker } from '../../../services/appUpdate/appUpdateCheck';
 import { Logger, type LogEntry } from '../../../services/logger';
 import type { PhoneRuntimeStatus } from '../contracts';
 
@@ -18,29 +19,25 @@ export function describePhoneBuild(): string {
   return `Version ${APP_VERSION}${revision}${APP_RELEASE_ID ? '' : ' · local build'}`;
 }
 
-interface BuildInfo { version?: unknown; buildId?: unknown; releaseId?: unknown }
-
-/** Pure comparison of the loaded build with the server's build info (same rule as the top bar's check). */
-export function comparePhoneBuild(loaded: { version: string; buildId: string; releaseId?: string | null }, server: BuildInfo | null): PhoneUpdateState {
-  const comparison = compareAppBuild({ version: loaded.version, buildId: loaded.buildId, releaseId: loaded.releaseId ?? null }, server);
-  if (comparison.kind === 'unknown') {
-    return { kind: 'unknown', message: 'This build cannot check for updates (no build info on the server).' };
+/** Phone wording for the answer of the shared update check. */
+export function describePhoneUpdateOutcome(outcome: AppUpdateCheckOutcome, loadedVersion: string = APP_VERSION): PhoneUpdateState {
+  if (outcome.kind === 'current') return { kind: 'current', message: `You have the latest version (${loadedVersion}).` };
+  if (outcome.kind === 'available') {
+    return {
+      kind: 'available',
+      message: `Version ${outcome.version} is ready. Reload to update; your project is saved first.`,
+      serverVersion: outcome.version,
+    };
   }
-  if (comparison.kind === 'current') return { kind: 'current', message: `You have the latest version (${loaded.version}).` };
-  return {
-    kind: 'available',
-    message: `Version ${comparison.version} is ready. Reload to update; your project is saved first.`,
-    serverVersion: comparison.version,
-  };
+  if (outcome.kind === 'disabled') return { kind: 'unknown', message: 'Update checks are off in this browser.' };
+  return outcome.cause === 'no-build-info'
+    ? { kind: 'unknown', message: 'This build cannot check for updates (no build info on the server).' }
+    : { kind: 'unknown', message: 'The update check needs a connection. Try again when you are online.' };
 }
 
-export async function checkPhoneAppUpdate(fetcher: typeof fetch = fetch): Promise<PhoneUpdateState> {
-  const loaded = { version: APP_VERSION, buildId: APP_BUILD_ID, releaseId: APP_RELEASE_ID };
-  try {
-    return comparePhoneBuild(loaded, await fetchServerBuildInfo(fetcher, Date.now()) as BuildInfo | null);
-  } catch {
-    return { kind: 'unknown', message: 'The update check needs a connection. Try again when you are online.' };
-  }
+/** Checks right away, past the background check's pause (a check that is already running is shared). */
+export async function checkPhoneAppUpdate(checker: Pick<AppUpdateChecker, 'checkNow'> = getAppUpdateChecker()): Promise<PhoneUpdateState> {
+  return describePhoneUpdateOutcome(await checker.checkNow());
 }
 
 /** Strips query strings, tokens and long ids so a diagnostics line can be shared safely. */

@@ -166,6 +166,9 @@ test('INV6/cache-reset: the confirmation names what goes and what stays, Keep ch
   await closeSheets(m1)
 })
 
+// The check is the shared one of the desktop brand: the dev server keeps it off unless `ms.updateCheck.enabled`
+// is set, and a version it finds also shows the top bar's Update button. Save and reload brings the editor
+// back without the announced version, so the next case starts from the running build again.
 test('INV6/app-version-and-update-state: shows the loaded version and reports a newer build @phone', async ({ m1 }) => {
   const version = (JSON.parse(readFileSync(path.join(DEFAULT_REPO_ROOT, 'package.json'), 'utf8')) as { version: string }).version
   await m1.page.route('**/build-info.json*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version: '99.0.0', buildId: 'newer-build' }) }))
@@ -173,12 +176,24 @@ test('INV6/app-version-and-update-state: shows the loaded version and reports a 
     await openSettings(m1)
     await expect(m1.page.getByTestId(SET.version)).toContainText(version)
     await tapOn(m1, m1.page.getByTestId(SET.checkUpdate))
+    await expect(m1.sheet).toContainText('Update checks are off in this browser.')
+    await m1.page.evaluate(() => window.localStorage.setItem('ms.updateCheck.enabled', 'true'))
+    await tapOn(m1, m1.page.getByTestId(SET.checkUpdate))
     await expect(m1.sheet).toContainText('Version 99.0.0 is ready')
-    await expect(m1.page.getByTestId(SET.reloadUpdate)).toBeVisible()
-    await closeSheets(m1)
+    await expect(m1.page.getByTestId('phone-topbar-update'), 'the top bar learns the same answer').toBeVisible()
+    await m1.page.evaluate(() => window.localStorage.removeItem('ms.updateCheck.enabled'))
+    await m1.page.unroute('**/build-info.json*')
+    const reloaded = m1.page.waitForEvent('framenavigated', { predicate: frame => frame === m1.page.mainFrame() })
+    await tapOn(m1, m1.page.getByTestId(SET.reloadUpdate))
+    await reloaded
+    await ensureEditor(m1)
   } finally {
     await m1.page.unroute('**/build-info.json*')
+    await m1.page.evaluate(() => window.localStorage.removeItem('ms.updateCheck.enabled')).catch(() => undefined)
   }
+  await expect(m1.page.getByTestId('phone-topbar-update')).toHaveCount(0)
+  await m1.bridge.waitForTarget({ timeoutMs: 30_000, requireVisible: true })
+  await m1.bridge.authenticate()
 })
 
 // A deploy while the phone editor is open (docs/Features/App-Updates.md). The dev server has no build info
