@@ -169,6 +169,10 @@ options** opens the desktop panel itself. **Batch queue** exports several media 
 another, retries the ones that failed, and saves or shares each result. **Keep rendered part** stops
 a running video export early and keeps what is rendered so far.
 
+A video export decodes your recordings with the phone's own video decoder. On Android it keeps only
+as many decoded pictures as that decoder can hand out, so it does not wait seconds for each picture
+([Export: decoder surface budget](Export.md#decoder-surface-budget)).
+
 **Tip:** a greyed-out tool is not hidden on purpose. Tap it: it tells you why it does not work on
 a phone. The same project always opens in the full editor (tap the project name, then **Full editor**).
 

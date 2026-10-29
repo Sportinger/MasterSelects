@@ -8,7 +8,7 @@ import { ACTION_MEDIA, IDS, M1_IDS, TOPBAR_EXPORT, TOPBAR_PROJECTS, UI_WAIT_MS, 
 import { footageContentType, pixelRecordingName } from './deviceFootage'
 import { injectFile, installShareCapture, pullSharedFile, removeShareCapture, sharedFiles, type InjectedFile } from './deviceMedia'
 import { actionPhases, parseExportSize, type ActionPhases, type MediaImportReport } from './deviceParsing'
-import { markLoadReportsSeen, pageNow, readActions, readBootMarks, readMediaImports, takeProgress, waitForBackgroundCopies, waitForLoadReport, type ProgressSample } from './deviceTelemetry'
+import { markLoadReportsSeen, pageNow, readActions, readBootMarks, readMediaImports, recordExportEvidence, takeProgress, waitForBackgroundCopies, waitForLoadReport, type ExportEvidence, type ProgressSample } from './deviceTelemetry'
 import { PHONE_PROJECT_LOADING_TEST_ID } from '../../../src/components/mobileSkin/runtime/phoneProjectLoadingTestIds'
 import { readTiles, type TileState } from './deviceTimeline'
 import type { BootMark, LoadReport } from './deviceParsing'
@@ -134,6 +134,7 @@ export function differingShare(before: { width: number; height: number; data: Bu
 export interface ExportResult {
   file: string; bytes: number; summary: string; size: { width: number; height: number } | null
   exportMs: number; transferMs: number; transport: string; sharedName: string; sharedType: string
+  evidence: ExportEvidence
 }
 
 /**
@@ -149,11 +150,14 @@ export async function exportAndPull(world: DeviceWorld, testInfo: TestInfo, time
   await expect(summaryLocator).toContainText(/\d/, { timeout: 30_000 })
   const summary = (await summaryLocator.textContent())?.trim() ?? ''
   await installShareCapture(page)
+  const stopEvidence = await recordExportEvidence(page, process.env.MASTERSELECTS_DEVICE_EXPORT_LOG === '1')
+  let evidence: ExportEvidence | null = null
   try {
     const started = Date.now()
     await tapOn(world, page.getByTestId(M1_IDS.exportStart))
     await expect(page.getByTestId(M1_IDS.exportShare), 'the export never finished').toHaveAttribute('aria-disabled', 'false', { timeout: timeoutMs })
     const exportMs = Date.now() - started
+    evidence = await stopEvidence()
     await tapOn(world, page.getByTestId(M1_IDS.exportShare))
     await expect.poll(async () => (await sharedFiles(page)).length, { message: 'Share handed no file to navigator.share', timeout: 30_000 }).toBe(1)
     const [shared] = await sharedFiles(page)
@@ -163,8 +167,10 @@ export async function exportAndPull(world: DeviceWorld, testInfo: TestInfo, time
     await tapOn(world, page.getByTestId(IDS.sheetCancel))
     await expect(page.getByTestId(IDS.sheet), 'the export sheet did not close').toBeHidden({ timeout: UI_WAIT_MS })
     return { file, bytes: pulled.bytes, summary, size: parseExportSize(summary), exportMs, transferMs: pulled.transferMs, transport: pulled.transport,
-      sharedName: shared.name, sharedType: shared.type }
+      sharedName: shared.name, sharedType: shared.type, evidence }
   } finally {
+    // A failed export still restores the page's log level.
+    if (!evidence) await stopEvidence().catch(() => null)
     await removeShareCapture(page)
   }
 }

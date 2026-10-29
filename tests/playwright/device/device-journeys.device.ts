@@ -5,7 +5,7 @@ import {
 } from './deviceFixture'
 import { createDeviceProject, decodeExport, differingShare, exportAndPull, importFootage, openNewProjectForm, previewPixels, waitForFirstScreen } from './deviceJourney'
 import { describeActionPhases, describeLoadReport, describeMediaImport, judgeFrames, loadBudgetProblems, seekPathPictures, sourceSecondsAt, transportMs, type BootMark, type TimelineSegment } from './deviceParsing'
-import { describeProgress, readBootMarks, takeProgress, waitForLoadReport } from './deviceTelemetry'
+import { describeExportEvidence, describeProgress, readBootMarks, takeProgress, waitForLoadReport } from './deviceTelemetry'
 import { COMP_FPS, expectContentAt, readPlayheadFrame, readTiles, seekToFrame, tile, type TileState } from './deviceTimeline'
 
 /**
@@ -252,7 +252,7 @@ test('D6 export: the edited project exports at 1080x1920 and every exported fram
   const verdict = judgeFrames(expected, decoded.frames, index => !isClearFrame(model(dev), segments, index))
   await record(testInfo, 'export', { ...result, decoded: { width: decoded.width, height: decoded.height, frames: decoded.frames.length, durationSeconds: decoded.durationSeconds }, verdict },
     `${result.size ? `${result.size.width}x${result.size.height}` : result.summary} · ${(result.bytes / 1e6).toFixed(1)} MB in ${result.exportMs} ms, pulled via ${result.transport} in ${result.transferMs} ms · `
-    + `${decoded.frames.length}/${expected.length} frames, ${verdict.failures.length} wrong, ${verdict.policy.length} rounding-policy differences`)
+    + `${decoded.frames.length}/${expected.length} frames, ${verdict.failures.length} wrong, ${verdict.policy.length} rounding-policy differences · ${describeExportEvidence(result.evidence)}`)
   expect(result.size, `the export sheet offers 1080x1920 ("${result.summary}")`).toEqual({ width: 1080, height: 1920 })
   expect(result.sharedType, 'a video file').toMatch(/^video\//)
   expect({ width: decoded.width, height: decoded.height }, 'exported picture size').toEqual({ width: 1080, height: 1920 })

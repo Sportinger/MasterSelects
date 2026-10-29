@@ -148,6 +148,7 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 - Repeated source-time jumps, such as frames from a sped-up or speed-ramped clip, continue decoding from the current cursor and discard skipped outputs. A forward jump restarts at a keyframe only when a keyframe lies inside the gap, so skipping is cheaper than decoding through it.
 - Speed ramps: FAST export tracks the source stride between requested frames, decodes the predicted next frame in the background, and immediately closes decoded frames that fall between predicted requests. Hardware decoders therefore keep free output surfaces. If a decelerating ramp requests a frame that was closed, export restarts from the preceding keyframe for that frame.
 - Decoder backpressure waits for decoder progress events instead of fixed sleeps. If a hardware decoder holds reordered samples and its queue stops draining, export submits more input instead of waiting for a timeout.
+- A hardware decoder with only a few output surfaces (Android) sets how many decoded frames export keeps open: see [Decoder surface budget](#decoder-surface-budget).
 - Regular multi-clip exports use source-shared sequential WebCodecs decoders; nested-composition video clips use `ParallelDecodeManager`.
 - In parallel exports, speed-keyframed and transition-mapped clips prefetch at their mapped source time and retire old frames using that same time. They do not first seek to the clip's constant-speed time.
 - Every FAST path picks the source frame for a requested time with one rule (`parallelDecode/presentationFrame.ts`). A reversed clip asks for the time 10 µs before a frame boundary, so it shows frame 119 − N of a 120-frame source, not 120 − N.
@@ -518,6 +519,79 @@ Key implementation files:
 FAST export includes the final exact-frame wait in its bounded decoder recovery. If the browser loses the decoder after samples were submitted, export recreates it and restarts from the preceding keyframe once. It still requires the exact source frame; a missing frame or failed recreation produces an explicit failure instead of substituting a neighboring frame or retrying indefinitely.
 
 Export submissions retain exclusive ownership until the runner and its cleanup settle. Same-tick duplicate starts and restart attempts during cancellation are ignored; cancellation leaves the timeline export lock in place until cleanup finishes. A later export can start normally after completion or failure.
+
+### Decoder surface budget
+
+A hardware video decoder on Android (MediaCodec behind Chrome's `VideoDecoder`) owns a small pool
+of output surfaces. Every decoded `VideoFrame` the page has not closed keeps one. FAST export used
+to keep up to six frames open per source: one behind the shown frame, the shown frame and four
+decoded ahead. On a phone whose decoder hands out fewer, the decoder kept its queued samples and
+emitted nothing until the export closed a frame. The export instead waited for each frame until a
+time limit ran out: 1.2 s for the frame, up to 2 s per queued sample, and the foreground seek
+waited for the background decode-ahead.
+
+Chrome 155 on a Pixel 10 Pro hands out four open H.264 frames at 1080x1920. There, every third
+frame of a 1080x1920 phone clip waited about 8.8 s (`Slow export frame`, almost all of it
+`seekMs`), about 2.9 s per frame. The real-device journey D6 reached its 17-minute limit after
+232 of 420 frames. Another export of the same project failed with "FAST export could not decode
+frame": five frames held, 87 samples queued in the decoder.
+
+FAST export now notices such a stall: samples are pending, the decoder has put out nothing for
+100 ms, and the export holds decoded frames. This counts only once the decoder has put out a frame
+since it was configured; a hardware decoder starting up after a keyframe restart is slow, not out
+of surfaces. During a foreground seek the export closes every frame more than half a frame before
+the requested one; the shown frame was already rendered. In the background it closes only frames
+behind the shown one, and when nothing may be closed the background decode-ahead ends at once
+instead of waiting. The flush at the end of a source waits the same way: a decoder without a free
+surface cannot emit its last frames, so the flush used to wait 4 s plus a 2 s queue drain.
+
+The number of frames held at the stall, at least two, is the decoder's surface budget for the rest
+of the export. Keeping a frame behind, decoding ahead and starting a background window all stay
+within it: the shown frame plus one decoded ahead always fit, and a frame behind is kept only if a
+surface is left for it. One stall per source and export teaches the budget; after that the decoder
+always has a surface for the next frame. A desktop decoder with a large pool never stalls and keeps
+the full window.
+
+Three rules keep the requested frame safe when the export holds few frames:
+
+- Frame timestamps are whole microseconds, a requested time is not (1/30 s is 33333.33 µs). Every
+  limit that closes or discards frames before a request therefore keeps half a frame of slack. A
+  strict "before" closed the requested frame itself, and a keyframe restart at a trimmed cut,
+  with no frame kept behind, discarded it.
+- An empty buffer with the request behind the decode cursor counts as a backward jump only when
+  the decoder already put that frame out (`missingFrameRestartReason` in
+  `exportSamplePlanning.ts`). After a stall released every held frame, the request is still
+  queued in the decoder.
+- During a foreground seek the background decode-ahead schedules nothing, and every decode window
+  skips samples another window submitted while it waited. No sample is decoded twice, so no twin
+  replaces a frame that is being rendered.
+
+Code: `src/engine/webCodecsExport/exportSurfaceBudget.ts`, the stall check in
+`exportDecoderPump.ts`, the release in `WebCodecsExportMode.ts`.
+
+The export diagnostics (`debugExport` / `getStats`, and `window.__MS_EXPORT_DIAGNOSTICS__` for a
+remote-debugged phone) report the decoder work of a run under `decoder`: samples submitted,
+frames buffered and discarded, keyframe restarts and their reasons, time spent waiting for queue
+drain (`backpressureWaitMs`) and for output (`outputWaitMs`, `outputWaitTimeouts`), the most frames
+held at once, `surfaceStalls` and the learnt `surfaceBudget`. The window copy holds numbers only,
+no clip names or ids.
+
+Tests:
+
+- `tests/unit/webCodecsExportSurfacePool.test.ts` exports 45 frames on a mock decoder with 2 to 5
+  surfaces and Chrome's whole-microsecond timestamps: every frame exact, no shown frame closed
+  while it is rendered, one stall, the budget equal to the pool. It also covers the end of the
+  source, a slow first output and a cut that restarts at a keyframe. Before the fix, 3 surfaces
+  took 239 s for these 45 frames.
+- The phone journey `tests/playwright/mobile/m3-export-decoder-surfaces.spec.ts` replaces
+  `window.VideoDecoder` with an Android decoder model (`tests/playwright/fixtures/androidDecoderModel.ts`,
+  four surfaces) for the export of a 2 s 1080x1920 phone recording under 4x CPU throttling. It
+  judges the share of the export spent seeking and every exported frame. On the code before the
+  fix it failed with 92 % of 85 s spent seeking (slowest frame 15 s); with the fix the export takes
+  about 5 s with 1-7 % seeking.
+- The real-device journey D6 (`tests/playwright/README.md`, "Real device") records the same
+  diagnostics on the phone. On the Pixel 10 Pro it now exports the 420 frames of its 14 s edit in
+  15 s, every frame exact, with one stall and one keyframe restart at the cut.
 
 ### Encoder allocation during preparation
 

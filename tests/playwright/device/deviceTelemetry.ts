@@ -161,3 +161,69 @@ export async function readMediaImports(page: Page, sinceMs = 0): Promise<MediaIm
     .filter(item => (item.startedAt ?? 0) >= since), sinceMs).catch(() => [])
   return sanitizeMediaImportReports(raw)
 }
+
+/** What the page reported about one export: the FAST decoder counters and the slow frames (numbers only, no clip names). */
+export interface ExportEvidence {
+  /** window.__MS_EXPORT_DIAGNOSTICS__ of the finished run, when the build publishes it. */
+  diagnostics: Record<string, unknown> | null
+  /** The "Slow export frame" warnings the page logged (frame, seek and render times). */
+  slowFrames: Array<Record<string, unknown>>
+  /** Export log lines (WebCodecsExportMode, ExportDiagnostics, ...) when MASTERSELECTS_DEVICE_EXPORT_LOG=1 raised the level. */
+  log: string[]
+}
+
+const EXPORT_LOG_MODULES = /\[(WebCodecsExportMode|ExportDiagnostics|FrameExporter|ClipPreparation|VideoSeeker)\]/
+
+/**
+ * Starts recording the export evidence. With `verbose` the page's Logger level goes to INFO for the
+ * export (and back afterwards), so the decoder's restart and decode-more lines reach the console.
+ * Returns the function that stops the recording and reads the evidence.
+ */
+export async function recordExportEvidence(page: Page, verbose: boolean): Promise<() => Promise<ExportEvidence>> {
+  const log: string[] = []
+  const onConsole = (message: { text(): string }) => {
+    const text = message.text()
+    if (verbose && EXPORT_LOG_MODULES.test(text) && log.length < 2000) log.push(text.replace(/clip(Names?|Name)":\s*(\[[^\]]*\]|"[^"]*")/g, 'clip$1":"…"').slice(0, 400))
+  }
+  page.on('console', onConsole)
+  const previous = await page.evaluate((verbose) => {
+    const logger = (window as unknown as { Logger?: { setLevel(level: string): void; clear(): void } }).Logger
+    const stored = localStorage.getItem('logger_config')
+    logger?.clear()
+    if (verbose) logger?.setLevel('INFO')
+    return stored
+  }, verbose).catch(() => null)
+  return async () => {
+    page.off('console', onConsole)
+    return page.evaluate(({ previous, verbose }) => {
+      const holder = window as unknown as {
+        __MS_EXPORT_DIAGNOSTICS__?: Record<string, unknown>
+        Logger?: { getBuffer(level?: string): Array<{ module: string; message: string; data?: unknown }> }
+      }
+      if (verbose) {
+        if (previous === null) localStorage.removeItem('logger_config')
+        else localStorage.setItem('logger_config', previous)
+        try { (holder.Logger as unknown as { setLevel(level: string): void })?.setLevel(JSON.parse(previous ?? '{}').level ?? 'WARN') } catch { /* keep */ }
+      }
+      const slowFrames = (holder.Logger?.getBuffer('WARN') ?? [])
+        .filter(entry => entry.module === 'ExportDiagnostics' && /Slow export/.test(entry.message))
+        .map(entry => {
+          const { activeClipIds: _ids, activeClipNames: _names, ...numbers } = (entry.data ?? {}) as Record<string, unknown>
+          return numbers
+        })
+      const diagnostics = holder.__MS_EXPORT_DIAGNOSTICS__ ? JSON.parse(JSON.stringify(holder.__MS_EXPORT_DIAGNOSTICS__)) as Record<string, unknown> : null
+      return { diagnostics, slowFrames, log: [] as string[] }
+    }, { previous, verbose }).then(evidence => ({ ...evidence, log }))
+  }
+}
+
+/** One line: slow frames, the longest seek, and the FAST decoder counters when the page published them. */
+export function describeExportEvidence(evidence: ExportEvidence): string {
+  const seeks = evidence.slowFrames.map(frame => Number(frame.seekMs)).filter(Number.isFinite)
+  const parts = [`${evidence.slowFrames.length} slow frame warning(s)${seeks.length ? `, longest seek ${Math.round(Math.max(...seeks))} ms` : ''}`]
+  const decoder = (evidence.diagnostics?.decoder ?? null) as Record<string, unknown> | null
+  if (decoder) parts.push(`decoder ${JSON.stringify(decoder)}`)
+  const phases = (evidence.diagnostics?.phaseTotals ?? null) as Record<string, number> | null
+  if (phases) parts.push(`phase totals seek ${Math.round(phases.seek ?? 0)} ms, render ${Math.round(phases.render ?? 0)} ms, encode ${Math.round(phases.encode ?? 0)} ms`)
+  return parts.join(' · ')
+}
