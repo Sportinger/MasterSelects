@@ -17,6 +17,7 @@ type PlaybackStopPauseDeps = Pick<
  * element kept playing to while a slow (e.g. 4K) frame was rendering.
  */
 export function pausePlaybackVideosNow(deps: PlaybackStopPauseDeps): void {
+  pauseUpcomingPreplaysNow(deps);
   // Android grabs the running frame before pausing (see the HTML stop path).
   if (isAndroidVideoFrameRuntime()) return;
   const pauseClipVideos = (clip: TimelineClip): void => {
@@ -34,4 +35,21 @@ export function pausePlaybackVideosNow(deps: PlaybackStopPauseDeps): void {
     clip.nestedClips?.forEach(pauseClipVideos);
   };
   useTimelineStore.getState().clips.forEach(pauseClipVideos);
+}
+
+/**
+ * A pre-roll runs the upcoming clip's video muted ahead of the playhead and shows no frame yet,
+ * so there is nothing to grab from it, on Android either. Only the per-frame sync used to end
+ * pre-rolls, and paused in a gap it no longer runs: a pre-roll started there kept playing, and a
+ * stale entry kept the next play from starting a fresh one.
+ */
+function pauseUpcomingPreplaysNow(deps: PlaybackStopPauseDeps): void {
+  for (const [video, preplay] of deps.warmups.listUpcomingPreplays()) {
+    if (!video.paused) {
+      video.pause();
+      vfPipelineMonitor.record('vf_pause', { clipId: preplay.clipId, reason: 'playback-stop-preplay' });
+    }
+    if (video.playbackRate !== 1) video.playbackRate = 1;
+    deps.warmups.deleteUpcomingPreplay(video);
+  }
 }

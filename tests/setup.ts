@@ -32,6 +32,7 @@ vi.mock('../src/engine/WebGPUEngine', () => ({
     preloadSceneModelAsset: vi.fn().mockResolvedValue(true),
     setGeneratingRamPreview: vi.fn(),
     setTimelineVisualDemand: vi.fn(),
+    setPlaybackGapLeadMs: vi.fn(),
     setVisualTargetFps: vi.fn(),
     setContinuousRender: vi.fn(),
     setResolution: vi.fn(),

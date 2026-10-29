@@ -128,10 +128,32 @@ The source monitor shows a raw media file in the preview panel instead of the co
 
 The engine render loop is RAF-based and has three important behaviors:
 
-- It idles after about 1 second of inactivity.
+- It idles after about 1 second of inactivity, and at once on a static preview without video. It never
+  idles during playback: while the playhead crosses a gap (no visual clip under it) the loop still runs
+  the render callback (cadence in the next point). The callback draws the gap black, sees the playhead enter
+  the next clip on the first frame inside it, and keeps the video sync running, which warms, positions
+  and pre-rolls the clip ahead and pauses the one that ended. Before this the loop went idle in every
+  gap (since 56cb1a8a1, "idle static previews"); only an unrelated wake, often the ended clip's last
+  presented frames, noticed the next clip, so after a clip that ran to the end of its source the next
+  one stayed black for a second or more and entered cold (owner report 2026-10-29, journey
+  `tests/playwright/playback/gap-speed-playback.spec.ts`, unit tests in `tests/unit/renderLoop.test.ts`
+  and `tests/unit/useEngineExactFrameContext.test.tsx`).
+- Through a gap the callback runs once per display frame only within 2 s (wall clock, so faster
+  playback starts earlier) of the next clip in the playback direction, which covers the video sync's
+  warmup and pre-roll windows. Further ahead, during audio-only playback or in a long gap at the end,
+  it runs at 8 Hz. A requested frame (an edit) still runs at display rate. The playback loop wakes the
+  render host on the frame the playhead enters a clip, so the clip shows on time after a loop wrap,
+  a seek or reverse playback too (`src/services/render/playbackGapCadence.ts`, unit tests
+  `tests/unit/renderLoop.test.ts`, `tests/unit/timelineVisualDemandLead.test.ts`,
+  `tests/unit/usePlaybackLoopGapWake.test.ts`).
+- Pause and stop also end pre-rolls: the muted early start of an upcoming clip's video. This applies
+  on Android too, and even when no clip is visible at the playhead. Paused in a gap, a pre-roll used
+  to keep running, and its stale entry blocked a fresh pre-roll on the next play
+  (`tests/unit/videoSyncPlaybackStopPause.test.ts`).
 - While paused on a video clip, the held frame is re-presented every 250 ms. A requested render (a paused seek, the decoded frame it asked for, a capture) runs at display cadence instead; a request held back by a frame limiter stays pending for the next allowed tick rather than being dropped.
 - Idle detection is suppressed until the first play event so browser video surfaces can warm up after reload.
 - A watchdog checks for stalls and restarts the loop if it dies while the engine is expected to render.
+  Playback counts as render demand in a gap too, so a loop stalled there is woken instead of left asleep.
 - The composition playback clock is hosted above individual dock layouts. Switching between Video Edit, Color, and other editor layouts therefore preserves active playback and keeps every mounted transport and compact playhead synchronized.
 
 ### Frame-exact paused preview

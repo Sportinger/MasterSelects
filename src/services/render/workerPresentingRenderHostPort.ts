@@ -108,6 +108,7 @@ import { canResumeWorkerNativeScene } from './workerNativeSceneCatchUp';
 import { closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
 import { workerGpuOperatorProgramPresentationKey } from './workerGpuOperatorPipeline';
 import { trackGpuInitOutcome } from '../productAnalytics/gpuInitOutcome';
+import { isPlaybackGapNearVisualDemand, PLAYBACK_GAP_FAR_FRAME_TIME_MS } from './playbackGapCadence';
 
 const log = Logger.create('WorkerPresentingRenderHostPort');
 const WORKER_PRESENTING_TARGET_FPS = 60;
@@ -272,6 +273,8 @@ class WorkerPresentingRenderHostPortCore {
   private isScrubbing = false;
   private lastScrubEndedAt = 0;
   private timelineVisualDemand = false;
+  // Wall-clock lead from a playback gap to the next visual clip (NaN until the callback reports it).
+  private playbackGapLeadMs = Number.NaN;
   private continuousRender = false;
   private readonly attachedWorkerTargetIds = new Set<string>();
   private rafBackupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -651,7 +654,12 @@ class WorkerPresentingRenderHostPortCore {
   setTimelineVisualDemand(hasDemand: boolean): void {
     if (this.timelineVisualDemand === hasDemand) return;
     this.timelineVisualDemand = hasDemand;
+    if (!hasDemand) this.playbackGapLeadMs = Number.NaN;
     this.requestRender();
+  }
+
+  setPlaybackGapLeadMs(leadMs: number): void {
+    this.playbackGapLeadMs = leadMs;
   }
 
   setVisualTargetFps(_targetFps: number): void {
@@ -666,6 +674,7 @@ class WorkerPresentingRenderHostPortCore {
       this.pendingGpuStreamStartsByTarget.size > 0
     );
     this.isPlaying = isPlaying;
+    this.playbackGapLeadMs = Number.NaN;
     if (startingPlayback) {
       this.playbackRunStartedAt = performance.now();
       this.pendingGpuPauseHoldsByTarget.clear();
@@ -3067,6 +3076,10 @@ class WorkerPresentingRenderHostPortCore {
 
   private currentCadenceTargetFps(): number {
     if (this.isScrubbing) return WORKER_PRESENTING_SCRUB_TARGET_FPS;
+    if (this.isPlaying && !this.timelineVisualDemand && !isPlaybackGapNearVisualDemand(this.playbackGapLeadMs)) {
+      // A gap far from the next visual clip only needs a few callbacks per second (see playbackGapCadence).
+      return 1000 / PLAYBACK_GAP_FAR_FRAME_TIME_MS;
+    }
     if (this.isPlaying) {
       const { activeCompositionId, compositions } = useMediaStore.getState();
       const activeComposition = activeCompositionId

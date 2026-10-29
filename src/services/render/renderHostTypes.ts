@@ -72,6 +72,8 @@ export interface RenderHostPort {
   stopRenderLoopForDiagnostics(): void;
   startExistingRenderLoopForDiagnostics(): void;
   setTimelineVisualDemand(hasDemand: boolean): void;
+  /** Wall-clock ms from a playback gap to the next visual clip; sets the gap render cadence. */
+  setPlaybackGapLeadMs(leadMs: number): void;
   setVisualTargetFps(targetFps: number): void;
   setIsPlaying(isPlaying: boolean): void;
   setPlaybackSpeed(playbackSpeed: number): void;

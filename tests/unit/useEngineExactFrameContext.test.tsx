@@ -6,6 +6,7 @@ import type { Layer } from '../../src/types';
 const hoisted = vi.hoisted(() => ({
   timelineState: {
     isPlaying: true,
+    playbackSpeed: 1,
     isDraggingPlayhead: false,
     playheadPosition: 1,
     clipDragPreview: null,
@@ -32,6 +33,9 @@ const hoisted = vi.hoisted(() => ({
   setActiveCompLayers: vi.fn(),
   render: vi.fn(),
   renderLoopCallback: null as (() => void) | null,
+  visualDemand: true,
+  getPlaybackVisualDemandLeadMs: vi.fn(() => Number.POSITIVE_INFINITY),
+  setPlaybackGapLeadMs: vi.fn(),
 }));
 
 vi.mock('../../src/stores/engineStore', () => ({
@@ -84,7 +88,8 @@ vi.mock('../../src/services/logger', () => ({
 }));
 
 vi.mock('../../src/services/timeline/timelineVisualDemand', () => ({
-  hasActiveTimelineVisualClip: () => true,
+  hasActiveTimelineVisualClip: () => hoisted.visualDemand,
+  getPlaybackVisualDemandLeadMs: (...args: unknown[]) => hoisted.getPlaybackVisualDemandLeadMs(...args),
 }));
 
 vi.mock('../../src/services/render/renderHostPort', () => ({
@@ -93,6 +98,7 @@ vi.mock('../../src/services/render/renderHostPort', () => ({
     setPreviewCanvas: vi.fn(),
     setVisualTargetFps: vi.fn(),
     setTimelineVisualDemand: vi.fn(),
+    setPlaybackGapLeadMs: hoisted.setPlaybackGapLeadMs,
     setIsScrubbing: vi.fn(),
     setContinuousRender: vi.fn(),
     requestRender: vi.fn(),
@@ -134,6 +140,9 @@ describe('useEngine exact producer frame context', () => {
   afterEach(() => {
     vi.clearAllMocks();
     hoisted.renderLoopCallback = null;
+    hoisted.visualDemand = true;
+    hoisted.timelineState.isPlaying = true;
+    hoisted.timelineState.playbackSpeed = 1;
   });
 
   it('uses one captured time for video sync, layer evaluation, scheduler, and render host', () => {
@@ -170,6 +179,43 @@ describe('useEngine exact producer frame context', () => {
     expect(hoisted.setActiveCompLayers).toHaveBeenCalledWith(layers, schedulerContext);
     expect(hoisted.render).toHaveBeenCalledWith(layers, schedulerContext);
 
+    hook.unmount();
+  });
+
+  it('keeps syncing videos while playback crosses a gap, so the next clip is warmed before it starts', () => {
+    // Owner report 2026-10-29: in a gap the callback returned before the video sync, so the clip
+    // after the gap was never warmed or positioned and entered cold (black until its seek finished).
+    const gapContext = { activeCompId: 'comp-exact', compositionById: new Map(), playheadPosition: 3.2, isPlaying: true } as unknown as FrameContext;
+    hoisted.visualDemand = false;
+    hoisted.getPlayheadPosition.mockReturnValue(3.2);
+    hoisted.captureFrameContext.mockReturnValue(gapContext);
+    hoisted.getPlaybackVisualDemandLeadMs.mockReturnValue(850);
+    hoisted.timelineState.playbackSpeed = -2;
+
+    const hook = renderHook(() => useEngine());
+    hoisted.renderLoopCallback?.();
+    hoisted.renderLoopCallback?.();
+
+    expect(hoisted.captureFrameContext).toHaveBeenCalledWith(3.2);
+    expect(hoisted.syncVideoElements).toHaveBeenCalledTimes(2);
+    expect(hoisted.syncVideoElements).toHaveBeenCalledWith(gapContext);
+    // Each gap frame reports the wall-clock lead to the next clip in the playback direction (here
+    // reverse at 2x), which sets the gap render cadence.
+    expect(hoisted.getPlaybackVisualDemandLeadMs).toHaveBeenCalledWith(
+      hoisted.timelineState.clips, hoisted.timelineState.tracks, 3.2, -2,
+    );
+    expect(hoisted.setPlaybackGapLeadMs).toHaveBeenCalledTimes(2);
+    expect(hoisted.setPlaybackGapLeadMs).toHaveBeenLastCalledWith(850);
+    // The gap is drawn black once; nothing is built or rendered with layers.
+    expect(hoisted.render).toHaveBeenCalledTimes(1);
+    expect(hoisted.render.mock.calls[0]?.[0]).toEqual([]);
+    expect(hoisted.buildLayersFromStore).not.toHaveBeenCalled();
+
+    // Paused in a gap there is nothing ahead to prepare.
+    hoisted.timelineState.isPlaying = false;
+    hoisted.renderLoopCallback?.();
+    expect(hoisted.syncVideoElements).toHaveBeenCalledTimes(2);
+    expect(hoisted.setPlaybackGapLeadMs).toHaveBeenCalledTimes(2);
     hook.unmount();
   });
 });

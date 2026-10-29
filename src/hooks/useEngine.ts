@@ -12,7 +12,7 @@ import { liveInputRuntime } from '../services/mediaRuntime/liveInputRuntime';
 import { renderScheduler } from '../services/renderScheduler';
 import { framePhaseMonitor } from '../services/framePhaseMonitor';
 import { Logger } from '../services/logger';
-import { hasActiveTimelineVisualClip } from '../services/timeline/timelineVisualDemand';
+import { getPlaybackVisualDemandLeadMs, hasActiveTimelineVisualClip } from '../services/timeline/timelineVisualDemand';
 import { renderHostPort } from '../services/render/renderHostPort';
 import type { RenderFrameCallback } from '../services/render/renderHostTypes';
 import {
@@ -207,6 +207,21 @@ export function useEngine() {
             renderHostPort.render([], frameContext);
             renderMs += performance.now() - renderStart;
             lastNoDemandFrameWasCleared = true;
+          }
+          if (timelineState.isPlaying && !isInteractiveScrub) {
+            // The playhead crosses a gap: nothing to draw, but the video sync must keep warming,
+            // positioning and pre-rolling the clips ahead (and pause the one that ended), so the
+            // next clip enters decoded instead of seeking from cold. The lead to that clip sets how
+            // often the render loop calls back here (display rate only shortly before it).
+            renderHostPort.setPlaybackGapLeadMs(getPlaybackVisualDemandLeadMs(
+              timelineClips,
+              timelineState.tracks,
+              currentPlayhead,
+              timelineState.playbackSpeed,
+            ));
+            const syncVideoStart = performance.now();
+            layerBuilder.syncVideoElements(layerBuilder.captureFrameContext(currentPlayhead));
+            syncVideoMs += performance.now() - syncVideoStart;
           }
           if (!timelineState.isPlaying) {
             const syncAudioStart = performance.now();

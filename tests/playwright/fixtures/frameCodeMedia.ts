@@ -44,6 +44,15 @@ export interface FrameCodeClipOptions {
   seconds?: number
   /** ffmpeg video encoder settings; default H.264 High with B-frames, one keyframe per second. */
   codec?: 'h264' | 'vp9'
+  /**
+   * Frame code of the file's first frame (default 0). Two clips with different offsets never show
+   * each other's numbers, so a case can tell which clip a preview frame came from.
+   */
+  firstCode?: number
+  /** Seconds between keyframes (default 1); camera and generated footage often uses long GOPs. */
+  keyframeSeconds?: number
+  /** Adds a sine tone of this frequency as an audio track (AAC in MP4, Opus in WebM), so the clip imports with linked audio. */
+  audioHz?: number
 }
 
 export interface FrameCodeClip {
@@ -53,15 +62,19 @@ export interface FrameCodeClip {
   fps: number
   frames: number
   codec: 'h264' | 'vp9'
+  /** Frame code of the first frame: source frame k shows code `firstCode + k`. */
+  firstCode: number
+  audioHz?: number
 }
 
 const CACHE_DIR = path.join(DEFAULT_REPO_ROOT, 'test-results', 'playwright', 'frame-code-media')
 
-export function frameCodeFilter(width: number, height: number): string {
+export function frameCodeFilter(width: number, height: number, firstCode = 0): string {
   const { blocks, numberBits, codeBand, barBand, rampBand, bars, black, white, background } = FRAME_CODE_LAYOUT
-  const nibble = (k: number) => `mod(floor(N/${16 ** k}),16)`
+  const N = firstCode ? `(N+${firstCode})` : 'N'
+  const nibble = (k: number) => `mod(floor(${N}/${16 ** k}),16)`
   const check = `(15-mod(${nibble(0)}+${nibble(1)}+${nibble(2)},16))`
-  const bit = (k: number) => k < numberBits ? `mod(floor(N/${2 ** k}),2)` : `mod(floor(${check}/${2 ** (k - numberBits)}),2)`
+  const bit = (k: number) => k < numberBits ? `mod(floor(${N}/${2 ** k}),2)` : `mod(floor(${check}/${2 ** (k - numberBits)}),2)`
   const codeBit = Array.from({ length: blocks }, (_, k) => `eq(floor(X*${blocks}/W),${k})*${bit(k)}`).join('+')
   const band = ([from, to]: readonly [number, number]) => `between(Y,H*${from},H*${to}-1)`
   const barValue = (channel: number) => `(${bars.map((item, index) => `eq(floor(X*${bars.length}/W),${index})*${item.rgb[channel]}`).join('+')})`
@@ -70,17 +83,22 @@ export function frameCodeFilter(width: number, height: number): string {
     + `if(${band(barBand)},${barValue(channel)},if(${band(rampBand)},${ramp},${background})))`
   const fontSize = Math.max(12, Math.round(Math.min(width * 0.04, height * 0.07)))
   return `geq=r='${value(0)}':g='${value(1)}':b='${value(2)}',`
-    + `drawtext=text='%{frame_num}':x=w*0.02:y=h*0.9:fontsize=${fontSize}:fontcolor=white,format=yuv420p`
+    + `drawtext=text='%{frame_num}':${firstCode ? `start_number=${firstCode}:` : ''}x=w*0.02:y=h*0.9:fontsize=${fontSize}:fontcolor=white,format=yuv420p`
 }
 
 /** Generates (or reuses) a frame-code clip. Fails with a clear message when ffmpeg is missing. */
 export async function frameCodeClip(options: FrameCodeClipOptions = {}): Promise<FrameCodeClip> {
-  const { width = 640, height = 360, fps = 30, seconds = 4, codec = 'h264' } = options
+  const { width = 640, height = 360, fps = 30, seconds = 4, codec = 'h264', firstCode = 0, audioHz, keyframeSeconds } = options
   const frames = Math.round(fps * seconds)
+  if (!Number.isInteger(firstCode) || firstCode < 0 || firstCode + frames > 2 ** FRAME_CODE_LAYOUT.numberBits) {
+    throw new Error(`frame codes ${firstCode}-${firstCode + frames - 1} do not fit the ${FRAME_CODE_LAYOUT.numberBits}-bit frame number`)
+  }
   const extension = codec === 'vp9' ? 'webm' : 'mp4'
-  const file = path.join(CACHE_DIR, `frame-code-v1-${width}x${height}-${fps}fps-${frames}f-${codec}.${extension}`)
-  await renderClip(file, { width, height, fps, seconds, frames, codec }, frameCodeFilter(width, height))
-  return { path: file, width, height, fps, frames, codec }
+  // Files without an offset or tone keep their original cache names.
+  const variant = `${firstCode ? `-from${firstCode}` : ''}${audioHz ? `-tone${audioHz}` : ''}${keyframeSeconds ? `-gop${keyframeSeconds}s` : ''}`
+  const file = path.join(CACHE_DIR, `frame-code-v1-${width}x${height}-${fps}fps-${frames}f-${codec}${variant}.${extension}`)
+  await renderClip(file, { width, height, fps, seconds, frames, codec, audioHz, keyframeSeconds }, frameCodeFilter(width, height, firstCode))
+  return { path: file, width, height, fps, frames, codec, firstCode, ...(audioHz ? { audioHz } : {}) }
 }
 
 /**
@@ -180,23 +198,31 @@ export async function frameCodeClipV2(options: FrameCodeV2Options): Promise<Fram
   const extension = codec === 'vp9' ? 'webm' : 'mp4'
   const file = path.join(CACHE_DIR, `frame-code-v2r${FRAME_CODE_V2.revision}-${chart}-id${sourceId}-v${variant}-${width}x${height}-${fps}fps-${frames}f-${codec}.${extension}`)
   await renderClip(file, { width, height, fps, seconds, frames, codec }, frameCodeFilterV2(width, height, { chart, sourceId, variant }), BT709_TAGS)
-  return { path: file, width, height, fps, frames, codec, chart, sourceId, variant }
+  return { path: file, width, height, fps, frames, codec, firstCode: 0, chart, sourceId, variant }
 }
 
 const BT709_TAGS = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv']
 
-async function renderClip(file: string, { width, height, fps, seconds, frames, codec }: Omit<FrameCodeClip, 'path'> & { seconds: number }, filter: string,
-  tags: string[] = []): Promise<void> {
+async function renderClip(file: string, { width, height, fps, seconds, frames, codec, audioHz, keyframeSeconds = 1 }:
+  Omit<FrameCodeClip, 'path' | 'firstCode'> & { seconds: number; keyframeSeconds?: number },
+  filter: string, tags: string[] = []): Promise<void> {
   if (await access(file).then(() => true, () => false)) return
   await mkdir(CACHE_DIR, { recursive: true })
   const extension = path.extname(file).slice(1)
+  const gop = String(Math.round(fps * keyframeSeconds))
   const encoder = codec === 'vp9'
-    ? ['-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '20', '-g', String(fps), '-row-mt', '1']
-    : ['-c:v', 'libx264', '-profile:v', 'high', '-crf', '14', '-g', String(fps), '-bf', '2', '-movflags', '+faststart']
+    ? ['-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '20', '-g', gop, '-row-mt', '1']
+    : ['-c:v', 'libx264', '-profile:v', 'high', '-crf', '14', '-g', gop, ...(keyframeSeconds !== 1 ? ['-keyint_min', gop, '-sc_threshold', '0'] : []), '-bf', '2', '-movflags', '+faststart']
+  const audio = audioHz
+    ? ['-f', 'lavfi', '-i', `sine=frequency=${audioHz}:sample_rate=48000:duration=${seconds}`]
+    : []
+  const audioOutput = audioHz
+    ? ['-map', '0:v', '-map', '1:a', ...(codec === 'vp9' ? ['-c:a', 'libopus'] : ['-c:a', 'aac', '-b:a', '128k'])]
+    : []
   const temporary = `${file}.${process.pid}.tmp.${extension}`
   try {
     await run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=${fps}:d=${seconds}`,
-      '-vf', filter, '-frames:v', String(frames), ...encoder, ...tags, temporary], { maxBuffer: 16 * 1024 * 1024 })
+      ...audio, '-vf', filter, '-frames:v', String(frames), ...audioOutput, ...encoder, ...tags, temporary], { maxBuffer: 16 * 1024 * 1024 })
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     throw new Error(code === 'ENOENT'

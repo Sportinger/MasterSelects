@@ -122,6 +122,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
     let rafId: number;
     let lastTime = performance.now();
     let lastStateUpdate = 0;
+    let hadVisualRenderDemand = false;
     let lastAudioSync = 0;
     const VISUAL_STATE_UPDATE_INTERVAL = 33; // ~30fps while video/visual playback is active
     const AUDIO_ONLY_STATE_UPDATE_INTERVAL = 100; // live playhead uses refs; React state can stay lower cadence
@@ -316,6 +317,13 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           playheadPosition: newPosition,
           clipDragPreview,
         });
+        // Entering a clip from a gap wakes the render host on this frame. Far from the next clip a
+        // gap renders only a few times per second (see playbackGapCadence), and a loop wrap, a seek
+        // or reverse playback can land in a clip at any moment.
+        if (hasVisualRenderDemand && !hadVisualRenderDemand) {
+          renderHostPort.setTimelineVisualDemand(true);
+        }
+        hadVisualRenderDemand = hasVisualRenderDemand;
 
         const audioSyncInterval = playheadState.playbackJustStarted
           ? AUDIO_STARTUP_SYNC_INTERVAL
