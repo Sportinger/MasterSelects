@@ -11,7 +11,7 @@ export function canKeepClipPropertiesTab(tab: PropertiesTab, clip: ClipPropertie
     case 'effects': return !isStoryboardClip && !isCameraClip && !isFlockClip && !isLightClip;
     case 'transform': return !isStoryboardClip && !isAudioClip && !isMotionAdjustmentClip;
     case 'color': return !isStoryboardClip && !isAudioClip && !isCameraClip && !isFlockClip
-      && !isMotionAdjustmentClip && !isLightClip && !isSplatEffectorClip;
+      && !isLightClip && !isSplatEffectorClip;
     case 'masks': return !isStoryboardClip && !isAudioClip && !isCameraClip && !isFlockClip && !isLightClip;
     case 'analysis': return isAudioClip || (!isStoryboardClip && !isCameraClip && !isFlockClip
       && !isMathSceneClip && !isMotionAdjustmentClip && !isMotionShapeClip && !isCaptionClip

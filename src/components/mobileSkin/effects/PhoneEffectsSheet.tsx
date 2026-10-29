@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react';
 
 import { effectExperimentalNote, getEffect, getEffectDisplayName } from '../../../effects';
+import { inspectAdjustmentLayerProperties } from '../../../services/motionDesign/adjustment/adjustmentLayerRenderAdmission';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { PhoneSheetComponent } from '../contracts';
 import { PhoneSheet } from '../sheets/PhoneSheet';
@@ -49,6 +50,7 @@ export const PhoneEffectsSheet: PhoneSheetComponent = () => {
   // Any adjustment layer among the targets limits the catalog to what adjustment layers render.
   const adjustment = selection.nothingSelected || isAdjustmentClip(clip) || selection.clips.some(isAdjustmentClip);
   const blocked = !selection.nothingSelected && selection.clips.length === 0;
+  const skippedOnLayer = useMemo(() => (clip && isAdjustmentClip(clip) ? inspectAdjustmentLayerProperties(clip) : []), [clip]);
 
   const add = async (effectType: string) => {
     if (blocked) {
@@ -105,6 +107,11 @@ export const PhoneEffectsSheet: PhoneSheetComponent = () => {
       <div className="phone-fx" onPointerUp={blurPointerButton}>
         <p className="phone-fx__target" data-testid={IDS.effectsTarget} title={targetText ?? undefined}>{targetText}</p>
         {!blocked && selection.note && <p className="phone-fx__note">{selection.note}</p>}
+        {skippedOnLayer.length > 0 && (
+          <p className="phone-fx__note" role="status" data-testid={IDS.effectsAdjustmentNotice}>
+            Skipped on this adjustment layer, the rest renders: {skippedOnLayer.map((item) => item.reason).join(' ')}
+          </p>
+        )}
 
         {clip && stack.length > 0 && (
           <PhoneEffectStack

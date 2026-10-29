@@ -37,7 +37,7 @@ function describeSkips(skips: readonly PhoneAdjustSkip[]): string | null {
 
 /** The one status line with nothing selected; the tap-for-reason notice carries the full reason. */
 const ROOT_LINE = 'Select a clip to adjust its colour';
-const ROOT_REASON = 'Select a clip first: Adjust changes the colour of the selected clips. For the whole picture, use Effects with nothing selected: it adds an adjustment layer with Brightness, Contrast or Saturation.';
+const ROOT_REASON = 'Select a clip first: Adjust changes the colour of the selected clips. For the whole picture, use Effects with nothing selected: it adds an adjustment layer; select that layer and Adjust grades everything below it.';
 
 /** The values the primary clip shows at the playhead, keyframes included. */
 function usePrimaryValues(clipId: string | null): Record<Key, number> {
@@ -64,7 +64,7 @@ export const PhoneAdjustSheet: PhoneSheetComponent = () => {
   const showUnavailable = usePhoneUiStore((state) => state.showUnavailable);
   const openWorkspace = usePhoneUiStore((state) => state.openWorkspace);
   const session = usePhoneEditSession('Adjust colour');
-  const selectionRef = useRef(readPhoneVisualSelection({ allowAdjustment: false }));
+  const selectionRef = useRef(readPhoneVisualSelection());
   const selection = selectionRef.current;
   const clipIds = selection.clips.map((clip) => clip.id);
   const primaryId = selection.primary?.id ?? null;

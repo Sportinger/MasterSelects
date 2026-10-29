@@ -41,7 +41,7 @@ import { resolveLinkedAudioClip } from '../../../services/nodeGraph/clipGraphPro
 import { LandmarkTrackingControls } from './LandmarkTrackingControls';
 import { EffectCatalogPicker, type EffectCatalogGroup } from './EffectCatalogPicker';
 import { effectsDependOnPlayhead } from './effectsPlayheadDependency';
-import { MotionAdjustmentEffectNotice } from './MotionAdjustmentEffectNotice';
+import { MotionAdjustmentEffectNotice, MotionAdjustmentLayerNotice } from './MotionAdjustmentEffectNotice';
 import { adjustmentEffectCatalog } from './adjustmentEffectCatalog';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 import { EffectGpuFailureNotice } from './EffectGpuFailureNotice';
@@ -525,6 +525,7 @@ export const EffectsTab = memo(function EffectsTab({ clipId, effects, isAudioCli
           </>
         )}
       </div>}
+      {!audioMode && clip && isMotionAdjustmentClip && <MotionAdjustmentLayerNotice clip={clip} />}
 
       {audioMode ? (
         audioClip ? <>

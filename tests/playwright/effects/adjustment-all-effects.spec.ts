@@ -18,6 +18,12 @@ import { openFrameCodeProject, type FrameCodeProject } from '../fixtures/frameCo
  * Effects that cannot run on an adjustment layer must be missing from the picker, refused by the AI
  * tool with their reason and, when one is on the layer anyway (older project), skipped alone with a
  * notice on its card while the rest of the layer renders.
+ *
+ * Every admitted effect is switched off and on once with its card's bypass button before it is
+ * measured: in 3.3.9 that wrote node-graph layout onto the layer (the effect's group collapses), which
+ * the layer admission refused, so the preview dropped the layer and the export stopped (production,
+ * Pixel Sort Bands on a phone adjustment layer). The graph/texture recipes run through the same sweep.
+ * Two further cases export a graph effect from the layer and grade the composite in the Color tab.
  */
 interface Shared extends FrameCodeProject {
   adjustmentId: string
@@ -120,6 +126,17 @@ async function clearEffects(shared: Shared): Promise<void> {
   for (const effect of await effectsOf(shared, shared.clipId)) {
     await shared.bridge.toolData('removeEffect', { clipId: shared.clipId, effectId: effect.id })
   }
+  // The colour case leaves grades on the layer and the clip (opening the Color tab creates one).
+  await shared.page.evaluate(async (clipIds) => {
+    const { useTimelineStore } = await import('/src/stores/timeline/index.ts' as string)
+    const store = useTimelineStore.getState()
+    for (const clipId of clipIds) {
+      if (store.clips.find((clip: { id: string; colorCorrection?: unknown }) => clip.id === clipId)?.colorCorrection) {
+        store.updateClip(clipId, { colorCorrection: undefined })
+      }
+    }
+    store.invalidateCache()
+  }, [shared.adjustmentId, shared.clipId])
 }
 
 /** Reads until the preview shows the plain clip again (mean difference below 1). */
@@ -168,6 +185,15 @@ async function addThroughPicker(shared: Shared, effect: EffectInfo): Promise<boo
   await tile.first().click()
   await expect.poll(async () => (await effectsOf(shared, shared.adjustmentId)).length, { timeout: 5_000 }).toBeGreaterThan(0)
   return true
+}
+
+/** The card's bypass button: off and on again (collapses the effect's node group, node-graph layout). */
+async function bypassAndEnableInCard(shared: Shared): Promise<void> {
+  const card = shared.page.locator('.effects-list .effect-item').first()
+  await card.locator('.effect-bypass-btn[title="Bypass effect"]').click()
+  await expect.poll(async () => (await effectsOf(shared, shared.adjustmentId))[0]?.enabled, { timeout: 5_000 }).toBe(false)
+  await card.locator('.effect-bypass-btn[title="Enable effect"]').click()
+  await expect.poll(async () => (await effectsOf(shared, shared.adjustmentId))[0]?.enabled, { timeout: 5_000 }).toBe(true)
 }
 
 // ---------- strength bump for effects that are identity at their defaults ----------
@@ -251,6 +277,7 @@ async function sweepAdmitted(shared: Shared, effect: EffectInfo): Promise<Row> {
     row.picker = 'missing'
     await shared.bridge.toolData('addEffect', { clipId: shared.adjustmentId, effectType: effect.id })
   }
+  await bypassAndEnableInCard(shared)
   let onLayer = await settle(shared, shared.plain)
   let [added] = await effectsOf(shared, shared.adjustmentId)
   if (meanDiff(onLayer.pixels, shared.plain) <= 0.6) {
@@ -264,6 +291,8 @@ async function sweepAdmitted(shared: Shared, effect: EffectInfo): Promise<Row> {
   }
   const notice = shared.page.getByTestId('motion-adjustment-effect-notice')
   row.warning = (await notice.count()) ? (await notice.allInnerTexts()).join(' | ').slice(0, 300) : undefined
+  const layerNotice = shared.page.getByTestId('motion-adjustment-layer-notice')
+  if (await layerNotice.count()) row.warning = [row.warning, await layerNotice.innerText()].filter(Boolean).join(' | ').slice(0, 300)
   row.changeVsPlain = round(meanDiff(onLayer.pixels, shared.plain))
   row.changedShare = round(changedShare(onLayer.pixels, shared.plain), 3)
   row.changesImage = row.changeVsPlain > 0.6
@@ -282,7 +311,7 @@ async function sweepAdmitted(shared: Shared, effect: EffectInfo): Promise<Row> {
   if (!onLayer.stable || !direct.stable) row.matchesDirect += ' (animated)'
   row.verdict = !row.changesImage
     ? (directChanged ? 'FAIL: no change on the adjustment layer although the direct effect changes the clip' : 'ok-identity: no visible change at these settings, also not on the clip')
-    : row.warning && /bypass/i.test(row.warning) ? `FAIL: admitted effect reported as bypassed: ${row.warning}`
+    : row.warning && /bypass|Skipped on this adjustment layer/i.test(row.warning) ? `FAIL: admitted effect reported as bypassed or skipped: ${row.warning}`
       : row.diffVsDirect > 8 && effect.behavior === 'accumulated-frame' ? 'REVIEW: differs from the direct clip effect'
         : 'ok'
   return row
@@ -336,42 +365,127 @@ async function sweepUnavailable(shared: Shared, effect: EffectInfo): Promise<Row
   return row
 }
 
+/** Exports 0..1 s through the Export panel and returns its frame at 0.5 s, scaled to the preview capture size. */
+async function exportFrameAtHalfSecond(shared: Shared, testInfo: TestInfo, name: string, size: { width: number; height: number }): Promise<FramePixels> {
+  const { bridge, page } = shared
+  await bridge.toolData('setInOutPoints', { inPoint: 0, outPoint: 1 })
+  try {
+    const exporter = new ExportDriver(page)
+    await exporter.open()
+    await exporter.selectFastWebCodecs()
+    await exporter.useCompositionSettings()
+    await exporter.useInOutMarkers()
+    await exporter.setFilename(name)
+    const file = testInfo.outputPath(`${name}.mp4`)
+    await exporter.exportTo(file)
+    // Frame 15 of the export (0.5 s).
+    const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', '0.5', '-i', file, '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1'],
+      { encoding: 'buffer', maxBuffer: 32 * 1024 * 1024 })
+    const { data, info } = await sharp(stdout as Buffer).resize(size.width, size.height, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+    return { width: info.width, height: info.height, channels: 3, data }
+  } finally {
+    await bridge.toolData('setInOutPoints', { inPoint: null, outPoint: null })
+  }
+}
+
+/** Compares an exported frame with the preview it should match and the plain clip it should not. */
+async function judgeExport(shared: Shared, testInfo: TestInfo, preview: FramePixels, exported: FramePixels): Promise<Record<string, number>> {
+  await clearEffects(shared)
+  await shared.bridge.toolData('setPlayhead', { time: 0.5 })
+  const plain = await settle(shared, preview)
+  const result = {
+    exportVsPreview: round(meanDiff(exported, preview)),
+    exportVsPlain: round(meanDiff(exported, plain.pixels)),
+    previewVsPlain: round(meanDiff(preview, plain.pixels)),
+  }
+  await testInfo.attach('export.json', { body: JSON.stringify(result, null, 1), contentType: 'application/json' })
+  console.log(`EXPORT ${JSON.stringify(result)}`)
+  return result
+}
+
 test('a one-second export renders Hue Shift, Mirror and Pixelate on the adjustment layer @module:effects', async ({ shared }, testInfo) => {
   await reset(shared, testInfo)
-  const { bridge, page } = shared
-  await bridge.toolData('editMotionAdjustment', { operation: 'configure', clipId: shared.adjustmentId, effects: [
+  await shared.bridge.toolData('editMotionAdjustment', { operation: 'configure', clipId: shared.adjustmentId, effects: [
     { type: 'hue-shift', parameters: { shift: 0.25 } },
     { type: 'mirror' },
     { type: 'pixelate' },
   ] })
-  await bridge.toolData('setPlayhead', { time: 0.5 })
+  await shared.bridge.toolData('setPlayhead', { time: 0.5 })
   const preview = await settle(shared, shared.plain)
-  await bridge.toolData('setInOutPoints', { inPoint: 0, outPoint: 1 })
-  const exporter = new ExportDriver(page)
-  await exporter.open()
-  await exporter.selectFastWebCodecs()
-  await exporter.useCompositionSettings()
-  await exporter.useInOutMarkers()
-  await exporter.setFilename('adjustment-effects')
-  const file = testInfo.outputPath('adjustment-effects.mp4')
-  await exporter.exportTo(file)
-  await bridge.toolData('setInOutPoints', { inPoint: null, outPoint: null })
-  // Frame 15 of the export (0.5 s), scaled to the preview capture size.
-  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', '0.5', '-i', file, '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1'],
-    { encoding: 'buffer', maxBuffer: 32 * 1024 * 1024 })
-  const { data, info } = await sharp(stdout as Buffer).resize(preview.pixels.width, preview.pixels.height, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true })
-  const exported: FramePixels = { width: info.width, height: info.height, channels: 3, data }
-  await clearEffects(shared)
-  await bridge.toolData('setPlayhead', { time: 0.5 })
-  const plain = await settle(shared, preview.pixels)
-  const result = {
-    exportVsPreview: round(meanDiff(exported, preview.pixels)),
-    exportVsPlain: round(meanDiff(exported, plain.pixels)),
-    previewVsPlain: round(meanDiff(preview.pixels, plain.pixels)),
-  }
-  await testInfo.attach('export.json', { body: JSON.stringify(result, null, 1), contentType: 'application/json' })
-  console.log(`EXPORT ${JSON.stringify(result)}`)
+  const exported = await exportFrameAtHalfSecond(shared, testInfo, 'adjustment-effects', preview.pixels)
+  const result = await judgeExport(shared, testInfo, preview.pixels, exported)
   expect(result.previewVsPlain, 'the effects change the preview').toBeGreaterThan(10)
   expect(result.exportVsPlain, 'the exported frame shows the effects, not the plain clip').toBeGreaterThan(result.exportVsPreview * 2)
   expect(result.exportVsPreview, 'the exported frame matches the preview with the effects').toBeLessThan(8)
+})
+
+test('a graph effect switched off and on in its card exports from the adjustment layer: Pixel Sort Bands (3.3.9 export abort) @module:effects @case:effects.adjustment-graph-export', async ({ shared }, testInfo) => {
+  await reset(shared, testInfo)
+  const effect = shared.effects.find(item => item.id === 'pixel-sort-bands')
+  expect(effect, 'Pixel Sort Bands is a registry effect').toBeTruthy()
+  expect(await addThroughPicker(shared, effect!), 'Pixel Sort Bands is in the adjustment picker').toBe(true)
+  await bypassAndEnableInCard(shared)
+  // Sorting runs of the test chart's flat colour areas changes nothing; a range over the whole column sorts every column.
+  const [added] = await effectsOf(shared, shared.adjustmentId)
+  await shared.bridge.toolData('updateEffect', { clipId: shared.adjustmentId, effectId: added.id, params: { centre: 0.5, range: 1, progress: 1 } })
+  await expect(shared.page.getByTestId('motion-adjustment-layer-notice'), 'the layer renders without skipping anything').toHaveCount(0)
+  await shared.bridge.toolData('setPlayhead', { time: 0.5 })
+  const preview = await settle(shared, shared.plain)
+  const exported = await exportFrameAtHalfSecond(shared, testInfo, 'adjustment-pixel-sort-bands', preview.pixels)
+  const result = await judgeExport(shared, testInfo, preview.pixels, exported)
+  expect(result.previewVsPlain, 'Pixel Sort Bands changes the preview under the layer').toBeGreaterThan(10)
+  // Band width and run length are pixel sizes: the export sorts at the composition size, the preview
+  // at its canvas size, so the streaks differ in detail. The export must carry the effect and stay
+  // closer to the sorted preview than to the plain clip.
+  expect(result.exportVsPlain, 'the exported frame shows the effect, not the plain clip').toBeGreaterThan(10)
+  expect(result.exportVsPreview, 'the exported frame is closer to the sorted preview than to the plain clip').toBeLessThan(result.exportVsPlain)
+})
+
+/** Selects `clipId`, opens its Color tab and types one stop of exposure into the Exposure control. */
+async function gradeThroughColorTab(shared: Shared, clipId: string, exposure: string): Promise<void> {
+  const { page } = shared
+  const timeout = 10_000
+  await shared.bridge.toolData('selectClips', { clipIds: [clipId] })
+  await page.getByRole('tab', { name: 'Properties' }).click({ timeout })
+  await page.locator('.tab-btn', { hasText: /^Color$/ }).click({ timeout })
+  await page.getByTitle('Exposure', { exact: true }).click({ timeout })
+  await page.getByRole('slider', { name: 'Exposure', exact: true }).dblclick({ timeout })
+  const field = page.getByRole('textbox', { name: 'Exposure', exact: true })
+  await field.fill(exposure, { timeout })
+  await field.press('Enter', { timeout })
+}
+
+
+test('the Color tab grades the composite below an adjustment layer, in preview and export like a clip grade @module:effects @case:effects.adjustment-color', async ({ shared }, testInfo) => {
+  test.setTimeout(300_000)
+  await reset(shared, testInfo)
+  const mean = (pixels: FramePixels) => pixels.data.reduce((sum, value) => sum + value, 0) / pixels.data.length
+  // Every picture of this case is frame 15 (0.5 s), the frame the export helper reads.
+  await shared.bridge.toolData('setPlayhead', { time: 0.5 })
+  const plain = (await settle(shared, shared.plain, { expectChange: false })).pixels
+  // Reference: the same grade on the clip itself, through the same Color tab.
+  await gradeThroughColorTab(shared, shared.clipId, '0.5')
+  const direct = await settle(shared, plain)
+  const directExport = await exportFrameAtHalfSecond(shared, testInfo, 'clip-color', direct.pixels)
+  // Exposure back to 0 is a neutral grade: the clip shows its plain picture again.
+  await gradeThroughColorTab(shared, shared.clipId, '0')
+  const neutral = await settle(shared, direct.pixels)
+  expect(round(meanDiff(neutral.pixels, plain)), 'a neutral grade shows the plain clip').toBeLessThan(1)
+
+  await gradeThroughColorTab(shared, shared.adjustmentId, '0.5')
+  const preview = await settle(shared, plain)
+  expect(mean(preview.pixels), 'exposure on the adjustment layer brightens the picture below').toBeGreaterThan(mean(plain) + 8)
+  const details = await shared.bridge.toolData<{ adjustmentRender?: { skippedProperties: unknown[] } }>('getClipDetails', { clipId: shared.adjustmentId })
+  expect(details.adjustmentRender?.skippedProperties, 'the grade is no skipped property').toEqual([])
+  const exported = await exportFrameAtHalfSecond(shared, testInfo, 'adjustment-color', preview.pixels)
+  const result = {
+    ...await judgeExport(shared, testInfo, preview.pixels, exported),
+    layerPreviewVsClipPreview: round(meanDiff(preview.pixels, direct.pixels)),
+    layerExportVsClipExport: round(meanDiff(exported, directExport)),
+    clipExportVsClipPreview: round(meanDiff(directExport, direct.pixels)),
+  }
+  console.log(`COLOR ${JSON.stringify(result)}`)
+  expect(result.layerPreviewVsClipPreview, 'the layer grade looks like the same grade on the clip (full-frame clip, same input)').toBeLessThan(3)
+  expect(result.layerExportVsClipExport, 'the exported layer grade matches the exported clip grade').toBeLessThan(3)
+  expect(result.exportVsPlain, 'the exported frame is graded, not the plain clip').toBeGreaterThan(result.exportVsPreview * 2)
 })

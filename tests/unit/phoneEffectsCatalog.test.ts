@@ -90,13 +90,12 @@ describe('phone selection for the design sheets', () => {
     expect(selection.note).toMatch(/1 audio clip has no picture; 1 clip is on a locked track, so left out/);
   });
 
-  it('leaves adjustment layers out of Filters and Adjust, and says so', () => {
+  it('keeps adjustment layers in the selection: Effects, Filters and Adjust all edit them', () => {
     const withLayer = [...clips, createMockClip({ id: 'layer', trackId: 'v1', source: { type: 'motion-adjustment' } as never })];
     const state = { clips: withLayer, tracks, selectedClipIds: new Set(['layer', 'pic']), primarySelectedClipId: 'layer' };
-    expect(resolvePhoneVisualSelection(state).clips.map((clip) => clip.id)).toEqual(['layer', 'pic']);
-    const strict = resolvePhoneVisualSelection(state, { allowAdjustment: false });
-    expect(strict.clips.map((clip) => clip.id)).toEqual(['pic']);
-    expect(strict.note).toMatch(/1 adjustment layer takes only Effects/);
+    const selection = resolvePhoneVisualSelection(state);
+    expect(selection.clips.map((clip) => clip.id)).toEqual(['layer', 'pic']);
+    expect(selection.note).toBeNull();
   });
 
   it('places an adjustment layer on the nearest free unlocked track above the main picture', () => {

@@ -153,7 +153,7 @@ export function PropertiesClipTabContent({
           />
         )}
         {activeTab === 'model-3d' && isModelClip && <Model3DTab clipId={selectedClip.id} />}
-        {activeTab === 'color' && !isAudioClip && !isCameraClip && !isLightClip && !isSplatEffectorClip && !isMotionAdjustmentClip && !isFlockClip && <ColorTab clipId={selectedClip.id} />}
+        {activeTab === 'color' && !isAudioClip && !isCameraClip && !isLightClip && !isSplatEffectorClip && !isFlockClip && <ColorTab clipId={selectedClip.id} />}
         {activeTab === 'blendshapes' && isGaussianAvatar && <BlendshapesTab clipId={selectedClip.id} />}
         {activeTab === 'gaussian-splat' && isGaussianSplat && <GaussianSplatTab clipId={selectedClip.id} />}
         {activeTab === 'light' && isLightClip && <LightTab clipId={selectedClip.id} />}

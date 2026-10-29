@@ -499,11 +499,12 @@ export class LayerBuilderService {
       layer = applyLayerBuilderAINodesToLayer(clip, layer, ctx);
     }
 
-    // Pass through 3D flag from clip to layer
-    if (layer && clip.is3D) {
-      layer.is3D = true;
+    // Pass through 3D flag and scene graph from clip to layer. An adjustment layer renders flat;
+    // its builder already skipped (and named) both.
+    if (layer && layer.source?.type !== 'motion-adjustment') {
+      if (clip.is3D) layer.is3D = true;
+      layer.sceneGraph = clip.nodeGraph?.scene; Object.assign(layer, sharedSceneOutputLayer(clip, ctx.playheadPosition));
     }
-    if (layer) { layer.sceneGraph = clip.nodeGraph?.scene; Object.assign(layer, sharedSceneOutputLayer(clip, ctx.playheadPosition)); }
 
     return layer ? bindTerrainLayer(layer, clip, ctx.clips, ctx.playheadPosition) : null;
   }

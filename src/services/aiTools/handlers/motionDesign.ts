@@ -61,6 +61,7 @@ import { normalizeMotionReplicatorBundle } from '../../motionDesign/contracts/re
 import { planMotionReplicatorSemanticOperation } from '../../motionDesign/replicator/semanticOperations';
 import { getTimelineMotionStructureGraphRevision } from '../../motionDesign/contracts/timelineStructureAdapter';
 import { applyTimelineMotionAdjustmentMutation } from '../../motionDesign/adjustment/timelineMutationAdapter';
+import { adjustmentLayerSkipWarnings } from '../../motionDesign/adjustment/adjustmentLayerExportNotes';
 import { effectParamWarnings } from './effects';
 import { planMotionModifierSemanticOperation, type MotionModifierSemanticOperation } from '../../motionDesign/modifiers/semanticOperations';
 import { MOTION_MODIFIER_MAX_ABS_AMOUNT, MOTION_MODIFIER_TARGET_PATHS, parseMotionModifierStackContract } from '../../motionDesign/modifiers/contracts';
@@ -447,7 +448,11 @@ export async function handleEditMotionAdjustment(
   if (result.receipt.operation !== 'remove') {
     selectClipAndOpenTab(result.receipt.clipId, 'adjustment');
   }
-  const warnings = adjustmentEffectParameterWarnings(args, result.receipt.clipId, result.receipt.createdEffectIds);
+  const adjusted = result.receipt.operation !== 'remove' ? clipsAfter.find((clip) => clip.id === result.receipt.clipId) : undefined;
+  const warnings = [
+    ...adjustmentEffectParameterWarnings(args, result.receipt.clipId, result.receipt.createdEffectIds),
+    ...(adjusted ? adjustmentLayerSkipWarnings(adjusted) : []),
+  ];
   return {
     success: true,
     data: {

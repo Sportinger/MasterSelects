@@ -389,7 +389,7 @@ describe('MD7 Motion Adjustment LayerBuilder integration', () => {
     warn.mockRestore();
   });
 
-  it('admits registry effects, bypasses only unavailable ones, and fails closed for non-identity transforms', () => {
+  it('admits registry effects, bypasses only unavailable ones, and skips a non-identity transform or unsupported mix with a log instead of failing the export', () => {
     const track = videoTrack('track:rejected-adjustment');
     const mixed = adjustmentClip('clip:mixed-adjustment', track.id, {
       effects: [{
@@ -427,18 +427,16 @@ describe('MD7 Motion Adjustment LayerBuilder integration', () => {
     );
     expect(exportLayers.map((layer) => layer.effects.map((effect) => effect.type))).toEqual([['exposure']]);
 
+    const warn = vi.spyOn(Object.getPrototypeOf(Logger.create('probe')) as { warn: (message: string, data?: unknown) => void }, 'warn');
     const transformed = adjustmentClip('clip:transformed-adjustment', track.id, {
       transform: {
         ...structuredClone(DEFAULT_TRANSFORM),
         position: { x: 0.25, y: 0, z: 0 },
       },
     });
-    expect(() => buildLayersAtTime(
-      exportContext(track, transformed),
-      new Map(),
-      null,
-      false,
-    )).toThrowError('Motion adjustment transforms must remain identity in v1');
+    const [transformedLayer] = buildLayersAtTime(exportContext(track, transformed), new Map(), null, false);
+    expect(transformedLayer?.position).toEqual({ x: 0, y: 0, z: 0 });
+    expect(transformedLayer?.source?.type).toBe('motion-adjustment');
 
     const unsupportedMix = adjustmentClip('clip:unsupported-mix-adjustment', track.id, {
       transform: {
@@ -446,11 +444,10 @@ describe('MD7 Motion Adjustment LayerBuilder integration', () => {
         blendMode: 'difference',
       },
     });
-    expect(() => buildLayersAtTime(
-      exportContext(track, unsupportedMix),
-      new Map(),
-      null,
-      false,
-    )).toThrowError('Motion adjustment mix is outside the supported v1 contract');
+    const [mixLayer] = buildLayersAtTime(exportContext(track, unsupportedMix), new Map(), null, false);
+    expect(mixLayer?.blendMode).toBe('normal');
+    const skipped = warn.mock.calls.filter(([message]) => message === 'Adjustment layer property skipped; the rest of the layer renders');
+    expect(skipped.map(([, data]) => (data as { property: string }).property)).toEqual(['transform', 'blend-mode']);
+    warn.mockRestore();
   });
 });

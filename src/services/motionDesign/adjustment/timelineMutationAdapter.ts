@@ -698,12 +698,12 @@ function timelineClipToAdjustmentLayer(
       [clip.id],
     );
   }
+  // Colour correction and the node graph (layout, parameter drivers) render on adjustment layers
+  // and stay with the clip through every mutation; a bypassed effect alone writes node layout.
   if (
     clip.is3D === true
     || clip.sourceRect !== undefined
     || clip.transitionRender !== undefined
-    || clip.colorCorrection !== undefined
-    || clip.nodeGraph !== undefined
     || clip.parentClipId !== undefined
   ) {
     throw mutationError(

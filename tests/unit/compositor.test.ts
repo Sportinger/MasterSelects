@@ -4,6 +4,7 @@ import type { LayerRenderData } from '../../src/engine/core/types';
 import { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../src/effects/EffectsPipeline';
 import type { MaskTextureManager } from '../../src/engine/texture/MaskTextureManager';
+import type { ColorPipeline } from '../../src/engine/color/ColorPipeline';
 
 function makeRenderPass() {
   return {
@@ -94,7 +95,7 @@ function makeAdjustmentLayerData(
   };
 }
 
-function makeCompositorHarness() {
+function makeCompositorHarness(options: { color?: boolean } = {}) {
   const updateLayerUniforms = vi.fn();
   const createCompositeBindGroup = vi.fn(() => ({ label: 'bind-group' }));
   const applyEffects = vi.fn((
@@ -108,6 +109,14 @@ function makeCompositorHarness() {
     hasMask: id === 'adjustment-mask',
     view: { label: `mask-${id}` },
   }));
+  const applyGrade = vi.fn((
+    _commandEncoder: GPUCommandEncoder,
+    _grade: unknown,
+    _sampler: GPUSampler,
+    _inputView: GPUTextureView,
+    outputView: GPUTextureView,
+  ) => ({ finalView: outputView, applied: true }));
+  const colorPipeline = options.color ? { applyGrade, previewGradeOutputs: vi.fn() } as unknown as ColorPipeline : null;
   const compositor = new Compositor(
     {
       getOrCreateUniformBuffer: vi.fn((id: string) => ({ label: `ubo-${id}` })),
@@ -123,6 +132,7 @@ function makeCompositorHarness() {
       getMaskInfo,
       logMaskState: vi.fn(),
     } as unknown as MaskTextureManager,
+    colorPipeline,
   );
   const commandEncoder = {
     beginRenderPass: vi.fn(() => makeRenderPass()),
@@ -145,6 +155,7 @@ function makeCompositorHarness() {
     updateLayerUniforms,
     createCompositeBindGroup,
     applyEffects,
+    applyGrade,
     getMaskInfo,
   };
 }
@@ -258,6 +269,42 @@ describe('Compositor motion adjustment layers', () => {
     const adjustmentBindGroupCall = harness.createCompositeBindGroup.mock.calls[1];
     expect((adjustmentBindGroupCall[1] as { label: string }).label).toBe('pong');
     expect((adjustmentBindGroupCall[2] as { label: string }).label).toBe('tmp-a');
+  });
+
+  it('grades the accumulated frame of an adjustment layer in its stack position, never into its own input', () => {
+    const harness = makeCompositorHarness({ color: true });
+    const adjustment = makeAdjustmentLayerData([{
+      id: 'fx-blur', name: 'Gaussian Blur', type: 'gaussian-blur', enabled: true, params: { radius: 12, samples: 5 },
+    }]);
+    const grade = { enabled: true, stackIndex: 1, primaryNodes: [], nodeIds: [] };
+    adjustment.layer.colorCorrection = grade as unknown as NonNullable<LayerRenderData['layer']['colorCorrection']>;
+    harness.applyEffects.mockImplementation((_encoder, _effects, _sampler, _input, _output, _ping, pong) => ({ finalView: pong, swapped: true }));
+
+    harness.compositor.composite([
+      makeSourceLayerData('bottom', 'bottom-source'),
+      adjustment,
+    ], harness.commandEncoder, harness.state);
+
+    // The blur (before the grade) reads the accumulator and ends in tmp-b; the grade then reads tmp-b
+    // and writes tmp-a, and the adjustment composite samples the graded tmp-a.
+    expect((harness.applyEffects.mock.calls[0][3] as { label: string }).label).toBe('pong');
+    expect(harness.applyGrade).toHaveBeenCalledTimes(1);
+    const gradeCall = harness.applyGrade.mock.calls[0];
+    expect(gradeCall[1]).toBe(grade);
+    expect((gradeCall[3] as { label: string }).label).toBe('tmp-b');
+    expect((gradeCall[4] as { label: string }).label).toBe('tmp-a');
+    const adjustmentBindGroupCall = harness.createCompositeBindGroup.mock.calls[1];
+    expect((adjustmentBindGroupCall[2] as { label: string }).label).toBe('tmp-a');
+  });
+
+  it('grades an adjustment layer without effects straight from the accumulated frame', () => {
+    const harness = makeCompositorHarness({ color: true });
+    const adjustment = makeAdjustmentLayerData([]);
+    adjustment.layer.colorCorrection = { enabled: true, stackIndex: 0, primaryNodes: [], nodeIds: [] } as unknown as NonNullable<LayerRenderData['layer']['colorCorrection']>;
+    harness.compositor.composite([makeSourceLayerData('bottom', 'bottom-source'), adjustment], harness.commandEncoder, harness.state);
+    expect((harness.applyGrade.mock.calls[0][3] as { label: string }).label).toBe('pong');
+    expect((harness.applyGrade.mock.calls[0][4] as { label: string }).label).toBe('tmp-b');
+    expect((harness.createCompositeBindGroup.mock.calls[1][2] as { label: string }).label).toBe('tmp-b');
   });
 
   it('is a no-op when effects are skipped and preserves the accumulator for the next layer', () => {
