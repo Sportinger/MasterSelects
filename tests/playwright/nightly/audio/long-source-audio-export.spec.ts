@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test, expect } from '../../fixtures/test';
 import { ExportDriver } from '../../drivers/ExportDriver';
 import { inspectMediaArtifact } from '../../assertions/mediaArtifactAssertions';
+import { ensureTestMedia } from '../../fixtures/testMediaStore';
 
 // A 48-minute stereo m4a at 44.1 kHz, cut into five pieces in the first two minutes, exported
 // through the Export panel: the In/Out range as WAV and MP3, and the full timeline as WAV. The
@@ -13,26 +13,26 @@ import { inspectMediaArtifact } from '../../assertions/mediaArtifactAssertions';
 // export memory budget once refused ("Export audio processed-buffer denied by runtime admission
 // ... budget-exceeded").
 // The source is generated with ffmpeg; MASTERSELECTS_LONG_AUDIO_FIXTURE uses a real file instead.
-// Nightly only: the full-timeline WAV alone is ~550 MB. Source and exports therefore stay in the
-// OS temp folder (exports are deleted after the checks) and only a JSON summary is attached, so
-// the run's evidence stays within the test hosts' artifact budget (512 MB).
+// Nightly only: the full-timeline WAV alone is ~550 MB. The source lives in the shared test media
+// store (fixtures/testMediaStore.ts), the exports in the OS temp folder (deleted after the checks),
+// and only a JSON summary is attached, so the run's evidence stays within the test hosts' artifact
+// budget (512 MB).
 const SOURCE_SECONDS = 2861.35;
 const CUTS = [20, 45, 70, 100];
 const OUT_POINT = 124.35;
 
-function longAudioFixture(): string {
+async function longAudioFixture(): Promise<string> {
   const own = process.env.MASTERSELECTS_LONG_AUDIO_FIXTURE?.trim();
   if (own) return path.resolve(own);
-  const file = path.join(os.tmpdir(), 'masterselects-e2e-fixtures', 'long-source-48min-44k.m4a');
-  if (!existsSync(file)) {
-    mkdirSync(path.dirname(file), { recursive: true });
+  // The file name is the cache key: rename it whenever the recipe below changes.
+  const media = await ensureTestMedia('nightly/long-source-48min-44k.m4a', async (target) => {
     const result = spawnSync('ffmpeg', ['-hide_banner', '-v', 'error', '-y',
       '-f', 'lavfi', '-i', `sine=frequency=220:sample_rate=44100:duration=${SOURCE_SECONDS}`,
       '-f', 'lavfi', '-i', `sine=frequency=330:sample_rate=44100:duration=${SOURCE_SECONDS}`,
-      '-filter_complex', '[0:a][1:a]amerge=inputs=2[a]', '-map', '[a]', '-c:a', 'aac', '-b:a', '96k', file], { encoding: 'utf8' });
+      '-filter_complex', '[0:a][1:a]amerge=inputs=2[a]', '-map', '[a]', '-c:a', 'aac', '-b:a', '96k', target], { encoding: 'utf8' });
     if (result.status !== 0) throw new Error(`ffmpeg could not make the long audio fixture: ${result.stderr || result.error?.message}`);
-  }
-  return file;
+  });
+  return media.path;
 }
 
 interface TimelineState {
@@ -50,7 +50,7 @@ const CASES = [
 
 for (const { container, range } of CASES) {
   test(`exports ${container} of the ${range === 'full' ? 'full timeline' : 'In/Out range'} from a 48-minute audio source @module:audio @module:export`, async ({ page, bridge }, testInfo) => {
-    const source = longAudioFixture();
+    const source = await longAudioFixture();
     const exportDir = await mkdtemp(path.join(os.tmpdir(), 'masterselects-long-audio-'));
     try {
       await test.step('import the long source onto the timeline and cut five pieces', async () => {

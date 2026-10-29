@@ -20,7 +20,7 @@ import {
 test.describe.configure({ timeout: 180_000 });
 
 test('MP4 · H.264 + AAC exports every source frame once @module:export @smoke @case:export.mp4-h264-aac', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264High);
+  const source = await ensureFastSource(FAST_SOURCES.h264High);
   await arrange(fast.bridge, source, 30, 3);
   await withWorkDir(async (workDir) => {
     const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
@@ -36,7 +36,7 @@ test('MP4 · H.264 + AAC exports every source frame once @module:export @smoke @
 });
 
 test('MP4 · H.265 exports where the browser encodes HEVC and is unavailable elsewhere @module:export @case:export.mp4-h265-aac', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264High);
+  const source = await ensureFastSource(FAST_SOURCES.h264High);
   await arrange(fast.bridge, source, 30, 3);
   const exporter = new ExportDriver(fast.page);
   await exporter.open();
@@ -64,7 +64,7 @@ test('MP4 · H.265 exports where the browser encodes HEVC and is unavailable els
 });
 
 test('WebM · VP9 + Opus exports every source frame once @module:export @case:export.webm-vp9-opus', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264High);
+  const source = await ensureFastSource(FAST_SOURCES.h264High);
   await arrange(fast.bridge, source, 30, 3);
   await withWorkDir(async (workDir) => {
     const result = await exportFast(fast, workDir, 30, { container: '.webm', videoCodec: 'VP9' });
@@ -78,7 +78,7 @@ test('WebM · VP9 + Opus exports every source frame once @module:export @case:ex
 });
 
 test('In/Out range exports exactly the frames between the markers @module:export @case:export.range-in-out', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264High);
+  const source = await ensureFastSource(FAST_SOURCES.h264High);
   await arrange(fast.bridge, source, 30, 3);
   await fast.bridge.toolData('setInOutPoints', { inPoint: 1, outPoint: 2 });
   await withWorkDir(async (workDir) => {
@@ -90,7 +90,7 @@ test('In/Out range exports exactly the frames between the markers @module:export
 });
 
 test('1080p60 export keeps size, rate and every frame @module:export @case:export.format-1080p60', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264Hd60);
+  const source = await ensureFastSource(FAST_SOURCES.h264Hd60);
   await arrange(fast.bridge, source, 60, 2);
   await withWorkDir(async (workDir) => {
     const result = await exportFast(fast, workDir, 60, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
@@ -104,7 +104,7 @@ test('1080p60 export keeps size, rate and every frame @module:export @case:expor
 });
 
 test('audio stays within one frame of the picture @module:export @case:export.audio-sync', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264Eight);
+  const source = await ensureFastSource(FAST_SOURCES.h264Eight);
   await arrange(fast.bridge, source, 30, 8);
   await withWorkDir(async (workDir) => {
     const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
@@ -116,7 +116,7 @@ test('audio stays within one frame of the picture @module:export @case:export.au
 });
 
 test('codec lists offer only what the container and browser can encode @module:export @case:export.unsupported-combo-rejected', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264High);
+  const source = await ensureFastSource(FAST_SOURCES.h264High);
   await arrange(fast.bridge, source, 30, 3);
   const exporter = new ExportDriver(fast.page);
   await exporter.open();
@@ -141,7 +141,7 @@ test('codec lists offer only what the container and browser can encode @module:e
 });
 
 test('an 8-second export contains every frame exactly once @module:export @case:export.fast.frame-sequence-8s', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264Eight);
+  const source = await ensureFastSource(FAST_SOURCES.h264Eight);
   await arrange(fast.bridge, source, 30, 8);
   await withWorkDir(async (workDir) => {
     const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });

@@ -19,7 +19,7 @@ import {
 test.describe.configure({ timeout: 180_000 });
 
 test('H.264 High source with B-frames exports frame-exactly from an In point @module:export @case:export.mode-fast', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h264High);
+  const source = await ensureFastSource(FAST_SOURCES.h264High);
   await arrange(fast.bridge, source, 30, 3);
   await fast.bridge.toolData('setInOutPoints', { inPoint: 0.5, outPoint: 2.5 });
   await withWorkDir(async (workDir) => {
@@ -30,7 +30,7 @@ test('H.264 High source with B-frames exports frame-exactly from an In point @mo
 });
 
 test('H.265 8-bit source exports frame-exactly @module:export @case:export.fast.src-h265-8bit', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.h265);
+  const source = await ensureFastSource(FAST_SOURCES.h265);
   await arrange(fast.bridge, source, 30, 3);
   await withWorkDir(async (workDir) => {
     const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
@@ -40,7 +40,7 @@ test('H.265 8-bit source exports frame-exactly @module:export @case:export.fast.
 });
 
 test('long-GOP source exports frame-exactly from the middle of a GOP @module:export @case:export.fast.src-long-gop', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.longGop);
+  const source = await ensureFastSource(FAST_SOURCES.longGop);
   await arrange(fast.bridge, source, 30, 12);
   // Keyframes sit at 0 s and 10 s; the range starts 5 s into the first GOP.
   await fast.bridge.toolData('setInOutPoints', { inPoint: 5, outPoint: 7 });
@@ -54,7 +54,7 @@ test('long-GOP source exports frame-exactly from the middle of a GOP @module:exp
 test('variable-frame-rate source maps every output frame to the nearest source frame @module:export @case:export.fast.src-vfr', async ({ fast }, testInfo) => {
   // The source has gaps and uneven spacing but no output time exactly halfway between two
   // frames; at such a tie the product's pick depends on timestamp rounding.
-  const source = ensureFastSource(FAST_SOURCES.vfr);
+  const source = await ensureFastSource(FAST_SOURCES.vfr);
   await arrange(fast.bridge, source, 30, 3);
   await withWorkDir(async (workDir) => {
     const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
@@ -64,7 +64,7 @@ test('variable-frame-rate source maps every output frame to the nearest source f
 });
 
 test('rotated phone MOV exports upright @module:export @case:export.fast.src-mov-rotation', async ({ fast }, testInfo) => {
-  const source = ensureFastSource(FAST_SOURCES.movPortrait);
+  const source = await ensureFastSource(FAST_SOURCES.movPortrait);
   await arrange(fast.bridge, source, 30, 3);
   await withWorkDir(async (workDir) => {
     const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
@@ -77,8 +77,8 @@ test('rotated phone MOV exports upright @module:export @case:export.fast.src-mov
 });
 
 test('PNG with alpha shows the layer below through transparent pixels @module:export @case:export.fast.src-png-alpha', async ({ fast }, testInfo) => {
-  const video = ensureFastSource(FAST_SOURCES.h264Baseline);
-  const still = ensureFastSource(FAST_SOURCES.pngAlpha);
+  const video = await ensureFastSource(FAST_SOURCES.h264Baseline);
+  const still = await ensureFastSource(FAST_SOURCES.pngAlpha);
   await arrange(fast.bridge, video, 30, 3);
   await placeSource(fast.bridge, still.path, { newTrack: 'video' });
   await withWorkDir(async (workDir) => {
@@ -97,8 +97,8 @@ test('PNG with alpha shows the layer below through transparent pixels @module:ex
 
 for (const key of ['mp3Clicks', 'wavClicks'] as const) {
   test(`${key === 'mp3Clicks' ? 'MP3' : 'WAV'} audio source stays in sync with the picture @module:export @case:export.fast.src-audio-mp3-wav`, async ({ fast }, testInfo) => {
-    const video = ensureFastSource(FAST_SOURCES.h264Baseline);
-    const audio = ensureFastSource(FAST_SOURCES[key]);
+    const video = await ensureFastSource(FAST_SOURCES.h264Baseline);
+    const audio = await ensureFastSource(FAST_SOURCES[key]);
     await arrange(fast.bridge, video, 30, 3);
     await placeSource(fast.bridge, audio.path, { newTrack: 'audio' });
     await withWorkDir(async (workDir) => {
@@ -113,7 +113,7 @@ for (const key of ['mp3Clicks', 'wavClicks'] as const) {
 test('WebM/VP9 source stops FAST export with the named container message @module:export @case:export.fast-webm-source', async ({ fast }, testInfo) => {
   // FAST export demuxes with MP4Box (MP4/MOV only): a WebM source is refused before parsing,
   // naming the container and the way out (fastSourceContainer.ts). This is the one outcome.
-  const source = ensureFastSource(FAST_SOURCES.webmVp9);
+  const source = await ensureFastSource(FAST_SOURCES.webmVp9);
   await arrange(fast.bridge, source, 30, 3);
   await withWorkDir(async (workDir) => {
     const failure = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' })

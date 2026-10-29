@@ -1,8 +1,6 @@
 import { execFile } from 'node:child_process'
-import { access, mkdir, rename } from 'node:fs/promises'
-import path from 'node:path'
 import { promisify } from 'node:util'
-import { DEFAULT_REPO_ROOT } from './bridgeClient'
+import { ensureTestMedia } from './testMediaStore'
 
 const run = promisify(execFile)
 
@@ -16,7 +14,9 @@ const run = promisify(execFile)
  * Layout constants are shared with assertions/frameCodeOracle.ts.
  *
  * The clips are generated with ffmpeg at test time (no binary media in the
- * repository, no redistribution question) and cached by their parameters.
+ * repository, no redistribution question) and cached by their parameters in
+ * the shared test media store (fixtures/testMediaStore.ts, key
+ * `frame-code-media/<name>`), which also fetches them from the remote.
  */
 export const FRAME_CODE_LAYOUT = {
   blocks: 16,
@@ -67,8 +67,6 @@ export interface FrameCodeClip {
   audioHz?: number
 }
 
-const CACHE_DIR = path.join(DEFAULT_REPO_ROOT, 'test-results', 'playwright', 'frame-code-media')
-
 export function frameCodeFilter(width: number, height: number, firstCode = 0): string {
   const { blocks, numberBits, codeBand, barBand, rampBand, bars, black, white, background } = FRAME_CODE_LAYOUT
   const N = firstCode ? `(N+${firstCode})` : 'N'
@@ -96,8 +94,8 @@ export async function frameCodeClip(options: FrameCodeClipOptions = {}): Promise
   const extension = codec === 'vp9' ? 'webm' : 'mp4'
   // Files without an offset or tone keep their original cache names.
   const variant = `${firstCode ? `-from${firstCode}` : ''}${audioHz ? `-tone${audioHz}` : ''}${keyframeSeconds ? `-gop${keyframeSeconds}s` : ''}`
-  const file = path.join(CACHE_DIR, `frame-code-v1-${width}x${height}-${fps}fps-${frames}f-${codec}${variant}.${extension}`)
-  await renderClip(file, { width, height, fps, seconds, frames, codec, audioHz, keyframeSeconds }, frameCodeFilter(width, height, firstCode))
+  const file = await renderClip(`frame-code-v1-${width}x${height}-${fps}fps-${frames}f-${codec}${variant}.${extension}`,
+    { width, height, fps, seconds, frames, codec, audioHz, keyframeSeconds }, frameCodeFilter(width, height, firstCode))
   return { path: file, width, height, fps, frames, codec, firstCode, ...(audioHz ? { audioHz } : {}) }
 }
 
@@ -196,19 +194,23 @@ export async function frameCodeClipV2(options: FrameCodeV2Options): Promise<Fram
   const { width = 352, height = 224, fps = 30, seconds = 4, codec = 'h264', chart = 'tile', sourceId, variant = 0 } = options
   const frames = Math.round(fps * seconds)
   const extension = codec === 'vp9' ? 'webm' : 'mp4'
-  const file = path.join(CACHE_DIR, `frame-code-v2r${FRAME_CODE_V2.revision}-${chart}-id${sourceId}-v${variant}-${width}x${height}-${fps}fps-${frames}f-${codec}.${extension}`)
-  await renderClip(file, { width, height, fps, seconds, frames, codec }, frameCodeFilterV2(width, height, { chart, sourceId, variant }), BT709_TAGS)
+  const file = await renderClip(`frame-code-v2r${FRAME_CODE_V2.revision}-${chart}-id${sourceId}-v${variant}-${width}x${height}-${fps}fps-${frames}f-${codec}.${extension}`,
+    { width, height, fps, seconds, frames, codec }, frameCodeFilterV2(width, height, { chart, sourceId, variant }), BT709_TAGS)
   return { path: file, width, height, fps, frames, codec, firstCode: 0, chart, sourceId, variant }
 }
 
 const BT709_TAGS = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv']
 
-async function renderClip(file: string, { width, height, fps, seconds, frames, codec, audioHz, keyframeSeconds = 1 }:
-  Omit<FrameCodeClip, 'path' | 'firstCode'> & { seconds: number; keyframeSeconds?: number },
-  filter: string, tags: string[] = []): Promise<void> {
-  if (await access(file).then(() => true, () => false)) return
-  await mkdir(CACHE_DIR, { recursive: true })
-  const extension = path.extname(file).slice(1)
+type ClipEncodeOptions = Omit<FrameCodeClip, 'path' | 'firstCode'> & { seconds: number; keyframeSeconds?: number }
+
+/** Returns the cached (or fetched, or freshly rendered) clip `name`; the name holds every parameter of the picture. */
+async function renderClip(name: string, options: ClipEncodeOptions, filter: string, tags: string[] = []): Promise<string> {
+  const media = await ensureTestMedia(`frame-code-media/${name}`, target => encodeClip(target, options, filter, tags))
+  return media.path
+}
+
+async function encodeClip(target: string, { width, height, fps, seconds, frames, codec, audioHz, keyframeSeconds = 1 }: ClipEncodeOptions,
+  filter: string, tags: string[]): Promise<void> {
   const gop = String(Math.round(fps * keyframeSeconds))
   const encoder = codec === 'vp9'
     ? ['-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '20', '-g', gop, '-row-mt', '1']
@@ -219,15 +221,13 @@ async function renderClip(file: string, { width, height, fps, seconds, frames, c
   const audioOutput = audioHz
     ? ['-map', '0:v', '-map', '1:a', ...(codec === 'vp9' ? ['-c:a', 'libopus'] : ['-c:a', 'aac', '-b:a', '128k'])]
     : []
-  const temporary = `${file}.${process.pid}.tmp.${extension}`
   try {
     await run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=${fps}:d=${seconds}`,
-      ...audio, '-vf', filter, '-frames:v', String(frames), ...audioOutput, ...encoder, ...tags, temporary], { maxBuffer: 16 * 1024 * 1024 })
+      ...audio, '-vf', filter, '-frames:v', String(frames), ...audioOutput, ...encoder, ...tags, target], { maxBuffer: 16 * 1024 * 1024 })
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     throw new Error(code === 'ENOENT'
       ? 'ffmpeg is not installed on this test host; the frame-code clips are generated with it (install ffmpeg and rerun).'
       : `ffmpeg could not generate the frame-code clip: ${(error as Error).message}`)
   }
-  await rename(temporary, file)
 }

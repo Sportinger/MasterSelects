@@ -56,8 +56,8 @@ rotated phone MOV, PNG with alpha, MP3/WAV, WebM). Run only them with
 
 - **One project per worker** (the frame-code Sammeltest start, `fixtures/frameCodeProject.ts`);
   each case opens its own new composition, so no case sees another case's clips or In/Out points.
-- **Sources** come from `fixtures/fastExportSources.ts`: ffmpeg recipes rendered once per host
-  into the OS temp folder (keyed by a hash of the recipe). Video frames are the v1 frame-code
+- **Sources** come from `fixtures/fastExportSources.ts`: ffmpeg recipes rendered once into the
+  [test media cache](#test-media-cache) (keyed by a hash of the recipe). Video frames are the v1 frame-code
   chart of `fixtures/frameCodeMedia.ts` plus a white flash square in the lower right corner on
   each whole second; audio has a 1 kHz click on each whole second. ffmpeg must be on the PATH or
   named by `MASTERSELECTS_E2E_FFMPEG`; without it the journeys fail with that hint.
@@ -80,9 +80,72 @@ Long journeys (large exports, hour-long sources) live under `nightly/`. They are
 excluded from every other run through `testIgnore`, including the Fassandra
 auto-repair acceptance, which resets `grep` but keeps `testIgnore`; a `skip`
 would fail that acceptance. Include them with `npm run test:e2e:nightly` or
-`MASTERSELECTS_E2E_NIGHTLY=1`. Nightly journeys keep large sources and exported
-files in the OS temp folder, delete exports after their checks and attach a JSON
-summary instead: a test host returns at most 512 MB of evidence per run.
+`MASTERSELECTS_E2E_NIGHTLY=1`. Nightly journeys keep their large generated sources
+in the [test media cache](#test-media-cache) and exported files in the OS temp
+folder, delete exports after their checks and attach a JSON summary instead: a
+test host returns at most 512 MB of evidence per run.
+
+## Test media cache
+
+Every generated test medium (frame-code clips, phone footage including the
+10-minute and multi-GB recordings, Fast export sources, nightly sources) goes
+through `fixtures/testMediaStore.ts` (`ensureTestMedia(key, generate)`). The key
+is a relative path such as `frame-code-media/<name>.mp4`; its file name holds
+every generator parameter and version, so a changed recipe gets a new name. A
+file is resolved in this order:
+
+1. **Local cache**: `~/.cache/masterselects-test-media/<key>`, shared by every
+   worktree and kept on disk (not in a RAM tmpfs). `MASTERSELECTS_TEST_MEDIA_DIR`
+   moves it; `MASTERSELECTS_PHONE_FOOTAGE_DIR` still moves the phone footage alone.
+   The dev server allows this folder as a file root (`tools/devBridge/auth.ts`),
+   so the journeys import from it directly; restart a running dev server once
+   after changing `MASTERSELECTS_TEST_MEDIA_DIR`.
+2. **Remote** (optional): copied with rsync over ssh (`BatchMode`, short connect
+   timeout) into a temporary name, checked against the `<file>.sha256` sidecar
+   (size and SHA-256) and only then renamed into place. A corrupt or partial
+   remote copy is discarded and regenerated.
+3. **Generation** with ffmpeg into the local cache. The file gets its sidecar and
+   is uploaded to the remote in the background (file first, sidecar last). An
+   upload never fails a test; a failure is logged once per process, and the file
+   is offered again on its next use in a later run. A cached file is uploaded only
+   while it still matches its sidecar; a mismatch is logged and nothing goes up.
+
+The remote is `MASTERSELECTS_TEST_MEDIA_REMOTE`, else the first line of
+`~/.config/masterselects/test-media-remote`, written as `<ssh-host>:<path>`
+(or a local directory). `MASTERSELECTS_TEST_MEDIA_REMOTE=off` disables it. The
+host and path stay out of the repository; without a remote (CI, Windows hosts,
+no VPN) a single probe of a few seconds per process fails and every file is
+generated locally, with one log line. Unit tests (vitest) use the remote only
+when the environment variable names one. The ssh user needs write access to the
+remote folder and rsync on both ends; the probe also checks rsync and sh on this
+host and turns the remote off (one log line) when either is missing.
+
+A lock file next to the target (`<file>.lock`, `fixtures/testMediaLock.ts`) keeps
+two workers, worktrees or hosts from generating the same file twice; every file
+appears by an atomic rename either way. Its heartbeat comes from a small separate
+process, so a generator that blocks the event loop (spawnSync) keeps it fresh. A
+lock is taken over when its process died, when its PID now belongs to another
+process (start time from `/proc`), when its heartbeat stopped for 10 minutes on
+this host without a start time to compare, or for 30 s on another host. Takeover
+moves the lock to a unique name and checks it moved the stale one (a fresh lock
+of another waiter is put back), and each holder releases only its own lock.
+Under the lock, the temporaries an interrupted run left next to the file (killed
+generator or download: `<file>.<pid>-<hex>.tmp…`, `.part`, rsync's hidden
+`.<file>.….part.*`, lock leftovers) are removed first, once their process is gone
+or after an hour without writes, never in their first minute; one log line per
+cleanup. The phone footage's shared segment folder (`segments/<name>/`, used by
+`long-10min` and `multi-gb`) has its own lock; finished segments of an interrupted
+run are reused by the next generation, and otherwise removed on the next call
+unless a `keepSegments` run marked them kept. Log lines start with `[test-media]`.
+
+- **Seed the remote** by running the generators with the remote configured, for
+  example `node scripts/generate-phone-footage.mjs all` or the journeys that use
+  the media. Generated files are uploaded; cached files that never reached the
+  remote (no `<file>.uploaded` marker for it) are uploaded on their next use.
+- **Clear the local cache**: `rm -rf ~/.cache/masterselects-test-media` (or one
+  subfolder, e.g. `phone-footage/`). The next run fetches from the remote.
+- **Clear a remote file**: delete `<key>` and `<key>.sha256` in the remote folder
+  over ssh. A remote file without its sidecar is ignored and regenerated.
 
 ## Performance journeys
 
@@ -146,7 +209,7 @@ agents from invalidating an in-progress headed test.
 the user sees. Build new cases the same way:
 
 1. **Media that says what it is.** `fixtures/frameCodeMedia.ts` generates clips
-   with ffmpeg at test time (cached in `test-results/playwright/frame-code-media/`,
+   with ffmpeg at test time (cached in the [test media cache](#test-media-cache),
    no binary media in the repository). Every frame carries its number as 16
    black/white blocks with a check nibble, plus six colour bars and a grey ramp.
    The composition matches the clip's size and rate, so one composition frame is
@@ -433,7 +496,7 @@ MASTERSELECTS_DEVICE=1 npm run test:e2e:device
 | `MASTERSELECTS_DEVICE_FOOTAGE_PROFILE` | `android-h264` | profile from `fixtures/phoneFootageProfiles.ts` |
 | `MASTERSELECTS_DEVICE_MEDIA_TRANSPORT` | `auto` | `route`, `reverse` or `auto` (by size) |
 | `MASTERSELECTS_DEVICE_OUTPUT_DIR` | `<os.tmpdir()>/masterselects-device` | where exports land (checked for free space first) |
-| `MASTERSELECTS_PHONE_FOOTAGE_DIR` | see `fixtures/phoneFootage.ts` | footage cache |
+| `MASTERSELECTS_PHONE_FOOTAGE_DIR` | `phone-footage/` in the [test media cache](#test-media-cache) | local footage folder |
 | `MASTERSELECTS_DEVICE_CDP_PORT` / `_MEDIA_PORT` | `9333` / `8099` | PC ports |
 | `MASTERSELECTS_DEVICE_*_BUDGET_MS` | 3000 phase, 6000 total, 3000 first frame, 8000 boot, 10000 import | soft budgets (import: Done to clip tile, page clock) |
 

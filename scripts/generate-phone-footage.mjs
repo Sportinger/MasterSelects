@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * Generates the synthetic phone footage fixtures (tests/playwright/fixtures/phoneFootage.ts)
- * into test-results/playwright/phone-footage/ (short profiles) or
- * $TMPDIR/masterselects-phone-footage/ (long-10min, multi-gb: files above 256 MB
- * default to os.tmpdir(), a tmpfs on most Linux hosts) and verifies each file against its
+ * into the shared test media cache (phone-footage/ under MASTERSELECTS_TEST_MEDIA_DIR, default
+ * ~/.cache/masterselects-test-media; fetched from or uploaded to the test media remote when one
+ * is configured, see tests/playwright/README.md "Test media cache") and verifies each file against its
  * expectation model with ffprobe (timestamps, codec, timescale, rotation) and,
  * with --frames, by decoding every frame and reading its frame code.
  *
@@ -15,7 +15,7 @@
  *   node scripts/generate-phone-footage.mjs --small all     # unit-test sizes
  *   node scripts/generate-phone-footage.mjs --list
  *
- * MASTERSELECTS_PHONE_FOOTAGE_DIR moves the cache to another disk. Nothing here
+ * MASTERSELECTS_PHONE_FOOTAGE_DIR moves the local footage folder to another disk. Nothing here
  * touches a phone or personal media; every file is generated.
  */
 import { registerHooks } from 'node:module'
@@ -52,10 +52,12 @@ const ids = named.includes('all') ? all : named.length ? named : short
 for (const id of ids) if (!all.includes(id)) { console.error(`unknown profile ${id}; --list shows them`); process.exit(2) }
 
 let failed = 0
+const uploads = []
 for (const id of ids) {
   const profile = phoneFootageProfile(id, size)
   const started = Date.now()
   const footage = await phoneFootage(id, { size, keepSegments: flag('--keep-segments'), log: line => console.log(`  ${line}`) })
+  if (footage.upload) uploads.push(footage.upload)
   const segmented = Boolean(profile.segmentSeconds)
   const probe = await probeFootage(footage.path, { source: segmented || flag('--packets') ? 'packets' : 'frames' })
   const report = checkFootageProbe(footage.model, probe)
@@ -72,5 +74,11 @@ for (const id of ids) {
     + `intervals ${stats.minMs.toFixed(2)}-${stats.maxMs.toFixed(2)} ms, boxes ${boxes.join(' ')}, pts ${probe.source}: ${report.ok ? 'exact' : 'MISMATCH'}`
     + `${frames ? `, frame codes: ${frames.ok ? 'all correct' : 'WRONG'}` : ''}`)
   for (const problem of [...report.problems, ...(frames?.problems ?? []), ...(moovLast ? [] : ['moov is not after mdat'])]) console.log(`     - ${problem}`)
+}
+// Seeding: wait until every file that is not on the test media remote yet has arrived there.
+if (uploads.length) {
+  console.log('checking the test media remote for files it does not have yet')
+  const arrived = (await Promise.all(uploads)).filter(Boolean).length
+  console.log(`${arrived} file(s) uploaded to the test media remote`)
 }
 process.exit(failed ? 1 : 0)
