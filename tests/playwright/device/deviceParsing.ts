@@ -44,7 +44,7 @@ export function parsePortMappings(output: string): Array<{ serial?: string; loca
 }
 
 /**
- * Paths of the tabs (by URL) that already show the editor's origin: the owner's MasterSelects tabs.
+ * Paths of the tabs (by URL) that already show the editor's origin: the phone user's MasterSelects tabs.
  * Only the pathname is returned, never a query or fragment.
  */
 export function editorTabPaths(urls: readonly string[], baseURL: string): string[] {
@@ -94,11 +94,11 @@ export interface DeviceTabPlan {
    * are parked on PARKED_DEVICE_TAB_URL, never closed, so no second harness tab holds the project storage.
    */
   park: number[]
-  /** Paths of unmarked tabs on the editor origin: the owner's MasterSelects tabs (the run refuses to start). */
+  /** Paths of unmarked tabs on the editor origin: the phone user's MasterSelects tabs (the run refuses to start). */
   ownerEditorPaths: string[]
 }
 
-/** Which tab the run uses: its own marked tab if there is one; owner tabs are only counted, never touched. */
+/** Which tab the run uses: its own marked tab if there is one; other tabs are only counted, never touched. */
 export function planDeviceTabs(tabs: readonly DeviceTabInfo[], baseURL: string): DeviceTabPlan {
   const marked = tabs.flatMap((tab, index) => tab.marked ? [index] : [])
   // Prefer a marked tab that already shows the editor's origin (the live test tab) over a parked one.
@@ -172,7 +172,7 @@ const finite = (value: unknown): number | null => typeof value === 'number' && N
 /**
  * The boot marks, reduced to phase, time and a short machine detail ("not-restored"). A detail that
  * is not such a token (it might carry a project name) is dropped, so attachments never name the
- * owner's projects.
+ * user's projects.
  */
 export function sanitizeBootMarks(raw: unknown): BootMark[] {
   const marks = (raw as { marks?: unknown } | null)?.marks

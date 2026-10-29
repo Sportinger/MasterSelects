@@ -23,7 +23,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const TRACKS = { picture: 'Picture', voice: 'Voice', captions: 'Captions' };
+export const TRACKS = { picture: 'Picture', voice: 'Voice', captions: 'Captions', music: 'Music' };
 // The look of the burned-in captions of earlier tutorials: bold white words, a dark outline, the spoken word in gold.
 const CAPTION_STYLE = {
   wordsPerCaption: 4, gapThreshold: 0.6, holdAfter: 0.35, maxLines: 1, maxWidth: 80,
@@ -69,10 +69,11 @@ async function connect({ origin, token }, tab) {
     throw new Error(`${tabs.length} editor tabs are connected to ${origin}; name one with --tab: ${tabs.map(item => `${item.tabId} (${item.visibilityState}${item.hasFocus ? ', focused' : ''})`).join(', ')}`);
   }
   const targetTabId = tab ?? tabs[0].tabId;
-  return async (tool, args = {}) => {
+  // `timeoutMs`: how long the bridge waits for the tab (30 s by default; an export takes longer).
+  return async (tool, args = {}, { timeoutMs } = {}) => {
     const response = await fetch(`${origin}/api/ai-tools`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tool, args, targetTabId }),
+      body: JSON.stringify({ tool, args, targetTabId, ...(timeoutMs ? { timeoutMs } : {}) }),
     });
     const text = await response.text();
     let result;
@@ -94,13 +95,16 @@ export function isCutProject(state) {
   return tracks.some(track => track.name === TRACKS.picture) || tracks.every(track => !track.clips.length);
 }
 
-/** The cut editor: --editor, else the first known dev server whose editor holds a cut project. */
-async function cutEditor(editor, tab) {
+/**
+ * The cut editor: --editor, else the first known dev server whose editor holds a cut project. `anyProject`: any open
+ * project will do (tutorial-ms-template.mjs opens the template or creates a project itself).
+ */
+export async function cutEditor(editor, tab, { anyProject = false } = {}) {
   const reasons = [];
   for (const origin of editor ? [new URL(editor).origin] : knownOrigins()) {
     try {
       const call = await connect(bridgeFor(origin), tab);
-      if (isCutProject(await call('getTimelineState'))) {
+      if (anyProject || isCutProject(await call('getTimelineState'))) {
         console.log(`cut editor: ${origin}/editor`);
         return call;
       }
@@ -138,6 +142,34 @@ export function partClips(state, name) {
   return all.filter(clip => isPartName(clip.name, name));
 }
 
+/**
+ * The camera of a part as keyframes of its picture clip: { 'scale.x', 'scale.y', 'position.x', 'position.y' } →
+ * [[seconds of the clip, value, easing]]. `segments` come from the take (cameraSegments in scripts/tutorialCut.mjs,
+ * framings in take pixels); `base` is the scale at which the whole take fills the composition. A framing
+ * { cx, cy, zoom } puts take point (cx, cy) in the middle of the composition at base × zoom.
+ */
+export function cameraKeyframes(segments, { viewport, base }) {
+  const points = [];
+  const put = (t, framing, easing) => {
+    const last = points.at(-1);
+    if (last && Math.abs(last.t - t) < 0.005) points.pop();
+    else if (last) last.easing = last.easing === 'cubic-in-out' && last.moving ? last.easing : 'hold';
+    points.push({ t, framing, easing, moving: easing === 'cubic-in-out' });
+  };
+  for (const segment of segments.toSorted((a, b) => a.at - b.at)) {
+    if (segment.ms > 0) {
+      put(segment.at, segment.from, 'cubic-in-out');
+      put(segment.at + segment.ms / 1000, segment.to, 'hold');
+    } else put(segment.at, segment.to, 'hold');
+  }
+  if (!points.length || points[0].t > 0.005) points.unshift({ t: 0, framing: { cx: viewport.width / 2, cy: viewport.height / 2, zoom: 1 }, easing: 'hold' });
+  points[0].t = 0;
+  const value = { 'scale.x': f => base * f.zoom, 'scale.y': f => base * f.zoom,
+    'position.x': f => -(f.cx - viewport.width / 2) * base * f.zoom, 'position.y': f => -(f.cy - viewport.height / 2) * base * f.zoom };
+  return Object.fromEntries(Object.entries(value).map(([property, of]) => [property,
+    points.map(point => [Number(point.t.toFixed(3)), Number(of(point.framing).toFixed(4)), point.easing])]));
+}
+
 /** Moves clips by `delta` seconds, in an order in which no clip runs into one not moved yet. */
 async function shiftClips(call, clips, delta) {
   if (Math.abs(delta) < 0.001) return;
@@ -158,7 +190,7 @@ export function captionRuns(lines, duration) {
   return runs;
 }
 
-async function ensureTrack(call, state, type, name) {
+export async function ensureTrack(call, state, type, name) {
   const tracks = type === 'video' ? state.videoTracks : state.audioTracks;
   const found = tracks.find(track => track.name === name);
   if (found) return found.id;
@@ -219,6 +251,18 @@ async function placePart(call, edl, { at, replace, captions }) {
   if (placed) start = placed.startTime;
   const length = placed ? placed.endTime - placed.startTime : edl.duration;
   console.log(`  picture ${edl.name}.mp4 at ${start.toFixed(2)} s (${length.toFixed(2)} s)`);
+  // The take is larger than the episode (2560×1440 in 1080p): it fills the frame at `base`, and the recipe's camera
+  // moves become keyframes of the clip, which can be changed in MasterSelects.
+  if (placed && edl.size) {
+    const { activeCompositionId } = await call('getTimelineState');
+    const frame = ((await call('getMediaItems', { recursive: true })).compositions ?? []).find(item => item.id === activeCompositionId);
+    if (!frame?.width) throw new Error(`the open composition (${activeCompositionId}) reports no size; the camera cannot be placed`);
+    const base = Math.max(frame.width / edl.size.width, frame.height / edl.size.height);
+    const keys = cameraKeyframes(edl.camera ?? [], { viewport: edl.size, base });
+    await call('setTransform', { clipId: placed.id, x: keys['position.x'][0][1], y: keys['position.y'][0][1], scaleX: keys['scale.x'][0][1], scaleY: keys['scale.y'][0][1] });
+    if (keys['scale.x'].length > 1) await call('addKeyframe', { clipId: placed.id, keys });
+    console.log(`  camera: ${keys['scale.x'].length - 1} keyframes on the picture (take ${edl.size.width}×${edl.size.height} in ${frame.width}×${frame.height})`);
+  }
   if (later.length) {
     const delta = start + length - Math.min(...later.map(clip => clip.startTime));
     await shiftClips(call, later, delta);

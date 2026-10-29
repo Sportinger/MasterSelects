@@ -244,7 +244,7 @@ import {
   handleStartMediaGeneration,
 } from './mediaGeneration';
 import { handleOpenLocalProject } from './localProject';
-import { handleCreateLocalProject, handleGrantWorkspaceRoot, handleListWorkspaceRoots, handleSaveProject } from './workspaceRoots';
+import { handleCreateLocalProject, handleSaveLocalProjectAs, handleGrantWorkspaceRoot, handleListWorkspaceRoots, handleSaveProject } from './workspaceRoots';
 import {
   handleListDocuments, handleSearchDocuments, handleReadDocument,
   handleGetDocumentLinks, handleCreateProjectDocument, handleEditDocumentBlock,
@@ -289,6 +289,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   grantWorkspaceRoot: handleGrantWorkspaceRoot,
   listWorkspaceRoots: handleListWorkspaceRoots,
   createLocalProject: handleCreateLocalProject,
+  saveLocalProjectAs: handleSaveLocalProjectAs,
   saveProject: handleSaveProject,
   fillAppControl: handleFillAppControl,
   probeSameOriginRequest: handleProbeSameOriginRequest,

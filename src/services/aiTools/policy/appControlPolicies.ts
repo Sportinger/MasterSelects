@@ -56,4 +56,12 @@ export const APP_CONTROL_POLICIES: Array<[string, ToolPolicyEntry]> = [
     localFileAccess: true,
     allowedCallers: ['devBridge', 'internal'],
   }],
+  ['saveLocalProjectAs', {
+    readOnly: false,
+    riskLevel: 'high',
+    requiresConfirmation: true,
+    sensitiveDataAccess: true,
+    localFileAccess: true,
+    allowedCallers: ['devBridge', 'internal'],
+  }],
 ];

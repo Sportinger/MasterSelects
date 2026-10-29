@@ -67,7 +67,7 @@ export const test = base.extend<{ dev: DeviceWorld }, { world: DeviceWorld }>({
     process.stdout.write(`[device] ${session.device.model}, Android ${session.device.android} (SDK ${session.device.sdk}), Chrome ${session.device.chrome}; `
       + `${session.tab === 'reused' ? 'reused its marked test tab' : 'opened a new test tab'}`
       + `${session.parkedTabs ? `, parked ${session.parkedTabs} older harness tab(s) on about:blank` : ''}; `
-      + `${session.foreignPages} tab(s) of the owner left untouched; target ${env.baseURL}/m#${DEVICE_TAB_MARKER}\n`)
+      + `${session.foreignPages} existing tab(s) left untouched; target ${env.baseURL}/m#${DEVICE_TAB_MARKER}\n`)
     try {
       await provide({ ...session, touch, probe, footage, profileId, journey })
     } finally {
@@ -156,7 +156,7 @@ export async function tapTile(world: DeviceWorld, id: string): Promise<void> {
   await tapOn(world, world.page.locator(`[data-testid="${IDS.clip}"][data-clip-id="${id}"]`), world.page.getByTestId(IDS.timelineSurface))
 }
 
-/** Taps a project row, but only one of a Device test project: the owner's projects are never opened by the harness. */
+/** Taps a project row, but only one of a Device test project: the phone user's projects are never opened by the harness. */
 export async function tapDeviceProjectRow(world: DeviceWorld, name: string): Promise<void> {
   if (!isDeviceProjectName(name)) throw new Error(`Refusing to open "${name}": the harness only opens "Device test" projects`)
   await tapOn(world, world.page.locator(`[data-testid="${M1_IDS.projectRow}"][data-project-name="${name}"]`).first())

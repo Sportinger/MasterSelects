@@ -8,7 +8,7 @@ import { BLOCK_SILHOUETTE_GRID_RANGE, BLOCK_SILHOUETTE_MARK_RANGE, BLOCK_SILHOUE
 
 /**
  * Block Silhouette recipe (see docs/Features/effects/block-silhouette.md): the picture as a flat two-colour
- * silhouette on a block grid, like the neon-yellow frames of the Nissan 350Z reel.
+ * silhouette on a block grid, like a black object on a neon-yellow backdrop.
  * - Every block of Block Size pixels (1080p, centred grid) measures its brightness at five points (near its
  *   corners and its centre); transparency counts as light. Below Threshold the block takes Ink, else Paper.
  *   Measure: Differs from edge instead takes Ink where the block's colour differs from the frame edge in the

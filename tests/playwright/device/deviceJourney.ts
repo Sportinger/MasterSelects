@@ -30,7 +30,7 @@ export async function waitForFirstScreen(world: DeviceWorld, timeoutMs = 180_000
 }
 
 /**
- * Shows the phone home and its new-project form. When the boot restored a project (the owner's last
+ * Shows the phone home and its new-project form. When the boot restored a project (the phone user's last
  * one), the top bar's Projects button shows the home over it without closing or changing it.
  */
 export async function openNewProjectForm(world: DeviceWorld): Promise<void> {
@@ -139,7 +139,7 @@ export interface ExportResult {
 /**
  * Export sheet: Export, wait until Share is ready, tap Share. The tab's navigator.share is stubbed
  * (deviceMedia.installShareCapture) so the File stays in the page instead of a share sheet or the
- * owner's Downloads; it is then copied to the PC (MASTERSELECTS_DEVICE_OUTPUT_DIR).
+ * phone's Downloads; it is then copied to the PC (MASTERSELECTS_DEVICE_OUTPUT_DIR).
  */
 export async function exportAndPull(world: DeviceWorld, testInfo: TestInfo, timeoutMs: number): Promise<ExportResult> {
   const { page } = world

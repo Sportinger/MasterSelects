@@ -9,7 +9,7 @@ import { describeProgress, readBootMarks, takeProgress, waitForLoadReport } from
 import { COMP_FPS, expectContentAt, readPlayheadFrame, readTiles, seekToFrame, tile, type TileState } from './deviceTimeline'
 
 /**
- * Journeys on the owner's real phone (Pixel 10 Pro, Android 16, Chrome) over wireless adb: one
+ * Journeys on a real Android phone (tested on a Pixel 10 Pro, Android 16, Chrome) over wireless adb: one
  * catalog case per test, in order, on one "Device test" project built through the phone UI with a
  * generated phone recording (fixtures/phoneFootage.ts). The oracles are the preview's real pixels
  * (frame codes in device screenshots), the exported file decoded on the PC, and the sanitized load
@@ -21,7 +21,7 @@ test.skip(!resolveDeviceEnv().enabled, 'real-device journeys run only with MASTE
 
 const model = (dev: DeviceWorld) => dev.footage.model
 
-/** Every editing case first proves the open project is the harness's own: the owner's projects are never edited. */
+/** Every editing case first proves the open project is the harness's own: the phone user's projects are never edited. */
 async function expectDeviceProjectOpen(dev: DeviceWorld): Promise<void> {
   const name = needs(dev.journey.projectName, 'the Device test project')
   await expect(dev.page.getByTestId(IDS.timeline), 'the editor is not showing').toBeVisible({ timeout: 30_000 })

@@ -47,6 +47,32 @@ export class ExportDriver {
     await expect(container).toContainText(label);
   }
 
+  /** Picks a WebCodecs video codec by its label, e.g. 'H.264 (AVC)' or 'VP9'. */
+  async selectVideoCodec(label: string): Promise<void> {
+    const codec = await this.openVideoCodecList();
+    await this.page.getByRole('option', { name: label, exact: true }).click();
+    await expect(codec).toContainText(label);
+  }
+
+  /** The option of a video codec in the open codec list (to check that it is offered or disabled). */
+  async videoCodecOption(label: string): Promise<Locator> {
+    await this.openVideoCodecList();
+    return this.page.getByRole('option', { name: label, exact: true });
+  }
+
+  async closeOpenList(): Promise<void> {
+    await this.page.keyboard.press('Escape');
+  }
+
+  /** The current audio codec label in the Audio section, e.g. 'AAC' or 'OPUS (fallback)'. */
+  async audioCodecText(): Promise<string> {
+    await this.ensureOpen();
+    // A video export shows its single audio codec as text; audio-only exports offer a list.
+    const codec = this.panel.locator('[data-export-target="audio-format"] .inspector-row-control');
+    await expect(codec).toBeVisible();
+    return (await codec.innerText()).trim();
+  }
+
   async setFilename(filename: string): Promise<void> {
     await this.ensureOpen();
     const input = this.panel.getByRole('textbox', { name: 'Output name', exact: true });
@@ -105,6 +131,14 @@ export class ExportDriver {
     // Cleanup failure after a successful export must still fail the journey.
     await retainedObserver?.stop();
     return download;
+  }
+
+  private async openVideoCodecList(): Promise<Locator> {
+    await this.ensureOpen();
+    const codec = this.panel.getByRole('combobox', { name: 'Video codec', exact: true });
+    await expect(codec).toBeVisible();
+    await codec.click();
+    return codec;
   }
 
   private async ensureOpen(): Promise<void> {

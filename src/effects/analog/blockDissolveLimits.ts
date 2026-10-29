@@ -29,7 +29,7 @@ export const BLOCK_DISSOLVE_PATTERN_OPTIONS = [
   { value: 'bayer', label: 'Bayer' },
   { value: 'diagonal', label: 'Diagonal' },
 ] as const;
-/** Diagonal of the slant cuts: top-left to bottom-right (the 350Z reel), bottom-left to top-right, or both. */
+/** Diagonal of the slant cuts: top-left to bottom-right (the default), bottom-left to top-right, or both. */
 export const BLOCK_DISSOLVE_SLANT_OPTIONS = [
   { value: 'falling', label: 'Falling' },
   { value: 'rising', label: 'Rising' },

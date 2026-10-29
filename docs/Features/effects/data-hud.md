@@ -1,6 +1,6 @@
 # Data HUD
 
-<!-- effect-docs: basic page sha=f75d0b892c1f, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=d5a2d3fb2f88, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Draws a measurement overlay over the object, like a product render under analysis: lime boxes open in the middle of each side, teal centre dots, coordinate labels (x 537 y 984) and free blocks of data text; the marks keep their place and grow or shrink one by one; Boxes and Text Blocks set how many, Box Size, Gap and Line Width their look, Object where they may sit, Rate and Glide the rhythm.
 
@@ -15,7 +15,7 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 
 *A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
 
-**Presets:** Tracking Data · 350Z Overlay · Quiet Scan · Dense Readout. Pick one in the **Preset** row of the effect card.
+**Presets:** Tracking Data · Lime Overlay · Quiet Scan · Dense Readout. Pick one in the **Preset** row of the effect card.
 
 ## Controls
 

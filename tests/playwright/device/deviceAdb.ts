@@ -77,7 +77,7 @@ export class DeviceAdb {
   /**
    * Fails fast unless the screen is on and unlocked: a locked phone renders nothing and every
    * journey would time out. The wake key turns a dozing screen on first, so a phone that merely
-   * dimmed passes; the lock screen itself is never touched (the owner unlocks it).
+   * dimmed passes; the lock screen itself is never touched (the phone user unlocks it).
    */
   async assertUnlocked(): Promise<void> {
     if ((await this.wakefulness()) !== 'Awake') await this.wake()

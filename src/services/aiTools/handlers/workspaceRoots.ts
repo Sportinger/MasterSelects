@@ -83,6 +83,36 @@ export async function handleSaveProject(): Promise<ToolResult> {
 
 let creating = false;
 
+/** Save As to an absolute folder below a granted workspace root: the open project's content in a new project there. */
+export async function handleSaveLocalProjectAs(args: Record<string, unknown>): Promise<ToolResult> {
+  if (creating) return { success: false, error: 'Another project is currently being created.' };
+  const directory = typeof args.directory === 'string' ? normalizeWorkspacePath(args.directory) : null;
+  const segments = directory?.split('/') ?? [];
+  const name = segments.at(-1) ?? '';
+  if (!directory || segments.length < 2 || /^[A-Z]:$/.test(name)) {
+    return { success: false, error: 'Supply the absolute path of the new project folder, e.g. D:/Shows/Episode 2.' };
+  }
+  creating = true;
+  try {
+    const [{ projectFileService }, { useTimelineStore }] = await Promise.all([
+      import('../../projectFileService'), import('../../../stores/timeline'),
+    ]);
+    if (useTimelineStore.getState().isExporting) return { success: false, error: 'Wait for the current export to finish.' };
+    const parent = await resolveWorkspaceDirectory(segments.slice(0, -1).join('/') || '/', { create: true, mode: 'readwrite' });
+    if (await containsProjectPackage(parent, name)) {
+      return { success: false, error: `${directory} already contains a project. Use openLocalProject instead.` };
+    }
+    if (projectFileService.activeBackend !== 'fsa') projectFileService.activateFsaBackend();
+    const { saveProjectAsInFolder } = await import('../../project/projectLifecycle');
+    if (!await saveProjectAsInFolder(parent, name)) return { success: false, error: `Saving the project as ${directory} failed.` };
+    return { success: true, data: { directory: displayWorkspacePath(directory), name, backend: projectFileService.activeBackend } };
+  } catch (error) {
+    return errorResult(error, 'Saving the project under a new folder failed.');
+  } finally {
+    creating = false;
+  }
+}
+
 export async function handleCreateLocalProject(args: Record<string, unknown>): Promise<ToolResult> {
   if (creating) return { success: false, error: 'Another project is currently being created.' };
   const directory = typeof args.directory === 'string' ? normalizeWorkspacePath(args.directory) : null;

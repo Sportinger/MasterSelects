@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test'
 import { resolveDeviceEnv } from './tests/playwright/device/deviceEnv'
 
 /**
- * Journeys on a REAL phone (the owner's Pixel 10 Pro, Android 16, Chrome) over wireless adb, see
+ * Journeys on a REAL Android phone (tested on a Pixel 10 Pro, Android 16, Chrome) over wireless adb, see
  * tests/playwright/README.md, "Real device". Playwright launches no browser: the fixture forwards
  * the phone's DevTools socket with adb, connects over CDP and works in one new tab of the phone's
  * Chrome (tests/playwright/device/deviceConnection.ts). No web server is started; the phone opens
@@ -35,7 +35,7 @@ export default defineConfig({
   ],
   use: {
     // Traces and videos are not recorded: a connected phone is not a launched browser, and the
-    // screenshots of the page would carry the owner's Chrome UI state. Failures attach their own
+    // screenshots of the page would carry the phone user's Chrome UI state. Failures attach their own
     // device screenshot and adb state (deviceFixture.ts).
     trace: 'off',
     video: 'off',

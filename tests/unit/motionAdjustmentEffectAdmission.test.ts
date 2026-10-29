@@ -33,7 +33,8 @@ import {
   WorkerGpuAdjustmentFallbackError,
   workerGpuUnsupportedAdjustmentEffectTypes,
 } from '../../src/services/render/workerGpuAdjustmentPlanAdapter';
-import type { Effect, Layer } from '../../src/types';
+import type { Effect } from '../../src/types/effects';
+import type { Layer } from '../../src/types/layers';
 
 function effect(id: string, type: string, params: Effect['params'] = {}, enabled = true): Effect {
   return { id, name: type, type: type as Effect['type'], enabled, params };

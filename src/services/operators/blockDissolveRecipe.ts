@@ -269,7 +269,7 @@ function ditherInk(g: AnalogRecipeBuilder, rawLuma: GraphPort, alpha: GraphPort)
   const threshold = g.unary('dither-threshold', 'pattern.bayer4.vec2', g.add2('dither-cell-positive', cells, g.splat2('dither-offset', g.number('dither-offset-value', 65536))));
   const tone = g.plus('dither-tone', g.mul('dither-tone-covered', luma, alpha), g.sub('dither-tone-clear', 'one', alpha));
   const bayer = g.sub('dither-bayer-ink', 'one', g.add('dither-paper', 'math.step.scalar', { edge: threshold, value: tone }));
-  // Checker: every other dot, whatever the brightness (the 350Z reel's dither band).
+  // Checker: every other dot, whatever the brightness (a regular dither band).
   const [cx, cy] = g.split2('dither-cell-split', cells);
   const checker = g.add('dither-checker', 'math.step.scalar', { edge: 'half', value: g.mul('dither-checker-parity',
     g.fn('dither-checker-fract', 'fract', g.mul('dither-checker-half', g.plus('dither-checker-sum', cx, cy), 'half')), g.number('dither-checker-two', 2)) });
@@ -289,7 +289,7 @@ const BAND_DIRECTIONS = [[1, 0], [-1, 0], [0, 1], [0, -1], [.7071, .7071], [.707
 /**
  * The dither band along the real outline: background pixels with object within Edge Width (looked up in
  * BAND_DIRECTIONS), a strip just outside the object. It follows the outline at any angle, so a slanted
- * edge gives a slanted band; clipped to the edge blocks it turns into the slanted pieces of the 350Z reel.
+ * edge gives a slanted band; clipped to the edge blocks it turns into slanted pieces along the outline.
  * `band-rgb` / `band-alpha` give it the colour of the object beside it.
  */
 function contourBand(g: AnalogRecipeBuilder, ownRaw: GraphPort) {
@@ -315,12 +315,12 @@ function contourBand(g: AnalogRecipeBuilder, ownRaw: GraphPort) {
 
 /**
  * Slant: a dithered edge block is cut along a diagonal (`slant-on`, by Slant; Slant Direction), and only the side
- * `slant-side` is drawn, so even straight outlines break into slanted pieces like the curved 350Z body.
+ * `slant-side` is drawn, so even straight outlines break into slanted pieces like a curved body.
  */
 function slantCut(g: AnalogRecipeBuilder) {
   const [u, v] = g.split2('slant-local', g.binary('slant-local-raw', 'math.divide-ieee.vec2', g.sub2('slant-from-start', 'pixel', 'block-start'), 'block-size'));
   g.mul('slant-on', chance(g, 'slant-chance', roll(g, 'slant-roll', SALT.slant, 'block-key-x', 'block-key-y', 'choice-state'), 'slant-clamped'), 'edge-active');
-  // Slant Direction: Falling 0 (cuts along the top-left to bottom-right diagonal, as in the 350Z reel),
+  // Slant Direction: Falling 0 (cuts along the top-left to bottom-right diagonal),
   // Rising 1 (bottom-left to top-right), Both 2. The kept side is random per block.
   const choice = g.bound('slant-choice', 'slantDirection', 'values.choice');
   const both = g.add('slant-both', 'math.step.scalar', { edge: g.number('slant-both-edge', 1.5), value: choice });

@@ -1,6 +1,6 @@
 # Block Dissolve
 
-<!-- effect-docs: basic page sha=33c316264650, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=e02f9c45d385, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Breaks an object into blocks of different shapes, like a product render dissolving in a data glitch: whole parts vanish (Holes), edges flicker between the outline, a staircase and a 1-bit dither in Ink and Paper, some blocks jump sideways (Displace); Object picks dark, light or alpha as the object, Structure Rate and Flicker Rate the two clocks.
 
@@ -15,7 +15,7 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 
 *A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
 
-**Presets:** Data Dissolve · 350Z Burst · Cross Grid · Crumble · Big Blocks. Pick one in the **Preset** row of the effect card.
+**Presets:** Data Dissolve · Diagonal Burst · Cross Grid · Crumble · Big Blocks. Pick one in the **Preset** row of the effect card.
 
 ## Controls
 

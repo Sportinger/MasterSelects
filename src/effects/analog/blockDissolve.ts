@@ -53,9 +53,9 @@ const ranges = {
 /** Presets: only values that differ from the defaults (EffectPreset). */
 const presets: readonly EffectPreset[] = [
   { id: 'data-dissolve', name: 'Data Dissolve', params: {} },
-  // Nissan 350Z reel (frames 1-16): even blocks, the object itself revealed (no fill), one large hole, dithered edges.
-  { id: '350z-burst', name: '350Z Burst', params: { scale: 39, variation: 0.1, holes: 0.2, holeSize: 2, edgeDither: 0.9, ditherSize: 5, pattern: 'diagonal', slant: 0.7, displace: 0.06, structureRate: 0.7, flickerRate: 2 } },
-  // Nissan 350Z reel, frames 92-101: the body flat black, a ring of original blocks at the outline, white crosses on black around it.
+  // Even blocks, the object itself revealed (no fill), one large hole, dithered edges, slanted diagonal cuts.
+  { id: 'diagonal-burst', name: 'Diagonal Burst', params: { scale: 39, variation: 0.1, holes: 0.2, holeSize: 2, edgeDither: 0.9, ditherSize: 5, pattern: 'diagonal', slant: 0.7, displace: 0.06, structureRate: 0.7, flickerRate: 2 } },
+  // The body flat black, a ring of original blocks at the outline, white crosses on black around it.
   { id: 'cross-grid', name: 'Cross Grid', params: { scale: 39, variation: 0.1, solid: 1, holes: 0, edgeAmount: 1, edgeDither: 0, displace: 0, colorB: '#000000', paperMarks: 'crosses', markGrid: 36, markSize: 3, structureRate: 0.7, flickerRate: 2 } },
   { id: 'crumble', name: 'Crumble', params: { holes: 0.35, holeSize: 4, edgeDither: 0.9, dither: 0.15, displace: 0.12, flickerRate: 6 } },
   { id: 'big-blocks', name: 'Big Blocks', params: { scale: 60, variation: 0.8, holeSize: 2, holes: 0.2, ditherSize: 4, displace: 0.15 } },

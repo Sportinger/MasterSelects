@@ -45,6 +45,35 @@ project in that context's browser storage. Native file pickers are disabled only
 for this portable entry flow; the Windows beta profile keeps its native folder
 selection. Any autosave writes stay in the disposable context's test project.
 
+## Fast export journeys
+
+`export/fast/` checks the Fast (WebCodecs) export through the Export panel:
+`output.spec.ts` covers containers, codecs, range, 1080p60, A/V sync and the codec lists;
+`sources.spec.ts` covers source files (B-frames, HEVC, long GOP, variable frame rate, a
+rotated phone MOV, PNG with alpha, MP3/WAV, WebM). Run only them with
+`npm run test:e2e:module -- export/fast/` or one case with its catalog tag, e.g.
+`--grep @case:export.mp4-h264-aac`.
+
+- **One project per worker** (the frame-code Sammeltest start, `fixtures/frameCodeProject.ts`);
+  each case opens its own new composition, so no case sees another case's clips or In/Out points.
+- **Sources** come from `fixtures/fastExportSources.ts`: ffmpeg recipes rendered once per host
+  into the OS temp folder (keyed by a hash of the recipe). Video frames are the v1 frame-code
+  chart of `fixtures/frameCodeMedia.ts` plus a white flash square in the lower right corner on
+  each whole second; audio has a 1 kHz click on each whole second. ffmpeg must be on the PATH or
+  named by `MASTERSELECTS_E2E_FFMPEG`; without it the journeys fail with that hint.
+- **Oracle** (`assertions/fastExportOracle.ts`): the exported file is decoded completely with
+  ffmpeg outside the browser, every frame's code is read with `assertions/frameCodeOracle.ts`
+  and compared with the expected source frame: the nearest source sample to the output time, a
+  tie going to the later sample, as Fast export resolves it. Flash frames and clicks give the
+  A/V offset.
+- **Platform expectations** are part of the journeys, not skips: Chrome on Linux has no AAC
+  or HEVC encoder (MP4 audio becomes Opus and reads "OPUS (fallback)", H.265 is disabled),
+  Windows must offer and use HEVC.
+- **Sources Fast export cannot read** (WebM/Matroska, AVI, MPEG-TS, Ogg) must stop with a
+  visible message that names the container and points to Precise export, never a parser error.
+- Exports stay in the OS temp folder and are deleted after the checks; each journey attaches
+  a JSON summary.
+
 ## Nightly journeys
 
 Long journeys (large exports, hour-long sources) live under `nightly/`. They are
@@ -296,7 +325,7 @@ unset. The clips need `ffmpeg` on the test host, like the desktop frame-code cas
 The emulated phone suite missed every recent production bug of the phone editor
 (slow loads from Android folders, multi-GB recordings in export, jittered phone
 timestamps). `playwright.device.config.ts` (`npm run test:e2e:device`) runs the
-journeys on a real Android phone (the owner's Pixel 10 Pro, Android 16, Chrome)
+journeys on a real Android phone (tested on a Pixel 10 Pro, Android 16, Chrome)
 over wireless adb, with generated phone recordings (`fixtures/phoneFootage.ts`;
 never real media). The config refuses to load without `MASTERSELECTS_DEVICE=1`,
 and the journey file ends in `.device.ts`, so no other config picks it up.
@@ -312,7 +341,7 @@ and the journey file ends in `.device.ts`, so no other config picks it up.
   survives Android Chrome discarding and reloading the tab, which drops
   `window.name` and `sessionStorage`. A further marked editor tab is parked on
   `about:blank#masterselects-device-test`, never closed. The harness never
-  navigates, reloads or closes the owner's (unmarked) tabs and leaves its own tab
+  navigates, reloads or closes the phone user's (unmarked) tabs and leaves its own tab
   open. It fails fast when the phone is locked (`isKeyguardShowing`), and refuses
   to start while an unmarked MasterSelects tab is open on the phone (the test tab
   restores the last project, and two tabs on one project compete for its storage;
@@ -337,7 +366,7 @@ and the journey file ends in `.device.ts`, so no other config picks it up.
   background copy into the project (`background-copy` report) and requires it to
   succeed, so the later cases and the reopen use the durable copy; the export is
   shared to a stubbed `navigator.share` in the test tab (nothing lands in the
-  owner's Downloads), copied to the PC and decoded with the phone footage oracle;
+  phone's Downloads), copied to the PC and decoded with the phone footage oracle;
   load times come from `window.__MS_PHONE_BOOT__`, `window.__MS_PROJECT_LOAD__`,
   `window.__MS_MEDIA_IMPORT__` (sanitized: phase names and milliseconds only) and
   the progress view. Budgets are soft (`expect.soft`), the numbers are attached to

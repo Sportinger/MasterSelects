@@ -8,7 +8,7 @@ import { PHONE_M1_TEST_IDS, PHONE_TEST_IDS } from '../../../src/components/mobil
 import { PHONE_PROJECT_LOADING_TEST_ID } from '../../../src/components/mobileSkin/runtime/phoneProjectLoadingTestIds'
 
 /**
- * Connects to Chrome on the owner's phone over wireless adb and works in ONE TEST TAB of its own.
+ * Connects to Chrome on a real Android phone over wireless adb and works in ONE TEST TAB of its own.
  *
  * - DevTools: `adb forward tcp:<port> localabstract:chrome_devtools_remote`, then
  *   `chromium.connectOverCDP`. The phone's default browser context is used, because a context
@@ -18,13 +18,13 @@ import { PHONE_PROJECT_LOADING_TEST_ID } from '../../../src/components/mobileSki
  *   and opens a new tab only when there is none, so runs never pile up editor tabs that share one
  *   project storage (a second harness tab once restored the previous run's project, Pixel run
  *   2026-10-28). A further marked editor tab is parked on about:blank#… (never closed).
- * - The owner's tabs are never touched: unmarked tabs are only read for their URL. The harness never
+ * - The phone user's tabs are never touched: unmarked tabs are only read for their URL. The harness never
  *   navigates, reloads or closes them, and leaves its own tab open at the end (repository rule: never
  *   close tabs). Disconnecting closes only the DevTools connection.
  * - The phone must be unlocked before the run; the wake key keeps the screen on while connected.
  *   No device setting is changed.
  * - The test tab restores the phone's last project on /m (there is no way around the boot restore),
- *   and the journeys then create a new "Device test" project. If the owner has an (unmarked)
+ *   and the journeys then create a new "Device test" project. If the phone user has an (unmarked)
  *   MasterSelects tab open, both tabs would work on one project's storage, so the run refuses to
  *   start unless MASTERSELECTS_DEVICE_ALLOW_EDITOR_TABS=1.
  */
@@ -71,7 +71,7 @@ export async function connectDevice(env: DeviceEnv = resolveDeviceEnv()): Promis
     if (!context) throw new Error('Chrome on the phone exposes no default browser context')
     const existing = context.pages()
     // The window.name check runs script in a tab, so it is only tried on tabs of the editor's own origin:
-    // the owner's other tabs (mail, banking, messengers) are never evaluated.
+    // the phone user's other tabs (mail, banking, messengers) are never evaluated.
     const editorOrigin = new URL(env.baseURL).origin
     const tabs = await Promise.all(existing.map(async item => ({ url: item.url(),
       marked: hasDeviceTabMarker(item.url()) || (originOf(item.url()) === editorOrigin && await isMarkedTestTab(item)) })))

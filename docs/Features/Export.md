@@ -156,7 +156,13 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 - Parallel exports count a frame as ready only when exactly that frame is buffered. If it is not, they wait, flush frames the decoder holds back, then re-decode. Before, a buffered neighbour within three frames counted as ready, so with about a dozen layers and the 8-decoder pool some layers showed the previous frame. Recycling a pool decoder resumes after the newest buffered frame. A clip that walks its source backward prunes and evicts the frames it has already passed.
 - If the exact frame still does not arrive, a neighbour within the lookup window stands in. The run's diagnostics count it as a `previousFrameFallbacks` entry with `reason: 'neighbour-frame'`. The per-time and the per-clip source-time prefetch share this wait (`waitForExactBufferedFrame`). A single sample that never decodes therefore no longer stops the export. The export fails only when no frame is buffered nearby. For a reversed clip, a full frame buffer evicts the end farthest from the target, never the frame that just arrived.
 - Preview resolution updates pause during export. Each export frame rechecks its render host dimensions before rendering so an intervening preview resize cannot produce readback pixels at the wrong size.
-- Parses source media with MP4Box.
+- Parses source media with MP4Box, so it reads MP4 and MOV (ISO-BMFF) files. Other containers
+  (WebM/Matroska, AVI, MPEG-TS, Ogg) are refused before parsing with a message that names the
+  container and the clip and points to Precise export, instead of a parser error
+  (`clipPreparation/fastSourceContainer.ts`). Only containers recognised by their signature are
+  refused; an unrecognised header still goes to the parser, whose error also names the clip. The Playwright journeys in
+  `tests/playwright/export/fast/` check Fast export frame by frame (codecs, range, 1080p60, A/V
+  sync, B-frame, HEVC, long-GOP, VFR, rotated, alpha and audio sources).
 - Decode, buffer, and unsupported-file failures remain in the selected workflow. Errors are logged and surfaced; Fast mode does not automatically switch to HTMLVideo.
 
 ### Precise Mode
