@@ -10,6 +10,7 @@ import { phoneCompositionBackStep, usePhoneCompositionTrail } from '../compositi
 import { PHONE_COMPOSITIONS_TEST_IDS } from '../compositions/phoneCompositionsTestIds';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from './phoneIcons';
+import { PhoneUpdateButton } from './PhoneUpdateButton';
 import { scrollChildIntoStrip, usePhoneScrollEdges } from './usePhoneScrollEdges';
 import './PhoneTopBar.css';
 
@@ -172,6 +173,7 @@ export function PhoneTopBar({ inert = false }: { inert?: boolean } = {}) {
         >
           {projectName || 'Untitled Project'}
         </button>
+        <PhoneUpdateButton />
         <PhoneStorageStatus />
         <TopBarButton
           actionId="assistant"

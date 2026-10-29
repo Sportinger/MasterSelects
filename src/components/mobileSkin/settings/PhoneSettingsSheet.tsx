@@ -10,8 +10,7 @@ import { usePhoneUiStore } from '../state/phoneUiStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { isLegacyMobileDockLayoutEnabled } from '../../../stores/dockStore/legacyMobileLayout';
 import { hasHostedAiSession, useAccountStore } from '../../../stores/accountStore';
-import { projectFileService } from '../../../services/projectFileService';
-import { saveCurrentProject } from '../../../services/projectSync';
+import { reloadForAppUpdate } from '../../../services/appUpdate/reloadForAppUpdate';
 import { blurTappedControl, PhoneStatusLine, usePhoneStatus } from '../library/phoneListUi';
 import { checkPhoneAppUpdate, describePhoneBuild, type PhoneUpdateState } from './phoneAppInfo';
 import {
@@ -88,12 +87,11 @@ export const PhoneSettingsSheet: PhoneSheetComponent = () => {
     setChecking(false);
   };
 
+  // Same safe reload as the top bar's Update button: copies finish and the project is saved first.
   const reloadForUpdate = async () => {
-    if (projectFileService.isProjectOpen() && !await saveCurrentProject({ source: 'manual' })) {
-      report({ ok: false, message: 'The project could not be saved, so the app did not reload.' });
-      return;
-    }
-    window.location.reload();
+    const outcome = await reloadForAppUpdate();
+    if (outcome.status === 'export-running') report({ ok: false, message: 'An export is running. Update when it has finished.' });
+    else if (outcome.status === 'save-failed') report({ ok: false, message: outcome.message });
   };
 
   if (view === 'note') return <PhoneLeaveNotePage onBack={back} />;

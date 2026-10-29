@@ -1,0 +1,169 @@
+/* Brand of the workspace bar (WorkspaceBarBrand.tsx). The base brand look lives in WorkspaceBar.css;
+   this file adds the slot and the turquoise "new version available" state. */
+@layer components {
+.workspace-bar-brand-slot {
+  position: relative;
+  display: flex;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.workspace-bar-brand.workspace-bar-brand--update {
+  position: relative;
+  isolation: isolate;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--update-available);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The glow is a blurred layer that only fades (opacity runs on the compositor, no repaint per frame). */
+.workspace-bar-brand.workspace-bar-brand--update::before {
+  position: absolute;
+  z-index: -1;
+  inset: 3px 2px;
+  border-radius: 999px;
+  background: radial-gradient(closest-side, var(--update-available-glow), transparent);
+  content: '';
+  opacity: 0.3;
+  pointer-events: none;
+  animation: workspace-bar-update-glow 3.2s ease-in-out infinite;
+}
+
+.workspace-bar-brand.workspace-bar-brand--update .workspace-bar-brand-label,
+.workspace-bar-brand.workspace-bar-brand--update .workspace-bar-brand-version {
+  color: var(--update-available);
+  text-shadow: 0 0 6px var(--update-available-glow);
+}
+
+.workspace-bar-brand.workspace-bar-brand--update .workspace-bar-brand-mark {
+  border-color: var(--update-available);
+  color: var(--update-available);
+  box-shadow: 0 0 6px var(--update-available-glow);
+}
+
+.workspace-bar-brand.workspace-bar-brand--update[aria-busy='true'] {
+  cursor: progress;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-bar-brand.workspace-bar-brand--update:hover::before {
+    opacity: 0.9;
+  }
+}
+
+.workspace-bar-brand.workspace-bar-brand--update:focus {
+  outline: none;
+}
+
+.workspace-bar-brand.workspace-bar-brand--update:focus-visible {
+  outline: 1px solid var(--update-available);
+  outline-offset: -2px;
+}
+
+@keyframes workspace-bar-update-glow {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-bar-brand.workspace-bar-brand--update::before {
+    opacity: 0.6;
+    animation: none;
+  }
+}
+
+.workspace-bar-update-prompt {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 8px;
+  z-index: 10;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  user-select: text;
+}
+
+.workspace-bar-update-prompt[data-update-phase='failed'] {
+  border-color: var(--danger);
+}
+
+.workspace-bar-update-prompt p {
+  margin: 0 0 8px;
+  white-space: normal;
+}
+
+.workspace-bar-update-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.workspace-bar-update-actions button {
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--veil-2);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.workspace-bar-update-prompt[data-update-phase='ask-export'] .workspace-bar-update-actions button:first-child {
+  border-color: var(--update-available);
+  color: var(--update-available);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-bar-update-actions button:hover {
+    background: var(--veil-3);
+  }
+}
+
+.workspace-bar-update-actions button:focus {
+  outline: none;
+}
+
+.workspace-bar-update-actions button:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+/* The narrow bar hides the brand (WorkspaceBar.css); an available update keeps its glowing mark. */
+@media (max-width: 720px) {
+  .workspace-bar-brand-slot:not([data-update-available='true']) {
+    display: none;
+  }
+
+  .workspace-bar:has(.workspace-bar-brand-slot[data-update-available='true']) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .workspace-bar-brand.workspace-bar-brand--update {
+    display: flex;
+    padding: 0 8px;
+  }
+
+  .workspace-bar-brand.workspace-bar-brand--update .workspace-bar-brand-label {
+    display: none;
+  }
+}
+}

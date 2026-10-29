@@ -10,7 +10,7 @@ import {
   useDockStore,
 } from '../../stores/dockStore';
 import type { SavedDockLayout } from '../../types/dock';
-import { APP_VERSION } from '../../version';
+import { WorkspaceBarBrand } from './WorkspaceBarBrand';
 import { WorkspacePageIcon } from './WorkspacePageIcon';
 import { openPhoneEditor } from './openPhoneEditor';
 import './WorkspaceBar.css';
@@ -111,12 +111,7 @@ export function WorkspaceBar() {
 
   return (
     <nav aria-label="Workspaces" className="workspace-bar">
-      <div aria-hidden="true" className="workspace-bar-brand">
-        <span className="workspace-bar-brand-mark">M</span>
-        <span className="workspace-bar-brand-label">
-          MasterSelects <span className="workspace-bar-brand-version">{APP_VERSION}</span>
-        </span>
-      </div>
+      <WorkspaceBarBrand />
 
       <div aria-label="Favorite workspaces" className="workspace-bar-modes" role="group">
         {favoriteLayouts.map((layout) => (

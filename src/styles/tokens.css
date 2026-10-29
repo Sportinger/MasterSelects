@@ -71,6 +71,10 @@
   --cyan-500: #22d3ee;
   --cyan-400: #67e8f9;
 
+  /* Teal */
+  --teal-400: #2dd4bf;
+  --teal-600: #0d9488;
+
   /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
      SEMANTIC TOKENS (meaning-based)
      â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
@@ -132,6 +136,10 @@
   --danger-dim: rgba(239, 68, 68, 0.15);
   --danger-subtle: rgba(239, 68, 68, 0.1);
   --danger-border: rgba(239, 68, 68, 0.3);
+
+  /* A newer deployed version (glowing workspace bar brand, phone top bar) */
+  --update-available: var(--teal-400);
+  --update-available-glow: rgba(45, 212, 191, 0.45);
 
   --success: var(--green-600);
   --success-light: var(--green-400);
@@ -405,6 +413,8 @@
   --danger-dim: rgba(211, 47, 47, 0.1);
   --danger-subtle: rgba(211, 47, 47, 0.06);
   --danger-border: rgba(211, 47, 47, 0.25);
+  --update-available: var(--teal-600);
+  --update-available-glow: rgba(13, 148, 136, 0.3);
   --success: #2e7d32;
   --success-light: #43a047;
   --success-dim: rgba(46, 125, 50, 0.1);

@@ -35,3 +35,33 @@
 .mobile-skin .phone-comp-strip__back:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .mobile-skin .phone-comp-strip__button:focus-visible,
 .mobile-skin .phone-comp-strip__back:focus-visible { outline: 2px solid var(--phone-accent); outline-offset: -2px; }
+
+/* Update button (PhoneUpdateButton.tsx): shown only when a new version is deployed; glows turquoise.
+   Two classes, so the turquoise wins over .phone-icon-button whatever order the sheets load in. */
+.mobile-skin { --phone-update: var(--update-available, #2dd4bf); --phone-update-glow: var(--update-available-glow, rgba(45, 212, 191, 0.45)); }
+.mobile-skin[data-phone-scheme='light'] { --phone-update: #0d9488; --phone-update-glow: rgba(13, 148, 136, 0.3); }
+.mobile-skin .phone-icon-button.phone-update-button {
+  position: relative;
+  isolation: isolate;
+  color: var(--phone-update);
+  -webkit-tap-highlight-color: transparent;
+}
+/* Only the glow layer's opacity animates, so the pulse never repaints the bar. */
+.mobile-skin .phone-icon-button.phone-update-button::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--phone-update-glow), transparent);
+  opacity: 0.35;
+  pointer-events: none;
+  animation: phone-update-glow 3.2s ease-in-out infinite;
+}
+.mobile-skin .phone-icon-button.phone-update-button[aria-busy='true'] { opacity: 0.7; }
+.mobile-skin .phone-update-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.mobile-skin .phone-update-actions .phone-button { align-self: auto; }
+@keyframes phone-update-glow { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.95; } }
+@media (prefers-reduced-motion: reduce) {
+  .mobile-skin .phone-icon-button.phone-update-button::before { opacity: 0.7; animation: none; }
+}

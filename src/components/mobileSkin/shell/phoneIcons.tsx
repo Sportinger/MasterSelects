@@ -40,6 +40,7 @@ const GLYPHS: Record<PhoneIconName, ReactNode> = {
   reorder: (<><path d="M4 8h16M4 16h16" /><path d="M9 4.5L12 8l3-3.5M9 19.5L12 16l3 3.5" /></>),
   close: (<path d="M5.5 5.5l13 13M18.5 5.5l-13 13" />),
   check: (<path d="M4.5 12.5l5 5 10-11" />),
+  update: (<><path d="M19.5 12a7.5 7.5 0 1 1-2.6-5.7" /><path d="M19.5 4v4h-4" /></>),
 };
 
 const FILLED: ReadonlySet<PhoneIconName> = new Set(['play']);

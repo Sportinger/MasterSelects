@@ -238,6 +238,7 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Current shortcut registry, playback controls, and preset behavior |
 | [Android App](./Android-App.md) | Bundled offline editor, Android file import and export, build/signing instructions, and device limits |
 | [Phone Editor](./Phone-Editor.md) | The touch editor at /m: five strips, fixed centre playhead, swipe, pinch, tap and split, greyed-out tools by milestone |
+| [App updates](./App-Updates.md) | The glowing brand when a new version is live, and the one-click update that saves first |
 
 <!-- planned:
 | [Workspaces and layouts](./Workspaces.md) | Workspaces, saved layouts and the dock |

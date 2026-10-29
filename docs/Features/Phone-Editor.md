@@ -52,7 +52,8 @@ phone, because the installed app covers only the full editor's address.
 
 The screen has five strips:
 
-1. **Top bar** – projects, project name, assistant and export.
+1. **Top bar** – projects, project name, assistant and export; a glowing **Update** button when a new
+   version is ready ([App updates](./App-Updates.md)).
 2. **Preview** – the real picture of your composition. It stays visible while you work, also above an
    open sheet.
 3. **Transport** – time, play, undo and redo.

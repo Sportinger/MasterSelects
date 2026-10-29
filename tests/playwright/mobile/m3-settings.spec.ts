@@ -4,7 +4,7 @@ import { PHONE_SETTINGS_TEST_IDS as SET } from '../../../src/components/mobileSk
 import { PHONE_PROJECT_TEST_IDS as PROJ } from '../../../src/components/mobileSkin/project/phoneProjectTestIds'
 import { PHONE_HOME_TEST_IDS } from '../../../src/components/mobileSkin/home/phoneHomeTestIds'
 import { DEFAULT_REPO_ROOT } from '../fixtures/bridgeClient'
-import { IDS, M1_IDS, expect, tapOn, test, type M1Session } from './m1Fixture'
+import { IDS, M1_IDS, ensureEditor, expect, tapOn, test, type M1Session } from './m1Fixture'
 import { accountDialog, closeAccountDialog, closeSheets, restoreSettings, settingsState, sheetSettled, tapCancel, tapDone } from './m3LibraryFixture'
 
 /**
@@ -179,6 +179,55 @@ test('INV6/app-version-and-update-state: shows the loaded version and reports a 
   } finally {
     await m1.page.unroute('**/build-info.json*')
   }
+})
+
+// A deploy while the phone editor is open (docs/Features/App-Updates.md). The dev server has no build info
+// and keeps the background check off unless `ms.updateCheck.enabled` is set; the case sets it, routes a newer
+// release and triggers the check the way a returning connection does. The tap reloads the page, so the case
+// brings the editor back itself.
+test('INV6/update-button-in-top-bar: a newly deployed version shows the glowing Update button; a tap saves and reloads @phone', async ({ m1 }, testInfo) => {
+  const update = m1.page.getByTestId('phone-topbar-update')
+  const revision = 'e'.repeat(40)
+  await expect(update, 'no Update button while the running build is served').toHaveCount(0)
+  await m1.page.route('**/build-info.json*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ schema: 'masterselects-build/v1', version: '99.0.0', buildId: '2099-01-01T00:00:00.000Z', sourceRevision: revision, sourceDirty: false, releaseId: `masterselects-99.0.0-${revision}` }),
+  }))
+  try {
+    await m1.page.evaluate(() => {
+      window.localStorage.setItem('ms.updateCheck.enabled', 'true')
+      window.dispatchEvent(new Event('online'))
+    })
+    await expect(update).toBeVisible()
+    await expect(update).toHaveAttribute('aria-label', 'New version 99.0.0 available – tap to update')
+    expect(await update.evaluate(element => getComputedStyle(element, '::before').animationName)).toBe('phone-update-glow')
+    // The icon really is drawn in the update colour (a later stylesheet once painted it white).
+    const colors = await update.evaluate((element) => {
+      const probe = document.createElement('span')
+      probe.style.color = 'var(--phone-update)'
+      element.parentElement!.appendChild(probe)
+      const expected = getComputedStyle(probe).color
+      probe.remove()
+      return { actual: getComputedStyle(element).color, expected }
+    })
+    expect(colors.actual, 'the Update icon uses --phone-update').toBe(colors.expected)
+    const shot = testInfo.outputPath('phone-update-button.png')
+    await m1.page.getByTestId(IDS.topBar).screenshot({ path: shot })
+    await testInfo.attach('phone-update-button.png', { path: shot, contentType: 'image/png' })
+
+    await m1.page.evaluate(() => { (window as unknown as { __beforeUpdateReload?: boolean }).__beforeUpdateReload = true })
+    const reloaded = m1.page.waitForEvent('framenavigated', { predicate: frame => frame === m1.page.mainFrame() })
+    await tapOn(m1, update)
+    await reloaded
+    await ensureEditor(m1)
+    expect(await m1.page.evaluate(() => (window as unknown as { __beforeUpdateReload?: boolean }).__beforeUpdateReload), 'the page reloaded').toBeUndefined()
+  } finally {
+    await m1.page.unroute('**/build-info.json*')
+  }
+  await m1.page.evaluate(() => window.localStorage.removeItem('ms.updateCheck.enabled'))
+  await m1.bridge.waitForTarget({ timeoutMs: 30_000, requireVisible: true })
+  await m1.bridge.authenticate()
 })
 
 test('INV6/runtime-health-and-diagnostics: the diagnostics page reports the preview engine and storage @phone', async ({ m1 }) => {

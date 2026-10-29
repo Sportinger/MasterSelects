@@ -1,9 +1,10 @@
 // App version, update check and a short, sanitized diagnostics report for the phone Settings sheet.
-// The update check compares the loaded build with the server's /build-info.json; a build without
-// that file (the dev server) says so instead of claiming to be current.
+// The update check compares the loaded build with the server's /build-info.json (services/appUpdate);
+// a build without that file (the dev server) says so instead of claiming to be current.
 
 import { APP_VERSION } from '../../../version';
 import { APP_BUILD_ID, APP_RELEASE_ID, APP_SOURCE_REVISION } from '../../../services/appBuild';
+import { compareAppBuild, fetchServerBuildInfo } from '../../../services/appUpdate/appUpdateCheck';
 import { Logger, type LogEntry } from '../../../services/logger';
 import type { PhoneRuntimeStatus } from '../contracts';
 
@@ -17,25 +18,26 @@ export function describePhoneBuild(): string {
   return `Version ${APP_VERSION}${revision}${APP_RELEASE_ID ? '' : ' · local build'}`;
 }
 
-interface BuildInfo { version?: unknown; buildId?: unknown }
+interface BuildInfo { version?: unknown; buildId?: unknown; releaseId?: unknown }
 
-/** Pure comparison of the loaded build with the server's build info. */
-export function comparePhoneBuild(loaded: { version: string; buildId: string }, server: BuildInfo | null): PhoneUpdateState {
-  if (!server || typeof server.buildId !== 'string') {
+/** Pure comparison of the loaded build with the server's build info (same rule as the top bar's check). */
+export function comparePhoneBuild(loaded: { version: string; buildId: string; releaseId?: string | null }, server: BuildInfo | null): PhoneUpdateState {
+  const comparison = compareAppBuild({ version: loaded.version, buildId: loaded.buildId, releaseId: loaded.releaseId ?? null }, server);
+  if (comparison.kind === 'unknown') {
     return { kind: 'unknown', message: 'This build cannot check for updates (no build info on the server).' };
   }
-  const serverVersion = typeof server.version === 'string' ? server.version : 'newer';
-  if (server.buildId === loaded.buildId) return { kind: 'current', message: `You have the latest version (${loaded.version}).` };
-  return { kind: 'available', message: `Version ${serverVersion} is ready. Reload to update; your project is saved first.`, serverVersion };
+  if (comparison.kind === 'current') return { kind: 'current', message: `You have the latest version (${loaded.version}).` };
+  return {
+    kind: 'available',
+    message: `Version ${comparison.version} is ready. Reload to update; your project is saved first.`,
+    serverVersion: comparison.version,
+  };
 }
 
 export async function checkPhoneAppUpdate(fetcher: typeof fetch = fetch): Promise<PhoneUpdateState> {
+  const loaded = { version: APP_VERSION, buildId: APP_BUILD_ID, releaseId: APP_RELEASE_ID };
   try {
-    const response = await fetcher(`/build-info.json?check=${Date.now()}`, { cache: 'no-store' });
-    if (!response.ok) return comparePhoneBuild({ version: APP_VERSION, buildId: APP_BUILD_ID }, null);
-    const type = response.headers.get('content-type') ?? '';
-    if (!type.includes('json')) return comparePhoneBuild({ version: APP_VERSION, buildId: APP_BUILD_ID }, null);
-    return comparePhoneBuild({ version: APP_VERSION, buildId: APP_BUILD_ID }, await response.json() as BuildInfo);
+    return comparePhoneBuild(loaded, await fetchServerBuildInfo(fetcher, Date.now()) as BuildInfo | null);
   } catch {
     return { kind: 'unknown', message: 'The update check needs a connection. Try again when you are online.' };
   }

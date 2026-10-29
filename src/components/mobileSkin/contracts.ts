@@ -81,7 +81,7 @@ export type PhoneIconName =
   | 'filters' | 'adjust' | 'text' | 'audio' | 'overlay' | 'format' | 'media' | 'transition'
   | 'mask' | 'keyframe' | 'crop' | 'replace' | 'assistant' | 'nodes' | 'color' | 'captions'
   | 'more' | 'play' | 'pause' | 'undo' | 'redo' | 'back' | 'export' | 'fullscreen' | 'plus'
-  | 'compositions' | 'reorder' | 'close' | 'check';
+  | 'compositions' | 'reorder' | 'close' | 'check' | 'update';
 
 export interface PhoneActionDefinition {
   id: string;
