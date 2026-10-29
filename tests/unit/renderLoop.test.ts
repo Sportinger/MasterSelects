@@ -309,7 +309,7 @@ describe('RenderLoop watchdog', () => {
       loop.setHasActiveVideo(false);
       loop.setIsPlaying(true);
       for (let i = 0; i < 90; i++) tick();
-      // One callback per display frame through 1.5 s of gap, never idle.
+      // One callback per display frame through 1.5 s of gap (no lead reported: treated as near), never idle.
       expect(onRender.mock.calls.length).toBeGreaterThanOrEqual(88);
       expect(loop.getIsIdle()).toBe(false);
       // The callback reports the next clip; the very next frame renders it.
@@ -325,6 +325,108 @@ describe('RenderLoop watchdog', () => {
       for (let i = 0; i < 60; i++) tick();
       expect(onRender.mock.calls.length).toBe(paused);
       expect(loop.getIsIdle()).toBe(true);
+    } finally { loop.stop(); vi.unstubAllGlobals(); }
+  });
+
+  it('runs a gap far from the next clip at a few callbacks per second and at display rate shortly before it', () => {
+    // Review 2026-10-29: audio-only playback or a long gap at the end ran the full callback and video
+    // sync at display rate. Only the 2 s before the next clip need it (warmup and pre-roll there).
+    const callbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callbacks.push(cb); return callbacks.length; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const clipEntryAt = 6000;
+    const renderTimes: number[] = [];
+    // Like the engine callback in a gap: report the wall-clock lead to the next clip.
+    const onRender = vi.fn(() => { renderTimes.push(now); loop.setPlaybackGapLeadMs(clipEntryAt - now); });
+    const loop = new RenderLoop({ recordRafGap: vi.fn(), resetPerSecondCounters: vi.fn() } as never,
+      { isRecovering: () => false, isExporting: () => false, onRender });
+    const tick = () => { now += 1000 / 60; callbacks.shift()!(now); };
+    const rendersBetween = (from: number, to: number) => renderTimes.filter((time) => time > from && time <= to).length;
+    try {
+      loop.start();
+      loop.setTimelineVisualDemand(false);
+      loop.setHasActiveVideo(false);
+      loop.setIsPlaying(true);
+      while (now < 5900) tick();
+      // The gap's first frame runs at once (lead unknown), then 8 Hz while the clip is further than 2 s ahead.
+      expect(renderTimes[0]).toBeLessThan(20);
+      expect(rendersBetween(500, 3500)).toBeGreaterThanOrEqual(22);
+      expect(rendersBetween(500, 3500)).toBeLessThanOrEqual(26);
+      // From 2 s before the clip one callback per display frame.
+      expect(rendersBetween(4200, 5900)).toBeGreaterThanOrEqual(100);
+      expect(loop.getIsIdle()).toBe(false);
+
+      // A far gap still serves a requested frame (an edit) at display cadence, not on the next 8 Hz tick.
+      loop.setPlaybackGapLeadMs(Number.POSITIVE_INFINITY);
+      tick();
+      const before = onRender.mock.calls.length;
+      tick();
+      expect(onRender.mock.calls.length).toBe(before);
+      loop.requestRender();
+      tick();
+      expect(onRender.mock.calls.length).toBe(before + 1);
+
+      // Entering a clip (the playback loop wakes the host with the visual demand) renders on the next frame.
+      tick();
+      const atEntry = onRender.mock.calls.length;
+      loop.setTimelineVisualDemand(true);
+      tick();
+      expect(onRender.mock.calls.length).toBe(atEntry + 1);
+
+      // The next gap starts at display rate again until its lead is reported.
+      loop.setTimelineVisualDemand(false);
+      const gapStart = onRender.mock.calls.length;
+      onRender.mockImplementation(() => undefined);
+      for (let i = 0; i < 6; i++) tick();
+      expect(onRender.mock.calls.length).toBeGreaterThanOrEqual(gapStart + 5);
+    } finally { loop.stop(); vi.unstubAllGlobals(); }
+  });
+
+  it('treats a stalled playback gap as render demand and wakes the loop', () => {
+    // Since 4471270e0 playback renders through gaps, so the watchdog counts playback without a visual
+    // clip at the playhead as demand. Before, it treated the gap as an expected idle and let the loop
+    // sleep there.
+    loopLog.warn.length = 0;
+    const loop = createLoop();
+    loop.isPlaying = true;
+    (loop as unknown as { timelineVisualDemand: boolean }).timelineVisualDemand = false;
+    try {
+      loop.checkHealth();
+      expect(loop.isIdle).toBe(false);
+      expect(loop.renderRequested).toBe(true);
+      expect(String(loopLog.warn[0]?.[0])).toContain('Render stall detected');
+    } finally {
+      loop.stop();
+    }
+  });
+
+  it('does not report the slow far-gap cadence as a render stall', () => {
+    const callbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callbacks.push(cb); return callbacks.length; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    loopLog.warn.length = 0;
+    const onRender = vi.fn(() => { loop.setPlaybackGapLeadMs(Number.POSITIVE_INFINITY); });
+    const loop = new RenderLoop({ recordRafGap: vi.fn(), resetPerSecondCounters: vi.fn() } as never,
+      { isRecovering: () => false, isExporting: () => false, onRender });
+    const checkHealth = () => (loop as unknown as RenderLoopTestAccess).checkHealth();
+    try {
+      loop.start();
+      loop.setTimelineVisualDemand(false);
+      loop.setHasActiveVideo(false);
+      loop.setIsPlaying(true);
+      for (let i = 0; i < 600; i++) {
+        now += 1000 / 60;
+        callbacks.shift()!(now);
+        if (i % 120 === 119) checkHealth();
+      }
+      expect(onRender.mock.calls.length).toBeLessThan(90);
+      expect(loopLog.warn).toEqual([]);
+      expect(loop.getIsIdle()).toBe(false);
     } finally { loop.stop(); vi.unstubAllGlobals(); }
   });
 

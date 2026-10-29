@@ -152,7 +152,9 @@ async function buildCase({ bridge, editor }: Shared, gapCase: GapCase, a: FrameC
   expect(wholeA.startTime, 'clip A starts at 0').toBeCloseTo(0, 3)
   expect(wholeA.duration, 'clip A duration').toBeCloseTo(sourceSecondsA / speedA, 2)
   if (gapCase.splitA) await bridge.toolData('splitClip', { clipId: wholeA.id, splitTime: gapCase.splitA })
-  await bridge.toolData('moveClip', { clipId: clipB.id, newStartTime: wholeA.endTime + gap })
+  // Likewise an unchanged move: B is imported at 6 s, already the place behind a 2 s A and a 4 s gap.
+  const startB = wholeA.endTime + gap
+  if (Math.abs(named(await videoClips(), b)[0].startTime - startB) > 1e-4) await bridge.toolData('moveClip', { clipId: clipB.id, newStartTime: startB })
   const state = await bridge.toolData<TimelineState>('getTimelineState')
   const clips = state.videoTracks.flatMap(track => track.clips)
   const placedB = clips.find(item => item.id === clipB.id)!
@@ -311,6 +313,11 @@ const CASES: GapCase[] = [
   { name: 'playback started inside the gap, into a 1.5x clip', speedA: 1, speedB: 1.5, gap: 2, leadIn: 0.3 },
   // A cold entry must seek from the only keyframe at 0 to 5 s: slow, so a missing warmup shows.
   { name: 'two-second gap into a 2x clip whose in-point is 5 s into one long GOP', speedA: 1.5, speedB: 2, gap: 2, inB: 5, sourceSecondsB: 2.5, source: { keyframeSeconds: 8, seconds: 8 } },
+  // Longer than the 2 s display-rate window before a clip: the render loop first calls back only
+  // 8 times per second in the gap (src/services/render/playbackGapCadence.ts).
+  { name: 'four-second gap at normal speed', speedA: 1, speedB: 1, gap: 4 },
+  { name: 'playback started 3.5 s before the next clip, inside a four-second gap', speedA: 1, speedB: 1.5, gap: 4, leadIn: 3.5 },
+  { name: 'four-second gap into a 2x clip whose in-point is 5 s into one long GOP', speedA: 1.5, speedB: 2, gap: 4, inB: 5, sourceSecondsB: 2.5, source: { keyframeSeconds: 8, seconds: 8 } },
 ]
 
 for (const gapCase of CASES) {

@@ -6,6 +6,7 @@ import type { Layer } from '../../src/types';
 const hoisted = vi.hoisted(() => ({
   timelineState: {
     isPlaying: true,
+    playbackSpeed: 1,
     isDraggingPlayhead: false,
     playheadPosition: 1,
     clipDragPreview: null,
@@ -33,6 +34,8 @@ const hoisted = vi.hoisted(() => ({
   render: vi.fn(),
   renderLoopCallback: null as (() => void) | null,
   visualDemand: true,
+  getPlaybackVisualDemandLeadMs: vi.fn(() => Number.POSITIVE_INFINITY),
+  setPlaybackGapLeadMs: vi.fn(),
 }));
 
 vi.mock('../../src/stores/engineStore', () => ({
@@ -86,6 +89,7 @@ vi.mock('../../src/services/logger', () => ({
 
 vi.mock('../../src/services/timeline/timelineVisualDemand', () => ({
   hasActiveTimelineVisualClip: () => hoisted.visualDemand,
+  getPlaybackVisualDemandLeadMs: (...args: unknown[]) => hoisted.getPlaybackVisualDemandLeadMs(...args),
 }));
 
 vi.mock('../../src/services/render/renderHostPort', () => ({
@@ -94,6 +98,7 @@ vi.mock('../../src/services/render/renderHostPort', () => ({
     setPreviewCanvas: vi.fn(),
     setVisualTargetFps: vi.fn(),
     setTimelineVisualDemand: vi.fn(),
+    setPlaybackGapLeadMs: hoisted.setPlaybackGapLeadMs,
     setIsScrubbing: vi.fn(),
     setContinuousRender: vi.fn(),
     requestRender: vi.fn(),
@@ -137,6 +142,7 @@ describe('useEngine exact producer frame context', () => {
     hoisted.renderLoopCallback = null;
     hoisted.visualDemand = true;
     hoisted.timelineState.isPlaying = true;
+    hoisted.timelineState.playbackSpeed = 1;
   });
 
   it('uses one captured time for video sync, layer evaluation, scheduler, and render host', () => {
@@ -183,6 +189,8 @@ describe('useEngine exact producer frame context', () => {
     hoisted.visualDemand = false;
     hoisted.getPlayheadPosition.mockReturnValue(3.2);
     hoisted.captureFrameContext.mockReturnValue(gapContext);
+    hoisted.getPlaybackVisualDemandLeadMs.mockReturnValue(850);
+    hoisted.timelineState.playbackSpeed = -2;
 
     const hook = renderHook(() => useEngine());
     hoisted.renderLoopCallback?.();
@@ -191,6 +199,13 @@ describe('useEngine exact producer frame context', () => {
     expect(hoisted.captureFrameContext).toHaveBeenCalledWith(3.2);
     expect(hoisted.syncVideoElements).toHaveBeenCalledTimes(2);
     expect(hoisted.syncVideoElements).toHaveBeenCalledWith(gapContext);
+    // Each gap frame reports the wall-clock lead to the next clip in the playback direction (here
+    // reverse at 2x), which sets the gap render cadence.
+    expect(hoisted.getPlaybackVisualDemandLeadMs).toHaveBeenCalledWith(
+      hoisted.timelineState.clips, hoisted.timelineState.tracks, 3.2, -2,
+    );
+    expect(hoisted.setPlaybackGapLeadMs).toHaveBeenCalledTimes(2);
+    expect(hoisted.setPlaybackGapLeadMs).toHaveBeenLastCalledWith(850);
     // The gap is drawn black once; nothing is built or rendered with layers.
     expect(hoisted.render).toHaveBeenCalledTimes(1);
     expect(hoisted.render.mock.calls[0]?.[0]).toEqual([]);
@@ -200,6 +215,7 @@ describe('useEngine exact producer frame context', () => {
     hoisted.timelineState.isPlaying = false;
     hoisted.renderLoopCallback?.();
     expect(hoisted.syncVideoElements).toHaveBeenCalledTimes(2);
+    expect(hoisted.setPlaybackGapLeadMs).toHaveBeenCalledTimes(2);
     hook.unmount();
   });
 });

@@ -282,6 +282,10 @@ export class WebGPUEngine {
     this.renderLoop?.setTimelineVisualDemand(hasDemand);
   }
 
+  setPlaybackGapLeadMs(leadMs: number): void {
+    this.renderLoop?.setPlaybackGapLeadMs(leadMs);
+  }
+
   setVisualTargetFps(targetFps: number): void {
     this.renderLoop?.setVisualTargetFps(targetFps);
   }

@@ -2,6 +2,7 @@
 
 import { Logger } from '../../services/logger';
 import { readEditorContentPublication } from '../../services/project/repository/transaction/editorPublication';
+import { isPlaybackGapNearVisualDemand, PLAYBACK_GAP_FAR_FRAME_TIME_MS } from '../../services/render/playbackGapCadence';
 import type { PerformanceStats } from '../stats/PerformanceStats';
 
 const log = Logger.create('RenderLoop');
@@ -42,6 +43,9 @@ export class RenderLoop {
   private isPlaying = false;
   private isScrubbing = false;
   private timelineVisualDemand = true;
+  // Wall-clock lead from a gap to the next visual clip, reported by the render callback.
+  // NaN until reported: a gap starts at display rate.
+  private playbackGapLeadMs = Number.NaN;
   private continuousRender = false;
   private newFrameReady = false; // Fresh program frames bypass the sampling deadline
   private lastRenderTime = 0;
@@ -129,9 +133,10 @@ export class RenderLoop {
       const playbackRenderActive = this.isPlaying && this.timelineVisualDemand;
       const scrubRenderActive = this.isScrubbing && this.timelineVisualDemand;
       // Playback crossing a gap (no visual clip at the playhead) keeps calling the render callback:
-      // the composite is black, but only the callback sees the playhead enter the next clip, and its
+      // the composite is black, but the callback sees the playhead enter the next clip, and its
       // video sync warms and positions that clip meanwhile. An idle loop here waited for an unrelated
-      // wake and kept the next clip black for up to seconds (owner report 2026-10-29).
+      // wake and kept the next clip black for up to seconds (owner report 2026-10-29). The cadence
+      // follows the lead to that clip (see playbackGapCadence).
       const playbackGapActive = this.isPlaying && !this.timelineVisualDemand;
       const measureCadence = (playbackRenderActive || scrubRenderActive || this.continuousRender)
         && (typeof document === 'undefined' || !document.hidden);
@@ -249,8 +254,13 @@ export class RenderLoop {
             return;
           }
         } else if (playbackGapActive) {
-          // One callback per display frame: it only re-checks the playhead and syncs upcoming videos.
-          if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
+          // The callback only re-checks the playhead and syncs upcoming videos: once per display
+          // frame shortly before the next clip or for a requested frame (an edit), a few times per
+          // second further ahead (audio-only playback, a long gap at the end).
+          const gapFrameTime = pendingRequest || isPlaybackGapNearVisualDemand(this.playbackGapLeadMs)
+            ? this.VIDEO_FRAME_TIME
+            : PLAYBACK_GAP_FAR_FRAME_TIME_MS;
+          if (timeSinceLastRender < gapFrameTime) {
             holdForLimiter();
             return;
           }
@@ -519,6 +529,8 @@ export class RenderLoop {
     if (this.timelineVisualDemand === hasDemand) return;
 
     this.timelineVisualDemand = hasDemand;
+    // A new gap runs at display rate until the callback reports its lead.
+    if (!hasDemand) this.playbackGapLeadMs = Number.NaN;
     if (hasDemand && (this.isPlaying || this.isScrubbing)) {
       this.lastRenderTime = 0;
       this.requestRender();
@@ -540,8 +552,19 @@ export class RenderLoop {
     return this.isPlaying;
   }
 
+  /**
+   * Wall-clock milliseconds until playback through a gap reaches the next visual clip (Infinity
+   * when none lies ahead). Only the render callback knows the timeline; it reports this per gap frame.
+   */
+  setPlaybackGapLeadMs(leadMs: number): void {
+    this.playbackGapLeadMs = leadMs;
+  }
+
   setIsPlaying(playing: boolean): void {
-    if (this.isPlaying !== playing) this.lastCadenceRender = 0;
+    if (this.isPlaying !== playing) {
+      this.lastCadenceRender = 0;
+      this.playbackGapLeadMs = Number.NaN;
+    }
     this.isPlaying = playing;
     this.playbackNextRenderTime = 0;
     if (playing && this.idleSuppressed) {
