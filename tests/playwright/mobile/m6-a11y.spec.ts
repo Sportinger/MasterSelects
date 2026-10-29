@@ -167,7 +167,10 @@ test('N5/a11y-names-roles: every control on the main screen, toolbar, timeline a
   await sheetSettled(page)
   const sheet = page.getByRole('dialog')
   await expect(sheet, 'the sheet is a named dialog').toHaveAccessibleName(/\S/)
-  await expect(sheet).toHaveAttribute('aria-modal', 'true')
+  // The transport stays docked under the sheet (Play, Undo, Redo keep working), so the sheet is a
+  // non-modal dialog: aria-modal would hide those controls from assistive technology.
+  await expect(page.getByTestId(IDS.transport)).toBeVisible()
+  await expect(sheet).not.toHaveAttribute('aria-modal', 'true')
   expect(await unnamedControls(page, [IDS.sheet]), 'sheet controls without role or name').toEqual([])
   await tap(phone, page.getByTestId(IDS.sheetCancel))
   await expect(page.getByTestId(IDS.sheet)).toHaveCount(0)
@@ -186,7 +189,7 @@ test('N5/a11y-clip-names: timeline clips are options named by clip name, start a
   await expect(page.getByTestId(IDS.timelineSurface)).toHaveAccessibleName(/Timeline/)
 })
 
-test('N5/a11y-keyboard-sheet: Tab reaches the toolbar in screen order, Enter opens a sheet, Tab stays inside, Escape closes and focus returns @phone', async ({ phone }) => {
+test('N5/a11y-keyboard-sheet: Tab reaches the toolbar in screen order, Enter opens a sheet, Tab stays inside the sheet and its docked transport, Escape closes and focus returns @phone', async ({ phone }) => {
   const { page } = phone
   // Start where a keyboard user starts: on the first control of the screen.
   await page.getByTestId('phone-topbar-projects').focus()
@@ -208,10 +211,12 @@ test('N5/a11y-keyboard-sheet: Tab reaches the toolbar in screen order, Enter ope
   await page.keyboard.press('Enter')
   await sheetSettled(page)
   const insideSheet = () => page.evaluate(() => Boolean(document.activeElement?.closest('[data-testid="phone-sheet"]')))
+  // Tab cycles through the docked transport and the sheet (PhoneSheet), nothing else.
+  const insideSheetOrTransport = () => page.evaluate((transport) => Boolean(document.activeElement?.closest(`[data-testid="phone-sheet"], [data-testid="${transport}"]`)), IDS.transport)
   expect(await insideSheet(), 'focus did not move into the sheet').toBe(true)
   for (let press = 0; press < 25; press++) {
     await page.keyboard.press(press % 5 === 4 ? 'Shift+Tab' : 'Tab')
-    expect(await insideSheet(), `Tab ${press + 1} left the modal sheet`).toBe(true)
+    expect(await insideSheetOrTransport(), `Tab ${press + 1} left the sheet and its docked transport`).toBe(true)
   }
   await page.keyboard.press('Escape')
   await expect(page.getByTestId(IDS.sheet), 'Escape did not close the sheet').toHaveCount(0)

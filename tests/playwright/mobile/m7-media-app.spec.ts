@@ -133,10 +133,12 @@ test('INV8/assistant-timeline-variants: the assistant shows A/B/C, watching one 
   await m1.bridge.toolData('clearSelection')
   await tapAction(m1, phoneActionTestId('assistant'))
   await expect(m1.page.getByTestId(ASSIST.root)).toBeVisible()
-  // Without a comparison: one tap types the request, nothing is sent.
+  // Without a comparison: one tap types the request, nothing is sent. The shared world may already hold
+  // messages from an earlier assistant case, so compare with the count before the tap.
+  const messagesBefore = await m1.page.getByTestId(ASSIST.message).count()
   await tapOn(m1, m1.page.getByTestId(VARIANTS.ask))
   await expect(m1.page.getByTestId(ASSIST.prompt)).toHaveValue(PHONE_VARIANTS_PROMPT)
-  await expect(m1.page.getByTestId(ASSIST.message)).toHaveCount(0)
+  await expect(m1.page.getByTestId(ASSIST.message)).toHaveCount(messagesBefore)
   await tapOn(m1, m1.page.getByTestId(IDS.sheetCancel))
   await expect(m1.sheet).toBeHidden()
   const seeded = await g6SeedVariants(m1)
