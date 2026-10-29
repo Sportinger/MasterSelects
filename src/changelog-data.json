@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-10-29",
+    "type": "improve",
+    "title": "MasterSelects 3.4.2",
+    "description": "The sidebar in the Nodes panel now stays the way you left it: clicking a node, an effect or a clip no longer pops it open, it follows your selection in the background and slides open and closed smoothly when you use its toggle. Clicking the MasterSelects name and version at the bottom left now checks for a new version right away and briefly shows whether you are up to date; on the phone the same check sits in Settings → App.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-29",
     "type": "fix",
     "title": "MasterSelects 3.4.1",
     "description": "Exports on the phone are much faster: a 14-second phone edit now exports in about 15 seconds instead of stalling for many minutes, because the export no longer holds more decoded frames than the phone's hardware decoder can give out. Effects such as Pixel Sort on an adjustment layer no longer break the export after being switched off and on again, colour grades now work on adjustment layers, and anything an adjustment layer cannot render is skipped with a visible note instead of aborting the export or silently dropping the layer from the preview.",
