@@ -52,6 +52,8 @@ export interface PhoneExportPlanInput {
   inPoint: number | null;
   outPoint: number | null;
   capabilities: PhoneExportCapabilities;
+  /** What layers render without (adjustment layers, adjustmentLayerExportNotes); notes overlapping the range are shown. */
+  layerNotes?: readonly { startTime: number; duration: number; note: string }[];
 }
 
 export interface PhoneExportSize {
@@ -258,6 +260,9 @@ export function buildPhoneExportPlan(input: PhoneExportPlanInput): PhoneExportPl
   }
   if (range.source === 'in-out') {
     notes.push('Exporting the in/out range set on the timeline.');
+  }
+  for (const layer of input.layerNotes ?? []) {
+    if (layer.startTime < range.endTime && layer.startTime + layer.duration > range.startTime) notes.push(layer.note);
   }
 
   return {

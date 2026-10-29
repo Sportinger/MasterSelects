@@ -92,6 +92,25 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
     expect(status).toHaveTextContent('Slit Scan cannot run on an adjustment layer');
   });
 
+  it('names layer properties the adjustment layer renders without, here and on the Effects tab', () => {
+    act(() => {
+      useTimelineStore.setState((state) => ({
+        clips: state.clips.map((clip) => clip.id === clipId
+          ? { ...clip, is3D: true, effects: [effect('invert', {})], nodeGraph: { version: 1, nodes: [], groups: { 'effect:x': { collapsed: true } } } }
+          : clip),
+      }));
+    });
+    const clip = useTimelineStore.getState().clips.find((candidate) => candidate.id === clipId)!;
+    render(<MotionAdjustmentTab clipId={clipId} opacity={1} blendMode="normal" />);
+    const status = screen.getByTestId('motion-adjustment-diagnostics');
+    expect(status).toHaveTextContent('Properties skipped');
+    expect(status).toHaveTextContent('It is set to 3D; an adjustment layer works on the flat composite below, so it renders flat.');
+    // Node-graph layout alone (a bypassed effect collapses its group) is no skipped property.
+    expect(status).not.toHaveTextContent('node graph');
+    render(<EffectsTab clipId={clipId} effects={clip.effects} />);
+    expect(screen.getByTestId('motion-adjustment-layer-notice')).toHaveTextContent('Skipped on this adjustment layer, the rest renders: It is set to 3D');
+  });
+
   it('reports complete supported-effect parity for valid effect data', () => {
     const diagnostics = getMotionAdjustmentDiagnostics(clipId, [
       effect('brightness', { amount: 0.2 }),
@@ -188,7 +207,8 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
 
     expect(await screen.findByRole('button', { name: 'Adjustment' })).toHaveClass('active');
     expect(screen.queryByRole('button', { name: 'Transform' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Color' })).not.toBeInTheDocument();
+    // The grade works on the composite below, like the effects.
+    expect(screen.getByRole('button', { name: 'Color' })).toBeInTheDocument();
     expect(await screen.findByTestId('motion-adjustment-diagnostics')).toHaveTextContent('Render compatible');
   });
 });

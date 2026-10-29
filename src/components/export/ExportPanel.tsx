@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { resolveExportRange } from './exportRange';
+import { adjustmentLayerExportNotes } from '../../services/motionDesign/adjustment/adjustmentLayerExportNotes';
 import { supportsNativeVideoAlpha } from './exportAlphaSupport';
 import { useExportState } from './useExportState';
 import { ExportProgressView } from './ExportProgressView';
@@ -190,6 +191,10 @@ export function ExportPanel() {
   // Batch source jobs always cover the full source file; timeline In/Out only
   // belongs to the composition export path.
   const compositionRange = resolveExportRange({ duration, inPoint, outPoint }, useInOut);
+  // Adjustment layers in the range that render without a property or effect (named on their cards too).
+  const adjustmentNotes = useMemo(() => adjustmentLayerExportNotes(clips).filter(note => (
+    note.startTime < compositionRange.endTime && note.startTime + note.duration > compositionRange.startTime
+  )), [clips, compositionRange.endTime, compositionRange.startTime]);
   const startTime = batchActive ? 0 : compositionRange.startTime;
   const endTime = batchActive
     ? Math.max(
@@ -785,6 +790,12 @@ export function ExportPanel() {
               />
 
               {(isVideoMode || isImageMode) && <ExportRenderQualitySection />}
+
+              {!batchActive && (isVideoMode || isImageMode) && adjustmentNotes.length > 0 && (
+                <div className="export-inline-note export-inline-note-warning" role="status" data-testid="export-adjustment-notes">
+                  {adjustmentNotes.map(note => <p key={note.clipId}>{note.note}</p>)}
+                </div>
+              )}
 
               <BatchExportQueue
                 jobs={batch.jobs}

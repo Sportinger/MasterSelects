@@ -96,6 +96,8 @@ export function PropertiesClipTabStrip({
       ) : isMotionAdjustmentClip ? (
         <>
           <button className={`tab-btn ${activeTab === 'adjustment' ? 'active' : ''}`} onClick={() => onTabChange('adjustment')}>Adjustment</button>
+          {/* The grade works on the composite below, like the effects. */}
+          <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => onTabChange('color')}>Color</button>
           <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => onTabChange('effects')}>
             Effects {visualEffectCount > 0 && <span className="badge">{visualEffectCount}</span>}
           </button>

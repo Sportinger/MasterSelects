@@ -3,6 +3,8 @@
 export const PHONE_EFFECTS_TEST_IDS = {
   // Effects sheet.
   effectsTarget: 'phone-effects-target',
+  /** Layer properties an adjustment layer renders without (transform, 3D, transition, ...), with reasons. */
+  effectsAdjustmentNotice: 'phone-effects-adjustment-notice',
   effectsSearch: 'phone-effects-search',
   /** One chip per catalog group; data-group carries the group id ('all' for every group). */
   effectsCategory: 'phone-effects-category',

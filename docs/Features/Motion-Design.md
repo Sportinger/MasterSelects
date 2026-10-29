@@ -44,8 +44,8 @@ Motion Design is native MasterSelects timeline content, not an embedded external
 - Texture fills freeze image or video content at one selected time.
 - Replicators duplicate the rendered shape texture.
 - Appearance presets reject texture fills, and templates exclude expressions.
-- Adjustment-layer transforms and color correction are disabled.
-- Effects that need a source clip of their own or cut pixels out are unavailable on adjustment layers (see above).
+- Adjustment layers always cover the whole frame: a transform, 3D, a crop rectangle or a transition on one is skipped and named (see [Layer properties of adjustment layers](#layer-properties-of-adjustment-layers)).
+- Effects that need a source clip of their own are unavailable on adjustment layers (see above).
 - Appearance blend modes outside the six listed modes fall back to normal in the Motion shader.
 - Path trim/dash affect stroke appearances only; open paths render no fill, and fills on closed paths ignore trim/dash.
 
@@ -102,15 +102,66 @@ the layer, for example to replace the effect list. The receipt's `before`/`after
 effects under `bypassedEffects` with their reason.
 
 The Playwright journey `tests/playwright/effects/adjustment-all-effects.spec.ts` checks every
-registry effect on an adjustment layer in the real preview: admitted effects must change the picture
-(a strength value is raised when the default does nothing on the test pattern) and match the same
-effect applied directly to the clip; unavailable ones must be missing from the picker, refused by the
-tool and, when injected, bypassed alone with a card notice and a log line. It ends with a one-second
-export of Hue Shift, Mirror and Pixelate on the layer.
+registry effect on an adjustment layer in the real preview: each admitted effect is added through the
+effect picker and switched off and on once with its card's bypass button, then it must change the
+picture (a strength value is raised when the default does nothing on the test pattern) and match the
+same effect applied directly to the clip; unavailable ones must be missing from the picker, refused by
+the tool and, when injected, bypassed alone with a card notice and a log line. Its export cases render
+Hue Shift, Mirror and Pixelate, Pixel Sort Bands after a bypass toggle, and a Color tab grade (compared
+with the same grade on the clip) from the layer. The phone journey
+`tests/playwright/mobile/m2-adjustment-graph-export.spec.ts` runs the production path for every
+graph/texture effect (Pixel Sort Bands, Block Dissolve, Block Silhouette, Data HUD, Block Cloud,
+Flow Mosh): nothing selected, Effects sheet, card, off and on in the stack, Done, export through the
+export sheet; frames before the layer read their frame code in order and match the source, frames
+under it differ from the source. A last case grades a selected layer with Adjust and a filter.
+
+## Layer properties of adjustment layers
+
+An adjustment layer renders its effects (effect graphs and recipes included), its colour correction,
+its masks, its opacity and one of five blend modes (Normal, Multiply, Screen, Overlay, Add). The
+colour correction grades the composite below in the layer's stack position, exactly as a clip grades
+its own picture (`Compositor.ts`; the grade never writes into the view it reads). It is edited in the
+Color tab of the adjustment layer and on the phone with Adjust and Filters (Looks are effect stacks).
+The node graph of the clip (`clip.nodeGraph`) is presentation and driver data: group layout, previews,
+canvas placements, parameter sources and keyframe nodes render as on a clip. Switching an effect off
+collapses its node group and so writes node-graph layout; until 3.3.9 the layer admission refused any
+node graph, so one off-and-on of an effect on a phone adjustment layer made the export stop with
+"Motion adjustment layer uses unsupported render properties" and the preview leave the layer out.
+
+What an adjustment layer cannot render is skipped property by property
+(`adjustmentLayerRenderAdmission.ts`, shared by the preview, nested-composition, target-preview and
+export layer builders, the inspector, the phone sheets, the export notes and the tools). The layer
+renders without it; nothing else changes:
+
+| Property | Renders as |
+|---|---|
+| Position, scale or rotation not neutral | Identity: the layer covers the whole frame |
+| Opacity outside 0..1 or not a number | Clamped to 0..1 (100 % when not a number) |
+| Blend mode outside the five | Normal |
+| 3D | Flat |
+| Crop rectangle (`sourceRect`) | Ignored; a mask limits where the layer works |
+| Transition (`transitionRender`) | Ignored |
+| 3D scene in the node graph, shared scene output | Ignored |
+| Custom (AI) nodes in the node graph | Ignored (they process a clip's own picture) |
+
+Each skipped property is named in the Adjustment tab status ("Properties skipped"), above the effect
+cards ("Skipped on this adjustment layer, the rest renders: ..."), in the phone Effects sheet, in the
+export notes of the phone export sheet and the desktop Export panel ("Adjustment layer ... exports
+without ..."; bypassed effects are named there too), once per layer and property in the
+`MotionAdjustmentLayerBuilder` log, and in tool results: `getClipDetails` reports `adjustmentRender`
+(`skippedProperties`, `bypassedEffects`), `addEffect` and `editMotionAdjustment` add a warning per
+skipped property. Only a broken layer definition (not an adjustment motion definition) stops the layer:
+the preview leaves it out and the Adjustment tab says "Render blocked" with the reason, and the export
+stops with `Adjustment layer "<name>" cannot render: <reason>` instead of producing different media.
+
+`editMotionAdjustment` edits layers with a colour correction or node-graph data. Its frozen v1 stack
+contract still refuses layers in the composition that are 3D, have a crop rectangle, a transition or
+a parent (`MD7_ADJUSTMENT_UNSUPPORTED_STATE`); the renderer skips those properties as above.
 
 The opt-in worker render host modes still draw only the original five with their 4×5 color
-matrix and separable blur (`WORKER_GPU_ADJUSTMENT_EFFECT_TYPES`). A stack with any other effect
-throws `WorkerGpuAdjustmentFallbackError`: worker export frames go to the main compositor and the
+matrix and separable blur (`WORKER_GPU_ADJUSTMENT_EFFECT_TYPES`) and no colour correction. A stack
+with any other effect or a graded adjustment layer throws `WorkerGpuAdjustmentFallbackError`
+(`colour correction` is named like an effect type): worker export frames go to the main compositor and the
 `WorkerExportHost` log names the reason once; strict worker-only frames fail with that reason, and
 the adjustment tab says so while such a mode is selected. The default render path never uses the
 worker executor.

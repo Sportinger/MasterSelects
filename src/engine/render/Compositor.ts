@@ -249,7 +249,8 @@ export class Compositor {
 
       this.maskTextureManager.logMaskState(maskLookupId, hasMask);
 
-      const orderedColorIndex = !isAdjustmentLayer && !!this.colorPipeline && !state.skipEffects && layer.colorCorrection?.enabled
+      // An adjustment layer grades the composite below it like a clip grades its own picture.
+      const orderedColorIndex = !!this.colorPipeline && !state.skipEffects && layer.colorCorrection?.enabled
         ? Math.min(visualAdjustmentEffects.length, Math.max(0, Math.trunc(layer.colorCorrection.stackIndex)))
         : null;
       const beforeColorEffects = orderedColorIndex === null ? visualAdjustmentEffects : visualAdjustmentEffects.slice(0, orderedColorIndex);
@@ -272,10 +273,14 @@ export class Compositor {
         });
       }
 
+      const hasColorCorrection = !!this.colorPipeline
+        && !state.skipEffects
+        && !!layer.colorCorrection?.enabled;
       const requiresEffectTargets = isAdjustmentLayer
         && (
           !!complexEffects?.length
           || !!renderEffects?.length
+          || hasColorCorrection
         );
       if (
         requiresEffectTargets
@@ -293,10 +298,6 @@ export class Compositor {
         continue;
       }
 
-      const hasColorCorrection = !isAdjustmentLayer
-        && !!this.colorPipeline
-        && !state.skipEffects
-        && !!layer.colorCorrection?.enabled;
       const colorPreview = !!layer.sourceClipId && (nodePreviewTextureTap.has(`color-input:${layer.sourceClipId}`)
         || nodePreviewTextureTap.has(`color:${layer.sourceClipId}`) || nodePreviewTextureTap.matching(`color-node:${layer.sourceClipId}:`).length > 0);
       const requestedTerrainProjection = !isAdjustmentLayer
@@ -452,12 +453,13 @@ export class Compositor {
               this.colorPipeline?.previewGradeOutputs(layer.sourceClipId, commandEncoder, layer.colorCorrection, state.sampler, sourceTextureView, { width: sourceWidth, height: sourceHeight });
             }
             if (hasColorCorrection) {
+              // Never grade a texture into itself: effects before the grade can end in either temp view.
               const colorResult = this.colorPipeline!.applyGrade(
                 commandEncoder,
                 layer.colorCorrection,
                 state.sampler,
                 sourceTextureView,
-                state.effectTempView2,
+                sourceTextureView === state.effectTempView2 ? state.effectTempView : state.effectTempView2,
                 resourceLayerId,
                 undefined,
                 { width: state.outputWidth, height: state.outputHeight },

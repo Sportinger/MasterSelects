@@ -24,6 +24,7 @@ import { finiteEffectNumber, isUnusableEffectNumber } from '../../../effects/_sh
 import type { AudioEffectParams } from '../../../types/audio';
 import { checkClipAudioEffectParams, type ClipAudioParamCheck } from './clipAudioEffectParams';
 import { hasAudioEffect } from '../../../engine/audio/AudioEffectRegistry';
+import { adjustmentLayerSkipWarnings } from '../../motionDesign/adjustment/adjustmentLayerExportNotes';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -213,7 +214,8 @@ export async function handleAddEffect(
   const added = useTimelineStore.getState().clips.find(c => c.id === clipId)?.effects.find(e => e.id === newEffect?.id);
   const experimental = effectExperimentalNote(getEffect(effectType));
   const warnings = [...(experimental ? [`${getEffect(effectType)!.name} is experimental: ${experimental}`] : []), ...runtimeChecked?.warnings ?? [],
-    ...effectParamWarnings(added, Object.keys(customParams ?? {})), ...await chromaKeyScreenWarnings(clipId, added)];
+    ...effectParamWarnings(added, Object.keys(customParams ?? {})), ...await chromaKeyScreenWarnings(clipId, added),
+    ...(clip.source?.type === 'motion-adjustment' ? adjustmentLayerSkipWarnings(useTimelineStore.getState().clips.find(c => c.id === clipId) ?? clip) : [])];
 
   return {
     success: true,

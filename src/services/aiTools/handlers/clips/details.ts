@@ -5,6 +5,7 @@ import { getGaussianSplatGpuRenderer } from '../../../../engine/gaussian/core/Ga
 import { resolveSharedSplatSceneKey } from '../../../../engine/scene/runtime/SharedSplatRuntimeUtils';
 import { ensureRenderForDiagnostics } from '../renderOnce';
 import { summarizeClipEffectGraphs } from './effectGraphSummary';
+import { adjustmentLayerRenderReport } from '../../../motionDesign/adjustment/adjustmentLayerExportNotes';
 import type { TimelineStore } from './runtime';
 import { useMediaStore } from '../../../../stores/mediaStore';
 import {
@@ -113,6 +114,8 @@ export async function handleGetClipDetails(
       terrainScreenAnchor: clip.terrainScreenAnchor ?? null,
       terrainAnchorConnector: clip.terrainAnchorConnector ?? null,
       trackingBinding: clip.trackingBinding ?? null,
+      // What an adjustment layer renders without (skipped layer properties, bypassed effects).
+      ...(clip.source?.type === 'motion-adjustment' ? { adjustmentRender: adjustmentLayerRenderReport(clip) } : {}),
       cameraSettings: clip.source?.cameraSettings ?? null,
       nested: clip.isComposition
         ? {

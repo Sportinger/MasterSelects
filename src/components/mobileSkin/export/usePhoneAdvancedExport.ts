@@ -2,6 +2,7 @@
 // capabilities at the chosen size, the resulting plan, and the project export presets shared
 // with the desktop export panel.
 import { useCallback, useMemo, useState } from 'react';
+import { adjustmentLayerExportNotes } from '../../../services/motionDesign/adjustment/adjustmentLayerExportNotes';
 import { useExportStore } from '../../../stores/exportStore';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -75,6 +76,7 @@ export function usePhoneAdvancedExport(enabled: boolean): PhoneAdvancedExport {
     selectedClipIds,
     playhead,
     capabilities,
+    layerNotes: adjustmentLayerExportNotes(clips),
   }), [capabilities, clips, composition, inPoint, outPoint, playhead, selectedClipIds, settings, tracks]);
 
   const loadPreset = useCallback((presetId: string) => {

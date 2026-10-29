@@ -235,13 +235,19 @@ export class WorkerGpuAdjustmentFallbackError extends Error {
   }
 }
 
-/** Enabled adjustment effects of `layers` the worker GPU executor cannot draw (unique types). */
+/**
+ * Enabled adjustment effects of `layers` the worker GPU executor cannot draw (unique types), plus
+ * `colour correction` when an adjustment layer grades the composite (only the main compositor does).
+ */
 export function workerGpuUnsupportedAdjustmentEffectTypes(layers: readonly Layer[]): string[] {
-  return [...new Set(layers
-    .filter((layer) => layer.visible && layer.source?.type === 'motion-adjustment')
-    .flatMap((layer) => layer.effects)
-    .filter((effect) => effect.enabled !== false && effect.type !== 'blur' && !isWorkerGpuAdjustmentEffectType(effect.type))
-    .map((effect) => effect.type))];
+  const adjustments = layers.filter((layer) => layer.visible && layer.source?.type === 'motion-adjustment');
+  return [...new Set([
+    ...adjustments
+      .flatMap((layer) => layer.effects)
+      .filter((effect) => effect.enabled !== false && effect.type !== 'blur' && !isWorkerGpuAdjustmentEffectType(effect.type))
+      .map((effect) => effect.type),
+    ...(adjustments.some((layer) => layer.colorCorrection?.enabled) ? ['colour correction'] : []),
+  ])];
 }
 
 export function buildWorkerGpuAdjustmentExecutionPlan(

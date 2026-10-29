@@ -2,7 +2,8 @@
 // slider (phoneLookFilters.ts). Picking a filter replaces the clip's previous filter effects with the
 // Look's (applyLookToClip, the same stack the desktop builds); everything stays in one cancellable
 // session: Done = one undo step, Cancel = exact rollback. With nothing selected the filters stay
-// visible but greyed: a Look's effects cannot render on an adjustment layer yet.
+// visible but greyed and point to Effects (which adds an adjustment layer); a selected adjustment
+// layer takes a filter like a clip, applied to the picture below it.
 
 import { useMemo, useRef, useState } from 'react';
 
@@ -55,7 +56,7 @@ export const PhoneFiltersSheet: PhoneSheetComponent = () => {
   // Selection and the filters found on the clips, captured once when the sheet opens.
   const initial = useRef<{ selection: ReturnType<typeof readPhoneVisualSelection>; filters: Map<string, PhoneAppliedFilter>; strength: number } | null>(null);
   if (!initial.current) {
-    const selection = readPhoneVisualSelection({ allowAdjustment: false });
+    const selection = readPhoneVisualSelection();
     const filters = new Map<string, PhoneAppliedFilter>();
     let strength = 1;
     for (const clip of selection.clips) {

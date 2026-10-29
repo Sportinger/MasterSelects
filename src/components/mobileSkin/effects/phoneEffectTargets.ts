@@ -23,37 +23,35 @@ export interface PhoneVisualSelection {
 type SelectionState = Pick<ReturnType<typeof useTimelineStore.getState>, 'clips' | 'tracks' | 'selectedClipIds' | 'primarySelectedClipId'>;
 
 /**
- * Pure: splits the selection into editable visual clips and the ones it has to leave out. Without
- * `allowAdjustment`, adjustment layers are left out too (they render only a few effects, no grade or Look).
+ * Pure: splits the selection into editable visual clips and the ones it has to leave out. Adjustment
+ * layers stay in: they take effects, Looks and the colour grade, applied to the picture below them.
  */
-export function resolvePhoneVisualSelection(state: SelectionState, { allowAdjustment = true }: { allowAdjustment?: boolean } = {}): PhoneVisualSelection {
+export function resolvePhoneVisualSelection(state: SelectionState): PhoneVisualSelection {
   const ids = [...state.selectedClipIds];
   if (ids.length === 0) return { clips: [], primary: null, note: null, nothingSelected: true };
   const ordered = state.primarySelectedClipId && state.selectedClipIds.has(state.primarySelectedClipId)
     ? [state.primarySelectedClipId, ...ids.filter((id) => id !== state.primarySelectedClipId)]
     : ids;
   const clips: TimelineClip[] = [];
-  let locked = 0, audio = 0, adjustment = 0;
+  let locked = 0, audio = 0;
   for (const id of ordered) {
     const clip = state.clips.find((candidate) => candidate.id === id);
     if (!clip) continue;
     const track = state.tracks.find((candidate) => candidate.id === clip.trackId);
     if (track?.type !== 'video') { audio++; continue; }
     if (track.locked) { locked++; continue; }
-    if (!allowAdjustment && clip.source?.type === 'motion-adjustment') { adjustment++; continue; }
     clips.push(clip);
   }
   const parts = [
     audio ? `${audio} audio clip${audio > 1 ? 's have' : ' has'} no picture` : '',
     locked ? `${locked} clip${locked > 1 ? 's are' : ' is'} on a locked track` : '',
-    adjustment ? `${adjustment} adjustment layer${adjustment > 1 ? 's take' : ' takes'} only Effects (Brightness, Contrast, Saturation, Invert, Gaussian Blur)` : '',
   ].filter(Boolean);
   const note = parts.length ? `${parts.join('; ')}, so ${clips.length ? 'left out' : 'nothing can change here'}.` : null;
   return { clips, primary: clips[0] ?? null, note, nothingSelected: false };
 }
 
-export function readPhoneVisualSelection(options?: { allowAdjustment?: boolean }): PhoneVisualSelection {
-  return resolvePhoneVisualSelection(useTimelineStore.getState(), options);
+export function readPhoneVisualSelection(): PhoneVisualSelection {
+  return resolvePhoneVisualSelection(useTimelineStore.getState());
 }
 
 const EPSILON = 1e-4;

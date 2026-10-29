@@ -8,6 +8,7 @@ import { useExportScreenWakeLock } from '../../../hooks/useExportScreenWakeLock'
 import { AudioEncoderWrapper } from '../../../engine/audio';
 import { FrameExporter } from '../../../engine/export';
 import { Logger } from '../../../services/logger';
+import { adjustmentLayerExportNotes } from '../../../services/motionDesign/adjustment/adjustmentLayerExportNotes';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { PhoneExportRunSpec } from './phoneExportAdvancedPlan';
@@ -169,6 +170,7 @@ export function usePhoneExport(): UsePhoneExportResult {
       inPoint,
       outPoint,
       capabilities: probed.capabilities,
+      layerNotes: adjustmentLayerExportNotes(clips),
     });
   }, [clips, composition, inPoint, outPoint, probeKey, probed, tracks]);
 

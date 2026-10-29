@@ -15,6 +15,7 @@ import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPr
 import { effectOperatorGraph, effectOperatorParams, migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import type { Effect } from '../../src/types/effects';
+import { createDefaultColorCorrectionState } from '../../src/types/colorCorrection';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();
@@ -345,6 +346,35 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     expect(receipt.removedEffectIds).toContain('legacy-slit');
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects.map((effect) => effect.type))
       .toEqual(['invert']);
+  });
+
+  it('keeps editing a layer whose effect was switched off once (node layout) or that carries a colour grade', async () => {
+    const { clipId } = await createAdjustment({ effects: [{ type: 'invert' }] });
+    const effectId = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!.effects[0].id;
+    // A bypass collapses the effect's node group: node-graph layout on the clip, nothing that renders.
+    useTimelineStore.getState().setClipEffectEnabled(clipId, effectId, false);
+    useTimelineStore.getState().setClipEffectEnabled(clipId, effectId, true);
+    useTimelineStore.getState().updateClip(clipId, { colorCorrection: createDefaultColorCorrectionState() });
+    const before = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!;
+    expect(before.nodeGraph).toBeDefined();
+
+    const configured = await executeAITool('editMotionAdjustment', { operation: 'configure', clipId, opacity: 0.5 }, 'internal');
+    expect(configured.success).toBe(true);
+    const after = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!;
+    expect(after.transform.opacity).toBe(0.5);
+    expect(after.nodeGraph).toEqual(before.nodeGraph);
+    expect(after.colorCorrection).toEqual(before.colorCorrection);
+
+    useTimelineStore.getState().updateClip(clipId, { sourceRect: { x: 0, y: 0, width: 0.5, height: 1 } });
+    // Tool results name what the layer renders without.
+    const added = await executeAITool('addEffect', { clipId, effectType: 'invert' }, 'internal');
+    expect(added.success).toBe(true);
+    expect((added.data as { warnings?: string[] }).warnings).toEqual([
+      expect.stringContaining('Adjustment layer renders without a property: It has a source crop rectangle'),
+    ]);
+    // A crop rectangle is a state the frozen v1 stack contract still refuses to edit: the tool says so.
+    const refused = await executeAITool('editMotionAdjustment', { operation: 'configure', clipId, opacity: 0.4 }, 'internal');
+    expect(refused).toMatchObject({ success: false, error: expect.stringContaining('unsupported v1 layer state') });
   });
 
   it('blocks generic AI effect paths from injecting unsupported adjustment data', async () => {

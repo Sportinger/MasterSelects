@@ -119,7 +119,11 @@ nothing selected, **Effects** adds an adjustment layer at the playhead that chan
 it (every effect except the few that need a clip of their own, such as Slit Scan or the tracking effects). **Filters** puts one look on
 the clip, with **Strength** to make it subtler and **None** to remove it. **Adjust** changes the
 colour: tap a tile (Brightness, Exposure, Contrast, Saturation, Temperature, Tint, Highlights, Shadows
-and more) and drag the slider; **Reset** and **Reset all** go back to the defaults.
+and more) and drag the slider; **Reset** and **Reset all** go back to the defaults. Select an
+adjustment layer and Effects, Filters and Adjust all work on it: they change everything below the
+layer, in the preview and in the export. Something an adjustment layer cannot do (a move or scale,
+3D, a crop rectangle, a transition) is left out and named in the Effects sheet and in the export
+sheet; the rest of the layer still renders and the export finishes.
 
 **Transitions:** wherever two clips meet on a track, the timeline shows a small square at the cut. Tap
 it, pick a transition (Dissolve, Wipe, Slide and more) or None, and set its length. **Apply to all

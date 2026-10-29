@@ -85,6 +85,8 @@ export interface PhoneAdvancedContext {
   selectedClipIds: ReadonlySet<string> | readonly string[];
   playhead: number;
   capabilities: PhoneExportBrowserCapabilities;
+  /** What layers render without (adjustment layers, adjustmentLayerExportNotes); notes overlapping the range are shown. */
+  layerNotes?: readonly { startTime: number; duration: number; note: string }[];
 }
 
 export interface PhoneExportRunSpec {
@@ -232,6 +234,14 @@ export function buildPhoneAdvancedPlan(settings: PhoneAdvancedSettings, context:
       return { supported: false, reason: settings.range === 'content'
         ? 'Nothing to export yet. Add a visible clip to the timeline first.'
         : 'The chosen range is empty.', size };
+    }
+  }
+
+  if (format.kind !== 'audio') {
+    // A still shows the frame at the playhead; a moving export its range.
+    const [from, to] = format.kind === 'still' ? [exportTime, exportTime + 1e-6] : [startTime, endTime];
+    for (const layer of context.layerNotes ?? []) {
+      if (layer.startTime < to && layer.startTime + layer.duration > from) notes.push(layer.note);
     }
   }
 

@@ -33,8 +33,8 @@ export function MotionAdjustmentTab({
   const clip = useTimelineStore((state) => state.clips.find((candidate) => candidate.id === clipId));
   const diagnostics = useMemo(
     () => getMotionAdjustmentDiagnostics(clipId, clip?.effects ?? [], blendMode,
-      { workerRenderMode: WORKER_RENDER_MODES.has(getRenderHostDevMode() ?? 'main') }),
-    [blendMode, clip?.effects, clipId],
+      { workerRenderMode: WORKER_RENDER_MODES.has(getRenderHostDevMode() ?? 'main'), clip }),
+    [blendMode, clip, clipId],
   );
   const setPropertyValue = useTimelineStore((state) => state.setPropertyValue);
   const updateClipTransform = useTimelineStore((state) => state.updateClipTransform);
@@ -92,17 +92,19 @@ export function MotionAdjustmentTab({
       <div className="properties-section">
         <div className="section-header">Adjustment 1.0</div>
         <div
-          className={`analysis-status ${diagnostics.compatible && !diagnostics.bypassed ? 'ready' : 'error'}`}
+          className={`analysis-status ${diagnostics.compatible && !diagnostics.bypassed && !diagnostics.skipped ? 'ready' : 'error'}`}
           role="status"
           data-testid="motion-adjustment-diagnostics"
         >
-          <strong>{!diagnostics.compatible ? 'Render blocked' : diagnostics.bypassed ? 'Effects bypassed' : 'Render compatible'}</strong>
+          <strong>{!diagnostics.compatible ? 'Render blocked' : diagnostics.bypassed ? 'Effects bypassed'
+            : diagnostics.skipped ? 'Properties skipped' : 'Render compatible'}</strong>
           <span>{diagnostics.message}</span>
         </div>
         <p className="property-hint">
-          Every video effect processes the composite below, except the few that need a source clip of
-          their own; their cards say why and they are bypassed. Adjustment transforms and color
-          correction stay disabled so preview and export cannot diverge.
+          Every video effect, effect graph and the colour correction (Color tab) process the composite
+          below, except the few effects that need a source clip of their own; their cards say why and
+          they are bypassed. A transform, 3D, a crop rectangle or a transition cannot apply to an
+          adjustment layer: each is skipped and named here, in preview and export alike.
         </p>
       </div>
     </div>
