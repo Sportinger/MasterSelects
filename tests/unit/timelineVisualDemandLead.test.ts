@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getPlaybackVisualDemandLeadMs } from '../../src/services/timeline/timelineVisualDemand';
 import { isPlaybackGapNearVisualDemand } from '../../src/services/render/playbackGapCadence';
-import type { TimelineClip, TimelineTrack } from '../../src/types';
+import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
 
 const tracks = [
   { id: 'v1', type: 'video', visible: true },

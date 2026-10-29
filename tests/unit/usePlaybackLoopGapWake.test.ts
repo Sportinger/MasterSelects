@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import type { TimelineClip, TimelineTrack } from '../../src/types';
+import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
 
 const hoisted = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
