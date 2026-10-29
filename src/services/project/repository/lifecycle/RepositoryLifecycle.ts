@@ -114,6 +114,8 @@ export class RepositoryLifecycle {
         await prepared.prepareTarget?.();
         timer.enter('storage_open');
         candidate = await RepositorySession.open({ ...prepared.options, ...(abortable ? { signal: prepared.options.signal ?? abortable } : {}), onOpenProgress: progress => {
+          // The first progress comes from the started worker: the time before it is its script load.
+          timer.noteStorageWorkerStarted();
           if (progress.phase === 'projection') timer.enter('session_read');
           timer.noteRecords(progress.processedRecords);
           prepared.options.onOpenProgress?.(progress); this.hooks.progress?.(progress);

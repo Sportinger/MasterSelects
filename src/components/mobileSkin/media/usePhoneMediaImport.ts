@@ -1,6 +1,7 @@
 // Sequential phone import through the media store's own importFile, always asking for a copy into
-// the project so the project reopens after a reload. A finished import does not prove that: every
-// file whose copy failed or that stays only linked is reported back, never just logged.
+// the project so the project reopens after a reload. The copy runs in the background (the clips are
+// placed first, the "Copying into project" toast shows it, the media switch to the copy when it is
+// durable). Every file whose copy failed or that stays only linked is reported, never just logged.
 
 import { useCallback, useEffect, useState } from 'react';
 import type { FileImportResult } from '../../../stores/mediaStore/types';
@@ -50,6 +51,8 @@ function errorMessage(error: unknown): string {
 
 function isDurable(result: FileImportResult): boolean {
   if (result.type === 'signal') return true;
+  // A copy still running in the background reports its own outcome (status toast; a failure is shown there).
+  if ('projectCopy' in result && result.projectCopy === 'copying') return true;
   return Boolean(result.projectPath || result.absolutePath);
 }
 
@@ -57,7 +60,8 @@ function isDurable(result: FileImportResult): boolean {
 export async function importPhoneFilesInOrder(
   files: readonly File[],
   onProgress?: (progress: PhoneMediaImportProgress) => void,
-  importFile: ImportFile = (file) => useMediaStore.getState().importFile(file, undefined, { forceCopyToProject: true }),
+  // The copy into the project runs in the background: clips land as soon as metadata and thumbnail are ready.
+  importFile: ImportFile = (file) => useMediaStore.getState().importFile(file, undefined, { forceCopyToProject: true, copyInBackground: true }),
 ): Promise<PhoneMediaImportOutcome> {
   const outcome: PhoneMediaImportOutcome = { imported: [], failures: [], notDurable: [] };
   for (const [index, file] of files.entries()) {

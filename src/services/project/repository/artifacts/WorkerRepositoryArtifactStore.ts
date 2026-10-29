@@ -1,5 +1,5 @@
 import { ArtifactStore } from '../../../../artifacts/ArtifactStore';
-import type { ArtifactManifest, ArtifactStorageAdapter, ArtifactStorageLocation } from '../../../../artifacts/types';
+import type { ArtifactManifest, ArtifactStorageAdapter, ArtifactStorageLocation, ArtifactWriteOptions } from '../../../../artifacts/types';
 import { getManifestHashFromArtifactId } from '../../../../artifacts/ids';
 import { isArtifactManifest } from '../../../../artifacts/guards';
 import { RepositoryError, type JsonValue, type RecordReference, type RepositoryRecord } from '../contracts';
@@ -8,6 +8,7 @@ import type { RepositoryJournalEntry } from '../journal/RepositoryJournalReader'
 import { frozenJson } from '../segments/canonical';
 import { hashArtifactManifest } from './manifestIdentity';
 import { RepositoryArtifactPins } from './RepositoryArtifactPins';
+import { timeMediaCopyPhase } from '../../mediaCopy/mediaCopyPhaseTimings';
 const adapters = new WeakMap<ArtifactStore, WorkerRepositoryArtifactAdapter>();
 const stores = new WeakMap<RepositorySession, ArtifactStore>();
 function blobReference(manifest: ArtifactManifest) { return { hash: `sha256:${manifest.hash}`, length: manifest.size }; }
@@ -21,13 +22,19 @@ export class WorkerRepositoryArtifactAdapter implements ArtifactStorageAdapter {
   createStorageLocation(hash: string): ArtifactStorageLocation {
     return { kind: 'project-cache', projectRelativePath: `.masterselects/artifacts/${hash}.blob` };
   }
-  async writeArtifact(manifest: ArtifactManifest, blob: Blob, signal?: AbortSignal): Promise<void> {
+  async writeArtifact(manifest: ArtifactManifest, blob: Blob, signal?: AbortSignal, options: ArtifactWriteOptions = {}): Promise<void> {
     const release = this.pins.pin({ purpose: 'transaction', blobs: [blobReference(manifest)], manifests: [manifest.manifestHash!], records: [] });
-    try { await this.session.client.storeBlob(blobReference(manifest), this.chunks(blob, signal), signal); await this.saveArtifactManifest(manifest, signal); }
-    finally { release(); }
+    try {
+      // The worker reads the Blob itself (one request, 4 MB slices); see StorageWorkerClient.storeBlobFile.
+      // Every artifact is read back after the write unless its caller (a project media copy) asked otherwise.
+      await timeMediaCopyPhase(blob, 'copy_write', this.session.client.storeBlobFile(blobReference(manifest), blob, signal, options.writeConfirmation ?? 'read-back'));
+      await timeMediaCopyPhase(blob, 'copy_manifest', this.saveArtifactManifest(manifest, signal));
+    } finally { release(); }
   }
-  private async *chunks(blob: Blob, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
-    for (let offset = 0; offset < blob.size; offset += 256 * 1024) { signal?.throwIfAborted(); yield new Uint8Array(await blob.slice(offset, offset + 256 * 1024).arrayBuffer()); }
+  /** Content hash in the storage worker: never on the main thread, native SHA-256 for bounded files. */
+  async hashArtifactBlob(blob: Blob, signal?: AbortSignal): Promise<string> {
+    const hash = await timeMediaCopyPhase(blob, 'copy_hash', this.session.client.hashBlob(blob, signal));
+    return hash.slice('sha256:'.length);
   }
   async saveArtifactManifest(manifest: ArtifactManifest, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();

@@ -22,7 +22,9 @@ export async function readEditorRepositoryWorkspace(session: RepositorySession, 
   const result = { ...object(baseWorkspace) };
   const keys = ['media/activeCompositionId', 'media/openCompositionIds', 'media/selectedIds', 'media/expandedFolderIds', 'media/previewCompositionId',
     'media/sourceMonitorFileId', 'documents/activeDocumentId', 'tracking/selectedAssetId', 'midi/isEnabled', 'export/selectedPresetId',
-    'seedance/activeRunId', 'flashboard/composer', 'flashboard/activeAIWorkspaceId', 'flashboard/selectedActiveGenerationRecordIds', 'dock/layout', 'project-codec'];
+    'seedance/activeRunId', 'flashboard/composer', 'flashboard/activeAIWorkspaceId', 'flashboard/selectedActiveGenerationRecordIds', 'dock/layout', 'project-codec',
+    // Background copies into the project that were running (pendingProjectCopyMarker).
+    'media-copy/pending'];
   const entities = session.coordinator.getEntities();
   for (const key of entities.keys()) {
     if (!key.includes('/block/') && !key.includes('/item/') && !key.startsWith('artifact-') && !key.startsWith('source-identity:')) {

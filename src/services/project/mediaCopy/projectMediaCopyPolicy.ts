@@ -7,7 +7,7 @@ import { projectFileService } from '../../projectFileService';
 import { captureRepositoryDomainPublication } from '../repository/artifacts/RepositoryDomainPublication';
 import { getActiveRepositorySession } from '../repository/lifecycle/editorRepositoryLifecycle';
 import { isCopyingUndurableMedia, probeMediaLinkDurability } from './mediaLinkDurability';
-import { beginProjectMediaCopy, noteMediaLinkedByChoice } from './projectMediaCopyNotices';
+import { beginProjectMediaCopy, noteMediaLinkedByChoice, type ProjectMediaCopyTicket } from './projectMediaCopyNotices';
 
 export type ProjectMediaCopyReason =
   /** "Copy media to project folder" is on. */
@@ -67,24 +67,49 @@ export async function decideProjectMediaCopy(input: ProjectMediaCopyInput): Prom
   return { copy: true, reason, linkedByChoice: false };
 }
 
+/** A finished copy whose ticket is still open: the caller settles it once the copy is in use (see runHeldProjectMediaCopy). */
+export interface HeldProjectMediaCopy<T> {
+  value: T;
+  ticket: ProjectMediaCopyTicket;
+}
+
 /**
- * Runs one copy into the project and reports it: durability copies are announced
- * with their size, every failure is shown. A failed copy resolves to null so the
+ * Runs one copy into the project and reports it: durability and background copies
+ * are announced with their size, every failure is shown. A failed copy resolves to null so the
  * import continues with the linked file instead of being lost.
  */
 export async function runProjectMediaCopy<T>(
   file: Pick<File, 'name' | 'size'>,
   decision: ProjectMediaCopyDecision,
   copy: () => Promise<T | null>,
+  options: { announce?: boolean } = {},
 ): Promise<T | null> {
+  const held = await runHeldProjectMediaCopy(file, decision, copy, options);
+  held?.ticket.done();
+  return held?.value ?? null;
+}
+
+/**
+ * Like runProjectMediaCopy, but a successful copy keeps its ticket open: it still counts as pending (the
+ * "Copying into project" status and the unload guard stay on) until the caller settles it, e.g. after the
+ * media were switched to the copy and that switch is recorded in the project. A failure is settled here.
+ */
+export async function runHeldProjectMediaCopy<T>(
+  file: Pick<File, 'name' | 'size'>,
+  decision: ProjectMediaCopyDecision,
+  copy: () => Promise<T | null>,
+  options: { announce?: boolean } = {},
+): Promise<HeldProjectMediaCopy<T> | null> {
   if (decision.linkedByChoice) noteMediaLinkedByChoice(file.name);
   if (!decision.copy) return null;
-  const ticket = beginProjectMediaCopy(file, isDurabilityCopyReason(decision.reason));
+  // Background copies are always announced: nobody waits for them, so their progress must be visible.
+  const durability = isDurabilityCopyReason(decision.reason);
+  const ticket = beginProjectMediaCopy(file, options.announce === true || durability, durability ? 'durability' : 'background');
   try {
     const result = await copy();
-    if (result) ticket.done();
-    else ticket.fail(new Error('the project storage did not accept it'));
-    return result;
+    if (result) return { value: result, ticket };
+    ticket.fail(new Error('the project storage did not accept it'));
+    return null;
   } catch (error) {
     ticket.fail(error);
     return null;

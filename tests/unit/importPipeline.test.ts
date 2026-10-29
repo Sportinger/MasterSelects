@@ -176,6 +176,81 @@ describe('processImport', () => {
     expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('resolves a background-copy import before the copy finishes, then hands over the durable project copy', async () => {
+    const originalFile = new File(['original-bytes'], 'phone.mp4', { type: 'video/mp4' });
+    const rawCopyFile = new File(['original-bytes'], 'phone.mp4', { type: 'video/mp4' });
+    const rawHandle = { name: 'phone.mp4', getFile: vi.fn(async () => rawCopyFile) } as unknown as FileSystemFileHandle;
+    let finishCopy!: (value: unknown) => void;
+    mocks.copyToRawFolder.mockReturnValue(new Promise((resolve) => { finishCopy = resolve; }));
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:original');
+
+    const result = await processImport({ file: originalFile, id: 'media-bg', forceCopyToProject: true, copyInBackground: true });
+
+    // Placed on the original: no project path yet, the copy is still running and visible as pending.
+    expect(result.mediaFile.file).toBe(originalFile);
+    expect(result.mediaFile.projectPath).toBeUndefined();
+    expect(result.projectCopy).toBeInstanceOf(Promise);
+    expect(getProjectMediaCopyNotice()?.pendingFiles).toBe(1);
+    expect(getProjectMediaCopyNotice()?.durabilityFiles).toBe(0);
+    const reports = (globalThis as { __MS_MEDIA_IMPORT__?: Array<{ kind: string; outcome: string }> }).__MS_MEDIA_IMPORT__ ?? [];
+    expect(reports.at(-1)).toMatchObject({ kind: 'background-copy', outcome: 'running' });
+
+    finishCopy({ handle: rawHandle, relativePath: 'Raw/phone.mp4', alreadyExisted: false });
+    const copied = await result.projectCopy;
+    expect(copied).toMatchObject({ file: rawCopyFile, handle: rawHandle, relativePath: 'Raw/phone.mp4' });
+    expect(mocks.storeHandle).toHaveBeenCalledWith('media_media-bg', rawHandle);
+    expect(reports.at(-1)).toMatchObject({ kind: 'background-copy', outcome: 'ok' });
+    // The copy is durable, but the media do not use it yet: it stays pending (unload guard on) until the
+    // switch is recorded and settles its ticket (backgroundProjectCopy).
+    expect(getProjectMediaCopyNotice()).toMatchObject({ pendingFiles: 1, copiedFiles: 0, failures: [] });
+    copied!.ticket!.done();
+    expect(getProjectMediaCopyNotice()).toMatchObject({ pendingFiles: 0, copiedFiles: 1, failures: [] });
+  });
+
+  it('settles a started background copy as unused when the import fails afterwards (never orphaned, never "Copied")', async () => {
+    const originalFile = new File(['bytes'], 'phone-late-fail.mp4', { type: 'video/mp4' });
+    const rawHandle = { name: 'phone-late-fail.mp4', getFile: vi.fn(async () => originalFile) } as unknown as FileSystemFileHandle;
+    mocks.copyToRawFolder.mockResolvedValue({ handle: rawHandle, relativePath: 'Raw/phone-late-fail.mp4', alreadyExisted: false });
+    // The import fails after the copy started: creating the media's preview URL throws.
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => { throw new Error('no URL'); });
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      await expect(processImport({ file: originalFile, id: 'media-late-fail', forceCopyToProject: true, copyInBackground: true })).rejects.toThrow('no URL');
+      expect(mocks.copyToRawFolder).toHaveBeenCalled();
+      await vi.waitFor(() => expect(getProjectMediaCopyNotice()?.pendingFiles).toBe(0));
+      expect(getProjectMediaCopyNotice()).toMatchObject({ copiedFiles: 0, failures: [] });
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
+  it('reports a failed background copy and resolves it to null instead of failing the placed import', async () => {
+    const originalFile = new File(['bytes'], 'phone-fail.mp4', { type: 'video/mp4' });
+    mocks.copyToRawFolder.mockRejectedValue(new DOMException('full', 'QuotaExceededError'));
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:original');
+
+    const result = await processImport({ file: originalFile, id: 'media-bg-fail', forceCopyToProject: true, copyInBackground: true });
+
+    expect(result.mediaFile.file).toBe(originalFile);
+    await expect(result.projectCopy).resolves.toBeNull();
+    expect(getProjectMediaCopyNotice()?.failures).toEqual([{ name: 'phone-fail.mp4', bytes: originalFile.size, message: 'browser storage is full' }]);
+  });
+
+  it('keeps waiting for the copy when no background copy is asked for (desktop behaviour)', async () => {
+    const originalFile = new File(['bytes'], 'desk.mp4', { type: 'video/mp4' });
+    const rawCopyFile = new File(['bytes'], 'desk.mp4', { type: 'video/mp4' });
+    mocks.copyToRawFolder.mockResolvedValue({ handle: { name: 'desk.mp4', getFile: async () => rawCopyFile }, relativePath: 'Raw/desk.mp4', alreadyExisted: false });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:raw');
+
+    const result = await processImport({ file: originalFile, id: 'media-desk' });
+
+    expect(result.projectCopy).toBeUndefined();
+    expect(result.mediaFile.file).toBe(rawCopyFile);
+    expect(result.mediaFile.projectPath).toBe('Raw/desk.mp4');
+  });
+
   it('copies picker files into browser-private projects even when auto-copy is disabled', async () => {
     mocks.settingsState.copyMediaToProject = false;
     mocks.requiresProjectLocalMediaCopies.mockReturnValue(true);

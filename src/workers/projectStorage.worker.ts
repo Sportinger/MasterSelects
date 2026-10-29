@@ -19,6 +19,8 @@ import { IndexedDBMetadataIndex } from '../services/project/repository/index/Ind
 import { WorkspaceViewStore } from '../services/project/repository/workspace/WorkspaceViewStore';
 import { IncomingBlobTransfer } from '../services/project/repository/persistence/IncomingBlobTransfer';
 import { blobPath, verifyBlob } from '../services/project/repository/persistence/blobStorage';
+import { createFileJobLimiter, hashBlobContent, readBlobChunks } from '../services/project/repository/persistence/blobFileSource';
+import { createSessionBlobVerification } from '../services/project/repository/persistence/sessionBlobVerification';
 import type { NativeCommandResponse, StorageCancel, StorageEnvelope, StorageRequest, StorageOpenResult, RepositoryOpenProgress } from '../services/project/repository/storageWorkerProtocol';
 import type { OkResponse, RepositoryCommand } from '../services/nativeHelper/protocol';
 
@@ -42,6 +44,10 @@ let publicationTail: Promise<unknown> = Promise.resolve();
 const requests = new Map<string, AbortController>();
 const nativeRequests = new Map<string, { resolve: (value: OkResponse) => void; reject: (error: unknown) => void }>();
 const transfers = new Map<string, { stream: IncomingBlobTransfer; done: Promise<void> }>();
+/** Project media copies this worker stored this session: later checks only confirm their length (see the module). */
+const sessionBlobs = createSessionBlobVerification(verifyBlob);
+/** blob-hash and blob-store-file hold up to one whole-file buffer each: at most two at once, the rest wait. */
+const fileJobs = createFileJobLimiter();
 
 function openProgress(progress: RepositoryOpenProgress): void {
   scope.postMessage({ type: 'open-progress', sessionEpoch: epoch, progress });
@@ -281,12 +287,30 @@ async function execute(request: StorageRequest, signal: AbortSignal): Promise<un
         return { hash: hash.digest(), length: request.blob.size };
       } finally { hashingSources--; }
     }
-    case 'verify-blob': return verifyBlob(requireBackend(), request.reference, signal);
+    case 'verify-blob': return sessionBlobs.verify(requireBackend(), request.reference, signal);
+    case 'blob-hash': {
+      if (!(request.blob instanceof Blob)) throw new RepositoryError('corrupt', 'Blob hashing requires a Blob');
+      const blob = request.blob;
+      return fileJobs.run(async () => ({ hash: await hashBlobContent(blob, signal), length: blob.size }), signal);
+    }
+    case 'blob-store-file': {
+      if (!(request.blob instanceof Blob) || request.blob.size !== request.reference.length) throw new RepositoryError('corrupt', 'Stored file does not match its declared length');
+      const { blob, reference, confirm } = request;
+      return fileJobs.run(async () => {
+        const backend = requireBackend();
+        if (await backend.stat(blobPath(reference.hash))) { await sessionBlobs.verify(backend, reference, signal); return; }
+        // One pass over the file: hashed (native up to 64 MB, streamed above) and written in 4 MB slices. A
+        // project media copy ('length') is confirmed by its stored length and trusted for this session; every
+        // other artifact is read back and re-hashed (see storeBlob).
+        await requireWriter().storeBlob(reference, readBlobChunks(blob, signal), signal, { verifyWritten: confirm === 'length' ? 'length' : 'read-back' });
+        if (confirm === 'length') sessionBlobs.remember(backend, reference);
+      }, signal);
+    }
     case 'blob-read': {
       const backend = requireBackend();
       const path = blobPath(request.reference.hash);
       if (!await backend.stat(path)) return null;
-      await verifyBlob(backend, request.reference, signal);
+      await sessionBlobs.verify(backend, request.reference, signal);
       if (backend.readBlob) {
         const blob = await backend.readBlob(path, signal);
         if (!blob || blob.size !== request.reference.length) throw new RepositoryError('corrupt', 'Required repository blob is missing');
@@ -315,7 +339,7 @@ async function execute(request: StorageRequest, signal: AbortSignal): Promise<un
       readRecord: reference => readRecord(requireBackend(), reference, signal) }).page(request.cursor, request.limit ?? 128, signal);
     case 'blob-start': {
       if (await requireBackend().stat(blobPath(request.reference.hash))) {
-        await verifyBlob(requireBackend(), request.reference, signal); return { skip: true };
+        await sessionBlobs.verify(requireBackend(), request.reference, signal); return { skip: true };
       }
       if (transfers.size >= 4 || transfers.has(request.transferId)) throw new RepositoryError('budget', 'Too many concurrent repository blob transfers');
       const stream = new IncomingBlobTransfer();

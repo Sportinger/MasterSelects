@@ -1,5 +1,5 @@
 import type { ArtifactStore } from '../../../../artifacts/ArtifactStore';
-import type { ArtifactManifest } from '../../../../artifacts/types';
+import type { ArtifactManifest, ArtifactWriteConfirmation } from '../../../../artifacts/types';
 import type { JsonValue } from '../contracts';
 import type { ProjectFolderKey } from '../../core/constants';
 /** Captured hosts stay bound to their original location after editor activation changes. */
@@ -8,7 +8,8 @@ export interface RepositoryDomainPublication {
   readonly sessionEpoch: string;
   readonly artifacts: ArtifactStore;
   readFile(folder: ProjectFolderKey, name: string): Promise<File | null>;
-  writeFile(folder: ProjectFolderKey, name: string, input: string | Blob | ArrayBuffer): Promise<boolean>;
+  /** `writeConfirmation` 'length' is for project media copies only (see ArtifactWriteConfirmation). */
+  writeFile(folder: ProjectFolderKey, name: string, input: string | Blob | ArrayBuffer, options?: { writeConfirmation?: ArtifactWriteConfirmation }): Promise<boolean>;
   deleteFile(folder: ProjectFolderKey, name: string): Promise<boolean>;
   /** Allocates through the same session coordinator, never a second sequence. */
   appendJournal(id: string, value: JsonValue): Promise<void>;

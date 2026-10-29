@@ -127,6 +127,19 @@ export class StorageWorkerClient {
       await this.request({ type: 'blob-abort', transferId }).catch(() => {}); throw error;
     }
   }
+  /** SHA-256 of a Blob/File, computed in the storage worker (the main thread never reads its bytes). */
+  async hashBlob(blob: Blob, signal?: AbortSignal): Promise<string> {
+    const result = await this.request<{ hash: string; length: number }>({ type: 'blob-hash', blob }, signal);
+    return result.hash;
+  }
+  /**
+   * Stores a whole Blob/File as one request: the File is cloned to the worker as a reference to the same
+   * bytes, and the worker reads, checks and writes it in 4 MB slices. Replaces 256 KB acknowledged chunk
+   * messages for media copies, whose per-message round trips dominated a phone import.
+   */
+  storeBlobFile(reference: BlobReference, blob: Blob, signal?: AbortSignal, confirm: 'read-back' | 'length' = 'read-back'): Promise<void> {
+    return this.request({ type: 'blob-store-file', reference, blob, confirm }, signal);
+  }
   verifyBlob(reference: BlobReference, signal?: AbortSignal): Promise<void> {
     return this.request({ type: 'verify-blob', reference }, signal);
   }

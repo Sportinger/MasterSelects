@@ -9,6 +9,7 @@ import { isRepositoryHydrating } from './repository/transaction/storeMutationBou
 // Project Lifecycle — create, open, close, auto-sync
 
 import { Logger } from '../logger';
+import { hasPendingProjectMediaCopies } from './mediaCopy/projectMediaCopyNotices';
 import { preserveUnsavedProjectOnChunkFailure } from '../../runtime/chunkReloadGuard';
 import { saveProjectBeforeDevFullReload } from '../../runtime/devFullReloadSave';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
@@ -588,7 +589,9 @@ export function setupAutoSync(): void {
 
   // Development refreshes are frequent; keep the unload warning for production only.
   beforeUnloadHandler = event => {
-    if (!import.meta.env.DEV && hasUnsavedWorkspace()) {
+    // A media copy still running into the project is lost on reload (a picked phone file cannot be
+    // reopened), so it asks before leaving in development too.
+    if (hasPendingProjectMediaCopies() || (!import.meta.env.DEV && hasUnsavedWorkspace())) {
       event.preventDefault();
       event.returnValue = '';
     }

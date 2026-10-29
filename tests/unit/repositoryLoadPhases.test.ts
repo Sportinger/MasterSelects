@@ -122,6 +122,9 @@ describe('phase timings', () => {
     expect(opened).toMatchObject({ kind: 'open', outcome: 'ready', recoveredRecords: 120 });
     expect(Object.keys(opened!.phases)).toEqual(['queue', 'prepare', 'handoff', 'target', 'storage_open', 'session_read', 'workspace', 'activation', 'close_previous']);
     expect(opened!.totalMs).toBeGreaterThanOrEqual(Object.values(opened!.phases).reduce((sum, value) => sum + value, 0));
+    // The worker's first progress splits off its start inside storage_open.
+    expect(opened!.workerStartMs).toBeGreaterThan(0);
+    expect(opened!.workerStartMs!).toBeLessThanOrEqual(opened!.phases.storage_open!);
 
     await expect(lifecycle.open(prepared('broken'))).rejects.toThrow('Disk failed');
     expect(reports[1]).toMatchObject({ kind: 'open', outcome: 'failed' });
@@ -131,6 +134,22 @@ describe('phase timings', () => {
     await lifecycle.flush({ measure: true });
     expect(reports[2]).toMatchObject({ kind: 'save', outcome: 'ready' });
     expect(Object.keys(reports[2]!.phases)).toEqual(expect.arrayContaining(['queue', 'sync', 'publish']));
+  });
+});
+
+describe('storage worker start', () => {
+  it('counts the time until the worker first answered inside storage_open, once, and nowhere else', () => {
+    let clock = 0;
+    const timer = new RepositoryLoadTimer('create', () => clock);
+    timer.enter('target'); clock = 10;
+    timer.noteStorageWorkerStarted(); // not in storage_open yet: ignored
+    timer.enter('storage_open'); clock = 13_800;
+    timer.noteStorageWorkerStarted(); clock = 13_900;
+    timer.noteStorageWorkerStarted(); // later progress does not move it
+    timer.enter('initialize'); clock = 13_950;
+    expect(timer.finish('ready')).toMatchObject({ phases: { target: 10, storage_open: 13_890, initialize: 50 }, workerStartMs: 13_790 });
+    const plain = new RepositoryLoadTimer('open', () => 0);
+    expect(plain.finish('ready')).not.toHaveProperty('workerStartMs');
   });
 });
 

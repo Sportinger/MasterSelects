@@ -11,6 +11,7 @@ import { placePhoneMedia, type PhonePlacementMode } from './phoneMediaPlacement'
 import { Logger } from '../../../services/logger';
 import { formatMediaBytes } from '../../../services/project/mediaCopy/projectMediaCopyNotices';
 import { runEditorBatch } from '../../../services/project/repository/transaction/editorMutationRuntime';
+import { beginMediaImportTiming } from '../../../stores/mediaStore/helpers/importPhaseTimings';
 import './PhoneMediaSheet.css';
 
 const log = Logger.create('PhoneMediaSheet');
@@ -74,13 +75,21 @@ export const PhoneMediaSheet: PhoneSheetComponent = () => {
     const files = picked.map((item) => item.file);
     setPhase('importing');
     setProblems([]);
+    // Done to clips on the timeline, by phase (window.__MS_MEDIA_IMPORT__, kind 'phone-add').
+    const timing = beginMediaImportTiming('phone-add', files.length === 1 ? files[0].type || 'unknown' : 'mixed',
+      files.reduce((sum, file) => sum + file.size, 0));
     try {
       const { imported, failures, notDurable, placed } = await runEditorBatch('Add media', async () => {
+        timing.mark('batch_start');
         const importOutcome = await importFiles(files);
+        timing.mark('import');
         setPhase('placing');
         const placement = await placePhoneMedia(importOutcome.imported, mode);
+        timing.mark('placement');
         return { ...importOutcome, placed: placement };
       });
+      timing.mark('commit');
+      timing.finish('ok');
       const allProblems = [...failures, ...placed.failures, ...notDurable];
       const count = placed.clipIds.length;
       log.info('Phone media added', { picked: files.length, imported: imported.length, placed: count, problems: allProblems.length });
@@ -94,6 +103,7 @@ export const PhoneMediaSheet: PhoneSheetComponent = () => {
       setPhase('result');
       showToast(`${count} of ${files.length} added. ${allProblems[0].message}`, 'error');
     } catch (error) {
+      timing.finish('failed');
       log.error('Adding phone media failed', error);
       const message = `Adding media failed: ${error instanceof Error ? error.message : String(error)}`;
       setProblems([{ name: '', message }]);

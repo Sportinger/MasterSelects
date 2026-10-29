@@ -21,6 +21,13 @@ export class PreviewProbe {
   readonly canvas: Locator
   readonly observations: PreviewObservation[] = []
   private origin = Date.now()
+  /**
+   * Upper bound for one canvas screenshot. Locally a capture takes milliseconds; a real device behind a
+   * slow wireless DevTools link can need many seconds for one frame (DevicePreviewProbe raises it). It is
+   * a transport limit only: what the screenshot shows is still judged by waitForFrame, so a wrong frame
+   * fails exactly as before.
+   */
+  protected screenshotTimeoutMs = 5_000
 
   constructor(page: Page) {
     this.canvas = page.getByRole('region', { name: 'Preview' }).getByTestId('preview-canvas')
@@ -55,7 +62,7 @@ export class PreviewProbe {
    * that both axes scale alike.
    */
   async capture(): Promise<FramePixels> {
-    const png = await this.canvas.screenshot({ animations: 'allow', caret: 'initial', scale: 'css', timeout: 5_000 })
+    const png = await this.canvas.screenshot({ animations: 'allow', caret: 'initial', scale: 'css', timeout: this.screenshotTimeoutMs })
     const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true })
     return { width: info.width, height: info.height, channels: 3, data }
   }
@@ -70,7 +77,9 @@ export class PreviewProbe {
     { timeoutMs?: number; stable?: number; inverted?: boolean; allowed?: (frame: number) => boolean } = {}): Promise<PreviewObservation> {
     const deadline = Date.now() + timeoutMs
     let streak = 0
-    while (Date.now() < deadline) {
+    // A target already seen gets its confirming reads even when a slow capture ran past the deadline;
+    // any other frame still fails at once.
+    while (Date.now() < deadline || (streak > 0 && streak < stable)) {
       const { reading, observation } = await this.read()
       if (reading.valid && reading.frame === frame && reading.inverted === inverted) {
         streak++

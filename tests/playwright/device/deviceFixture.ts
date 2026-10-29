@@ -4,14 +4,14 @@ import { frameIndexAt, PHONE_FOOTAGE_PROFILES, type FootageExpectation, type Pho
 import { visibleCentre } from '../mobile/phoneFixture'
 import { PhoneTouch } from '../mobile/phoneTouch'
 import { connectDevice, disconnectDevice, type DeviceSession } from './deviceConnection'
-import { isDeviceProjectName, resolveDeviceEnv } from './deviceEnv'
+import { UI_WAIT_MS, isDeviceProjectName, resolveDeviceEnv } from './deviceEnv'
 import { ensureDeviceFootage, isPhoneFootageProfile, type PhoneFootage } from './deviceFootage'
-import { sourceSecondsAt, type TimelineSegment } from './deviceParsing'
+import { DEVICE_TAB_MARKER, sourceSecondsAt, type TimelineSegment } from './deviceParsing'
 import { DevicePreviewProbe } from './devicePreview'
 import { COMP_FPS, readPlayheadFrame, readTiles, seekToFrame, type TileState } from './deviceTimeline'
 
 /**
- * The real-device world: one worker, one phone, one new tab, one test project built through the
+ * The real-device world: one worker, one phone, one marked test tab (reused across runs), one test project built through the
  * phone UI and carried from journey to journey (the cases run in order; each one checks the state
  * it starts from and skips with a reason when an earlier case did not get there). Production has no
  * Dev Bridge, so nothing is arranged behind the UI: the page is read from the DOM, the preview
@@ -25,6 +25,7 @@ export const TOPBAR_EXPORT = 'phone-topbar-export'
 export const TOPBAR_PROJECTS = 'phone-topbar-projects'
 export const ACTION_MEDIA = phoneActionTestId('media')
 export const ACTION_SPLIT = phoneActionTestId('split')
+export { UI_WAIT_MS }
 export const ACTION_TEXT = phoneActionTestId('text')
 
 /** What the journeys hand on to the next one. */
@@ -64,7 +65,9 @@ export const test = base.extend<{ dev: DeviceWorld }, { world: DeviceWorld }>({
     const probe = new DevicePreviewProbe(session.page)
     const journey: JourneyState = { projectName: null, clip: null, splitFrame: null, segments: null, title: null, signature: null, endFrame: null }
     process.stdout.write(`[device] ${session.device.model}, Android ${session.device.android} (SDK ${session.device.sdk}), Chrome ${session.device.chrome}; `
-      + `${session.foreignPages} tab(s) of the owner left untouched; target ${env.baseURL}/m\n`)
+      + `${session.tab === 'reused' ? 'reused its marked test tab' : 'opened a new test tab'}`
+      + `${session.parkedTabs ? `, parked ${session.parkedTabs} older harness tab(s) on about:blank` : ''}; `
+      + `${session.foreignPages} tab(s) of the owner left untouched; target ${env.baseURL}/m#${DEVICE_TAB_MARKER}\n`)
     try {
       await provide({ ...session, touch, probe, footage, profileId, journey })
     } finally {
@@ -111,11 +114,42 @@ export function needs<T>(value: T | null | undefined, what: string): T {
 // Touch on locators
 // ---------------------------------------------------------------------------
 
-/** Real touch tap on the visible centre of `target` (inside `within`, default the page body). */
+/** How long a tap target and the visual viewport must hold still before the tap is aimed. */
+export const TAP_STILL_MS = 250
+
+/**
+ * Resolves once `target`'s box and the visual viewport stayed the same for TAP_STILL_MS (page clock).
+ * A sheet slides in, and the on-screen keyboard an autofocused field opens lifts it by the keyboard's
+ * height a moment later: a tap aimed before that lands where the control was (D5 title, run 16: Done
+ * missed, the sheet stayed open). A target that keeps moving fails with that reason.
+ */
+export async function waitUntilStill(target: Locator, timeoutMs = UI_WAIT_MS): Promise<void> {
+  const still = await target.evaluate((element, { stillMs, timeoutMs }) => new Promise<boolean>((resolve) => {
+    const started = performance.now()
+    let last = '', since = started
+    const step = (now: number) => {
+      const box = element.getBoundingClientRect(), viewport = window.visualViewport
+      const key = [box.x, box.y, box.width, box.height, viewport?.height, viewport?.offsetTop, window.innerHeight].map(value => Math.round(value ?? -1)).join(',')
+      if (key !== last) { last = key; since = now }
+      if (now - since >= stillMs) resolve(true)
+      else if (now - started >= timeoutMs) resolve(false)
+      else requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }), { stillMs: TAP_STILL_MS, timeoutMs })
+  if (!still) throw new Error(`The tap target kept moving for ${timeoutMs} ms (box or visual viewport changed); refusing to tap where it was`)
+}
+
+/**
+ * Real touch tap on the visible centre of `target` (inside `within`, default the page body), aimed
+ * once the target holds still and sent as one down/up pair (PhoneTouch.tapAtOnce: a DevTools stall
+ * cannot turn it into a long press).
+ */
 export async function tapOn(world: Pick<DeviceWorld, 'touch' | 'page'>, target: Locator, within?: Locator): Promise<void> {
   await expect(target, 'tap target is not visible').toBeVisible({ timeout: 30_000 })
   await target.scrollIntoViewIfNeeded()
-  await world.touch.tap(await visibleCentre(target, within ?? world.page.locator('body')))
+  await waitUntilStill(target)
+  await world.touch.tapAtOnce(await visibleCentre(target, within ?? world.page.locator('body')))
 }
 
 export async function tapTile(world: DeviceWorld, id: string): Promise<void> {

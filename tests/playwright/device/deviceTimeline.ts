@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
+import { UI_WAIT_MS } from './deviceEnv'
 import { PHONE_TEST_IDS as IDS } from '../../../src/components/mobileSkin/contracts'
 import type { PreviewProbe } from '../fixtures/previewProbe'
 import { parseClipLabel, parsePhoneTimeFrames } from './deviceParsing'
@@ -47,7 +48,7 @@ export function tile(page: Page, id: string): Locator {
 
 /** The playhead as a frame number, from the transport time. */
 export async function readPlayheadFrame(page: Page, fps = COMP_FPS): Promise<number> {
-  const text = await page.getByTestId(IDS.time).locator('.phone-transport__now').textContent({ timeout: 10_000 })
+  const text = await page.getByTestId(IDS.time).locator('.phone-transport__now').textContent({ timeout: UI_WAIT_MS })
   const frame = parsePhoneTimeFrames(text ?? '', fps)
   if (frame === null) throw new Error(`The transport time "${text}" is not mm:ss.ff`)
   return frame
@@ -85,17 +86,24 @@ export async function seekToFrame(page: Page, frame: number, { fps = COMP_FPS, t
 /**
  * Seeks to timeline frame `frame` and waits until the preview shows `expected` there (a frame code,
  * or null for nothing: a gap shows a flat picture), on two consecutive reads. Only the frame shown
- * before the seek (`previous`) may appear on the way; any other valid frame fails at once, because
+ * before the seek (`previous`) and the pictures of the timeline frames the seek stepped through
+ * (`passed`, see seekPathPictures: strictly between start and target, none on a cut) may appear on the
+ * way; any other valid frame fails at once, because
  * the preview then showed a wrong picture (the Vorschau-Wahrheit rule, fixtures/previewProbe.ts).
  * Waiting for a known frame matters on a phone: a seek into long-GOP footage can keep the old
  * frame on screen for several reads, so "two equal reads" alone would accept a stale picture.
  */
 export async function expectContentAt(page: Page, probe: PreviewProbe, frame: number, expected: number | null,
-  { previous = null, timeoutMs = 20_000 }: { previous?: number | null; timeoutMs?: number } = {}): Promise<void> {
+  { previous = null, passed = new Set<number>(), timeoutMs = UI_WAIT_MS }:
+  { previous?: number | null; passed?: ReadonlySet<number>; timeoutMs?: number } = {}): Promise<void> {
   await seekToFrame(page, frame)
   probe.mark()
+  // The keyboard seek steps through the frames between start and target; a phone decoder may still show
+  // the picture of the last step it finished (`passed`) for a moment. Any picture the edit does not put on
+  // that path is still a wrong frame and fails at once.
+  const onTheWay = (shown: number) => shown === previous || passed.has(shown)
   if (expected !== null) {
-    await probe.waitForFrame(expected, { timeoutMs, allowed: shown => shown === previous })
+    await probe.waitForFrame(expected, { timeoutMs, allowed: onTheWay })
       .catch((error: Error) => { throw new Error(`Timeline frame ${frame}: ${error.message}`) })
     return
   }
@@ -108,7 +116,7 @@ export async function expectContentAt(page: Page, probe: PreviewProbe, frame: nu
       continue
     }
     streak = 0
-    if (reading.valid && reading.frame !== previous) {
+    if (reading.valid && !onTheWay(reading.frame!)) {
       throw new Error(`Timeline frame ${frame} should show nothing (a gap), but the preview showed frame ${reading.frame} at ${observation.at} ms. ${probe.summary()}`)
     }
   }

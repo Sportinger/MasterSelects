@@ -5,6 +5,8 @@ import { Logger } from '../../../logger';
 
 const log = Logger.create('RepositoryDirectoryBackend');
 const COMMIT_PATH = /^\.masterselects\/commits\/[^/]+\.json$/;
+/** Bytes per writable-stream write call (see the write loop). */
+const WRITE_CALL_BYTES = 4 * 1024 * 1024;
 type CommitSummary = { commitId: string; lastOperation: number; hash: string };
 async function summarizeCommit(bytes: Uint8Array): Promise<CommitSummary | null> {
   try {
@@ -257,7 +259,10 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
           for await (const chunk of chunks) {
             checkAbort(signal); await writer.assertOwned();
             written.add(chunk);
-            for (let offset = 0; offset < chunk.byteLength; offset += 256 * 1024) await stream.write(chunk.slice(offset, offset + 256 * 1024));
+            // 4 MB per write call: each write is one round trip to the browser's file backend, and a phone
+            // media copy of 256 KB writes spent most of its time in those trips. subarray, not slice: the
+            // writable stream copies the bytes itself, a second copy here only cost time and memory.
+            for (let offset = 0; offset < chunk.byteLength; offset += WRITE_CALL_BYTES) await stream.write(chunk.subarray(offset, offset + WRITE_CALL_BYTES) as Uint8Array<ArrayBuffer>);
           }
           checkAbort(signal); await writer.assertOwned(); await stream.close();
         } catch (error) { files.forgetHandle(path); await stream.abort().catch(() => {}); if (!existing) await removeAfterFailedWrite(directory, name); throw error; }

@@ -41,6 +41,19 @@ export interface PutArtifactOptions {
   createdAt?: string;
   retention?: 'required' | 'reproducible-cache' | 'temporary';
   signal?: AbortSignal;
+  /** How the stored bytes are confirmed (see ArtifactWriteOptions); adapters without a choice ignore it. */
+  writeConfirmation?: ArtifactWriteConfirmation;
+}
+
+/**
+ * 'read-back' (default): every stored byte is read and hashed again after the write. 'length': the hash
+ * was checked on the exact bytes written, the write is confirmed by the stored length only, and the blob is
+ * trusted for the rest of the session; only project media copies (Raw originals) ask for it.
+ */
+export type ArtifactWriteConfirmation = 'read-back' | 'length';
+
+export interface ArtifactWriteOptions {
+  writeConfirmation?: ArtifactWriteConfirmation;
 }
 
 export interface PutArtifactResult {
@@ -63,7 +76,9 @@ export interface ArtifactManifestIndex {
 
 export interface ArtifactStorageAdapter extends ArtifactManifestIndex {
   createStorageLocation(hash: string): ArtifactStorageLocation;
-  writeArtifact(manifest: ArtifactManifest, blob: Blob, signal?: AbortSignal): Promise<void>;
+  writeArtifact(manifest: ArtifactManifest, blob: Blob, signal?: AbortSignal, options?: ArtifactWriteOptions): Promise<void>;
+  /** Optional: hash the bytes where they are stored (e.g. in a storage worker); hex SHA-256 without prefix. */
+  hashArtifactBlob?(blob: Blob, signal?: AbortSignal): Promise<string>;
   readArtifactBlob(manifest: ArtifactManifest): Promise<Blob | null>;
   hasArtifactBlob(manifest: ArtifactManifest): Promise<boolean>;
   deleteArtifactBlob(manifest: ArtifactManifest): Promise<boolean>;

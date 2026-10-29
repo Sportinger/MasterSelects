@@ -24,6 +24,8 @@ import type { ProjectFile } from '../../types/project.types';
 import { directoryForOpfs } from './repositoryLocations';
 import { splitProjectWorkspace, readProjectWorkspace } from './workspaceProjection';
 import { retryTransientStorage } from '../../core/browserStorageFailure';
+import { finishProjectMediaCopiesBeforeSwitch } from '../../mediaCopy/projectSwitchCopyWait';
+import { reportInterruptedProjectMediaCopies } from '../../mediaCopy/pendingProjectCopyMarker';
 
 let installedCleanup = (import.meta.hot?.data?.repositoryInstalledCleanup as (() => void) | undefined) ?? null;
 let projectWorkspace: JsonValue = (import.meta.hot?.data?.repositoryWorkspace as JsonValue | undefined) ?? {};
@@ -82,6 +84,8 @@ const lifecycle = createLifecycle({
       if (progress.phase === 'ready') {
         completeProjectLoadProgress();
         startScheduledLinkedMediaConnection();
+        // A copy into this project that a closed page interrupted is reported now (after hydration: it writes a view).
+        queueMicrotask(reportInterruptedProjectMediaCopies);
         const timeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
         if (timeline) scheduleMediaSourceArtifactProjectionForClips(timeline.clips);
         return;
@@ -130,6 +134,8 @@ export function getActiveRepositorySession(): RepositorySession | null { return 
 export function subscribeRepositoryLifecycle(listener: () => void): () => void { return lifecycle.subscribe(listener); }
 export const getRepositoryLifecycleState = () => lifecycle.getState();
 export async function openEditorRepository(prepare: PrepareRepository, kind: RepositoryOpenKind = 'open'): Promise<RepositorySession> {
+  // Copies still running into the current project are recorded there first, never dropped by the switch.
+  await finishProjectMediaCopiesBeforeSwitch();
   try { const session = await lifecycle.open(prepare, kind); scratchSuperseded = false; return session; }
   catch (error) {
     // The open cancelled the scratch workspace and then failed itself: edits made now need it again.
@@ -140,7 +146,7 @@ export async function openEditorRepository(prepare: PrepareRepository, kind: Rep
     throw error;
   }
 }
-export const closeEditorRepository = () => lifecycle.close();
+export async function closeEditorRepository(): Promise<void> { await finishProjectMediaCopiesBeforeSwitch(); await lifecycle.close(); }
 export async function flushEditorRepository(): Promise<boolean> {
   if (!getActiveRepositorySession()?.opening.writable) throw new RepositoryError('ownership', 'Read-only project cannot publish a save');
   await lifecycle.flush({ retry: true, measure: true }); return true;

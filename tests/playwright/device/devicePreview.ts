@@ -3,6 +3,7 @@ import { PHONE_TEST_IDS } from '../../../src/components/mobileSkin/contracts'
 import { readColorBars, type BarReading, type FrameCodeReading } from '../assertions/frameCodeOracle'
 import { readPhoneFrameCode } from '../assertions/phoneFootageOracle'
 import { PreviewProbe, type PreviewObservation } from '../fixtures/previewProbe'
+import { UI_WAIT_MS } from './deviceEnv'
 
 /**
  * The preview probe of the real phone: a screenshot of the phone preview canvas (Page.captureScreenshot
@@ -14,6 +15,9 @@ export class DevicePreviewProbe extends PreviewProbe {
   constructor(page: Page) {
     super(page)
     Object.defineProperty(this, 'canvas', { value: page.getByTestId(PHONE_TEST_IDS.previewRegion).getByTestId(PHONE_TEST_IDS.previewCanvas) })
+    // Over wireless adb one Page.captureScreenshot of the canvas can take many seconds: a capture gets the
+    // harness's transport-tolerant UI wait instead of the 5 s desktop limit (a slow capture is not a wrong frame).
+    this.screenshotTimeoutMs = UI_WAIT_MS
   }
 
   override async read(): Promise<{ reading: FrameCodeReading; bars: BarReading[]; observation: PreviewObservation }> {

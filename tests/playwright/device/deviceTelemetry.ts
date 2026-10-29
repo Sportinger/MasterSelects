@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { PHONE_TEST_IDS } from '../../../src/components/mobileSkin/contracts'
 import { PHONE_PROJECT_LOADING_TEST_ID } from '../../../src/components/mobileSkin/runtime/phoneProjectLoadingTestIds'
-import { sanitizeBootMarks, sanitizeLoadReports, type BootMark, type LoadReport } from './deviceParsing'
+import { sanitizeBootMarks, sanitizeLoadReports, sanitizeMediaImportReports, type ActionEvent, type BootMark, type LoadReport, type MediaImportReport } from './deviceParsing'
 
 /**
  * Load-time evidence from the phone: the boot marks (window.__MS_PHONE_BOOT__), the sanitized
@@ -93,4 +93,71 @@ export function describeProgress(samples: ProgressSample[]): string {
     const what = sample.view === 'none' ? 'nothing' : `${sample.view}${sample.kind ? ` ${sample.kind}` : ''}${sample.step ? `/${sample.step}` : ''}${sample.percent !== undefined ? ` ${sample.percent} %` : ''}`
     return `${sample.atMs}${end !== undefined ? `-${end}` : '+'} ms ${what}`
   }).join(' · ')
+}
+
+// ---------------------------------------------------------------------------
+// Page-side action timeline
+// ---------------------------------------------------------------------------
+
+type ActionWindow = Window & { __msDeviceActions?: ActionEvent[] }
+
+/**
+ * Records, with the page's own clock, every touch down and click on an element with a data-testid
+ * and every appearance/disappearance of the watched test ids. The PC's wall clock includes the
+ * DevTools transport over wireless adb, which stalled for 12-15 s in Pixel runs (2026-10-28) while
+ * the page was idle; only page times tell the product's share. Test ids only, never texts.
+ */
+export async function installActionTimeline(page: Page, watched: readonly string[]): Promise<void> {
+  const recorder = (ids: readonly string[]) => {
+    const holder = window as ActionWindow
+    if (holder.__msDeviceActions) return
+    const events: ActionEvent[] = []
+    holder.__msDeviceActions = events
+    const push = (kind: ActionEvent['kind'], id: string) => {
+      events.push({ atMs: Math.round(performance.now()), kind, id })
+      if (events.length > 2000) events.splice(0, events.length - 2000)
+    }
+    const testIdOf = (target: EventTarget | null) => (target instanceof Element ? target.closest<HTMLElement>('[data-testid]')?.dataset.testid : undefined)
+    window.addEventListener('pointerdown', (event) => { const id = testIdOf(event.target); if (id) push('down', id) }, true)
+    window.addEventListener('click', (event) => { const id = testIdOf(event.target); if (id) push('click', id) }, true)
+    const shown = new Set<string>()
+    const scan = () => {
+      for (const id of ids) {
+        const present = document.querySelector(`[data-testid="${id}"]`) !== null
+        if (present && !shown.has(id)) { shown.add(id); push('show', id) } else if (!present && shown.has(id)) { shown.delete(id); push('hide', id) }
+      }
+    }
+    const start = () => { scan(); new MutationObserver(scan).observe(document.documentElement, { subtree: true, childList: true }) }
+    if (document.documentElement) start(); else document.addEventListener('DOMContentLoaded', start, { once: true })
+  }
+  await page.addInitScript(recorder, watched)
+  await page.evaluate(recorder, watched).catch(() => undefined)
+}
+
+/** The page-side events recorded since `sinceMs` (page clock). */
+export async function readActions(page: Page, sinceMs = 0): Promise<ActionEvent[]> {
+  return page.evaluate((since) => ((window as ActionWindow).__msDeviceActions ?? []).filter(event => event.atMs >= since), sinceMs).catch(() => [])
+}
+
+/** The page clock now (performance.now()), to mark where an action starts. */
+export async function pageNow(page: Page): Promise<number> {
+  return page.evaluate(() => Math.round(performance.now()))
+}
+
+/**
+ * Waits until every background copy into the project that started at or after `sinceMs` settled (its
+ * 'background-copy' report is no longer 'running'); returns false when one was still running at the timeout.
+ * Builds without background copies have no such report and return at once.
+ */
+export async function waitForBackgroundCopies(page: Page, sinceMs: number, timeoutMs: number): Promise<boolean> {
+  return page.waitForFunction((since) => !((globalThis as { __MS_MEDIA_IMPORT__?: Array<{ kind?: string; startedAt?: number; outcome?: string }> }).__MS_MEDIA_IMPORT__ ?? [])
+    .some(item => item.kind === 'background-copy' && (item.startedAt ?? 0) >= since && item.outcome === 'running'), sinceMs, { timeout: timeoutMs, polling: 250 })
+    .then(() => true, () => false)
+}
+
+/** Media import reports (window.__MS_MEDIA_IMPORT__) that started at or after `sinceMs` (page clock). Empty on builds without them. */
+export async function readMediaImports(page: Page, sinceMs = 0): Promise<MediaImportReport[]> {
+  const raw = await page.evaluate((since) => ((globalThis as { __MS_MEDIA_IMPORT__?: Array<{ startedAt?: number }> }).__MS_MEDIA_IMPORT__ ?? [])
+    .filter(item => (item.startedAt ?? 0) >= since), sinceMs).catch(() => [])
+  return sanitizeMediaImportReports(raw)
 }

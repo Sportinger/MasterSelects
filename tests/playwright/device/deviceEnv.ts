@@ -34,7 +34,8 @@ export interface DeviceEnv {
   keepAwakeMs: number
   /** Phone footage profile the journeys import (fixtures/phoneFootageProfiles.ts, e.g. android-h264, android-h264-rotated, android-vfr). */
   footageProfile: string
-  budgets: { phaseMs: number; totalMs: number; firstFrameMs: number; bootMs: number }
+  /** importMs: Done to the clip tile on the page clock, for the journeys' recording (budgets are soft checks). */
+  budgets: { phaseMs: number; totalMs: number; firstFrameMs: number; bootMs: number; importMs: number }
   /**
    * Where exported files pulled from the phone land. Default: a folder under os.tmpdir() (a tmpfs on
    * the Linux test host), because a phone export can be gigabytes and the repo disk is often full.
@@ -48,8 +49,12 @@ export interface DeviceEnv {
   allowEditorTabs: boolean
 }
 
-/** Above this size `auto` serves a file over adb reverse instead of a Chrome route (a route body crosses DevTools in one message). */
-export const ROUTE_LIMIT_BYTES = 64 * 1024 * 1024
+/**
+ * Above this size `auto` serves a file over adb reverse instead of a Chrome route. A route body crosses
+ * DevTools as one base64 message: over wireless adb the 30 MB Pixel recording took 24-38 s that way and
+ * twice lost the DevTools target mid-transfer ("Target page ... has been closed"); adb reverse streams it.
+ */
+export const ROUTE_LIMIT_BYTES = 8 * 1024 * 1024
 
 function int(value: string | undefined, fallback: number, name: string): number {
   if (value === undefined || value.trim() === '') return fallback
@@ -87,6 +92,7 @@ export function resolveDeviceEnv(env: Record<string, string | undefined> = proce
       totalMs: int(env.MASTERSELECTS_DEVICE_TOTAL_BUDGET_MS, 6_000, 'MASTERSELECTS_DEVICE_TOTAL_BUDGET_MS'),
       firstFrameMs: int(env.MASTERSELECTS_DEVICE_FIRST_FRAME_BUDGET_MS, 3_000, 'MASTERSELECTS_DEVICE_FIRST_FRAME_BUDGET_MS'),
       bootMs: int(env.MASTERSELECTS_DEVICE_BOOT_BUDGET_MS, 8_000, 'MASTERSELECTS_DEVICE_BOOT_BUDGET_MS'),
+      importMs: int(env.MASTERSELECTS_DEVICE_IMPORT_BUDGET_MS, 10_000, 'MASTERSELECTS_DEVICE_IMPORT_BUDGET_MS'),
     },
     outputDir: path.resolve(env.MASTERSELECTS_DEVICE_OUTPUT_DIR?.trim() || path.join(os.tmpdir(), 'masterselects-device')),
     allowEditorTabs: env.MASTERSELECTS_DEVICE_ALLOW_EDITOR_TABS === '1',
@@ -98,6 +104,14 @@ export function transportFor(env: Pick<DeviceEnv, 'transport'>, bytes: number): 
   if (env.transport !== 'auto') return env.transport
   return bytes <= ROUTE_LIMIT_BYTES ? 'route' : 'reverse'
 }
+
+/**
+ * Wait for a UI reaction to a tap (a sheet opening, a handle showing). Generous on purpose: the
+ * wireless adb DevTools link to the Pixel stalls for 12-15 s at times while the page is idle
+ * (2026-10-28), and a 15 s wait then failed a journey for a stall the product never saw. The
+ * product's own speed is judged on the page clock (deviceTelemetry.installActionTimeline).
+ */
+export const UI_WAIT_MS = 45_000
 
 /** Every test project the harness creates is named like this, so it is recognisable on the phone. */
 export const DEVICE_PROJECT_PREFIX = 'Device test'

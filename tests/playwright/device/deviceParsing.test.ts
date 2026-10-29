@@ -5,8 +5,9 @@ import { phoneClipAccessibleName } from '../../../src/components/mobileSkin/time
 import { deviceProjectName, isDeviceProjectName, PRODUCTION_BASE_URL, resolveDeviceEnv, ROUTE_LIMIT_BYTES, transportFor } from './deviceEnv'
 import { pixelRecordingName } from './deviceFootage'
 import {
+  actionPhases, describeActionPhases, sanitizeMediaImportReports, type ActionEvent,
   describeLoadReport, editorTabPaths, expectedTimelineFrames, judgeFrames, loadBudgetProblems, parseAdbDevices, parseClipLabel, parseExportSize,
-  parseKeyguardShowing, parsePhoneTimeFrames, parsePortMappings, parseWakefulness, sanitizeBootMarks, sanitizeLoadReports, sourceSecondsAt,
+  parseKeyguardShowing, parsePhoneTimeFrames, parsePortMappings, parseWakefulness, planDeviceTabs, hasDeviceTabMarker, deviceTabURL, PARKED_DEVICE_TAB_URL, sanitizeBootMarks, sanitizeLoadReports, seekPathPictures, sourceSecondsAt, transportMs,
 } from './deviceParsing'
 
 // Pure parts of the real-device harness (tests/playwright/device). Nothing here touches adb or a phone.
@@ -43,6 +44,28 @@ describe('adb output', () => {
   it('finds the owner tabs on the editor origin by path only, never with their query', () => {
     expect(editorTabPaths(['https://www.masterselects.com/m?project=secret', 'https://example.org/m', 'chrome://newtab/', 'not a url',
       'https://www.masterselects.com/editor#x'], PRODUCTION_BASE_URL)).toEqual(['/m', '/editor'])
+  })
+
+  it('marks the test tab in its URL fragment, which survives Chrome discarding and reloading the tab', () => {
+    expect(deviceTabURL('https://www.masterselects.com/')).toBe('https://www.masterselects.com/m#masterselects-device-test')
+    expect(hasDeviceTabMarker(deviceTabURL(PRODUCTION_BASE_URL))).toBe(true)
+    expect(hasDeviceTabMarker(PARKED_DEVICE_TAB_URL)).toBe(true)
+    expect(hasDeviceTabMarker('https://www.masterselects.com/m')).toBe(false)
+    expect(hasDeviceTabMarker('https://www.masterselects.com/m#other')).toBe(false)
+    expect(hasDeviceTabMarker('not a url')).toBe(false)
+  })
+
+  it('reuses its own marked tab, parks further marked editor tabs and reports unmarked editor tabs as the owner\'s', () => {
+    const base = PRODUCTION_BASE_URL
+    expect(planDeviceTabs([], base)).toEqual({ reuse: null, park: [], ownerEditorPaths: [] })
+    expect(planDeviceTabs([{ url: 'https://example.org/', marked: false }, { url: `${base}/m`, marked: true }], base))
+      .toEqual({ reuse: 1, park: [], ownerEditorPaths: [] })
+    // A parked about:blank harness tab is used only when no marked tab shows the editor.
+    expect(planDeviceTabs([{ url: PARKED_DEVICE_TAB_URL, marked: true }, { url: `${base}/m`, marked: true }, { url: `${base}/m?x=1`, marked: true }], base))
+      .toEqual({ reuse: 1, park: [2], ownerEditorPaths: [] })
+    expect(planDeviceTabs([{ url: PARKED_DEVICE_TAB_URL, marked: true }], base)).toEqual({ reuse: 0, park: [], ownerEditorPaths: [] })
+    expect(planDeviceTabs([{ url: `${base}/editor?project=secret`, marked: false }, { url: `${base}/m`, marked: true }], base))
+      .toEqual({ reuse: 1, park: [], ownerEditorPaths: ['/editor'] })
   })
 })
 
@@ -85,7 +108,23 @@ describe('load telemetry', () => {
     expect(loadBudgetProblems(report, { phaseMs: 3000, totalMs: 6000, firstFrameMs: 3000 })).toEqual([
       'phase session_read took 6400 ms (budget 3000)', 'total 7200 ms (budget 6000)', 'first frame after 3500 ms (budget 3000)',
     ])
-    expect(describeLoadReport(report)).toBe('open ready (opfs): total 7200 ms · storage_open 300 · session_read 6400 · first frame 3500')
+    expect(describeLoadReport(report)).toBe('open ready (opfs): total 7200 ms · storage_open 300 · session_read 6400 · first frame 3500 · long tasks 900')
+  })
+
+  it('reports the storage worker start (its script over the adb link) and judges storage_open and the total without it', () => {
+    // Pixel run 14: the worker script fetch stalled for ~14 s; the storage open itself took ~140 ms.
+    const [report] = sanitizeLoadReports([{ kind: 'create', outcome: 'ready', storage: 'opfs', totalMs: 14098, phases: { storage_open: 13927, views: 99 }, workerStartMs: 13790.4 }])
+    expect(report.workerStartMs).toBe(13790)
+    expect(transportMs(report)).toBe(13790)
+    expect(loadBudgetProblems(report, { phaseMs: 3000, totalMs: 6000, firstFrameMs: 3000 })).toEqual([])
+    expect(describeLoadReport(report)).toBe('create ready (opfs): total 14098 ms · storage_open 13927 · views 99 · storage worker start 13790')
+    // A slow open after a quick worker start is still judged.
+    const [slow] = sanitizeLoadReports([{ kind: 'open', outcome: 'ready', storage: 'opfs', totalMs: 9000, phases: { storage_open: 8500 }, workerStartMs: 200 }])
+    expect(loadBudgetProblems(slow, { phaseMs: 3000, totalMs: 6000, firstFrameMs: 3000 })).toEqual([
+      'phase storage_open took 8300 ms after the worker start (budget 3000)', 'total 8800 ms without the worker start (budget 6000)',
+    ])
+    // Builds without the field judge as before.
+    expect(transportMs(sanitizeLoadReports([{ kind: 'open', outcome: 'ready', totalMs: 10, phases: { storage_open: 5 } }])[0]!)).toBe(0)
   })
 })
 
@@ -99,6 +138,25 @@ describe('frame expectations', () => {
     const frames = expectedTimelineFrames(segments, 260, 30, seconds => Math.floor(seconds * 30 + 1e-6))
     expect(frames.slice(223, 227)).toEqual([223, 224, null, null])
     expect(frames.slice(254, 257)).toEqual([null, 255, 256])
+  })
+
+  it('lets a seek show only the pictures strictly between start and target, none on a cut and no neighbours', () => {
+    const pictureAt = (frame: number) => expectedTimelineFrames(segments, 400, 30, seconds => Math.floor(seconds * 30 + 1e-6))[frame]
+    // Within one segment: the frames stepped through, not the start or the target, no ±1.
+    expect([...seekPathPictures(segments, 100, 104, pictureAt)]).toEqual([101, 102, 103])
+    expect([...seekPathPictures(segments, 104, 100, pictureAt)]).toEqual([101, 102, 103])
+    // Across the gap: segment ends (224, 255 on the timeline) are cut frames, the gap shows nothing.
+    const across = seekPathPictures(segments, 220, 260, pictureAt)
+    expect(across.has(224)).toBe(false)
+    expect(across.has(255)).toBe(false)
+    expect([...across].toSorted((a, b) => a - b)).toEqual([221, 222, 223, 256, 257, 258, 259])
+    // Adjacent frames: nothing in between.
+    expect(seekPathPictures(segments, 152, 153, pictureAt).size).toBe(0)
+    // A step whose rounding policy decides between two pictures lets both pass, never on a cut.
+    const either = (frame: number) => frame === 102 || frame === 224 ? [pictureAt(frame)!, pictureAt(frame)! + 1] : pictureAt(frame)
+    expect([...seekPathPictures(segments, 100, 103, either)].toSorted((a, b) => a - b)).toEqual([101, 102, 103])
+    const atCut = seekPathPictures(segments, 220, 226, either)
+    expect(atCut.has(224) || atCut.has(225)).toBe(false)
   })
 
   it('fails wrong frames but only reports a one-frame difference at a frame the rounding policy decides', () => {
@@ -145,5 +203,36 @@ describe('device settings', () => {
     expect(isDeviceProjectName('Hochzeit Anna')).toBe(false)
     expect(pixelRecordingName('/tmp/x/phone-r1-android-h264.mp4', new Date('2026-10-28T10:15:00.123Z'))).toBe('PXL_20261028_101500123.mp4')
     expect(pixelRecordingName('/tmp/x/iphone.mov', new Date('2026-10-28T10:15:00.123Z'))).toBe('PXL_20261028_101500123.mov')
+  })
+})
+
+describe('page-side action phases', () => {
+  const events: ActionEvent[] = [
+    { atMs: 100, kind: 'click', id: 'phone-create-project' },
+    { atMs: 1000, kind: 'down', id: 'phone-create-project' },
+    { atMs: 1060, kind: 'click', id: 'phone-create-project' },
+    { atMs: 1066, kind: 'show', id: 'phone-project-loading' },
+    { atMs: 1380, kind: 'hide', id: 'phone-home' },
+  ]
+  const ends = { loading: { kind: 'show' as const, id: 'phone-project-loading' }, home: { kind: 'hide' as const, id: 'phone-home' } }
+
+  it('splits a tap into page phases and attributes the rest of the wall time to the DevTools transport', () => {
+    const result = actionPhases(events, 'phone-create-project', ends, 15_400, 900)
+    expect(result).toEqual({ phases: { tap: 60, loading: 6, home: 320 }, pageMs: 380, transportMs: 15_020 })
+    expect(describeActionPhases(result)).toBe('page 380 ms (tap 60 · loading 6 · home 320) · DevTools transport 15020 ms')
+  })
+
+  it('reports no page time when the click or an end was not seen', () => {
+    expect(actionPhases([], 'phone-create-project', ends, 500)).toEqual({ phases: {}, pageMs: null, transportMs: null })
+    expect(actionPhases(events.slice(0, 4), 'phone-create-project', ends, 500, 900)).toEqual({ phases: { tap: 60, loading: 6 }, pageMs: null, transportMs: null })
+  })
+
+  it('passes only machine fields of the media import reports', () => {
+    expect(sanitizeMediaImportReports([
+      { kind: 'phone-add', mediaType: 'video/mp4', bytes: 30e6, totalMs: 4100.4, outcome: 'ok', startedAt: 5, phases: [{ phase: 'import', ms: 3900.2 }, { phase: 'My Video.mp4', ms: 1 }] },
+      { kind: 'PXL 2026 secret.mp4', bytes: 1, totalMs: 1 },
+      'junk',
+    ])).toEqual([{ kind: 'phone-add', mediaType: 'video/mp4', bytes: 30e6, totalMs: 4100, outcome: 'ok', phases: [{ phase: 'import', ms: 3900 }] }])
+    expect(sanitizeMediaImportReports(null)).toEqual([])
   })
 })

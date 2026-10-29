@@ -165,6 +165,16 @@ judged by frame index, never by a time distance that also admits a neighbour:
   Pixel 10 Pro, frame 246 (stamped 2.6 ms early) filled slot 245 and timeline frame 245 kept showing
   it, and frame 152 (2.8 ms late) settled a step to frame 153, so the paused preview stayed one
   keyboard step behind.
+- **A late warmup report waits for the next frame.** The decoder warmup plays the element briefly
+  and labels its capture with the frame the `requestVideoFrameCallback` reports. A callback that runs
+  while `currentTime` is already more than half a frame past that frame's timestamp is late: the
+  element may already show the next frame (`presentedFrameCallbackIsLate` in
+  `src/services/videoSourceFrameRate.ts`). The warmup then waits for the next callback (up to three,
+  and logs a warning if all three are late; `requestOnTimePresentedFrame` in
+  `src/services/layerBuilder/videoSyncPresentedFrame.ts`) instead of labelling the picture as the earlier frame and
+  pausing on it. Before, a callback that reported frame 0 at `currentTime` 0.0269 s cached frame 1
+  as frame 0, and the paused preview showed frame 1 at timeline frame 0 until the next play (phone
+  journey m1-edit 5, about one run in eight).
 - **Held and cached frames show the target frame only.** The paused guard
   (`htmlVideoPausedFrameGuard.ts`) compares frame indices on the source grid, never finer than the
   scrub cache's 1/30 s slots; it used to accept anything from one 1/30 s slot back to 50 ms ahead.

@@ -298,7 +298,8 @@ describe('recovery-scoped immutable caches and proofs', () => {
     const recovered = await recoverRepository(source.backend, descriptor);
     expect(recovered.head).toEqual(previousCommit); expect(recovered.operationSequence).toBe(12);
     // Every new record declares the same source, so this proves cross-commit verification reuse.
-    expect(reads.get(path)).toBe(Math.ceil(blobBytes.length / (256 * 1024)));
+    // verifyBlob reads in 4 MB ranges (the backends' bounded read size).
+    expect(reads.get(path)).toBe(Math.ceil(blobBytes.length / (4 * 1024 * 1024)));
     for (const publication of publications) {
       expect(reads.get(commitPath(publication.commit.commitId))).toBe(1);
       for (const segment of publication.segments) expect(reads.get(segmentPath(segment.descriptor.segmentId))).toBe(1);

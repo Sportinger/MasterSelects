@@ -193,6 +193,9 @@ export interface MediaFile extends MediaItem, MediaVideoTrackMetadata {
   externalOrigin?: ExternalMediaOrigin;
   // Import loading state
   isImporting?: boolean;
+  // Transient: a copy into the project still running in the background ('copying') or failed ('failed',
+  // reported through the project media copy notice). Never persisted; absent once the copy is durable.
+  projectCopy?: 'copying' | 'failed';
   // Transient: why this image could not be decoded (not persisted; cleared on the next successful decode)
   decodeError?: string;
   vectorAnimation?: VectorAnimationMetadata;

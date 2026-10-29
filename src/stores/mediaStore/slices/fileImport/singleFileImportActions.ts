@@ -1,7 +1,7 @@
 import { bindEditorAsyncStore, captureEditorAsyncMutation, discardUnpublishedMedia } from '../../../../services/project/repository/transaction/editorAsyncMutation';
 import { withProjectArtifactWriteBatch } from '../../../../services/project/projectArtifactWriteBatch';
 import type { MediaFile, MediaSliceCreator, MediaState } from '../../types';
-import { generateId, processImport } from '../../helpers/importPipeline';
+import { generateId, processImport, releaseUnusedProjectCopy, type ProjectCopySource } from '../../helpers/importPipeline';
 import type { FileImportActions, ImportFileOptions } from '../fileImportSlice';
 import type { FileManageActions } from '../fileManageSlice';
 import { commitSignalAsset } from './signalAssetCommit';
@@ -13,6 +13,7 @@ import {
   startVideoProxyGenerationIfNeeded,
 } from './placeholderLifecycle';
 import { fileImportLog as log } from './log';
+import { switchToProjectCopyWhenDurable } from './backgroundProjectCopy';
 
 function importMetadata(options?: ImportFileOptions) {
   return {
@@ -129,6 +130,8 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
       files: [...state.files, placeholder],
     }));
 
+    // A background copy no media took over yet: settled as unused if the import ends without the media.
+    let unclaimedCopy: Promise<ProjectCopySource | null> | undefined;
     try {
       const result = await processImport({
         file,
@@ -137,17 +140,26 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
         forceCopyToProject: options?.forceCopyToProject === true,
         projectFileName: options?.projectFileName,
         typeOverride: type,
+        copyInBackground: options?.copyInBackground === true,
       });
+      unclaimedCopy = result.projectCopy;
       if (!binding.isCurrent() || baseGet().files.find(candidate => candidate.id === id)?.file !== file) {
         discardUnpublishedMedia(result.mediaFile);
         throw new DOMException('Media import target changed', 'AbortError');
       }
-      const mediaFile = { ...result.mediaFile, ...importMetadata(options) };
+      const mediaFile = { ...result.mediaFile, ...importMetadata(options), ...(result.projectCopy ? { projectCopy: 'copying' as const } : {}) };
       finalizeImportedMediaFile(set, get, id, mediaFile);
+      if (result.projectCopy) {
+        unclaimedCopy = undefined;
+        void switchToProjectCopyWhenDurable(baseSet, baseGet, id, file, result.projectCopy);
+      }
       log.info('Complete:', mediaFile.name);
       return mediaFile;
     } catch (err) {
       log.error(`Import failed: ${file.name}`, err);
+      // Never orphaned and never reported as "Copied" for media that are not there.
+      if (unclaimedCopy) releaseUnusedProjectCopy(unclaimedCopy, err instanceof DOMException && err.name === 'AbortError'
+        ? 'the media were replaced or removed while importing' : 'the import failed');
       set((state) => ({
         files: state.files.filter((f) => f.id !== id || f.file !== file),
       }));

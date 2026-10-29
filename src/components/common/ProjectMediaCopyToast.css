@@ -17,6 +17,8 @@
   box-shadow: var(--shadow-lg);
   color: var(--text-primary);
   transform: translateX(-50%);
+  /* A status, not a control: taps on its text reach the editor underneath; only its buttons take them. */
+  pointer-events: none;
 }
 
 .project-media-copy-toast-body {
@@ -54,6 +56,7 @@
   color: var(--text-primary);
   font-size: var(--font-sm);
   cursor: pointer;
+  pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
 }
 

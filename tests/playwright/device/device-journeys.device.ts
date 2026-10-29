@@ -1,10 +1,10 @@
-import { deviceProjectName, isDeviceProjectName, resolveDeviceEnv } from './deviceEnv'
+import { UI_WAIT_MS, deviceProjectName, isDeviceProjectName, resolveDeviceEnv } from './deviceEnv'
 import {
   ACTION_SPLIT, ACTION_TEXT, IDS, M1_IDS, clearFrameNear, expect, expectedFrameAt, footageTimelineFrames, isClearFrame, needs, readAllTiles,
   record, segmentsFromTiles, tapDeviceProjectRow, tapOn, tapTile, test, tileSignature, waitForSaved, type DeviceWorld,
 } from './deviceFixture'
 import { createDeviceProject, decodeExport, differingShare, exportAndPull, importFootage, openNewProjectForm, previewPixels, waitForFirstScreen } from './deviceJourney'
-import { describeLoadReport, judgeFrames, loadBudgetProblems, type BootMark, type TimelineSegment } from './deviceParsing'
+import { describeActionPhases, describeLoadReport, describeMediaImport, judgeFrames, loadBudgetProblems, seekPathPictures, sourceSecondsAt, transportMs, type BootMark, type TimelineSegment } from './deviceParsing'
 import { describeProgress, readBootMarks, takeProgress, waitForLoadReport } from './deviceTelemetry'
 import { COMP_FPS, expectContentAt, readPlayheadFrame, readTiles, seekToFrame, tile, type TileState } from './deviceTimeline'
 
@@ -25,7 +25,7 @@ const model = (dev: DeviceWorld) => dev.footage.model
 async function expectDeviceProjectOpen(dev: DeviceWorld): Promise<void> {
   const name = needs(dev.journey.projectName, 'the Device test project')
   await expect(dev.page.getByTestId(IDS.timeline), 'the editor is not showing').toBeVisible({ timeout: 30_000 })
-  const shown = (await dev.page.getByTestId(IDS.projectName).textContent({ timeout: 10_000 }))?.trim() ?? ''
+  const shown = (await dev.page.getByTestId(IDS.projectName).textContent({ timeout: UI_WAIT_MS }))?.trim() ?? ''
   if (!isDeviceProjectName(shown) || !shown.includes(name)) throw new Error(`The open project is not the run's Device test project; refusing to edit it.`)
 }
 
@@ -35,11 +35,25 @@ function bootProblems(marks: BootMark[], budgetMs: number): string[] {
 
 /**
  * Seeks to `frame` and waits until the preview shows what the edit puts there. On the way only the
- * picture of the frame the playhead came from may show (expectContentAt's rule).
+ * picture of the frame the playhead came from and of the frames it stepped through (not those on a cut)
+ * may show (expectContentAt's rule).
  */
 async function showsAt(dev: DeviceWorld, segments: readonly TimelineSegment[], frame: number, timeoutMs = 30_000): Promise<void> {
-  const previous = expectedFrameAt(model(dev), segments, await readPlayheadFrame(dev.page))
-  await expectContentAt(dev.page, dev.probe, frame, expectedFrameAt(model(dev), segments, frame), { previous, timeoutMs })
+  const start = await readPlayheadFrame(dev.page)
+  const previous = expectedFrameAt(model(dev), segments, start)
+  // Pictures of the timeline frames the keyboard seek steps through on its way, strictly between start and
+  // target and never at a cut (seekPathPictures). The target itself must still show in the end.
+  // At a step whose source time is not clear (jitter puts a timestamp within 2 ms, or the last-timestamp
+  // rule and the nominal grid disagree) either policy's picture may pass by.
+  const passed = seekPathPictures(segments, start, frame, step => {
+    const expected = expectedFrameAt(model(dev), segments, step)
+    if (expected === null || isClearFrame(model(dev), segments, step)) return expected
+    const seconds = sourceSecondsAt(segments, step, COMP_FPS)
+    const { timing } = model(dev).profile
+    const nominal = seconds !== null && timing.kind === 'grid' ? Math.round(seconds * timing.fps[0] / timing.fps[1]) : null
+    return [expected, expected - 1, expected + 1].filter(picture => picture >= 0 && (nominal === null || picture === expected || picture === nominal))
+  })
+  await expectContentAt(dev.page, dev.probe, frame, expectedFrameAt(model(dev), segments, frame), { previous, passed, timeoutMs })
 }
 
 const describeBoot = (marks: BootMark[]) => marks.map(mark => `${mark.phase} ${mark.atMs}${mark.detail ? ` [${mark.detail}]` : ''}`).join(' · ')
@@ -70,21 +84,33 @@ test('D1 create: a new Device test project opens in browser storage without a fo
   const created = await createDeviceProject(dev, name)
   dev.journey.projectName = name
   await expectDeviceProjectOpen(dev)
-  await record(testInfo, 'create-load', created, `${describeLoadReport(created.report)} · wall ${created.wallMs} ms · ${describeProgress(created.progress)}`)
+  await record(testInfo, 'create-load', created, `${describeLoadReport(created.report)} · wall ${created.wallMs} ms · ${describeActionPhases(created.page)} · ${describeProgress(created.progress)}`)
   expect(await page.evaluate(() => (window as unknown as { __msDevicePickerCalls: number }).__msDevicePickerCalls), 'New project asked for a folder').toBe(0)
   expect(created.report.outcome, 'the create load finished').toBe('ready')
   expect(created.report.storage, 'the project lives in browser storage').toMatch(/^(opfs|indexeddb)$/)
   expect.soft(loadBudgetProblems(created.report, env.budgets), 'every create phase stays within its budget').toEqual([])
+  // The page's own clock: tap to the editor without the DevTools transport and without the storage worker's
+  // script fetch over the adb link (transport stalls are reported, not judged).
+  expect.soft(created.page.pageMs, 'the page saw the Create tap through to the editor').not.toBeNull()
+  expect.soft((created.page.pageMs ?? 0) - transportMs(created.report), 'Create tap to editor, page clock').toBeLessThanOrEqual(env.budgets.totalMs)
 })
 
 test('D2 import: a generated phone recording picked in the media sheet becomes one clip of its full length, preview shows its frames @device', async ({ dev }, testInfo) => {
   const timeoutMs = 180_000 + Math.round(dev.footage.bytes / 2e6) * 1000
   test.setTimeout(timeoutMs + 240_000)
   await expectDeviceProjectOpen(dev)
+  const { env } = dev
   const imported = await importFootage(dev, timeoutMs)
   const frames = footageTimelineFrames(model(dev))
-  await record(testInfo, 'import', { profile: dev.profileId, injected: imported.injected, wallMs: imported.wallMs, clip: { startFrame: imported.clip.startFrame, durationFrames: imported.clip.durationFrames } },
-    `${dev.profileId} ${(imported.injected.bytes / 1e6).toFixed(1)} MB via ${imported.injected.transport} in ${imported.injected.fetchMs} ms; on the timeline ${imported.wallMs} ms after Done`)
+  await record(testInfo, 'import', { profile: dev.profileId, injected: imported.injected, wallMs: imported.wallMs, page: imported.page, imports: imported.imports,
+    clip: { startFrame: imported.clip.startFrame, durationFrames: imported.clip.durationFrames } },
+    `${dev.profileId} ${(imported.injected.bytes / 1e6).toFixed(1)} MB via ${imported.injected.transport} in ${imported.injected.fetchMs} ms; on the timeline ${imported.wallMs} ms after Done · `
+    + `${describeActionPhases(imported.page)}${imported.imports.length ? ` · ${imported.imports.map(describeMediaImport).join(' · ')}` : ' · no import phase reports (build without __MS_MEDIA_IMPORT__)'}`)
+  expect.soft(imported.page.pageMs, 'the page saw Done through to the clip tile').not.toBeNull()
+  expect.soft(imported.page.pageMs ?? 0, 'Done to clip tile, page clock').toBeLessThanOrEqual(env.budgets.importMs)
+  expect(imported.copySettled, 'the background copy into the project finished').toBe(true)
+  const copy = imported.imports.find(report => report.kind === 'background-copy')
+  if (copy) expect(copy.outcome, `the background copy into the project: ${describeMediaImport(copy)}`).toBe('ok')
   expect(imported.clip.startFrame, 'the clip starts at 0').toBe(0)
   expect(Math.abs(imported.clip.durationFrames - frames), `clip length ${imported.clip.durationFrames} frames, recording ${frames}`).toBeLessThanOrEqual(1)
   const segments: TimelineSegment[] = [{ startFrame: 0, endFrame: imported.clip.durationFrames, sourceStartSeconds: 0 }]
@@ -137,14 +163,14 @@ test('D4 trim: dragging the start and end handle of the second part by touch mov
   // Start handle: one second to the right.
   await tapTile(dev, right.id)
   const startHandle = page.getByTestId(M1_IDS.trimHandleStart), endHandle = page.getByTestId(M1_IDS.trimHandleEnd)
-  await expect(startHandle, 'the selected part shows its start handle').toBeVisible({ timeout: 10_000 })
+  await expect(startHandle, 'the selected part shows its start handle').toBeVisible({ timeout: UI_WAIT_MS })
   const box = (await tile(page, right.id).boundingBox())!
   const pxPerFrame = box.width / right.durationFrames
   const startBox = (await startHandle.boundingBox())!
   await dev.touch.pan({ x: startBox.x + startBox.width / 2, y: startBox.y + startBox.height / 2 }, { x: 30 * pxPerFrame, y: 0 })
   let trimmed = right
   await expect.poll(async () => { trimmed = (await lastVideo()) ?? right; return trimmed.durationFrames < right.durationFrames },
-    { timeout: 15_000, message: 'dragging the start handle did not shorten the part' }).toBe(true)
+    { timeout: UI_WAIT_MS, message: 'dragging the start handle did not shorten the part' }).toBe(true)
   const cutIn = right.durationFrames - trimmed.durationFrames
   expect(cutIn, `the start handle moved by ${cutIn} frames for a 30-frame drag`).toBeGreaterThanOrEqual(20)
   expect(cutIn).toBeLessThanOrEqual(40)
@@ -154,12 +180,12 @@ test('D4 trim: dragging the start and end handle of the second part by touch mov
   const endBefore = trimmed.startFrame + trimmed.durationFrames
   await seekToFrame(page, endBefore - 15)
   if (!await endHandle.isVisible()) await tapTile(dev, trimmed.id)
-  await expect(endHandle, 'the selected part shows its end handle').toBeVisible({ timeout: 10_000 })
+  await expect(endHandle, 'the selected part shows its end handle').toBeVisible({ timeout: UI_WAIT_MS })
   const endBox = (await endHandle.boundingBox())!
   await dev.touch.pan({ x: endBox.x + endBox.width / 2, y: endBox.y + endBox.height / 2 }, { x: -30 * pxPerFrame, y: 0 })
   let final = trimmed
   await expect.poll(async () => { final = (await lastVideo()) ?? trimmed; return final.durationFrames < trimmed.durationFrames },
-    { timeout: 15_000, message: 'dragging the end handle did not shorten the part' }).toBe(true)
+    { timeout: UI_WAIT_MS, message: 'dragging the end handle did not shorten the part' }).toBe(true)
   const cutOut = trimmed.durationFrames - final.durationFrames
   expect(cutOut, `the end handle moved by ${cutOut} frames for a 30-frame drag`).toBeGreaterThanOrEqual(20)
   expect(cutOut).toBeLessThanOrEqual(40)
@@ -186,14 +212,21 @@ test('D5 title: the Text tool adds a title at the playhead that shows in the pre
   const at = clearFrameNear(model(dev), segments, Math.min(30, split - 1), 1, { max: split - 1 })
   const expected = expectedFrameAt(model(dev), segments, at)
   if (expected === null) throw new Error(`Frame ${at} lies in a gap; the title case needs a frame of the first part`)
+  // D4 leaves the trimmed part selected, so the toolbar shows the clip tools; the Text tool is a main tool.
+  // Back first, then the reference picture (a selection may draw handles over the preview).
+  const toolbar = page.getByTestId(IDS.toolbar)
+  if (await toolbar.getAttribute('data-scope') === 'clip') {
+    await tapOn(dev, toolbar.getByTestId('phone-toolbar-back'))
+    await expect(toolbar, 'Back did not return to the main tools').toHaveAttribute('data-scope', 'root', { timeout: UI_WAIT_MS })
+  }
   await showsAt(dev, segments, at)
   const before = await previewPixels(dev)
   const known = new Set((await readTiles(page)).map(item => item.id))
   await tapOn(dev, page.getByTestId(ACTION_TEXT))
-  await expect(page.getByTestId(IDS.sheet), 'the text sheet did not open').toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId(IDS.sheet), 'the text sheet did not open').toBeVisible({ timeout: UI_WAIT_MS })
   await page.getByTestId(M1_IDS.titleInput).fill('Device test title')
   await tapOn(dev, page.getByTestId(IDS.sheetDone))
-  await expect(page.getByTestId(IDS.sheet), 'the text sheet stayed open').toBeHidden({ timeout: 15_000 })
+  await expect(page.getByTestId(IDS.sheet), 'the text sheet stayed open').toBeHidden({ timeout: UI_WAIT_MS })
   let title: TileState | undefined
   await expect.poll(async () => { title = (await readTiles(page)).find(item => !known.has(item.id) && item.lane !== 'audio'); return Boolean(title) },
     { timeout: 30_000, message: 'Done added no title clip' }).toBe(true)

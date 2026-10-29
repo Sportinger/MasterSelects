@@ -6,6 +6,7 @@ vi.mock('../../src/services/productAnalytics', () => ({ productAnalytics: analyt
 import {
   FIRST_FRAME_TIMEOUT_MS,
   formatProjectLoadTiming,
+  sanitizeProjectLoadTiming,
   projectLoadAnalyticsProperties,
   readProjectLoadTimings,
   roundLoadMs,
@@ -65,6 +66,14 @@ describe('project load phase telemetry', () => {
     startProjectLoadMeasurement('scratch')(null);
     expect(analytics.track).toHaveBeenCalledOnce();
     expect(formatProjectLoadTiming(timing())).toContain('session_read 29876');
+  });
+
+  it('keeps the storage worker start for diagnostics, in the window list and the log line, but not in analytics', () => {
+    const withWorker = timing({ workerStartMs: 13_790.4 });
+    expect(sanitizeProjectLoadTiming(withWorker).workerStartMs).toBe(13_790.4);
+    expect(formatProjectLoadTiming(withWorker)).toContain('storage worker start 13790');
+    expect(sanitizeProjectLoadTiming(timing({ workerStartMs: Number.NaN }))).not.toHaveProperty('workerStartMs');
+    expect(projectLoadAnalyticsProperties(withWorker)).toEqual(projectLoadAnalyticsProperties(timing()));
   });
 
   it('keeps only a sanitized report on the window: no location, folder handle, path or name', () => {

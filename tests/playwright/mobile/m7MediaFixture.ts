@@ -1,10 +1,13 @@
+import { randomUUID } from 'node:crypto'
+import { copyFile, mkdir } from 'node:fs/promises'
+import path from 'node:path'
 import type { Page } from '@playwright/test'
 import { phoneActionTestId, PHONE_TEST_IDS } from '../../../src/components/mobileSkin/contracts'
 import { PHONE_LIBRARY_TEST_IDS as LIB } from '../../../src/components/mobileSkin/library/phoneLibraryTestIds'
 import { PHONE_PROJECT_TEST_IDS as PROJ } from '../../../src/components/mobileSkin/project/phoneProjectTestIds'
 import { PHONE_SETTINGS_TEST_IDS as SET } from '../../../src/components/mobileSkin/settings/phoneSettingsTestIds'
 import { PHONE_SOURCE_TEST_IDS as SRC } from '../../../src/components/mobileSkin/source/phoneSourceTestIds'
-import { expect, tapAction, tapOn, waitForIdle, type M1Session } from './m1Fixture'
+import { expect, tapAction, tapOn, test, waitForIdle, type M1Session } from './m1Fixture'
 import { sheetSettled } from './m3LibraryFixture'
 
 /**
@@ -131,11 +134,20 @@ export async function openSource(m1: M1Session, fileId: string): Promise<void> {
   await sheetSettled(m1)
 }
 
-/** Imports one file into the library only (no clip), through the Library's own import input. */
+/**
+ * Imports one file into the library only (no clip), through the Library's own import input. The M1 world
+ * is one project for every spec of the worker, and an earlier spec (m1-edit, m3-library) may already have
+ * put the same file there; importFile then keeps that media (same name and size) instead of importing it,
+ * with whatever jobs it ran before. So each call imports its own copy under a unique name that keeps the
+ * original name as a suffix (cases find files by tags like '-30f-'), and the case gets a fresh media.
+ */
 export async function importToLibrary(m1: M1Session, file: string): Promise<G6File> {
   const before = await g6Files(m1.page)
+  const own = test.info().outputPath(`g6-${randomUUID().slice(0, 8)}-${path.basename(file)}`)
+  await mkdir(path.dirname(own), { recursive: true })
+  await copyFile(file, own)
   await openLibrary(m1)
-  await m1.page.getByTestId(LIB.importInput).setInputFiles(file)
+  await m1.page.getByTestId(LIB.importInput).setInputFiles(own)
   let added: G6File | undefined
   await expect.poll(async () => {
     added = (await g6Files(m1.page)).find(entry => !before.some(old => old.id === entry.id))

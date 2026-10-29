@@ -4,11 +4,12 @@ import { promisify } from 'node:util'
 import type { TestInfo } from '@playwright/test'
 import sharp from 'sharp'
 import { readPhoneFrameCode, streamDisplayFrames } from '../assertions/phoneFootageOracle'
-import { ACTION_MEDIA, IDS, M1_IDS, TOPBAR_EXPORT, TOPBAR_PROJECTS, expect, tapOn, type DeviceWorld } from './deviceFixture'
+import { ACTION_MEDIA, IDS, M1_IDS, TOPBAR_EXPORT, TOPBAR_PROJECTS, UI_WAIT_MS, expect, tapOn, type DeviceWorld } from './deviceFixture'
 import { footageContentType, pixelRecordingName } from './deviceFootage'
 import { injectFile, installShareCapture, pullSharedFile, removeShareCapture, sharedFiles, type InjectedFile } from './deviceMedia'
-import { parseExportSize } from './deviceParsing'
-import { markLoadReportsSeen, readBootMarks, takeProgress, waitForLoadReport, type ProgressSample } from './deviceTelemetry'
+import { actionPhases, parseExportSize, type ActionPhases, type MediaImportReport } from './deviceParsing'
+import { markLoadReportsSeen, pageNow, readActions, readBootMarks, readMediaImports, takeProgress, waitForBackgroundCopies, waitForLoadReport, type ProgressSample } from './deviceTelemetry'
+import { PHONE_PROJECT_LOADING_TEST_ID } from '../../../src/components/mobileSkin/runtime/phoneProjectLoadingTestIds'
 import { readTiles, type TileState } from './deviceTimeline'
 import type { BootMark, LoadReport } from './deviceParsing'
 
@@ -40,10 +41,14 @@ export async function openNewProjectForm(world: DeviceWorld): Promise<void> {
   }
   const create = page.getByTestId(M1_IDS.createProject)
   if (!await create.isVisible()) await tapOn(world, page.getByTestId(M1_IDS.newProject))
-  await expect(create, 'the new-project form did not open').toBeVisible({ timeout: 15_000 })
+  await expect(create, 'the new-project form did not open').toBeVisible({ timeout: UI_WAIT_MS })
 }
 
-export interface LoadMeasurement { report: LoadReport; progress: ProgressSample[]; wallMs: number; boot: BootMark[] }
+export interface LoadMeasurement {
+  report: LoadReport; progress: ProgressSample[]; wallMs: number; boot: BootMark[]
+  /** Page-side split of the tap: tap (down to click), loading (click to loading view), home (click to the home gone). */
+  page: ActionPhases
+}
 
 /** New 9:16 project in browser storage: format chip, name, Create. Measures the create load. */
 export async function createDeviceProject(world: DeviceWorld, name: string): Promise<LoadMeasurement> {
@@ -53,39 +58,62 @@ export async function createDeviceProject(world: DeviceWorld, name: string): Pro
   await expect(page.getByTestId(M1_IDS.projectNameInput)).toHaveValue(name)
   await markLoadReportsSeen(page)
   await takeProgress(page)
+  const since = await pageNow(page)
   const started = Date.now()
   await tapOn(world, page.getByTestId(M1_IDS.createProject))
   await expect(page.getByTestId(IDS.timeline), 'the new project did not open in the editor').toBeVisible({ timeout: 180_000 })
   await expect(page.getByTestId(M1_IDS.home), 'the home stays on top of the new project').toHaveCount(0, { timeout: 30_000 })
   const wallMs = Date.now() - started
   const report = await waitForLoadReport(page, 'create', 120_000)
-  return { report, progress: await takeProgress(page), wallMs, boot: await readBootMarks(page) }
+  const pagePhases = actionPhases(await readActions(page, since), M1_IDS.createProject, {
+    loading: { kind: 'show', id: PHONE_PROJECT_LOADING_TEST_ID }, home: { kind: 'hide', id: M1_IDS.home },
+  }, wallMs, since)
+  return { report, progress: await takeProgress(page), wallMs, boot: await readBootMarks(page), page: pagePhases }
 }
 
-export interface ImportMeasurement { injected: InjectedFile; wallMs: number; clip: TileState; tiles: TileState[] }
+export interface ImportMeasurement {
+  injected: InjectedFile; wallMs: number; clip: TileState; tiles: TileState[]
+  /** Page-side split: tap (down to click on Done), sheet (click to the sheet gone), tile (click to the first clip tile). */
+  page: ActionPhases
+  /** window.__MS_MEDIA_IMPORT__ reports of this import (phone-add, the pipeline's phases, the background copy); empty on builds without them. */
+  imports: MediaImportReport[]
+  /** False when a background copy into the project was still running when the import timeout ran out. */
+  copySettled: boolean
+}
 
 /** Media tool, the generated recording into the visual input, Done; resolves when the video tile is there. */
 export async function importFootage(world: DeviceWorld, timeoutMs: number): Promise<ImportMeasurement> {
   const { page } = world
   await tapOn(world, page.getByTestId(ACTION_MEDIA))
   const sheet = page.getByTestId(IDS.sheet)
-  await expect(sheet, 'the media sheet did not open').toBeVisible({ timeout: 15_000 })
+  await expect(sheet, 'the media sheet did not open').toBeVisible({ timeout: UI_WAIT_MS })
   const injected = await injectFile(page, world.env, world.server, world.footage.path, {
     inputTestId: M1_IDS.mediaInputVisual, contentType: footageContentType(world.footage.path), name: pixelRecordingName(world.footage.path),
   })
   await expect(page.getByTestId(M1_IDS.mediaPickedItem), 'the media sheet lists the picked recording').toHaveCount(1, { timeout: 60_000 })
+  const since = await pageNow(page)
   const started = Date.now()
   await tapOn(world, page.getByTestId(IDS.sheetDone))
   await expect(sheet, 'the media sheet stayed open after Done').toBeHidden({ timeout: timeoutMs })
   let tiles: TileState[] = []
   await expect.poll(async () => { tiles = await readTiles(page); return tiles.filter(tile => tile.lane === 'video').length },
     { timeout: timeoutMs, message: 'the recording did not reach the timeline as one video clip' }).toBe(1)
-  return { injected, wallMs: Date.now() - started, clip: tiles.find(tile => tile.lane === 'video')!, tiles }
+  const wallMs = Date.now() - started
+  const pagePhases = actionPhases(await readActions(page, since), IDS.sheetDone, {
+    sheet: { kind: 'hide', id: IDS.sheet }, tile: { kind: 'show', id: IDS.clip },
+  }, wallMs, since)
+  // The copy into the project continues after the clip landed: the journey waits for it (later cases and the
+  // reopen need the durable copy) and reports it with the import.
+  const copySettled = await waitForBackgroundCopies(page, since, timeoutMs)
+  return { injected, wallMs, clip: tiles.find(tile => tile.lane === 'video')!, tiles, page: pagePhases, copySettled, imports: await readMediaImports(page, since) }
 }
 
-/** Reads the preview pixels (css scale, RGB). */
+/**
+ * Reads the preview pixels (css scale, RGB). One capture over the wireless DevTools link can stall for
+ * many seconds (14 s on the Pixel run of 2026-10-28, D5), so it gets the device probe's transport limit.
+ */
 export async function previewPixels(world: DeviceWorld): Promise<{ width: number; height: number; data: Buffer }> {
-  const png = await world.probe.canvas.screenshot({ animations: 'allow', caret: 'initial', scale: 'css', timeout: 10_000 })
+  const png = await world.probe.canvas.screenshot({ animations: 'allow', caret: 'initial', scale: 'css', timeout: UI_WAIT_MS })
   const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true })
   return { width: info.width, height: info.height, data }
 }
@@ -116,7 +144,7 @@ export interface ExportResult {
 export async function exportAndPull(world: DeviceWorld, testInfo: TestInfo, timeoutMs: number): Promise<ExportResult> {
   const { page } = world
   await tapOn(world, page.getByTestId(TOPBAR_EXPORT))
-  await expect(page.getByTestId(IDS.sheet), 'the export sheet did not open').toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId(IDS.sheet), 'the export sheet did not open').toBeVisible({ timeout: UI_WAIT_MS })
   const summaryLocator = page.getByTestId(M1_IDS.exportSummary)
   await expect(summaryLocator).toContainText(/\d/, { timeout: 30_000 })
   const summary = (await summaryLocator.textContent())?.trim() ?? ''
@@ -133,7 +161,7 @@ export async function exportAndPull(world: DeviceWorld, testInfo: TestInfo, time
     const pulled = await pullSharedFile(page, world.env, world.server, 0, file)
     expect(pulled.bytes, 'the export arrived complete on the PC').toBe(shared.size)
     await tapOn(world, page.getByTestId(IDS.sheetCancel))
-    await expect(page.getByTestId(IDS.sheet), 'the export sheet did not close').toBeHidden({ timeout: 15_000 })
+    await expect(page.getByTestId(IDS.sheet), 'the export sheet did not close').toBeHidden({ timeout: UI_WAIT_MS })
     return { file, bytes: pulled.bytes, summary, size: parseExportSize(summary), exportMs, transferMs: pulled.transferMs, transport: pulled.transport,
       sharedName: shared.name, sharedType: shared.type }
   } finally {

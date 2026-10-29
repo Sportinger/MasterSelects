@@ -120,6 +120,10 @@ export class ProjectTransactionCoordinator {
   };
   getEntities(): ReadonlyMap<EntityKey, EntityDTO> { return this.entities; }
   owns(token: TransactionToken): boolean { return token.sessionEpoch === this.sessionEpoch && this.transactions.get(token.owner)?.token === token; }
+  /** True while an open transaction (a gesture, a modal batch) owns `key`: another writer must wait for it to end. */
+  isEntityOpen(key: EntityKey): boolean { return this.entityOwners.has(key); }
+  /** True while Undo/Redo activates a revision or the project is handed over: writes are refused only until it ends (it notifies). */
+  isSwitching(): boolean { return this.closing || this.activating; }
   getProjection(): RepositoryProjection { return { revisionId: this.revisionId, generation: this.generation, entities: new Map(this.entities) }; }
   getStatus(): CoordinatorStatus {
     return { revisionId: this.revisionId, generation: this.generation, appliedSequence: this.sequence,

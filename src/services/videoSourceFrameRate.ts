@@ -38,3 +38,24 @@ export function nominalPresentedFrameTime(target: object | null | undefined, pts
   const lead = next - position;
   return lead > 1e-9 && lead <= PRESENTED_FRAME_EARLY_TOLERANCE_FRAMES ? next / fps : pts;
 }
+
+/**
+ * How far a playing element's currentTime may run past the PTS a requestVideoFrameCallback reports
+ * before that report no longer names the picture the element shows. Chromium presents frames ahead of
+ * currentTime, so a callback that runs while currentTime is already half a frame past the reported
+ * frame's own time is late: the next frame may be on screen. A warmup labelled such a capture with the
+ * earlier frame and paused there, and the paused preview kept showing frame k+1 as frame k (phone
+ * journey m1-edit 5: frame 1 at timeline frame 0 for 15 s, 2026-10-29).
+ */
+export const PRESENTED_FRAME_CALLBACK_LATE_FRAMES = 0.5;
+
+/** True when a frame callback ran too late to label what a playing element shows (see the constant above). */
+export function presentedFrameCallbackIsLate(
+  target: object | null | undefined,
+  mediaTime: number | undefined,
+  currentTime: number,
+): boolean {
+  const fps = getVideoSourceFrameRate(target);
+  if (!fps || typeof mediaTime !== 'number' || !Number.isFinite(mediaTime) || !Number.isFinite(currentTime)) return false;
+  return (currentTime - mediaTime) * fps > PRESENTED_FRAME_CALLBACK_LATE_FRAMES;
+}

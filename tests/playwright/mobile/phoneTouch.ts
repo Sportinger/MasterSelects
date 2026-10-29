@@ -51,6 +51,19 @@ export class PhoneTouch {
   }
 
   /**
+   * A tap whose down and up are sent back to back, with no page round trip in between. On the real
+   * phone (device suite) the DevTools link over wireless adb stalls for seconds at times: `tap` then
+   * holds the finger for that long, the browser makes a long press of it (no click), and a control
+   * that moves meanwhile (a sheet lifted by the on-screen keyboard) is no longer under the finger at
+   * the release, so the click goes to its parent. Both messages travel in order on one session, so a
+   * stall delays them together and the tap stays a tap.
+   */
+  async tapAtOnce(point: Point): Promise<void> {
+    await Promise.all([this.send('touchStart', [{ ...point, id: 0 }]), this.send('touchEnd', [])])
+    await this.nextFrame()
+  }
+
+  /**
    * One finger from `from`, moved by (dx, dy) in `steps` equal moves, one per
    * frame. Positive dx drags the content to the right.
    */

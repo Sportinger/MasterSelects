@@ -7,7 +7,8 @@ import {
   videoHasTargetFrame,
   videoPausedOnTargetFrame,
 } from '../../src/services/layerBuilder/videoSyncFrameSelection';
-import { nominalPresentedFrameTime, setVideoSourceFrameRate } from '../../src/services/videoSourceFrameRate';
+import { nominalPresentedFrameTime, presentedFrameCallbackIsLate, setVideoSourceFrameRate } from '../../src/services/videoSourceFrameRate';
+import { requestOnTimePresentedFrame, WARMUP_MAX_LATE_FRAME_CALLBACKS } from '../../src/services/layerBuilder/videoSyncPresentedFrame';
 import {
   isPausedHtmlTargetMediaTimeUsable,
   pausedHtmlTargetFrameRate,
@@ -234,5 +235,72 @@ describe('presented frames of jittered phone footage', () => {
         expect(samePresentedSourceFrame(video, (frame - 1 + late) / 30, frame / 30), `frame ${frame - 1}+${late}`).toBe(false);
       }
     }
+  });
+});
+
+describe('late frame callbacks of a playing warmup', () => {
+  // Phone journey m1-edit 5 (2026-10-29): the warmup's callback reported frame 0 (mediaTime 0) while the
+  // element was already at 0.0269 s, i.e. showing frame 1. The capture was labelled frame 0 and the
+  // paused preview kept frame 1 at timeline frame 0. A late report must not label the picture.
+  it('flags a report that currentTime has already run more than half a frame past', () => {
+    const video = videoAt(0.0269, 30);
+    expect(presentedFrameCallbackIsLate(video, 0, video.currentTime)).toBe(true);
+  });
+
+  it('accepts the usual report of a frame presented ahead of currentTime, or just behind it', () => {
+    const video = videoAt(0.025, 30);
+    expect(presentedFrameCallbackIsLate(video, 1 / 30, 0.025)).toBe(false);
+    expect(presentedFrameCallbackIsLate(video, 2, 2 + 0.4 / 30)).toBe(false);
+  });
+
+  it('never judges without a known rate or a reported time', () => {
+    expect(presentedFrameCallbackIsLate(videoAt(0.5), 0, 0.5)).toBe(false);
+    expect(presentedFrameCallbackIsLate(videoAt(0.5, 30), undefined, 0.5)).toBe(false);
+  });
+});
+
+describe('the warmup waits past late frame callbacks', () => {
+  type FrameCallback = (now: number, metadata?: { mediaTime?: number }) => void;
+  function fakeVideo(currentTime: number, fps: number) {
+    const pending: FrameCallback[] = [];
+    const video = { currentTime, requestVideoFrameCallback: (cb: FrameCallback) => pending.push(cb) } as unknown as HTMLVideoElement;
+    setVideoSourceFrameRate(video, fps);
+    const present = (mediaTime: number, time: number) => {
+      (video as { currentTime: number }).currentTime = time;
+      pending.shift()?.(0, { mediaTime });
+    };
+    return { video, pending, present };
+  }
+
+  it('skips a late report and labels the next on-time frame', () => {
+    const { video, present } = fakeVideo(0, 30);
+    const frames: Array<number | undefined> = [];
+    expect(requestOnTimePresentedFrame(video, { clipId: 'c', isCurrent: () => true, onFrame: (t) => frames.push(t) })).toBe(true);
+    present(0, 0.0269);
+    expect(frames).toEqual([]);
+    present(1 / 30, 0.04);
+    expect(frames).toEqual([1 / 30]);
+  });
+
+  it('gives up after the allowed late callbacks and still finishes the warmup', () => {
+    const { video, present } = fakeVideo(0, 30);
+    const frames: Array<number | undefined> = [];
+    requestOnTimePresentedFrame(video, { clipId: 'c', isCurrent: () => true, onFrame: (t) => frames.push(t) });
+    for (let i = 0; i <= WARMUP_MAX_LATE_FRAME_CALLBACKS; i++) present(i / 30, i / 30 + 0.9 / 30);
+    expect(frames).toEqual([WARMUP_MAX_LATE_FRAME_CALLBACKS / 30]);
+  });
+
+  it('stops the chain once the attempt is superseded, and reports elements without frame callbacks', () => {
+    const { video, pending, present } = fakeVideo(0, 30);
+    let current = true;
+    const frames: Array<number | undefined> = [];
+    requestOnTimePresentedFrame(video, { clipId: 'c', isCurrent: () => current, onFrame: (t) => frames.push(t) });
+    present(0, 0.0269);
+    current = false;
+    present(1 / 30, 0.04);
+    expect(frames).toEqual([]);
+    expect(pending).toHaveLength(0);
+    const bare = {} as HTMLVideoElement;
+    expect(requestOnTimePresentedFrame(bare, { clipId: 'c', isCurrent: () => true, onFrame: () => {} })).toBe(false);
   });
 });

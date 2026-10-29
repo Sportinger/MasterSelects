@@ -73,12 +73,18 @@ export function getArtifactHashAlgorithm(): typeof ARTIFACT_HASH_ALGORITHM {
   return ARTIFACT_HASH_ALGORITHM;
 }
 
-/** Full SHA-256 over bounded slices; never materializes the whole original. */
+/** Slice size of the streaming hash: few reads per file, bounded memory. */
+const STREAM_SLICE_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Full SHA-256 over bounded slices; never materializes the whole original. Storage adapters that can hash
+ * where the bytes live (the project storage worker, natively) override this via hashArtifactBlob.
+ */
 export async function sha256Blob(blob: Blob, signal?: AbortSignal): Promise<string> {
   const hash = new StreamHash();
-  for (let offset = 0; offset < blob.size; offset += 256 * 1024) {
+  for (let offset = 0; offset < blob.size; offset += STREAM_SLICE_BYTES) {
     signal?.throwIfAborted();
-    hash.update(new Uint8Array(await blobToArrayBuffer(blob.slice(offset, offset + 256 * 1024))));
+    hash.update(new Uint8Array(await blobToArrayBuffer(blob.slice(offset, offset + STREAM_SLICE_BYTES))));
   }
   signal?.throwIfAborted();
   return hash.digest().slice(7);

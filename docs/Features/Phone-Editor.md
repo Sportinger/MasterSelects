@@ -66,7 +66,19 @@ tap empty space (or the clip again) to deselect.
 ## Cut a story
 
 - **Add media:** **Media** opens the phone's file picker for videos, images and audio. Several files
-  land on the main track in the order you picked them.
+  land on the main track in the order you picked them, as soon as each one's first picture is read
+  (a 30 MB, 15 s recording on a Pixel 10 Pro: about 0.4 s from **Add** to the clip). The copy into the
+  project, which lets the project reopen after a reload, then runs in the background (about 1.3 s for
+  that recording): a **Copying into project** note shows it and goes away once the copy is stored
+  (no success message; taps on the note reach the editor underneath), the clip switches to the
+  project copy when it is stored (with several files, right after the whole set is added; Undo and
+  Redo keep it), and a failed copy is reported there (the clip then works only until the page reloads).
+  Leaving or reloading the page while a copy runs asks first, because a picked phone file cannot be
+  reopened afterwards. Opening or creating another project waits for the copy to finish
+  (**Finishing the copy into the current project** on the loading screen), so the clip never goes
+  offline in the project it was added to. Android does not ask when a tab is swiped away or discarded;
+  the project notes a running copy, and on reopen **Copy into project interrupted** names the files to
+  pick again.
 - **Trim:** select a clip and drag the handles at its ends; the preview shows the new first or last
   frame.
 - **Split:** with the playhead inside the selected clip, **Split** cuts it there.
@@ -396,7 +408,18 @@ has no folder picker, and reading text in pictures (MasterSelects has no OCR eng
   `effects/phoneSampleFrame.ts`); `effects/phoneEffectPreviewParams.ts` lists the demonstration
   values for effects that are neutral at their defaults.
 - Diagnostics: `settings/phoneProjectLoads.ts` formats the sanitized reports on
-  `window.__MS_PROJECT_LOAD__` (see [Project Repository](./Project-Repository.md)).
+  `window.__MS_PROJECT_LOAD__` (see [Project Repository](./Project-Repository.md)). Every media import
+  keeps a phase report on `window.__MS_MEDIA_IMPORT__` (last 12, `src/stores/mediaStore/helpers/importPhaseTimings.ts`):
+  `pipeline` reports per file (`classify`, `metadata`, `thumbnail`, `hash`, `thumbnail_store`,
+  `proxy_check`, `copy` into the project, `source_location`, `object_url`; metadata and thumbnail may
+  overlap), the media sheet's `phone-add` report from **Add** to the clips on the timeline
+  (`batch_start`, `import`, `placement`, `commit`) and, because phone imports copy in the background,
+  one `background-copy` report per file with the copy's own steps (`copy_hash`, `copy_write`,
+  `copy_manifest`, `copy_publish`, `copy_open`, `copy`, `copy_switch`; see
+  [Media Panel](./Media-Panel.md)). Kind, MIME type, bytes and milliseconds only, never a
+  file name; an import over 8 s logs one warning with its phases. The real-device harness reads these
+  and the page's own action clock, so a slow import is split into product phases and DevTools transport
+  ([Playwright README](../../tests/playwright/README.md#real-device)).
 - Sheets: `sheets/PhoneSheet.tsx` is the frame, lifted by `--phone-keyboard-inset`. Each sheet
   sizes to its content up to the cap of its kind in `sheets/phoneSheetSizing.ts` (`tool`: the preview
   keeps 40 % of the visual viewport; `list`: up to the full cap; `fill`: always the whole cap). The

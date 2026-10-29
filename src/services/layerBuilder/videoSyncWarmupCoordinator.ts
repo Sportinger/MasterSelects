@@ -20,10 +20,7 @@ import {
 import type { VideoSyncWarmupState } from './videoSyncWarmupState';
 import { preBufferUpcomingNestedCompVideos } from './videoSyncNestedCompWarmup';
 import { warmUpcomingBakedTransitionVideos } from './videoSyncTransitionWarmup';
-
-type VideoFrameCallbackVideo = HTMLVideoElement & { requestVideoFrameCallback: (callback: () => void) => number };
-
-function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo { return 'requestVideoFrameCallback' in video; }
+import { requestOnTimePresentedFrame } from './videoSyncPresentedFrame';
 
 export type VideoSyncWarmupCoordinatorDeps = {
   warmups: VideoSyncWarmupState;
@@ -486,11 +483,13 @@ export class VideoSyncWarmupCoordinator {
       if (!this.deps.warmups.isAttemptCurrent(video, attemptId)) {
         return;
       }
-      if (hasVideoFrameCallback(video)) {
-        video.requestVideoFrameCallback((_now, metadata) => {
-          void finishWarmup(false, metadata?.mediaTime);
-        });
-      } else {
+      // A late frame callback no longer names the picture on screen; the helper waits for one that does.
+      const onTime = requestOnTimePresentedFrame(video, {
+        clipId,
+        isCurrent: () => this.deps.warmups.isAttemptCurrent(video, attemptId),
+        onFrame: (mediaTime) => { void finishWarmup(false, mediaTime); },
+      });
+      if (!onTime) {
         setTimeout(() => {
           void finishWarmup(true);
         }, 100);

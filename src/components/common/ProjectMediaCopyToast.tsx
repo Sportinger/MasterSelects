@@ -3,6 +3,7 @@ import {
   dismissProjectMediaCopyNotice,
   formatMediaBytes,
   getProjectMediaCopyNotice,
+  isQuietProjectMediaCopyNotice,
   subscribeProjectMediaCopyNotice,
   type ProjectMediaCopyNotice,
 } from '../../services/project/mediaCopy/projectMediaCopyNotices';
@@ -34,6 +35,13 @@ function describe(notice: ProjectMediaCopyNotice, linkedReason: string): { title
   if (notice.failures.length > 0) {
     const first = notice.failures[0];
     const others = notice.failures.length > 1 ? ` (and ${plural(notice.failures.length - 1, 'other file')})` : '';
+    if (first.interrupted) {
+      return {
+        title: 'Copy into project interrupted',
+        text: `${first.name} (${formatMediaBytes(first.bytes)})${others} was still being copied when the page closed. `
+          + 'Pick it again in Media to bring it back.',
+      };
+    }
     return {
       title: 'Not copied into project',
       text: `${first.name} (${formatMediaBytes(first.bytes)})${others} could not be copied: ${first.message}. `
@@ -43,7 +51,10 @@ function describe(notice: ProjectMediaCopyNotice, linkedReason: string): { title
   if (notice.pendingFiles > 0) {
     return {
       title: 'Copying into project',
-      text: `${plural(notice.pendingFiles, 'file')} · ${formatMediaBytes(notice.pendingBytes)}. ${linkedReason}`,
+      text: notice.durabilityFiles > 0
+        ? `${plural(notice.pendingFiles, 'file')} · ${formatMediaBytes(notice.pendingBytes)}. ${linkedReason}`
+        : `${plural(notice.pendingFiles, 'file')} · ${formatMediaBytes(notice.pendingBytes)}, so they reopen after a reload. `
+          + 'You can keep editing; keep this page open until it finishes.',
     };
   }
   if (notice.copiedFiles > 0) {
@@ -83,19 +94,24 @@ export function ProjectMediaCopyToast() {
     return () => { cancelled = true; };
   }, [settled, notice?.copiedBytes]);
 
+  const quiet = isQuietProjectMediaCopyNotice(notice);
+
   useEffect(() => {
     if (!settled || hasFailures) return;
+    // Finished background copies need no success message: they are cleared at once.
+    if (quiet) { dismissProjectMediaCopyNotice(); return; }
     const timer = window.setTimeout(dismissProjectMediaCopyNotice, SUCCESS_VISIBLE_MS);
     return () => window.clearTimeout(timer);
-  }, [settled, hasFailures, notice]);
+  }, [settled, hasFailures, quiet, notice]);
 
-  if (!notice) return null;
+  if (!notice || quiet) return null;
   const linkedReason = durability === 'not-durable'
     ? 'This browser cannot keep links to files after a reload.'
     : 'These files have no location the project can reopen.';
   const { title, text } = describe(notice, linkedReason);
   const showFree = settled && notice.copiedFiles > 0 && freeBytes !== null;
-  const offerLinking = copying && !hasFailures && (notice.pendingFiles > 0 || notice.copiedFiles > 0);
+  // Only copies made for link durability can be avoided by linking; background copies are always made.
+  const offerLinking = copying && !hasFailures && notice.durabilityFiles > 0 && (notice.pendingFiles > 0 || notice.copiedFiles > 0);
 
   return (
     <div className="project-media-copy-toast" role={hasFailures ? 'alert' : 'status'} aria-live="polite">
@@ -104,7 +120,7 @@ export function ProjectMediaCopyToast() {
         <span className="project-media-copy-toast-text">
           {text}
           {showFree && ` ${formatMediaBytes(freeBytes)} browser storage left.`}
-          {!copying && notice.copiedFiles > 0 && ' Future imports stay linked; change this in Settings › Import.'}
+          {!copying && notice.durabilityFiles > 0 && notice.copiedFiles > 0 && ' Future imports stay linked; change this in Settings › Import.'}
         </span>
       </div>
       <div className="project-media-copy-toast-actions">

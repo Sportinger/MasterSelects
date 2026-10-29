@@ -257,6 +257,10 @@ and the longest frame gap on the main thread meanwhile, is logged (a warning abo
 `project_load_phases` analytics event (see [Product Analytics](./Product-Analytics.md)).
 Long phases point at storage or the editor; short phases with a long frame gap
 point at a screen that did not repaint while the work itself was quick.
+`storage_open` starts with the storage worker's start, which includes fetching its
+script; the report keeps that part as `workerStartMs` (shown as "storage worker
+start" in the log line, not sent to analytics). A long `storage_open` with an equally
+long worker start and no long tasks is a slow or stalled network fetch, not storage.
 
 Opening automatically uses this cache when the same browser/location retains its
 attestation and every previously validated history file still has the same size

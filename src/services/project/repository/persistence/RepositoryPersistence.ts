@@ -7,7 +7,7 @@ import { readRecord, segmentRecords } from '../segments/recordSegment';
 import { commitPath, preparePublication, readCommit, writePublication, type PreparedPublication, type PublicationBatch, type PublicationResult } from './publication';
 import { createRecoveryProofs, recoverRepository, type RecoveryResult } from './recovery';
 import { materializeProjection, readRevision } from './projection';
-import { storeBlob } from './blobStorage';
+import { storeBlob, type StoreBlobOptions } from './blobStorage';
 
 export type { PublicationBatch, PublicationResult, PublicationPointer } from './publication';
 export type { RecoveryResult } from './recovery';
@@ -92,7 +92,7 @@ export class RepositoryPersistence {
   readRecord(reference: RecordReference, signal?: AbortSignal) { return readRecord(this.backend, reference, signal); }
   readRevision(reference: RecordReference, signal?: AbortSignal) { return readRevision(this.backend, reference, signal); }
   materializeProjection(reference: RecordReference, generation = 0, signal?: AbortSignal) { return materializeProjection(this.backend, reference, this.checkpoints, generation, signal); }
-  storeBlob(reference: BlobReference, chunks: AsyncIterable<Uint8Array>, signal?: AbortSignal) { return storeBlob(this.backend, this.owner, reference, chunks, signal); }
+  storeBlob(reference: BlobReference, chunks: AsyncIterable<Uint8Array>, signal?: AbortSignal, options?: StoreBlobOptions) { return storeBlob(this.backend, this.owner, reference, chunks, signal, options); }
   confirmedReceipt(): OperationReceipt { return { repositoryId: this.descriptor.repositoryId, sessionEpoch: this.options.sessionEpoch, operationSequence: this.operationSequence, views: {} }; }
   publish(batch: PublicationBatch, signal?: AbortSignal): Promise<PublicationResult> { return this.enqueue(batch, signal); }
   enqueue(batch: PublicationBatch, signal?: AbortSignal): Promise<PublicationResult> {

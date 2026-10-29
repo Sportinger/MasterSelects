@@ -6,6 +6,7 @@ import type { ProjectTransactionCoordinator } from '../transaction/ProjectTransa
 import type { ProjectFolderKey } from '../../core/constants';
 import type { RepositoryDomainPublication } from './RepositoryDomainPublication';
 import { Logger } from '../../../logger';
+import { timeMediaCopyPhase } from '../../mediaCopy/mediaCopyPhaseTimings';
 const log = Logger.create('RepositoryArtifacts');
 export interface DomainPublicationOptions {
   coordinator: ProjectTransactionCoordinator;
@@ -77,7 +78,7 @@ export function createRepositoryDomainPublication(options: DomainPublicationOpti
       if (!stored) throw new RepositoryError('corrupt', `Required artifact file ${name} is missing`);
       return matchesSource(stored.manifest) ? new File([stored.blob], name, { type: stored.manifest.mimeType }) : null;
     },
-    async writeFile(folder, name, input) {
+    async writeFile(folder, name, input, writeOptions = {}) {
       // Capture source and current target binding BEFORE hashing/publishing any bytes.
       const prior = coordinator.getProjection().entities.get(pathKey(folder, name));
       const sourceBound = isSourceBound(folder, name);
@@ -90,12 +91,13 @@ export function createRepositoryDomainPublication(options: DomainPublicationOpti
       const journalOnly = folder === 'AI_CHAT' || name.startsWith('agent-timeline-pointer-');
       const cacheOnly = folder.startsWith('CACHE') || folder === 'PROXY' || folder === 'AUDIO_PROXIES';
       const blob = typeof input === 'string' ? new Blob([input], { type: 'application/json' }) : input;
-      const { manifest } = await artifacts.putArtifact(blob, { retention: cacheOnly ? 'reproducible-cache' : 'required', sourceRefs: sourceVersion ? [sourceVersion] : [] });
+      const { manifest } = await artifacts.putArtifact(blob, { retention: cacheOnly ? 'reproducible-cache' : 'required', sourceRefs: sourceVersion ? [sourceVersion] : [],
+        writeConfirmation: writeOptions.writeConfirmation });
       const event = { type: 'artifact-file-result', folder, name, artifactId: manifest.artifactId, sourceVersion, sessionEpoch: coordinator.sessionEpoch };
       if (journalOnly || cacheOnly) { await journal(`artifact-file:${folder}:${name}`, event); return true; }
       const current = coordinator.getProjection().entities.get(pathKey(folder, name));
       const matches = current === prior && options.sourceVersion(name) === sourceVersion;
-      if (matches) {
+      const published = !matches || await timeMediaCopyPhase(blob, 'copy_publish', (async () => {
         const reference = await getWorkerArtifactManifestReference(artifacts, manifest.artifactId);
         if (!reference) throw new RepositoryError('corrupt', 'Required standalone manifest reference is missing');
         // Recheck after resolving manifest dependency: source/binding can change during IO.
@@ -104,7 +106,9 @@ export function createRepositoryDomainPublication(options: DomainPublicationOpti
           return false;
         }
         await mutate(pathKey(folder, name), fileEntity(manifest, reference));
-      }
+        return true;
+      })());
+      if (!published) return false;
       await journal(`artifact-file-result:${crypto.randomUUID()}`, { ...event, applied: matches });
       return matches;
     },

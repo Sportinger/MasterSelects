@@ -48,7 +48,9 @@ export class ArtifactStore {
   ): Promise<PutArtifactResult> {
     const mimeType = options.mimeType ?? (input instanceof Blob ? input.type : '') ?? DEFAULT_MIME_TYPE;
     const blob = await artifactInputToBlob(input, mimeType || DEFAULT_MIME_TYPE);
-    const hash = await sha256Blob(blob, options.signal);
+    const hash = this.adapter.hashArtifactBlob
+      ? await this.adapter.hashArtifactBlob(blob, options.signal)
+      : await sha256Blob(blob, options.signal);
     const artifactId = buildArtifactId(hash);
     const existingManifest = await this.adapter.getArtifactManifest(artifactId);
 
@@ -83,7 +85,7 @@ export class ArtifactStore {
       return { manifest: nextManifest, deduplicated: true };
     }
 
-    await this.adapter.writeArtifact(nextManifest, blob, options.signal);
+    await this.adapter.writeArtifact(nextManifest, blob, options.signal, { writeConfirmation: options.writeConfirmation });
     return {
       manifest: nextManifest,
       deduplicated: false,

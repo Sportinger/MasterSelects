@@ -5,6 +5,7 @@ import { captureRepositoryDomainPublication } from '../artifacts/RepositoryDomai
 import { getActiveRepositorySession } from './editorRepositoryLifecycle';
 import { StreamHash } from '../segments/streamHash';
 import { getBrowserStorageRoot } from '../../core/browserStorageRoot';
+import { timeMediaCopyPhase } from '../../mediaCopy/mediaCopyPhaseTimings';
 type Folder = keyof typeof PROJECT_FOLDERS;
 
 export function repositoryFileNames(folder: Folder): string[] {
@@ -60,26 +61,54 @@ export async function scanRepositoryFiles(folder?: Folder): Promise<Map<string, 
   }
   return files;
 }
+/** Name-collision check of a copy: hashed in the storage worker when a project is open, never on the main thread. */
 async function fileHash(file: Blob): Promise<string> {
+  const session = getActiveRepositorySession();
+  if (session) return session.client.hashBlob(file);
   const hash = new StreamHash();
   for (let offset = 0; offset < file.size; offset += 256 * 1024) hash.update(new Uint8Array(await file.slice(offset, offset + 256 * 1024).arrayBuffer()));
   return hash.digest();
 }
-export async function copyRepositoryRaw(file: File, requestedName = file.name) {
+/**
+ * Copies of the same requested Raw name run one after another. Phone imports copy in the background, so two
+ * different files named video.mp4 often overlap; run together, both would see the name free and the second
+ * would lose the compare-and-set of its write. One after another, the second finds the first and takes its
+ * hashed name (or shares the stored file when the bytes are the same).
+ */
+const rawNameQueues = new Map<string, Promise<unknown>>();
+export function copyRepositoryRaw(file: File, requestedName = file.name) {
+  const previous = rawNameQueues.get(requestedName) ?? Promise.resolve();
+  const job = previous.then(() => copyRepositoryRawNow(file, requestedName), () => copyRepositoryRawNow(file, requestedName));
+  const settled = job.then(() => undefined, () => undefined);
+  rawNameQueues.set(requestedName, settled);
+  void settled.then(() => { if (rawNameQueues.get(requestedName) === settled) rawNameQueues.delete(requestedName); });
+  return job;
+}
+async function copyRepositoryRawNow(file: File, requestedName: string) {
   const host = captureRepositoryDomainPublication(); if (!host) return null;
-  let name = requestedName; let existing = await host.readFile('RAW', name); let alreadyExisted = false;
-  if (existing) {
-    const hash = await fileHash(file);
-    if (existing.size === file.size && await fileHash(existing) === hash) alreadyExisted = true;
-    else { const dot = requestedName.lastIndexOf('.'); const stem = dot > 0 ? requestedName.slice(0, dot) : requestedName;
-      const extension = dot > 0 ? requestedName.slice(dot) : ''; name = `${stem}-${hash.slice(7, 23)}${extension}`;
-      existing = await host.readFile('RAW', name);
-      if (existing && (existing.size !== file.size || await fileHash(existing) !== hash)) throw new RepositoryError('conflict', 'Raw media name has different immutable bytes');
-      alreadyExisted = Boolean(existing);
+  // A writer outside this queue (another path, a hashed name of a third copy) can still take the name between
+  // the check and the write: the lost compare-and-set is answered by checking again, once.
+  for (let attempt = 0; ; attempt++) {
+    let name = requestedName; let existing = await host.readFile('RAW', name); let alreadyExisted = false;
+    if (existing) {
+      const hash = await fileHash(file);
+      if (existing.size === file.size && await fileHash(existing) === hash) alreadyExisted = true;
+      else { const dot = requestedName.lastIndexOf('.'); const stem = dot > 0 ? requestedName.slice(0, dot) : requestedName;
+        const extension = dot > 0 ? requestedName.slice(dot) : ''; name = `${stem}-${hash.slice(7, 23)}${extension}`;
+        existing = await host.readFile('RAW', name);
+        if (existing && (existing.size !== file.size || await fileHash(existing) !== hash)) throw new RepositoryError('conflict', 'Raw media name has different immutable bytes');
+        alreadyExisted = Boolean(existing);
+      }
     }
+    // A media copy is the one write confirmed by its stored length (its hash was checked on the bytes written):
+    // re-reading every byte of a phone recording doubled the copy time. Other artifacts keep the read-back.
+    if (!alreadyExisted && !await host.writeFile('RAW', name, file, { writeConfirmation: 'length' })) {
+      if (attempt === 0) continue;
+      return null;
+    }
+    const handle = await timeMediaCopyPhase(file, 'copy_open', repositoryFileHandle('RAW', name));
+    return { handle: handle ?? undefined, relativePath: PROJECT_FOLDERS.RAW + '/' + name, alreadyExisted };
   }
-  if (!alreadyExisted && !await host.writeFile('RAW', name, file)) return null;
-  return { handle: await repositoryFileHandle('RAW', name) ?? undefined, relativePath: PROJECT_FOLDERS.RAW + '/' + name, alreadyExisted };
 }
 
 export function repositoryDownloadFolder(platform: string): string {

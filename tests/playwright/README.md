@@ -55,6 +55,16 @@ would fail that acceptance. Include them with `npm run test:e2e:nightly` or
 files in the OS temp folder, delete exports after their checks and attach a JSON
 summary instead: a test host returns at most 512 MB of evidence per run.
 
+## Performance journeys
+
+`performance/inspector-latency.spec.ts` measures inspector drags (frame rate,
+input to control and preview paint) next to deterministic store counters
+(gesture-preview staging, one revision per gesture). Counters are hard
+assertions; timing budgets are `perf-soft` annotations unless
+`MASTERSELECTS_INSPECTOR_PERF=budget` or `strict` is set, and a loaded host is
+annotated `host-busy`.
+Details and numbers: `docs/Features/Inspector-Performance.md` ("Drag latency").
+
 ## Module and test tags
 
 Every journey carries its canonical `@module:*` tag. Add `@smoke` only to the
@@ -294,25 +304,71 @@ and the journey file ends in `.device.ts`, so no other config picks it up.
 - **Connection** (`device/deviceConnection.ts`, `device/deviceAdb.ts`):
   `adb forward tcp:<port> localabstract:chrome_devtools_remote`, then
   `chromium.connectOverCDP` into Chrome's default context (a new context on
-  Android Chrome has no network). The run opens **one new tab** and works only
-  there; it never navigates, reloads or closes the owner's tabs and leaves its own
-  tab open. It fails fast when the phone is locked (`isKeyguardShowing`), and
-  refuses to start while a MasterSelects tab is already open on the phone (the new
-  tab restores the last project, and two tabs on one project compete for its
-  storage; override with `MASTERSELECTS_DEVICE_ALLOW_EDITOR_TABS=1`). While
+  Android Chrome has no network). The run works in **one test tab of its own**,
+  marked by its URL fragment (`/m#masterselects-device-test`, plus `window.name`):
+  every run reuses that tab (bring to front, boot `/m` again) and opens a new tab
+  only when none exists, so runs never pile up editor tabs on one project storage
+  (a second harness tab once showed the previous run's project). The fragment
+  survives Android Chrome discarding and reloading the tab, which drops
+  `window.name` and `sessionStorage`. A further marked editor tab is parked on
+  `about:blank#masterselects-device-test`, never closed. The harness never
+  navigates, reloads or closes the owner's (unmarked) tabs and leaves its own tab
+  open. It fails fast when the phone is locked (`isKeyguardShowing`), and refuses
+  to start while an unmarked MasterSelects tab is open on the phone (the test tab
+  restores the last project, and two tabs on one project compete for its storage;
+  override with `MASTERSELECTS_DEVICE_ALLOW_EDITOR_TABS=1`). While
   connected it sends `KEYCODE_WAKEUP` every 20 s; no device setting is changed, no
   input goes through `adb shell input`, and only its own port mappings are removed.
 - **Media in** (`device/deviceMedia.ts`): the page fetches the generated file and
-  sets it on the hidden media input through a `DataTransfer`. Files up to 64 MB
+  sets it on the hidden media input through a `DataTransfer`. Files up to 8 MB
   come from a Chrome route (no network); larger ones from a tiny token-protected
   server on the PC (`device/deviceMediaServer.ts`) over `adb reverse`.
 - **Oracles:** preview frame codes from device screenshots of the preview canvas
-  (`device/devicePreview.ts`, both code rows of the phone footage); the export is
+  (`device/devicePreview.ts`, both code rows of the phone footage). One capture may
+  take many seconds over wireless adb, so a device capture waits up to `UI_WAIT_MS`
+  (a transport limit; desktop probes keep 5 s), and a target frame already seen
+  gets its confirming read even when that capture ran past the deadline. The
+  keyboard seek steps through the frames between start and target: the pictures of
+  the frames strictly between them may show on the way (`seekPathPictures`; at a step
+  whose source time is not clear, the picture of either rounding policy), but no
+  neighbouring picture and none of a frame on a cut, so an off-by-one at a cut fails
+  even while it only flickers; any other picture fails at once and the target must
+  show in the end. D2 waits for the
+  background copy into the project (`background-copy` report) and requires it to
+  succeed, so the later cases and the reopen use the durable copy; the export is
   shared to a stubbed `navigator.share` in the test tab (nothing lands in the
   owner's Downloads), copied to the PC and decoded with the phone footage oracle;
-  load times come from `window.__MS_PHONE_BOOT__`, `window.__MS_PROJECT_LOAD__`
-  (sanitized: phase names and milliseconds only) and the progress view. Budgets
-  are soft (`expect.soft`), the numbers are attached to each case.
+  load times come from `window.__MS_PHONE_BOOT__`, `window.__MS_PROJECT_LOAD__`,
+  `window.__MS_MEDIA_IMPORT__` (sanitized: phase names and milliseconds only) and
+  the progress view. Budgets are soft (`expect.soft`), the numbers are attached to
+  each case.
+- **Page clock versus DevTools transport** (`device/deviceTelemetry.ts`,
+  `installActionTimeline`): the page records, with its own clock, every touch and
+  click on a test id and when the home, timeline, loading view, sheet and first
+  clip tile appear or go. Create and import are reported as page phases (`tap`,
+  `loading`, `home`; `tap`, `sheet`, `tile`) plus the rest of the PC wall time as
+  "DevTools transport". On the Pixel the wireless adb DevTools link stalled for
+  12-15 s while the page was idle (a console line logged at 3.9 s arrived on the
+  PC at 16.5 s; 15 % ping loss), which once read as a 15 s Create. Only the page
+  clock is judged (`MASTERSELECTS_DEVICE_TOTAL_BUDGET_MS` for Create,
+  `MASTERSELECTS_DEVICE_IMPORT_BUDGET_MS` for Done to clip tile).
+- **The same stalls inside the page** (`transportMs`, `device/deviceParsing.ts`): the
+  page fetches its scripts from the PC over adb reverse, and the preview server asks
+  for revalidation on every request, so each new storage worker fetches its script
+  over that link. A stall during that fetch landed whole in `storage_open` (Create
+  13.9 s, boot `repository-open` 14.7 s and 21.9 s; the storage work itself took
+  about 0.1 s, the main thread was idle). Holding back the worker script on the
+  desktop reproduces it exactly. The load report therefore splits off
+  `workerStartMs` (storage_open until the worker first answered); the harness
+  prints it as "storage worker start" and judges `storage_open`, the total and the
+  Create page clock without it.
+- **Taps** (`tapOn`, `device/deviceFixture.ts`): a tap is aimed only once the target
+  and the visual viewport held still for 250 ms (`waitUntilStill`), and its down and
+  up go out back to back (`PhoneTouch.tapAtOnce`). The title sheet focuses its field,
+  the on-screen keyboard then lifts the sheet; a tap aimed before that missed Done and
+  the sheet stayed open (D5, run 16; reproduced on the desktop by shrinking the
+  viewport between aiming and tapping). A tap whose up waited for a page round trip
+  could also be held for a whole transport stall and become a long press.
 - **Journeys** (`device/device-journeys.device.ts`, serial, one catalog case per
   test, real touch for every action under test): D1 create a project in browser
   storage, D2 import a phone recording, D3 split at a frame-exact playhead, D4 trim
@@ -339,7 +395,7 @@ MASTERSELECTS_DEVICE=1 npm run test:e2e:device
 | `MASTERSELECTS_DEVICE_OUTPUT_DIR` | `<os.tmpdir()>/masterselects-device` | where exports land (checked for free space first) |
 | `MASTERSELECTS_PHONE_FOOTAGE_DIR` | see `fixtures/phoneFootage.ts` | footage cache |
 | `MASTERSELECTS_DEVICE_CDP_PORT` / `_MEDIA_PORT` | `9333` / `8099` | PC ports |
-| `MASTERSELECTS_DEVICE_*_BUDGET_MS` | 3000 phase, 6000 total, 3000 first frame, 8000 boot | soft load budgets |
+| `MASTERSELECTS_DEVICE_*_BUDGET_MS` | 3000 phase, 6000 total, 3000 first frame, 8000 boot, 10000 import | soft budgets (import: Done to clip tile, page clock) |
 
 ## Reference-project media pack
 

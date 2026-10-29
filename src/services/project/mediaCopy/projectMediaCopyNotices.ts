@@ -11,6 +11,8 @@ export interface ProjectMediaCopyFailure {
   name: string;
   bytes: number;
   message: string;
+  /** The copy was still running when the page closed (found on reopen): the media must be picked again. */
+  interrupted?: true;
 }
 
 export interface ProjectMediaCopyNotice {
@@ -22,12 +24,23 @@ export interface ProjectMediaCopyNotice {
   copiedBytes: number;
   /** Files kept linked by the user's choice although the link will not survive a reload. */
   linkedFiles: number;
+  /**
+   * Announced copies that only exist because a link would not survive a reload (the user may choose to
+   * link such files instead). The rest are background copies the caller always makes (phone imports).
+   */
+  durabilityFiles: number;
   failures: readonly ProjectMediaCopyFailure[];
 }
 
 export interface ProjectMediaCopyTicket {
   done(): void;
   fail(error: unknown): void;
+  /**
+   * The copy finished but no media use it (its import failed or was replaced meanwhile): no longer pending,
+   * not counted as copied, and the reason is logged. The file stays in the project's Raw folder, because a
+   * copy can be the same stored file another media already use (identical bytes are never stored twice).
+   */
+  unused(reason: string): void;
 }
 
 let notice: ProjectMediaCopyNotice | null = null;
@@ -36,7 +49,7 @@ const listeners = new Set<() => void>();
 
 function update(change: (current: ProjectMediaCopyNotice) => ProjectMediaCopyNotice): void {
   const current = notice ?? {
-    batch: ++batch, pendingFiles: 0, pendingBytes: 0, copiedFiles: 0, copiedBytes: 0, linkedFiles: 0, failures: [],
+    batch: ++batch, pendingFiles: 0, pendingBytes: 0, copiedFiles: 0, copiedBytes: 0, linkedFiles: 0, durabilityFiles: 0, failures: [],
   };
   notice = change(current);
   for (const listener of listeners) listener();
@@ -52,10 +65,15 @@ function describeError(error: unknown): string {
  * Starts tracking one copy into the project; exactly one of done/fail must follow.
  * Unannounced copies (asked for by setting or caller) only surface when they fail.
  */
-export function beginProjectMediaCopy(file: Pick<File, 'name' | 'size'>, announce = true): ProjectMediaCopyTicket {
+export function beginProjectMediaCopy(
+  file: Pick<File, 'name' | 'size'>,
+  announce = true,
+  kind: 'durability' | 'background' = 'durability',
+): ProjectMediaCopyTicket {
   const bytes = file.size;
   const pending = announce ? 1 : 0;
-  if (announce) update(current => ({ ...current, pendingFiles: current.pendingFiles + 1, pendingBytes: current.pendingBytes + bytes }));
+  if (announce) update(current => ({ ...current, pendingFiles: current.pendingFiles + 1, pendingBytes: current.pendingBytes + bytes,
+    durabilityFiles: current.durabilityFiles + (kind === 'durability' ? 1 : 0) }));
   let settled = false;
   const settle = (change: (current: ProjectMediaCopyNotice) => ProjectMediaCopyNotice) => {
     if (settled) return;
@@ -76,6 +94,11 @@ export function beginProjectMediaCopy(file: Pick<File, 'name' | 'size'>, announc
       log.warn('Imported media could not be copied into the project; it stays linked until the page reloads', { name: file.name, bytes, message });
       settle(current => ({ ...current, failures: [...current.failures, { name: file.name, bytes, message }] }));
     },
+    unused: (reason) => {
+      log.info('A finished copy into the project is not used by any media', { name: file.name, bytes, reason });
+      if (!announce) { settled = true; return; }
+      settle(current => current);
+    },
   };
 }
 
@@ -83,6 +106,41 @@ export function beginProjectMediaCopy(file: Pick<File, 'name' | 'size'>, announc
 export function noteMediaLinkedByChoice(name: string): void {
   log.info('Imported media stay linked by choice and must be picked again after a reload', { name });
   update(current => ({ ...current, linkedFiles: current.linkedFiles + 1 }));
+}
+
+/** True while an announced copy into the project is still running (the page must not be left then). */
+export function hasPendingProjectMediaCopies(): boolean {
+  return (notice?.pendingFiles ?? 0) > 0;
+}
+
+/** Resolves once no announced copy is pending any more (each one was recorded, failed or released as unused). */
+export function waitForProjectMediaCopies(): Promise<void> {
+  if (!hasPendingProjectMediaCopies()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsubscribe = subscribeProjectMediaCopyNotice(() => {
+      if (hasPendingProjectMediaCopies()) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
+/** Reports media whose copy into the project was still running when the page closed (see pendingProjectCopyMarker). */
+export function noteInterruptedProjectMediaCopy(name: string, bytes: number): void {
+  log.warn('A copy into the project was interrupted when the page closed; the media must be picked again', { name, bytes });
+  update(current => ({ ...current,
+    failures: [...current.failures, { name, bytes, message: 'the copy was interrupted when the page closed', interrupted: true }] }));
+}
+
+/**
+ * True for a finished notice that holds only background copies that all succeeded (phone imports): the
+ * copy is part of every import, so its success needs no message, and a lingering "Copied into project"
+ * toast would cover the controls a person taps next. Durability copies, linked files and failures still
+ * show; a running background copy still shows as "Copying into project".
+ */
+export function isQuietProjectMediaCopyNotice(current: ProjectMediaCopyNotice | null): boolean {
+  return current !== null && current.pendingFiles === 0 && current.failures.length === 0
+    && current.durabilityFiles === 0 && current.linkedFiles === 0;
 }
 
 export function getProjectMediaCopyNotice(): ProjectMediaCopyNotice | null {

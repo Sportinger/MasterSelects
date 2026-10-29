@@ -44,6 +44,14 @@ export type StorageRequest =
   | { type: 'blob-chunk'; transferId: string; offset: number; bytes: Uint8Array }
   | { type: 'blob-finish'; transferId: string }
   | { type: 'blob-abort'; transferId: string }
+  /** SHA-256 of a Blob/File read inside the worker (the Blob is a reference, its bytes never cross). */
+  | { type: 'blob-hash'; blob: Blob }
+  /**
+   * Stores a whole Blob/File under its known identity in one request; the worker reads it in 4 MB slices.
+   * `confirm` 'length' (project media copies only) confirms the write by its stored length and trusts the
+   * blob for the session; 'read-back' re-reads and re-hashes it like every other artifact write.
+   */
+  | { type: 'blob-store-file'; reference: BlobReference; blob: Blob; confirm: 'read-back' | 'length' }
   | { type: 'close' };
 export interface StorageEnvelope { requestId: string; sessionEpoch: string; request: StorageRequest; }
 export interface StorageCancel { type: 'cancel'; requestId: string; sessionEpoch: string; }

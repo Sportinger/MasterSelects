@@ -58,6 +58,11 @@ export interface RepositoryLoadReport {
   storage: RepositoryLoadStorage;
   writable?: boolean;
   recoveredRecords?: number;
+  /**
+   * Part of storage_open until the storage worker first answered (its script fetched and started).
+   * The rest of storage_open is the open itself. A long wait here is the network, not storage.
+   */
+  workerStartMs?: number;
 }
 
 export class RepositoryLoadTimer {
@@ -71,6 +76,7 @@ export class RepositoryLoadTimer {
   private storage: RepositoryLoadStorage = 'unknown';
   writable?: boolean;
   recoveredRecords?: number;
+  private workerStartMs?: number;
   constructor(kind: RepositoryLoadKind, now: () => number = () => performance.now()) {
     this.kind = kind; this.now = now; this.started = now();
   }
@@ -87,6 +93,11 @@ export class RepositoryLoadTimer {
   }
   /** Notes where the repository lives; only its storage kind is kept. */
   noteLocation(location: RepositoryLocation): void { this.storage = repositoryLoadStorage(location); }
+  /** The storage worker answered for the first time (its first open progress); counts once, inside storage_open. */
+  noteStorageWorkerStarted(): void {
+    if (this.finished || this.current !== 'storage_open' || this.workerStartMs !== undefined) return;
+    this.workerStartMs = Math.max(0, this.now() - this.currentStarted);
+  }
   noteRecords(count: number | undefined): void {
     if (typeof count === 'number' && Number.isFinite(count)) this.recoveredRecords = Math.max(this.recoveredRecords ?? 0, count);
   }
@@ -96,6 +107,7 @@ export class RepositoryLoadTimer {
     this.end(); this.finished = true;
     return { kind: this.kind, outcome, totalMs: Math.max(0, this.now() - this.started), phases: { ...this.phases }, storage: this.storage,
       ...(this.writable !== undefined ? { writable: this.writable } : {}),
-      ...(this.recoveredRecords !== undefined ? { recoveredRecords: this.recoveredRecords } : {}) };
+      ...(this.recoveredRecords !== undefined ? { recoveredRecords: this.recoveredRecords } : {}),
+      ...(this.workerStartMs !== undefined ? { workerStartMs: this.workerStartMs } : {}) };
   }
 }

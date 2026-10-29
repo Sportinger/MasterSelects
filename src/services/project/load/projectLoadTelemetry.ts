@@ -115,6 +115,7 @@ export function sanitizeProjectLoadTiming(timing: ProjectLoadTiming): ProjectLoa
       frameGapMaxMs: thread.frameGapMaxMs, pageHidden: thread.pageHidden },
     ...(typeof timing.writable === 'boolean' ? { writable: timing.writable } : {}),
     ...(typeof timing.recoveredRecords === 'number' ? { recoveredRecords: timing.recoveredRecords } : {}),
+    ...(typeof timing.workerStartMs === 'number' && Number.isFinite(timing.workerStartMs) ? { workerStartMs: timing.workerStartMs } : {}),
     ...(typeof timing.firstFrameMs === 'number' ? { firstFrameMs: timing.firstFrameMs } : {}),
   };
 }
@@ -151,6 +152,7 @@ export function formatProjectLoadTiming(timing: ProjectLoadTiming): string {
     .map(phase => `${phase} ${Math.round(timing.phases[phase]!)}`);
   const thread = timing.mainThread;
   return [`${timing.kind} ${timing.outcome} total ${Math.round(timing.totalMs)} ms`, ...phases,
+    ...(timing.workerStartMs !== undefined ? [`storage worker start ${Math.round(timing.workerStartMs)}`] : []),
     `long tasks ${Math.round(thread.longTaskMs)} (max ${Math.round(thread.longTaskMaxMs)})`,
     thread.frameGapMaxMs >= 0 ? `frame gap ${Math.round(thread.frameGapMaxMs)}` : 'frames not observed',
     ...(timing.firstFrameMs !== undefined ? [`first frame ${Math.round(timing.firstFrameMs)}`] : []),

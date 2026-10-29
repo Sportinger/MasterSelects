@@ -23,6 +23,11 @@ export interface FileImportActions {
 export interface ImportFileOptions {
   forceCopyToProject?: boolean;
   projectFileName?: string;
+  /**
+   * Resolve once metadata and thumbnail are ready; the copy into the project finishes in the background
+   * (visible "Copying into project" status, the media switch to the project copy when it is durable).
+   */
+  copyInBackground?: boolean;
   stemInfo?: MediaFileStemInfo;
   externalOrigin?: ExternalMediaOrigin;
 }
