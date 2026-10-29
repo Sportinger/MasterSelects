@@ -101,7 +101,9 @@ describe('media copy into project storage', () => {
 
     await storeBlob(backend, owner, reference, readBlobChunks(new Blob([bytes])), undefined, { verifyWritten: 'length' });
 
-    expect(files.get(blobPath(reference.hash))).toEqual(bytes);
+    // Byte-wise toEqual over 4 MB takes seconds (15 s on CI runners); compare the buffers natively.
+    const stored = files.get(blobPath(reference.hash));
+    expect(stored && Buffer.from(stored).equals(Buffer.from(bytes)), 'the stored bytes equal the file').toBe(true);
     expect(writeCalls).toEqual([BLOB_FILE_CHUNK_BYTES, 10]);
     expect(reads, 'no read-back of the bytes just written').toEqual([]);
   });
