@@ -398,6 +398,11 @@ export interface ProjectLoadProgress {
   itemsDone?: number;
   itemsTotal?: number;
   blocking?: boolean;
+  /**
+   * A way out the load screen offers: 'continue-without-copies' is shown when a project switch has waited
+   * a while for copies into the current project (projectSwitchCopyWait.continueProjectSwitchWithoutCopies).
+   */
+  action?: 'continue-without-copies';
 }
 
 // Union type for all items

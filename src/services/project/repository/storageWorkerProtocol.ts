@@ -62,6 +62,8 @@ export interface NativeBlobRequest { type: 'native-blob'; requestId: string; ses
 export interface NativeCommandResponse { type: 'native-response'; requestId: string; sessionEpoch: string; data?: OkResponse; error?: string; }
 export interface RepositoryOpenProgress { phase: 'opening' | 'source' | 'importing' | 'recovery' | 'projection' | 'activation' | 'ready' | 'failed'; processedRecords?: number; error?: string; }
 export interface StorageOpenProgress { type: 'open-progress'; sessionEpoch: string; progress: RepositoryOpenProgress; }
+/** Bytes read so far by a running blob-hash or blob-store-file request (throttled; the response follows). */
+export interface StorageRequestProgress { type: 'request-progress'; requestId: string; sessionEpoch: string; bytes: number; }
 export interface StorageOpenResult {
   ownershipReason?: 'needs-copy-restore' | 'location-registry-unavailable'; writable: boolean; locationId: string; writerEpoch: string | null; recovery: RecoveryResult; }
 export type StorageResult = StorageOpenResult | PublicationResult | RepositoryProjection | RepositoryRecord | RevisionMetadata | MetadataPage<RevisionMetadata> | JsonValue | CommitManifest | null | number | void;

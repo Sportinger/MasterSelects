@@ -81,6 +81,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The way out of a project switch that waits for media copies (projectSwitchCopyWait). */
+.mobile-skin .phone-loading__action {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--phone-text-dim, #98a0ad);
+}
+.mobile-skin .phone-loading__action p { margin: 0 0 10px; }
+
 .mobile-skin .phone-loading__detail {
   min-width: 0;
   overflow: hidden;

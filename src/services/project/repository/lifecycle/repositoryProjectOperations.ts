@@ -20,7 +20,7 @@ export async function openRepositoryProject(location: RepositoryLocation, option
         && (location.kind !== 'opfs' || current.location.kind !== 'opfs' || resolveBrowserStore(location.store) === resolveBrowserStore(current.location.store));
     if (same) return current;
   }
-  return openEditorRepository(onProgress => prepareRepositoryOpen(location, repositoryWorkspaceId, onProgress, options));
+  return openEditorRepository(onProgress => prepareRepositoryOpen(location, repositoryWorkspaceId, onProgress, options), 'open', options.signal);
 }
 export async function createRepositoryAt(location: RepositoryLocation, name: string, preserveCurrent = false, composition?: NewProjectComposition) {
   const previous = getActiveRepositorySession();

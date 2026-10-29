@@ -56,7 +56,7 @@ function savedProjectPath(id: string): string | null {
  * media the target revision does not hold leave the store, media it holds come back (without a runtime
  * file, with the saved project path), so an Undo of the import really removes them.
  */
-async function installRepository(options: { updateView?: (key: string) => Promise<number>; workspace?: Record<string, unknown> } = {}) {
+async function installRepository(options: { updateView?: (key: string) => Promise<number>; workspace?: Record<string, unknown>; writable?: boolean } = {}) {
   const owner: Composition = { id: 'composition', name: 'Test composition', type: 'composition', parentId: null, createdAt: 0,
     width: 1920, height: 1080, frameRate: 25, duration: 30, backgroundColor: '#000',
     timelineData: createSerializableTimelineState(useTimelineStore.getState()) };
@@ -85,7 +85,7 @@ async function installRepository(options: { updateView?: (key: string) => Promis
   const seed = coordinator.begin('Initial project', 'import');
   for (const [key, entity] of encoded.entities) coordinator.write(seed, key, entity);
   await coordinator.flush(coordinator.commit(seed).receipt);
-  const session = { opening: { writable: true }, coordinator, updateView: options.updateView ?? (async () => 1) } as unknown as RepositorySession;
+  const session = { opening: { writable: options.writable ?? true }, coordinator, updateView: options.updateView ?? (async () => 1) } as unknown as RepositorySession;
   repositoryCleanup = installEditorRepositorySession(session, options.workspace ? { workspace: options.workspace as never } : {});
   const sources = async () => { await coordinator.flush(); return [...revisions.values()].slice(1).map(revision => `${revision.label}:${revision.source}`); };
   return { coordinator, sources };
@@ -318,5 +318,17 @@ describe('background project copy against the project history', () => {
     expect(getProjectMediaCopyNotice()?.failures).toEqual([{ name: 'm1.mp4', bytes: 4,
       message: 'the copy was interrupted when the page closed', interrupted: true }]);
     expect((getEditorRepositoryWorkspace() as Record<string, unknown>)[PENDING_PROJECT_COPIES_VIEW] ?? {}).toEqual({});
+  });
+
+  it("a read-only tab neither reports nor clears the writer's note: that copy may still be running in the writer's tab", async () => {
+    const note = { m1: { name: 'm1.mp4', bytes: 4 } };
+    const updateView = vi.fn(async () => 1);
+    await installRepository({ writable: false, updateView, workspace: { [PENDING_PROJECT_COPIES_VIEW]: note } });
+    useMediaStore.setState(state => ({ files: [...state.files, mediaFile('m1', undefined)] }));
+    reportInterruptedProjectMediaCopies();
+    await settle();
+    expect(getProjectMediaCopyNotice()).toBeNull();
+    expect((getEditorRepositoryWorkspace() as Record<string, unknown>)[PENDING_PROJECT_COPIES_VIEW]).toEqual(note);
+    expect(updateView).not.toHaveBeenCalled();
   });
 });

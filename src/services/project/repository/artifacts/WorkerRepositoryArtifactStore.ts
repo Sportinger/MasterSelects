@@ -9,6 +9,7 @@ import { frozenJson } from '../segments/canonical';
 import { hashArtifactManifest } from './manifestIdentity';
 import { RepositoryArtifactPins } from './RepositoryArtifactPins';
 import { timeMediaCopyPhase } from '../../mediaCopy/mediaCopyPhaseTimings';
+import { noteProjectMediaCopyBytes } from '../../mediaCopy/projectMediaCopyNotices';
 const adapters = new WeakMap<ArtifactStore, WorkerRepositoryArtifactAdapter>();
 const stores = new WeakMap<RepositorySession, ArtifactStore>();
 function blobReference(manifest: ArtifactManifest) { return { hash: `sha256:${manifest.hash}`, length: manifest.size }; }
@@ -27,13 +28,14 @@ export class WorkerRepositoryArtifactAdapter implements ArtifactStorageAdapter {
     try {
       // The worker reads the Blob itself (one request, 4 MB slices); see StorageWorkerClient.storeBlobFile.
       // Every artifact is read back after the write unless its caller (a project media copy) asked otherwise.
-      await timeMediaCopyPhase(blob, 'copy_write', this.session.client.storeBlobFile(blobReference(manifest), blob, signal, options.writeConfirmation ?? 'read-back'));
+      await timeMediaCopyPhase(blob, 'copy_write', this.session.client.storeBlobFile(blobReference(manifest), blob, signal, options.writeConfirmation ?? 'read-back',
+        bytes => noteProjectMediaCopyBytes(blob, 'write', bytes)));
       await timeMediaCopyPhase(blob, 'copy_manifest', this.saveArtifactManifest(manifest, signal));
     } finally { release(); }
   }
   /** Content hash in the storage worker: never on the main thread, native SHA-256 for bounded files. */
   async hashArtifactBlob(blob: Blob, signal?: AbortSignal): Promise<string> {
-    const hash = await timeMediaCopyPhase(blob, 'copy_hash', this.session.client.hashBlob(blob, signal));
+    const hash = await timeMediaCopyPhase(blob, 'copy_hash', this.session.client.hashBlob(blob, signal, bytes => noteProjectMediaCopyBytes(blob, 'hash', bytes)));
     return hash.slice('sha256:'.length);
   }
   async saveArtifactManifest(manifest: ArtifactManifest, signal?: AbortSignal): Promise<void> {

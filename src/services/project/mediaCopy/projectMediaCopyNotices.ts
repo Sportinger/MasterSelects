@@ -20,6 +20,12 @@ export interface ProjectMediaCopyNotice {
   batch: number;
   pendingFiles: number;
   pendingBytes: number;
+  /**
+   * Of pendingBytes, how far the running copies got: each copy reads its file twice in the storage worker
+   * (content hash, then the write), so a file counts half when hashed and whole when written. An estimate
+   * for progress displays (project switch wait), never a durability statement.
+   */
+  pendingDoneBytes: number;
   copiedFiles: number;
   copiedBytes: number;
   /** Files kept linked by the user's choice although the link will not survive a reload. */
@@ -47,11 +53,33 @@ let notice: ProjectMediaCopyNotice | null = null;
 let batch = 0;
 const listeners = new Set<() => void>();
 
+/** An announced copy that has not settled yet. */
+interface PendingCopy {
+  file: Pick<File, 'name' | 'size'>;
+  /** Ends the copy's ticket as interrupted (see abandonPendingProjectMediaCopies). */
+  abandon(message: string): void;
+}
+const pendingCopies = new Set<PendingCopy>();
+/** Bytes the storage worker read of each copied file, per pass (see noteProjectMediaCopyBytes). */
+const readProgress = new WeakMap<object, { hash: number; write: number }>();
+
+function doneBytesOf(file: Pick<File, 'name' | 'size'>): number {
+  const read = readProgress.get(file);
+  if (!read || file.size <= 0) return 0;
+  return (Math.min(file.size, read.hash) + Math.min(file.size, read.write)) / 2;
+}
+
+function pendingDoneBytes(): number {
+  let done = 0;
+  for (const copy of pendingCopies) done += doneBytesOf(copy.file);
+  return Math.round(done);
+}
+
 function update(change: (current: ProjectMediaCopyNotice) => ProjectMediaCopyNotice): void {
   const current = notice ?? {
-    batch: ++batch, pendingFiles: 0, pendingBytes: 0, copiedFiles: 0, copiedBytes: 0, linkedFiles: 0, durabilityFiles: 0, failures: [],
+    batch: ++batch, pendingFiles: 0, pendingBytes: 0, pendingDoneBytes: 0, copiedFiles: 0, copiedBytes: 0, linkedFiles: 0, durabilityFiles: 0, failures: [],
   };
-  notice = change(current);
+  notice = { ...change(current), pendingDoneBytes: pendingDoneBytes() };
   for (const listener of listeners) listener();
 }
 
@@ -75,9 +103,18 @@ export function beginProjectMediaCopy(
   if (announce) update(current => ({ ...current, pendingFiles: current.pendingFiles + 1, pendingBytes: current.pendingBytes + bytes,
     durabilityFiles: current.durabilityFiles + (kind === 'durability' ? 1 : 0) }));
   let settled = false;
+  const entry: PendingCopy | null = announce ? {
+    file,
+    abandon: (message) => {
+      log.warn('A copy into the project was left unfinished; the media must be picked again', { name: file.name, bytes, message });
+      settle(current => ({ ...current, failures: [...current.failures, { name: file.name, bytes, message, interrupted: true }] }));
+    },
+  } : null;
+  if (entry) pendingCopies.add(entry);
   const settle = (change: (current: ProjectMediaCopyNotice) => ProjectMediaCopyNotice) => {
     if (settled) return;
     settled = true;
+    if (entry) pendingCopies.delete(entry);
     update(current => change({
       ...current,
       pendingFiles: Math.max(0, current.pendingFiles - pending),
@@ -113,16 +150,27 @@ export function hasPendingProjectMediaCopies(): boolean {
   return (notice?.pendingFiles ?? 0) > 0;
 }
 
-/** Resolves once no announced copy is pending any more (each one was recorded, failed or released as unused). */
-export function waitForProjectMediaCopies(): Promise<void> {
-  if (!hasPendingProjectMediaCopies()) return Promise.resolve();
-  return new Promise((resolve) => {
-    const unsubscribe = subscribeProjectMediaCopyNotice(() => {
-      if (hasPendingProjectMediaCopies()) return;
-      unsubscribe();
-      resolve();
-    });
-  });
+/**
+ * Bytes the storage worker has read of `blob` in one pass of its copy into the project ('hash' or
+ * 'write'). Feeds pendingDoneBytes while `blob` is an announced, still running copy; other blobs are ignored.
+ */
+export function noteProjectMediaCopyBytes(blob: Blob, pass: 'hash' | 'write', bytes: number): void {
+  const read = readProgress.get(blob) ?? { hash: 0, write: 0 };
+  if (bytes <= read[pass]) return;
+  read[pass] = bytes;
+  readProgress.set(blob, read);
+  if (notice && [...pendingCopies].some((copy) => (copy.file as object) === blob)) update((current) => current);
+}
+
+/**
+ * Ends every announced copy that is still running as interrupted, with `message`: the person chose not to
+ * wait for it (project switch). Each one is reported in the notice (the media must be picked again); the
+ * copy itself may still finish later, but its ticket is settled and changes nothing any more.
+ */
+export function abandonPendingProjectMediaCopies(message: string): number {
+  const abandoned = [...pendingCopies];
+  for (const copy of abandoned) copy.abandon(message);
+  return abandoned.length;
 }
 
 /** Reports media whose copy into the project was still running when the page closed (see pendingProjectCopyMarker). */

@@ -133,9 +133,10 @@ export function getActiveRepositoryDirectory(): FileSystemDirectoryHandle | null
 export function getActiveRepositorySession(): RepositorySession | null { return lifecycle.getSession(); }
 export function subscribeRepositoryLifecycle(listener: () => void): () => void { return lifecycle.subscribe(listener); }
 export const getRepositoryLifecycleState = () => lifecycle.getState();
-export async function openEditorRepository(prepare: PrepareRepository, kind: RepositoryOpenKind = 'open'): Promise<RepositorySession> {
-  // Copies still running into the current project are recorded there first, never dropped by the switch.
-  await finishProjectMediaCopiesBeforeSwitch();
+export async function openEditorRepository(prepare: PrepareRepository, kind: RepositoryOpenKind = 'open', signal?: AbortSignal): Promise<RepositorySession> {
+  // Copies still running into the current project are recorded there first, never dropped by the switch
+  // (unless the person continues without them); `signal` (the caller's Cancel) also ends that wait.
+  await finishProjectMediaCopiesBeforeSwitch(signal);
   try { const session = await lifecycle.open(prepare, kind); scratchSuperseded = false; return session; }
   catch (error) {
     // The open cancelled the scratch workspace and then failed itself: edits made now need it again.

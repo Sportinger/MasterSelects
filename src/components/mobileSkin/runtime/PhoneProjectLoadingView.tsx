@@ -4,6 +4,7 @@
 // time. Nothing of the editor shows through it.
 import { useEffect, useState } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { continueProjectSwitchWithoutCopies } from '../../../services/project/mediaCopy/projectSwitchCopyWait';
 import { PHONE_TEST_IDS } from '../contracts';
 import {
   PHONE_LOAD_STEP_LABELS,
@@ -86,6 +87,20 @@ function PhoneProjectLoadingContent({ booting }: PhoneProjectLoadingViewProps) {
           {detail ? <span className="phone-loading__detail">{detail}</span> : null}
           {elapsed ? <span data-testid={`${PHONE_PROJECT_LOADING_TEST_ID}-elapsed`}>{elapsed}</span> : null}
         </p>
+        {progress.active && progress.action === 'continue-without-copies' ? (
+          <div className="phone-loading__action">
+            <p>Media not copied yet must be picked again in this project.</p>
+            <button
+              type="button"
+              className="phone-load-status__dismiss"
+              data-testid="project-switch-continue-without-copies"
+              onPointerUp={(event) => event.currentTarget.blur()}
+              onClick={continueProjectSwitchWithoutCopies}
+            >
+              Continue without it
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -41,6 +41,8 @@ export function setProjectLoadProgress(update: ProjectLoadProgressUpdate | null)
       itemsDone: update.itemsDone,
       itemsTotal: update.itemsTotal,
       blocking: update.blocking ?? state.projectLoadProgress.blocking,
+      // Offered only by the update that names it: a later step never inherits a stale way out.
+      action: update.action,
     },
   }));
 }

@@ -2,10 +2,12 @@
 // another project meanwhile must not drop that copy: the old project would keep media whose project copy
 // is never recorded and that are offline after a reload. Every project switch goes through
 // openEditorRepository / closeEditorRepository, so both wait for running copies first, with visible
-// progress, and only then replace the project.
+// progress, and only then replace the project. The wait always has a way out: the caller's Cancel, and
+// after a while "Continue without it", which reports the unfinished copies as interrupted.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as editor from '../../src/services/project/repository/lifecycle/editorRepositoryLifecycle';
-import { beginProjectMediaCopy, dismissProjectMediaCopyNotice, getProjectMediaCopyNotice } from '../../src/services/project/mediaCopy/projectMediaCopyNotices';
+import { beginProjectMediaCopy, dismissProjectMediaCopyNotice, getProjectMediaCopyNotice, noteProjectMediaCopyBytes } from '../../src/services/project/mediaCopy/projectMediaCopyNotices';
+import { CONTINUE_WITHOUT_COPIES_AFTER_MS, COPY_LEFT_BY_SWITCH_MESSAGE, continueProjectSwitchWithoutCopies } from '../../src/services/project/mediaCopy/projectSwitchCopyWait';
 import { setProjectLoadProgress } from '../../src/services/project/load/loadProgress';
 
 const fake = vi.hoisted(() => ({ open: vi.fn(), close: vi.fn() }));
@@ -34,7 +36,8 @@ beforeEach(() => {
   fake.close.mockReset().mockResolvedValue(undefined);
   progress.mockReset();
 });
-afterEach(() => { if (getProjectMediaCopyNotice()?.pendingFiles === 0) dismissProjectMediaCopyNotice(); });
+afterEach(() => { vi.useRealTimers(); if (getProjectMediaCopyNotice()?.pendingFiles === 0) dismissProjectMediaCopyNotice(); });
+const MB = 1024 * 1024;
 
 describe('project switch with a background copy into the current project', () => {
   it('opening another project waits for the copy and shows why', async () => {
@@ -60,6 +63,67 @@ describe('project switch with a background copy into the current project', () =>
     await closed;
     expect(fake.close).toHaveBeenCalledOnce();
     expect(getProjectMediaCopyNotice()?.failures).toHaveLength(1);
+  });
+
+  it('shows the bytes the storage worker has read (hash pass, then write pass) while it waits', async () => {
+    const file = new File([new Uint8Array(8 * MB)], 'clip.mp4');
+    const ticket = beginProjectMediaCopy(file, true, 'background');
+    const opened = editor.openEditorRepository(prepare);
+    await settle();
+    noteProjectMediaCopyBytes(file, 'hash', 8 * MB);
+    expect(progress).toHaveBeenLastCalledWith(expect.objectContaining({ detail: '1 file · 4.0 MB left', percent: 50 }));
+    noteProjectMediaCopyBytes(file, 'write', 4 * MB);
+    expect(progress).toHaveBeenLastCalledWith(expect.objectContaining({ detail: '1 file · 2.0 MB left', percent: 75 }));
+    // Bytes of a file that is not a running copy change nothing.
+    progress.mockClear();
+    noteProjectMediaCopyBytes(new File(['x'], 'other.mp4'), 'write', 1);
+    expect(progress).not.toHaveBeenCalled();
+    ticket.done();
+    await opened;
+  });
+
+  it('after a while offers to continue without the copy; continuing opens the project and reports the copy as interrupted', async () => {
+    vi.useFakeTimers();
+    const ticket = beginProjectMediaCopy(new File([new Uint8Array(4 * MB)], 'clip.mp4'), true, 'background');
+    const opened = editor.openEditorRepository(prepare);
+    await vi.advanceTimersByTimeAsync(CONTINUE_WITHOUT_COPIES_AFTER_MS - 100);
+    expect(progress).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'continue-without-copies' }));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(progress).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'continue-without-copies', blocking: true }));
+    expect(fake.open).not.toHaveBeenCalled();
+
+    continueProjectSwitchWithoutCopies();
+    await opened;
+    expect(fake.open).toHaveBeenCalledOnce();
+    expect(progress).toHaveBeenLastCalledWith(null);
+    expect(getProjectMediaCopyNotice()).toMatchObject({ pendingFiles: 0, pendingBytes: 0,
+      failures: [{ name: 'clip.mp4', bytes: 4 * MB, message: COPY_LEFT_BY_SWITCH_MESSAGE, interrupted: true }] });
+    // The copy finishing later changes nothing: its ticket was settled by the switch.
+    ticket.done();
+    expect(getProjectMediaCopyNotice()).toMatchObject({ copiedFiles: 0, failures: [expect.objectContaining({ interrupted: true })] });
+  });
+
+  it("the caller's Cancel ends the wait: the open rejects, nothing opens, and the copy keeps running", async () => {
+    const ticket = beginProjectMediaCopy(new File(['abcd'], 'clip.mp4'), true, 'background');
+    const controller = new AbortController();
+    const opened = editor.openEditorRepository(prepare, 'open', controller.signal);
+    await settle();
+    controller.abort();
+    await expect(opened).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fake.open).not.toHaveBeenCalled();
+    expect(progress).toHaveBeenLastCalledWith(null);
+    expect(getProjectMediaCopyNotice()).toMatchObject({ pendingFiles: 1, failures: [] });
+    ticket.done();
+    expect(getProjectMediaCopyNotice()).toMatchObject({ pendingFiles: 0, copiedFiles: 1 });
+  });
+
+  it('an already cancelled open does not wait at all', async () => {
+    const ticket = beginProjectMediaCopy(new File(['abcd'], 'clip.mp4'), true, 'background');
+    const controller = new AbortController();
+    controller.abort();
+    await expect(editor.openEditorRepository(prepare, 'open', controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(progress).not.toHaveBeenCalled();
+    ticket.done();
   });
 
   it('switches at once without running copies', async () => {

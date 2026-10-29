@@ -75,8 +75,9 @@ tap empty space (or the clip again) to deselect.
   Redo keep it), and a failed copy is reported there (the clip then works only until the page reloads).
   Leaving or reloading the page while a copy runs asks first, because a picked phone file cannot be
   reopened afterwards. Opening or creating another project waits for the copy to finish
-  (**Finishing the copy into the current project** on the loading screen), so the clip never goes
-  offline in the project it was added to. Android does not ask when a tab is swiped away or discarded;
+  (**Finishing the copy into the current project** on the loading screen, with the size left), so the
+  clip does not go offline in the project it was added to. After 8 s the loading screen offers
+  **Continue without it**: the switch goes on and the unfinished files are reported to pick again. Android does not ask when a tab is swiped away or discarded;
   the project notes a running copy, and on reopen **Copy into project interrupted** names the files to
   pick again.
 - **Trim:** select a clip and drag the handles at its ends; the preview shows the new first or last

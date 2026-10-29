@@ -1,10 +1,10 @@
 import { RepositoryError, type BlobReference, type RepositoryErrorCode } from '../contracts';
-import type { NativeCommandRequest, NativeBlobRequest, StorageFailure, StorageRequest, StorageSuccess, StorageOpenProgress, RepositoryOpenProgress } from '../storageWorkerProtocol';
+import type { NativeCommandRequest, NativeBlobRequest, StorageFailure, StorageRequest, StorageSuccess, StorageOpenProgress, StorageRequestProgress, RepositoryOpenProgress } from '../storageWorkerProtocol';
 import type { NativeRepositoryClient } from '../backends/nativeBackend';
 import { reportWorkerLoadFailure } from '../../../../runtime/workerLoadFailure';
 import { noteFolderAccessFailure } from '../../folderAccess/folderAccessPause';
 
-interface PendingRequest { type: StorageRequest['type']; resolve: (value: unknown) => void; reject: (error: unknown) => void; removeAbort: () => void; }
+interface PendingRequest { type: StorageRequest['type']; resolve: (value: unknown) => void; reject: (error: unknown) => void; removeAbort: () => void; onProgress?: (bytes: number) => void; }
 export class StorageWorkerClient {
   readonly sessionEpoch = crypto.randomUUID();
   private readonly worker: Worker;
@@ -30,6 +30,11 @@ export class StorageWorkerClient {
         if (progress.sessionEpoch === this.sessionEpoch && !this.closed) {
           this.phase = 'opening'; this.onOpenProgress?.(progress.progress);
         }
+        return;
+      }
+      const readProgress = event.data as StorageRequestProgress;
+      if (readProgress.type === 'request-progress') {
+        if (readProgress.sessionEpoch === this.sessionEpoch) this.pending.get(readProgress.requestId)?.onProgress?.(readProgress.bytes);
         return;
       }
       const message = event.data as StorageSuccess | StorageFailure | NativeCommandRequest | NativeBlobRequest;
@@ -92,7 +97,8 @@ export class StorageWorkerClient {
       if (!this.closed) this.worker.postMessage({ type: 'native-response', requestId: message.requestId, sessionEpoch: this.sessionEpoch, error: String(error) });
     }
   }
-  request<T>(request: StorageRequest, signal?: AbortSignal, transfer: Transferable[] = []): Promise<T> {
+  /** `onProgress` receives the bytes read so far by a whole-file request (blob-hash, blob-store-file). */
+  request<T>(request: StorageRequest, signal?: AbortSignal, transfer: Transferable[] = [], onProgress?: (bytes: number) => void): Promise<T> {
     if (this.closed || this.fault || this.closing && request.type !== 'close') return Promise.reject(this.fault ?? new RepositoryError('ownership', 'Project storage worker session closed'));
     if (signal?.aborted) return Promise.reject(new RepositoryError('cancelled', 'Project storage request cancelled'));
     const requestId = crypto.randomUUID();
@@ -102,7 +108,7 @@ export class StorageWorkerClient {
         this.pending.delete(requestId); signal?.removeEventListener('abort', abort);
         reject(new RepositoryError('cancelled', 'Project storage request cancelled'));
       };
-      this.pending.set(requestId, { type: request.type, resolve: value => resolve(value as T), reject, removeAbort: () => signal?.removeEventListener('abort', abort) });
+      this.pending.set(requestId, { type: request.type, resolve: value => resolve(value as T), reject, removeAbort: () => signal?.removeEventListener('abort', abort), onProgress });
       signal?.addEventListener('abort', abort, { once: true });
       try { this.worker.postMessage({ requestId, sessionEpoch: this.sessionEpoch, request }, transfer); }
       catch (error) { this.pending.delete(requestId); signal?.removeEventListener('abort', abort); reject(error); }
@@ -128,8 +134,8 @@ export class StorageWorkerClient {
     }
   }
   /** SHA-256 of a Blob/File, computed in the storage worker (the main thread never reads its bytes). */
-  async hashBlob(blob: Blob, signal?: AbortSignal): Promise<string> {
-    const result = await this.request<{ hash: string; length: number }>({ type: 'blob-hash', blob }, signal);
+  async hashBlob(blob: Blob, signal?: AbortSignal, onProgress?: (bytes: number) => void): Promise<string> {
+    const result = await this.request<{ hash: string; length: number }>({ type: 'blob-hash', blob }, signal, [], onProgress);
     return result.hash;
   }
   /**
@@ -137,8 +143,8 @@ export class StorageWorkerClient {
    * bytes, and the worker reads, checks and writes it in 4 MB slices. Replaces 256 KB acknowledged chunk
    * messages for media copies, whose per-message round trips dominated a phone import.
    */
-  storeBlobFile(reference: BlobReference, blob: Blob, signal?: AbortSignal, confirm: 'read-back' | 'length' = 'read-back'): Promise<void> {
-    return this.request({ type: 'blob-store-file', reference, blob, confirm }, signal);
+  storeBlobFile(reference: BlobReference, blob: Blob, signal?: AbortSignal, confirm: 'read-back' | 'length' = 'read-back', onProgress?: (bytes: number) => void): Promise<void> {
+    return this.request({ type: 'blob-store-file', reference, blob, confirm }, signal, [], onProgress);
   }
   verifyBlob(reference: BlobReference, signal?: AbortSignal): Promise<void> {
     return this.request({ type: 'verify-blob', reference }, signal);

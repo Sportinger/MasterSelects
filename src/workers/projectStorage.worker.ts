@@ -19,7 +19,7 @@ import { IndexedDBMetadataIndex } from '../services/project/repository/index/Ind
 import { WorkspaceViewStore } from '../services/project/repository/workspace/WorkspaceViewStore';
 import { IncomingBlobTransfer } from '../services/project/repository/persistence/IncomingBlobTransfer';
 import { blobPath, verifyBlob } from '../services/project/repository/persistence/blobStorage';
-import { createFileJobLimiter, hashBlobContent, readBlobChunks } from '../services/project/repository/persistence/blobFileSource';
+import { BLOB_FILE_CHUNK_BYTES, NATIVE_FILE_HASH_BYTES, createFileJobLimiter, hashBlobContent, readBlobChunks, throttleBlobReadProgress, type BlobReadProgress } from '../services/project/repository/persistence/blobFileSource';
 import { createSessionBlobVerification } from '../services/project/repository/persistence/sessionBlobVerification';
 import type { NativeCommandResponse, StorageCancel, StorageEnvelope, StorageRequest, StorageOpenResult, RepositoryOpenProgress } from '../services/project/repository/storageWorkerProtocol';
 import type { OkResponse, RepositoryCommand } from '../services/nativeHelper/protocol';
@@ -198,7 +198,7 @@ async function verifyIndexedRevision(item: import('../services/project/repositor
   if (publication.reference.hash !== attestation.hash || publication.commit.lastOperation !== item.operationSequence
     || attestation.operationSequence !== item.operationSequence || !publication.commit.segments.some(segment => segment.segmentId === item.reference.segmentId)) throw new RepositoryError('corrupt', 'Derived revision sequence is not authoritative');
 }
-async function execute(request: StorageRequest, signal: AbortSignal): Promise<unknown> {
+async function execute(request: StorageRequest, signal: AbortSignal, onRead?: BlobReadProgress): Promise<unknown> {
   switch (request.type) {
     case 'open': return open(request, signal);
     case 'close': return close();
@@ -291,7 +291,7 @@ async function execute(request: StorageRequest, signal: AbortSignal): Promise<un
     case 'blob-hash': {
       if (!(request.blob instanceof Blob)) throw new RepositoryError('corrupt', 'Blob hashing requires a Blob');
       const blob = request.blob;
-      return fileJobs.run(async () => ({ hash: await hashBlobContent(blob, signal), length: blob.size }), signal);
+      return fileJobs.run(async () => ({ hash: await hashBlobContent(blob, signal, NATIVE_FILE_HASH_BYTES, onRead), length: blob.size }), signal);
     }
     case 'blob-store-file': {
       if (!(request.blob instanceof Blob) || request.blob.size !== request.reference.length) throw new RepositoryError('corrupt', 'Stored file does not match its declared length');
@@ -302,7 +302,7 @@ async function execute(request: StorageRequest, signal: AbortSignal): Promise<un
         // One pass over the file: hashed (native up to 64 MB, streamed above) and written in 4 MB slices. A
         // project media copy ('length') is confirmed by its stored length and trusted for this session; every
         // other artifact is read back and re-hashed (see storeBlob).
-        await requireWriter().storeBlob(reference, readBlobChunks(blob, signal), signal, { verifyWritten: confirm === 'length' ? 'length' : 'read-back' });
+        await requireWriter().storeBlob(reference, readBlobChunks(blob, signal, BLOB_FILE_CHUNK_BYTES, onRead), signal, { verifyWritten: confirm === 'length' ? 'length' : 'read-back' });
         if (confirm === 'length') sessionBlobs.remember(backend, reference);
       }, signal);
     }
@@ -390,7 +390,11 @@ scope.onmessage = event => {
         for (const transfer of transfers.values()) transfer.stream.abort(new RepositoryError('cancelled', 'Storage session closing'));
         for (const [id, request] of requests) if (id !== envelope.requestId) request.abort();
       }
-      const run = serial ? publicationTail.catch(() => {}).then(() => execute(envelope.request, controller.signal)) : execute(envelope.request, controller.signal);
+      // Whole-file jobs report how far they read, so a long media copy shows progress in the tab.
+      const onRead = envelope.request.type === 'blob-hash' || envelope.request.type === 'blob-store-file'
+        ? throttleBlobReadProgress(bytes => scope.postMessage({ type: 'request-progress', requestId: envelope.requestId, sessionEpoch: epoch, bytes }))
+        : undefined;
+      const run = serial ? publicationTail.catch(() => {}).then(() => execute(envelope.request, controller.signal)) : execute(envelope.request, controller.signal, onRead);
       if (serial) publicationTail = run;
       const data = await run;
       scope.postMessage({ requestId: envelope.requestId, sessionEpoch: epoch, ok: true, data });

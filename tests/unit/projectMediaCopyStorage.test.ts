@@ -5,7 +5,7 @@
 // by every later check (other artifacts are), but a missing or truncated one still fails.
 import { describe, expect, it, vi } from 'vitest';
 import { RepositoryError, type BlobReference, type RepositoryBackend, type RepositoryOwner } from '../../src/services/project/repository/contracts';
-import { BLOB_FILE_CHUNK_BYTES, MAX_CONCURRENT_FILE_JOBS, createFileJobLimiter, hashBlobContent, readBlobChunks } from '../../src/services/project/repository/persistence/blobFileSource';
+import { BLOB_FILE_CHUNK_BYTES, MAX_CONCURRENT_FILE_JOBS, createFileJobLimiter, hashBlobContent, readBlobChunks, throttleBlobReadProgress } from '../../src/services/project/repository/persistence/blobFileSource';
 import { blobPath, storeBlob, verifyBlob } from '../../src/services/project/repository/persistence/blobStorage';
 import { createSessionBlobVerification } from '../../src/services/project/repository/persistence/sessionBlobVerification';
 import { hashBytes } from '../../src/services/project/repository/segments/canonical';
@@ -62,6 +62,27 @@ describe('media copy into project storage', () => {
     const sizes: number[] = [];
     for await (const chunk of readBlobChunks(blob)) sizes.push(chunk.byteLength);
     expect(sizes).toEqual([BLOB_FILE_CHUNK_BYTES, BLOB_FILE_CHUNK_BYTES, 123]);
+  });
+
+  it('reports the bytes read after each slice of the hash and the write, so a long copy can show progress', async () => {
+    const size = BLOB_FILE_CHUNK_BYTES * 2 + 123;
+    const written: number[] = [];
+    for await (const chunk of readBlobChunks(new SliceOnlyBlob([bytesOf(size)]), undefined, BLOB_FILE_CHUNK_BYTES, bytes => written.push(bytes))) void chunk;
+    expect(written).toEqual([BLOB_FILE_CHUNK_BYTES, BLOB_FILE_CHUNK_BYTES * 2, size]);
+    const streamed: number[] = [];
+    await hashBlobContent(new SliceOnlyBlob([bytesOf(size)]), undefined, 1024, bytes => streamed.push(bytes));
+    expect(streamed.at(-1)).toBe(size);
+    const native: number[] = [];
+    await hashBlobContent(new Blob([bytesOf(1000)]), undefined, undefined, bytes => native.push(bytes));
+    expect(native).toEqual([1000]);
+  });
+
+  it('sends read progress at most once per interval', () => {
+    let time = 0;
+    const sent: number[] = [];
+    const report = throttleBlobReadProgress(bytes => sent.push(bytes), 250, () => time);
+    report(1); time = 100; report(2); time = 260; report(3); time = 400; report(4); time = 520; report(5);
+    expect(sent).toEqual([1, 3, 5]);
   });
 
   it('hashes large files by streaming slices and agrees with the native hash', async () => {
