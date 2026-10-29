@@ -18,6 +18,8 @@ import { buildFlockRuntimeStatus } from '../../engine/flock/runtime/flockRuntime
 import { WorkerNativeSceneDeadline } from './workerNativeSceneCatchUp';
 import { WorkerFlockControls } from './workerFlockControls';
 import { flockGpuTimings } from '../../engine/flock/gpu/FlockGpuTimings';
+import { whenFlockPipelinesSettled } from '../../engine/flock/gpu/flockPipelineGate';
+import type { FlockDrawPlan } from '../../engine/flock/gpu/FlockBranchRenderer';
 
 interface SceneEntry {
   compositionId?: string;
@@ -134,6 +136,7 @@ export class WorkerGpuNativeSceneOwner {
           entry.definitions.delete(id); entry.keyframes.delete(id); entry.statuses.delete(id);
           entry.simulation.releaseClip(id);
         }
+        const plans: FlockDrawPlan[] = [];
         for (const layer of entry.layers) {
           if (layer.kind !== 'flock') continue;
           let ready = false;
@@ -146,7 +149,14 @@ export class WorkerGpuNativeSceneOwner {
             const plan = entry.simulation.prepare(this.device, encoder, layer, {
               realtime: false, submissionWindow: 1, previewStepBudget: 4,
             });
-            if (!plan) throw new Error(entry.statuses.get(layer.clipId)?.message ?? 'Worker Flock simulation could not prepare');
+            if (!plan) {
+              // A new session (first preview frame, every export) waits for its
+              // pipeline verdicts; a rejected required pipeline throws its message.
+              const hold = entry.simulation.pipelineHold(layer.clipId, layer.flock.consumer);
+              if (!hold) throw new Error(entry.statuses.get(layer.clipId)?.message ?? 'Worker Flock simulation could not prepare');
+              await hold;
+              continue;
+            }
             this.device.queue.submit([encoder.finish()]);
             const session = entry.simulation.entries.get(sessionKey);
             const afterStep = session?.session.step ?? 0;
@@ -156,6 +166,7 @@ export class WorkerGpuNativeSceneOwner {
             this.preparation.prepareCalls++;
             ready = session?.caughtUp === true;
             if (ready) {
+              plans.push(plan);
               // Simulation and rendering share this queue. The compositor's final
               // fence proves completion; a CPU round trip here would idle it.
               // Do not count these steps as resumable completed GPU work yet.
@@ -170,6 +181,13 @@ export class WorkerGpuNativeSceneOwner {
               // the backlog required by the next playback frame.
             }
           }
+        }
+        if (plans.length && entry.camera) {
+          // An exact frame must contain the flock draws: the renderer skips them
+          // until its pipelines have driver verdicts, so wait for those here.
+          const renderer = entry.simulation.getRenderer(this.device);
+          const pathTraced = payload.renderSettings?.engine === 'path-traced';
+          await whenFlockPipelinesSettled([...renderer.framePipelines(plans, entry.camera), ...(pathTraced ? renderer.pathTracePipelines() : [])]);
         }
         guard();
         entry.payload = payload;

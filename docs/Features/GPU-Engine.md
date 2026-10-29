@@ -115,11 +115,13 @@ guide preview. It scopes every synchronous pipeline creation for all three
 error kinds and remembers failed pipelines. Once one failed, render passes,
 compute passes and render bundles skip its `setPipeline`, draws, dispatches and
 bind groups derived from it, so only that feature is missing. Work encoded with
-a pipeline before its verdict arrives is not protected: Chrome loses that
-command buffer, and Safari keeps an encoder locked after a pass that set the
-failed pipeline, so its next `beginComputePass` fails with `encoder state is
+a pipeline before its verdict arrives is not protected: by the WebGPU spec the
+pass invalidates its encoder, so every browser loses that command buffer, and
+shipping Safari also keeps the encoder locked after a pass that set the failed
+pipeline, so its next `beginComputePass` fails with `encoder state is
 invalid`. Features that encode right after creating pipelines wait for
-`gpuPipelineSettled` first (effect pipeline cache, flock session gate). Healthy devices pay nothing: passes
+`gpuPipelineSettled` first (effect pipeline cache, flock session gate, flock
+renderer). Healthy devices pay nothing: passes
 are only wrapped after a failure. Each failure is logged with feature, label,
 kind and driver message (huge messages are condensed to their first line and
 compiler error lines: WebKit prefixes the whole generated Metal source); the preview shows "Not supported by this graphics
@@ -132,8 +134,12 @@ scopes on a guarded device: effects skip and report themselves in the effect
 card, and the HAP export encoder falls back to its CPU encoder. On an unguarded
 device `createCheckedPipeline` also records the verdict for `gpuPipelineSettled`.
 `markGpuPipelineFallback(pipeline, note)` declares that the owner switches to an
-equivalent implementation when the pipeline fails: the failure is logged as a
-warning naming the fallback and raises no "not supported" notice.
+equivalent implementation when the pipeline fails: it raises no "not
+supported" notice, and is reported once per page session as a non-fatal
+ERROR-level log starting with `GPU pipeline fallback used` (guarded and
+unguarded devices), carrying the condensed driver message. Only errors reach
+the production diagnostics feed; the classifier gives it the failure code
+`gpu_pipeline_fallback`, so triage can tell it from a skipped feature.
 
 ### Per-Draw GPU Buffers (Shared Uniform Ring)
 

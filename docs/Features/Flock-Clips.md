@@ -184,17 +184,31 @@ keyframeable; animate *Active Fraction* or *Lifetime* to change population.
 - A session encodes nothing until the driver has accepted every compute
   pipeline it uses (`FlockPipelineGate`, `src/engine/flock/gpu/flockPipelineGate.ts`).
   The pipelines are built synchronously but their verdict arrives later; a frame
-  that encoded a rejected pipeline would lose its whole command buffer, and on
-  Safari the pass that set it leaves the encoder locked, so the next pass fails
-  with `encoder state is invalid`. While verdicts are pending the clip shows
-  `compiling` ("Preparing GPU pipelines…") for a frame and re-renders when they
-  arrive; export and precompute wait for them. If a required pipeline is rejected
-  the clip turns `unsupported` with an error diagnostic naming the pipeline and
-  the driver's compiler error, the warning is logged once per session, and no
-  simulation work is encoded. The workgroup particle-to-grid transfer
-  (`fluidP2GBlock`) is optional: if the driver rejects it, the liquid runs the
-  reference `fluidP2G` transfer (same fixed-point sums, slower), shows an info
-  diagnostic and logs a warning instead of a skipped-feature notice.
+  that encoded a rejected pipeline loses its whole command buffer in every
+  browser (WebGPU spec), and shipping Safari also leaves the encoder locked, so
+  the next pass fails with `encoder state is invalid`. While verdicts are pending
+  the clip shows `compiling` ("Preparing GPU pipelines…") for a frame and
+  re-renders when they arrive; export, precompute and the render worker wait for
+  them (the worker holds its frame instead of failing it), and a particle sample
+  (`sampleFlockParticles`, node previews) waits too. If a required pipeline is
+  rejected the clip turns `unsupported` with an error diagnostic naming the
+  pipeline and the driver's compiler error, the warning is logged once per
+  session, no simulation work is encoded, and export, precompute, the worker and
+  particle samples fail with that message. The workgroup particle-to-grid
+  transfer (`fluidP2GBlock`) is optional: if the driver rejects it, the liquid
+  runs the reference `fluidP2G` transfer (same fixed-point sums, slower), shows
+  an info diagnostic, raises no skipped-feature notice, and reports one non-fatal
+  `GPU pipeline fallback used` error per page session with the condensed
+  compiler lines, so production diagnostics (failure code
+  `gpu_pipeline_fallback`) can still name the failing construct.
+- The renderer draws a flock frame only once every pipeline that frame can
+  use has a verdict (render, shadow, point-cache, compute rasterizer and path
+  trace pipelines, `FlockBranchRenderer.framePipelines`). Until then flock draws
+  nothing for that frame and requests a re-render when the verdicts arrive; a
+  rejected one is then skipped by the device guard instead of invalidating the
+  shared frame encoder. A standalone `FlockFluidGrid` that owns its particle
+  order encodes the order reset into its first `encode` instead of submitting
+  it from the constructor.
 
 ### Precompute and cache
 
@@ -353,8 +367,11 @@ workgroup slots (12 KiB, within the 16 KiB spec default) before global atomics.
 Slots are claimed in a separate phase with `atomicMin` (the smallest face hashed
 to a slot owns it); contributions whose slot belongs to another face go straight
 to the global sums. Every contribution is the same integer either way, so the
-result is bit-identical to `fluidP2G`. The earlier compare-exchange hash table
-failed to compile on Safari (WebKit's Metal backend, production 2026-10-29);
+result is bit-identical to `fluidP2G`. Shipping Safari's Metal compiler rejected
+the earlier compare-exchange hash table (production 2026-10-29). That shader was
+valid WGSL within the default limits; the most likely cause is WebKit's MSL
+codegen for `atomicCompareExchangeWeak` (strong inference, the compiler line was
+truncated). As a portability guard,
 `tests/unit/flockWgslPortability.test.ts` keeps all flock compute shaders within
 the default workgroup limits and free of `atomicCompareExchangeWeak`. Checkpoints and
 diagnostic samples retain canonical identity order; checkpoint restore resets the

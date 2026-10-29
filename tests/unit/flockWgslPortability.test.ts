@@ -10,9 +10,12 @@ import { FLOCK_POINT_RASTER_COMPUTE_WGSL } from '../../src/engine/flock/shaders/
 
 /**
  * Spec-default WebGPU (what Safari exposes): 16384 bytes of workgroup storage and
- * 256 invocations per workgroup. Safari (WebKit, Metal backend) also failed to
- * compile the earlier compare-exchange slot claim of `fluidP2GBlock` in production,
- * so flock compute shaders claim slots with order-independent atomics instead.
+ * 256 invocations per workgroup. The compare-exchange ban is a portability
+ * guard, not a WGSL rule: `atomicCompareExchangeWeak` on workgroup memory is
+ * valid WGSL, but shipping Safari's Metal compiler rejected the earlier
+ * `fluidP2GBlock` that used it, most likely in WebKit's MSL codegen for that
+ * built-in (strong inference; the production compiler line was truncated). Flock
+ * compute shaders therefore claim slots with order-independent atomics instead.
  */
 const MAX_WORKGROUP_BYTES = 16384;
 const MAX_INVOCATIONS = 256;

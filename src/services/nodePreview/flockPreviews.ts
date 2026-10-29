@@ -32,7 +32,8 @@ export async function flockPreview(request: PreviewRequest, clip: TimelineClip, 
   if (semantic === 'flock:particles') {
     const status = flockRuntime.getStatus(clip.id);
     if (!status || status.hashes?.topology !== program.hashes.topology || status.hashes.behavior !== program.hashes.behavior) return missing('Simulation has not rendered this graph');
-    const sample = await flockRuntime.sampleParticles(clip.id, 128);
+    const sample = await flockRuntime.sampleParticles(clip.id, 128).catch((error: unknown) => error instanceof Error ? error : new Error(String(error)));
+    if (sample instanceof Error) return missing(sample.message);
     if (!sample) return missing('Particle sample unavailable');
     const points: number[] = [];
     for (let i = 0; i + 7 < sample.values.length && points.length < 384; i += 8) {

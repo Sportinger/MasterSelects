@@ -8,6 +8,7 @@ import { getFlockMesh } from './flockMeshes';
 import type { FlockRenderAssets } from './FlockRenderAssets';
 import { FlockPointCache } from './FlockPointCache';
 import { FlockPointRasterizer, type FlockRasterTarget } from './FlockPointRasterizer';
+import { flockPipelinesSettled } from './flockPipelineGate';
 import { flockGpuTimings } from './FlockGpuTimings';
 import { FLOCK_PATH_TRACE_WORKGROUP } from '../shaders/flockPathTraceWgsl';
 import { BRANCH_BYTES, RENDER_BLOCK_BYTES, flockPointChildren, flockPointChildrenForViewport, flockPointUsesCompute, flockPointUsesTriangles, packBranch, packRenderBlock } from './flockRenderPacking';
@@ -78,10 +79,14 @@ export class FlockBranchRenderer {
   private readonly frameRasterTargets = new Map<string, FlockRasterTarget>();
   private readonly placeholderCache: GPUBindGroup;
 
-  constructor(device: GPUDevice, pipelines: FlockGpuPipelines, assets: FlockRenderAssets) {
+  /** Re-render request once pipelines a skipped frame waited for have their verdicts. */
+  private readonly onPipelinesSettled?: () => void;
+
+  constructor(device: GPUDevice, pipelines: FlockGpuPipelines, assets: FlockRenderAssets, onPipelinesSettled?: () => void) {
     this.device = device;
     this.assets = assets;
     this.pipelines = pipelines;
+    this.onPipelinesSettled = onPipelinesSettled;
     this.placeholder = device.createBuffer({ size: 64, usage: GPUBufferUsage.STORAGE, label: 'flock-placeholder-storage' });
     this.placeholderCache = device.createBindGroup({ layout: pipelines.pointCacheRenderLayout, entries: [{ binding: 0, resource: { buffer: this.placeholder } }] });
     this.shadowPlaceholder = device.createTexture({
@@ -199,6 +204,38 @@ export class FlockBranchRenderer {
     return draws;
   }
 
+  private raster(): FlockPointRasterizer {
+    this.rasterizer ??= new FlockPointRasterizer(this.device, this.pipelines);
+    return this.rasterizer;
+  }
+
+  /**
+   * Every pipeline the plans' draws can encode in a frame with this camera (a
+   * superset where the choice depends on per-frame budgets). Getting them creates
+   * them, so their driver verdicts start before anything is encoded with them.
+   */
+  framePipelines(plans: FlockDrawPlan[], camera: SceneCamera): object[] {
+    const pipelines = new Set<object>();
+    for (const plan of plans) {
+      const light = resolveFlockLight(plan.render, plan.program.emitters);
+      for (const draw of [...this.collect([plan], 'opaque', camera.viewport), ...this.collect([plan], 'transparent', camera.viewport)]) {
+        pipelines.add(this.pipelines.getRenderPipeline(draw.kind, draw.blend));
+        if (light.enabled && (draw.kind === 'points' || draw.kind === 'instances')) pipelines.add(this.pipelines.getShadowPipeline(draw.kind));
+        if (draw.kind !== 'points') continue;
+        pipelines.add(this.pipelines.getRenderPipeline('pointsCached', draw.blend));
+        pipelines.add(this.pipelines.getPointCachePipeline('cachePoints'));
+        if (light.enabled && draw.lit) pipelines.add(this.pipelines.getPointCachePipeline('cacheVisibility'));
+        if (draw.compute || light.enabled) for (const pipeline of this.raster().pipelines()) pipelines.add(pipeline);
+      }
+    }
+    return [...pipelines];
+  }
+
+  /** Path tracer pipelines for point branches; getting them starts their verdicts. */
+  pathTracePipelines(): object[] {
+    return [this.pipelines.getPathTracePipeline(), this.pipelines.getPointCachePipeline('cachePoints')];
+  }
+
   /** The plans' point branches for the path tracer, with their point counts (those within the cache budget). */
   pathTracePoints(plans: FlockDrawPlan[], camera: SceneCamera): FlockPathTracePoints[] {
     this.pathTraceDraws.clear();
@@ -210,6 +247,12 @@ export class FlockBranchRenderer {
         points.push({ key: draw.cacheKey, count: draw.instanceCount, lit: draw.lit && draw.blend !== 'additive',
           version: `${plan.session.step}|${plan.alpha}|${plan.render.time}|${Array.from(camera.viewMatrix).join(',')}` });
       }
+    }
+    // A pipeline without a driver verdict must not be encoded (see flockPipelineGate);
+    // the spheres join once it has one.
+    if (points.length && !flockPipelinesSettled(this.pathTracePipelines(), this.onPipelinesSettled)) {
+      this.pathTraceDraws.clear();
+      return [];
     }
     return points;
   }
@@ -338,8 +381,7 @@ export class FlockBranchRenderer {
         this.pointCache.encode(commandEncoder, 'cachePoints', entry, prepFrameGroup(), this.branchGroup(draw, temporaryBuffers));
         this.frameCacheKeys.add(draw.cacheKey);
         if (draw.compute) {
-          this.rasterizer ??= new FlockPointRasterizer(this.device, this.pipelines);
-          const target = this.rasterizer.ensure(`main:${draw.cacheKey}`, camera.viewport.width, camera.viewport.height, draw.instanceCount);
+          const target = this.raster().ensure(`main:${draw.cacheKey}`, camera.viewport.width, camera.viewport.height, draw.instanceCount);
           if (target) this.frameRasterTargets.set(draw.cacheKey, target);
         }
         cached.push(draw);
@@ -362,13 +404,12 @@ export class FlockBranchRenderer {
       let shadowTarget: FlockRasterTarget | null = null;
       let shadowGroups: [GPUBindGroup, GPUBindGroup, GPUBindGroup] | null = null;
       if (computeCasters.length > 0) {
-        this.rasterizer ??= new FlockPointRasterizer(this.device, this.pipelines);
-        shadowTarget = this.rasterizer.ensure(`shadow:${plan.layer.clipId}`, FLOCK_SHADOW_MAP_SIZE, FLOCK_SHADOW_MAP_SIZE, plan.program.capacity);
+        shadowTarget = this.raster().ensure(`shadow:${plan.layer.clipId}`, FLOCK_SHADOW_MAP_SIZE, FLOCK_SHADOW_MAP_SIZE, plan.program.capacity);
         if (shadowTarget) {
           for (const [index, caster] of computeCasters.entries()) {
             shadowGroups = [prepFrameGroup(), this.branchGroup(caster, temporaryBuffers), this.placeholderCache];
-            if (index === 0) this.rasterizer.encode(commandEncoder, 'clearPixels', shadowTarget, shadowGroups);
-            this.rasterizer.encode(commandEncoder, 'shadowDepth', shadowTarget, shadowGroups);
+            if (index === 0) this.raster().encode(commandEncoder, 'clearPixels', shadowTarget, shadowGroups);
+            this.raster().encode(commandEncoder, 'shadowDepth', shadowTarget, shadowGroups);
           }
         }
       }
@@ -412,6 +453,10 @@ export class FlockBranchRenderer {
     /** Path traced frames: the path tracer draws the point branches as spheres. */
     skipPoints = false,
   ): boolean {
+    // Encoding a pipeline before its driver verdict can invalidate the whole frame's
+    // command buffer (see flockPipelineGate). Until every pipeline these plans can
+    // use has a verdict, flock draws nothing; the frame is re-rendered on settle.
+    if (plans.length && !flockPipelinesSettled(this.framePipelines(plans, camera), this.onPipelinesSettled)) return true;
     if (pass === 'opaque') this.prepareFrame(commandEncoder, plans, camera, temporaryBuffers);
     const draws = this.collect(plans, pass, camera.viewport).filter(draw => !skipPoints || draw.kind !== 'points');
     if (draws.length === 0) return true;

@@ -1,12 +1,15 @@
 import { condenseGpuPipelineMessage, createCheckedPipeline, gpuPipelineSettled, markGpuPipelineFallback } from '../../core/gpuPipelineGuard';
 
 /**
- * Flock compute pipelines are created synchronously, but whether the driver
- * accepted them is only known when the error scope resolves. Encoding a rejected
- * pipeline invalidates the command buffer; on Safari it also leaves the command
- * encoder locked, so the next pass fails with "encoder state is invalid".
- * A flock session therefore encodes nothing until every pipeline it uses has a
- * verdict (production: Safari rejected `flock-fluidP2GBlock` on its first frame).
+ * Flock pipelines are created synchronously, but whether the driver accepted
+ * them is only known when the error scope resolves. Encoding a rejected pipeline
+ * invalidates the command buffer in every browser (WebGPU: an invalid pass makes
+ * its parent encoder invalid when it ends); shipping Safari additionally leaves
+ * the encoder locked, so the next pass reports "encoder state is invalid".
+ * A flock session therefore encodes nothing until every compute pipeline it uses
+ * has a verdict, and the renderer draws a frame only once the render-side
+ * pipelines of that frame have one (production: Safari rejected
+ * `flock-fluidP2GBlock` on its first frame).
  */
 export interface FlockPipelineFailure {
   label: string;
@@ -16,14 +19,19 @@ export interface FlockPipelineFailure {
 
 const verdicts = new WeakMap<object, Promise<FlockPipelineFailure | null>>();
 const failures = new WeakMap<object, FlockPipelineFailure>();
+/** Pipelines whose verdict is known (accepted or rejected). */
+const settled = new WeakSet<object>();
+/** Pipelines with a pending re-render callback, so each frame does not add another. */
+const awaited = new WeakSet<object>();
 
-function track(pipeline: object, label: string, settled: Promise<{ kind: GPUErrorFilter; message: string } | null>): void {
-  verdicts.set(pipeline, settled.then((failure) => {
+function track(pipeline: object, label: string, verdict: Promise<{ kind: GPUErrorFilter; message: string } | null>): void {
+  verdicts.set(pipeline, verdict.then((failure) => {
+    settled.add(pipeline);
     if (!failure) return null;
     const record = { label, kind: failure.kind, message: failure.message };
     failures.set(pipeline, record);
     return record;
-  }, () => null));
+  }, () => { settled.add(pipeline); return null; }));
 }
 
 /**
@@ -42,10 +50,40 @@ export function createFlockComputePipeline(device: GPUDevice, descriptor: GPUCom
 export function flockPipelineVerdict(pipeline: object, label = 'flock-compute'): Promise<FlockPipelineFailure | null> {
   const known = verdicts.get(pipeline);
   if (known) return known;
-  const settled = gpuPipelineSettled(pipeline);
-  if (!settled) return Promise.resolve(null);
-  track(pipeline, (pipeline as { label?: string }).label || label, settled);
+  const verdict = gpuPipelineSettled(pipeline);
+  if (!verdict) {
+    // Neither guarded nor checked: no verdict will ever arrive (pre-guard behavior).
+    settled.add(pipeline);
+    return Promise.resolve(null);
+  }
+  track(pipeline, (pipeline as { label?: string }).label || label, verdict);
   return verdicts.get(pipeline)!;
+}
+
+/**
+ * Whether every pipeline already has a driver verdict, so encoding them cannot
+ * invalidate the command buffer (a rejected one is then skipped by the device
+ * guard). Pipelines created through the guarded device are used directly; when
+ * some are still pending, `onSettled` runs once each of them settles.
+ */
+export function flockPipelinesSettled(pipelines: Iterable<object>, onSettled?: () => void): boolean {
+  let pending = false;
+  for (const pipeline of pipelines) {
+    if (settled.has(pipeline)) continue;
+    const verdict = flockPipelineVerdict(pipeline);
+    if (settled.has(pipeline)) continue;
+    pending = true;
+    if (onSettled && !awaited.has(pipeline)) {
+      awaited.add(pipeline);
+      void verdict.then(() => { awaited.delete(pipeline); onSettled(); });
+    }
+  }
+  return !pending;
+}
+
+/** Resolves once every pipeline has a verdict (see `flockPipelinesSettled`). */
+export async function whenFlockPipelinesSettled(pipelines: Iterable<object>): Promise<void> {
+  await Promise.all([...pipelines].map(pipeline => flockPipelineVerdict(pipeline)));
 }
 
 /** Synchronous failure lookup, available once the verdict has resolved. */

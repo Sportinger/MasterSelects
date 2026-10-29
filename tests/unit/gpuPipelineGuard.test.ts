@@ -4,6 +4,7 @@ import {
   condenseGpuPipelineMessage,
   createCheckedPipeline,
   getGpuPipelineFailures,
+  GPU_PIPELINE_FALLBACK_MESSAGE,
   gpuFeatureName,
   guardGpuDevice,
   gpuPipelineSettled,
@@ -11,6 +12,8 @@ import {
   markGpuPipelineFallback,
 } from '../../src/engine/core/gpuPipelineGuard';
 import { HapGpuBlockEncoder } from '../../src/engine/hap/HapGpuBlockEncoder';
+import { setLoggerDiagnosticErrorSink, type LogEntry } from '../../src/services/logger';
+import { classifyRuntimeFailure } from '../../src/services/diagnostics/diagnosticFingerprint';
 
 // Production (Android 15, Brave 155): a flock or 3D pipeline the Vulkan driver could not
 // compile made every frame's command buffer invalid, so all layers vanished.
@@ -113,19 +116,47 @@ describe('device-wide GPU pipeline guard', () => {
     await expect(gpuPipelineSettled(pipeline)).resolves.toEqual({ kind: 'internal', message: DRIVER_FAILURE });
   });
 
-  it('logs a pipeline with a declared fallback as a warning without a skipped-feature notice', async () => {
-    const { device, calls } = fakeDevice(/flock-fluidP2GBlock/);
-    guardGpuDevice(device, 'editor');
-    const block = device.createComputePipeline({ label: 'flock-fluidP2GBlock' } as GPUComputePipelineDescriptor);
-    markGpuPipelineFallback(block, 'the reference transfer runs instead');
-    await flush();
-    expect(isGpuPipelineFailed(block)).toBe(true);
-    expect(getGpuPipelineFailures()).toEqual([]);
-    const pass = device.createCommandEncoder().beginComputePass();
-    pass.setPipeline(block);
-    pass.dispatchWorkgroups(1);
-    pass.end();
-    expect(calls).toEqual(['end']);
+  it('reports a pipeline with a declared fallback once as a non-fatal production error without a skipped-feature notice', async () => {
+    const reported: LogEntry[] = [];
+    setLoggerDiagnosticErrorSink(entry => { reported.push(entry); });
+    try {
+      const { device, calls } = fakeDevice(/flock-fluidP2GBlock/);
+      guardGpuDevice(device, 'editor');
+      const block = device.createComputePipeline({ label: 'flock-fluidP2GBlock' } as GPUComputePipelineDescriptor);
+      markGpuPipelineFallback(block, 'the reference transfer runs instead');
+      const again = device.createComputePipeline({ label: 'flock-fluidP2GBlock' } as GPUComputePipelineDescriptor);
+      markGpuPipelineFallback(again, 'the reference transfer runs instead');
+      await flush();
+      expect(isGpuPipelineFailed(block)).toBe(true);
+      expect(getGpuPipelineFailures()).toEqual([]);
+      const pass = device.createCommandEncoder().beginComputePass();
+      pass.setPipeline(block);
+      pass.dispatchWorkgroups(1);
+      pass.end();
+      expect(calls).toEqual(['end']);
+      // Only ERROR entries reach the production diagnostics feed.
+      expect(reported).toHaveLength(1);
+      expect(reported[0].message).toMatch(new RegExp(`^${GPU_PIPELINE_FALLBACK_MESSAGE}: .*flock-fluidP2GBlock.*the reference transfer runs instead.*Non-fatal`));
+      expect(reported[0].data).toMatchObject({ label: 'flock-fluidP2GBlock', message: DRIVER_FAILURE });
+      expect(classifyRuntimeFailure({ message: reported[0].message, stage: 'logger_error' })).toBe('gpu_pipeline_fallback');
+    } finally {
+      setLoggerDiagnosticErrorSink(null);
+    }
+  });
+
+  it('reports a declared fallback from an unguarded checked pipeline too', async () => {
+    const reported: LogEntry[] = [];
+    setLoggerDiagnosticErrorSink(entry => { reported.push(entry); });
+    try {
+      const { device } = fakeDevice(/flock-unguarded-block/);
+      const { pipeline, settled } = createCheckedPipeline(device, () => device.createComputePipeline({ label: 'flock-unguarded-block' } as GPUComputePipelineDescriptor));
+      markGpuPipelineFallback(pipeline, 'the reference transfer runs instead');
+      await settled;
+      expect(reported.map(entry => entry.message)).toEqual([expect.stringMatching(/^GPU pipeline fallback used: .*flock-unguarded-block/)]);
+      expect(getGpuPipelineFailures()).toEqual([]);
+    } finally {
+      setLoggerDiagnosticErrorSink(null);
+    }
   });
 
   // Production (Safari): WebKit's message starts with the whole generated Metal source,

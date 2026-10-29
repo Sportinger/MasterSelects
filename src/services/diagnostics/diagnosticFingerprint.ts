@@ -11,6 +11,7 @@ export type RuntimeFailureCode =
   | 'chunk_load_failed'
   | 'decode_failed'
   | 'encode_failed'
+  | 'gpu_pipeline_fallback'
   | 'javascript_error'
   | 'network_unavailable'
   | 'out_of_memory'
@@ -49,6 +50,9 @@ export function classifyRuntimeFailure(descriptor: RuntimeFailureDescriptor): Ru
       ? 'webgpu_out_of_memory'
       : 'webgpu_uncaptured_error';
   }
+  // Non-fatal: a GPU pipeline was rejected and its owner runs an equivalent
+  // implementation (gpuPipelineGuard GPU_PIPELINE_FALLBACK_MESSAGE).
+  if (message.startsWith('gpu pipeline fallback used')) return 'gpu_pipeline_fallback';
   if (stage === 'chunk_load' || CHUNK_LOAD_PATTERN.test(message)) return 'chunk_load_failed';
   if (stage === 'resource_error') {
     return /\/assets\/[^\s]+\.(?:m?js|css)\b/i.test(message) ? 'chunk_load_failed' : 'resource_load_failed';

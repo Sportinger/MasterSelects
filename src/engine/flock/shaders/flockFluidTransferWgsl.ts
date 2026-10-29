@@ -11,9 +11,13 @@ export const FLOCK_FLUID_BLOCK_SLOTS = 1024;
  * once) or straight to the global sum.
  *
  * Slots are claimed with `atomicMin` in a separate phase (the smallest face that
- * hashes to a slot owns it) instead of a compare-exchange hash table. Safari's
- * WebGPU (WebKit, Metal) failed to compile the earlier `atomicCompareExchangeWeak`
- * claim on workgroup memory, and the claim order no longer depends on scheduling.
+ * hashes to a slot owns it) instead of a compare-exchange hash table, so the claim
+ * order no longer depends on scheduling. Shipping Safari's Metal compiler rejected
+ * the earlier block transfer (production 2026-10-29, compiler line truncated). The
+ * old `atomicCompareExchangeWeak` claim on workgroup memory was valid WGSL (WGSL
+ * atomic built-ins allow the workgroup address space) and within the default
+ * limits; its WebKit MSL codegen (`__wgslAtomicCompareExchangeWeak`, since changed
+ * in WebKit trunk) is the most likely cause, a strong inference, not confirmed.
  */
 export function flockFluidBlockTransferWgsl(layout: FlockParticleLayout = 'full64'): string {
   return /* wgsl */ `

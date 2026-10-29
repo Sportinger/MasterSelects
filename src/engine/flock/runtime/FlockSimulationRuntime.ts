@@ -95,7 +95,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
 
   getRenderer(device: GPUDevice): FlockBranchRenderer {
     this.ensureDevice(device);
-    if (!this.renderer) this.renderer = new FlockBranchRenderer(device, getFlockGpuPipelines(device), this.host.renderAssets(device));
+    if (!this.renderer) this.renderer = new FlockBranchRenderer(device, getFlockGpuPipelines(device), this.host.renderAssets(device), () => this.host.requestRender());
     return this.renderer;
   }
 
@@ -371,6 +371,18 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
   }
 
   /**
+   * Explains a null plan from `prepare` for a session gated by its pipelines:
+   * resolves once the verdicts are in and the session may encode, rejects with the
+   * readable message when a required pipeline was rejected. Null when the session
+   * is not waiting on pipelines (the null plan has another cause, see its status).
+   */
+  pipelineHold(clipId: string, consumer: FlockSessionEntry['consumer']): Promise<void> | null {
+    const entry = this.entries.get(`${clipId}|${consumer}`);
+    if (!entry || entry.session.isDisposed || entry.session.pipelineState === 'ready') return null;
+    return awaitFlockPipelines(entry.session);
+  }
+
+  /**
    * A session draws nothing until its pipeline verdicts are in. Pending and failed
    * states are published once per entry (not every frame); a failure stays visible
    * in the flock status and diagnostics and is logged once.
@@ -456,9 +468,16 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
     if (job) job.cancelled = true;
   }
 
+  /**
+   * Returns null only when the clip has no live preview session. A session still
+   * waiting for its pipeline verdicts is sampled once they arrive; a session whose
+   * required pipeline the driver rejected throws the readable failure.
+   */
   async sampleParticles(clipId: string, options: { maxCount: number }): Promise<FlockParticleSample | null> {
     const entry = this.entries.get(`${clipId}|preview`);
-    if (!entry || entry.session.isDisposed || entry.session.pipelineState !== 'ready') return null;
+    if (!entry || entry.session.isDisposed) return null;
+    await awaitFlockPipelines(entry.session);
+    if (entry.session.isDisposed) return null;
     const raw = await entry.session.sampleParticles(options.maxCount);
     const count = raw.length / 16;
     const values: number[] = [];

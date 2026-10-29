@@ -11,11 +11,12 @@
  * missing; the rest of the frame renders, and the failure is reported.
  *
  * The verdict arrives asynchronously. Work encoded with a pipeline before its
- * verdict is known is not protected: on Safari a pass that set a failed pipeline
- * leaves its command encoder locked, the next `beginComputePass` reports
- * "encoder state is invalid", and the whole command buffer is lost. Features that
+ * verdict is known is not protected: by the WebGPU spec a pass that set an invalid
+ * pipeline invalidates its parent encoder when it ends, so the whole command
+ * buffer is lost in every browser. Shipping Safari also leaves the encoder locked,
+ * so its next `beginComputePass` reports "encoder state is invalid". Features that
  * encode right after creating a pipeline must wait for `gpuPipelineSettled`
- * (as the effect pipeline cache and the flock session gate do).
+ * (as the effect pipeline cache, the flock session gate and the flock renderer do).
  */
 import { Logger } from '../../services/logger';
 import {
@@ -124,8 +125,10 @@ export function gpuPipelineSettled(pipeline: object): Promise<PipelineCreationFa
 
 /**
  * Declare that the owner of `pipeline` switches to another implementation when the
- * driver rejects it. The failure is then logged as a warning naming `note`, and no
- * "feature skipped" notice is raised, because the feature still works.
+ * driver rejects it. No "feature skipped" notice is raised, because the feature
+ * still works; the failure is reported once per page session as a non-fatal
+ * "GPU pipeline fallback used" error, so production diagnostics still carry the
+ * condensed driver message that names the failing construct.
  */
 export function markGpuPipelineFallback(pipeline: object, note: string): void {
   fallbacks.set(pipeline, note);
@@ -146,17 +149,46 @@ export function createCheckedPipeline<P extends object>(device: GPUDevice, creat
   let pipeline: P;
   let settled: Promise<PipelineCreationFailure | null>;
   try { pipeline = create(); } finally { settled = popPipelineErrorScopes(device); }
-  const verdict = settled.catch(() => null);
+  const verdict = settled.catch(() => null).then(failure => {
+    // The owner handles the failure itself (it skips or degrades); only a declared
+    // fallback is reported here, because no other path would report it.
+    const fallback = failure ? fallbacks.get(pipeline) : undefined;
+    if (failure && fallback) reportFallback(recordFor('unguarded', pipelineLabel(pipeline), 'compute', failure), fallback);
+    return failure;
+  });
   settledPipelines.set(pipeline, verdict);
   return { pipeline, settled: verdict };
 }
 
+/** Prefix of the non-fatal report; diagnostics triage classifies it as `gpu_pipeline_fallback`. */
+export const GPU_PIPELINE_FALLBACK_MESSAGE = 'GPU pipeline fallback used';
+const reportedFallbacks = new Set<string>();
+
+function pipelineLabel(pipeline: object): string {
+  return (pipeline as { label?: string }).label || '(unlabeled)';
+}
+
+function recordFor(source: string, label: string, stage: 'render' | 'compute', failure: PipelineCreationFailure): GpuPipelineFailureRecord {
+  return { feature: gpuFeatureName(label), label, stage, kind: failure.kind, message: condenseGpuPipelineMessage(failure.message), source };
+}
+
+/**
+ * Once per page session and failure: an ERROR-level log, because only errors
+ * reach the production diagnostics feed. The wording marks it as non-fatal.
+ */
+function reportFallback(record: GpuPipelineFailureRecord, fallback: string): void {
+  const key = `${record.source}|${record.label}|${record.message}`;
+  if (reportedFallbacks.has(key)) return;
+  reportedFallbacks.add(key);
+  log.error(`${GPU_PIPELINE_FALLBACK_MESSAGE}: GPU could not build ${record.feature} (${record.label}, ${record.kind}); ${fallback}. Non-fatal, no feature is skipped`, record);
+}
+
 function report(source: string, pipeline: object, label: string, stage: 'render' | 'compute', failure: PipelineCreationFailure): void {
-  const message = condenseGpuPipelineMessage(failure.message);
-  const record = { feature: gpuFeatureName(label), label, stage, kind: failure.kind, message, source };
+  const record = recordFor(source, label, stage, failure);
+  const { message } = record;
   const fallback = fallbacks.get(pipeline);
   if (fallback) {
-    log.warn(`GPU could not build ${record.feature} (${label}, ${failure.kind}); ${fallback}`, record);
+    reportFallback(record, fallback);
     return;
   }
   if (!records.some(item => item.source === source && item.label === label && item.message === message)) {

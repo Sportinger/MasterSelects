@@ -30,6 +30,7 @@ vi.mock('../../src/engine/flock/runtime/FlockSimulationRuntime', () => ({
       state.prepares(entry.session.step);
       return {};
     }
+    getRenderer() { return { framePipelines: () => [], pathTracePipelines: () => [] }; }
     dispose() {}
   },
 }));

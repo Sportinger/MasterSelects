@@ -62,6 +62,11 @@ export class FlockPointRasterizer {
     done();
   }
 
+  /** Every pipeline this rasterizer can encode, for the renderer's verdict wait. */
+  pipelines(): object[] {
+    return [...Object.values(this.computePipelines), this.pointResolve, this.shadowResolve];
+  }
+
   ensure(key: string, width: number, height: number, count: number): FlockRasterTarget | null {
     const bytes = width * height * 8;
     if (width < 1 || height < 1 || bytes > Math.min(this.device.limits.maxBufferSize, this.device.limits.maxStorageBufferBindingSize)) return null;
