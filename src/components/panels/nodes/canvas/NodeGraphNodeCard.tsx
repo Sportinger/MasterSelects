@@ -205,7 +205,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
             aria-label={`Edit animation for ${node.label}, ${node.animation.channels.length} curves`}
             onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
             onClick={event => { event.stopPropagation(); requestNodeAnimation(node.animation!.clipId, node.workspaceOwner?.localId ?? node.id); if (event.detail > 0) event.currentTarget.blur(); }}>
-            <span>â—‡ Animation Â· {node.animation.channels.length} curves</span>
+            <span>◇ Animation · {node.animation.channels.length} curves</span>
           </button>
         : <NodeAnimationBadge node={node.workspaceOwner ? { ...node, id: node.workspaceOwner.localId } : node} top={getNodePortStartY(node) - 78} />)}
       {!canvasRendered && nodeBadges.length > 0 && (

@@ -1,5 +1,6 @@
 import { clipWorkspaceAddActions, runWorkspaceAdd } from './clipWorkspaceAddActions';
-import { nodeInspectorStartsOpen } from '../workspace/nodeInspectorDefault';
+import { NodeInspectorCommand, NodeInspectorDrawer } from '../workspace/NodeInspectorDrawer';
+import { setNodeInspectorOpen } from '../workspace/nodeInspectorVisibility';
 import { SceneOutputNavigation } from '../workspace/SceneOutputNavigation';
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { transferNodeGroup } from '../../../../services/nodeGraph/transferNodeGroup';
@@ -76,12 +77,12 @@ function batched(label: string, run: () => void): void {
   }
 }
 
-export function useClipWorkspaceController(clipId: string, panelId: string) {
+/** `inspectorPanelId` is the Nodes panel that shows this graph; its sidebar state is shared by all views in it. */
+export function useClipWorkspaceController(clipId: string, panelId: string, inspectorPanelId = panelId) {
   const data: NodeWorkspacePanelData = { nodeClipId: clipId };
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [animationInspector, setAnimationInspector] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(nodeInspectorStartsOpen);
   const [viewTheme, setViewTheme] = useState<NodeGraphViewTheme>('general');
   const pinnedClipId = typeof data?.nodeClipId === 'string' && data.nodeClipId ? data.nodeClipId : null;
   const subject = useNodeGraphSubject(viewTheme, pinnedClipId);
@@ -181,8 +182,11 @@ export function useClipWorkspaceController(clipId: string, panelId: string) {
       setPresetsOpen(false);
       setAnimationInspector(request.animation === true);
       setSelection({ graphId, nodeId: request.nodeId, nodeIds: [] });
+      // The animation editor lives in the sidebar: asking for it (a node's animation badge) opens it.
+      // Plain navigation to a node only selects and frames it.
+      if (request.animation === true) setNodeInspectorOpen(inspectorPanelId, true);
     }
-  }, [selectClip, subject?.id, subject?.selectedClip.id, graphId]);
+  }, [selectClip, subject?.id, subject?.selectedClip.id, graphId, inspectorPanelId]);
   useNodeWorkspaceViewRequests(handleViewRequest, panelId, pinnedClipId);
 
   const startInspectorResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
@@ -334,10 +338,11 @@ export function useClipWorkspaceController(clipId: string, panelId: string) {
               </>
             )}
           </nav>
-          <button type="button" className="node-workspace-breadcrumb-link node-catalog-toggle" aria-pressed={catalogOpen}
-            onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setPresetsOpen(false); setCatalogOpen(open => !open); }}>Catalog</button>
-          <button type="button" className="node-workspace-breadcrumb-link" aria-pressed={presetsOpen}
-            onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setCatalogOpen(false); setPresetsOpen(open => !open); }}>Effect presets</button>
+          {/* Catalog and Effect presets are explicit commands: they show in the sidebar, opening it if needed. */}
+          <NodeInspectorCommand panelId={inspectorPanelId} className="node-workspace-breadcrumb-link node-catalog-toggle" active={catalogOpen}
+            onShow={() => { setPresetsOpen(false); setCatalogOpen(true); }} onHide={() => setCatalogOpen(false)}>Catalog</NodeInspectorCommand>
+          <NodeInspectorCommand panelId={inspectorPanelId} className="node-workspace-breadcrumb-link" active={presetsOpen}
+            onShow={() => { setCatalogOpen(false); setPresetsOpen(true); }} onHide={() => setPresetsOpen(false)}>Effect presets</NodeInspectorCommand>
           <button type="button" disabled={keyframesLocked} className="node-workspace-breadcrumb-link" onClick={event => {
             if (event.detail > 0) event.currentTarget.blur();
             setCatalogOpen(false);
@@ -428,14 +433,8 @@ export function useClipWorkspaceController(clipId: string, panelId: string) {
           onSetAllGroupsCollapsed={unified.setAllGroupsCollapsed}
           layoutScaleX={adapter.layoutScaleX}
         />),
-    inspector: (<>
-      <button type="button" className="node-workspace-inspector-handle"
-        aria-expanded={inspectorOpen} aria-label={inspectorOpen ? 'Hide node inspector' : 'Show node inspector'}
-        title={inspectorOpen ? 'Hide inspector' : 'Show inspector'}
-        onClick={event => { setInspectorOpen(open => !open); if (event.detail > 0) event.currentTarget.blur(); }}>
-        {inspectorOpen ? '›' : '‹'}
-      </button>
-      {inspectorOpen && (presetsOpen ? <EffectPresetLibrary clipId={subject.id} effect={presetEffect} width={inspectorWidth}
+    inspector: (<NodeInspectorDrawer panelId={inspectorPanelId}>
+      {presetsOpen ? <EffectPresetLibrary clipId={subject.id} effect={presetEffect} width={inspectorWidth}
         locked={keyframesLocked || subject.clip.source?.type === 'audio'} onSelectNode={selectNode} /> : catalogOpen ? <NodeCatalog width={inspectorWidth} /> : <NodeInspector
         node={selectedNode}
         showAnimation={animationInspector && isCurrentGraphSelection}
@@ -447,8 +446,8 @@ export function useClipWorkspaceController(clipId: string, panelId: string) {
         onStartResizeInspector={startInspectorResize}
         showClipActions={activeTheme === 'general'}
         flockActions={subject.clip.flock ? flockActions : undefined}
-      />)}
-    </>),
+      />}
+    </NodeInspectorDrawer>),
     menus: (<>
       {connectionMenu?.graphId === subject.graph.id && <ConnectedNodeMenu clip={subject.clip} graph={subject.graph} drop={connectionMenu.drop}
         onClose={() => setConnectionMenu(null)} onAdded={selectNode} />}

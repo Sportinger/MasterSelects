@@ -24,6 +24,16 @@ During construction, flow-layout groups arrange unconnected nodes side by side i
 
 The narrow handle beside the right inspector hides or restores it, giving the graph the full panel width. Pointer interaction does not leave a blue focus ring on editor controls; keyboard Tab navigation still shows focus.
 
+Whether the inspector is shown belongs to the Nodes panel, not to the selection. Clicking nodes, clips, strip segments or transitions, picking a clip in the timeline, opening a clip's lane, double-clicking a node and following a link from Properties to a driving node all leave a hidden inspector hidden. Its content still follows the selection, so showing it again presents the current pick. The composition view and every clip graph of a panel share this state. It survives switching panels and reloading, with one value per Nodes panel. Only explicit commands open the inspector:
+
+- the handle,
+- **Catalog** and **Effect presets**, which show their content in the inspector,
+- a node's **Animation** badge or **Edit transform curves**, which open the animation editor there.
+
+On a phone the inspector is an overlay drawer and starts closed, independently of the desktop value.
+
+Showing and hiding the inspector slides it in or out in 200 ms with an ease-out curve. While it moves it lies over the canvas, and only its transform animates. The canvas changes size once per toggle, in the strip the inspector covers, so no per-frame canvas reallocation causes stutter or flicker (see [Linux/Mesa GPU](./Linux-Mesa-GPU.md)). A toggle in mid-slide reverses from the current position. With reduced motion enabled, the inspector switches immediately.
+
 Dragging a node parameter's value moves it by at most one parameter step per pixel (Shift ×10, Ctrl ×0.1). A value far smaller than its allowed range stays controllable: Yarn Profile's Radius of 0.03, allowed from 0 to 10, grows by 0.001 per pixel instead of jumping to about 0.3 on a short drag.
 
 Gaussian splat clips expose their scene nodes here. The **Splat Exploration** effect adds

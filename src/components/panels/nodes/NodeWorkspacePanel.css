@@ -114,6 +114,14 @@
 
 .node-workspace-inspector-handle:hover { color: var(--text-primary); background: var(--bg-hover); }
 
+/* While the inspector slides (nodeInspectorSlide.ts) it lies over the canvas and only transforms
+   animate, so the canvas is resized once per toggle instead of on every frame. */
+.node-workspace-panel[data-node-inspector-sliding] { position: relative; overflow: clip; }
+.node-workspace-panel > .node-workspace-inspector[data-node-inspector-sliding] {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; will-change: transform;
+}
+.node-workspace-panel[data-node-inspector-sliding] > .node-workspace-inspector-handle { z-index: 21; will-change: transform; }
+
 .node-workspace-grid {
   position: absolute;
   inset: -32px;

@@ -15,7 +15,7 @@ import { NodeGraphCanvas } from './NodeGraphCanvas';
 import { ACTIVE_NODE_SOURCE, NodeWorkspaceSourceSelect, TIMELINE_NODE_SOURCE, nodeViewSource } from './workspace/NodeWorkspaceSourceSelect';
 import { NodeViewLockButton } from './workspace/NodeViewLockButton';
 import { NodeCatalog } from './workspace/NodeCatalog';
-import { nodeInspectorStartsOpen } from './workspace/nodeInspectorDefault';
+import { NodeInspectorCommand, NodeInspectorDrawer } from './workspace/NodeInspectorDrawer';
 import { CompositionBreadcrumb } from './composition/CompositionBreadcrumb';
 import { CompositionNodeInspector } from './composition/CompositionNodeInspector';
 import { useCompositionGraphSubject } from './composition/useCompositionGraphSubject';
@@ -59,7 +59,6 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   const [activeClip, setActiveClip] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ graphId: string; ids: string[] } | null>(null);
   const [message, setMessage] = useState('');
-  const [inspectorOpen, setInspectorOpen] = useState(nodeInspectorStartsOpen);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [compositionMenu, setCompositionMenu] = useState<{ x: number; y: number } | null>(null);
   const [focusGroup, setFocusGroup] = useState<{ id: string; nonce: number }>();
@@ -225,8 +224,8 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
         <div className="node-workspace-view-bar"><NodeViewLockButton locked={locked}
           onChange={lock => setSource(lock ? rootOwner ?? TIMELINE_NODE_SOURCE : ACTIVE_NODE_SOURCE)} />
           <NodeWorkspaceSourceSelect clipId={source} onChange={setSource} />
-          {!embeddedSelection && <><span className="node-workspace-view-context">Composition</span><button type="button" className="node-workspace-toolbar-button"
-            onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setCatalogOpen(value => !value); }}>Catalog</button></>}
+          {!embeddedSelection && <><span className="node-workspace-view-context">Composition</span><NodeInspectorCommand panelId={panelId}
+            className="node-workspace-toolbar-button" active={catalogOpen} onShow={() => setCatalogOpen(true)} onHide={() => setCatalogOpen(false)}>Catalog</NodeInspectorCommand></>}
         </div>
         {embeddedSelection && currentController?.toolbar}
         {message && <div className="node-workspace-graph-message" role="status">{message}</div>}
@@ -262,11 +261,9 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
               } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
             }} />}
       </div>
-      {embeddedSelection && currentController ? currentController.inspector : <>
-        <button type="button" className="node-workspace-inspector-handle" aria-expanded={inspectorOpen} aria-label={inspectorOpen ? 'Hide node inspector' : 'Show node inspector'}
-          onClick={event => { if (event.detail > 0) event.currentTarget.blur(); setInspectorOpen(value => !value); }}>{inspectorOpen ? '›' : '‹'}</button>
-        {inspectorOpen && (catalogOpen ? <NodeCatalog width={300} /> : <CompositionNodeInspector node={selectedNode} clipIds={[...selectedClips]} onOpen={open} />)}
-      </>}
+      {embeddedSelection && currentController ? currentController.inspector : <NodeInspectorDrawer panelId={panelId}>
+        {catalogOpen ? <NodeCatalog width={300} /> : <CompositionNodeInspector node={selectedNode} clipIds={[...selectedClips]} onOpen={open} />}
+      </NodeInspectorDrawer>}
       <WorkspaceControllerMenus controllers={controllers} />
       {compositionMenu && <WorkspaceContextMenu {...compositionMenu} ownerName={`Composition: ${composition.graph.owner.name}`}
         targetNode={null} canDeleteTarget={false} onDeleteNode={() => {}} onClose={() => setCompositionMenu(null)}

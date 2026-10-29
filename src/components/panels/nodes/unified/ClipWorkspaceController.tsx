@@ -18,7 +18,7 @@ export const ClipWorkspaceController = memo(function ClipWorkspaceController({ c
   clipId: string; panelId: string; inline: boolean;
   onChange: (clipId: string, controller: ClipWorkspaceControllerValue | null) => void;
 }) {
-  const controller = useClipWorkspaceController(clipId, inline ? `${panelId}:inline:${clipId}` : panelId);
+  const controller = useClipWorkspaceController(clipId, inline ? `${panelId}:inline:${clipId}` : panelId, panelId);
   const { aspectRatio } = useNodePreviewPreferences(clipId);
   const source = (controller?.canvas.props as NodeGraphCanvasProps | undefined)?.graph;
   const clip = controller?.subject.clip;
