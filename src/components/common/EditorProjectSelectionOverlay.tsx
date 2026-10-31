@@ -26,6 +26,7 @@ import {
 } from '../../services/projectSync';
 import { getProjectWriteSupportError, resolveProjectRootMode } from '../../services/project/core/projectRootAccess';
 import { isBrowserStorageFallbackActive } from '../../services/project/core/browserStorageRoot';
+import { TemporaryStorageNotice } from './TemporaryStorageNotice';
 import { orderRecentProjectsForChoice, recentProjectLocation } from '../../services/project/recentProjectLocation';
 import { describeBrowserStorageFailure } from '../../services/project/core/browserStorageFailure';
 import { isExpectedArchiveImportRejection } from '../../services/project/projectBackendAvailability';
@@ -280,6 +281,7 @@ export function EditorProjectSelectionOverlay({
           <div className="editor-project-intro">
             <h1 id="editor-project-heading">Choose project</h1>
           </div>
+          <TemporaryStorageNotice className="editor-project-error editor-project-storage-notice" />
 
           {isNamingProject ? (
             <form className="editor-project-name-form" onSubmit={handleCreateProject}>

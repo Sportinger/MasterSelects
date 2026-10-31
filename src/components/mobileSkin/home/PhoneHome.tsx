@@ -23,6 +23,7 @@ import { PhoneIcon } from '../shell/phoneIcons';
 import { PHONE_HOME_TEST_IDS, TEMPLATES_NOTE } from './phoneHomeTestIds';
 import { dismissPhoneWelcome, usePhoneWelcomeDue } from './phoneWelcome';
 import './PhoneHome.css';
+import { TemporaryStorageNotice } from '../../common/TemporaryStorageNotice';
 
 const log = Logger.create('PhoneHome');
 const FORMAT_IDS = Object.keys(PHONE_PROJECT_FORMATS) as PhoneProjectFormatId[];
@@ -154,6 +155,7 @@ export function PhoneHome({ onClose, showBack = false }: PhoneHomeProps = {}) {
           ) : null}
         </header>
 
+        <TemporaryStorageNotice className="phone-home__error phone-home__storage-notice" />
         {error ? <p className="phone-home__error" role="alert">{error}</p> : null}
         {note ? <p className="phone-home__note" role="status">{note}</p> : null}
 

@@ -8,8 +8,8 @@
 
 import { Logger } from '../../logger';
 import { RepositoryError } from '../repository/contracts';
-import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isBrowserStorageUnavailableError } from './browserStorageFailure';
-import { isBrowserStorageFallbackActive, getBrowserStorageRoot } from './browserStorageRoot';
+import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isBrowserStorageUnavailableError, retryTransientStorage } from './browserStorageFailure';
+import { isBrowserStorageFallbackActive, getBrowserStorageRoot, isBrowserProjectStorageAvailable } from './browserStorageRoot';
 
 const log = Logger.create('ProjectRootAccess');
 
@@ -60,7 +60,7 @@ export function isBrowserStorageProjectRootForced(): boolean {
  * opening and saving keep following each project's own location, so folder projects keep opening.
  */
 export async function withBrowserStorageProjectRoot<T>(create: () => Promise<T>): Promise<T> {
-  if (!isOpfsAvailable() && !isBrowserStorageFallbackActive()) {
+  if (!isBrowserProjectStorageAvailable() && !isBrowserStorageFallbackActive()) {
     throw new RepositoryError('unsupported', BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
   }
   browserStorageScopes += 1;
@@ -75,7 +75,8 @@ export async function withBrowserStorageProjectRoot<T>(create: () => Promise<T>)
 export function resolveProjectRootMode(): ProjectRootMode {
   if (browserStorageScopes > 0) return 'opfs';
   if (isFsaPickerAvailable()) return 'fsa';
-  if (isOpfsAvailable()) return 'opfs';
+  // Without OPFS the temporary IndexedDB store is the last resort; the editor says so (see browserStorageRoot).
+  if (isBrowserProjectStorageAvailable()) return 'opfs';
   return 'none';
 }
 
@@ -200,10 +201,14 @@ export async function listProjectFolderNames(root: FileSystemDirectoryHandle): P
   const names: string[] = [];
 
   try {
-    for await (const entry of (root as IterableDirectoryHandle).values()) {
-      if (entry.kind === 'directory' && !INTERNAL_STORAGE_FOLDERS.has(entry.name)) folders.push(entry);
-    }
-    for (const folder of folders) if (await isProjectFolder(folder)) names.push(folder.name);
+    // Read-only, so safe to repeat: WebKit fails a listing now and then while its storage process resumes.
+    await retryTransientStorage(async () => {
+      folders.length = 0; names.length = 0;
+      for await (const entry of (root as IterableDirectoryHandle).values()) {
+        if (entry.kind === 'directory' && !INTERNAL_STORAGE_FOLDERS.has(entry.name)) folders.push(entry);
+      }
+      for (const folder of folders) if (await isProjectFolder(folder)) names.push(folder.name);
+    }, 'Listing project folders');
   } catch (error) {
     log.error('Failed to list project folders', error);
     throw error;

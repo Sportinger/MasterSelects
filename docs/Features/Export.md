@@ -71,6 +71,14 @@ soft glows and thin strands are therefore not multiplied by their coverage a
 second time. Stacked-alpha output keeps its separate coverage plane, and image or
 native-alpha consumers retain their existing readback contract.
 
+### Cancelling while a frame decodes
+
+Cancel can arrive while a FAST frame is still waiting for the decoder (for example
+during a decode-window restart). Teardown then removes the decoder and the waiting
+frame fails ("FAST export decoder missing during waitForBufferedTarget"). Once the
+export was cancelled, such a failure ends the run as cancelled, with an info log,
+not as an export error.
+
 ### Audio export cancellation
 
 Cancelling while the browser audio encoder flushes returns a cancelled run without
@@ -127,6 +135,10 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
   Failures remain logged. If every source is unavailable, export still fails explicitly;
   this cannot reconstruct missing or revoked media. Clips sharing a source reuse one
   preparation read per export run.
+- A source file that changed on disk after it was imported (still being copied or written,
+  replaced, re-encoded) cannot be read any more: Chromium refuses even its first bytes
+  (`NotReadableError`). FAST export then says so and asks to import or relink the file,
+  instead of "Try PRECISE mode", which reads the same file and fails the same way.
 - Sources of 512 MB and more are read on demand instead of whole. Chromium cannot read a
   file of several GB into one ArrayBuffer (`NotReadableError`); a 4.5 GB phone recording
   used to stop FAST export with "Could not load file data". FAST export reads only the

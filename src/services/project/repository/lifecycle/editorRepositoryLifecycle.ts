@@ -178,7 +178,9 @@ export async function ensureEditorScratchRepository(): Promise<void> {
 }
 async function scratchPrepare(): Promise<PreparedRepository> {
   const unsupported = () => new RepositoryError('unsupported', 'Browser recovery is unavailable. Update your browser before creating or editing projects.');
-  if (typeof navigator.storage?.getDirectory !== 'function') throw unsupported();
+  // OPFS, or the temporary IndexedDB store as last resort on browsers without it.
+  const { isBrowserProjectStorageAvailable } = await import('../../core/browserStorageRoot');
+  if (!isBrowserProjectStorageAvailable()) throw unsupported();
   const { backendForLocation, prepareNewRepository, prepareRepositoryOpen } = await import('./repositoryLocations');
   const location = { kind: 'opfs' as const, path: 'repository-scratch/' + repositoryWorkspaceId };
   // OPFS without writable streams stays read-only; the IndexedDB fallback can always write.

@@ -13,7 +13,11 @@ import { isMobileAppleWebKit } from '../../../utils/mobileAppleWebKit';
 const log = Logger.create('BrowserStorage');
 
 const UNKNOWN_STORAGE_MESSAGE = /unknown transient reason/i;
-const RETRY_DELAY_MS = 200;
+/**
+ * Pauses before each new attempt. WebKit's storage process can take more than a second to resume; giving
+ * up early sends the person to the temporary fallback store, which must stay a last resort.
+ */
+const RETRY_DELAYS_MS = [200, 600, 1500];
 
 export const BROWSER_STORAGE_UNAVAILABLE_MESSAGE = 'This browser could not open its project storage. '
   + 'Private Browsing, in-app browsers, and low device storage can block it: open MasterSelects in a regular '
@@ -47,18 +51,20 @@ function isRetryableStorageError(error: unknown): boolean {
 }
 
 /**
- * Runs a storage operation and repeats it once after a short pause when WebKit
- * reports a transient failure. Callers pass only operations that are safe to
- * repeat (acquisition, or idempotent open-or-create flows).
+ * Runs a storage operation and repeats it after growing pauses (up to three more times) when WebKit
+ * reports a transient failure. Callers pass only operations that are safe to repeat (acquisition,
+ * reads, or idempotent open-or-create flows).
  */
 export async function retryTransientStorage<T>(operation: () => Promise<T>, context: string): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (!isRetryableStorageError(error)) throw error;
-    log.warn(`${context}: transient browser-storage failure, retrying once`, error);
-    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-    return operation();
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const delay = RETRY_DELAYS_MS[attempt];
+      if (delay === undefined || !isRetryableStorageError(error)) throw error;
+      log.warn(`${context}: transient browser-storage failure, retrying (${attempt + 1}/${RETRY_DELAYS_MS.length})`, error);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
 }
 

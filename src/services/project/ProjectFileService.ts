@@ -15,7 +15,7 @@ import { ProxyStorageService, type ProxyFrameScanProgressCallback, type ProxyFra
 import { RawMediaService } from './domains/RawMediaService';
 import { PROJECT_FOLDERS } from './core/constants';
 import { ProjectBackendUnavailableError, selectOpenProjectRoute, type OpenProjectRoute } from './projectBackendAvailability';
-import { isOpfsAvailable } from './core/projectRootAccess';
+import { isBrowserProjectStorageAvailable } from './core/browserStorageRoot';
 import {
   getFsaProjectPackageSession,
   getNativeProjectPackageSession,
@@ -275,7 +275,7 @@ class ProjectFileService {
   /** Without a folder picker or Native Helper, Open Project lists browser-stored projects instead. */
   async resolveOpenProjectRoute(): Promise<OpenProjectRoute> {
     return selectOpenProjectRoute({ folderPicker: this.backends.backend === 'fsa' && this.isFsaAvailable,
-      nativeHelper: async () => Boolean(await this.backends.selectReadyNative()), browserStorage: isOpfsAvailable() });
+      nativeHelper: async () => Boolean(await this.backends.selectReadyNative()), browserStorage: isBrowserProjectStorageAvailable() });
   }
 
   getRecentProjects(): RecentProjectEntry[] {

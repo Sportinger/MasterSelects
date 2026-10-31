@@ -4,6 +4,7 @@ import type { MediaFile } from '../../../stores/mediaStore/types';
 import type { WebCodecsPlayer } from '../../WebCodecsPlayer';
 import { StreamedMp4UnsupportedError } from '../../webcodecs/fileSampleData';
 import { type ClipFileDataCache, loadClipFileDataCached, resolveReadableClipExportFile } from './sourceResolution';
+import { isChangedSourceFailure } from './changedSourceFailure';
 import { describeFastUnsupportedContainer, fastUnsupportedContainerMessage } from './fastSourceContainer';
 
 const log = Logger.create('ClipPreparation');
@@ -42,7 +43,8 @@ export async function loadFastExportSource(
   mediaFile: MediaFile | null | undefined,
   fileDataCache: ClipFileDataCache,
 ): Promise<void> {
-  const source = await resolveReadableClipExportFile(clip, mediaFile);
+  const accessFailures: unknown[] = [];
+  const source = await resolveReadableClipExportFile(clip, mediaFile, accessFailures);
   if (source) refuseUnsupportedContainer(clip, source.header);
   let onDemandFailure = '';
   if (source && source.file.size >= FAST_EXPORT_ON_DEMAND_MIN_BYTES) {
@@ -66,6 +68,11 @@ export async function loadFastExportSource(
   const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
   endLoad();
   if (!fileData) {
+    if (!source && isChangedSourceFailure(accessFailures)) {
+      // PRECISE export reads the same file and would fail the same way, so it is no advice here.
+      throw new Error(`FAST export failed: the source file of clip "${clip.name}" changed on disk or became unreadable `
+        + 'after it was imported (for example it was still being copied, or it was replaced). Import it again or relink it, then export.');
+    }
     const details = source ? ` (${formatSize(source.file.size)}${onDemandFailure ? `; ${onDemandFailure}` : ''})` : '';
     throw new Error(`FAST export failed: Could not load file data for clip "${clip.name}"${details}. Try PRECISE mode instead.`);
   }

@@ -149,6 +149,12 @@ export class FrameExporter {
     try {
       return await this.exportAttempt(onProgress, state);
     } catch (error) {
+      if (this.isCancelled) {
+        // A frame still decoding when the export was cancelled fails once teardown removed its decoder
+        // ("FAST export decoder missing during waitForBufferedTarget"); that is the cancel, not a failure.
+        log.info('Export cancelled while a frame was still in progress', { reason: error instanceof Error ? error.message : String(error) });
+        return null;
+      }
       log.error('Export error:', error);
       throw error;
     } finally {

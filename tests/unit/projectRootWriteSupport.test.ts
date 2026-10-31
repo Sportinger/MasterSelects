@@ -42,14 +42,15 @@ it.each(['AbortError', 'UnknownError'])('recovers an OPFS root after transient %
   expect(getDirectory).toHaveBeenCalledTimes(2);
 });
 
-it('bounds OPFS recovery and preserves permission errors without retrying them', async () => {
+it('bounds OPFS recovery and preserves permission errors without retrying them', { timeout: 15_000 }, async () => {
   const unavailable = new DOMException('Unavailable', 'UnknownError');
   const getDirectory = vi.fn().mockRejectedValue(unavailable);
   vi.stubGlobal('navigator', { storage: { getDirectory } });
   // Persistent WebKit UnknownError is environment storage loss: explain it instead of rethrowing opaque text.
   await expect(acquireProjectRoot('opfs', { throwOnFailure: true })).rejects.toMatchObject({
     name: 'RepositoryError', code: 'unsupported', message: BROWSER_STORAGE_UNAVAILABLE_MESSAGE, cause: unavailable });
-  expect(getDirectory).toHaveBeenCalledTimes(2);
+  // Bounded: the first attempt plus three retries after growing pauses, then the explanation.
+  expect(getDirectory).toHaveBeenCalledTimes(4);
   getDirectory.mockClear().mockRejectedValue(new DOMException('Denied', 'SecurityError'));
   await expect(acquireProjectRoot('opfs', { throwOnFailure: true })).rejects.toMatchObject({ name: 'SecurityError' });
   expect(getDirectory).toHaveBeenCalledOnce();

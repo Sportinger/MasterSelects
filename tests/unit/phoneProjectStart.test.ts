@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../src/services/project/core/browserStorageRoot', () => ({
   isBrowserStorageFallbackActive: () => false,
   getBrowserStorageRoot: vi.fn(),
+  // OPFS, or IndexedDB for the temporary last-resort store.
+  isBrowserProjectStorageAvailable: () => typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function',
 }));
 
 import {
