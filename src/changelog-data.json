@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-31",
+    "type": "fix",
+    "title": "MasterSelects 3.4.3",
+    "description": "If a project's folder is deleted or moved while the project is open, the save status now says \"Project files missing\" and opens Save As, which keeps your current work, including edits made after the loss, in a new project. Before, Save As failed and the editor was left without a project. A waveform that cannot be saved is no longer retried with every edit, a failed export or a stopped video bake no longer blocks later exports and a refused export says which export still runs, an export that stops after a graphics reset names the real encoder error, and a media file removed while it imports is no longer reported as an error.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-29",
     "type": "improve",
     "title": "MasterSelects 3.4.2",
