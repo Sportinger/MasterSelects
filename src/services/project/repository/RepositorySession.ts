@@ -102,4 +102,12 @@ export class RepositorySession {
     if (this.closed) return;
     await this.coordinator.handoff(async () => { try { await this.storage.close(); } finally { this.closed = true; openSessions.delete(this); } });
   }
+  /**
+   * Ends a session whose files are gone without the final save `close` needs: that save can only fail.
+   * Used after its content was carried into a new repository (Save As of a project whose folder vanished).
+   */
+  async abandon(): Promise<void> {
+    if (this.closed) return;
+    try { await this.storage.close(); } finally { this.closed = true; openSessions.delete(this); }
+  }
 }

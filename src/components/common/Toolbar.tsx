@@ -438,7 +438,7 @@ export function Toolbar({
 
       <div className="toolbar-section toolbar-right">
         <ToolbarSavePermanently status={permanentSave} onOpen={() => setShowSavePermanently(true)} />
-        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} onExportArchive={() => setShowSavePermanently(true)} />
+        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} onSaveAs={projectActions.handleSaveAs} onExportArchive={() => setShowSavePermanently(true)} />
         <ToolbarWriteAccess />
         <ToolbarFolderAccess />
         {(capturePhase === 'recording' || capturePhase === 'paused' || capturePhase === 'stopping') && (

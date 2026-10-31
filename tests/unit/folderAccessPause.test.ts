@@ -34,6 +34,8 @@ describe('folder access loss detection', () => {
     expect(toRepositoryError(new DOMException('no', 'NotAllowedError')).code).toBe('access');
     expect(toRepositoryError(new DOMException('no', 'SecurityError')).code).toBe('access');
     expect(toRepositoryError(new DOMException('full', 'QuotaExceededError')).code).toBe('quota');
+    // Files deleted or moved on disk while the project was open.
+    expect(toRepositoryError(new DOMException('gone', 'NotFoundError')).code).toBe('missing');
     expect(toRepositoryError(new Error('boom')).code).toBe('io');
     const original = new RepositoryError('conflict', 'kept');
     expect(toRepositoryError(original)).toBe(original);

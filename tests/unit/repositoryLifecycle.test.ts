@@ -121,6 +121,51 @@ describe('repository lifecycle handoff', () => {
   });
 });
 
+describe('switching away from a project whose files are gone', () => {
+  function vanishedSession(id: string) {
+    const session = fakeSession(id);
+    const handoff = vi.fn(async () => { throw new Error('A requested file or directory could not be found'); });
+    return Object.assign(session, {
+      coordinator: { ...session.coordinator, handoff },
+      abandon: vi.fn(async () => {}),
+    }) as RepositorySession & { abandon: ReturnType<typeof vi.fn> };
+  }
+
+  it('switches without the final save of the old session and ends it without saving', async () => {
+    const first = vanishedSession('first'), second = fakeSession('second');
+    vi.spyOn(RepositorySession, 'open').mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const activated: string[] = [];
+    const lifecycle = new RepositoryLifecycle({
+      async beforeReceipt() { throw new Error('views cannot be written'); },
+      async barrier() { return { release() {} }; },
+      async activate(session) { activated.push(session.descriptor.repositoryId); }, install() {},
+    });
+    await lifecycle.open(prepared('first'));
+    await lifecycle.open(prepared('second'), 'create', { abandonPrevious: true });
+    expect(lifecycle.getSession()).toBe(second);
+    expect(activated).toEqual(['first', 'second']);
+    expect(first.coordinator.handoff).not.toHaveBeenCalled();
+    expect(first.abandon).toHaveBeenCalledOnce();
+    expect(first.close).not.toHaveBeenCalled();
+    expect(lifecycle.getState().error).toBeNull();
+  });
+
+  it('keeps the old session and the editor state when the rescue switch fails', async () => {
+    const first = vanishedSession('first');
+    vi.spyOn(RepositorySession, 'open').mockResolvedValueOnce(first).mockRejectedValueOnce(new Error('target unavailable'));
+    const activated: string[] = [];
+    const lifecycle = new RepositoryLifecycle({ async barrier() { return { release() {} }; },
+      async activate(session) { activated.push(session.descriptor.repositoryId); }, install() {},
+    });
+    await lifecycle.open(prepared('first'));
+    await expect(lifecycle.open(prepared('second'), 'create', { abandonPrevious: true })).rejects.toThrow('target unavailable');
+    // Re-reading the vanished project would fail and drop it; the content on screen stays for another try.
+    expect(lifecycle.getSession()).toBe(first);
+    expect(activated).toEqual(['first']);
+    expect(first.abandon).not.toHaveBeenCalled();
+  });
+});
+
 
 describe('failed or cancelled project preparation', () => {
   const lifecycleWithPhases = (phases: string[]) => new RepositoryLifecycle({ async barrier() { return { release() {} }; },

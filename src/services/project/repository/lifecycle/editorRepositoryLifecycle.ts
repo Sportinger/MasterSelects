@@ -6,7 +6,7 @@ import type { MediaState } from '../../../../stores/mediaStore/types';
 import type { TimelineStore } from '../../../../stores/timeline/types';
 import { scheduleMediaSourceArtifactProjectionForClips } from '../../../mediaArtifacts/mediaSourceArtifacts';
 import { setProjectLoadProgress, completeProjectLoadProgress, failProjectLoadProgress } from '../../load/loadProgress';
-import { editorRepositoryLifecycle as createLifecycle, isSupersededScratchOpen, type PreparedRepository, type PrepareRepository, type RepositoryOpenKind } from './RepositoryLifecycle';
+import { editorRepositoryLifecycle as createLifecycle, isSupersededScratchOpen, type PreparedRepository, type PrepareRepository, type RepositoryOpenKind, type RepositoryOpenOptions } from './RepositoryLifecycle';
 import { startProjectLoadMeasurement } from '../../load/projectLoadTelemetry';
 import { Logger } from '../../../logger';
 import { activateRepositoryProjection } from '../transaction/editorProjectionActivation';
@@ -133,11 +133,11 @@ export function getActiveRepositoryDirectory(): FileSystemDirectoryHandle | null
 export function getActiveRepositorySession(): RepositorySession | null { return lifecycle.getSession(); }
 export function subscribeRepositoryLifecycle(listener: () => void): () => void { return lifecycle.subscribe(listener); }
 export const getRepositoryLifecycleState = () => lifecycle.getState();
-export async function openEditorRepository(prepare: PrepareRepository, kind: RepositoryOpenKind = 'open', signal?: AbortSignal): Promise<RepositorySession> {
+export async function openEditorRepository(prepare: PrepareRepository, kind: RepositoryOpenKind = 'open', signal?: AbortSignal, options: RepositoryOpenOptions = {}): Promise<RepositorySession> {
   // Copies still running into the current project are recorded there first, never dropped by the switch
   // (unless the person continues without them); `signal` (the caller's Cancel) also ends that wait.
   await finishProjectMediaCopiesBeforeSwitch(signal);
-  try { const session = await lifecycle.open(prepare, kind); scratchSuperseded = false; return session; }
+  try { const session = await lifecycle.open(prepare, kind, options); scratchSuperseded = false; return session; }
   catch (error) {
     // The open cancelled the scratch workspace and then failed itself: edits made now need it again.
     if (scratchSuperseded && !lifecycle.getSession()) {

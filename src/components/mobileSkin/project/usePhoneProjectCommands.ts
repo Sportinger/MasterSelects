@@ -26,6 +26,8 @@ import { isBrowserStorageFallbackActive } from '../../../services/project/core/b
 import { getProjectWriteSupportError } from '../../../services/project/core/projectRootAccess';
 import { isExpectedArchiveImportRejection } from '../../../services/project/projectBackendAvailability';
 import { recentProjectLocation } from '../../../services/project/recentProjectLocation';
+import { getActiveRepositorySession } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
+import { isRepositoryLocationGone } from '../../../services/project/repository/lifecycle/repositoryProjectOperations';
 
 const log = Logger.create('PhoneProjectCommands');
 
@@ -173,7 +175,10 @@ export async function duplicatePhoneProject(name: string): Promise<PhoneActionRe
   try {
     const stored = await projectFileService.listStoredProjects().catch(() => [] as string[]);
     if (stored.includes(trimmed)) return fail(`A project named "${trimmed}" already exists.`);
-    if (!await saveCurrentProject({ source: 'manual' })) {
+    // An original whose files were deleted cannot be saved first; the copy then keeps the work on screen.
+    const session = getActiveRepositorySession();
+    const originalGone = session ? await isRepositoryLocationGone(session) : false;
+    if (!originalGone && !await saveCurrentProject({ source: 'manual' })) {
       return fail('The original could not be saved first, so no copy was made.');
     }
     // The copy stays in browser storage like every phone project; no folder dialog.

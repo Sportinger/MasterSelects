@@ -371,6 +371,34 @@ not as a failure or a missing file:
   never empty, so a later retry finishes that file instead of failing with a
   conflict.
 
+### Project files deleted while a project is open
+
+A project folder that is deleted or moved on disk (or a browser project whose
+storage was cleared) while it is open cannot be saved again; retrying cannot
+bring the files back. The editor keeps the work on screen and offers to save it
+elsewhere:
+
+- **Detection.** The storage worker reports `NotFoundError` with the repository
+  code `missing`. The save status then reads **Project files missing**, its
+  tooltip says what happened, and a click opens **Save As** instead of a retry.
+  The phone status reads **Files missing** and points to Duplicate.
+- **Save As keeps the current state.** When the open project's folder or
+  `project.msrepo.json` is gone, Save As (and the phone's Duplicate) does not
+  copy the vanished repository with its history. It creates the new project from
+  the editor's current state, edits after the loss included, and keeps the
+  composition, playhead and panels that were open. The old session ends without
+  the final save that could only fail. Before, Save As tried to copy the vanished
+  project, failed, and left the tab without any project ("Recovery unavailable").
+- **Limits.** The history before the loss is not carried over, and media files
+  that were copied into the deleted folder are gone with it: such media show as
+  offline in the new project after a reload and need Relink. Media linked from
+  elsewhere on disk stay connected.
+- **If the rescue fails** (for example the new location cannot be written), the
+  old session stays mapped with the editor state untouched, so Save As can be
+  tried again with another location.
+- Covered by `tests/playwright/persistence/project-folder-loss.spec.ts` (case 2:
+  status, Save As, reload and reopen).
+
 ## Save status and lifecycle
 
 Save status belongs to the active repository session. Its operation receipt

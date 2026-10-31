@@ -216,7 +216,9 @@ Fault journeys break the environment on purpose and check that the editor degrad
 looping. `persistence/project-folder-loss.spec.ts` removes the open browser project's folders
 from the origin private file system, mutes an audio clip through the Volume inspector and keeps
 editing: the processed waveform that can no longer be saved must be reported and retried at most
-three times in 40 s (before the fix: 21 attempts, one per edit).
+three times in 40 s (before the fix: 21 attempts, one per edit). Its second case edits after the
+loss, expects the save status **Project files missing**, saves through Save As from that status and
+reopens the saved project after a reload with the edit kept.
 
 ## Deterministic cases: the Vorschau-Wahrheit pattern
 

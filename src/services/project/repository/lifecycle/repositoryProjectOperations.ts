@@ -1,10 +1,15 @@
 import type { RepositoryLocation } from '../storageWorkerProtocol';
-import { RepositoryError } from '../contracts';
+import { RepositoryError, isRepositoryFilesMissingError } from '../contracts';
+import type { RepositorySession } from '../RepositorySession';
+import { Logger } from '../../../logger';
 import { encodeProjectDomains, PROJECT_ENTITY_KEY } from '../domains/projectDomains';
 import { createRepositoryProject, type NewProjectComposition } from './defaultProject';
-import { prepareNewRepository, prepareRepositoryOpen, backendForLocation, type RepositoryOpenOptions } from './repositoryLocations';
-import { openEditorRepository, getActiveRepositorySession, repositoryWorkspaceId, flushEditorRepository } from './editorRepositoryLifecycle';
+import { prepareNewRepository, prepareRepositoryOpen, backendForLocation, opfsLocationExists, type RepositoryOpenOptions } from './repositoryLocations';
+import { openEditorRepository, getActiveRepositorySession, repositoryWorkspaceId, flushEditorRepository, readEditorRepositoryProject } from './editorRepositoryLifecycle';
 import { splitProjectWorkspace } from './workspaceProjection';
+import { captureEditorProjectDomains } from '../transaction/editorRepositorySession';
+import { getEditorRepositoryWorkspace } from '../transaction/editorMutationRuntime';
+import type { JsonValue } from '../contracts';
 import { recoverRepository } from '../persistence/recovery';
 import { prepareArchive } from '../archive/selectiveArchive';
 import { captureRuntimeArchiveSources } from '../archive/runtimeSources';
@@ -22,8 +27,48 @@ export async function openRepositoryProject(location: RepositoryLocation, option
   }
   return openEditorRepository(onProgress => prepareRepositoryOpen(location, repositoryWorkspaceId, onProgress, options), 'open', options.signal);
 }
+const log = Logger.create('RepositoryProjectOperations');
+
+/** The open repository's folder or descriptor was deleted or moved on disk. Native locations are not probed. */
+export async function isRepositoryLocationGone(session: RepositorySession): Promise<boolean> {
+  const { location } = session;
+  try {
+    if (location.kind === 'opfs') return !await opfsLocationExists(location.path, location.store);
+    if (location.kind === 'fsa') { await location.handle.getFileHandle('project.msrepo.json'); return false; }
+    return false;
+  } catch (error) { return isRepositoryFilesMissingError(error); }
+}
+
+/**
+ * Save As of a project whose files vanished while it was open: the history cannot be read any more, so the
+ * new repository starts from the editor's current state (its last edits included) and the old session ends
+ * without the save that can only fail. Before, Save As tried to copy the vanished repository, failed, and
+ * left the tab without any project while the work was still on screen.
+ */
+async function rescueRepositoryAt(location: RepositoryLocation, name: string, previous: RepositorySession) {
+  log.warn('The open project\'s files are gone; Save As keeps the current state without its history', { name });
+  const session = await openEditorRepository(async () => {
+    const project = readEditorRepositoryProject();
+    if (!project) throw new RepositoryError('corrupt', 'The open project has no state to save');
+    const prepared = await prepareNewRepository(location, repositoryWorkspaceId);
+    prepared.options.descriptor.lineageId = previous.descriptor.lineageId;
+    const domains = captureEditorProjectDomains({ ...project, name });
+    // The editor's own views (open composition, playhead, panels) as they are now, not as last saved.
+    const views = getEditorRepositoryWorkspace();
+    const editorViews = views && typeof views === 'object' && !Array.isArray(views) ? views as Record<string, JsonValue> : {};
+    prepared.initialize = { entities: domains.entities, journals: domains.journals, workspace: {
+      ...editorViews,
+      ...Object.fromEntries(splitProjectWorkspace(domains.workspace).map(part => [part.key, part.value])),
+    } };
+    return prepared;
+  }, 'create', undefined, { abandonPrevious: true });
+  await renameRepositoryProject(name);
+  return session;
+}
+
 export async function createRepositoryAt(location: RepositoryLocation, name: string, preserveCurrent = false, composition?: NewProjectComposition) {
   const previous = getActiveRepositorySession();
+  if (preserveCurrent && previous && await isRepositoryLocationGone(previous)) return rescueRepositoryAt(location, name, previous);
   const session = await openEditorRepository(async () => {
     const prepared = await prepareNewRepository(location, repositoryWorkspaceId);
     if (preserveCurrent && previous) {

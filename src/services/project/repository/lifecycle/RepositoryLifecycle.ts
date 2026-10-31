@@ -25,6 +25,13 @@ export interface LifecycleHooks {
   measure?(kind: RepositoryLoadKind): ((report: RepositoryLoadReport | null) => void) | undefined;
 }
 export type RepositoryOpenKind = Exclude<RepositoryLoadKind, 'scratch' | 'save'>;
+export interface RepositoryOpenOptions {
+  /**
+   * The active repository's files are gone and `prepare` already carries its content: switch without the
+   * final save of the old session (it can only fail) and end that session without saving.
+   */
+  abandonPrevious?: boolean;
+}
 /** Reason of the cancellation that ends a background scratch open when the person opens a project. */
 export const SCRATCH_SUPERSEDED_MESSAGE = 'Background recovery workspace was superseded by a project open';
 export function isSupersededScratchOpen(error: unknown): boolean {
@@ -75,13 +82,13 @@ export class RepositoryLifecycle {
     });
     return this.scratchOpening;
   }
-  open(prepare: PrepareRepository, kind: RepositoryOpenKind = 'open'): Promise<RepositorySession> {
+  open(prepare: PrepareRepository, kind: RepositoryOpenKind = 'open', options: RepositoryOpenOptions = {}): Promise<RepositorySession> {
     // Cancels a background scratch open that is queued or still reading. Once it writes a new scratch
     // repository or activates the editor it finishes first, so no half-created state is left behind.
     this.scratchAbort?.abort();
-    return this.run(prepare, { kind });
+    return this.run(prepare, { kind, abandonPrevious: options.abandonPrevious === true });
   }
-  private run(prepare: PrepareRepository, { kind, onlyIfEmpty = false, supersede }: { kind: RepositoryLoadKind; onlyIfEmpty?: boolean; supersede?: AbortSignal }): Promise<RepositorySession> {
+  private run(prepare: PrepareRepository, { kind, onlyIfEmpty = false, supersede, abandonPrevious = false }: { kind: RepositoryLoadKind; onlyIfEmpty?: boolean; supersede?: AbortSignal; abandonPrevious?: boolean }): Promise<RepositorySession> {
     const timer = new RepositoryLoadTimer(kind); const report = this.hooks.measure?.(kind);
     const done = (outcome: RepositoryLoadOutcome | null) => {
       const result = outcome ? timer.finish(outcome) : null;
@@ -103,7 +110,10 @@ export class RepositoryLifecycle {
 
       timer.enter('handoff');
       const previous = this.active;
-      if (previous) { await this.hooks.beforeReceipt?.(previous); }
+      if (previous && abandonPrevious) {
+        // Its last edits are already in the prepared content; writing them to the vanished files fails.
+        await this.hooks.beforeReceipt?.(previous).catch(() => {});
+      } else if (previous) { await this.hooks.beforeReceipt?.(previous); }
       const barrier = await this.hooks.barrier();
       this.switching = true; this.error = null; this.notify();
       let candidate: RepositorySession | null = null;
@@ -143,12 +153,15 @@ export class RepositoryLifecycle {
         this.hooks.install(candidate); this.active = candidate; this.hooks.progress?.({ phase: 'ready' });
       };
       try {
-        if (previous) {
+        if (previous && !abandonPrevious) {
           await previous.coordinator.handoff(switchTarget);
         } else await switchTarget();
         // Activation succeeded. Close the old owner only after the complete replacement exists.
         timer.enter('close_previous');
-        await previous?.close().catch(error => {
+        if (previous && abandonPrevious) {
+          // Its files are gone, so ending it can fail too; the new project is complete either way.
+          await previous.abandon().catch(() => {});
+        } else await previous?.close().catch(error => {
           // The new session is committed; a retired owner cleanup failure cannot roll it back.
           this.error = `Previous project cleanup failed: ${error instanceof Error ? error.message : String(error)}`;
         });
@@ -159,7 +172,11 @@ export class RepositoryLifecycle {
         const error = abortable?.aborted && isCancellation(caught) ? cancelSuperseded() : caught;
         await (candidate as RepositorySession | null)?.close().catch(() => {});
         if (!isSupersededScratchOpen(error)) this.error = error instanceof Error ? error.message : String(error);
-        if (previous) {
+        if (previous && abandonPrevious) {
+          // Reading the vanished project back cannot work. Keep it mapped with the editor state untouched,
+          // so the content stays in this tab and Save As can be tried again with another location.
+          this.hooks.install(previous); this.active = previous;
+        } else if (previous) {
           this.hooks.install(previous); this.active = previous;
           try { await this.hooks.activate(previous, await readProjectWorkspace(previous)); }
           catch (reactivation) {

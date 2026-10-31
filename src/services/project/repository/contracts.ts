@@ -82,7 +82,8 @@ export interface OperationReceipt {
  * session-only grant lapsed while the tab was in the background. Re-allowing the same handle resumes it.
  * `permission`: a repository policy refused the operation (invalid or protected path).
  */
-export type RepositoryErrorCode = 'permission' | 'access' | 'quota' | 'ownership' | 'conflict' | 'corrupt' | 'unsupported' | 'budget' | 'cancelled' | 'io';
+/** `missing`: files or folders of the repository were removed or moved while it was open (NotFoundError). */
+export type RepositoryErrorCode = 'permission' | 'access' | 'quota' | 'ownership' | 'conflict' | 'corrupt' | 'unsupported' | 'budget' | 'cancelled' | 'io' | 'missing';
 export class RepositoryError extends Error {
   public readonly code: RepositoryErrorCode;
   constructor(code: RepositoryErrorCode, message: string, options?: ErrorOptions) {
@@ -94,8 +95,14 @@ export function toRepositoryError(error: unknown): RepositoryError {
   if (error instanceof RepositoryError) return error;
   const name = typeof error === 'object' && error !== null ? String((error as { name?: unknown }).name ?? '') : '';
   const code: RepositoryErrorCode = name === 'QuotaExceededError' ? 'quota'
-    : name === 'NotAllowedError' || name === 'SecurityError' ? 'access' : 'io';
+    : name === 'NotAllowedError' || name === 'SecurityError' ? 'access'
+      : name === 'NotFoundError' ? 'missing' : 'io';
   return new RepositoryError(code, error instanceof Error ? error.message : String(error), { cause: error });
+}
+/** Files of the open repository were removed or moved on disk (also after crossing the storage worker). */
+export function isRepositoryFilesMissingError(error: unknown): boolean {
+  if (error instanceof RepositoryError) return error.code === 'missing';
+  return error instanceof DOMException && error.name === 'NotFoundError';
 }
 export interface RepositoryCapabilities {
   rangeReads: boolean;

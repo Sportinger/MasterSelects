@@ -114,4 +114,18 @@ describe('toolbar persistent save status', () => {
     expect(label()).toBe('Read-only');
     expect(button().disabled).toBe(true);
   });
+
+  it('names deleted project files and offers Save As instead of a retry that cannot work', async () => {
+    const { RepositoryError } = await import('../../src/services/project/repository/contracts');
+    openSession('opfs');
+    const onSave = vi.fn(); const onSaveAs = vi.fn();
+    render(<ToolbarSaveStatus onSave={onSave} onSaveAs={onSaveAs} onExportArchive={vi.fn()} />);
+    state.status = { ...state.status, error: new RepositoryError('missing', 'A requested file or directory could not be found') };
+    refresh();
+    expect(label()).toBe('Project files missing');
+    expect(button().title).toContain('moved or deleted on disk');
+    fireEvent.click(button());
+    expect(onSaveAs).toHaveBeenCalledOnce();
+    expect(onSave).not.toHaveBeenCalled();
+  });
 });

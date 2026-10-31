@@ -11,6 +11,7 @@ import {
   isScratchRepository,
 } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
+import { isRepositoryFilesMissingError } from '../../../services/project/repository/contracts';
 import { FALLBACK_STORAGE_NOTICE, isBrowserStorageFallbackActive } from '../../../services/project/core/browserStorageRoot';
 import { getFolderAccessPause } from '../../../services/project/folderAccess/folderAccessPause';
 import './PhoneProject.css';
@@ -51,6 +52,8 @@ function readPhoneStorageStatus(): PhoneStorageState {
     return { phase: 'pending', label: 'Paused', detail: 'The browser paused storage access. Your changes are kept in this tab.' };
   }
   const error = session.client?.error ?? state.error;
+  if (isRepositoryFilesMissingError(error)) return { phase: 'failed', label: 'Files missing',
+    detail: 'Files of this project were deleted while it was open, so changes cannot be saved there. Your work is still here: duplicate the project in the project sheet to keep it.' };
   if (error || lifecycle.error) {
     return { phase: 'failed', label: 'Save failed', detail: error?.message ?? lifecycle.error ?? 'Saving failed.' };
   }
