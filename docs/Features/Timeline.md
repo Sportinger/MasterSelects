@@ -450,6 +450,7 @@ Section resize observations update only the element that changed, so an audio or
 - RAM preview caches 30 fps frames.
 - Composition video bake regions render a compressed preview proxy through the export pipeline and use it as a single layer during editor preview playback. Clip-scoped video bake regions use the transient RAM preview path.
 - Video bake proxy artifacts are runtime-only; project persistence keeps the region marks and resets volatile bake status after reload or timeline cache invalidation.
+- Unbaking or removing a composition region while it bakes stops the bake render at once; it no longer keeps rendering in the background and holding the tab's export slot.
 - Proxy caching keeps proxy frame ranges warm in the background.
 - Clips whose source must be reloaded keep their normal body rendering and add
   the shared missing-media tint and border, so the reload state remains visible

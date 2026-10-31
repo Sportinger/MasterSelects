@@ -157,4 +157,79 @@ describe('timeline audio artifact generation warmup', () => {
 
     expect(generateSpectrogramForClip).not.toHaveBeenCalled();
   });
+
+  it('pauses a processed waveform that ended without its artifact instead of retrying on every clip update', async () => {
+    vi.useFakeTimers();
+    let now = 0;
+    const generateProcessedWaveformForClip = vi.fn().mockResolvedValue(undefined);
+    const deps = { ...createDeps({ generateProcessedWaveformForClip }), now: () => now };
+    const request = { clipId: 'clip-a', requestKey: 'processed:clip-a' };
+
+    scheduleTimelineProcessedWaveformDerivation(request, { deps, delayMs: 50 });
+    await vi.advanceTimersByTimeAsync(60);
+    expect(generateProcessedWaveformForClip).toHaveBeenCalledTimes(1);
+
+    // The storage write failed (no ref on the clip): the next schedule waits instead of running again.
+    now = 1_000;
+    scheduleTimelineProcessedWaveformDerivation(request, { deps, delayMs: 50 });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(generateProcessedWaveformForClip).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(generateProcessedWaveformForClip).toHaveBeenCalledTimes(2);
+
+    // The second failure (still at now = 1 s) doubles the pause to 30 s.
+    scheduleTimelineProcessedWaveformDerivation(request, { deps, delayMs: 50 });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(generateProcessedWaveformForClip).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(generateProcessedWaveformForClip).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries a failed processed waveform at once when the clip audio changed', async () => {
+    vi.useFakeTimers();
+    const generateProcessedWaveformForClip = vi.fn().mockResolvedValue(undefined);
+    let clip = createClip();
+    const base = createDeps({ generateProcessedWaveformForClip });
+    const deps: TimelineAudioArtifactGenerationDeps = {
+      ...base,
+      getState: () => ({ ...base.getState(), clips: [clip], generateProcessedWaveformForClip }),
+    };
+    const request = { clipId: 'clip-a', requestKey: 'processed:clip-a' };
+
+    scheduleTimelineProcessedWaveformDerivation(request, { deps, delayMs: 50 });
+    await vi.advanceTimersByTimeAsync(60);
+    expect(generateProcessedWaveformForClip).toHaveBeenCalledTimes(1);
+
+    clip = createClip({ speed: 2 });
+    scheduleTimelineProcessedWaveformDerivation(request, { deps, delayMs: 50 });
+    await vi.advanceTimersByTimeAsync(60);
+    expect(generateProcessedWaveformForClip).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not pause a processed waveform that was created', async () => {
+    vi.useFakeTimers();
+    let clip = createClip();
+    const generateProcessedWaveformForClip = vi.fn(async () => {
+      clip = createClip({
+        audioState: {
+          sourceAnalysisRefs: { waveformPyramidId: 'source-waveform-ref' },
+          processedAnalysisRefs: { processedWaveformPyramidId: 'processed-ref' },
+        },
+      });
+    });
+    const base = createDeps({ generateProcessedWaveformForClip });
+    const deps: TimelineAudioArtifactGenerationDeps = {
+      ...base,
+      getState: () => ({ ...base.getState(), clips: [clip], generateProcessedWaveformForClip }),
+    };
+    const request = { clipId: 'clip-a', requestKey: 'processed:clip-a' };
+
+    scheduleTimelineProcessedWaveformDerivation(request, { deps, delayMs: 50 });
+    await vi.advanceTimersByTimeAsync(60);
+    clip = createClip();
+    scheduleTimelineProcessedWaveformDerivation(request, { deps, delayMs: 50 });
+    await vi.advanceTimersByTimeAsync(60);
+
+    expect(generateProcessedWaveformForClip).toHaveBeenCalledTimes(2);
+  });
 });

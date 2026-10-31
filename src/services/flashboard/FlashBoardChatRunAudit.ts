@@ -1,5 +1,6 @@
 import { captureRepositoryDomainPublication, type RepositoryDomainPublication } from '../project/repository/artifacts/RepositoryDomainPublication';
 import { APP_VERSION } from '../../version';
+import { Logger } from '../logger';
 import { useMediaStore } from '../../stores/mediaStore';
 import { hasHostedAgentReloadSnapshot } from '../kernelClient/hostedAgent/reloadResume';
 import type {
@@ -75,6 +76,22 @@ runtime.activeRunIds ??= new Set<string>();
 runtimeGlobal.__MASTERSELECTS_CHAT_RUN_AUDIT__ = runtime;
 
 const repositoryRunTargets = new Map<string, RepositoryDomainPublication>();
+const log = Logger.create('FlashBoardChatRunAudit');
+const reportedPublicationFailures = new Map<string, number>();
+
+/** Logs each distinct publication failure once as an error; repeats only count up in debug. */
+function reportRepositoryPublicationFailure(error: unknown): void {
+  const key = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  const repeats = reportedPublicationFailures.get(key);
+  if (repeats !== undefined) {
+    reportedPublicationFailures.set(key, repeats + 1);
+    log.debug('Repository chat audit publication failed again', { error: key, repeats: repeats + 1 });
+    return;
+  }
+  if (reportedPublicationFailures.size >= 20) reportedPublicationFailures.clear();
+  reportedPublicationFailures.set(key, 0);
+  log.error('Repository chat audit publication failed; later chat runs still try to save', error);
+}
 
 export function beginFlashBoardChatRun(
   request: FlashBoardChatRequest,
@@ -234,9 +251,12 @@ function enqueuePersist(record: FlashBoardChatRunRecord): void {
   if (repository) {
     const immutable = JSON.parse(JSON.stringify(record));
     const previous = runtime.persistenceQueue ?? Promise.resolve();
-    runtime.persistenceQueue = previous.then(() => repository.appendJournal(`chat-run:${record.runId}`, immutable));
-    // Keep rejection visible to diagnostics while allowing the next audit to persist.
-    void runtime.persistenceQueue.catch(error => console.error('Repository chat audit publication failed', error));
+    // Every append runs after the previous one settled: a failed append must not skip all later
+    // audits and replay its own rejection for each of them (one broken write logged 79 times).
+    runtime.persistenceQueue = previous
+      .catch(() => undefined)
+      .then(() => repository.appendJournal(`chat-run:${record.runId}`, immutable))
+      .catch(reportRepositoryPublicationFailure);
     if (record.status !== 'running') repositoryRunTargets.delete(record.runId);
     return;
   }

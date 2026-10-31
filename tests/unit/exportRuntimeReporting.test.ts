@@ -7,6 +7,8 @@ import {
   canRetainExportParallelFrameBuffer,
   canRetainExportPreviewFrame,
   canRetainExportRunJob,
+  describeHeldExportRunJobs,
+  listHeldExportRunJobs,
   releaseExportRunResources,
   releaseExportAudioBuffer,
   reportExportAudioBuffer,
@@ -555,5 +557,25 @@ describe('exportRuntimeReporting', () => {
 
     releaseExportRunResources('planned-run');
     expect(timelineRuntimeCoordinator.getBridgeStats().policies.export.resources).toHaveLength(0);
+  });
+
+  it('names the export that still holds the run job and forgets it on release', () => {
+    reportExportRunJob({
+      runId: 'run-bake',
+      settings: { ...settings, filename: 'video-bake-r1.mp4' },
+      startedAtMs: 1_000,
+      exportMode: 'fast',
+    });
+
+    const denied = canRetainExportRunJob({ runId: 'run-user', settings, startedAtMs: 2_000 });
+    expect(denied.admitted).toBe(false);
+    expect(describeHeldExportRunJobs(1_000 + 4 * 60_000)).toBe(
+      'a fast export (video-bake-r1.mp4) started 4 min ago',
+    );
+
+    releaseExportRunResources('run-bake');
+    expect(listHeldExportRunJobs()).toEqual([]);
+    expect(describeHeldExportRunJobs()).toBeNull();
+    expect(canRetainExportRunJob({ runId: 'run-user', settings }).admitted).toBe(true);
   });
 });

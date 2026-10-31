@@ -12,7 +12,7 @@ import {
   startMediaFileAudioProxyGeneration,
   startVideoProxyGenerationIfNeeded,
 } from './placeholderLifecycle';
-import { fileImportLog as log } from './log';
+import { fileImportLog as log, reportImportFailure } from './log';
 import { switchToProjectCopyWhenDurable } from './backgroundProjectCopy';
 
 function importMetadata(options?: ImportFileOptions) {
@@ -156,7 +156,7 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
       log.info('Complete:', mediaFile.name);
       return mediaFile;
     } catch (err) {
-      log.error(`Import failed: ${file.name}`, err);
+      reportImportFailure(file.name, err);
       // Never orphaned and never reported as "Copied" for media that are not there.
       if (unclaimedCopy) releaseUnusedProjectCopy(unclaimedCopy, err instanceof DOMException && err.name === 'AbortError'
         ? 'the media were replaced or removed while importing' : 'the import failed');

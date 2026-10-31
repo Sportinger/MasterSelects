@@ -35,6 +35,8 @@ The prompt book is presented as a "magic book": it opens with a one-shot fall-op
 
 ---
 
+Chat run audit records are appended to the project journal one after another. A failed append (for example after the project folder changed on disk) is logged once per distinct error as `FlashBoardChatRunAudit`; later runs still try to save instead of replaying the first failure for every run.
+
 The open Prompt Book updates completed tool calls as a chat run progresses, including failed tool calls and calls completed before a later provider error. It does not need to be reopened after the response finishes.
 
 ## Node Lifecycle

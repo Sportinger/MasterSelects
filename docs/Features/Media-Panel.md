@@ -746,4 +746,6 @@ Run tests: `npx vitest run`
 
 *Source: `src/components/panels/MediaPanel.tsx`, `src/components/panels/media/`, `src/stores/mediaStore/index.ts`, `src/stores/mediaStore/slices/`*
 
+An import whose media item is removed or replaced while it runs (or that is cancelled) ends with an `AbortError`; it is logged as `Import stopped: <file>` at info level and not counted as an import failure. Only real failures log `Import failed: <file>` as an error.
+
 Repeated import requests while the native file picker is open are ignored. Only the original request receives the selected files; cancellation and errors release the picker guard for the next request.

@@ -13,6 +13,18 @@ import type {
 const log = Logger.create('TimelineVideoBake');
 const MIN_VIDEO_BAKE_REGION_SECONDS = 1 / 60;
 
+// Runtime-only: the exporter of each running composition bake. Unbake and remove stop it;
+// before, it kept rendering in the background and held the tab's only export slot.
+const activeVideoBakeExporters = new Map<string, { cancel(): void }>();
+
+function cancelActiveVideoBake(regionId: string): void {
+  const exporter = activeVideoBakeExporters.get(regionId);
+  if (!exporter) return;
+  activeVideoBakeExporters.delete(regionId);
+  log.info('Stopping the running video bake', { regionId });
+  exporter.cancel();
+}
+
 function evenDimension(value: number): number {
   return Math.max(2, Math.round(value / 2) * 2);
 }
@@ -63,7 +75,13 @@ async function renderCompositionVideoBakeProxy(
     filename: `video-bake-${region.id}.${container}`,
   });
 
-  const blob = await exporter.export((progress) => onProgress(progress.percent));
+  activeVideoBakeExporters.set(region.id, exporter);
+  let blob: Blob | null;
+  try {
+    blob = await exporter.export((progress) => onProgress(progress.percent));
+  } finally {
+    if (activeVideoBakeExporters.get(region.id) === exporter) activeVideoBakeExporters.delete(region.id);
+  }
   if (!blob) return false;
 
   await videoBakeProxyCache.registerCompositionArtifact({
@@ -348,6 +366,7 @@ export const createVideoBakeSlice: SliceCreator<VideoBakeActions> = (set, get) =
     if (!region) return false;
 
     captureSnapshot('Unbake composition video region');
+    cancelActiveVideoBake(regionId);
     void import('../../services/videoBakeProxyCache').then(({ videoBakeProxyCache }) => {
       videoBakeProxyCache.remove(regionId);
     });
@@ -370,6 +389,7 @@ export const createVideoBakeSlice: SliceCreator<VideoBakeActions> = (set, get) =
     if (!region) return false;
 
     captureSnapshot('Remove composition video bake region');
+    cancelActiveVideoBake(regionId);
     void import('../../services/videoBakeProxyCache').then(({ videoBakeProxyCache }) => {
       videoBakeProxyCache.remove(regionId);
     });

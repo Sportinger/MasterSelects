@@ -1,4 +1,5 @@
 import { EXPORT_POLICY_ID, getExportRunOwnerId } from './exportReporting/core';
+import { forgetExportRunJob } from './exportReporting/runResources';
 export { createExportRunId, getExportRunOwnerId } from './exportReporting/core';
 export {
   canRetainExportAudioBuffer,
@@ -36,6 +37,8 @@ export {
 export {
   canRetainExportOutputSurface,
   canRetainExportRunJob,
+  describeHeldExportRunJobs,
+  listHeldExportRunJobs,
   reportExportOutputSurface,
   reportExportRunJob,
 } from './exportReporting/runResources';
@@ -57,4 +60,5 @@ export function releaseExportRunResources(runId: string): void {
     ownerId: getExportRunOwnerId(runId),
     policyId: EXPORT_POLICY_ID,
   });
+  forgetExportRunJob(runId);
 }

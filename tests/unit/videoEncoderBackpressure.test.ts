@@ -214,4 +214,22 @@ describe('VideoEncoderWrapper export backpressure', () => {
 
     wrapper.cancel();
   });
+
+  it('names the codec error instead of "closed codec" after the browser closes a failed encoder', async () => {
+    vi.stubGlobal('VideoEncoder', MockVideoEncoder);
+    vi.stubGlobal('VideoFrame', MockVideoFrame);
+    MockVideoEncoder.instances = [];
+    const wrapper = new VideoEncoderWrapper(createSettings());
+    await wrapper.init({ deferVideoEncoder: true });
+    await wrapper.encodeVideoFrame({} as VideoFrame, 0);
+    const encoder = MockVideoEncoder.instances[0];
+
+    encoder.state = 'closed';
+    encoder.init.error(new DOMException('Encoding error.', 'OperationError'));
+
+    const failure = wrapper.encodeVideoFrame({} as VideoFrame, 1);
+    await expect(failure).rejects.toThrow('The video encoder stopped (OperationError: Encoding error.)');
+    expect(encoder.encode).toHaveBeenCalledOnce();
+    wrapper.cancel();
+  });
 });

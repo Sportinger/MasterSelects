@@ -41,6 +41,8 @@ export class VideoEncoderWrapper {
   private framesSubmitted = 0;
   private outputWaiters: Array<() => void> = [];
   private isClosed = false;
+  /** Error the codec reported before it closed itself; later calls name it instead of "closed codec". */
+  private encoderError: DOMException | null = null;
   private hasAudio = false;
   private audioCodec: AudioCodec = 'aac';
   private containerFormat: ContainerFormat = 'mp4';
@@ -176,6 +178,10 @@ export class VideoEncoderWrapper {
         },
         error: (e) => {
           log.error('Encode error:', e);
+          this.encoderError = e;
+          // The codec is closed now: wake backpressure waits so the export fails at once.
+          const waiters = this.outputWaiters; this.outputWaiters = [];
+          for (const wake of waiters) wake();
         },
       });
 
@@ -327,10 +333,12 @@ export class VideoEncoderWrapper {
    */
   async encodeVideoFrame(frame: VideoFrame, frameIndex: number, keyframeInterval?: number): Promise<void> {
     this.ensureEncoderStarted();
+    this.throwIfEncoderFailed();
     if (!this.encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
     }
     await this.waitForEncodeCapacity();
+    this.throwIfEncoderFailed();
 
     // FPS-based keyframe interval (default: 1 keyframe per second)
     const interval = keyframeInterval ?? this.settings.fps;
@@ -353,6 +361,17 @@ export class VideoEncoderWrapper {
     if (frameIndex % 30 === 0) {
       await new Promise<void>(resolve => queueMicrotask(() => resolve()));
     }
+  }
+
+  /** The browser closes a VideoEncoder after an encode error; report that error, not the closed state. */
+  private throwIfEncoderFailed(): void {
+    const failure = this.encoderError;
+    if (!failure || this.encoder?.state !== 'closed') return;
+    const error = new Error(
+      `The video encoder stopped (${failure.name}: ${failure.message}). This often follows a GPU or driver reset; export again.`,
+    );
+    Object.assign(error, { cause: failure });
+    throw error;
   }
 
   getEncodeQueueSize(): number {
@@ -392,6 +411,7 @@ export class VideoEncoderWrapper {
     const deadline = performance.now() + VideoEncoderWrapper.OUTPUT_WAIT_MS;
     while (!hasCapacity() && performance.now() < deadline) {
       await this.waitForEncodedOutput(deadline - performance.now());
+      this.throwIfEncoderFailed();
       if (encoder.state === 'closed' || this.isClosed) {
         throw new Error('Encoder closed while applying export backpressure');
       }
@@ -443,6 +463,7 @@ export class VideoEncoderWrapper {
     if (!this.encoder || !this.muxer) {
       throw new Error('Encoder not initialized');
     }
+    this.throwIfEncoderFailed();
 
     this.isClosed = true;
 

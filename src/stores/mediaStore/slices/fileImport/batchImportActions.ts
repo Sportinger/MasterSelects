@@ -23,7 +23,7 @@ import {
   updatePlaceholderImportProgress,
 } from './placeholderLifecycle';
 import { splitModelSequenceEntries } from './sequencePlanning';
-import { fileImportLog as log } from './log';
+import { fileImportLog as log, reportImportFailure } from './log';
 import { reconnectOfflineMediaFromImport } from './offlineMediaImportReconnect';
 import {
   importPremiereProject,
@@ -282,8 +282,7 @@ async function importPlainSinglesInBatches(
           finalizeImportedMediaFile(set, get, id, result.mediaFile);
           return result.mediaFile;
         } catch (err) {
-          log.error(`Import failed: ${file.name}`, err);
-          analytics.trackFailure(err, 'media_processing');
+          if (reportImportFailure(file.name, err)) analytics.trackFailure(err, 'media_processing');
           set((state) => ({
             files: state.files.filter((f) => f.id !== id || f.file !== file),
           }));
@@ -330,8 +329,7 @@ async function importHandleSingles(
       finalizeImportedMediaFile(set, get, id, importResult.mediaFile);
       imported.push(importResult.mediaFile);
     } catch (err) {
-      log.error(`Import failed: ${file.name}`, err);
-      analytics.trackFailure(err, 'media_processing');
+      if (reportImportFailure(file.name, err)) analytics.trackFailure(err, 'media_processing');
       set((state) => ({
         files: state.files.filter((f) => f.id !== id || f.file !== file),
       }));

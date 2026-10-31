@@ -36,6 +36,7 @@ import {
   canRetainExportOutputSurface,
   canRetainExportRunJob,
   createExportRunId,
+  describeHeldExportRunJobs,
   releaseExportRunResources,
   reportExportClipStates,
   reportExportOutputSurface,
@@ -150,6 +151,15 @@ export class FrameExporter {
     } catch (error) {
       log.error('Export error:', error);
       throw error;
+    } finally {
+      // Every path out of an attempt frees its run job; one left behind blocks all later exports
+      // in this tab (job budget 1) until reload.
+      const leftoverRunId = this.activeExportRunId;
+      if (leftoverRunId) {
+        log.warn('Export attempt ended without releasing its run job; releasing it now', { runId: leftoverRunId });
+        releaseExportRunResources(leftoverRunId);
+        this.activeExportRunId = null;
+      }
     }
   }
 
@@ -191,6 +201,14 @@ export class FrameExporter {
     };
     const runJobAdmission = canRetainExportRunJob(runJobReport);
     if (!runJobAdmission.admitted) {
+      const held = describeHeldExportRunJobs(startedAtMs);
+      if (held) {
+        // The export slot is taken (one render job per tab): say by what instead of a budget code.
+        log.warn('Export refused: another export still holds the export slot', { held });
+        const error = new Error(`Another export is still running in this tab: ${held}. Wait for it to finish or cancel it, then export again.`);
+        Object.assign(error, { admissionDecision: runJobAdmission });
+        throw error;
+      }
       throw this.createAdmissionError('run job', runJobAdmission);
     }
     this.activeExportRunId = exportRunId;

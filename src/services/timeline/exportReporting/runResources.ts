@@ -12,6 +12,7 @@ import {
   retainExportResource,
 } from './core';
 import type { ExportOutputSurfaceReport, ExportRunReport } from './types';
+import { timelineRuntimeCoordinator } from '../timelineRuntimeCoordinator';
 
 function createExportRunJobResource(report: ExportRunReport): RenderResourceDescriptor {
   const resourceId = getRunResourceId(report.runId, 'job:render');
@@ -60,6 +61,50 @@ export function canRetainExportRunJob(report: ExportRunReport): TimelineRuntimeA
 
 export function reportExportRunJob(report: ExportRunReport): void {
   retainExportResource(createExportRunJobResource(report));
+  heldExportRunJobs.set(report.runId, {
+    runId: report.runId,
+    startedAtMs: report.startedAtMs ?? Date.now(),
+    exportMode: report.exportMode ?? report.settings.exportMode ?? 'unknown',
+    filename: report.settings.filename,
+  });
+}
+
+/** Run jobs this tab holds, so a denied export can name what still occupies the export slot. */
+export interface HeldExportRunJob {
+  runId: string;
+  startedAtMs: number;
+  exportMode: string;
+  filename?: string;
+}
+
+const heldExportRunJobs = new Map<string, HeldExportRunJob>();
+
+export function forgetExportRunJob(runId: string): void {
+  heldExportRunJobs.delete(runId);
+}
+
+/** Run jobs still retained in the runtime coordinator; entries cleared elsewhere drop out. */
+export function listHeldExportRunJobs(): HeldExportRunJob[] {
+  if (heldExportRunJobs.size === 0) return [];
+  const retained = new Set(
+    timelineRuntimeCoordinator.getBridgeStats().policies[EXPORT_POLICY_ID]?.resources.map((resource) => resource.id) ?? [],
+  );
+  for (const runId of heldExportRunJobs.keys()) {
+    if (!retained.has(getRunResourceId(runId, 'job:render'))) heldExportRunJobs.delete(runId);
+  }
+  return [...heldExportRunJobs.values()];
+}
+
+/** Human-readable reason for a denied run job, e.g. "a fast export (video-bake-r1.mp4) started 4 min ago". */
+export function describeHeldExportRunJobs(now = Date.now(), excludeRunId?: string): string | null {
+  const held = listHeldExportRunJobs().filter((job) => job.runId !== excludeRunId);
+  if (held.length === 0) return null;
+  return held.map((job) => {
+    const ageSeconds = Math.max(0, Math.round((now - job.startedAtMs) / 1000));
+    const age = ageSeconds < 120 ? `${ageSeconds} s` : `${Math.round(ageSeconds / 60)} min`;
+    const name = job.filename ? ` (${job.filename})` : '';
+    return `a ${job.exportMode} export${name} started ${age} ago`;
+  }).join(', ');
 }
 
 function createExportOutputSurfaceResource(
