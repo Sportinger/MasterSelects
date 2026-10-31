@@ -2,6 +2,7 @@ import { test as base, expect } from '@playwright/test'
 import { BridgeClient } from './bridgeClient'
 import { EditorPage, createEditorTabId } from './editorPage'
 import { FailureEvidenceCollector } from './failureEvidence'
+import { describeRepeatedErrors, findRepeatedErrors } from '../assertions/repeatedErrorAssertions'
 import { IsolatedProjectFixture } from './isolatedProject'
 import { ReferenceProjectFixture } from './referenceProject'
 import {
@@ -25,7 +26,11 @@ export const test = base.extend<MasterSelectsFixtures>({
   failureEvidence: async ({ page }, provide, testInfo) => {
     const collector = new FailureEvidenceCollector(page, testInfo)
     await provide(collector)
-    await collector.finish()
+    // Every journey on this fixture fails on an error storm, whatever it tests.
+    const repeated = findRepeatedErrors(collector.consoleEntries, collector.pageErrors)
+    const passedSoFar = testInfo.status === testInfo.expectedStatus
+    await collector.finish(repeated.length > 0)
+    if (repeated.length > 0 && passedSoFar) throw new Error(describeRepeatedErrors(repeated))
   },
 
   editorPage: [async ({ page, baseURL, failureEvidence }, provide, testInfo) => {

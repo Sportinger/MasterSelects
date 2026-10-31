@@ -203,6 +203,21 @@ changes do not trigger HMR or full-page reloads during a journey, while the
 targeted Dev Bridge websocket remains active. This prevents unrelated workspace
 agents from invalidating an in-progress headed test.
 
+## Error storms and fault journeys
+
+Journeys on the shared fixture (`fixtures/test.ts`) fail when the editor logs the same error
+more than 20 times (`assertions/repeatedErrorAssertions.ts`): ids, UUIDs and numbers are
+ignored when errors are compared, browser network load errors are not counted. Production 3.4.1
+logged one failed waveform save 1004 times and one failed chat audit write 79 times while the
+picture and the files stayed right, so no picture or file oracle noticed. Journeys with their own
+setup (frame-code Sammeltests, phone journeys) do not inherit the check yet.
+
+Fault journeys break the environment on purpose and check that the editor degrades instead of
+looping. `persistence/project-folder-loss.spec.ts` removes the open browser project's folders
+from the origin private file system, mutes an audio clip through the Volume inspector and keeps
+editing: the processed waveform that can no longer be saved must be reported and retried at most
+three times in 40 s (before the fix: 21 attempts, one per edit).
+
 ## Deterministic cases: the Vorschau-Wahrheit pattern
 
 `foundation/preview-truth.spec.ts` is the reference for how a case proves what

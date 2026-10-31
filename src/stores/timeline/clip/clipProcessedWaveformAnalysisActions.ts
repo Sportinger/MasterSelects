@@ -112,6 +112,14 @@ export async function generateProcessedWaveformForClipAction(
       }
 
       if (options.derivedOnly) {
+        // Silent before: a source waveform that can no longer be read (project folder gone)
+        // left the clip without a processed waveform and gave no reason.
+        if (sourceWaveformPyramidId && canDeriveProcessedWaveform) {
+          log.warn('Processed waveform not derived: the saved source waveform could not be read', {
+            clipId,
+            sourceWaveformPyramidId,
+          });
+        }
         updateClips(clips => updateClipById(clips, clipId, clearAudioAnalysisJobUpdate()));
         return;
       }
