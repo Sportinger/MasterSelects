@@ -71,7 +71,8 @@ describe('directory backend on a slow disk', () => {
 
   it('still reports a missing folder to readers', async () => {
     const backend = await writableBackend();
-    await expect(backend.read('.masterselects/commits/missing.json')).rejects.toMatchObject({ code: 'io' });
+    // NotFoundError keeps its own code so the editor can tell deleted project files from other I/O failures.
+    await expect(backend.read('.masterselects/commits/missing.json')).rejects.toMatchObject({ code: 'missing' });
     expect(await backend.stat('.masterselects/commits/missing.json')).toBeNull();
   });
 });

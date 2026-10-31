@@ -18,8 +18,7 @@ type AudioArtifactGenerationStatus =
   | 'generated'
   | 'ready'
   | 'blocked'
-  | 'skipped'
-  | 'failed';
+  | 'skipped';
 
 interface TimelineAudioArtifactGenerationState {
   clips: readonly TimelineClip[];
@@ -48,86 +47,67 @@ const DEFAULT_SPECTROGRAM_GENERATION_DELAY_MS = 650;
 const DEFAULT_AUDIO_INTELLIGENCE_GENERATION_DELAY_MS = 800;
 const AUDIO_INTELLIGENCE_WARMUP_ENABLED = false;
 
-// A generation that ends without its artifact (storage gone, source unreadable) is retried with
-// growing pauses. Without them every clip update re-ran the warmup, and one session logged the
-// same failing waveform save 1004 times in two hours.
-const FAILED_GENERATION_RETRY_BASE_MS = 15_000;
-const FAILED_GENERATION_RETRY_MAX_MS = 10 * 60_000;
+// Attempts for the same clip audio are spaced with growing pauses. A generation that ended without its
+// artifact (storage gone, source unreadable) is otherwise restarted by every clip update: one session
+// logged the same failing waveform save 1004 times in two hours. The check runs on the next warmup
+// call, which reads the clip anyway; a created artifact or an edit to the clip's audio clears it.
+const ATTEMPT_PAUSE_BASE_MS = 15_000;
+const ATTEMPT_PAUSE_MAX_MS = 10 * 60_000;
 
-interface FailedAudioArtifactGeneration {
-  failures: number;
-  retryAtMs: number;
-  /** Audio state the attempt ran for; an edit to the clip's audio retries right away. */
+interface AudioArtifactGenerationAttempt {
+  /** Audio state the last attempt ran for. */
   stateKey: string;
+  /** Attempts so far for this audio state. */
+  attempts: number;
+  /** No new attempt for this audio state before this time. */
+  pausedUntilMs: number;
+  reported: boolean;
 }
 
 const log = Logger.create('TimelineAudioArtifactWarmup');
 const scheduledAudioArtifactTimers = new Map<string, TimerHandle>();
 const inFlightAudioArtifactGenerations = new Map<string, Promise<AudioArtifactGenerationStatus>>();
-const failedAudioArtifactGenerations = new Map<string, FailedAudioArtifactGeneration>();
+const audioArtifactGenerationAttempts = new Map<string, AudioArtifactGenerationAttempt>();
 
 function readNow(deps: TimelineAudioArtifactGenerationDeps): number {
   return deps.now?.() ?? Date.now();
 }
 
-function createGenerationStateKey(clip: TimelineClip, keyframes: readonly Keyframe[]): string {
-  return createProcessedClipAudioStateHash(clip, { keyframes });
-}
-
-/** Records whether a finished generation produced its artifact and paces the next attempt. */
-function settleAudioArtifactGeneration(
+/**
+ * Called when the artifact is still missing. Returns false while an earlier attempt for the same audio
+ * state is pausing (that attempt ended without its artifact); otherwise records this attempt.
+ */
+function beginPacedAttempt(
   request: TimelineAudioArtifactGenerationRequest,
   deps: TimelineAudioArtifactGenerationDeps,
   label: string,
-  stateKey: string,
-  hasArtifact: (clip: TimelineClip) => boolean,
-): AudioArtifactGenerationStatus {
-  const resolved = getClipAndKeyframes(deps.getState(), request.clipId);
-  if (!resolved) {
-    failedAudioArtifactGenerations.delete(request.requestKey);
-    return 'skipped';
+  clip: TimelineClip,
+  keyframes: readonly Keyframe[],
+): boolean {
+  const stateKey = createProcessedClipAudioStateHash(clip, { keyframes });
+  const now = readNow(deps);
+  const previous = audioArtifactGenerationAttempts.get(request.requestKey);
+  const sameState = previous?.stateKey === stateKey;
+  if (previous && sameState && now < previous.pausedUntilMs) {
+    if (!previous.reported) {
+      previous.reported = true;
+      log.warn(`${label} was not created; the next attempt waits`, {
+        clipId: request.clipId,
+        attempts: previous.attempts,
+        retryInSeconds: Math.round((previous.pausedUntilMs - now) / 1000),
+      });
+    }
+    return false;
   }
-  if (hasArtifact(resolved.clip)) {
-    failedAudioArtifactGenerations.delete(request.requestKey);
-    return 'generated';
-  }
-  if (createGenerationStateKey(resolved.clip, resolved.keyframes) !== stateKey) {
-    // The clip's audio changed meanwhile; the result was discarded as stale, not failed.
-    failedAudioArtifactGenerations.delete(request.requestKey);
-    return 'skipped';
-  }
-  const previous = failedAudioArtifactGenerations.get(request.requestKey);
-  const failures = previous?.stateKey === stateKey ? previous.failures + 1 : 1;
-  const retryInMs = Math.min(
-    FAILED_GENERATION_RETRY_MAX_MS,
-    FAILED_GENERATION_RETRY_BASE_MS * 2 ** (failures - 1),
-  );
-  failedAudioArtifactGenerations.set(request.requestKey, {
-    failures,
-    retryAtMs: readNow(deps) + retryInMs,
-    stateKey,
-  });
-  log.warn(`${label} was not created; retrying later`, {
-    clipId: request.clipId,
-    failures,
-    retryInSeconds: Math.round(retryInMs / 1000),
-  });
-  return 'failed';
+  const attempts = sameState && previous ? previous.attempts + 1 : 1;
+  const pauseMs = Math.min(ATTEMPT_PAUSE_MAX_MS, ATTEMPT_PAUSE_BASE_MS * 2 ** (attempts - 1));
+  audioArtifactGenerationAttempts.set(request.requestKey, { stateKey, attempts, pausedUntilMs: now + pauseMs, reported: false });
+  return true;
 }
 
-/** Remaining pause before a failed request may run again; 0 when it may run now. */
-function getFailedGenerationDelayMs(
-  request: TimelineAudioArtifactGenerationRequest,
-  deps: TimelineAudioArtifactGenerationDeps,
-): number {
-  const failure = failedAudioArtifactGenerations.get(request.requestKey);
-  if (!failure) return 0;
-  const resolved = getClipAndKeyframes(deps.getState(), request.clipId);
-  if (!resolved || createGenerationStateKey(resolved.clip, resolved.keyframes) !== failure.stateKey) {
-    failedAudioArtifactGenerations.delete(request.requestKey);
-    return 0;
-  }
-  return Math.max(0, failure.retryAtMs - readNow(deps));
+/** The artifact exists: later losses of it start again without a pause. */
+function forgetAttempts(request: TimelineAudioArtifactGenerationRequest): void {
+  audioArtifactGenerationAttempts.delete(request.requestKey);
 }
 
 function getDefaultDeps(): TimelineAudioArtifactGenerationDeps {
@@ -172,21 +152,18 @@ async function warmProcessedWaveformDerivation(
   const { clip, keyframes } = resolved;
 
   if (clip.waveformGenerating) return 'blocked';
-  if (clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId) return 'ready';
+  if (clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId) {
+    forgetAttempts(request);
+    return 'ready';
+  }
   if (!clipRequiresProcessedWaveformPyramid(clip, keyframes)) return 'skipped';
   if (!canDeriveProcessedWaveformPyramid(clip, keyframes)) return 'skipped';
 
   let generation = inFlightAudioArtifactGenerations.get(request.requestKey);
   if (!generation) {
-    const stateKey = createGenerationStateKey(clip, keyframes);
+    if (!beginPacedAttempt(request, deps, 'Processed waveform', clip, keyframes)) return 'blocked';
     generation = state.generateProcessedWaveformForClip(clip.id, { derivedOnly: true })
-      .then(() => settleAudioArtifactGeneration(
-        request,
-        deps,
-        'Processed waveform',
-        stateKey,
-        (current) => Boolean(current.audioState?.processedAnalysisRefs?.processedWaveformPyramidId),
-      ))
+      .then(() => 'generated' as const)
       .finally(() => {
         inFlightAudioArtifactGenerations.delete(request.requestKey);
       });
@@ -212,22 +189,17 @@ async function warmSpectrogramTiles(
   const requiredRef = needsProcessedSpectrogram
     ? clip.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0]
     : clip.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0];
-  if (requiredRef) return 'ready';
+  if (requiredRef) {
+    forgetAttempts(request);
+    return 'ready';
+  }
   if (!clip.isComposition && !clip.file) return 'skipped';
 
   let generation = inFlightAudioArtifactGenerations.get(request.requestKey);
   if (!generation) {
-    const stateKey = createGenerationStateKey(clip, keyframes);
+    if (!beginPacedAttempt(request, deps, 'Spectrogram', clip, keyframes)) return 'blocked';
     generation = state.generateSpectrogramForClip(clip.id)
-      .then(() => settleAudioArtifactGeneration(
-        request,
-        deps,
-        'Spectrogram',
-        stateKey,
-        (current) => Boolean(needsProcessedSpectrogram
-          ? current.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0]
-          : current.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0]),
-      ))
+      .then(() => 'generated' as const)
       .finally(() => {
         inFlightAudioArtifactGenerations.delete(request.requestKey);
       });
@@ -247,7 +219,10 @@ async function warmVoiceActivity(
   if (!resolved) return 'skipped';
   const { clip, keyframes } = resolved;
   if (clip.waveformGenerating) return 'blocked';
-  if (clip.audioState?.sourceAnalysisRefs?.voiceActivityId) return 'ready';
+  if (clip.audioState?.sourceAnalysisRefs?.voiceActivityId) {
+    forgetAttempts(request);
+    return 'ready';
+  }
   if (!clip.isComposition && !clip.file) return 'skipped';
   if (!state.generateAudioIntelligenceForClip) return 'skipped';
 
@@ -256,15 +231,9 @@ async function warmVoiceActivity(
     const vadOnlyOptions = {
       features: new Set(['vad']),
     } as GenerateClipAudioAnalysisOptions;
-    const stateKey = createGenerationStateKey(clip, keyframes);
+    if (!beginPacedAttempt(request, deps, 'Voice activity', clip, keyframes)) return 'blocked';
     generation = state.generateAudioIntelligenceForClip(clip.id, vadOnlyOptions)
-      .then(() => settleAudioArtifactGeneration(
-        request,
-        deps,
-        'Voice activity',
-        stateKey,
-        (current) => Boolean(current.audioState?.sourceAnalysisRefs?.voiceActivityId),
-      ))
+      .then(() => 'generated' as const)
       .finally(() => {
         inFlightAudioArtifactGenerations.delete(request.requestKey);
       });
@@ -289,12 +258,11 @@ function scheduleAudioArtifactGeneration(
   }
 
   const deps = options.deps ?? getDefaultDeps();
-  const delayMs = Math.max(options.delayMs, getFailedGenerationDelayMs(request, deps));
   const timer = deps.setTimeout(() => {
     if (scheduledAudioArtifactTimers.get(request.requestKey) !== timer) return;
     scheduledAudioArtifactTimers.delete(request.requestKey);
     void warm(request, deps);
-  }, delayMs);
+  }, options.delayMs);
 
   scheduledAudioArtifactTimers.set(request.requestKey, timer);
 
@@ -361,7 +329,7 @@ export function resetTimelineAudioArtifactGenerationWarmupForTest(): void {
   clearTimelineWarmupTimers(scheduledAudioArtifactTimers.values());
   scheduledAudioArtifactTimers.clear();
   inFlightAudioArtifactGenerations.clear();
-  failedAudioArtifactGenerations.clear();
+  audioArtifactGenerationAttempts.clear();
 }
 
 export type {
