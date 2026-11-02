@@ -796,7 +796,7 @@ describe('transition registry', () => {
     });
     expect(getRuntimeTransition('datamosh')?.capability).toBeUndefined();
     expect(getDefaultTransitionParams(getTransition('datamosh'))).toEqual({
-      bitrateMbps: 2,
+      bitrateMbps: 8,
       bakedMediaFileId: '',
       bakedDuration: 0,
       bakedBitrateMbps: 0,

@@ -36,7 +36,7 @@ function assertWebCodecs(): void {
 
 async function chooseEncoderConfig(input: DatamoshPlaybackEncodeInput): Promise<VideoEncoderConfig> {
   const base = {
-    codec: getCodecString(DATAMOSH_PLAYBACK_VIDEO_CODEC),
+    codec: getCodecString(DATAMOSH_PLAYBACK_VIDEO_CODEC, { width: input.width, height: input.height, fps: input.fps }),
     width: input.width,
     height: input.height,
     bitrate: input.bitrate,

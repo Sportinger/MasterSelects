@@ -8,9 +8,12 @@ import {
 } from './codecDatamoshEncoder';
 import { createMpeg4DatamoshFrames } from './mpeg4Datamosh';
 
-const MAX_BAKE_PIXELS = 640 * 360;
-const MAX_BAKE_DIMENSION = 1280;
-const MAX_RAW_SOURCE_BYTES = 128 * 1024 * 1024;
+// The bake keeps the composition's resolution. Only a raw frame buffer this tab could not hold scales down, and the
+// result says so (`reducedFrom`).
+const MAX_RAW_SOURCE_BYTES = 3 * 1024 * 1024 * 1024;
+// The playback artifact only has to carry the moshed pixels. Data Rate shapes the MPEG-4 mosh and must not compress
+// its result a second time.
+const PLAYBACK_BITS_PER_PIXEL = 0.35;
 
 export type DatamoshBakePhase = 'preparing' | 'rendering' | 'corrupting' | 'muxing';
 
@@ -31,6 +34,8 @@ export interface DatamoshTransitionBakeResult extends CodecDatamoshEncodeResult 
   height: number;
   fps: number;
   duration: number;
+  /** The composition's size, when this length did not fit in memory at full resolution. */
+  reducedFrom?: { width: number; height: number };
 }
 
 function evenDimension(value: number): number {
@@ -44,19 +49,17 @@ export function resolveDatamoshBakeDimensions(
 ): { width: number; height: number } {
   const safeWidth = Math.max(2, width);
   const safeHeight = Math.max(2, height);
-  const frameBudgetPixels = Math.max(4, Math.floor(MAX_RAW_SOURCE_BYTES / Math.max(1, inputFrameCount) / 4));
-  const pixelBudget = Math.min(MAX_BAKE_PIXELS, frameBudgetPixels);
-  const areaScale = Math.sqrt(pixelBudget / (safeWidth * safeHeight));
-  const scale = Math.min(
-    1,
-    areaScale,
-    MAX_BAKE_DIMENSION / safeWidth,
-    MAX_BAKE_DIMENSION / safeHeight,
-  );
+  const pixelBudget = Math.max(4, Math.floor(MAX_RAW_SOURCE_BYTES / Math.max(1, inputFrameCount) / 4));
+  const scale = Math.min(1, Math.sqrt(pixelBudget / (safeWidth * safeHeight)));
   return {
     width: evenDimension(safeWidth * scale),
     height: evenDimension(safeHeight * scale),
   };
+}
+
+/** The bitrate of the playback artifact: from its pixels, whatever the Data Rate of the mosh is. */
+export function resolveDatamoshPlaybackBitrate(width: number, height: number, fps: number): number {
+  return Math.round(width * height * fps * PLAYBACK_BITS_PER_PIXEL);
 }
 
 async function captureToRgba(
@@ -177,7 +180,7 @@ export async function bakeDatamoshTransition(
   const encoded = await encodeDatamoshPlaybackArtifact({
     ...dimensions,
     fps,
-    bitrate: input.bitrate,
+    bitrate: resolveDatamoshPlaybackBitrate(dimensions.width, dimensions.height, fps),
     frameCount: outputFrameCount,
     getFrame: async (index, timestampMicros, durationMicros) => new VideoFrame(
       moshedFrames.subarray(index * frameSize, (index + 1) * frameSize),
@@ -198,5 +201,8 @@ export async function bakeDatamoshTransition(
     ...dimensions,
     fps,
     duration: outputFrameCount * frameDurationMicros / 1_000_000,
+    ...(dimensions.width < input.width || dimensions.height < input.height
+      ? { reducedFrom: { width: input.width, height: input.height } }
+      : {}),
   };
 }
