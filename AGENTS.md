@@ -475,11 +475,20 @@ operations host (error groups: `open`, `investigating`, `fixed` with a commit,
 status CLI (`status-cli.mjs`, documented in the operations repository's
 `docs/AUTO-REPAIR.md`):
 
+- **Start with `node scripts/prod-error-ledger.mjs`** (after `git fetch origin`).
+  It shows which groups need attention and whether a fix is in a release and held.
+  Do not investigate or re-test a group it reports as fixed and released or as
+  ignored; that work is done. See `docs/Features/Debugging.md`.
 - Mark an error group `investigating` before you start on it, so the
   auto-repair loop does not take it at the same time.
 - After fixing a production error or finishing an auto-repair job locally,
-  set it `fixed` / `resolved` with the commit and a short note.
-- Mark groups that do not come from MasterSelects code `ignored`.
+  set it `fixed` / `resolved` with the commit and a note naming the tests and
+  the platforms they ran on, so nobody has to test it again.
+- Mark groups that do not come from MasterSelects code `ignored`, with the reason.
+- Leave no group without a status once you have looked at it. A `fixed` commit
+  that is not merged yet stays visible as not released, so it cannot be mistaken for live.
+- A journey you add or verify goes into the test catalog on the operations host
+  (`test-catalog-cli.mjs add` / `verify --platform ... --result ... --revision ...`).
 
 For an important question or a problem only the developer can solve,
 `notify-cli.mjs` sends a one-way Telegram message. Production builds report

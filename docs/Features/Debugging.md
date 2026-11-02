@@ -432,6 +432,15 @@ Each log entry contains:
 Development `POST /api/debug/action` supports `measure-keyframe-disclosure` with an explicit top-level `targetTabId` and `args: { trackId, clipId?, profile? }`. Wait for project loading to finish and keep the editor visible. It optionally selects the clip, toggles the track twice, measures synchronous React commit time and the following two animation frames, and restores selection/disclosure. `paintedMs: null` means the paint deadline expired or the tab became hidden. The result includes selected IDs and diamond counts so empty/unloaded rows cannot be mistaken for a successful dense-row benchmark. Optional CPU sampling covers the initial selection; bridge transport and tool preview capture are excluded from reported times.
 
 
+### Production error ledger
+
+`node scripts/prod-error-ledger.mjs` (after `git fetch origin`) shows the state of every production
+error group: it joins the telemetry in D1, the shared status on the operations host and git. A
+`fixed` status counts as released only when its commit is part of a release, and a group shows as
+**came back** when people hit it again on a version containing the fix, or after it was closed with a
+note starting "Not seen since". Without a flag it
+lists only what needs attention; `--all` and `--json` show everything. See AGENTS.md section 11.
+
 ### Chunk-load recovery diagnostics
 
 A failed dynamic import can request one reload, with a 60-second session cooldown.
