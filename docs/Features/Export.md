@@ -71,6 +71,27 @@ soft glows and thin strands are therefore not multiplied by their coverage a
 second time. Stacked-alpha output keeps its separate coverage plane, and image or
 native-alpha consumers retain their existing readback contract.
 
+### Long exports go to disk
+
+The in-memory muxer target gives up at 4 GB, and only when it finishes the file: production
+3.3.0 lost three runs of about 30 minutes each to "ArrayBuffer exceeded maximum size". From an
+estimated 1 GB on (bitrate times range, `engine/export/exportDiskSpill.ts`) the file is written
+to the origin private file system while it encodes, with 16 MB write blocks and the MP4 index at
+the end instead of fast start. Audio is encoded first and enters the file next to the video of
+the same time, so the file stays in time order. The result is a file-backed Blob: neither the
+packets nor the finished file have to fit into memory.
+
+- The file stays in the `export-spill` folder of browser storage until the next disk export, or
+  until the next app start once it is an hour old, because the browser reads it while saving.
+- An export up to 4 GB that does not fit into the free browser storage stays in memory. A larger
+  one stops before encoding and says how much is missing.
+- A private window cannot be told apart beforehand: Chrome reports 10 GB of storage there and refuses
+  writes at about 1 GB (measured). When the disk fills up during the export, one that fits into memory
+  starts over there; a larger one stops at once and suggests a normal window.
+- Without usable OPFS (Firefox Private Browsing, Safari before 26) an export up to 4 GB stays in
+  memory, and a larger one stops before encoding.
+- In development `localStorage['ms.export.diskMinBytes']` lowers the threshold for tests.
+
 ### Cancelling while a frame decodes
 
 Cancel can arrive while a FAST frame is still waiting for the decoder (for example
@@ -170,10 +191,11 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 - If the exact frame still does not arrive, a neighbour within the lookup window stands in. The run's diagnostics count it as a `previousFrameFallbacks` entry with `reason: 'neighbour-frame'`. The per-time and the per-clip source-time prefetch share this wait (`waitForExactBufferedFrame`). A single sample that never decodes therefore no longer stops the export. The export fails only when no frame is buffered nearby. For a reversed clip, a full frame buffer evicts the end farthest from the target, never the frame that just arrived.
 - Preview resolution updates pause during export. Each export frame rechecks its render host dimensions before rendering so an intervening preview resize cannot produce readback pixels at the wrong size.
 - Parses source media with MP4Box, so it reads MP4 and MOV (ISO-BMFF) files. Other containers
-  (WebM/Matroska, AVI, MPEG-TS, Ogg) are refused before parsing with a message that names the
-  container and the clip and points to Precise export, instead of a parser error
-  (`clipPreparation/fastSourceContainer.ts`). Only containers recognised by their signature are
-  refused; an unrecognised header still goes to the parser, whose error also names the clip. The Playwright journeys in
+  (WebM/Matroska, AVI, MPEG-TS, MPEG-PS, Ogg, MP3) are recognised before parsing
+  (`clipPreparation/fastSourceContainer.ts`), and a source the parser cannot read fails the same
+  way. The export then continues in PRECISE mode by itself (`FrameExporter.export`, logged as a
+  warning), because the browser's own decoder usually reads what MP4Box cannot. It used to stop
+  with "Try PRECISE mode" and make the person start over. The Playwright journeys in
   `tests/playwright/export/fast/` check Fast export frame by frame (codecs, range, 1080p60, A/V
   sync, B-frame, HEVC, long-GOP, VFR, rotated, alpha and audio sources).
 - Decode, buffer, and unsupported-file failures remain in the selected workflow. Errors are logged and surfaced; Fast mode does not automatically switch to HTMLVideo.
@@ -182,7 +204,7 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 
 Nested preview and export account for each composition wrapper's start time and trim when seeking deeper video sources.
 
-- Uses detached `HTMLVideoElement` instances and browser seeking.
+- Uses detached `HTMLVideoElement` instances and browser seeking. Seeks go slightly inside the source frame (`htmlVideoFrameSeekTime`, the same rule as the paused preview): a seek to exactly k/fps can present frame k-1, and at 30 fps every third exported frame used to repeat the one before it. WebM and MKV sources get their rate from the file (`matroskaFrameRate.ts`, at import and for older media at export), because the browser reports none.
 - Prepares nested video sources for the selected export range and parent trims. Ordinary forward 1x composition branches skip unused descendants; retimed or transition-driven branches keep conservative preparation. Composition wrappers do not consume video decoders.
 - If a required video cannot be admitted within the media budget, preparation reports the failure before rendering.
 - A seek that exceeds its 2-second budget waits briefly for the frame. If the frame then decoded, it is logged at info; if not, the warning says the exported frame repeats the previously decoded frame, and the run's diagnostics (`debugExport` → `exportStats.*.seeks`) count `timeouts` and `previousFrameFallbacks` with sample times and clips. The export finish logs one summary warning when any frame repeated.

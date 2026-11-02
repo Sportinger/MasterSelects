@@ -5,7 +5,7 @@ import type { WebCodecsPlayer } from '../../WebCodecsPlayer';
 import { StreamedMp4UnsupportedError } from '../../webcodecs/fileSampleData';
 import { type ClipFileDataCache, loadClipFileDataCached, resolveReadableClipExportFile } from './sourceResolution';
 import { isChangedSourceFailure } from './changedSourceFailure';
-import { describeFastUnsupportedContainer, fastUnsupportedContainerMessage } from './fastSourceContainer';
+import { describeFastUnsupportedContainer, FastSourceUnreadableError, fastUnsupportedContainerMessage } from './fastSourceContainer';
 
 const log = Logger.create('ClipPreparation');
 
@@ -27,13 +27,13 @@ function isQuickTime(header: Uint8Array): boolean {
 
 function parsingFailed(clip: TimelineClip, error: unknown, header: Uint8Array): Error {
   const hint = isQuickTime(header) ? ' MOV containers may have unsupported audio codecs.' : '';
-  return new Error(`FAST export failed: WebCodecs/MP4Box parsing failed for clip "${clip.name}": ${error}.${hint} Try PRECISE mode instead.`);
+  return new FastSourceUnreadableError(`FAST export could not parse clip "${clip.name}": ${error}.${hint}`);
 }
 
 /** Stops before parsing when the source is not ISO-BMFF (MP4/MOV), with the container's name. */
 function refuseUnsupportedContainer(clip: TimelineClip, header: Uint8Array): void {
   const container = describeFastUnsupportedContainer(header);
-  if (container) throw new Error(fastUnsupportedContainerMessage(container, clip.name));
+  if (container) throw new FastSourceUnreadableError(fastUnsupportedContainerMessage(container, clip.name));
 }
 
 /** Loads the clip's source into the export player: large files on demand, smaller ones whole. */

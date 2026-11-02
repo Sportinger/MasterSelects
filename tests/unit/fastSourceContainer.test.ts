@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   describeFastUnsupportedContainer,
   fastUnsupportedContainerMessage,
+  isFastSourceUnreadable,
 } from '../../src/engine/export/clipPreparation/fastSourceContainer';
 import { loadFastExportSource } from '../../src/engine/export/clipPreparation/fastSourceLoading';
 import type { WebCodecsPlayer } from '../../src/engine/WebCodecsPlayer';
@@ -34,12 +35,20 @@ describe('FAST export source container check', () => {
     expect(describeFastUnsupportedContainer(bytes('OggS', 0, 2, 0, 0, 0, 0, 0, 0))).toBe('Ogg');
   });
 
-  it('tells the user which clip failed and which export to use instead', () => {
+  // Production 3.3.8: a voice-over named .mpeg went into the MP4 parser, which printed "[BoxParser] Invalid box type".
+  it.each([
+    ['MPEG program stream', [0, 0, 1, 0xba, 0x44, 0, 4, 0, 4, 1, 1, 0x89]],
+    ['MP3', [0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0x23, 0x54, 0x53]],
+    ['MP3', [0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0, 0, 0, 0, 0]],
+  ])('names %s without asking the MP4 parser', (container, header) => {
+    expect(describeFastUnsupportedContainer(bytes(...header))).toBe(container);
+  });
+
+  it('tells the user which clip FAST cannot read', () => {
     const message = fastUnsupportedContainerMessage('WebM/Matroska', 'interview.webm');
     expect(message).toContain('WebM/Matroska');
     expect(message).toContain('"interview.webm"');
-    expect(message).toMatch(/PRECISE \(HTMLVideo\)/);
-    expect(message.startsWith('FAST export failed:')).toBe(true);
+    expect(message).toContain('FAST export cannot read');
     expect(message).not.toMatch(/MP4Box/);
   });
 
@@ -53,7 +62,7 @@ describe('FAST export source container check', () => {
     const mediaFile = { id: 'media-1', name: 'interview.webm', type: 'video', file: webm } as MediaFile;
 
     await expect(loadFastExportSource(player as unknown as WebCodecsPlayer, clip, mediaFile, new Map()))
-      .rejects.toThrow('FAST export failed: clip "interview.webm" is a WebM/Matroska file');
+      .rejects.toSatisfy((error: unknown) => isFastSourceUnreadable(error) && String(error).includes('"interview.webm" is a WebM/Matroska file'));
     expect(player.loadArrayBuffer).not.toHaveBeenCalled();
     expect(player.loadFileOnDemand).not.toHaveBeenCalled();
   });

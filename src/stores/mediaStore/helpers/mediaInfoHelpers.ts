@@ -18,6 +18,7 @@ import {
   isMxfFileName,
   readMxfMediaMetadata,
 } from '../../../services/mediaMetadata/mxf/mxfMediaMetadata';
+import { readMatroskaFrameRate } from '../../../services/mediaMetadata/matroskaFrameRate';
 
 const log = Logger.create('MediaInfo');
 
@@ -258,6 +259,7 @@ async function getVideoMediaInfo(file: File, container: string): Promise<MediaIn
   const htmlInfo = await htmlProbe.promise;
   htmlInfo.codec ??= getCodecFromExtension(file.name);
   htmlInfo.hasAudio = await checkHasAudioQuick(file);
+  htmlInfo.fps ??= await readMatroskaFrameRate(file);
   return htmlInfo;
 }
 

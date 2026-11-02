@@ -18,6 +18,7 @@ import { exportDiagnostics } from '../../services/export/exportDiagnostics';
 
 const log = Logger.create('VideoSeeker');
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
+import { htmlVideoFrameSeekTime } from '../../services/layerBuilder/videoSyncFrameSelection';
 
 type VideoFrameCallbackVideo = HTMLVideoElement & {
   requestVideoFrameCallback: (callback: () => void) => number;
@@ -448,13 +449,15 @@ export const VIDEO_SEEK_TIMEOUT_MS = 2000;
 export async function seekVideo(video: HTMLVideoElement, time: number): Promise<VideoSeekOutcome> {
   const duration = Number.isFinite(video.duration) ? video.duration : 0;
   const maxSeekTime = duration > 0 ? Math.max(0, duration - 0.001) : 0;
-  const targetTime = duration > 0
-    ? Math.max(0, Math.min(time, maxSeekTime))
-    : Math.max(0, time);
+  const clamp = (value: number) => duration > 0 ? Math.max(0, Math.min(value, maxSeekTime)) : Math.max(0, value);
+  const targetTime = clamp(time);
+  // A seek to exactly k/fps can present frame k-1: Chromium compares whole microseconds and the stored
+  // time of frame k is rounded up, so at 30 fps every third exported frame repeated the one before it.
+  const position = clamp(htmlVideoFrameSeekTime(video, time));
 
   // A nearby time may be on the other side of a backward frame boundary.
-  if (Math.abs(video.currentTime - targetTime) < 0.000001 && !video.seeking) {
-    await ensureVideoReadyForExport(video, targetTime);
+  if (Math.abs(video.currentTime - position) < 0.000001 && !video.seeking) {
+    await ensureVideoReadyForExport(video, position);
     return { targetTime, timedOut: false, usedPreviousFrame: false };
   }
 
@@ -499,13 +502,13 @@ export async function seekVideo(video: HTMLVideoElement, time: number): Promise<
     video.addEventListener('error', onReady);
 
     try {
-      video.currentTime = targetTime;
+      video.currentTime = position;
     } catch {
       finish();
     }
   });
 
-  await ensureVideoReadyForExport(video, targetTime);
+  await ensureVideoReadyForExport(video, position);
   if (!timedOut) return { targetTime, timedOut, usedPreviousFrame: false };
   const usedPreviousFrame = video.seeking || video.readyState < 2;
   if (usedPreviousFrame) {

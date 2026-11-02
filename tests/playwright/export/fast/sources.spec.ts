@@ -110,23 +110,64 @@ for (const key of ['mp3Clicks', 'wavClicks'] as const) {
   });
 }
 
-test('WebM/VP9 source stops FAST export with the named container message @module:export @case:export.fast-webm-source', async ({ fast }, testInfo) => {
-  // FAST export demuxes with MP4Box (MP4/MOV only): a WebM source is refused before parsing,
-  // naming the container and the way out (fastSourceContainer.ts). This is the one outcome.
+test('WebM/VP9 source finishes through PRECISE when FAST cannot read it @module:export @case:export.fast-webm-source', async ({ fast }, testInfo) => {
+  // FAST export demuxes with MP4Box (MP4/MOV only). The source is recognised before parsing and the
+  // export continues in PRECISE mode (FrameExporter), so the person gets the file without starting over.
   const source = await ensureFastSource(FAST_SOURCES.webmVp9);
   await arrange(fast.bridge, source, 30, 3);
   await withWorkDir(async (workDir) => {
-    const failure = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' })
-      .then(() => null, (error: unknown) => (error instanceof Error ? error.message : String(error)));
-    expect(failure, 'FAST export of a WebM source must be refused, not exported').not.toBeNull();
-    const message = failure ?? '';
-    await testInfo.attach('fast-export-outcome', { contentType: 'text/plain', body: message });
-    expect(message).toMatch(/^Product export failed before download: /);
-    expect(message).toContain('is a WebM/Matroska file, which FAST export cannot read');
-    expect(message).toContain('Use PRECISE (HTMLVideo) export for this clip.');
-    expect(message).not.toMatch(/MP4Box/);
-    const alert = new ExportDriver(fast.page).panel.getByRole('alert');
-    await expect(alert).toBeVisible();
-    await expect(alert).toContainText('WebM/Matroska');
+    const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
+    await attachSummary(testInfo, result);
+    assertFrameCodes(result.read.codes, expectedCodes(source, 30, 3), 'WebM source codes through PRECISE');
+    await expect(new ExportDriver(fast.page).panel.getByRole('alert')).toBeHidden();
   });
+});
+
+// Production 3.1.6-3.3.8: "WebCodecs/MP4Box parsing failed for clip ...: Codec avc1.640028 not supported. Try PRECISE mode
+// instead" (also an unparsable .mpeg and an MP4 with unusual metadata). The browser plays such a source, so the export finishes through PRECISE.
+test('a source FAST cannot decode finishes through PRECISE @module:export @case:export.fast-unreadable-source', async ({ fast }, testInfo) => {
+  const source = await ensureFastSource(FAST_SOURCES.h264Eight);
+  await arrange(fast.bridge, source, 30, 3);
+  await fast.page.evaluate(() => {
+    const decoder = VideoDecoder as unknown as { isConfigSupported: unknown; __original?: unknown };
+    decoder.__original = decoder.isConfigSupported;
+    decoder.isConfigSupported = async (config: VideoDecoderConfig) => ({ supported: false, config });
+  });
+  try {
+    await withWorkDir(async (workDir) => {
+      const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
+      await attachSummary(testInfo, result);
+      assertFrameCodes(result.read.codes, expectedCodes(source, 30, 3), 'codes through PRECISE');
+    });
+  } finally {
+    await fast.page.evaluate(() => {
+      const decoder = VideoDecoder as unknown as { isConfigSupported: unknown; __original?: unknown };
+      decoder.isConfigSupported = decoder.__original;
+    });
+  }
+});
+
+// Production 3.3.0: "ArrayBuffer exceeded maximum size of 4294967296 bytes" after a full encode. The threshold
+// override sends this short export down the same path as one of several gigabytes: written to disk while encoding.
+test('an export written to disk while it encodes is complete and frame-exact @module:export @case:export.fast-disk-spill', async ({ fast }, testInfo) => {
+  const source = await ensureFastSource(FAST_SOURCES.h264Eight);
+  await fast.page.evaluate(() => localStorage.setItem('ms.export.diskMinBytes', '1'));
+  try {
+    await arrange(fast.bridge, source, 30, 3);
+    await withWorkDir(async (workDir) => {
+      const result = await exportFast(fast, workDir, 30, { container: '.mp4', videoCodec: 'H.264 (AVC)' });
+      await attachSummary(testInfo, result);
+      assertFrameCodes(result.read.codes, expectedCodes(source, 30, 3), 'codes of the export written to disk');
+      const spills = await fast.page.evaluate(async () => {
+        const root = await navigator.storage.getDirectory();
+        const folder = await root.getDirectoryHandle('export-spill');
+        const names: string[] = [];
+        for await (const name of (folder as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name);
+        return names;
+      });
+      expect(spills.length, 'the export really went through the disk path').toBeGreaterThan(0);
+    });
+  } finally {
+    await fast.page.evaluate(() => localStorage.removeItem('ms.export.diskMinBytes'));
+  }
 });

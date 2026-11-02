@@ -170,7 +170,7 @@ export async function acquireProjectRoot(mode: ProjectRootMode, options: { throw
 
 /** Browser-storage folders the repository layer uses for staging, scratch recovery and downloads. */
 const INTERNAL_STORAGE_FOLDERS = new Set([
-  'archive-downloads', 'archive-staging', 'repository-archive-staging',
+  'archive-downloads', 'archive-staging', 'export-spill', 'repository-archive-staging',
   'repository-backup-restores', 'repository-file-staging', 'repository-scratch',
 ]);
 
