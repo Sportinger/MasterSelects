@@ -111,7 +111,9 @@ Use the AI debug bridge (see [Debugging](./Debugging.md)):
 The Vulkan troubleshooting banner appears only after WebGPU initialization
 fails on desktop Linux, including the worker render host. It is not shown when
 recovery after a device loss fails, because WebGPU already worked in that
-session. Successful initialization clears the banner. Android is excluded, and dismissing the
+session. Successful initialization clears the banner. Android and non-Chromium
+browsers are excluded (Firefox on Linux has no WebGPU and no `chrome://flags`; its
+error panel says to use a current Chrome, Edge or Safari), and dismissing the
 banner remains persistent. The message suggests checking hardware acceleration,
 drivers, and Chrome's Vulkan setting; it does not claim Vulkan is disabled.
 Websites cannot read Chrome's Vulkan flag, so working WebGPU is the condition

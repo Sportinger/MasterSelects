@@ -7,11 +7,16 @@ export type GPUInitializationFailure =
   | 'initialization_failed'
   | 'device_lost_repeatedly';
 
+/** Vulkan and chrome://flags advice only applies to Chromium browsers; Firefox on Linux simply has no WebGPU. */
+export function isChromiumBrowser(userAgent: string = navigator.userAgent): boolean {
+  return /\bchrom(?:e|ium)\b/i.test(userAgent);
+}
+
 /** Product copy for a known failure, never inferred from navigator.gpu alone. */
 export function describeGPUInitializationFailure(failure: GPUInitializationFailure | null): string {
   switch (failure) {
     case 'unsupported':
-      return 'WebGPU is unavailable in this browser environment.';
+      return 'This browser does not offer WebGPU, which the preview and export need. Use a current Chrome, Edge or Safari.';
     case 'adapter_unavailable':
       return 'The browser could not provide a compatible GPU. Check hardware acceleration and your graphics driver.';
     case 'adapter_timeout':

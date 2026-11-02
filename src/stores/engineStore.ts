@@ -3,6 +3,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { isChromiumBrowser } from '../engine/core/gpuInitializationFailure';
 import type { EngineStats } from '../types';
 import type { SceneCameraConfig, SceneGizmoAxis, SceneGizmoMode, SceneVector3 } from '../engine/scene/types';
 
@@ -238,11 +239,12 @@ export const useEngineStore = create<EngineState>()(
       const isLinux = navigator.platform.toLowerCase().includes('linux')
         && !/android/i.test(navigator.userAgent);
       const setupAdvice = options?.setupAdvice ?? true;
+      // The banner walks through chrome://flags, which only Chromium browsers have.
       set({
         engineInitFailed: failed,
         engineInitError: error ?? null,
         engineInitSetupAdvice: setupAdvice,
-        linuxVulkanWarning: failed && setupAdvice && isLinux
+        linuxVulkanWarning: failed && setupAdvice && isLinux && isChromiumBrowser()
           && !localStorage.getItem(LINUX_VULKAN_DISMISSED_KEY),
       });
     },
