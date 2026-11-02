@@ -96,6 +96,13 @@ export async function openSession(options) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('download', download => take.downloads.push(download));
+  // Playwright dismisses a dialog nobody listens to, which silently cancels what asked (a drop of several files on the
+  // timeline prompts for the arrangement). Take its default and say so. A native dialog is not in the picture of a take.
+  page.removeAllListeners('dialog');
+  page.on('dialog', async dialog => {
+    console.log(`  browser dialog (${dialog.type()}) answered with its default: ${dialog.message().replace(/\s+/g, ' ').slice(0, 120)}`);
+    await dialog.accept(dialog.defaultValue()).catch(() => {});
+  });
   try {
     await page.addInitScript(pageHooks);
     // The desktop window's files come from disk through this route.
@@ -121,6 +128,8 @@ export async function openSession(options) {
     const welcome = page.getByRole('button', { name: /New project/ }).first();
     const editor = page.locator('.dock-tab-pane[data-group-id="timeline-group"]');
     await Promise.any([welcome.waitFor({ timeout: 60000 }), editor.waitFor({ timeout: 60000 })]);
+    // The editor renders behind the project chooser, so the timeline can show just before the chooser that blocks it.
+    if (!checkpoint && !await welcome.isVisible()) await pause(1500);
     if (checkpoint) {
       if (!await editor.isVisible()) throw new Error(`checkpoint ${from} did not reopen its project (the welcome screen shows)`);
     } else if (await welcome.isVisible()) {

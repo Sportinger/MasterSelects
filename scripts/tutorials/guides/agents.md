@@ -152,9 +152,16 @@ Episode 2 still needs:
   the effect, and press play only to show a result.
 - **No title card intro.** Episode 1 opens straight with the presenter. The pointer moves like a
   person, not like a robot: arcs, small overshoots, a pause before a click.
+- **Always the whole MasterSelects (Roman, 2026-11-02).** The camera rests on the whole editor. Zoom in only
+  for an important or a dramatic moment, and come back right after it with `{ "camera": "all" }`; a part
+  should stay outside for most of its time. A take warns (`CAMERA: zoomed in for …`) above a third of
+  the part. Do not frame a pane for a whole scene to make the UI larger, and remember that a part starts
+  with the camera the previous part ended on.
 - **Zooms are light and emotional** (1.05–1.33): a slow push in for suspense, a quick snap back on the
-  punchline. At 100% the UI is small in a 1080p video, so frame the area being explained more often:
-  a zoom up to 1.33 on the 2560 px take stays sharp (`"camera": {"panes": ["tab=Preview", "left-group"], "maxZoom": 1.33}`).
+  punchline. A zoom up to 1.33 on the 2560 px take stays sharp (`{ "focus": "Bake Datamosh", "zoom": 1.3 }`).
+- **The full-screen result is rare.** `tutorial-ms-shot.mjs` lays an export over the whole picture. Use it
+  for the hook and the payoff, not as the way to show playback: playback belongs in the editor's
+  preview (see "A smooth preview").
 - **Intermediate renders.** When Roman asks for a "Zwischenstand", export it from the cut editor
   (or join the parts' quick looks, see "Intermediate render"). Open the file for him with `xdg-open`.
 - **Jokes come from the action.** Examples: "the jellyfish is tall, so we need a portrait comp", "we're
@@ -293,6 +300,23 @@ Episode 2 still needs:
 - **A scene lasts at least as long as its sentence.** A recorded voice keeps its own pauses: each
   scene lasts until the next scene's first word.
 
+### A smooth preview
+
+- **Chrome's screencast loses the preview's pictures.** While a take records, the editor still renders at
+  30+ fps without drops (`getStats`), but only 1–20 new preview pictures per second reach the frames, also
+  with an idle machine (measured 2026-11-02, two clips with a transition). It is the recording, not
+  the editor: do not chase it in the renderer, and a take with such a timeline needs `--allow-slow-preview`.
+- **Cover the preview with the real export.** Export the same timeline from the take's editor
+  (`debugExport` in `tutorial-tab.mjs eval`, the state right after the part), then
+  `node scripts/tutorial-ms-preview.mjs <part> <export> --export-start <s>`. It reads the playhead samples of
+  the take and lays the export exactly over the preview area, in time, on the track "Preview". Every
+  state that plays needs its own export (before and after a bake are different pictures).
+- **The camera must be outside while the timeline plays:** a stretch under a zoom is left out, and it says so.
+- **Pause at the end of a part that plays.** A part that continues a playing checkpoint shows a black preview
+  for seconds ("Preparing playback…"); end the part paused and press play in the next one.
+- **Make the tracks first:** `tutorial-ms-shot.mjs --tracks` before the first part goes into the cut gives the
+  stack Picture, Preview, Result, Captions, so the captions stay on top.
+
 ### Editor state and the test project
 
 - **The test project is real.** Text typed into a menu that is not open goes to the timeline as
@@ -407,6 +431,15 @@ Episode 2 still needs:
 - **The MS project** of an episode comes from the template (1920×1080, 30 fps,
   `tutorial-ms-template.mjs new`). The bridge cannot pick a folder without Roman's one-time grant
   of `~/Documents/MasterSelects-Tutorials` per editor origin.
+- **A second download from one editor tab is held back.** Chrome lets a page start one automatic download; the
+  next ones did not land in `~/Downloads` although `debugExport` reported success (2026-11-02). A visible cut editor
+  that already exported once cannot export again without a click. Rebuild the cut in a headless editor
+  (`tutorial-tab.mjs serve --project "<name>"`, then the scripts with `--tab <its session id>`) and save the export with
+  `page.waitForEvent('download')` in `tutorial-tab.mjs eval`.
+- **A hidden cut editor stops answering.** A tab in Roman's Chrome that goes to the background times out on the
+  bridge. Use its own Chrome window with its own `--user-data-dir`, without `--ozone-platform=x11` under Wayland.
+- **Several files dropped on the timeline ask a question:** `window.prompt` (stack or side by side), which no take can
+  show; the session answers it with its default and logs that. Drop one file at a time.
 - **Intro or bumper:** none exists yet. Episode 1 opened straight with the presenter (Roman's choice,
   "How Roman wants it"). If Roman wants one, it belongs into the template project, before the
   Picture clips, so every episode gets it.

@@ -13,7 +13,47 @@ export function previewView() {
   const pane = document.querySelector('.dock-tab-pane[data-group-id="preview-group"]');
   const box = pane?.querySelector('canvas')?.getBoundingClientRect();
   const playing = Boolean(document.querySelector('.dock-tab-pane[data-group-id="timeline-group"] button[aria-label="Pause"]'));
-  return { playing, box: box && box.width > 0 ? { x: box.x, y: box.y, width: box.width, height: box.height } : null };
+  const playhead = window.__timelineStoreModule?.useTimelineStore?.getState?.().playheadPosition ?? null;
+  return { playing, playhead, box: box && box.width > 0 ? { x: box.x, y: box.y, width: box.width, height: box.height } : null };
+}
+
+/**
+ * The stretches in which the timeline really played through, from the previewView samples of a take: [{ from, to,
+ * playhead, box }], with `from`/`to` in take seconds and `playhead` the timeline time at `from`. A jump (a loop, a seek)
+ * starts a new stretch; a hold while the editor prepares stays in it, and the playhead counts back from where it ran.
+ * scripts/tutorial-ms-preview.mjs lays the export over them.
+ */
+export function previewRuns(samples, { tolerance = 0.3, minSeconds = 0.4 } = {}) {
+  const runs = [];
+  let run = null;
+  for (const sample of samples) {
+    const offset = sample.playing && typeof sample.playhead === 'number' ? sample.playhead - sample.t : null;
+    if (offset === null) { run = null; continue; }
+    if (run && Math.abs(offset - run.offset) <= tolerance) {
+      run.to = sample.t;
+      run.offset = offset;
+      continue;
+    }
+    run = { from: sample.t, to: sample.t, offset, box: sample.box ?? null };
+    runs.push(run);
+  }
+  return runs.filter(item => item.to - item.from >= minSeconds)
+    .map(({ from, to, offset, box }) => ({ from, to, playhead: from + offset, box }));
+}
+
+/**
+ * Lets a stretch begin earlier where the preview is black in the recording: after a seek on the ruler, and in the first
+ * moments of a part (the reopened editor has not drawn yet). Those moments are covered with the pictures before the playhead.
+ */
+export function withLeadIn(runs, steps = [], { maxSeconds = 3, startSeconds = 1.5 } = {}) {
+  return runs.map((run, index) => {
+    const previousEnd = index ? runs[index - 1].to : 0;
+    const seek = steps.filter(step => /^click ruler:/.test(step.label ?? '')
+      && step.end <= run.from && run.from - step.end <= maxSeconds && step.end >= previousEnd).at(-1);
+    // A step ends a moment after its click took effect.
+    const begin = seek ? Math.max(seek.start ?? 0, seek.end - 0.3) : (!index && run.from <= startSeconds ? 0 : run.from);
+    return { ...run, from: begin, playhead: run.playhead - (run.from - begin) };
+  });
 }
 
 /** The times (take seconds) of the frames in which the preview area changed, from a small grey copy of each frame. */

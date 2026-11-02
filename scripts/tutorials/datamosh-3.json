@@ -1,0 +1,52 @@
+{
+  "name": "datamosh-3",
+  "episode": "datamosh",
+  "from": "datamosh-2",
+  "voice": { "voice": "flamer", "model": "eleven_v4" },
+  "scenes": [
+    {
+      "id": "clips",
+      "captions": "top",
+      "say": "[casual] Two clips, back to back.",
+      "steps": [
+        { "word": "Two", "early": 0.2 },
+        { "move": "clip:opera_house.mp4", "ms": 700 },
+        { "word": "back", "early": 0.4 },
+        { "move": "clip:dancer.mp4", "ms": 500 }
+      ]
+    },
+    {
+      "id": "search",
+      "say": "Transitions panel, [quickly] search mosh.",
+      "steps": [
+        { "click": "aria:Search transitions@left-group" },
+        { "word": "mosh", "early": 0.5 },
+        { "type": "mosh" },
+        { "pause": 300 },
+        { "click": "Glitch@left-group" },
+        { "pause": 300 }
+      ]
+    },
+    {
+      "id": "drag",
+      "captions": "top",
+      "say": "[pleased] There it is. Drag it right onto the cut.",
+      "steps": [
+        { "word": "Drag", "early": 0.5 },
+        { "drag": "Datamosh@left-group", "to": "clip:dancer.mp4:start", "ms": 1000 },
+        { "pause": 300 }
+      ]
+    },
+    {
+      "id": "nothing",
+      "say": "[deadpan] And... nothing. Because nothing's broken yet.",
+      "steps": [
+        { "click": "ruler:5.4" },
+        { "click": "aria:Play@preview-group" },
+        { "move": "pane:preview-group:0.8,0.62", "ms": 500 },
+        { "word": "broken", "early": 0.2 },
+        { "click": "aria:Pause@preview-group" }
+      ]
+    }
+  ]
+}

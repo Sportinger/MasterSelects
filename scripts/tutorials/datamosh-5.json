@@ -1,0 +1,81 @@
+{
+  "name": "datamosh-5",
+  "episode": "datamosh",
+  "from": "datamosh-4",
+  "voice": {
+    "voice": "flamer",
+    "model": "eleven_v4"
+  },
+  "scenes": [
+    {
+      "id": "rate",
+      "say": "[casual] Data rate down, [quickly] rebake.",
+      "steps": [
+        {
+          "word": "rate",
+          "early": 0.4
+        },
+        {
+          "dblclick": "aria:Data Rate"
+        },
+        {
+          "pause": 200
+        },
+        {
+          "type": "1"
+        },
+        {
+          "press": "Enter"
+        },
+        {
+          "word": "rebake",
+          "early": 0.4
+        },
+        {
+          "click": "Rebake Datamosh"
+        },
+        {
+          "pause": 300
+        },
+        {
+          "waitFor": "gone",
+          "text": "Baking...",
+          "fast": 6
+        }
+      ]
+    },
+    {
+      "id": "mess",
+      "say": "[impressed] More mess.",
+      "steps": [
+        {
+          "click": "ruler:5.4"
+        },
+        {
+          "click": "aria:Play@preview-group"
+        },
+        {
+          "move": "pane:preview-group:0.8,0.62",
+          "ms": 500
+        }
+      ]
+    },
+    {
+      "id": "bye",
+      "say": "[upbeat] Datamosh! No plug-in, no install, right in your browser. MasterSelects dot com. [deadpan] Your video teacher never has to know. [upbeat] Bye!",
+      "steps": [
+        {
+          "word": "right",
+          "early": 0.1
+        },
+        {
+          "click": "ruler:5.4"
+        },
+        {
+          "move": "pane:preview-group:0.8,0.62",
+          "ms": 500
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,203 @@
+{
+  "name": "datamosh-start",
+  "episode": "datamosh",
+  "project": "Datamosh",
+  "_beats": [
+    "Episode datamosh: a one-minute Flamer tutorial and advert. The finished effect first, then why it works, then built from scratch in the real UI.",
+    "Start state: opera house and dancer back to back, a baked Datamosh on the cut, a loop around it, and the Transitions panel open but not filtered.",
+    "Timeline shrunk at the start, so the Preview is large and Bake, Duration and Data Rate fit in Properties without scrolling."
+  ],
+  "media": {
+    "opera_house.mp4": "tests/browser/effect-lab/footage/opera_house_dolly.mp4",
+    "dancer.mp4": "tests/browser/effect-lab/footage/dancer_stage_motion.mp4"
+  },
+  "setup": [
+    {
+      "drag": "handle:left-group:bottom",
+      "to": "~0,210"
+    },
+    {
+      "pause": 500
+    },
+    {
+      "files": [
+        "opera_house.mp4"
+      ],
+      "title": "Footage"
+    },
+    {
+      "pick": [
+        0
+      ]
+    },
+    {
+      "dropFiles": "time:0@Video 1"
+    },
+    {
+      "waitFor": "clips",
+      "count": 1
+    },
+    {
+      "pause": 800
+    },
+    {
+      "files": [
+        "dancer.mp4"
+      ],
+      "title": "Footage"
+    },
+    {
+      "pick": [
+        0
+      ]
+    },
+    {
+      "dropFiles": "time:6.04@Video 1"
+    },
+    {
+      "waitFor": "clips",
+      "count": 2
+    },
+    {
+      "pause": 800
+    },
+    {
+      "expect": {
+        "clip": {
+          "name": "opera_house.mp4",
+          "start": 0
+        }
+      }
+    },
+    {
+      "click": "aria:Add panel@left-group"
+    },
+    {
+      "pause": 300
+    },
+    {
+      "click": "Editing"
+    },
+    {
+      "pause": 300
+    },
+    {
+      "click": "Transitions"
+    },
+    {
+      "pause": 700
+    },
+    {
+      "click": "aria:Search transitions@left-group"
+    },
+    {
+      "type": "mosh"
+    },
+    {
+      "pause": 500
+    },
+    {
+      "click": "Glitch@left-group"
+    },
+    {
+      "pause": 500
+    },
+    {
+      "drag": "Datamosh@left-group",
+      "to": "clip:dancer.mp4:start",
+      "ms": 900
+    },
+    {
+      "pause": 1200
+    },
+    {
+      "click": "aria:Clear search"
+    },
+    {
+      "pause": 500
+    },
+    {
+      "click": "clip:dancer.mp4:1"
+    },
+    {
+      "pause": 400
+    },
+    {
+      "click": "Properties"
+    },
+    {
+      "pause": 600
+    },
+    {
+      "dblclick": "aria:Duration"
+    },
+    {
+      "pause": 300
+    },
+    {
+      "type": "3"
+    },
+    {
+      "press": "Enter"
+    },
+    {
+      "pause": 400
+    },
+    {
+      "click": "Bake Datamosh"
+    },
+    {
+      "waitFor": "text",
+      "text": "Rebake Datamosh"
+    },
+    {
+      "pause": 800
+    },
+    {
+      "click": "ruler:4.5"
+    },
+    {
+      "click": "aria:Set In point at playhead"
+    },
+    {
+      "click": "ruler:10.5"
+    },
+    {
+      "click": "aria:Set Out point at playhead"
+    },
+    {
+      "click": "aria:Enable loop"
+    },
+    {
+      "click": "ruler:4.8"
+    },
+    {
+      "move": "pane:preview-group:0.72,0.62"
+    },
+    {
+      "pause": 800
+    },
+    {
+      "expect": {
+        "playing": false,
+        "playhead": 4.8,
+        "text": "Rebake Datamosh"
+      }
+    }
+  ],
+  "resume": [
+    {
+      "click": "clip:dancer.mp4:1"
+    },
+    {
+      "pause": 300
+    },
+    {
+      "click": "Properties"
+    },
+    {
+      "move": "pane:preview-group:0.72,0.62"
+    }
+  ],
+  "scenes": []
+}
