@@ -275,6 +275,7 @@ The banner appears only when the browser's own check (`VideoEncoder`/`AudioEncod
 
 ### Limitation
 
+- AAC exports (Windows, macOS) start without pre-roll, so the first 20 ms of audio are nearly silent. Picture and sound stay in sync. A real fix needs an edit list in the MP4 (`aac-first-frame-attenuated` in `tests/playwright/export/fast/sources.spec.ts`).
 - This is a stacked-alpha format, not a conventional single-layer transparent video container.
 
 ---

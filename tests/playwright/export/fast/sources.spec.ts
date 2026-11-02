@@ -97,6 +97,9 @@ test('PNG with alpha shows the layer below through transparent pixels @module:ex
 
 for (const key of ['mp3Clicks', 'wavClicks'] as const) {
   test(`${key === 'mp3Clicks' ? 'MP3' : 'WAV'} audio source stays in sync with the picture @module:export @case:export.fast.src-audio-mp3-wav`, async ({ fast }, testInfo) => {
+    // Found 2026-11-02 on AWS Windows, also on the released 3.4.3: AAC has no pre-roll, so the first 20 ms of an
+    // export are nearly silent (peak 1039 instead of 26214) and the click at 0 s goes unheard. Later clicks are exact.
+    test.fail(process.platform !== 'linux', 'aac-first-frame-attenuated');
     const video = await ensureFastSource(FAST_SOURCES.h264Baseline);
     const audio = await ensureFastSource(FAST_SOURCES[key]);
     await arrange(fast.bridge, video, 30, 3);

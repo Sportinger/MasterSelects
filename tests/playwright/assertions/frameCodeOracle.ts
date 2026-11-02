@@ -208,7 +208,7 @@ export async function streamVideoFrames(file: string, onFrame: (pixels: FramePix
   let index = 0
   await new Promise<void>((resolve, reject) => {
     const scale = width === stream.width && height === stream.height ? [] : ['-vf', `scale=${width}:${height}:flags=area`]
-    const child = spawn('ffmpeg', ['-v', 'error', '-i', file, ...scale, '-vsync', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'])
+    const child = spawn('ffmpeg', ['-v', 'error', '-i', file, ...scale, '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'])
     let pending: Buffer<ArrayBufferLike> = Buffer.alloc(0), errors = ''
     child.stdout.on('data', (chunk: Buffer) => {
       pending = pending.length ? Buffer.concat([pending, chunk]) : chunk
