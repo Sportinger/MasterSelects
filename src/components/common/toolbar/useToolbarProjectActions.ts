@@ -4,6 +4,7 @@ import { Logger } from '../../../services/logger';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { failProjectLoadProgress } from '../../../services/project/load/loadProgress';
 import {
+  describeExpectedProjectRejection,
   isExpectedArchiveImportRejection,
   isProjectBackendUnavailable,
   ProjectBackendUnavailableError,
@@ -316,6 +317,11 @@ export function useToolbarProjectActions({
       if (storageFailure) {
         log.warn('Project creation blocked: browser storage is unavailable', error);
         return `The project could not be created. ${storageFailure}`;
+      }
+      const expected = describeExpectedProjectRejection(error);
+      if (expected) {
+        log.warn('Project creation refused', error);
+        return `The project could not be created. ${expected}`;
       }
       log.error('Project creation failed', error);
       return 'The project could not be created. Please check the selected folder and try again.';

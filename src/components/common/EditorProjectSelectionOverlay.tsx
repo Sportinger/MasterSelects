@@ -29,7 +29,7 @@ import { isBrowserStorageFallbackActive } from '../../services/project/core/brow
 import { TemporaryStorageNotice } from './TemporaryStorageNotice';
 import { orderRecentProjectsForChoice, recentProjectLocation } from '../../services/project/recentProjectLocation';
 import { describeBrowserStorageFailure } from '../../services/project/core/browserStorageFailure';
-import { isExpectedArchiveImportRejection } from '../../services/project/projectBackendAvailability';
+import { describeExpectedProjectRejection, isExpectedArchiveImportRejection } from '../../services/project/projectBackendAvailability';
 import { resumePendingProject } from '../../services/project/pendingProjectResume';
 import { validateProjectName } from './projectNameValidation';
 import { InstallAppHint } from './InstallAppHint';
@@ -46,6 +46,11 @@ function reportProjectActionError(action: string, error: unknown, fallback: stri
   if (storageFailure) {
     log.warn(`Project ${action} blocked: browser storage is unavailable`, error);
     return `${fallback} ${storageFailure}`;
+  }
+  const expected = describeExpectedProjectRejection(error);
+  if (expected) {
+    log.warn(`Project ${action} refused`, error);
+    return `${fallback} ${expected}`;
   }
   log.error(`Project ${action} failed`, error);
   const reason = error instanceof Error ? error.message.trim() : '';

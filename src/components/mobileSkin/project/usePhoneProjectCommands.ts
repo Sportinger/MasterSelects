@@ -28,6 +28,7 @@ import { isExpectedArchiveImportRejection } from '../../../services/project/proj
 import { recentProjectLocation } from '../../../services/project/recentProjectLocation';
 import { getActiveRepositorySession } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import { isRepositoryLocationGone } from '../../../services/project/repository/lifecycle/repositoryProjectOperations';
+import { describeExpectedProjectRejection } from '../../../services/project/projectBackendAvailability';
 
 const log = Logger.create('PhoneProjectCommands');
 
@@ -59,6 +60,11 @@ export function describePhoneProjectError(action: string, error: unknown, fallba
   if (storage) {
     log.warn(`Project ${action} blocked: browser storage is unavailable`, error);
     return `${fallback} ${storage}`;
+  }
+  const expected = describeExpectedProjectRejection(error);
+  if (expected) {
+    log.warn(`Project ${action} refused`, error);
+    return `${fallback} ${expected}`;
   }
   log.error(`Project ${action} failed`, error);
   const reason = error instanceof Error ? error.message.trim() : '';

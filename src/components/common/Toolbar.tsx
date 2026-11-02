@@ -62,6 +62,7 @@ import { ToolbarLiveStatus } from './toolbar/ToolbarLiveStatus';
 import { CreditBurnMeter } from './CreditBurnMeter';
 import { runToolbarProjectBootRestore } from './toolbar/toolbarProjectStartup';
 import { restoreAndroidProjectAutomatically } from '../../services/project/androidProjectAutoRestore';
+import { describeExpectedProjectRejection } from '../../services/project/projectBackendAvailability';
 
 const log = Logger.create('Toolbar');
 
@@ -246,7 +247,9 @@ export function Toolbar({
       onProjectBootResolved?.(projectFileService.isProjectOpen());
     };
     void restoreProject().catch((error) => {
-      log.error('Failed to resolve project boot state', error);
+      // A last project whose folder no longer holds a project just leads to the chooser.
+      if (describeExpectedProjectRejection(error)) log.warn('Last project could not be restored', error);
+      else log.error('Failed to resolve project boot state', error);
       setProjectLoadProgress(null);
       setIsLoading(false);
       setupAutoSync();
