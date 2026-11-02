@@ -48,8 +48,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function refuseOpfs() {
-  const getDirectory = vi.fn(async () => { throw new DOMException('The operation failed for an unknown transient reason (e.g. out of memory).', 'UnknownError'); });
+function refuseOpfs(refusal = new DOMException('The operation failed for an unknown transient reason (e.g. out of memory).', 'UnknownError')) {
+  const getDirectory = vi.fn(async () => { throw refusal; });
   vi.stubGlobal('navigator', {
     storage: { getDirectory },
     locks: { request: async (_name: string, _options: unknown, callback: (lock: object) => unknown) => callback({}) },
@@ -58,6 +58,34 @@ function refuseOpfs() {
 }
 
 describe('browser storage fallback when OPFS is refused', () => {
+  // Production 3.4.3, Firefox Private Browsing: "Security error when calling GetDirectory" made
+  // "New project" and "Open" fail outright, while IndexedDB in the same window works.
+  it.each([
+    ['Firefox Private Browsing', 'Security error when calling GetDirectory'],
+    ['Chrome with site data blocked', 'Storage directory access is denied.'],
+    ['WebKit', 'The operation is insecure.'],
+  ])('uses the fallback at once on a SecurityError from %s', async (_browser, message) => {
+    const store = memoryStore(); openStore = async () => store;
+    const getDirectory = refuseOpfs(new DOMException(message, 'SecurityError'));
+    const root = await import('../../src/services/project/core/browserStorageRoot');
+    await root.getBrowserStorageRoot();
+    // Refused for good: asking again only delays the first project by seconds.
+    expect(getDirectory).toHaveBeenCalledTimes(1);
+    expect(root.isBrowserStorageFallbackActive()).toBe(true);
+    expect(root.getBrowserStorageFallbackReason()).toBe('refused');
+  });
+
+  it('explains the refusal, also when a worker relays only the text', async () => {
+    const { describeBrowserStorageFailure, BROWSER_STORAGE_UNAVAILABLE_MESSAGE } = await import('../../src/services/project/core/browserStorageFailure');
+    expect(describeBrowserStorageFailure(new DOMException('Security error when calling GetDirectory', 'SecurityError'))).toBe(BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
+    expect(describeBrowserStorageFailure(new Error('x', { cause: 'Security error when calling GetDirectory' }))).toBe(BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
+  });
+
+  it('leaves other SecurityErrors alone, such as a file picker without a user gesture', async () => {
+    const { describeBrowserStorageFailure } = await import('../../src/services/project/core/browserStorageFailure');
+    expect(describeBrowserStorageFailure(new DOMException('Must be handling a user gesture to show a file picker.', 'SecurityError'))).toBeNull();
+  });
+
   it('creates, saves and reopens a browser project in the fallback store', { timeout: 15_000 }, async () => {
     const store = memoryStore(); openStore = async () => store;
     const getDirectory = refuseOpfs();

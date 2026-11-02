@@ -6,7 +6,7 @@
 
 import { Logger } from '../../logger';
 import { RepositoryError } from '../repository/contracts';
-import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isBrowserStorageUnavailableError, retryTransientStorage } from './browserStorageFailure';
+import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isOpfsRefusal, retryTransientStorage } from './browserStorageFailure';
 import { createFallbackDirectoryRoot } from './fallbackDirectoryHandle';
 import { openIndexedDbEntryStore } from './indexedDbEntryStore';
 
@@ -121,8 +121,9 @@ export function adoptBrowserStorageKind(next: BrowserStorageKind): void { choose
 
 /**
  * Root directory for browser-local projects. OPFS is used whenever it opens;
- * only WebKit's opaque storage refusal on the first access selects the
- * fallback. Once chosen, a later OPFS failure is reported, never redirected.
+ * only the browser's refusal on the first access (WebKit's opaque failure, a
+ * SecurityError in Firefox Private Browsing) selects the fallback. Once chosen,
+ * a later OPFS failure is reported, never redirected.
  */
 export async function getBrowserStorageRoot(): Promise<FileSystemDirectoryHandle> {
   if (kind === null && readTabChoice() === 'indexeddb') choose('indexeddb');
@@ -144,7 +145,7 @@ export async function getBrowserStorageRoot(): Promise<FileSystemDirectoryHandle
     choose('opfs');
     return root;
   } catch (error) {
-    if (kind !== null || !isBrowserStorageUnavailableError(error)) throw error;
+    if (kind !== null || !isOpfsRefusal(error)) throw error;
     let root: FileSystemDirectoryHandle;
     try { root = await openFallbackRoot(); }
     catch (fallbackError) {

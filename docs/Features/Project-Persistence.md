@@ -131,7 +131,10 @@ about the environment, not as a code error.
 
 WebKit (every iOS/iPadOS browser) can refuse OPFS with an opaque `UnknownError`
 while its storage process resumes, in Private Browsing, in in-app browsers or on
-a nearly full device. The fallback below is a last resort: opening the project
+a nearly full device. Firefox refuses it for good with a `SecurityError` in
+Private Browsing (and on Android), and Chrome does when site data is blocked; that
+goes to the same fallback at once, without retries, instead of failing "New project"
+and "Open". The fallback below is a last resort: opening the project
 root, the scratch recovery and listing the stored projects retry after growing
 pauses (200 ms, 600 ms, 1.5 s) before giving up, because a single transient
 `UnknownError` used to empty the project list ("Failed to list project folders")

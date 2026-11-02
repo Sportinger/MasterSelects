@@ -12,7 +12,16 @@ import { installDeterministicStorage } from './phoneFixture'
  * can be created and opened in the temporary store, and its save status reads Temporary.
  * Own context: the init script removes OPFS for the whole page.
  */
-test('a phone without OPFS keeps projects in temporary storage and says so @phone', async ({ browser }, testInfo) => {
+const OPFS_MISSING = () => { delete (StorageManager.prototype as unknown as { getDirectory?: unknown }).getDirectory }
+// Production 3.4.3, Firefox Private Browsing and Firefox for Android: "Project creation failed: Security error when calling GetDirectory".
+const OPFS_REFUSED = () => {
+  StorageManager.prototype.getDirectory = () => Promise.reject(new DOMException('Security error when calling GetDirectory', 'SecurityError'))
+}
+
+for (const [title, removeOpfs, reason] of [
+  ['a phone without OPFS', OPFS_MISSING, 'too old'],
+  ['a browser that refuses OPFS with a SecurityError', OPFS_REFUSED, 'refused permanent storage'],
+] as const) test(`${title} keeps projects in temporary storage and says so @phone`, async ({ browser }, testInfo) => {
   test.setTimeout(180_000)
   const use = testInfo.project.use
   if (!use.baseURL || !use.viewport) throw new Error('Playwright baseURL and a phone viewport must be configured')
@@ -23,14 +32,14 @@ test('a phone without OPFS keeps projects in temporary storage and says so @phon
   try {
     const page = await context.newPage()
     await installDeterministicStorage(page, randomUUID())
-    await page.addInitScript(() => { delete (StorageManager.prototype as unknown as { getDirectory?: unknown }).getDirectory })
+    await page.addInitScript(removeOpfs)
     await page.goto(new URL('/m', use.baseURL).toString(), { waitUntil: 'domcontentloaded', timeout: 60_000 })
     await expect(page.getByTestId(PHONE_M1_TEST_IDS.home), 'the phone home did not appear').toBeVisible({ timeout: 90_000 })
 
     const notice = page.getByTestId('temporary-storage-notice')
     await expect(notice, 'the home must say that projects are only kept temporarily').toBeVisible({ timeout: 15_000 })
     await expect(notice).toContainText('Projects are only kept temporarily in this browser')
-    await expect(notice).toContainText('too old')
+    await expect(notice).toContainText(reason)
 
     const create = page.getByTestId(PHONE_M1_TEST_IDS.createProject)
     if (!await create.isVisible()) await page.getByTestId(PHONE_M1_TEST_IDS.newProject).click()
