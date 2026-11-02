@@ -129,6 +129,16 @@ A browser without OPFS or writable file streams (for example an older iOS
 Safari) cannot open the scratch recovery; the editor logs that as a warning
 about the environment, not as a code error.
 
+Instagram's in-app browser on iOS can finish an IndexedDB open without a connection
+while it also refuses OPFS. That counts as the same transient failure: it is retried
+after growing pauses and then reported as a warning, not a code error.
+
+Choosing a folder that already holds a project for **New project**, or one without a
+project for **Open**, is a normal answer: the person is told what to do and no error
+is reported. One effect whose stored graph this editor cannot read no longer keeps a
+project from opening or saving: the effect is switched off, the person is told, and the
+stored graph stays in the effect (`__unreadableOperatorGraph`).
+
 WebKit (every iOS/iPadOS browser) can refuse OPFS with an opaque `UnknownError`
 while its storage process resumes, in Private Browsing, in in-app browsers or on
 a nearly full device. Firefox refuses it for good with a `SecurityError` in

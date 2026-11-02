@@ -34,12 +34,14 @@ const descendantRange = (path: string) => IDBKeyRange.bound(`${path}/`, `${path}
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, 1);
+    const noConnection = () => new DOMException(`IndexedDB ${DATABASE_NAME} returned no database connection`, 'InvalidStateError');
     request.onupgradeneeded = () => {
+      if (!request.result) { reject(noConnection()); return; }
       const entries = request.result.createObjectStore(ENTRIES, { keyPath: 'path' });
       entries.createIndex('parent', 'parent');
       request.result.createObjectStore(CHUNKS, { keyPath: ['contentId', 'index'] });
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => { if (request.result) resolve(request.result); else reject(noConnection()); };
     request.onerror = () => reject(request.error);
     request.onblocked = () => reject(new DOMException('Browser project storage is blocked by another tab', 'InvalidStateError'));
   });

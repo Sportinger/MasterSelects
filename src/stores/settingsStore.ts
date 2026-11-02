@@ -32,6 +32,7 @@ import type {
   TimelineZoomAnchor,
   TranscriptionProvider,
 } from './settings/settingsOptions';
+import { isBrowserStorageUnavailableError } from '../services/project/core/browserStorageFailure';
 // Compatibility re-export: option catalog moved to ./settings/settingsOptions.
 // Surface kept identical to the pre-split module (clamp helpers stay internal).
 export type {
@@ -570,7 +571,8 @@ export const useSettingsStore = create<SettingsState>()(
           log.info('Integration credentials loaded from encrypted storage');
         } catch (err) {
           set({ youtubeApiKey: '' });
-          log.error('Failed to load integration credentials:', err);
+          if (isBrowserStorageUnavailableError(err)) log.warn('Integration credentials unavailable: this browser refuses IndexedDB', err);
+          else log.error('Failed to load integration credentials:', err);
         }
       },
     }),

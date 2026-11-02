@@ -16,7 +16,8 @@ import { isMobileAppleWebKit } from '../../../utils/mobileAppleWebKit';
 
 const log = Logger.create('BrowserStorage');
 
-const UNKNOWN_STORAGE_MESSAGE = /unknown transient reason/i;
+// IndexedDB's sibling of the same failure: the open succeeds without a connection (Instagram on iOS).
+const UNKNOWN_STORAGE_MESSAGE = /unknown transient reason|returned no database connection/i;
 const REFUSED_STORAGE_MESSAGE = /security error when calling getdirectory|storage directory access is denied/i;
 /**
  * Pauses before each new attempt. WebKit's storage process can take more than a second to resume; giving

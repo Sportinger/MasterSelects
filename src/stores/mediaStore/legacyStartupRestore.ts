@@ -21,6 +21,7 @@ import {
   createThumbnailMediaObjectUrl,
   revokeMediaFileObjectUrls,
 } from '../../services/project/mediaObjectUrlManager';
+import { isBrowserStorageUnavailableError } from '../../services/project/core/browserStorageFailure';
 
 type MediaStoreSet = (
   partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>),
@@ -223,7 +224,8 @@ export async function restoreLegacyStartupMediaState(
     });
     log.info(`Restored ${storedFiles.length} files from IndexedDB`);
   } catch (e) {
-    log.error('Failed to init from IndexedDB:', e);
+    if (isBrowserStorageUnavailableError(e)) log.warn('Restoring from IndexedDB skipped: this browser refuses it', e);
+    else log.error('Failed to init from IndexedDB:', e);
     set({ isLoading: false });
   }
 }

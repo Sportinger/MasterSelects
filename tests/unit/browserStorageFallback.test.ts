@@ -81,6 +81,20 @@ describe('browser storage fallback when OPFS is refused', () => {
     expect(describeBrowserStorageFailure(new Error('x', { cause: 'Security error when calling GetDirectory' }))).toBe(BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
   });
 
+  // Production: Instagram on iOS finishes the IndexedDB open without a connection, also while OPFS refuses.
+  it('treats an IndexedDB open without a connection as the same transient failure and retries it', async () => {
+    const { isBrowserStorageUnavailableError, retryTransientStorage } = await import('../../src/services/project/core/browserStorageFailure');
+    const noConnection = new DOMException('IndexedDB MASterSelectsDB returned no database connection', 'InvalidStateError');
+    expect(isBrowserStorageUnavailableError(noConnection)).toBe(true);
+    let attempts = 0;
+    await expect(retryTransientStorage(async () => {
+      attempts += 1;
+      if (attempts === 1) throw noConnection;
+      return 'open';
+    }, 'test')).resolves.toBe('open');
+    expect(attempts).toBe(2);
+  });
+
   it('leaves other SecurityErrors alone, such as a file picker without a user gesture', async () => {
     const { describeBrowserStorageFailure } = await import('../../src/services/project/core/browserStorageFailure');
     expect(describeBrowserStorageFailure(new DOMException('Must be handling a user gesture to show a file picker.', 'SecurityError'))).toBeNull();

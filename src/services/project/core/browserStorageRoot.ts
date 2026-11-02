@@ -60,7 +60,7 @@ function choose(next: BrowserStorageKind): void {
 }
 
 function openFallbackRoot(): Promise<FileSystemDirectoryHandle> {
-  fallbackRoot ??= openIndexedDbEntryStore().then(createFallbackDirectoryRoot);
+  fallbackRoot ??= retryTransientStorage(openIndexedDbEntryStore, 'Opening the temporary project store').then(createFallbackDirectoryRoot);
   fallbackRoot.catch(() => { fallbackRoot = null; });
   return fallbackRoot;
 }
