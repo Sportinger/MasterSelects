@@ -15,6 +15,7 @@ import {
   type FlashBoardProviderAsset,
 } from './FlashBoardProviderRunners';
 import { reportAiGenerationLifecycle } from '../diagnostics/diagnosticReporter';
+import { isEditRejection } from '../editRejection';
 
 const log = Logger.create('FlashBoardJob');
 export const FLASHBOARD_CANCEL_REQUESTED_ERROR =
@@ -400,7 +401,8 @@ class FlashBoardJobService {
       this.running = this.running.filter(r => r.recordId !== recordId);
       if (abortController.signal.aborted) return;
       const message = err instanceof Error ? err.message : 'Unknown error';
-      log.error(`Job resume failed for record ${recordId}:`, message);
+      if (isEditRejection(err)) log.warn(`Job resume refused for record ${recordId}:`, message);
+      else log.error(`Job resume failed for record ${recordId}:`, message);
       reportAiGenerationLifecycle(remoteTaskId, 'provider_result', 'failed', err);
       this.emitUpdate(recordId, { status: 'failed', error: message, remoteTaskId });
     }

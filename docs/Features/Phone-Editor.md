@@ -488,3 +488,7 @@ has no folder picker, and reading text in pictures (MasterSelects has no OCR eng
   and timeline unchanged. The phone emulation does not spoof an Android user agent: the engine's
   Linux/Mesa presentation path is keyed on "not Android", and a spoofed agent on a Linux test host
   leaves the WebGPU preview black.
+
+## Read-only tabs
+
+A project is written by one tab at a time. A phone tab that does not hold the project shows **Read-only** in the top bar; one tap on it takes the project over from the other tab, like **Take over editing** in the desktop toolbar. The other tab saves its changes and becomes the read-only one. If that tab cannot answer (a frozen background tab), the phone says so and asks to close it.

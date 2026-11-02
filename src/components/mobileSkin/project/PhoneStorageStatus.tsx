@@ -15,6 +15,7 @@ import { isRepositoryFilesMissingError } from '../../../services/project/reposit
 import { FALLBACK_STORAGE_NOTICE, isBrowserStorageFallbackActive } from '../../../services/project/core/browserStorageRoot';
 import { getFolderAccessPause } from '../../../services/project/folderAccess/folderAccessPause';
 import './PhoneProject.css';
+import { getEditorWriterHandover, takeOverEditing } from '../../../services/project/repository/lifecycle/editorWriterHandover';
 
 const POLL_MS = 500;
 
@@ -24,6 +25,8 @@ export interface PhoneStorageState {
   phase: PhoneStoragePhase;
   label: string;
   detail: string;
+  /** Another tab writes this project and this tab can ask for it. */
+  canTakeOver?: boolean;
 }
 
 /** Same decision order as the desktop toolbar's save status, reduced to four phone phases. */
@@ -46,6 +49,7 @@ function readPhoneStorageStatus(): PhoneStorageState {
       phase: 'pending',
       label: 'Read-only',
       detail: session.opening.recovery.warnings.at(-1) ?? 'This project is open for editing in another tab.',
+      canTakeOver: !session.opening.ownershipReason,
     };
   }
   if (getFolderAccessPause().project) {
@@ -68,7 +72,14 @@ function readPhoneStorageStatus(): PhoneStorageState {
 }
 
 function sameStatus(a: PhoneStorageState, b: PhoneStorageState): boolean {
-  return a.phase === b.phase && a.label === b.label && a.detail === b.detail;
+  return a.phase === b.phase && a.label === b.label && a.detail === b.detail && a.canTakeOver === b.canTakeOver;
+}
+
+/** The phone counterpart of the toolbar's Take over editing button. */
+async function takeOverHere(showToast: (message: string, kind?: 'info' | 'error') => void): Promise<void> {
+  showToast('Taking over editing from the other tab…', 'info');
+  const done = await takeOverEditing();
+  if (!done) showToast(getEditorWriterHandover().getSnapshot().notice ?? 'The other tab did not hand over. Close it, then try again.', 'error');
 }
 
 export function PhoneStorageStatus() {
@@ -89,8 +100,12 @@ export function PhoneStorageStatus() {
       className="phone-storage-status"
       data-phase={status.phase}
       data-testid={PHONE_M1_TEST_IDS.storageStatus}
-      aria-label={`${status.label}. ${status.detail}`}
-      onClick={() => showToast(status.detail, status.phase === 'failed' ? 'error' : 'info')}
+      aria-label={`${status.label}. ${status.detail}${status.canTakeOver ? ' Tap to edit here.' : ''}`}
+      onPointerUp={(event) => event.currentTarget.blur()}
+      onClick={() => {
+        if (status.canTakeOver) void takeOverHere(showToast);
+        else showToast(status.detail, status.phase === 'failed' ? 'error' : 'info');
+      }}
     >
       <span className="phone-storage-status__dot" aria-hidden="true" />
       <span className="phone-storage-status__label" role="status" aria-live="polite">{status.label}</span>

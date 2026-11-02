@@ -14,6 +14,7 @@ import {
 } from '../../timeline/utils/clipTrimTiming';
 import type { PhoneActionResult } from '../contracts';
 import { findNearestFreeStart, planPhoneMainTrackDrop } from './phoneReorderPlan';
+import { isEditRejection } from '../../../services/editRejection';
 
 const log = Logger.create('PhoneClipEdit');
 const EPSILON = 1e-4;
@@ -53,7 +54,8 @@ export function runPhoneEditBatch(label: string, apply: () => PhoneActionResult)
     }
     return result;
   } catch (error) {
-    log.error(`${label} threw`, error);
+    if (isEditRejection(error)) log.warn(`${label} refused`, error);
+    else log.error(`${label} threw`, error);
     rollback();
     return { ok: false, message: `${label} failed: ${errorText(error)}` };
   }
@@ -72,7 +74,8 @@ function guarded(label: string, action: () => TimelineEditResult, fallback: stri
   try {
     return phoneResultFromEdit(action(), fallback);
   } catch (error) {
-    log.error(`${label} threw`, error);
+    if (isEditRejection(error)) log.warn(`${label} refused`, error);
+    else log.error(`${label} threw`, error);
     return { ok: false, message: `${label} failed: ${errorText(error)}` };
   }
 }
