@@ -277,6 +277,18 @@ function describeResourceTarget(target: EventTarget | null): { tagName: string; 
   return { tagName, url: typeof url === 'string' ? url.slice(0, 500) : '' };
 }
 
+/** Only our own code failing to load is an error; media, preload hints and third-party scripts stay breadcrumbs. */
+function resourceFailureLevel(target: EventTarget | null, tagName: string, url: string): RuntimeDiagnosticLevel {
+  if (tagName !== 'script' && tagName !== 'link') return 'WARN';
+  // A failed preload hint proves nothing: the import that needs the module reports its own result.
+  if (tagName === 'link' && (target as HTMLLinkElement).rel?.toLowerCase() === 'modulepreload') return 'WARN';
+  try {
+    // Ad blockers routinely block the analytics beacon; the editor does not depend on any third-party script.
+    if (new URL(url, window.location.href).origin !== window.location.origin) return 'WARN';
+  } catch { /* An unparsable URL stays an error. */ }
+  return 'ERROR';
+}
+
 /** An edit the repository refused is shown to the person and kept as a warning, not reported as a crash. */
 function handleEditRejection(event: Event, error: unknown, source: RuntimeDiagnosticSource): boolean {
   if (!isEditRejection(error)) return false;
@@ -329,15 +341,14 @@ export function installRuntimeDiagnostics(): void {
 
   // Resource load failures (scripts, chunks, stylesheets, media) do not bubble,
   // so they only reach a capture-phase listener. Broken chunks are errors;
-  // broken media is a warning breadcrumb.
+  // everything else is a warning breadcrumb (see resourceFailureLevel).
   window.addEventListener('error', (event) => {
     if (event.target === window) return;
     const resource = describeResourceTarget(event.target);
     if (!resource) return;
-    const isCodeResource = resource.tagName === 'script' || resource.tagName === 'link';
     recordDiagnostic({
       source: 'resource-error',
-      level: isCodeResource ? 'ERROR' : 'WARN',
+      level: resourceFailureLevel(event.target, resource.tagName, resource.url),
       message: `Failed to load ${resource.tagName}: ${resource.url || '(no url)'}`,
       details: { tagName: resource.tagName, url: resource.url },
     });

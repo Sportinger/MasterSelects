@@ -40,8 +40,9 @@ before any other module evaluates. Sources:
   logged before the reporter existed are replayed once at install);
 - React 19 root hooks (`react_render`, `react_caught`, `react_recoverable`)
   including the component stack;
-- failed script/stylesheet loads (`resource_error`) and chunk-load reloads
-  (`chunk_load`);
+- failed loads of our own scripts and stylesheets (`resource_error`) and chunk-load
+  reloads (`chunk_load`); media, `modulepreload` hints and third-party scripts such as
+  the ad-blocked analytics beacon stay warning breadcrumbs;
 - WebGPU uncaptured errors and device loss (`webgpu_uncapturederror`,
   `webgpu_device_lost`);
 - AI-generation lifecycle: provider processing/result, download, import.

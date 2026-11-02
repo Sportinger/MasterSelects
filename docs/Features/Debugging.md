@@ -451,6 +451,11 @@ Three more paths lead into the same recovery (`src/runtime/chunkLoadRecovery.ts`
   event (`reload_waiting_online`) instead of failing again and spending the cooldown.
   Mobile tabs resumed from the background hit this most.
 - **Failed CSS preloads** ("Unable to preload CSS for …") count as chunk failures.
+  A failed `<link rel="modulepreload">` does not: it is only a hint, and the import
+  that needs the module reports its own result through `vite:preloadError`. Firefox
+  153/154 fire `error` on the preload of the entry chunk while that chunk runs fine,
+  which used to reload a working editor and leave the "could not be loaded" notice on
+  screen. It is logged as a warning breadcrumb, not as an error.
 - **Project storage worker that fails before answering.** A worker 404 raises no
   chunk error, only `Project storage worker failed (storage phase: startup …)`.
   `StorageWorkerClient` reports such a failure (`src/runtime/workerLoadFailure.ts`);

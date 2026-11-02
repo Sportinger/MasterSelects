@@ -40,7 +40,37 @@ async function failedViteImport(error: Error): Promise<unknown> {
   return undefined;
 }
 
+function failLink(rel: string, href: string): void {
+  const link = document.createElement('link');
+  link.rel = rel;
+  link.href = href;
+  const event = new Event('error', { cancelable: true });
+  Object.defineProperty(event, 'target', { value: link });
+  window.dispatchEvent(event);
+}
+
 describe('chunk load recovery', () => {
+  // Production 3.4.3, Firefox 153/154: the preload of the running entry chunk fires error, so a working
+  // editor reloaded itself and then kept showing "Part of MasterSelects could not be loaded".
+  it('does not treat a failed modulepreload hint as a failed chunk', () => {
+    failLink('modulepreload', 'https://www.masterselects.com/assets/editor-abc.js');
+    expect(reload).not.toHaveBeenCalled();
+    expect(notice()).toBeNull();
+    expect(window.sessionStorage.getItem(marker)).toBeNull();
+  });
+
+  it('still recovers when the import behind such a hint really fails', async () => {
+    failLink('modulepreload', 'https://www.masterselects.com/assets/editor-abc.js');
+    const error = new TypeError('error loading dynamically imported module: https://www.masterselects.com/assets/editor-abc.js');
+    await expect(failedViteImport(error)).rejects.toBe(error);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('still recovers from a failed stylesheet of our own', () => {
+    failLink('stylesheet', 'https://www.masterselects.com/assets/editor-abc.css');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
   it('retains dirty work without consuming reload recovery or swallowing the import error', async () => {
     const { preserveUnsavedProjectOnChunkFailure } = await import('../../src/runtime/chunkReloadGuard');
     let dirty = true;
