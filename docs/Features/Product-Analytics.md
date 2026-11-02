@@ -109,7 +109,10 @@ errors and diagnostic build-error comparison. Their reports remain in D1;
 volume separately. Matching uses the server-observed user agent. Unrecognized
 or missing agents are retained, so the remainder is not a verified human count.
 Historical product-analytics events do not retain user agents and are not
-retroactively filtered. Product-analytics and diagnostic session IDs are
+retroactively filtered; recognised crawlers are no longer stored there at all
+(`functions/lib/crawlerUserAgents.ts`). Uncaught errors whose stack shows only scripts
+we do not ship (in-app browsers, wallets, iOS browser scripts) and "Script error." stay
+warning breadcrumbs, as do MP4Box's notes about unknown metadata boxes. Product-analytics and diagnostic session IDs are
 independent; their counts must not be divided to estimate a failure rate.
 
 Production builds embed an ISO timestamp build ID, sent with `app_opened` and runtime diagnostic context (including reduced payloads). They also embed the built git commit (`sourceRevision`), whether the tree had uncommitted tracked changes (`sourceDirty`), and for clean builds `releaseId` (`masterselects-<version>-<commit>`), so Fassandra maps each error to its public source; the dev server sends none of these. Development builds use `development` and are excluded from release comparison. The comparison observes the latest two timestamp builds within 30 days, including builds with app opens but no errors; it shows distinct error sessions and occurrences per fingerprint. Different usage and observation periods mean a decrease or absence does not prove a fix. Legacy events without a timestamp build remain explicitly unassigned.

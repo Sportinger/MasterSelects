@@ -20,6 +20,7 @@ import {
 } from './proxy/jobRegistry';
 import { isExternalProxySourceActive } from '../../../services/mediaRuntime/linkedMediaSourceRuntime';
 import { runEditorBackgroundWrite } from '../../../services/project/repository/transaction/editorTransactionBinding';
+import { announceEditRejection } from '../../../services/editRejection';
 
 const log = Logger.create('Proxy');
 
@@ -184,7 +185,9 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => {
     }
 
     if (!projectFileService.isProjectOpen()) {
-      log.error('No project open!');
+      // Proxies are stored with the project, so a scratch session has nowhere to put them.
+      log.warn('Proxy generation needs an open project');
+      announceEditRejection(new Error('Proxies are stored with the project. Create or open a project first.'));
       return;
     }
 
