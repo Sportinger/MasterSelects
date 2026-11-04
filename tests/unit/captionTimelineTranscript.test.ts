@@ -206,6 +206,56 @@ describe('Caption timeline transcript', () => {
     ]);
   });
 
+  it('collects transcript sources once per build, not once per word, on a finely cut timeline', () => {
+    const wordCount = 2000;
+    const source = clip({
+      id: 'vocals',
+      trackId: 'audio',
+      sourceType: 'audio',
+      duration: 3000,
+      transcript: Array.from({ length: wordCount }, (_, index) => ({
+        id: `word-${index}`,
+        text: `word${index}`,
+        start: index,
+        end: index + 0.5,
+      })),
+    });
+    const multicamPieces = Array.from({ length: 400 }, (_, index) => clip({
+      id: `piece-${index}`,
+      trackId: 'video',
+      startTime: index * 7.5,
+      duration: 7.5,
+    }));
+    let scans = 0;
+    const clips = new Proxy([source, ...multicamPieces], {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) scans += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const events = createTimelineTranscript({ clips, timelineEnd: 3000, tracks });
+
+    expect(events.filter(event => event.kind === 'word')).toHaveLength(wordCount);
+    expect(scans).toBeLessThanOrEqual(2);
+  });
+
+  it('still honors the requested source and the rank for every word when sources overlap', () => {
+    const word = (id: string, start: number) => ({ id, text: id, start, end: start + 0.5 });
+    const video = clip({ id: 'video-source', trackId: 'video', duration: 4, transcript: [word('v1', 1), word('v2', 3)] });
+    const audio = clip({ id: 'audio-source', trackId: 'audio', sourceType: 'audio', duration: 4, transcript: [word('a1', 1), word('a2', 3)] });
+
+    const words = (sourceClipId?: string) => createTimelineTranscript({
+      clips: [audio, video],
+      sourceClipId,
+      timelineEnd: 4,
+      tracks,
+    }).flatMap(event => event.kind === 'word' ? [event.wordId] : []);
+
+    expect(words()).toEqual(['v1', 'v2']);
+    expect(words('audio-source')).toEqual(['a1', 'a2']);
+  });
+
   it('ripple-cuts linked video/audio, de-clicks both audio edges, and keeps captions in sync', () => {
     const transcript: TranscriptWord[] = [
       { id: 'before', text: 'before', start: 1, end: 1.4 },

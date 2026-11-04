@@ -3,7 +3,7 @@ import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import { getClipSourceRate } from '../../utils/clipPlaybackTiming';
 import {
   getCaptionSourceCandidates,
-  resolveTranscriptSourceAtTime,
+  resolveTranscriptSourceFromCandidates,
 } from './captionRuntime';
 
 const TIME_EPSILON = 1e-6;
@@ -64,8 +64,9 @@ function createWordEvents(input: {
   tracks: readonly TimelineTrack[];
 }): CaptionTimelineWordEvent[] {
   const events: CaptionTimelineWordEvent[] = [];
+  const candidates = getCaptionSourceCandidates(input.clips);
 
-  for (const candidate of getCaptionSourceCandidates(input.clips)) {
+  for (const candidate of candidates) {
     const clipStart = candidate.clip.startTime;
     const clipEnd = clipStart + candidate.clip.duration;
     for (const word of candidate.words) {
@@ -78,8 +79,8 @@ function createWordEvents(input: {
       const timelineEnd = Math.min(input.timelineEnd, clipEnd, Math.max(mappedA, mappedB));
       if (timelineEnd - timelineStart <= TIME_EPSILON) continue;
 
-      const selectedSource = resolveTranscriptSourceAtTime({
-        clips: input.clips,
+      const selectedSource = resolveTranscriptSourceFromCandidates({
+        candidates,
         sourceClipId: input.sourceClipId,
         tracks: input.tracks,
         timelineTime: (timelineStart + timelineEnd) / 2,
