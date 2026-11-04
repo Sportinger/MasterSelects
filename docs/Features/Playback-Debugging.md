@@ -114,6 +114,7 @@ If the preview is black after reload, also confirm the browser media element is 
 - Check browser media `readyState` first.
 - Check `getStats.decoder` and `playback.pipeline`: the active path can be full WebCodecs, HTML video / VideoFrame (including cache variants), Native Helper, or ParallelDecode.
 - If external texture import fails, inspect the media readiness and the recorded GPU/runtime diagnostics before assuming a browser-specific fallback.
+- A warning `refused by the runtime budget` names the unit, its usage and its limit: the clip got no media element or decoder and stays dark or silent. Only live handles count toward that budget, so a long cut of bound clips does not fill it; check what else holds resources when the warning appears.
 
 ### Scrub Freezes Or Delayed Updates
 
