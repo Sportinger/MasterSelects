@@ -283,6 +283,9 @@ export function ExportVideoInspectorSection({
               </div>
             </ExportInspectorRow>
           )}
+          {video.compositionSizeNote && (
+            <ExportInspectorNote tone="warning">{video.compositionSizeNote}</ExportInspectorNote>
+          )}
 
           <ExportInspectorRow
             actions={video.compositionMatchingAvailable ? (
@@ -329,6 +332,9 @@ export function ExportVideoInspectorSection({
                 value={video.customFps}
               />
             </ExportInspectorRow>
+          )}
+          {video.compositionFrameRateNote && (
+            <ExportInspectorNote tone="warning">{video.compositionFrameRateNote}</ExportInspectorNote>
           )}
 
           {mode.isGifMode ? (

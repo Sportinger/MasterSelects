@@ -195,7 +195,12 @@ a dev server (default `http://localhost:5174/editor`):
 - steps: `open` (Choose-project dialog or File → Open Project...), `restore` (wait
   for the automatic reopen), `pick:<dir>` / `pick:@<mount>` (answer the next folder
   dialog), `click:<button regex>`, `waitText:<regex>`, `wait:<ms>`,
-  `eval:<expression>`; confirm dialogs are accepted.
+  `eval:<expression>`, `shot:<png file>` (a screenshot at that point of the run);
+  confirm dialogs are accepted;
+- `--keep-open` leaves the visible window open after the steps, also after a failed
+  step, until it is closed, so a person can look at the loaded project. With
+  `--debug-port <port>` a second script can attach to that window
+  (Playwright `chromium.connectOverCDP('http://127.0.0.1:<port>')`) and keep working in it.
 
 The JSON report has a timed progress trace (load phases, "saved items recovered",
 missing-media notices), the final visible state and the editor's warnings/errors

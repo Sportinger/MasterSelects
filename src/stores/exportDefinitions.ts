@@ -99,6 +99,8 @@ export function createDefaultExportSettings(): ExportSettings {
     fps: 30,
     customFps: 30,
     useCustomFps: false,
+    matchCompositionResolution: true,
+    matchCompositionFrameRate: true,
     useInOut: true,
     filename: 'export',
     bitrate: 15_000_000,
@@ -197,6 +199,32 @@ export function pickNumber(value: unknown, fallback: number, options?: { min?: n
   return next;
 }
 
+/**
+ * A size or frame rate set by hand stops following the composition, so a preset, a tool or the
+ * phone can set a fixed format without being overruled. A write that states the choice itself
+ * (the composition follow-up does) keeps it.
+ */
+export function endCompositionMatchOnFormatChange(
+  current: ExportSettings,
+  patch: Partial<ExportSettings>,
+): Partial<ExportSettings> {
+  const next = { ...current, ...patch };
+  const size = (settings: ExportSettings) => (settings.useCustomResolution
+    ? [settings.customWidth, settings.customHeight]
+    : [settings.width, settings.height]);
+  const frameRate = (settings: ExportSettings) => (settings.useCustomFps ? settings.customFps : settings.fps);
+  const [width, height] = size(current);
+  const [nextWidth, nextHeight] = size(next);
+  return {
+    ...(patch.matchCompositionResolution === undefined && (width !== nextWidth || height !== nextHeight)
+      ? { matchCompositionResolution: false }
+      : {}),
+    ...(patch.matchCompositionFrameRate === undefined && frameRate(current) !== frameRate(next)
+      ? { matchCompositionFrameRate: false }
+      : {}),
+  };
+}
+
 export function sanitizeSettings(input?: Partial<ExportSettings> | null): ExportSettings {
   const defaults = createDefaultExportSettings();
   if (!input) {
@@ -231,6 +259,9 @@ export function sanitizeSettings(input?: Partial<ExportSettings> | null): Export
     fps: pickNumber(input.fps, defaults.fps, { min: 1, max: 240 }),
     customFps: pickNumber(input.customFps, defaults.customFps, { min: 1, max: 240 }),
     useCustomFps: typeof input.useCustomFps === 'boolean' ? input.useCustomFps : defaults.useCustomFps,
+    // No default here: settings saved without the choice stay undecided (see resolveCompositionMatch).
+    ...(typeof input.matchCompositionResolution === 'boolean' ? { matchCompositionResolution: input.matchCompositionResolution } : {}),
+    ...(typeof input.matchCompositionFrameRate === 'boolean' ? { matchCompositionFrameRate: input.matchCompositionFrameRate } : {}),
     useInOut: typeof input.useInOut === 'boolean' ? input.useInOut : defaults.useInOut,
     filename: typeof input.filename === 'string' ? input.filename : defaults.filename,
     bitrate: Math.round(pickNumber(input.bitrate, defaults.bitrate, { min: 1_000_000, max: 100_000_000 })),

@@ -67,6 +67,8 @@ export function useExportState(
     fps,
     customFps,
     useCustomFps,
+    matchCompositionResolution,
+    matchCompositionFrameRate,
     useInOut,
     filename,
     bitrate,
@@ -184,6 +186,13 @@ export function useExportState(
       setSettings({ videoCodec: availableCodecs[0].id });
     }
   }, [containerFormat, setSettings, videoCodec]);
+
+  const setCompositionMatch = useCallback((next: { resolution?: boolean; frameRate?: boolean }) => {
+    setSettings({
+      ...(next.resolution === undefined ? {} : { matchCompositionResolution: next.resolution }),
+      ...(next.frameRate === undefined ? {} : { matchCompositionFrameRate: next.frameRate }),
+    });
+  }, [setSettings]);
 
   const handleResolutionChange = useCallback((value: string) => {
     const [nextWidth, nextHeight] = value.split('x').map(Number);
@@ -319,6 +328,11 @@ export function useExportState(
     setCustomFps: (value: number) => setSettings({ customFps: value }),
     useCustomFps,
     setUseCustomFps: (value: boolean) => setSettings({ useCustomFps: value }),
+    /** Stored choice; undefined for settings saved before it existed. */
+    matchCompositionResolution,
+    matchCompositionFrameRate,
+    /** One write for either or both choices, so "Same as composition" is a single undo step. */
+    setCompositionMatch,
     useInOut,
     setUseInOut: (value: boolean) => setSettings({ useInOut: value }),
     filename,

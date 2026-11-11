@@ -26,6 +26,9 @@ export function phoneSpecToExportSettings(spec: PhoneExportRunSpec, range: Phone
     fps: spec.fps,
     customFps: spec.fps,
     useCustomFps: true,
+    // A phone preset holds the format it was saved with; the desktop panel must not replace it.
+    matchCompositionResolution: false,
+    matchCompositionFrameRate: false,
     useInOut: range === 'in-out',
     bitrate: spec.bitrate > 0 ? spec.bitrate : base.bitrate,
     containerFormat: spec.container,

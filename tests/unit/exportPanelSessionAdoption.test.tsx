@@ -407,9 +407,24 @@ vi.mock('../../src/components/export/exportHelpers', () => ({
   FFmpegFrameRenderer: mockFactory.MockFFmpegFrameRenderer,
 }));
 
-vi.mock('../../src/components/export/useExportState', () => ({
-  useExportState: () => mockFactory.createExportState(),
-}));
+vi.mock('../../src/components/export/useExportState', async () => {
+  const { useState } = await import('react');
+  return {
+    useExportState: () => {
+      // The stored "follow the composition" choice has to react to its checkboxes; absent at
+      // first, like settings saved before the choice was stored.
+      const [match, setMatch] = useState<{ resolution?: boolean; frameRate?: boolean }>({});
+      return {
+        ...mockFactory.createExportState(),
+        matchCompositionResolution: match.resolution,
+        matchCompositionFrameRate: match.frameRate,
+        setCompositionMatch: (next: { resolution?: boolean; frameRate?: boolean }) => (
+          setMatch(current => ({ ...current, ...next }))
+        ),
+      };
+    },
+  };
+});
 
 vi.mock('../../src/stores/timeline', () => {
   const useTimelineStore = Object.assign(

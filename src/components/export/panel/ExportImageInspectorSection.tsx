@@ -133,6 +133,9 @@ export function ExportImageInspectorSection({
           </div>
         </ExportInspectorRow>
       )}
+      {video.compositionSizeNote && (
+        <ExportInspectorNote tone="warning">{video.compositionSizeNote}</ExportInspectorNote>
+      )}
 
       <ExportInspectorRow label="Quality" target="image-quality">
         {image.selectedImageFormat.lossless ? (
@@ -207,6 +210,9 @@ export function ExportImageInspectorSection({
                 value={video.customFps}
               />
             </ExportInspectorRow>
+          )}
+          {video.compositionFrameRateNote && (
+            <ExportInspectorNote tone="warning">{video.compositionFrameRateNote}</ExportInspectorNote>
           )}
         </>
       )}

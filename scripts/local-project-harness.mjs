@@ -12,9 +12,11 @@
 //   node scripts/local-project-harness.mjs --folder "/path/to/Project" [--url http://localhost:5174/editor]
 //     [--mount <name>=<folder> [--mount-include <name>=<path regex>]]...
 //     [--step open | --step restore | --step pick:<relative dir> | --step pick:@<mount>[/<dir>] | --step click:<button name regex> | --step wait:<ms>
-//      | --step waitText:<regex> | --step eval:<js expression>]... [--exclude <relative prefix>]...
+//      | --step waitText:<regex> | --step eval:<js expression> | --step shot:<png file>]... [--exclude <relative prefix>]...
 //     [--profile <dir>] [--timeout <ms>] [--headed] [--channel chrome|chromium] [--report <file>] [--screenshot <file>]
-//     [--real-gpu] [--measure-pipelines]
+//     [--real-gpu] [--measure-pipelines] [--keep-open] [--debug-port <port>]
+// --keep-open leaves the visible window open after the steps (also after a failed step) until it is closed;
+// --debug-port lets a second script attach to that window (Playwright `connectOverCDP`).
 // --real-gpu opens a visible window on the hardware Vulkan driver (headless Chrome only has
 // SwiftShader). --measure-pipelines additionally compiles every pipeline the editor creates
 // asynchronously and reports the driver compile time per pipeline label (heaviest first).
@@ -47,6 +49,8 @@ function parseArgs(argv) {
     else if (name === '--real-gpu') { options.realGpu = true; options.headed = true; }
     else if (name === '--measure-pipelines') options.measurePipelines = true;
     else if (name === '--channel') options.channel = take();
+    else if (name === '--keep-open') { options.keepOpen = true; options.headed = true; }
+    else if (name === '--debug-port') options.debugPort = Number(take());
     else throw new Error(`Unknown argument: ${name}`);
   }
   if (!options.folder) throw new Error('--folder is required');
@@ -236,10 +240,12 @@ async function main() {
     // `--channel chromium` uses Playwright's bundled build.
     context = await chromium.launchPersistentContext(options.profile, {
       channel: options.channel === 'chromium' ? undefined : options.channel,
-      headless: !options.headed, viewport: { width: 1600, height: 1000 },
+      headless: !options.headed, viewport: options.keepOpen ? null : { width: 1600, height: 1000 },
       // Only this throwaway profile: let production pages read the loopback file server.
       args: ['--enable-unsafe-webgpu', '--disable-features=LocalNetworkAccessChecks,BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights',
-        ...(options.realGpu ? ['--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan', '--ignore-gpu-blocklist'] : [])],
+        ...(options.realGpu ? ['--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan', '--ignore-gpu-blocklist'] : []),
+        ...(options.keepOpen ? ['--window-size=1600,1000'] : []),
+        ...(options.debugPort ? [`--remote-debugging-port=${options.debugPort}`] : [])],
     });
     await context.addInitScript(installPickers);
     if (options.measurePipelines) await context.addInitScript(installPipelineMeter);
@@ -298,6 +304,7 @@ async function main() {
       else if (kind === 'wait') await page.waitForTimeout(Number(argument));
       else if (kind === 'waitText') await page.getByText(new RegExp(argument, 'i')).first().waitFor({ timeout: options.timeout });
       else if (kind === 'eval') report[`eval:${argument.slice(0, 40)}`] = await page.evaluate(argument);
+      else if (kind === 'shot') await page.screenshot({ path: path.resolve(argument) });
       else throw new Error(`Unknown step: ${step}`);
       mark(`step done ${step}`);
     }
@@ -312,6 +319,11 @@ async function main() {
     report.error = error instanceof Error ? error.message : String(error);
   } finally {
     report.durationMs = Date.now() - startedAt;
+    if (options.keepOpen && context) {
+      // The window stays for a person, or for a second script attached through --debug-port, until it is closed.
+      if (options.report) writeFileSync(options.report, JSON.stringify(report, null, 2));
+      await new Promise(resolve => context.on('close', resolve));
+    }
     await context?.close().catch(() => undefined);
     server.close();
   }
