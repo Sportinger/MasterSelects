@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error The tutorial pipeline is plain ESM JavaScript without type declarations.
-import { cameraSegments, timeMap } from '../../scripts/tutorialCut.mjs';
+import { cameraSegments, timeMap, zoomedShare } from '../../scripts/tutorialCut.mjs';
 // @ts-expect-error The tutorial pipeline is plain ESM JavaScript without type declarations.
 import { cameraKeyframes } from '../../scripts/tutorial-ms-cut.mjs';
 // @ts-expect-error The tutorial pipeline is plain ESM JavaScript without type declarations.
@@ -50,5 +50,23 @@ describe('tutorial music in MasterSelects', () => {
     expect(musicVolumeKeys({ at: 0, length: 18 }, { level: 0.08, first: true, last: true }))
       .toEqual([[0, 0, 'linear'], [0.6, 0.08, 'hold'], [15.5, 0.08, 'linear'], [18, 0, 'hold']]);
     expect(musicVolumeKeys({ at: 40, length: 16 }, { level: 0.08, first: false, last: false })).toEqual([[0, 0.08, 'hold']]);
+  });
+
+  it('measures how much of a take is zoomed in', () => {
+    const rest = { cx: 1280, cy: 720, zoom: 1 };
+    expect(zoomedShare([], rest, 10)).toBe(0);
+    const share = zoomedShare([
+      { t: 2, ms: 0, cx: 1000, cy: 700, zoom: 1.3 },
+      { t: 6, ms: 0, ...rest },
+    ], rest, 10);
+    expect(share).toBeGreaterThan(0.35);
+    expect(share).toBeLessThan(0.45);
+  });
+
+  it('counts a sped-up wait for its short length when it measures the zoom', () => {
+    const rest = { cx: 1280, cy: 720, zoom: 1 };
+    const keys = [{ t: 0, ms: 0, cx: 1000, cy: 700, zoom: 1.3 }, { t: 10, ms: 0, ...rest }];
+    expect(zoomedShare(keys, rest, 20)).toBeCloseTo(0.5, 1);
+    expect(zoomedShare(keys, rest, 20, { fast: [{ from: 0, to: 10, factor: 5 }] })).toBeCloseTo(1 / 6, 1);
   });
 });

@@ -32,9 +32,11 @@ Dynamic nested video sources are recollected within a timeline frame instead of 
 
 ### Datamosh codec bake
 
-Datamosh is a codec-domain transition rather than a shader approximation. Its Properties section renders the outgoing and incoming participants, encodes an MPEG-4 Part 2 stream, removes the junction I-frame, and imports the resulting H.264/MP4 playback artifact into a project-backed `Datamosh` media folder. The transition stores only the imported media ID and bounded bake metadata. Preview, nested composition playback, and export then use that seekable artifact in real time.
+Datamosh is a codec-domain transition rather than a shader approximation. Its Properties section renders the outgoing and incoming participants, encodes an MPEG-4 Part 2 stream, removes the junction I-frame, and imports the resulting H.264/MP4 playback artifact into a project-backed `Datamosh` media folder.
 
-Changing transition duration or data rate marks the artifact stale and exposes **Rebake Datamosh**. Until a current artifact exists, the transition fails safely to the incoming frame. Export preparation resolves baked media through the normal runtime registry and does not repeat the destructive codec operation during final delivery.
+The bake runs at the composition's resolution. Only a length that does not fit in memory at that size scales down (about 3 GB of raw frames, so 4K for longer than about 3 seconds at 30 fps), and the status line then names both sizes. **Data Rate** (default 8 Mbps) shapes the MPEG-4 mosh only: lower is rougher. The playback artifact gets its own bitrate from its pixels, so it does not compress the result a second time. Bakes made before this change are marked for a rebake. The transition stores only the imported media ID and bounded bake metadata. Preview, nested composition playback, and export then use that seekable artifact in real time.
+
+Changing transition duration or data rate marks the artifact stale, says so in the status line, and exposes **Rebake Datamosh**. Until a current artifact exists, the transition fails safely to the incoming frame. Export preparation resolves baked media through the normal runtime registry and does not repeat the destructive codec operation during final delivery.
 
 ## Editing
 

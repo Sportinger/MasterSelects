@@ -1,0 +1,92 @@
+{
+  "name": "datamosh-2",
+  "episode": "datamosh",
+  "from": "datamosh-1",
+  "voice": {
+    "voice": "flamer",
+    "model": "eleven_v4"
+  },
+  "scenes": [
+    {
+      "id": "science",
+      "say": "[casual] Quick science: a video only stores a few full pictures. [quickly] Everything in between just says: this block moves over there.",
+      "steps": [
+        {
+          "click": "aria:Play@preview-group"
+        },
+        {
+          "word": "full",
+          "early": 0.3
+        },
+        {
+          "circle": "pane:preview-group:0.5,0.45",
+          "r": 320,
+          "ry": 180,
+          "ms": 1100
+        },
+        {
+          "word": "block",
+          "early": 0.2
+        },
+        {
+          "trace": [
+            "pane:preview-group:0.3,0.55",
+            "pane:preview-group:0.68,0.42"
+          ],
+          "curve": true,
+          "ms": 1100
+        }
+      ]
+    },
+    {
+      "id": "hole",
+      "captions": "top",
+      "say": "[conspiratorial] So we delete the full picture at the cut... [gasps] and the dancer's moves land on the old picture.",
+      "steps": [
+        {
+          "word": "cut",
+          "early": 0.6
+        },
+        {
+          "circle": "clip:dancer.mp4:start",
+          "r": 70,
+          "ry": 40,
+          "ms": 1000
+        },
+        {
+          "word": "dancer's",
+          "early": 0.3
+        },
+        {
+          "move": "pane:preview-group:0.5,0.5",
+          "ms": 700
+        }
+      ]
+    },
+    {
+      "id": "scratch",
+      "say": "[snaps back to upbeat] Okay! Let's build it from scratch.",
+      "steps": [
+        {
+          "click": "aria:Pause@preview-group"
+        },
+        {
+          "word": "build",
+          "early": 0.5
+        },
+        {
+          "click": "Remove Transition"
+        },
+        {
+          "pause": 400
+        },
+        {
+          "expect": {
+            "gone": "Remove Transition",
+            "playing": false
+          }
+        }
+      ]
+    }
+  ]
+}

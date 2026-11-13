@@ -204,7 +204,7 @@ export async function main(args, { chrome, fresh = false } = {}) {
 
       // A failed step still leaves the recording up to it (recording.json with "failed"), so --recut can show it.
       const keepRecording = failed => {
-        const recording = { viewport, end: m.now() - take.t0, scenes, steps, camera: take.camera, fast: take.fast, failed,
+        const recording = { viewport, end: m.now() - take.t0, scenes, steps, camera: take.camera, fast: take.fast, failed, views,
           frames: frames.map(frame => ({ file: frame.file, time: frame.time - take.t0 })) };
         fs.writeFileSync(path.join(work, 'recording.json'), JSON.stringify(recording));
         return recording;
@@ -271,6 +271,10 @@ export async function main(args, { chrome, fresh = false } = {}) {
       if (slow.length && !args.includes('--allow-slow-preview')) {
         throw new Error(`the preview stuttered in ${slow.length} place(s) (above). Find the cause (profile it in the build server) and fix it`
           + ' before this part goes on; --allow-slow-preview records anyway. No checkpoint was saved.');
+      }
+      const zoomed = m.zoomedShare(take.camera, restCamera, recording.end, { fast: take.fast });
+      if (zoomed > m.MAX_ZOOMED_SHARE) {
+        console.warn(`CAMERA: zoomed in for ${(zoomed * 100).toFixed(0)} % of this part. Stay on the whole editor (\`{ "camera": "all" }\`); zoom only for an important or a dramatic moment, and come back.`);
       }
       if (!slow.length) console.log(`preview: at least ${m.MIN_PREVIEW_FPS} new pictures per second wherever the timeline played`);
 

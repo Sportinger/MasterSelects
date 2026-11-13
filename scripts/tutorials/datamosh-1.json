@@ -1,0 +1,83 @@
+{
+  "name": "datamosh-1",
+  "episode": "datamosh",
+  "from": "datamosh-start",
+  "voice": {
+    "voice": "flamer",
+    "model": "eleven_v4"
+  },
+  "_beats": [
+    "Episode datamosh: 'We break a video file. On purpose.' About one minute, in five parts.",
+    "Part 1 (datamosh-1): the finished effect plays, the intro, the promise: no shader, the file is really damaged.",
+    "Part 2 (datamosh-2): quick science on why it works, then the transition is removed: from scratch.",
+    "Part 3 (datamosh-3): two clips, Transitions, search mosh, drag Datamosh onto the cut; nothing happens yet.",
+    "Part 4 (datamosh-4): Properties, Bake Datamosh, the disturbance, and the result plays.",
+    "Part 5 (datamosh-5): Data Rate down, rebake, more mess; the sign-off."
+  ],
+  "scenes": [
+    {
+      "id": "hello",
+      "say": "[upbeat] Hey, what's up, Dominik Flamer here, and today: we break a video file. [deadpan] On purpose.",
+      "steps": [
+        {
+          "word": "today",
+          "early": 0.5
+        },
+        {
+          "click": "aria:Play@preview-group"
+        },
+        {
+          "move": "pane:preview-group:0.8,0.62",
+          "ms": 900
+        }
+      ]
+    },
+    {
+      "id": "look",
+      "say": "[impressed] That's an opera house... [slows down, mysterious] being eaten by a dancer.",
+      "steps": [
+        {
+          "word": "opera",
+          "early": 0.3
+        },
+        {
+          "circle": "pane:preview-group:0.5,0.45",
+          "r": 320,
+          "ry": 180,
+          "ms": 1200
+        },
+        {
+          "word": "eaten",
+          "early": 0.2
+        }
+      ]
+    },
+    {
+      "id": "real",
+      "say": "[casual] No shader. No glitch plug-in. [deadpan] This file is genuinely damaged.",
+      "steps": [
+        {
+          "word": "damaged",
+          "early": 0.1
+        },
+        {
+          "pause": 500
+        },
+        {
+          "click": "aria:Pause@preview-group"
+        }
+      ]
+    }
+  ],
+  "resume": [
+    {
+      "click": "clip:dancer.mp4:1"
+    },
+    {
+      "pause": 300
+    },
+    {
+      "click": "Properties"
+    }
+  ]
+}

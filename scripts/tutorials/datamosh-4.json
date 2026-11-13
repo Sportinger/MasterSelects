@@ -1,0 +1,131 @@
+{
+  "name": "datamosh-4",
+  "episode": "datamosh",
+  "from": "datamosh-3",
+  "voice": {
+    "voice": "flamer",
+    "model": "eleven_v4"
+  },
+  "setup": [
+    {
+      "click": "aria:Search transitions@left-group"
+    },
+    {
+      "type": "mosh"
+    },
+    {
+      "pause": 400
+    },
+    {
+      "move": "pane:preview-group:0.8,0.62"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "select",
+      "captions": "top",
+      "say": "[casual] Click it, Properties.",
+      "steps": [
+        {
+          "click": "clip:dancer.mp4:1"
+        },
+        {
+          "pause": 200
+        },
+        {
+          "click": "Properties"
+        },
+        {
+          "pause": 300
+        }
+      ]
+    },
+    {
+      "id": "button",
+      "say": "[whisper, ominous] And here's the button.",
+      "steps": [
+        {
+          "word": "button",
+          "early": 0.7
+        },
+        {
+          "camera": {
+            "focus": "Bake Datamosh",
+            "zoom": 1.3
+          },
+          "ms": 700
+        },
+        {
+          "circle": "Bake Datamosh",
+          "r": 150,
+          "ry": 40,
+          "ms": 800
+        }
+      ]
+    },
+    {
+      "id": "gone",
+      "say": "[deadpan] Real MPEG-4. Real I-frame... gone.",
+      "steps": [
+        {
+          "word": "Real",
+          "early": 0.2
+        },
+        {
+          "click": "Bake Datamosh"
+        },
+        {
+          "camera": "all",
+          "ms": 500
+        }
+      ]
+    },
+    {
+      "id": "teacher",
+      "say": "[whisper] Your video teacher just felt a disturbance.",
+      "steps": [
+        {
+          "pause": 200
+        },
+        {
+          "waitFor": "gone",
+          "text": "Baking...",
+          "fast": 6
+        }
+      ]
+    },
+    {
+      "id": "there",
+      "say": "[excited] And there it is!",
+      "steps": [
+        {
+          "click": "ruler:5.4"
+        },
+        {
+          "click": "aria:Play@preview-group"
+        },
+        {
+          "move": "pane:preview-group:0.8,0.62",
+          "ms": 500
+        },
+        {
+          "pause": 2600
+        },
+        {
+          "click": "aria:Pause@preview-group"
+        }
+      ]
+    }
+  ],
+  "resume": [
+    {
+      "click": "clip:dancer.mp4:1"
+    },
+    {
+      "pause": 300
+    },
+    {
+      "click": "Properties"
+    }
+  ]
+}

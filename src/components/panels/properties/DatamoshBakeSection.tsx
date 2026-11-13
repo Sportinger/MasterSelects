@@ -74,6 +74,8 @@ export function DatamoshBakeSection({
       && Math.abs(bakedBitrate - bitrateMbps) <= 0.000_001;
   }, [bakedMediaExists, bitrateMbps, duration, frameRate, transition.params]);
   const isBaking = progress !== null;
+  // A changed length or data rate leaves the old artifact behind: say so instead of still reporting it as ready.
+  const bakeIsStale = bakedMediaExists && !bakeIsCurrent;
 
   const bake = async () => {
     if (!activeComposition || isBaking) return;
@@ -136,7 +138,9 @@ export function DatamoshBakeSection({
       if (!editResult.success) {
         throw new Error(editResult.warnings.map(warning => warning.message).join(' ') || 'The transition could not be updated.');
       }
-      setCompletedMessage(`${result.outputPacketCount} codec packets ready`);
+      setCompletedMessage(result.reducedFrom
+        ? `Baked at ${result.width}×${result.height}: this length does not fit in memory at ${result.reducedFrom.width}×${result.reducedFrom.height}`
+        : `Baked at ${result.width}×${result.height} · ${result.outputPacketCount} codec packets`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -153,7 +157,9 @@ export function DatamoshBakeSection({
       <div className="datamosh-bake-status" aria-live="polite">
         {isBaking
           ? progressText(progress)
-          : error ?? completedMessage ?? (bakeIsCurrent ? 'Codec artifact is ready' : 'Bake required')}
+          : error ?? (bakeIsCurrent
+            ? completedMessage ?? 'Codec artifact is ready'
+            : bakeIsStale ? 'Settings changed: rebake required' : 'Bake required')}
       </div>
       <button
         className="datamosh-bake-button"
@@ -162,7 +168,7 @@ export function DatamoshBakeSection({
         onClick={() => void bake()}
         onPointerUp={(event) => event.currentTarget.blur()}
       >
-        {isBaking ? 'Baking...' : bakeIsCurrent ? 'Rebake Datamosh' : 'Bake Datamosh'}
+        {isBaking ? 'Baking...' : bakedMediaExists ? 'Rebake Datamosh' : 'Bake Datamosh'}
       </button>
     </section>
   );

@@ -185,7 +185,9 @@ export function captionRuns(lines, duration) {
     const top = Boolean(line.top);
     if (runs.at(-1)?.top === top) continue;
     if (runs.length) runs.at(-1).end = line.at;
-    runs.push({ top, start: runs.length ? line.at : 0, end: duration });
+    // A part's first run starts with its first word: a caption clip in front of its words showed its placeholder text
+    // ("Caption preview") in the first frames of an export.
+    runs.push({ top, start: runs.length ? line.at : line.at + (line.words?.[0]?.start ?? 0), end: duration });
   }
   return runs;
 }

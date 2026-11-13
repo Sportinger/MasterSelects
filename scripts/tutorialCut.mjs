@@ -75,6 +75,21 @@ export function cameraSegments(recording, map) {
   });
 }
 
+// Roman, 2026-11-02: we always want to see the whole MasterSelects. A zoom is for an important or a dramatic moment.
+export const MAX_ZOOMED_SHARE = 1 / 3;
+
+/** The share of a part (0-1) in which the camera is zoomed in, in output time: a sped-up wait counts for its short length. */
+export function zoomedShare(keys, rest, end, { fast = [], step = 0.1 } = {}) {
+  const at = cameraPath(keys, rest);
+  const weight = time => 1 / (fast.find(({ from, to }) => time >= from && time < to)?.factor ?? 1);
+  let zoomed = 0, total = 0;
+  for (let time = 0; time < end; time += step) {
+    total += weight(time);
+    if (at(time).zoom > 1.02) zoomed += weight(time);
+  }
+  return total ? zoomed / total : 0;
+}
+
 /**
  * Caption lines: a phrase ends at punctuation, a pause or a change of place, and a phrase longer
  * than `maxWords` is spread evenly over as few lines as fit ("Open the editor / in your browser,"

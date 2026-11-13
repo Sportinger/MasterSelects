@@ -1,6 +1,6 @@
 import type { TransitionDefinition } from '../types';
 
-export const DATAMOSH_BAKE_FORMAT = 'mpeg4-part2-keydrop-h264-mp4-v7';
+export const DATAMOSH_BAKE_FORMAT = 'mpeg4-part2-keydrop-h264-mp4-v8';
 
 /**
  * Codec-domain datamosh transition.
@@ -22,7 +22,8 @@ export const datamosh: TransitionDefinition = {
     bitrateMbps: {
       type: 'number',
       label: 'Data Rate',
-      defaultValue: 2,
+      // Megabits per second of the mosh at the composition's full resolution: lower is rougher.
+      defaultValue: 8,
       min: 0.25,
       max: 20,
       step: 0.25,

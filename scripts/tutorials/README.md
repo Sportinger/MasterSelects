@@ -113,6 +113,13 @@ A replaced part takes out its old clips, its own captions and its media items, a
 by the difference in length, so a shorter retake leaves no gap and a longer one does not run into the
 next part. Trim, move lines, add the music and export there.
 
+## Over the recording
+
+`tutorial-ms-preview.mjs <part> <export> --export-start <s>` covers the preview area with an export of the same timeline,
+in time with the take's playhead, because the screencast loses preview pictures. `tutorial-ms-shot.mjs <export> --at <s>`
+lays an export over the whole picture, for the hook and the payoff. `tutorial-ms-music.mjs` places the two music cues
+in the cut. `tutorial-ms-shot.mjs --tracks` makes the tracks in the right order before the first part goes in.
+
 ## The template and the finish
 
 `node scripts/tutorial-ms-template.mjs create` makes the template project
@@ -192,8 +199,9 @@ relative to the pointer. A `camera` names dock groups by id or as `tab=<tab>` (`
 `storage` resets editor settings before the editor loads. The complete format is described
 at the top of `scripts/tutorial-video.mjs`.
 
-Keep zooms light (1.05 to 1.3) and use them for feeling: a slow push in for suspense, a quick snap
-back on the punchline.
+The camera rests on the whole editor. Zoom only for an important or a dramatic moment, keep it light (1.05
+to 1.3), and come back: a slow push in for suspense, a quick snap back on the punchline. A take warns when it
+stays zoomed in for more than a third of the part.
 
 ## Timing a take
 
