@@ -52,7 +52,7 @@ export {
   MIN_SHORTCUT_DISPLAY_SCALE,
 } from './settings/settingsOptions';
 const log = Logger.create('SettingsStore');
-const SETTINGS_PERSIST_VERSION = 3;
+const SETTINGS_PERSIST_VERSION = 4;
 export type SettingsCategoryId =
   | 'general'
   | 'import'
@@ -593,15 +593,24 @@ export const useSettingsStore = create<SettingsState>()(
               copyMediaToProject: false,
             }
           : migrated;
-        if (version < 3) {
+        const touchMigrated = version < 3
+          ? {
+              ...importDefaultsMigrated,
+              // Touch feedback formerly defaulted to on. Disable that inherited
+              // choice once; explicit choices made afterwards remain persistent.
+              touchGooEnabled: false,
+            }
+          : importDefaultsMigrated;
+        if (version < 4) {
           return {
-            ...importDefaultsMigrated,
-            // Touch feedback formerly defaulted to on. Disable that inherited
-            // choice once; explicit choices made afterwards remain persistent.
-            touchGooEnabled: false,
+            ...touchMigrated,
+            // The engine used to switch Linux hybrid systems to the integrated
+            // GPU after a device loss and persist it. Chrome decodes video on
+            // its default GPU, so playback stayed black there. Reset it once.
+            gpuPowerPreference: 'high-performance' as const,
           };
         }
-        return importDefaultsMigrated;
+        return touchMigrated;
       },
       // Don't persist the YouTube credential in localStorage.
       // Don't persist transient UI state like isSettingsOpen

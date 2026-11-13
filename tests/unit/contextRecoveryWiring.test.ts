@@ -19,7 +19,6 @@ function setup() {
     onDeviceLost: (cb: typeof callbacks[string]) => { callbacks.lost = cb; },
     onDeviceRestored: (cb: typeof callbacks[string]) => { callbacks.restored = cb; },
     onRecoveryFailed: (cb: typeof callbacks[string]) => { callbacks.failed = cb; },
-    onPowerPreferenceFallback: vi.fn(),
   };
   const handlers = {
     setRecovering: vi.fn(), handleDeviceLost: vi.fn(), handleDeviceRestored: vi.fn(async () => {}),

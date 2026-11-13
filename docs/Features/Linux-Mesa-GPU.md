@@ -37,6 +37,7 @@ only on try/catch or return values when diagnosing them.
 | 3 | Canvas content **disappears on minimize/restore**, returning only on hover/interaction | GPU-backed canvas composition can be unreliable after visibility changes. | The Linux main-thread timeline path requests a 2D context with `willReadFrequently: true`; it is also used as the fallback after worker failure. See `timelineClipCanvasMainThreadSurface.ts`. |
 | 4 | Video preview is **black**, render loop stalls, then device lost | `device.importExternalTexture({ source })` can return an invalid-but-not-null external texture on open-source Mesa drivers (issue #46). | WebGPU video path; separate from the canvas issues above. Treat external textures as suspect on Linux and retain the engine's adapter/device recovery paths. |
 | 5 | Spurious `requestAdapter/requestDevice timed out after Nms` warnings even when WebGPU works | `WebGPUContext.withTimeout` does not clear its `setTimeout` when the real promise resolves first, so the timeout logs regardless. | Cosmetic log noise; `engineReady` is the source of truth. |
+| 6 | Video preview is **black during playback** on a hybrid-GPU system (for example NVIDIA + AMD iGPU), while other media still shows | Chrome decodes and composites video on its default GPU. A WebGPU device on the other GPU cannot import those frames: Dawn/Vulkan reports `Requested allocation size ... is smaller than the image requires` and every external texture and video copy turns invalid. | The engine never moves to the other GPU on its own: no low-power switch after a device loss or a failed adapter request (it falls back to the browser default adapter instead). Settings version 4 resets a formerly auto-persisted `low-power` choice once. |
 
 ---
 
@@ -57,8 +58,7 @@ only on try/catch or return values when diagnosing them.
    presentation.
 5. **Route canvas fallback decisions through one helper.** Use
    `prefersSoftwareTimelineCanvas()` from `src/utils/canvasPlatform.ts` (the
-   timeline utility is a compatibility re-export). The WebGPU context retains
-   its separate Linux low-power adapter fallback.
+   timeline utility is a compatibility re-export).
 6. **Never trust silent success.** Draw calls completing, diagnostics reporting
    N clips drawn, or `getImageData` showing pixels do **not** prove the canvas
    is on screen. Compositing is a separate step the page cannot observe.

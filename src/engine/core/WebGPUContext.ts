@@ -49,10 +49,6 @@ export class WebGPUContext {
   private recoveryAttempts = 0;
   private static readonly MAX_RECOVERY_ATTEMPTS = 3;
 
-  // Linux hybrid-GPU recovery: after an unexpected dGPU failure, try the
-  // integrated/display GPU once and keep that choice for future initializations.
-  private hasTriedLowPowerFallback = false;
-  private powerPreferenceFallbackCallbacks: Set<(preference: GPUPowerPreference) => void> = new Set();
   private readonly lossPolicy = new DeviceLossPolicy();
   private incidentLossMessage: string | null = null; // loss that started the current incident
 
@@ -91,13 +87,6 @@ export class WebGPUContext {
     }
   }
 
-  private shouldUseLowPowerFallback(): boolean {
-    const navigatorWithUserAgentData = navigator as Navigator & {
-      userAgentData?: { platform?: string };
-    };
-    const platform = navigatorWithUserAgentData.userAgentData?.platform || navigator.platform || navigator.userAgent || '';
-    return /linux/i.test(platform) && !/android/i.test(navigator.userAgent || '');
-  }
 
   private isAndroidRuntime(): boolean {
     const navigatorWithUserAgentData = navigator as Navigator & {
@@ -129,25 +118,11 @@ export class WebGPUContext {
         );
       }
 
-      // Fallback 1: on Linux hybrid-GPU systems, the requested dGPU can be
-      // unavailable/wedged while the compositor's display GPU still works.
-      if (!this.adapter && this.currentPowerPreference === 'high-performance' && this.shouldUseLowPowerFallback()) {
-        log.warn('high-performance adapter unavailable on Linux, trying low-power (integrated/display) GPU...');
-        const lowPowerAdapter = await requestGpuAdapter(
-          { powerPreference: 'low-power' },
-          'requestAdapter (low-power fallback)',
-          () => this.initializationGeneration,
-        );
-        if (lowPowerAdapter) {
-          this.adapter = lowPowerAdapter;
-          this.currentPowerPreference = 'low-power';
-          this.hasTriedLowPowerFallback = true;
-          log.warn('Using integrated/display GPU (low-power) and persisting for future loads');
-          this.notifyPowerPreferenceFallback('low-power');
-        }
-      }
-
-      // Fallback 2: try without powerPreference on desktop browsers.
+      // Never switch to the other GPU of a hybrid system on our own. Chrome
+      // decodes and composites video on its default GPU; WebGPU on a different
+      // GPU cannot import those frames (Dawn/Vulkan: "Requested allocation size
+      // ... is smaller than the image requires"), so every video goes black.
+      // When the requested adapter is unavailable, take the browser default.
       if (!this.adapter && !isAndroid) {
         log.warn('First adapter request failed, retrying without powerPreference...');
         this.adapter = await requestGpuAdapter(
@@ -322,12 +297,8 @@ export class WebGPUContext {
       this.finishRecoveryFailure();
       return;
     }
-    if (info.reason !== 'destroyed' && this.currentPowerPreference === 'high-performance' &&
-        !this.hasTriedLowPowerFallback && this.shouldUseLowPowerFallback()) {
-      this.hasTriedLowPowerFallback = true;
-      this.currentPowerPreference = 'low-power';
-      this.notifyPowerPreferenceFallback('low-power');
-    }
+    // Recover on the same GPU: a loss is no reason to move to the other GPU
+    // of a hybrid system, where browser-decoded video cannot be imported.
     // destroy()/reinitialize swap the device out first, so a 'destroyed' loss
     // here came from the browser and is recovered like any other loss.
     this.isRecovering = true;
@@ -521,25 +492,6 @@ export class WebGPUContext {
     this.deviceRestoredCallbacks.delete(callback);
   }
 
-  /**
-   * Register a callback fired when the context automatically falls back to a
-   * different power preference after Linux GPU initialization/recovery issues.
-   */
-  onPowerPreferenceFallback(callback: (preference: GPUPowerPreference) => void): void {
-    this.powerPreferenceFallbackCallbacks.add(callback);
-  }
-
-  /** Remove a power preference fallback callback */
-  offPowerPreferenceFallback(callback: (preference: GPUPowerPreference) => void): void {
-    this.powerPreferenceFallbackCallbacks.delete(callback);
-  }
-
-  private notifyPowerPreferenceFallback(preference: GPUPowerPreference): void {
-    for (const callback of this.powerPreferenceFallbackCallbacks) {
-      try { callback(preference); } catch (e) { log.error('Error in power preference fallback callback', e); }
-    }
-  }
-
   /** Check if the context is currently recovering from a device loss */
   get recovering(): boolean {
     return this.isRecovering;
@@ -568,7 +520,6 @@ export class WebGPUContext {
     this.adapter = null;
     this.isInitialized = false;
     this.initPromise = null;
-    this.hasTriedLowPowerFallback = false;
     this.isRecovering = false;
     this.recoveryAttempts = 0;
 
@@ -591,6 +542,5 @@ export class WebGPUContext {
     this.recoveryFailedCallbacks.clear();
     this.deviceLostCallbacks.clear();
     this.deviceRestoredCallbacks.clear();
-    this.powerPreferenceFallbackCallbacks.clear();
   }
 }

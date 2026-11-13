@@ -1,11 +1,10 @@
 // WebGPUContext lifecycle wiring for WebGPUEngine (extracted, packet 345).
-// Registers the device-lost / device-restored / power-preference-fallback
+// Registers the device-lost / device-restored / recovery-failed
 // callbacks in exactly the order and shape the engine constructor used inline.
 
 import { Logger } from '../../services/logger';
 import { useEngineStore } from '../../stores/engineStore';
 import { describeGPURecoveryFailure } from '../core/gpuInitializationFailure';
-import { useSettingsStore } from '../../stores/settingsStore';
 import type { WebGPUContext } from '../core/WebGPUContext';
 
 const log = Logger.create('WebGPUEngine');
@@ -41,14 +40,5 @@ export function wireContextRecovery(context: WebGPUContext, handlers: ContextRec
     useEngineStore.getState().setEngineReady(false);
     // The GPU worked earlier in this session: no Vulkan/driver setup advice.
     useEngineStore.getState().setEngineInitFailed(true, describeGPURecoveryFailure(failure), { setupAdvice: false });
-  });
-
-  context.onPowerPreferenceFallback((preference) => {
-    try {
-      useSettingsStore.getState().setGpuPowerPreference(preference);
-      log.info('Persisted GPU power preference fallback', { preference });
-    } catch (e) {
-      log.error('Failed to persist GPU power preference fallback', e);
-    }
   });
 }

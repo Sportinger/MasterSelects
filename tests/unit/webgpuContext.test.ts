@@ -335,7 +335,7 @@ describe('WebGPUContext', () => {
     }));
   });
 
-  it('uses low-power fallback on Linux when high-performance adapter selection fails', async () => {
+  it('never switches a Linux hybrid system to the low-power GPU when high-performance selection fails', async () => {
     Object.defineProperty(navigator, 'platform', {
       configurable: true,
       value: 'Linux x86_64',
@@ -358,15 +358,15 @@ describe('WebGPUContext', () => {
     });
 
     const context = new WebGPUContext();
-    const fallbackCallback = vi.fn();
-    context.onPowerPreferenceFallback(fallbackCallback);
     const success = await context.initialize('high-performance');
 
+    // Browser-decoded video lives on Chrome's default GPU; a WebGPU device on
+    // the other GPU cannot import it, so the fallback is the browser default.
     expect(success).toBe(true);
     expect(requestAdapter).toHaveBeenNthCalledWith(1, { powerPreference: 'high-performance' });
-    expect(requestAdapter).toHaveBeenNthCalledWith(2, { powerPreference: 'low-power' });
-    expect(context.getPowerPreference()).toBe('low-power');
-    expect(fallbackCallback).toHaveBeenCalledWith('low-power');
+    expect(requestAdapter).toHaveBeenNthCalledWith(2);
+    expect(requestAdapter).not.toHaveBeenCalledWith({ powerPreference: 'low-power' });
+    expect(context.getPowerPreference()).toBe('high-performance');
   });
 
   it('keeps the no-preference fallback on Windows instead of forcing low-power', async () => {
@@ -392,8 +392,6 @@ describe('WebGPUContext', () => {
     });
 
     const context = new WebGPUContext();
-    const fallbackCallback = vi.fn();
-    context.onPowerPreferenceFallback(fallbackCallback);
     const success = await context.initialize('high-performance');
 
     expect(success).toBe(true);
@@ -401,7 +399,6 @@ describe('WebGPUContext', () => {
     expect(requestAdapter).toHaveBeenNthCalledWith(2);
     expect(requestAdapter).not.toHaveBeenCalledWith({ powerPreference: 'low-power' });
     expect(context.getPowerPreference()).toBe('high-performance');
-    expect(fallbackCallback).not.toHaveBeenCalled();
   });
 
   it('requests the normal Android adapter before compatibility mode and skips powerPreference', async () => {
