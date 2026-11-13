@@ -64,6 +64,31 @@ describe('history runtime rehydration reporting', () => {
     expect(JSON.stringify(resources)).not.toContain('data-only-clip');
   });
 
+  it('keeps a long cut of bound clips from filling the budget and refusing new media', () => {
+    const cut = Array.from({ length: 500 }, (_, index) => makeRuntimeClip(`piece-${index}`, {
+      type: 'video',
+      mediaFileId: 'media-camera',
+      runtimeSourceId: 'media:camera',
+      runtimeSessionKey: `interactive:piece-${index}`,
+      naturalDuration: 5000,
+    }));
+
+    syncHistoryRehydratedTimelineRuntimeResources(cut);
+
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources).toEqual([]);
+    const overlay = timelineRuntimeCoordinator.canRetainResource({
+      id: 'overlay-video-element',
+      kind: 'html-media',
+      policyId: 'interactive',
+      owner: { ownerId: 'lazy-media:overlay', ownerType: 'clip', clipId: 'overlay' },
+      mediaElementKind: 'video',
+      elementId: 'overlay',
+      srcKind: 'blob-url',
+    });
+    expect(overlay.rejectedUnits).toEqual([]);
+    expect(overlay.admitted).toBe(true);
+  });
+
   it('replaces prior history rehydrate resources without touching other owners', () => {
     timelineRuntimeCoordinator.retainResource({
       id: 'unrelated-interactive-resource',

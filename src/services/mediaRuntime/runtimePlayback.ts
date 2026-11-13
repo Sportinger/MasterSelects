@@ -39,6 +39,7 @@ import type {
   MediaSourceRuntime,
   RuntimeFrameProvider,
 } from './types';
+import { warnRuntimeAdmissionRefused } from '../timeline/runtimeAdmissionWarning';
 
 export interface RuntimePlaybackBinding {
   sourceId: string;
@@ -48,6 +49,7 @@ export interface RuntimePlaybackBinding {
 }
 
 const pendingRuntimeProviderLoads = new Map<string, Promise<RuntimeFrameProvider | null>>();
+
 const log = Logger.create('RuntimePlayback');
 
 function getRuntimeFile(runtime: MediaSourceRuntime): File | null {
@@ -564,6 +566,12 @@ export async function ensureRuntimeFrameProvider(
     codecPlan ? codecPlan.backend : 'webcodecs',
   );
   if (!reservation.admitted) {
+    if (reservation.decision) {
+      warnRuntimeAdmissionRefused(log, 'Frame provider', reservation.decision, {
+        sourceId: binding.sourceId,
+        sessionKey: binding.sessionKey,
+      });
+    }
     if (!hadSession) {
       mediaRuntimeRegistry.releaseSession(binding.sourceId, binding.sessionKey);
     }

@@ -135,21 +135,40 @@ function compareSourceRank(
   return left.clip.id.localeCompare(right.clip.id);
 }
 
+/**
+ * Picks the source at a time from already collected candidates. Callers that
+ * resolve many times (one per transcript word) collect once and use this:
+ * collecting walks every clip, which is expensive on a finely cut timeline.
+ */
+export function resolveTranscriptSourceFromCandidates(input: {
+  candidates: readonly CaptionSourceCandidate[];
+  sourceClipId?: string | null;
+  timelineTime: number;
+  tracks: readonly TimelineTrack[];
+}): CaptionSourceCandidate | null {
+  const { candidates, sourceClipId, timelineTime, tracks } = input;
+  if (sourceClipId) {
+    const requested = candidates.find(candidate => candidate.clip.id === sourceClipId);
+    if (requested) return isClipActiveAt(requested.clip, timelineTime) ? requested : null;
+  }
+
+  return candidates
+    .filter(candidate => isClipActiveAt(candidate.clip, timelineTime))
+    .toSorted((left, right) => compareSourceRank(left, right, tracks))[0] ?? null;
+}
+
 export function resolveTranscriptSourceAtTime(input: {
   clips: readonly TimelineClip[];
   sourceClipId?: string | null;
   timelineTime: number;
   tracks: readonly TimelineTrack[];
 }): CaptionSourceCandidate | null {
-  const candidates = getCaptionSourceCandidates(input.clips);
-  if (input.sourceClipId) {
-    const requested = candidates.find(candidate => candidate.clip.id === input.sourceClipId);
-    if (requested) return isClipActiveAt(requested.clip, input.timelineTime) ? requested : null;
-  }
-
-  return candidates
-    .filter(candidate => isClipActiveAt(candidate.clip, input.timelineTime))
-    .sort((left, right) => compareSourceRank(left, right, input.tracks))[0] ?? null;
+  return resolveTranscriptSourceFromCandidates({
+    candidates: getCaptionSourceCandidates(input.clips),
+    sourceClipId: input.sourceClipId,
+    timelineTime: input.timelineTime,
+    tracks: input.tracks,
+  });
 }
 
 export function resolveCaptionSourceAtTime(input: {

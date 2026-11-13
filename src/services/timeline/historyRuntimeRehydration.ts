@@ -78,10 +78,15 @@ function getHistoryRehydrateOwnerId(clipId: string): string {
   return `${HISTORY_REHYDRATE_OWNER_PREFIX}:${clipId}`;
 }
 
+/**
+ * Only live handles occupy the interactive budget here. A runtime binding alone is a key: no element or
+ * decoder stands behind it until its clip enters the warm window, and that path reserves its own resources.
+ * Reporting every bound clip made a 500-piece cut hold 500 sessions against a limit of 64, which refused
+ * every new media element and decoder for as long as the project stayed open.
+ */
 function hasReportableRuntimeSource(clip: TimelineClip): boolean {
   const source = clip.source;
   if (!source) return false;
-  if (source.runtimeSourceId && source.runtimeSessionKey) return true;
   return Boolean(
     source.videoElement ||
       source.audioElement ||

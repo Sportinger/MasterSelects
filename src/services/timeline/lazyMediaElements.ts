@@ -25,6 +25,7 @@ import {
 } from '../../stores/timeline/editOperations/transitionPlanner';
 import { getRuntimeTransition, transitionIncludesAudio } from '../../transitions';
 import { clipTreeNeedsLiveVideoElement } from './liveInputClipTree';
+import { warnRuntimeAdmissionRefused } from './runtimeAdmissionWarning';
 
 type LazyMediaKind = 'video' | 'audio';
 
@@ -487,6 +488,7 @@ function canAttachLazyMedia(ctx: FrameContext, clip: TimelineClip, kind: LazyMed
       reason: admission.reason,
       rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
     });
+    warnRuntimeAdmissionRefused(log, `Lazy ${kind} element`, admission, { clipId: clip.id, clipName: clip.name });
   }
   return admission.admitted;
 }
