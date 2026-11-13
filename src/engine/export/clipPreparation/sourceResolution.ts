@@ -133,9 +133,11 @@ export async function resolveClipExportFile(
 }
 
 /** First export candidate whose bytes can actually be read, with its first 12 bytes (brand). */
+/** `failures` collects why each candidate could not be read, so the caller can name the cause. */
 export async function resolveReadableClipExportFile(
   clip: TimelineClip,
-  mediaFile?: MediaFile | null
+  mediaFile?: MediaFile | null,
+  failures?: unknown[],
 ): Promise<{ file: File; header: Uint8Array } | null> {
   for await (const { file, origin } of exportFileCandidates(clip, mediaFile)) {
     try {
@@ -143,11 +145,13 @@ export async function resolveReadableClipExportFile(
       if (header.byteLength > 0) return { file, header };
       log.warn(`Empty export file for ${clip.name} (${origin}); trying the next source`);
     } catch (error) {
+      failures?.push(error);
       log.warn(`Resolved export file access failed for ${clip.name} (${origin}):`, error);
     }
   }
   return null;
 }
+
 
 export async function loadClipFileData(
   clip: TimelineClip,

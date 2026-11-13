@@ -107,6 +107,10 @@ import { compileParticleDisintegrateGraph, particleDisintegrateOperatorGraph, va
 import { isParticleDisintegrateOperator } from './particleDisintegrateOperators';
 import { isCurveOperator } from './geometry/curveOperators';
 import { assertWeaveGraph, geometryOwnerOperators, WEAVE_EFFECT_TYPE, weaveOperatorGraph } from './geometry/weaveGraph';
+import { announceEditRejection } from '../editRejection';
+import { Logger } from '../logger';
+
+const log = Logger.create('EffectGraphOwner');
 
 const PARTICLE_DISINTEGRATE = 'pixel-particle-disintegrate';
 
@@ -333,7 +337,7 @@ export function migrateLoadedEffectOperatorGraph(effect: Effect): Effect {
   const earlier = !graphless ? undefined : COLOR_RECIPE_EFFECT_TYPES.has(effect.type)
     ? createLegacyColorEffectGraph(effect.type as EditableColorEffectType)
     : createEarlierStylizeGraph(effect.type) ?? earlierPrintGraph(effect.type);
-  return migratePersistedEffectOperatorGraph(earlier ? { ...effect, operatorGraph: earlier } : effect);
+  return migrateProjectEffectOperatorGraph(earlier ? { ...effect, operatorGraph: earlier } : effect);
 }
 
 /** Converts the former JSON parameter into the canonical effect-owned field.
@@ -347,6 +351,29 @@ export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
   try { return migratePersistedEffectGraph(effect); } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`Effect "${effect.name}" (${effect.type}): ${reason}`, { cause: error });
+  }
+}
+
+/** Where an effect keeps a graph this editor cannot read, so an older or newer version can still use it. */
+export const UNREADABLE_EFFECT_GRAPH_PARAM = '__unreadableOperatorGraph';
+
+/**
+ * Project data only: one effect whose graph this editor cannot read must not keep the whole project
+ * from opening or saving (production: "Invalid node: temporalTrail", "Failed to resolve project boot
+ * state"). The effect is switched off with its stored graph kept, and the person is told.
+ */
+export function migrateProjectEffectOperatorGraph(effect: Effect): Effect {
+  try {
+    return migratePersistedEffectOperatorGraph(effect);
+  } catch (error) {
+    const { [EFFECT_GRAPH_PARAM]: legacy, ...params } = effect.params;
+    const stored = effect.operatorGraph ?? legacy;
+    log.warn(`Effect "${effect.name}" could not be read and was switched off`, error);
+    announceEditRejection(new Error(`Effect "${effect.name}" could not be read and was switched off. The rest of the project is unchanged.`));
+    return migratePersistedEffectOperatorGraph({
+      ...effect, enabled: false, operatorGraph: undefined,
+      params: { ...params, [UNREADABLE_EFFECT_GRAPH_PARAM]: typeof stored === 'string' ? stored : JSON.stringify(stored ?? null) },
+    });
   }
 }
 

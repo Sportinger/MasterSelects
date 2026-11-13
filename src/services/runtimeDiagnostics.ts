@@ -254,9 +254,11 @@ function recordConsole(method: CapturedConsoleMethod, args: unknown[]): void {
   // Match only the standalone string: accompanying errors must stay errors.
   const isXnnpackInitialization = method === 'error' && args.length === 1
     && args[0] === 'INFO: Created TensorFlow Lite XNNPACK delegate for CPU.';
+  // MP4Box prints a line for every metadata box it does not know ('©swr', '©dji'); parsing goes on.
+  const isMp4BoxNote = method === 'error' && !firstError && message.includes('[BoxParser]');
   recordDiagnostic({
     source: 'console',
-    level: isXnnpackInitialization ? 'INFO' : consoleMethodToLevel(method),
+    level: isXnnpackInitialization ? 'INFO' : isMp4BoxNote ? 'WARN' : consoleMethodToLevel(method),
     message: message || `[console.${method}]`,
     args: serializedArgs,
     stack: firstError?.stack,
@@ -275,6 +277,33 @@ function describeResourceTarget(target: EventTarget | null): { tagName: string; 
   const candidate = target as Element & { currentSrc?: string; href?: string; src?: string };
   const url = candidate.currentSrc || candidate.src || candidate.href || '';
   return { tagName, url: typeof url === 'string' ? url.slice(0, 500) : '' };
+}
+
+const OWN_SCRIPT_URL = /\/(?:assets|src|node_modules|@vite|@fs)\//;
+
+/**
+ * True when an uncaught error comes from a script we do not ship: in-app browsers (iabjs://), iOS browsers,
+ * wallets and other extensions inject code that runs at the page URL or their own scheme, and
+ * "Script error." is all a browser says about another origin. Such errors cannot be fixed here and must not
+ * count as ours; our own bundles always carry an /assets/ frame.
+ */
+export function isForeignScriptFailure(message: string, stack?: string): boolean {
+  if (/^(?:uncaught )?script error\.?$/i.test(message.trim())) return true;
+  if (!stack) return false;
+  const urls = stack.match(/[a-z][a-z0-9+.-]*:\/\/[^\s)]+/gi) ?? [];
+  return urls.length > 0 && !urls.some(url => OWN_SCRIPT_URL.test(url));
+}
+
+/** Only our own code failing to load is an error; media, preload hints and third-party scripts stay breadcrumbs. */
+function resourceFailureLevel(target: EventTarget | null, tagName: string, url: string): RuntimeDiagnosticLevel {
+  if (tagName !== 'script' && tagName !== 'link') return 'WARN';
+  // A failed preload hint proves nothing: the import that needs the module reports its own result.
+  if (tagName === 'link' && (target as HTMLLinkElement).rel?.toLowerCase() === 'modulepreload') return 'WARN';
+  try {
+    // Ad blockers routinely block the analytics beacon; the editor does not depend on any third-party script.
+    if (new URL(url, window.location.href).origin !== window.location.origin) return 'WARN';
+  } catch { /* An unparsable URL stays an error. */ }
+  return 'ERROR';
 }
 
 /** An edit the repository refused is shown to the person and kept as a warning, not reported as a crash. */
@@ -315,7 +344,7 @@ export function installRuntimeDiagnostics(): void {
     const details = getErrorDetails(event.error);
     recordDiagnostic({
       source: 'window-error',
-      level: 'ERROR',
+      level: isForeignScriptFailure(event.message || details.message || '', details.stack) ? 'WARN' : 'ERROR',
       message: event.message || details.message || 'Window error',
       stack: details.stack,
       details: {
@@ -329,15 +358,14 @@ export function installRuntimeDiagnostics(): void {
 
   // Resource load failures (scripts, chunks, stylesheets, media) do not bubble,
   // so they only reach a capture-phase listener. Broken chunks are errors;
-  // broken media is a warning breadcrumb.
+  // everything else is a warning breadcrumb (see resourceFailureLevel).
   window.addEventListener('error', (event) => {
     if (event.target === window) return;
     const resource = describeResourceTarget(event.target);
     if (!resource) return;
-    const isCodeResource = resource.tagName === 'script' || resource.tagName === 'link';
     recordDiagnostic({
       source: 'resource-error',
-      level: isCodeResource ? 'ERROR' : 'WARN',
+      level: resourceFailureLevel(event.target, resource.tagName, resource.url),
       message: `Failed to load ${resource.tagName}: ${resource.url || '(no url)'}`,
       details: { tagName: resource.tagName, url: resource.url },
     });
@@ -359,7 +387,7 @@ export function installRuntimeDiagnostics(): void {
     }
     recordDiagnostic({
       source: 'unhandledrejection',
-      level: 'ERROR',
+      level: isForeignScriptFailure(details.message || '', details.stack) ? 'WARN' : 'ERROR',
       message: details.message || 'Unhandled promise rejection',
       stack: details.stack,
       details: {

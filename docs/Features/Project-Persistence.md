@@ -129,16 +129,39 @@ A browser without OPFS or writable file streams (for example an older iOS
 Safari) cannot open the scratch recovery; the editor logs that as a warning
 about the environment, not as a code error.
 
+Instagram's in-app browser on iOS can finish an IndexedDB open without a connection
+while it also refuses OPFS. That counts as the same transient failure: it is retried
+after growing pauses and then reported as a warning, not a code error.
+
+Choosing a folder that already holds a project for **New project**, or one without a
+project for **Open**, is a normal answer: the person is told what to do and no error
+is reported. One effect whose stored graph this editor cannot read no longer keeps a
+project from opening or saving: the effect is switched off, the person is told, and the
+stored graph stays in the effect (`__unreadableOperatorGraph`).
+
 WebKit (every iOS/iPadOS browser) can refuse OPFS with an opaque `UnknownError`
 while its storage process resumes, in Private Browsing, in in-app browsers or on
-a nearly full device. Opening the project root and the scratch recovery retries
-once; if OPFS stays unavailable, browser projects switch to an IndexedDB
+a nearly full device. Firefox refuses it for good with a `SecurityError` in
+Private Browsing (and on Android), and Chrome does when site data is blocked; that
+goes to the same fallback at once, without retries, instead of failing "New project"
+and "Open". The fallback below is a last resort: opening the project
+root, the scratch recovery and listing the stored projects retry after growing
+pauses (200 ms, 600 ms, 1.5 s) before giving up, because a single transient
+`UnknownError` used to empty the project list ("Failed to list project folders")
+or send the tab to temporary storage. Browsers without OPFS at all (Android
+Chrome before 109, some WebViews) could not create or open any project before;
+they now use the same fallback, and the notice says the browser is too old.
+If OPFS stays unavailable, browser projects switch to an IndexedDB
 fallback (`ms-browser-project-storage`) that serves the same directory/file
 handle surface, so project creation, saving, scratch recovery and `.msproj`
 export keep working. The choice is made on the first storage access and kept
 for the tab (`sessionStorage`), and the storage worker adopts the editor's
 choice, so one project never spans both stores. While the fallback is active
-the save status reads "Temporary storage", explains that Private Browsing and
+the project chooser (desktop) and the phone home show a red notice above
+everything else, **Projects are only kept temporarily in this browser**, with
+the reason (too old, or refused) and the way out (update the browser or open a
+regular window; Save permanently). The save status reads "Temporary storage",
+explains that Private Browsing and
 in-app browsers may delete the project when the window closes, and a warning
 styled **Temporary · Save permanently** button sits next to it (only "Save" on
 phone widths). Both open the *This project is only temporary* dialog, which

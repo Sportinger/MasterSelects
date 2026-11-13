@@ -230,3 +230,7 @@
 .mobile-skin .phone-home button:focus:not(:focus-visible) { outline: none; }
 /* While the reopen card is the primary action, New project steps back to an outlined button. */
 .mobile-skin .phone-home__new--secondary { background: var(--phone-surface-2); color: var(--phone-text); border: 1px solid var(--phone-border); }
+
+/* Temporary IndexedDB fallback: what the person must know before working in this browser. */
+.mobile-skin .phone-home__storage-notice strong { display: block; margin-bottom: 4px; }
+.mobile-skin .phone-home__storage-notice p { margin: 4px 0 0; }

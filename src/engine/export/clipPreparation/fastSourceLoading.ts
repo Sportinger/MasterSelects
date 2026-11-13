@@ -4,7 +4,8 @@ import type { MediaFile } from '../../../stores/mediaStore/types';
 import type { WebCodecsPlayer } from '../../WebCodecsPlayer';
 import { StreamedMp4UnsupportedError } from '../../webcodecs/fileSampleData';
 import { type ClipFileDataCache, loadClipFileDataCached, resolveReadableClipExportFile } from './sourceResolution';
-import { describeFastUnsupportedContainer, fastUnsupportedContainerMessage } from './fastSourceContainer';
+import { isChangedSourceFailure } from './changedSourceFailure';
+import { describeFastUnsupportedContainer, FastSourceUnreadableError, fastUnsupportedContainerMessage } from './fastSourceContainer';
 
 const log = Logger.create('ClipPreparation');
 
@@ -26,13 +27,13 @@ function isQuickTime(header: Uint8Array): boolean {
 
 function parsingFailed(clip: TimelineClip, error: unknown, header: Uint8Array): Error {
   const hint = isQuickTime(header) ? ' MOV containers may have unsupported audio codecs.' : '';
-  return new Error(`FAST export failed: WebCodecs/MP4Box parsing failed for clip "${clip.name}": ${error}.${hint} Try PRECISE mode instead.`);
+  return new FastSourceUnreadableError(`FAST export could not parse clip "${clip.name}": ${error}.${hint}`);
 }
 
 /** Stops before parsing when the source is not ISO-BMFF (MP4/MOV), with the container's name. */
 function refuseUnsupportedContainer(clip: TimelineClip, header: Uint8Array): void {
   const container = describeFastUnsupportedContainer(header);
-  if (container) throw new Error(fastUnsupportedContainerMessage(container, clip.name));
+  if (container) throw new FastSourceUnreadableError(fastUnsupportedContainerMessage(container, clip.name));
 }
 
 /** Loads the clip's source into the export player: large files on demand, smaller ones whole. */
@@ -42,7 +43,8 @@ export async function loadFastExportSource(
   mediaFile: MediaFile | null | undefined,
   fileDataCache: ClipFileDataCache,
 ): Promise<void> {
-  const source = await resolveReadableClipExportFile(clip, mediaFile);
+  const accessFailures: unknown[] = [];
+  const source = await resolveReadableClipExportFile(clip, mediaFile, accessFailures);
   if (source) refuseUnsupportedContainer(clip, source.header);
   let onDemandFailure = '';
   if (source && source.file.size >= FAST_EXPORT_ON_DEMAND_MIN_BYTES) {
@@ -66,6 +68,11 @@ export async function loadFastExportSource(
   const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
   endLoad();
   if (!fileData) {
+    if (!source && isChangedSourceFailure(accessFailures)) {
+      // PRECISE export reads the same file and would fail the same way, so it is no advice here.
+      throw new Error(`FAST export failed: the source file of clip "${clip.name}" changed on disk or became unreadable `
+        + 'after it was imported (for example it was still being copied, or it was replaced). Import it again or relink it, then export.');
+    }
     const details = source ? ` (${formatSize(source.file.size)}${onDemandFailure ? `; ${onDemandFailure}` : ''})` : '';
     throw new Error(`FAST export failed: Could not load file data for clip "${clip.name}"${details}. Try PRECISE mode instead.`);
   }

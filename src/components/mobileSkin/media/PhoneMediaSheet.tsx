@@ -13,6 +13,7 @@ import { formatMediaBytes } from '../../../services/project/mediaCopy/projectMed
 import { runEditorBatch } from '../../../services/project/repository/transaction/editorMutationRuntime';
 import { beginMediaImportTiming } from '../../../stores/mediaStore/helpers/importPhaseTimings';
 import './PhoneMediaSheet.css';
+import { isEditRejection } from '../../../services/editRejection';
 
 const log = Logger.create('PhoneMediaSheet');
 
@@ -104,7 +105,8 @@ export const PhoneMediaSheet: PhoneSheetComponent = () => {
       showToast(`${count} of ${files.length} added. ${allProblems[0].message}`, 'error');
     } catch (error) {
       timing.finish('failed');
-      log.error('Adding phone media failed', error);
+      if (isEditRejection(error)) log.warn('Adding phone media refused', error);
+      else log.error('Adding phone media failed', error);
       const message = `Adding media failed: ${error instanceof Error ? error.message : String(error)}`;
       setProblems([{ name: '', message }]);
       setPhase('result');

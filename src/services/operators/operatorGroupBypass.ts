@@ -1,7 +1,10 @@
 import type { EffectOperatorGraph, OperatorGroup } from '../../types/operatorGraph';
 import { getEffectOperator } from './operatorRegistry';
+import { Logger } from '../logger';
 
 /** A replacement source per outgoing edge; null disconnects it so the consumer input falls back to its default. */
+const log = Logger.create('OperatorGroupBypass');
+
 type BypassRoute = { from: string; output: string } | null;
 type BypassRoutes = Map<string, BypassRoute> | undefined;
 /** Per-element field signals: in geometry graphs an unconnected field input has a neutral default. */
@@ -121,7 +124,11 @@ function bypassGraph(graph: EffectOperatorGraph, bypassed: OperatorGroup[]): Eff
   const replacements = new Map<string, BypassRoute>();
   for (const group of bypassed.toSorted((a, b) => depth(b) - depth(a))) {
     const routes = operatorGroupBypassRoutes(graph, group);
-    if (!routes) throw new Error(`Group ${group.label} no longer has an unambiguous bypass boundary.`);
+    if (!routes) {
+      // Production 3.2.8: this threw while loading and the whole project could not be opened.
+      log.warn(`Group "${group.label}" no longer has an unambiguous bypass boundary, so it stays active`, { group: group.id });
+      continue;
+    }
     for (const edge of graph.edges) {
       const replacement = routes.get(edge.id);
       if (replacement !== undefined) replacements.set(`${edge.from}:${edge.output}`, replacement);

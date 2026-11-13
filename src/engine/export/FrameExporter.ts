@@ -47,6 +47,8 @@ import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/r
 import { ExportPreviewPublisher } from './frameExporter/ExportPreviewPublisher';
 import { prepareTransitionCompositionsForExport } from './prepareTransitionCompositionsForExport';
 import { resolveRequestedExportMode } from './exportModeSelection';
+import { isFastSourceUnreadable } from './clipPreparation/fastSourceContainer';
+import { estimateExportBytes, EXPORT_MEMORY_MAX_BYTES, ExportDiskFullError } from './exportDiskSpill';
 import { captureExportParameterState } from './frameExporter/parameterSourceSnapshot';
 import { createExportFrameContext } from './frameExporter/createExportFrameContext';
 
@@ -65,6 +67,8 @@ export class FrameExporter {
   private clipStates: Map<string, ExportClipState> = new Map();
   private readonly requestedExportMode: ExportMode;
   private exportMode: ExportMode;
+  /** The disk target failed in this export: a private window allows far less than it reports. */
+  private memoryOnly = false;
   private parallelDecoder: ParallelDecodeManager | null = null;
   private useParallelDecode = false;
   private lastExportRuntimeReportMs = Number.NEGATIVE_INFINITY;
@@ -146,9 +150,17 @@ export class FrameExporter {
     this.exportMode = this.requestedExportMode;
     this.resetAttemptState();
 
+    this.memoryOnly = false;
+
     try {
-      return await this.exportAttempt(onProgress, state);
+      return await this.runAttempts(onProgress, state);
     } catch (error) {
+      if (this.isCancelled) {
+        // A frame still decoding when the export was cancelled fails once teardown removed its decoder
+        // ("FAST export decoder missing during waitForBufferedTarget"); that is the cancel, not a failure.
+        log.info('Export cancelled while a frame was still in progress', { reason: error instanceof Error ? error.message : String(error) });
+        return null;
+      }
       log.error('Export error:', error);
       throw error;
     } finally {
@@ -159,6 +171,32 @@ export class FrameExporter {
         log.warn('Export attempt ended without releasing its run job; releasing it now', { runId: leftoverRunId });
         releaseExportRunResources(leftoverRunId);
         this.activeExportRunId = null;
+      }
+    }
+  }
+
+  /** One attempt, and one more for each failure another way of exporting can get past. */
+  private async runAttempts(
+    onProgress: (progress: ExportProgress) => void,
+    state: ReturnType<typeof useTimelineStore.getState>,
+  ): Promise<Blob | null> {
+    for (;;) {
+      try {
+        return await this.exportAttempt(onProgress, state);
+      } catch (error) {
+        if (this.isCancelled) throw error;
+        if (isFastSourceUnreadable(error) && this.exportMode !== 'precise') {
+          // The browser can usually decode what FAST's demuxer cannot read (AVI, MPEG, damaged or unusual
+          // MP4), so the person gets the file instead of a request to start over in another mode.
+          log.warn(`${error.message} Continuing this export in PRECISE mode.`);
+          this.exportMode = 'precise';
+        } else if (error instanceof ExportDiskFullError && !this.memoryOnly && estimateExportBytes(this.settings) < EXPORT_MEMORY_MAX_BYTES) {
+          log.warn(`${error.message} This export fits into memory, so it starts over there.`);
+          this.memoryOnly = true;
+        } else {
+          throw error;
+        }
+        this.resetAttemptState();
       }
     }
   }
@@ -252,7 +290,7 @@ export class FrameExporter {
     const encoderInitStart = performance.now();
     let initialized = false;
     try {
-      initialized = await this.encoder.init({ deferVideoEncoder: true });
+      initialized = await this.encoder.init({ deferVideoEncoder: true, memoryOnly: this.memoryOnly });
     } catch (error) {
       exportDiagnostics.recordPhase('encoderInit', performance.now() - encoderInitStart);
       // Release the admitted run job, or every later export is denied (job budget 1).
@@ -370,6 +408,7 @@ export class FrameExporter {
           finalStatus = 'cancelled';
           return null;
         }
+        if (audioResult) this.encoder.primeAudioChunks(audioResult);
       }
 
       // Prepare clips for export

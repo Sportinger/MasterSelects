@@ -17,6 +17,8 @@ import {
 import { resolveClipExportFile } from './sourceResolution';
 import { createClipSpeedSource, resolveClipSourceTime, videoFrameSourceTime, type SpeedSource } from '../../../services/timeline/retime/clipRetime';
 import { useTimelineStore } from '../../../stores/timeline';
+import { setVideoSourceFrameRate } from '../../../services/videoSourceFrameRate';
+import { readMatroskaFrameRate } from '../../../services/mediaMetadata/matroskaFrameRate';
 
 const log = Logger.create('ClipPreparation');
 
@@ -181,6 +183,9 @@ export async function createPreciseExportVideoElement(
   const src = objectUrl ?? fallbackSrc;
 
   const videoElement = createDetachedExportVideoElement(src);
+  // The frame-exact seek needs the source rate; without it only microsecond rounding is absorbed.
+  // Media imported before WebM rates were read has none stored.
+  setVideoSourceFrameRate(videoElement, mediaFile?.fps ?? (resolvedFile ? await readMatroskaFrameRate(resolvedFile) : undefined));
 
   try {
     await primePreciseExportVideoElement(videoElement, warmupTime);

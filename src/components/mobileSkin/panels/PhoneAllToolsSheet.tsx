@@ -24,6 +24,7 @@ import { getPhonePanel } from './phonePanelCatalog';
 import { setPhoneWorkspaceSideCollapsed } from '../workspace/phoneWorkspaceCatalog';
 import { PHONE_PANELS_TEST_IDS as IDS } from './phonePanelsTestIds';
 import './PhoneAllTools.css';
+import { isEditRejection } from '../../../services/editRejection';
 
 const log = Logger.create('PhoneAllTools');
 
@@ -76,7 +77,8 @@ export const PhoneAllToolsSheet: PhoneSheetComponent = () => {
       if (!result.ok) showToast(result.message, 'error');
       else if (result.message) showToast(result.message, 'info');
     } catch (error) {
-      log.error(`Action ${action.id} threw`, error);
+      if (isEditRejection(error)) log.warn(`Action ${action.id} refused`, error);
+      else log.error(`Action ${action.id} threw`, error);
       showToast(`${action.label} failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   };

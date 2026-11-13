@@ -5,6 +5,7 @@ import { useSettingsStore } from './stores/settingsStore';
 import { getStemSeparationService } from './services/audio/stemSeparation';
 import { startEditorAgentTimelinePersistence } from './services/agentTimeline/runtime/persistence/editorPersistenceBootstrap';
 import { ensureMetronomeScheduler } from './services/audio/metronomeScheduler';
+import { pruneExportSpills } from './engine/export/exportDiskSpill';
 
 // Runtime diagnostics and the error reporter are installed by
 // `src/bootDiagnostics.ts` (first import of main.tsx), before this chunk loads.
@@ -64,6 +65,9 @@ if (import.meta.env.DEV) {
   // bring their own model and harness; production builds do not expose it.
   void import('./services/aiTools/bridge');
 }
+
+// A finished long export stays on disk until its download is done; free that space some time after start.
+window.setTimeout(() => { void pruneExportSpills(); }, 30_000);
 
 // Expose store for debugging
 if (import.meta.env.DEV) {

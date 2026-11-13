@@ -6,7 +6,7 @@
 
 import { Logger } from '../../logger';
 import { RepositoryError } from '../repository/contracts';
-import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isBrowserStorageUnavailableError, retryTransientStorage } from './browserStorageFailure';
+import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isOpfsRefusal, retryTransientStorage } from './browserStorageFailure';
 import { createFallbackDirectoryRoot } from './fallbackDirectoryHandle';
 import { openIndexedDbEntryStore } from './indexedDbEntryStore';
 
@@ -16,11 +16,26 @@ export type BrowserStorageKind = 'opfs' | 'indexeddb';
 
 const TAB_CHOICE_KEY = 'ms.browserStorage.kind';
 
-export const FALLBACK_STORAGE_NOTICE = 'This browser refused its project file storage, so this project is kept in a '
-  + 'temporary browser database instead. Private Browsing and in-app browsers delete it when the window closes, and '
-  + 'clearing site data removes it. Use Save permanently to keep it.';
+export const FALLBACK_STORAGE_NOTICE = 'This browser did not give MasterSelects its permanent project storage, so '
+  + 'projects are kept in a temporary browser database instead. They can be lost: Private Browsing and in-app browsers '
+  + 'delete it when the window closes, and clearing site data removes it. Use Save permanently to keep your work.';
+
+/** The risk and the way out, for the chooser notice that already names the reason. */
+export const FALLBACK_STORAGE_RISK = 'Projects here can be lost: clearing site data removes them, and Private Browsing or '
+  + 'in-app browsers delete them when the window closes. Use Save permanently (.msproj) to keep your work.';
+
+/** Why this tab uses the temporary fallback: OPFS refused on first access, or not offered at all. */
+export type BrowserStorageFallbackReason = 'refused' | 'missing';
+
+/** What the person can do to get permanent storage back, by reason. */
+export function describeBrowserStorageFallback(reason: BrowserStorageFallbackReason | null): string {
+  return reason === 'missing'
+    ? 'This browser is too old to store projects permanently. Update it (or use a current Chrome, Edge or Safari) to save normally.'
+    : 'This browser refused permanent storage, usually in Private Browsing, in an in-app browser or on a full device. Open MasterSelects in a regular browser window to save normally.';
+}
 
 let kind: BrowserStorageKind | null = null;
+let fallbackReason: BrowserStorageFallbackReason | null = null;
 let fallbackRoot: Promise<FileSystemDirectoryHandle> | null = null;
 const listeners = new Set<() => void>();
 
@@ -45,7 +60,7 @@ function choose(next: BrowserStorageKind): void {
 }
 
 function openFallbackRoot(): Promise<FileSystemDirectoryHandle> {
-  fallbackRoot ??= openIndexedDbEntryStore().then(createFallbackDirectoryRoot);
+  fallbackRoot ??= retryTransientStorage(openIndexedDbEntryStore, 'Opening the temporary project store').then(createFallbackDirectoryRoot);
   fallbackRoot.catch(() => { fallbackRoot = null; });
   return fallbackRoot;
 }
@@ -81,6 +96,19 @@ export function switchBrowserStorageToOpfs(): void {
 /** The store chosen for browser-local projects in this context, or null before the first access. */
 export function getBrowserStorageKind(): BrowserStorageKind | null { return kind; }
 
+/** Why the fallback is active (null when it is not). A tab that kept the fallback across a reload is checked again. */
+export function getBrowserStorageFallbackReason(): BrowserStorageFallbackReason | null {
+  if (kind !== 'indexeddb') return null;
+  if (typeof navigator === 'undefined' || typeof navigator.storage?.getDirectory !== 'function') return 'missing';
+  return fallbackReason ?? 'refused';
+}
+
+/** Some browser store exists: OPFS, or IndexedDB for the emergency fallback. */
+export function isBrowserProjectStorageAvailable(): boolean {
+  if (typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function') return true;
+  return typeof indexedDB !== 'undefined';
+}
+
 export function isBrowserStorageFallbackActive(): boolean { return kind === 'indexeddb'; }
 
 export function subscribeBrowserStorageKind(listener: () => void): () => void {
@@ -93,21 +121,31 @@ export function adoptBrowserStorageKind(next: BrowserStorageKind): void { choose
 
 /**
  * Root directory for browser-local projects. OPFS is used whenever it opens;
- * only WebKit's opaque storage refusal on the first access selects the
- * fallback. Once chosen, a later OPFS failure is reported, never redirected.
+ * only the browser's refusal on the first access (WebKit's opaque failure, a
+ * SecurityError in Firefox Private Browsing) selects the fallback. Once chosen,
+ * a later OPFS failure is reported, never redirected.
  */
 export async function getBrowserStorageRoot(): Promise<FileSystemDirectoryHandle> {
   if (kind === null && readTabChoice() === 'indexeddb') choose('indexeddb');
   if (kind === 'indexeddb') return openFallbackRoot();
   if (typeof navigator === 'undefined' || typeof navigator.storage?.getDirectory !== 'function') {
-    throw new RepositoryError('unsupported', 'This browser does not provide project file storage.');
+    // Older browsers (Android Chrome before 109, some WebViews) offer no OPFS at all. Without this last
+    // resort they could not create or open any project; the editor says the storage is temporary.
+    if (kind !== null || typeof indexedDB === 'undefined') {
+      throw new RepositoryError('unsupported', 'This browser does not provide project file storage.');
+    }
+    const root = await openFallbackRoot();
+    log.warn('This browser has no origin private file system; browser projects use the temporary IndexedDB fallback');
+    fallbackReason = 'missing';
+    choose('indexeddb');
+    return root;
   }
   try {
     const root = await retryTransientStorage(() => navigator.storage.getDirectory(), 'Opening the origin private file system');
     choose('opfs');
     return root;
   } catch (error) {
-    if (kind !== null || !isBrowserStorageUnavailableError(error)) throw error;
+    if (kind !== null || !isOpfsRefusal(error)) throw error;
     let root: FileSystemDirectoryHandle;
     try { root = await openFallbackRoot(); }
     catch (fallbackError) {
@@ -115,6 +153,7 @@ export async function getBrowserStorageRoot(): Promise<FileSystemDirectoryHandle
       throw new RepositoryError('unsupported', BROWSER_STORAGE_UNAVAILABLE_MESSAGE, { cause: error });
     }
     log.warn('Origin private file system is unavailable; browser projects use the IndexedDB fallback for this tab', error);
+    fallbackReason = 'refused';
     choose('indexeddb');
     return root;
   }

@@ -12,7 +12,7 @@ export interface EditRejection {
 }
 
 /** Shown when this tab may not write; shared by the repository guard and up-front UI checks. */
-export const READ_ONLY_PROJECT_MESSAGE = 'This project is read-only in this tab. Choose "Take over editing" in the toolbar to edit here.';
+export const READ_ONLY_PROJECT_MESSAGE = 'This project is read-only in this tab. Choose "Take over editing" at the top of the screen (on a phone, tap "Read-only") to edit here.';
 
 type Listener = (rejection: EditRejection) => void;
 const listeners = new Set<Listener>();

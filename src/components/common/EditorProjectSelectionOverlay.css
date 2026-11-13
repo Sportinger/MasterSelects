@@ -330,3 +330,7 @@
   }
 }
 }
+
+/* Temporary IndexedDB fallback: shown above everything else in the chooser. */
+.editor-project-storage-notice strong { display: block; color: #f0c4b6; margin-bottom: 0.3rem; }
+.editor-project-storage-notice p { margin: 0.25rem 0 0; }

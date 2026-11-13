@@ -15,7 +15,7 @@ import { toProjectTransform } from './transformSerialization';
 import { serializeMaskEdgeFeathers, serializeMaskKeyframeProperty } from './maskSerialization';
 import { normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { serializeGaussianSplatSequence, serializeModelSequence } from './projectMediaSerialization';
-import { migratePersistedEffectOperatorGraph } from '../operators/effectGraphOwner';
+import { migrateProjectEffectOperatorGraph } from '../operators/effectGraphOwner';
 
 type ProjectSaveClip = SerializableClip & {
   source?: TimelineClip['source'];
@@ -46,7 +46,7 @@ function serializeProjectClipVideoState(videoState: ClipVideoState | undefined):
 }
 
 function serializeProjectEffect(effect: Effect) {
-  const migrated = migratePersistedEffectOperatorGraph(effect);
+  const migrated = migrateProjectEffectOperatorGraph(effect);
   return {
     id: migrated.id, type: migrated.type, name: migrated.name || migrated.type,
     enabled: migrated.enabled !== false, params: structuredClone(migrated.params),

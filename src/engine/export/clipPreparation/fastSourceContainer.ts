@@ -1,9 +1,21 @@
 // FAST export demuxes sources with MP4Box, which reads only ISO-BMFF files (MP4, MOV, M4V).
 // Other containers would fail deep inside the parser with an unrelated message, so the source
-// header is checked first and the export stops with the container's name and the way out.
+// header is checked first. The export then continues in PRECISE mode (FrameExporter).
 // Only containers recognised by their signature are refused; an unknown header still goes to
 // the parser (fragmented or unusual MP4 layouts must not be refused by a guess), whose error
 // names the clip and Precise export as well.
+
+/** FAST export's demuxer cannot read this source; PRECISE mode goes through the browser's own decoder. */
+export class FastSourceUnreadableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FastSourceUnreadableError';
+  }
+}
+
+export function isFastSourceUnreadable(error: unknown): error is FastSourceUnreadableError {
+  return error instanceof FastSourceUnreadableError;
+}
 
 const ISO_BOX_TYPES = new Set(['ftyp', 'moov', 'mdat', 'free', 'skip', 'wide', 'pnot', 'uuid', 'styp', 'sidx', 'moof']);
 
@@ -26,10 +38,12 @@ export function describeFastUnsupportedContainer(header: Uint8Array): string | n
   if (header.length >= 4 && header[0] === 0x47 && (header[1] & 0x80) === 0 && (header[3] & 0xc0) === 0) {
     return 'MPEG transport stream';
   }
+  if (header.length >= 4 && header[0] === 0 && header[1] === 0 && header[2] === 1 && header[3] === 0xba) return 'MPEG program stream';
+  if (header.length >= 3 && ascii(header, 0, 3) === 'ID3') return 'MP3';
+  if (header.length >= 2 && header[0] === 0xff && (header[1] & 0xe6) === 0xe2) return 'MP3';
   return null;
 }
 
 export function fastUnsupportedContainerMessage(container: string, clipName: string): string {
-  return `FAST export failed: clip "${clipName}" is a ${container} file, which FAST export cannot read `
-    + '(it reads MP4 and MOV). Use PRECISE (HTMLVideo) export for this clip.';
+  return `Clip "${clipName}" is a ${container} file, which FAST export cannot read (it reads MP4 and MOV).`;
 }

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LinuxVulkanWarning } from '../../src/components/common/LinuxVulkanWarning';
+import { describeGPUInitializationFailure, isChromiumBrowser } from '../../src/engine/core/gpuInitializationFailure';
 import { PreviewEngineFailureNotice } from '../../src/components/preview/PreviewEngineFailureNotice';
 import { useEngineStore } from '../../src/stores/engineStore';
 
@@ -36,6 +37,17 @@ describe('Linux GPU troubleshooting', () => {
     platform(os, agent);
     useEngineStore.getState().setEngineInitFailed(true);
     expect(useEngineStore.getState().linuxVulkanWarning).toBe(false);
+  });
+
+  // Production: Firefox on Linux was told to open chrome://flags, a page it does not have.
+  it('keeps the chrome://flags banner away from Firefox on Linux', () => {
+    platform('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0');
+    useEngineStore.getState().setEngineInitFailed(true, describeGPUInitializationFailure('unsupported'));
+    expect(useEngineStore.getState().linuxVulkanWarning).toBe(false);
+    expect(useEngineStore.getState().engineInitError).toContain('does not offer WebGPU');
+    expect(isChromiumBrowser()).toBe(false);
+    platform('Linux x86_64', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36');
+    expect(isChromiumBrowser()).toBe(true);
   });
 
   it('gives no Vulkan setup advice when recovery fails after the GPU already worked', () => {

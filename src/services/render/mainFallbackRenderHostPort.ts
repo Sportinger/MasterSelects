@@ -1,5 +1,5 @@
 import { engine } from '../../engine/WebGPUEngine';
-import { describeGPUInitializationFailure, type GPUInitializationFailure } from '../../engine/core/gpuInitializationFailure';
+import { describeGPUInitializationFailure, isChromiumBrowser, type GPUInitializationFailure } from '../../engine/core/gpuInitializationFailure';
 import { useEngineStore } from '../../stores/engineStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import type { EngineStats, Layer } from '../../types';
@@ -268,7 +268,7 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     }
 
     const error = describeGPUInitializationFailure(failure);
-    engineStore.setEngineInitFailed(true, error);
+    engineStore.setEngineInitFailed(true, error, { setupAdvice: failure !== 'unsupported' || isChromiumBrowser() });
     log.error('Engine initialization failed', { failure, error });
     return false;
   }

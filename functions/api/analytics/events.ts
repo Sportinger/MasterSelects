@@ -12,6 +12,7 @@ import {
   rateLimitedResponse,
   type RateLimitPolicy,
 } from '../../lib/rateLimit';
+import { isKnownCrawler } from '../../lib/crawlerUserAgents';
 
 const MAX_BATCH_SIZE = 25;
 const MAX_BODY_BYTES = 48_000;
@@ -130,6 +131,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
   if (body.events.length > MAX_BATCH_SIZE) {
     return json({ error: 'batch_too_large', ok: false }, { status: 413 });
+  }
+
+  if (isKnownCrawler(context.request.headers.get('user-agent'))) {
+    return json({ accepted: 0, discarded: body.events.length, ok: true }, { status: 202 });
   }
 
   const receivedAt = new Date();

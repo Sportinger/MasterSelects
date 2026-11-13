@@ -43,6 +43,19 @@ export async function selectOpenProjectRoute(environment: OpenProjectEnvironment
  * name clash or a full disk is the person's input or environment, not a
  * product failure: callers warn and explain instead of reporting an error.
  */
+/**
+ * A folder that already holds a project, or holds none, is a normal answer to choosing it. Returns the
+ * sentence for the person, or null for every other failure, which stays a reported error.
+ */
+export function describeExpectedProjectRejection(error: unknown): string | null {
+  if (!(error instanceof RepositoryError)) return null;
+  if (error.code === 'conflict' && /already contains a project/i.test(error.message)) {
+    return 'This folder already contains a project. Open it with "Open project", or choose an empty folder for the new one.';
+  }
+  if (error.code === 'unsupported' && /does not contain a MasterSelects project/i.test(error.message)) return error.message;
+  return null;
+}
+
 export function isExpectedArchiveImportRejection(error: unknown): boolean {
   return error instanceof RepositoryError && (error.code === 'unsupported' || error.code === 'conflict' || error.code === 'quota');
 }

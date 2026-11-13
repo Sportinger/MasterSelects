@@ -19,6 +19,7 @@ import type {
   StoredSourceThumbnail,
   StoredThumbnail,
 } from './projectDb/types';
+import { isBrowserStorageUnavailableError, retryTransientStorage } from './project/core/browserStorageFailure';
 
 export type {
   ProxyMetadata,
@@ -93,20 +94,14 @@ class ProjectDatabase {
     if (this.initPromise) return this.initPromise;
     if (this.initFailed && Date.now() < this.retryInitAfter) throw this.initError;
 
-    this.initPromise = this.openDatabase()
-      .catch((error: unknown) => {
-        // WebKit can abort an open while resuming storage. Retry only that
-        // transient failure, once, before surfacing it to all shared callers.
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return this.openDatabase();
-        }
-        throw error;
-      })
+    // WebKit can abort an open, or finish it without a connection, while resuming storage.
+    this.initPromise = retryTransientStorage(() => this.openDatabase(), 'Opening IndexedDB')
       .catch((error: unknown) => {
         this.initFailed = true;
         this.initError = error;
         this.retryInitAfter = Date.now() + INIT_RETRY_COOLDOWN_MS;
-        log.error('Failed to open IndexedDB', error);
+        if (isBrowserStorageUnavailableError(error)) log.warn('IndexedDB is unavailable in this browser', error);
+        else log.error('Failed to open IndexedDB', error);
         throw error;
       })
       .finally(() => { this.initPromise = null; });

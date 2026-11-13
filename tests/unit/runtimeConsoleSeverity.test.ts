@@ -34,3 +34,10 @@ it('drops the Logger clock prefix so a logged failure keeps one stable message',
     details: { method: 'error', logger: true },
   });
 });
+
+// Production: 55 "[BoxParser] Invalid box type" lines from one session; MP4Box goes on parsing after them.
+it('keeps MP4Box notes about unknown metadata boxes as warnings', () => {
+  installRuntimeDiagnostics();
+  console.error("[0:53:59.545] [BoxParser] Invalid box type: '©swr'");
+  expect(getRecentRuntimeDiagnosticEntries(1)[0]).toMatchObject({ level: 'WARN', details: { method: 'error' } });
+});

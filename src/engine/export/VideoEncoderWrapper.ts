@@ -2,6 +2,7 @@
 
 import { Logger } from '../../services/logger';
 import { MediaBunnyMuxerAdapter, type MuxerAdapter } from './MediaBunnyMuxerAdapter';
+import { estimateExportBytes, openExportDiskSpill, type ExportDiskSpill } from './exportDiskSpill';
 
 const log = Logger.create('VideoEncoder');
 import { AudioEncoderWrapper, type AudioCodec, type EncodedAudioResult } from '../audio';
@@ -34,6 +35,7 @@ export class VideoEncoderWrapper {
   private encoder: VideoEncoder | null = null;
   private startEncoder: (() => void) | null = null;
   private muxer: MuxerAdapter | null = null;
+  private audioPrimed = false;
   private settings: ExportSettings;
   private encodedFrameCount = 0;
   private framesSubmittedSinceFlush = 0;
@@ -55,7 +57,7 @@ export class VideoEncoderWrapper {
     this.containerFormat = settings.container ?? 'mp4';
   }
 
-  async init(options: { deferVideoEncoder?: boolean } = {}): Promise<boolean> {
+  async init(options: { deferVideoEncoder?: boolean; memoryOnly?: boolean } = {}): Promise<boolean> {
     if (!('VideoEncoder' in window)) {
       log.error('WebCodecs not supported');
       return false;
@@ -159,8 +161,13 @@ export class VideoEncoderWrapper {
 
     if (this.isClosed) return false;
 
-    // Create muxer (MediaBunny adapter)
-    this.createMuxer();
+    // Create muxer (MediaBunny adapter). A long export goes to disk; one that fits nowhere stops here.
+    const spill = options.memoryOnly ? null : await openExportDiskSpill(estimateExportBytes(this.settings));
+    if (this.isClosed) {
+      await spill?.discard();
+      return false;
+    }
+    this.createMuxer(spill);
 
     // Source/audio preparation can take minutes. Keep codec resources unallocated
     // until a frame is ready, while validating support and choosing audio up front.
@@ -258,13 +265,14 @@ export class VideoEncoderWrapper {
     }
   }
 
-  private createMuxer(): void {
+  private createMuxer(spill: ExportDiskSpill | null): void {
     this.muxer = new MediaBunnyMuxerAdapter({
       container: this.containerFormat,
       videoCodec: this.effectiveVideoCodec,
       fps: this.settings.fps,
       hasAudio: this.hasAudio,
       audioCodec: this.audioCodec,
+      spill,
     });
 
     const audioLabel = this.hasAudio ? this.audioCodec.toUpperCase() : 'no';
@@ -365,6 +373,7 @@ export class VideoEncoderWrapper {
 
   /** The browser closes a VideoEncoder after an encode error; report that error, not the closed state. */
   private throwIfEncoderFailed(): void {
+    if (this.muxer instanceof MediaBunnyMuxerAdapter && this.muxer.failure) throw this.muxer.failure;
     const failure = this.encoderError;
     if (!failure || this.encoder?.state !== 'closed') return;
     const error = new Error(
@@ -379,6 +388,7 @@ export class VideoEncoderWrapper {
   }
 
   private async waitForEncodeCapacity(): Promise<void> {
+    if (this.muxer instanceof MediaBunnyMuxerAdapter) await this.muxer.waitForDiskCapacity();
     const encoder = this.encoder;
     if (!encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
@@ -439,9 +449,20 @@ export class VideoEncoderWrapper {
     this.framesSubmittedSinceFlush = 0;
   }
 
+  /** A file written to disk stays in time order when the muxer has the audio before the video starts. */
+  primeAudioChunks(audioResult: EncodedAudioResult): void {
+    if (!(this.muxer instanceof MediaBunnyMuxerAdapter) || !this.muxer.streamsToDisk || !this.hasAudio) return;
+    this.muxer.primeAudio(audioResult.chunks, audioResult.metadata);
+    this.audioPrimed = true;
+  }
+
   addAudioChunks(audioResult: EncodedAudioResult, maxDurationSeconds?: number): void {
     if (!this.muxer || !this.hasAudio) {
       log.warn('Cannot add audio: muxer not ready or audio not enabled');
+      return;
+    }
+    if (this.audioPrimed) {
+      if (maxDurationSeconds !== undefined && this.muxer instanceof MediaBunnyMuxerAdapter) this.muxer.trimPrimedAudio(maxDurationSeconds);
       return;
     }
 
@@ -473,13 +494,18 @@ export class VideoEncoderWrapper {
     this.encoder.close();
 
     // Finalize the muxer — this flushes the internal queue and writes the file
-    await this.muxer.finalize();
-
-    const buffer = this.muxer.getBuffer();
     const mimeType = this.containerFormat === 'webm' ? 'video/webm' : 'video/mp4';
+    let blob: Blob;
+    try {
+      await this.muxer.finalize();
+      blob = await this.muxer.getBlob(mimeType);
+    } catch (error) {
+      if (this.muxer instanceof MediaBunnyMuxerAdapter) this.muxer.cancel();
+      throw error;
+    }
 
-    log.info(`Finished: ${this.encodedFrameCount} frames, ${(buffer.byteLength / 1024 / 1024).toFixed(2)}MB (${this.containerFormat.toUpperCase()})`);
-    return new Blob([buffer], { type: mimeType });
+    log.info(`Finished: ${this.encodedFrameCount} frames, ${(blob.size / 1024 / 1024).toFixed(2)}MB (${this.containerFormat.toUpperCase()})`);
+    return blob;
   }
 
   cancel(): void {

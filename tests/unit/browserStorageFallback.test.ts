@@ -48,8 +48,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function refuseOpfs() {
-  const getDirectory = vi.fn(async () => { throw new DOMException('The operation failed for an unknown transient reason (e.g. out of memory).', 'UnknownError'); });
+function refuseOpfs(refusal = new DOMException('The operation failed for an unknown transient reason (e.g. out of memory).', 'UnknownError')) {
+  const getDirectory = vi.fn(async () => { throw refusal; });
   vi.stubGlobal('navigator', {
     storage: { getDirectory },
     locks: { request: async (_name: string, _options: unknown, callback: (lock: object) => unknown) => callback({}) },
@@ -58,14 +58,58 @@ function refuseOpfs() {
 }
 
 describe('browser storage fallback when OPFS is refused', () => {
-  it('creates, saves and reopens a browser project in the fallback store', async () => {
+  // Production 3.4.3, Firefox Private Browsing: "Security error when calling GetDirectory" made
+  // "New project" and "Open" fail outright, while IndexedDB in the same window works.
+  it.each([
+    ['Firefox Private Browsing', 'Security error when calling GetDirectory'],
+    ['Chrome with site data blocked', 'Storage directory access is denied.'],
+    ['WebKit', 'The operation is insecure.'],
+  ])('uses the fallback at once on a SecurityError from %s', async (_browser, message) => {
+    const store = memoryStore(); openStore = async () => store;
+    const getDirectory = refuseOpfs(new DOMException(message, 'SecurityError'));
+    const root = await import('../../src/services/project/core/browserStorageRoot');
+    await root.getBrowserStorageRoot();
+    // Refused for good: asking again only delays the first project by seconds.
+    expect(getDirectory).toHaveBeenCalledTimes(1);
+    expect(root.isBrowserStorageFallbackActive()).toBe(true);
+    expect(root.getBrowserStorageFallbackReason()).toBe('refused');
+  });
+
+  it('explains the refusal, also when a worker relays only the text', async () => {
+    const { describeBrowserStorageFailure, BROWSER_STORAGE_UNAVAILABLE_MESSAGE } = await import('../../src/services/project/core/browserStorageFailure');
+    expect(describeBrowserStorageFailure(new DOMException('Security error when calling GetDirectory', 'SecurityError'))).toBe(BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
+    expect(describeBrowserStorageFailure(new Error('x', { cause: 'Security error when calling GetDirectory' }))).toBe(BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
+  });
+
+  // Production: Instagram on iOS finishes the IndexedDB open without a connection, also while OPFS refuses.
+  it('treats an IndexedDB open without a connection as the same transient failure and retries it', async () => {
+    const { isBrowserStorageUnavailableError, retryTransientStorage } = await import('../../src/services/project/core/browserStorageFailure');
+    const noConnection = new DOMException('IndexedDB MASterSelectsDB returned no database connection', 'InvalidStateError');
+    expect(isBrowserStorageUnavailableError(noConnection)).toBe(true);
+    let attempts = 0;
+    await expect(retryTransientStorage(async () => {
+      attempts += 1;
+      if (attempts === 1) throw noConnection;
+      return 'open';
+    }, 'test')).resolves.toBe('open');
+    expect(attempts).toBe(2);
+  });
+
+  it('leaves other SecurityErrors alone, such as a file picker without a user gesture', async () => {
+    const { describeBrowserStorageFailure } = await import('../../src/services/project/core/browserStorageFailure');
+    expect(describeBrowserStorageFailure(new DOMException('Must be handling a user gesture to show a file picker.', 'SecurityError'))).toBeNull();
+  });
+
+  it('creates, saves and reopens a browser project in the fallback store', { timeout: 15_000 }, async () => {
     const store = memoryStore(); openStore = async () => store;
     const getDirectory = refuseOpfs();
     const root = await import('../../src/services/project/core/browserStorageRoot');
     const { createOpfsRepositoryBackend } = await import('../../src/services/project/repository/backends/opfsBackend');
 
     const backend = await createOpfsRepositoryBackend('My Project');
-    expect(getDirectory).toHaveBeenCalledTimes(2);
+    // The fallback is a last resort: OPFS is asked again after growing pauses first.
+    expect(getDirectory).toHaveBeenCalledTimes(4);
+    expect(root.getBrowserStorageFallbackReason()).toBe('refused');
     expect(root.getBrowserStorageKind()).toBe('indexeddb');
     expect(sessionStorage.getItem('ms.browserStorage.kind')).toBe('indexeddb');
     expect(backend.locationId).toMatch(/^indexeddb:/);
@@ -84,7 +128,7 @@ describe('browser storage fallback when OPFS is refused', () => {
     // Reload: a fresh module graph adopts the tab's choice without probing OPFS again.
     vi.resetModules();
     const reopened = await (await import('../../src/services/project/repository/backends/opfsBackend')).createOpfsRepositoryBackend('My Project');
-    expect(getDirectory).toHaveBeenCalledTimes(2);
+    expect(getDirectory).toHaveBeenCalledTimes(4);
     expect(text(await reopened.read('project.msrepo.json'))).toContain('masterselects-repository');
     expect(await reopened.stat('.masterselects/segments/s1.msseg')).toMatchObject({ length: segment.byteLength });
     expect([...await reopened.read('.masterselects/segments/s1.msseg', 4 * 1024 * 1024 + 7, 3)]).toEqual([...segment.subarray(4 * 1024 * 1024 + 7, 4 * 1024 * 1024 + 10)]);
@@ -95,12 +139,58 @@ describe('browser storage fallback when OPFS is refused', () => {
     expect(await listProjectFolderNames((await acquireProjectRoot('opfs', { throwOnFailure: true }))!)).toEqual(['My Project']);
   });
 
-  it('explains the failure when the IndexedDB fallback is refused as well', async () => {
+  it('explains the failure when the IndexedDB fallback is refused as well', { timeout: 15_000 }, async () => {
     openStore = async () => { throw new DOMException('IndexedDB is unavailable in this browser', 'NotSupportedError'); };
     refuseOpfs();
     const { getBrowserStorageRoot, getBrowserStorageKind } = await import('../../src/services/project/core/browserStorageRoot');
     const { BROWSER_STORAGE_UNAVAILABLE_MESSAGE } = await import('../../src/services/project/core/browserStorageFailure');
     await expect(getBrowserStorageRoot()).rejects.toMatchObject({ code: 'unsupported', message: BROWSER_STORAGE_UNAVAILABLE_MESSAGE });
     expect(getBrowserStorageKind()).toBeNull();
+  });
+
+  it('keeps OPFS when it answers on a later attempt, without touching the fallback', { timeout: 15_000 }, async () => {
+    const store = memoryStore(); openStore = vi.fn(async () => store);
+    let calls = 0;
+    const opfsRoot = { kind: 'directory', name: '' } as unknown as FileSystemDirectoryHandle;
+    vi.stubGlobal('navigator', { storage: { getDirectory: vi.fn(async () => {
+      calls += 1;
+      if (calls < 3) throw new DOMException('The operation failed for an unknown transient reason (e.g. out of memory).', 'UnknownError');
+      return opfsRoot;
+    }) } });
+    const { getBrowserStorageRoot, getBrowserStorageKind } = await import('../../src/services/project/core/browserStorageRoot');
+    await expect(getBrowserStorageRoot()).resolves.toBe(opfsRoot);
+    expect(calls).toBe(3);
+    expect(getBrowserStorageKind()).toBe('opfs');
+    expect(openStore).not.toHaveBeenCalled();
+  });
+});
+
+describe('browser storage on browsers without OPFS', () => {
+  it('stores projects in the temporary fallback as a last resort and says why', async () => {
+    const store = memoryStore(); openStore = async () => store;
+    vi.stubGlobal('navigator', {
+      storage: {},
+      locks: { request: async (_name: string, _options: unknown, callback: (lock: object) => unknown) => callback({}) },
+    });
+    vi.stubGlobal('indexedDB', {});
+    const root = await import('../../src/services/project/core/browserStorageRoot');
+    const { resolveProjectRootMode } = await import('../../src/services/project/core/projectRootAccess');
+    expect(root.isBrowserProjectStorageAvailable()).toBe(true);
+    expect(resolveProjectRootMode()).toBe('opfs');
+
+    const { createOpfsRepositoryBackend } = await import('../../src/services/project/repository/backends/opfsBackend');
+    const backend = await createOpfsRepositoryBackend('Old Android');
+    expect(backend.locationId).toMatch(/^indexeddb:/);
+    expect(root.getBrowserStorageKind()).toBe('indexeddb');
+    expect(root.getBrowserStorageFallbackReason()).toBe('missing');
+    expect(root.describeBrowserStorageFallback('missing')).toContain('too old');
+  });
+
+  it('still reports no storage when IndexedDB is missing too', async () => {
+    vi.stubGlobal('navigator', { storage: {} });
+    vi.stubGlobal('indexedDB', undefined);
+    const root = await import('../../src/services/project/core/browserStorageRoot');
+    expect(root.isBrowserProjectStorageAvailable()).toBe(false);
+    await expect(root.getBrowserStorageRoot()).rejects.toMatchObject({ code: 'unsupported' });
   });
 });

@@ -6,6 +6,7 @@ import { useSliceStore } from '../../stores/sliceStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { Logger } from '../../services/logger';
 import { getRandomPopupPlacement } from './outputWindowPlacement';
+import { announceEditRejection } from '../../services/editRejection';
 
 const log = Logger.create('OutputWindowManager');
 const OPEN_WINDOWS_KEY = 'masterselects-output-windows-open';
@@ -76,7 +77,8 @@ export class OutputWindowManager {
     const outputWindow = window.open('', `output_${id}`, features);
 
     if (!outputWindow) {
-      log.error('Failed to open window (popup blocked?)');
+      log.warn('Failed to open window (popup blocked?)');
+      announceEditRejection(new Error('The browser blocked the output window. Allow pop-ups for this site, then try again.'));
       return null;
     }
 

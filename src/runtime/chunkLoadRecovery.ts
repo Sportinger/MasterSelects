@@ -44,6 +44,10 @@ function isChunkResource(target: EventTarget | null): boolean {
   }
 
   if (target instanceof HTMLLinkElement) {
+    // A modulepreload is only a hint: the import that needs the module reports its own result through
+    // vite:preloadError. Firefox 153/154 fire error on the preload of the entry chunk while it runs fine,
+    // which used to reload a working editor and then leave "could not be loaded" on screen.
+    if (target.rel.toLowerCase() === 'modulepreload') return false;
     return /\/assets\/.+\.(?:js|css)(?:$|\?)/i.test(target.href);
   }
 

@@ -85,7 +85,10 @@ describe('operator group bypass', () => {
     graph.groups = [{ id: 'red', label: 'Red', color: '#ffffff', nodeIds: ['invert-r'] }];
     expect(operatorGroupBypassRoutes(graph, graph.groups[0])).toBeUndefined();
     graph.groups[0].bypassed = true;
-    expect(() => applyOperatorGroupBypasses(graph)).toThrow('unambiguous bypass boundary');
+    // Production 3.2.8: this used to throw while loading, and the whole project could not be opened.
+    const active = applyOperatorGroupBypasses(graph);
+    expect(active.nodes.map(node => node.id)).toEqual(graph.nodes.map(node => node.id));
+    expect(active.edges).toEqual(graph.edges);
   });
 
   it('does not offer a bypass to an external input downstream of the group', () => {

@@ -7,6 +7,7 @@ import { usePhoneRuntime } from '../runtime/PhoneRuntimeContext';
 import { usePhoneUiStore } from '../state/phoneUiStore';
 import { PhoneIcon } from './phoneIcons';
 import { usePhoneScrollEdges } from './usePhoneScrollEdges';
+import { isEditRejection } from '../../../services/editRejection';
 
 const log = Logger.create('PhoneToolbar');
 
@@ -72,7 +73,8 @@ export function PhoneContextToolbar({ inert = false }: { inert?: boolean } = {})
       if (!result.ok) showToast(result.message, 'error');
       else if (result.message) showToast(result.message, 'info');
     } catch (error) {
-      log.error(`Action ${action.id} threw`, error);
+      if (isEditRejection(error)) log.warn(`Action ${action.id} refused`, error);
+      else log.error(`Action ${action.id} threw`, error);
       showToast(`${action.label} failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }
   };
