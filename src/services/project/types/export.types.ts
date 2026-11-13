@@ -51,6 +51,9 @@ export interface ProjectExportSettings {
   fps: number;
   customFps: number;
   useCustomFps: boolean;
+  /** Follow the active composition's size / frame rate; absent in projects saved before the choice was stored. */
+  matchCompositionResolution?: boolean;
+  matchCompositionFrameRate?: boolean;
   useInOut: boolean;
   filename: string;
   bitrate: number;

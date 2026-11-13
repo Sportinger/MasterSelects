@@ -1,4 +1,4 @@
-import { createPresetId, createBatchJobId, createBatchSettings, createDefaultExportStoreData, cloneExportSettings, cloneBatchJob, sanitizeSettings, applyBatchSourceInvariants, applySharedTechnicalSettings, sanitizeStoreData } from './exportDefinitions';
+import { createPresetId, createBatchJobId, createBatchSettings, createDefaultExportStoreData, cloneExportSettings, cloneBatchJob, sanitizeSettings, endCompositionMatchOnFormatChange, applyBatchSourceInvariants, applySharedTechnicalSettings, sanitizeStoreData } from './exportDefinitions';
 export { createDefaultExportSettings, createDefaultExportStoreData, getExportStoreData } from './exportDefinitions';
 import { withRepositoryStoreMutation } from '../services/project/repository/transaction/storeMutationBoundary';
 import { create } from 'zustand';
@@ -32,6 +32,12 @@ export interface ExportSettings {
   fps: number;
   customFps: number;
   useCustomFps: boolean;
+  /**
+   * Follow the active composition's size / frame rate. Absent only in settings saved before
+   * the choice was stored; `resolveCompositionMatch` then decides from the saved format.
+   */
+  matchCompositionResolution?: boolean;
+  matchCompositionFrameRate?: boolean;
   useInOut: boolean;
   filename: string;
   bitrate: number;
@@ -146,6 +152,7 @@ export const useExportStore = create<ExportStoreState>()(
         settings: sanitizeSettings({
           ...state.settings,
           ...patch,
+          ...endCompositionMatchOnFormatChange(state.settings, patch),
         }),
       }));
     },

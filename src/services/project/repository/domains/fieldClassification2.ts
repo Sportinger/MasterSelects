@@ -454,6 +454,8 @@ export const ProjectExportSettingsFields = {
   "fps": { class: 'content', owner: 'export' },
   "customFps": { class: 'content', owner: 'export' },
   "useCustomFps": { class: 'content', owner: 'export' },
+  "matchCompositionResolution": { class: 'content', owner: 'export' },
+  "matchCompositionFrameRate": { class: 'content', owner: 'export' },
   "useInOut": { class: 'content', owner: 'export' },
   "filename": { class: 'content', owner: 'export' },
   "bitrate": { class: 'content', owner: 'export' },

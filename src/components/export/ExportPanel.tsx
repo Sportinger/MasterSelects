@@ -1,6 +1,6 @@
 // Export Panel - embedded panel for frame-by-frame video export
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent as ReactDragEvent } from 'react';
+import { useCallback, useMemo, useState, type DragEvent as ReactDragEvent } from 'react';
 import './ExportPanel.css';
 import './ExportInspector.css';
 import { Logger } from '../../services/logger';
@@ -12,6 +12,7 @@ import { resolveExportRange } from './exportRange';
 import { adjustmentLayerExportNotes } from '../../services/motionDesign/adjustment/adjustmentLayerExportNotes';
 import { supportsNativeVideoAlpha } from './exportAlphaSupport';
 import { useExportState } from './useExportState';
+import { useExportCompositionMatch } from './useExportCompositionMatch';
 import { ExportProgressView } from './ExportProgressView';
 import {
   buildExportSettingsState,
@@ -76,8 +77,9 @@ export function ExportPanel() {
     setExportProgress: s.setExportProgress,
     endExport: s.endExport,
   })));
-  const { composition, getActiveComposition, mediaFiles } = useMediaStore(useShallow(s => ({
+  const { composition, compositions, getActiveComposition, mediaFiles } = useMediaStore(useShallow(s => ({
     composition: s.compositions.find((candidate) => candidate.id === s.activeCompositionId),
+    compositions: s.compositions,
     getActiveComposition: s.getActiveComposition,
     mediaFiles: s.files,
   })));
@@ -141,6 +143,9 @@ export function ExportPanel() {
     customWidth, setCustomWidth, customHeight, setCustomHeight,
     useCustomResolution, setUseCustomResolution,
     fps, setFps, customFps, setCustomFps, useCustomFps, setUseCustomFps,
+    matchCompositionResolution: storedMatchCompositionResolution,
+    matchCompositionFrameRate: storedMatchCompositionFrameRate,
+    setCompositionMatch,
     useInOut, setUseInOut, filename, setFilename,
     bitrate, setBitrate, containerFormat, setContainerFormat,
     videoCodec, setVideoCodec, codecSupport, codecSupportReady, rateControl, setRateControl,
@@ -336,46 +341,25 @@ export function ExportPanel() {
     ffmpegAvailable,
   });
   const compositionMatchingAvailable = !batchActive && !!composition;
-  const [matchCompositionResolution, setMatchCompositionResolution] = useState(() => (
-    !!composition
-    && actualWidth === composition.width
-    && actualHeight === composition.height
-  ));
-  const [matchCompositionFrameRate, setMatchCompositionFrameRate] = useState(() => (
-    !!composition && actualFps === composition.frameRate
-  ));
-
-  useEffect(() => {
-    if (!compositionMatchingAvailable || !composition) return;
-
-    const patch: Parameters<typeof setEffectiveExportSettings>[0] = {};
-    if (
-      matchCompositionResolution
-      && (actualWidth !== composition.width || actualHeight !== composition.height)
-    ) {
-      patch.customWidth = composition.width;
-      patch.customHeight = composition.height;
-      patch.useCustomResolution = true;
-    }
-    if (matchCompositionFrameRate && actualFps !== composition.frameRate) {
-      patch.customFps = composition.frameRate;
-      patch.useCustomFps = true;
-    }
-    if (Object.keys(patch).length === 0) return;
-    // An automatic follow-up, not a user edit: a read-only project session rejects it, and that
-    // must not take the panel down. The next change of the composition retries it.
-    try { setEffectiveExportSettings(patch); }
-    catch (error) { log.warn('Export settings were not matched to the composition', error); }
-  }, [
-    actualFps,
-    actualHeight,
-    actualWidth,
+  const {
+    match: { resolution: matchCompositionResolution, frameRate: matchCompositionFrameRate },
+    mismatch: compositionMismatch,
+    setMatchResolution: setMatchCompositionResolution,
+    setMatchFrameRate: setMatchCompositionFrameRate,
+    setMatchBoth: handleCompositionSettingsMatchChange,
+  } = useExportCompositionMatch({
+    available: compositionMatchingAvailable,
     composition,
-    compositionMatchingAvailable,
-    matchCompositionFrameRate,
-    matchCompositionResolution,
-    setEffectiveExportSettings,
-  ]);
+    compositions,
+    settings: {
+      width, height, customWidth, customHeight, useCustomResolution,
+      fps, customFps, useCustomFps,
+      matchCompositionResolution: storedMatchCompositionResolution,
+      matchCompositionFrameRate: storedMatchCompositionFrameRate,
+    },
+    applySettings: setEffectiveExportSettings,
+    setCompositionMatch,
+  });
 
   const { handleCancel, handleFinishEarly, handlePrimaryExport } = useExportRunController({
     exportState,
@@ -402,11 +386,6 @@ export function ExportPanel() {
     setUseCustomFps(false);
     setFps(value);
   }, [setFps, setUseCustomFps]);
-
-  const handleCompositionSettingsMatchChange = useCallback((enabled: boolean) => {
-    setMatchCompositionResolution(enabled);
-    setMatchCompositionFrameRate(enabled);
-  }, []);
 
   const handleQuickBitratePreset = useCallback((value: number) => {
     setRateControl('vbr');
@@ -571,6 +550,8 @@ export function ExportPanel() {
     compositionMatchingAvailable,
     matchCompositionFrameRate,
     matchCompositionResolution,
+    compositionSizeNote: compositionMismatch.resolution,
+    compositionFrameRateNote: compositionMismatch.frameRate,
     width,
     height,
     customWidth,

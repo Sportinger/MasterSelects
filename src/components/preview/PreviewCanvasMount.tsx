@@ -333,6 +333,11 @@ export function PreviewCanvasMount({
               />
               {!isExporting && !sourceMonitorActive && <TrackingPreviewOverlay displayedCompId={displayedCompId} width={canvasSize.width} height={canvasSize.height} resolution={effectiveResolution}/>}
               {isExporting && exportPreviewFrame && (
+                // The engine renders at the export size meanwhile, so the live canvas underneath
+                // would show stretched frames around an export frame of another shape.
+                <div className="preview-export-backdrop" aria-hidden="true" />
+              )}
+              {isExporting && exportPreviewFrame && (
                 <canvas
                   ref={exportPreviewCanvasRef}
                   width={exportPreviewFrame.width}

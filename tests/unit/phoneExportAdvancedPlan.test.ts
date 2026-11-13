@@ -136,6 +136,8 @@ describe('phone export presets, delivery and batch retry', () => {
     if (!plan.supported) throw new Error(plan.reason);
     const stored = phoneSpecToExportSettings(plan.spec, 'in-out', createDefaultExportSettings());
     expect(stored).toMatchObject({ encoder: 'webcodecs', containerFormat: 'webm', videoCodec: 'av1', customWidth: 720, customHeight: 1280, useCustomResolution: true, customFps: 25, bitrate: 4_000_000, useInOut: true });
+    // A phone preset holds its format: the desktop panel must not swap it for the composition's.
+    expect(stored).toMatchObject({ matchCompositionResolution: false, matchCompositionFrameRate: false });
     expect(exportSettingsToPhone(stored, PORTRAIT)).toMatchObject({ formatId: 'webm-av1', resolution: 'custom', customWidth: 720, customHeight: 1280, fps: 25, quality: 'custom', customBitrate: 4_000_000, range: 'in-out' });
     const still = phoneSpecToExportSettings({ ...plan.spec, kind: 'still', imageFormat: 'webp' }, 'content', createDefaultExportSettings());
     expect(exportSettingsToPhone(still, PORTRAIT)).toMatchObject({ formatId: 'still', imageFormat: 'webp' });

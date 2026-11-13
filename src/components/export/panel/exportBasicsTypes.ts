@@ -108,6 +108,9 @@ export interface ExportBasicsVideoState {
   compositionMatchingAvailable: boolean;
   matchCompositionFrameRate: boolean;
   matchCompositionResolution: boolean;
+  /** Set when the export does not follow the composition and would look different from the preview. */
+  compositionSizeNote: string | null;
+  compositionFrameRateNote: string | null;
   width: number;
   height: number;
   customWidth: number;
