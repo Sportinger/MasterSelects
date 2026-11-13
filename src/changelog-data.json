@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-13",
+    "type": "fix",
+    "title": "MasterSelects 3.4.4",
+    "description": "On Linux computers with two graphics cards, playback no longer stays black while scrubbing still shows the picture: the editor stays on the browser's graphics card instead of switching for good after a graphics reset, and a setting left behind by the old behavior is reset once. Long exports are written to disk instead of failing at 4 GB, a new composition is no longer exported at the previous one's size, and Datamosh transitions bake at the composition resolution. Projects open despite one unreadable effect graph, keep working in a clearly announced temporary store when the browser refuses its storage, and phones take over a read-only project with one tap. Captions build faster on long transcripts, and browsers without WebGPU say what to do.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-31",
     "type": "fix",
     "title": "MasterSelects 3.4.3",
