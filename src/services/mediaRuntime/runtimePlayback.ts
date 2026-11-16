@@ -1,4 +1,5 @@
 import type { TimelineClip } from '../../types';
+import { beginBackgroundActivity } from '../activity/backgroundActivity';
 import { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 import { flags } from '../../engine/featureFlags';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -579,6 +580,7 @@ export async function ensureRuntimeFrameProvider(
   }
 
   const initialTime = sourceTime ?? binding.session.currentTime;
+  const endActivity = beginBackgroundActivity('decoders');
   const loadPromise = (async () => {
     try {
       if (codecPlan) {
@@ -650,6 +652,7 @@ export async function ensureRuntimeFrameProvider(
         return null;
       }
     } finally {
+      endActivity();
       pendingRuntimeProviderLoads.delete(loadKey);
     }
   })();

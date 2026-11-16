@@ -20,7 +20,7 @@ import { useEngineStore } from '../../stores/engineStore';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
 import { ToolbarSaveStatus } from './toolbar/ToolbarSaveStatus';
-import { ToolbarSourceVerification } from './toolbar/ToolbarSourceVerification';
+import { ToolbarActivity } from './toolbar/ToolbarActivity';
 import { ToolbarWriteAccess } from './toolbar/ToolbarWriteAccess';
 import { ToolbarSavePermanently } from './toolbar/ToolbarSavePermanently';
 import { SavePermanentlyDialog } from './toolbar/SavePermanentlyDialog';
@@ -442,7 +442,7 @@ export function Toolbar({
 
       <div className="toolbar-section toolbar-right">
         <ToolbarSavePermanently status={permanentSave} onOpen={() => setShowSavePermanently(true)} />
-        <ToolbarSourceVerification />
+        <ToolbarActivity />
         <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} onSaveAs={projectActions.handleSaveAs} onExportArchive={() => setShowSavePermanently(true)} />
         <ToolbarWriteAccess />
         <ToolbarFolderAccess />

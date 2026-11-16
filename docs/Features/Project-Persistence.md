@@ -443,7 +443,14 @@ required records.
 
 Original media get a full-content SHA-256 (source identity) in the storage
 worker, one file at a time. The toolbar shows **Verifying media x %** with a bar
-while it runs (tooltip: file count and GB read). Large files are checkpointed
+while it runs (tooltip: file count and GB read).
+
+The same toolbar note says what else is still loading after a project opens,
+most visible first, with a small spinner: **Connecting media…** while the
+composition's files are opened, **Loading media…** while decoders start (the
+preview fills in afterwards), **Building thumbnails…**; "+n" means more work is
+running, all of it listed in the tooltip. It disappears when everything is
+loaded. Large files are checkpointed
 every 512 MB per file (name, size, modification time) in the browser's
 IndexedDB, so a reload or project switch continues where it stopped instead of
 reading a 100 GB camera file from the start again. A relink keeps the stored

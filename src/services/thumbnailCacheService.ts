@@ -4,6 +4,7 @@
 // Clips reference sourceId - split/trim needs zero thumbnail work
 
 import { Logger } from './logger';
+import { beginBackgroundActivity } from './activity/backgroundActivity';
 import { ThumbnailCacheEventBus } from './thumbnailCache/events';
 import { ThumbnailGenerator } from './thumbnailCache/generation';
 import { ThumbnailInvalidationController } from './thumbnailCache/invalidation';
@@ -224,6 +225,7 @@ class ThumbnailCacheService {
       sourceUrl,
     });
     this.lastGenerationErrors.delete(mediaFileId);
+    const endActivity = beginBackgroundActivity('thumbnails');
 
     try {
       this.durations.set(mediaFileId, duration);
@@ -310,6 +312,7 @@ class ThumbnailCacheService {
         this.abortControllers.delete(mediaFileId);
       }
     } finally {
+      endActivity();
       releaseThumbnailRuntimeResource(generationJobId);
     }
   }
@@ -341,6 +344,7 @@ class ThumbnailCacheService {
       sourceUrl,
     });
     this.lastGenerationErrors.delete(mediaFileId);
+    const endActivity = beginBackgroundActivity('thumbnails');
 
     try {
       this.durations.set(mediaFileId, duration);
@@ -380,6 +384,7 @@ class ThumbnailCacheService {
         this.abortControllers.delete(mediaFileId);
       }
     } finally {
+      endActivity();
       releaseThumbnailRuntimeResource(generationJobId);
     }
   }

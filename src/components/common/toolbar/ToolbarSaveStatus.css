@@ -37,3 +37,14 @@
   .toolbar-source-verification-bar { position: relative; width: 48px; height: 3px; overflow: hidden; border-radius: 2px; background: var(--bg-tertiary); }
   .toolbar-source-verification-bar span { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--accent-color, #8ab4f8); transition: width 0.3s ease; }
 }
+
+@layer components {
+  .toolbar-activity-spinner {
+    width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%;
+    border: 1.5px solid color-mix(in srgb, var(--accent-color, #8ab4f8) 30%, transparent);
+    border-top-color: var(--accent-color, #8ab4f8);
+    animation: toolbar-activity-spin 0.8s linear infinite;
+  }
+  @keyframes toolbar-activity-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .toolbar-activity-spinner { animation: none; } }
+}
