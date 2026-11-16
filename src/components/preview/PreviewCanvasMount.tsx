@@ -16,6 +16,7 @@ import type { MediaFile } from '../../stores/mediaStore';
 import type { PreviewQuality } from '../../stores/settingsStore';
 import type { SceneCameraConfig, SceneViewport } from '../../engine/scene/types';
 import { MaskOverlay } from './MaskOverlay';
+import { ColorWindowOverlay } from './colorWindowOverlay/ColorWindowOverlay';
 import { FaceAnalysisOverlay } from './FaceAnalysisOverlay';
 import { PreciseFaceOverlay } from './PreciseFaceOverlay';
 import { PreviewBottomControls } from './PreviewBottomControls';
@@ -357,6 +358,9 @@ export function PreviewCanvasMount({
                   displayHeight={canvasSize.height}
                   viewZoom={viewTransform.transform ? viewZoom : 1}
                 />
+              )}
+              {isEditableSource && !isExporting && !maskPanelActive && (
+                <ColorWindowOverlay canvasWidth={effectiveResolution.width} canvasHeight={effectiveResolution.height} />
               )}
               {isEditableSource && sam2Active && (
                 <SAM2Overlay

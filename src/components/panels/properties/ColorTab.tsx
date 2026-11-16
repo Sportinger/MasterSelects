@@ -9,6 +9,7 @@ import {
 import { ColorToolDock, type ColorAuxMode } from '../color-workspace/ColorToolDock';
 import { ColorCameraGradeToggle } from './ColorCameraGradeToggle';
 import { ColorDataLevelsToggle } from './ColorDataLevelsToggle';
+import { useColorWindowTarget } from '../../preview/colorWindowOverlay/colorWindowTarget';
 import '../color-workspace/ColorWorkspacePanel.css';
 import './ColorTab.css';
 
@@ -27,6 +28,11 @@ export function ColorTab({ clipId }: ColorTabProps) {
   const selectedNode = editableNodes.find(node => node.id === colorState.ui.selectedNodeId)
     ?? editableNodes[0];
   useEffect(() => { ensureColorCorrection(clipId); }, [clipId, ensureColorCorrection]);
+  // The preview shows the selected node's window while this tab is open.
+  useEffect(() => {
+    useColorWindowTarget.getState().setClipId(clipId);
+    return () => { if (useColorWindowTarget.getState().clipId === clipId) useColorWindowTarget.getState().setClipId(null); };
+  }, [clipId]);
   const openAuxPanel = (mode: ColorAuxMode) => {
     setAuxMode(mode);
     activatePanelType(mode === 'scopes' ? 'color-scopes' : 'color-keyframes');

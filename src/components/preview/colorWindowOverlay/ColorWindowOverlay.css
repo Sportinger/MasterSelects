@@ -1,0 +1,10 @@
+@layer features {
+  .color-window-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 14; overflow: visible; }
+  .color-window-overlay .color-window-edge { fill: rgba(255, 255, 255, 0.02); stroke: #f0c35a; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: all; cursor: move; }
+  .color-window-overlay .color-window-soft { fill: none; stroke: #f0c35a; stroke-opacity: 0.6; stroke-width: 1; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
+  .color-window-overlay .color-window-handle, .color-window-overlay .color-window-center { fill: #f0c35a; stroke: #1b1b1b; stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: all; }
+  .color-window-overlay .color-window-handle { cursor: ew-resize; }
+  .color-window-overlay .color-window-handle:last-of-type { cursor: ns-resize; }
+  .color-window-overlay .color-window-center { cursor: move; }
+  .color-window-overlay .color-window-label { fill: #f0c35a; font-size: 22px; text-anchor: middle; paint-order: stroke; stroke: rgba(0, 0, 0, 0.7); stroke-width: 3px; pointer-events: none; }
+}

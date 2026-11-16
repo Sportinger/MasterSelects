@@ -257,6 +257,13 @@ outside the stage and a gentle one on the lit performers. The window is part of 
 grade shares it with every clip of the camera; all window values are keyframeable. The GPU grade, the
 software render path and the grade thumbnails weight the node the same way (`src/types/colorWindow.ts`).
 
+While a clip's Color tab is open, the preview outlines the selected node's window: a solid line at the edge,
+dashed lines where the soft edge starts and ends, and a label saying whether the node corrects inside or
+outside. Drag inside the window or its center point to move it, the right handle for the width and the
+lower handle for the height. Nodes with the same window, such as an inside/outside pair, move together in
+one undo step (`src/components/preview/colorWindowOverlay/`). The overlay hides while the Masks panel edits
+clip masks.
+
 ## Superwhites
 
 Blown-out highlights in camera MXF files are often superwhites: detail above legal white that video-range
