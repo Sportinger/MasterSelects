@@ -15,6 +15,7 @@ import { createStoreSpeedSource, isReverseVideoPlayback, resolveClipSourceTime, 
 import { getNestedClipSourceTiming } from './layerBuilderNestedLayers';
 import type { FrameContext } from './types';
 import { syncNestedFullWebCodecs } from './videoSyncNestedFullWebCodecs';
+import { syncNestedCodecProviderClip } from './videoSyncNestedCodecProvider';
 import {
   getNestedClipContinuityKey,
   getNestedPreviewRootTrackKey,
@@ -111,7 +112,16 @@ export class VideoSyncNestedCompositionCoordinator {
 
     for (const nestedClip of compClip.nestedClips) {
       const nestedVideo = this.deps.getClipHtmlVideoElement(nestedClip);
-      if (!nestedVideo) continue;
+      if (!nestedVideo) {
+        syncNestedCodecProviderClip({
+          nestedClip,
+          compositionTime: compTime,
+          compositionRate: compRate,
+          ctx,
+          shouldSeekPaused: (provider, time) => this.deps.shouldSeekPausedWebCodecsProvider(provider, time),
+        });
+        continue;
+      }
 
       const isActive = compTime >= nestedClip.startTime && compTime < nestedClip.startTime + nestedClip.duration;
 

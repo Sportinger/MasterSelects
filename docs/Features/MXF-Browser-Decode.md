@@ -33,6 +33,12 @@ Goal: import, preview, scrub, and export MXF files entirely in the browser throu
   renders that runtime source; it used to open them in a `<video>` element, which cannot load MXF,
   so nested MXF clips stayed black. An undecodable essence is logged as
   `Composition video cannot be decoded` instead of a generic load failure.
+- **Codec clips inside nested and transition compositions** (for example a crossfade between two
+  MXF shots) get their decoder from the video sync, like top-level clips: it is started in the same
+  shared preview session the nested layer builder reads, advanced during playback and sought exactly
+  while paused (`videoSyncNestedCodecProvider.ts`). The nested sync used to skip every clip without
+  an HTML `<video>` element, so the transition showed nothing after a reload and, once its decoders
+  existed, kept their last frame from another moment (the crossfade "jumped").
 - **Codec provider backends.** Every codec backend is a descriptor in
   `src/services/mediaRuntime/codec/codecProviderDescriptors.ts` on top of
   `CodecFrameProviderBase` (latest-wins queue, epochs, prefetch, exact seek). Playback, thumbnails,
