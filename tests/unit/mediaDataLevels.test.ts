@@ -73,3 +73,24 @@ describe('media data levels (superwhites)', () => {
     expect(createLibavOpenRequest(mxf as never, 'dnxhd', false).fullRange).toBe(false);
   });
 });
+
+describe('relabelFullRange', () => {
+  it('copies a video-range frame into a full-range one and closes the original', async () => {
+    const { relabelFullRange } = await import('../../src/services/mediaRuntime/mxf/fullRangeFrame');
+    const made: Array<{ init: Record<string, unknown> }> = [];
+    vi.stubGlobal('VideoFrame', class { init: Record<string, unknown>; constructor(_data: unknown, init: Record<string, unknown>) { this.init = init; made.push(this); } });
+    const close = vi.fn();
+    const decoded = {
+      format: 'I420', codedWidth: 3840, codedHeight: 2160, displayWidth: 3840, displayHeight: 2160, timestamp: 40, duration: 40000,
+      visibleRect: { width: 3840, height: 2160 },
+      colorSpace: { fullRange: false, toJSON: () => ({ primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false }) },
+      allocationSize: () => 16, copyTo: async () => [{ offset: 0, stride: 4 }], close,
+    };
+    const out = await relabelFullRange(decoded as never) as unknown as { init: Record<string, unknown> };
+    expect(out.init).toMatchObject({ format: 'I420', codedWidth: 3840, timestamp: 40, colorSpace: { matrix: 'bt709', fullRange: true } });
+    expect(close).toHaveBeenCalled();
+    const already = { ...decoded, colorSpace: { fullRange: true } };
+    expect(await relabelFullRange(already as never)).toBe(already);
+    expect(made).toHaveLength(1);
+  });
+});

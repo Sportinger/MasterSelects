@@ -72,8 +72,9 @@ Camera MXF files are flagged as video range (16-235) but often record highlights
 example a spot-lit face on stage. Decoded as video range those superwhites clip to white, and no grade
 can bring the detail back. The Color tab's **Superwhites** switch sets `MediaFile.dataLevels = 'full'`
 for the clip's source file: the MXF H.264 decoder gets a full-range color space in its
-`VideoDecoderConfig` (which overrides the in-band one), and the libavcodec worker labels its frames full
-range. Code values 16-255 then all stay inside the picture; blacks sit slightly above 0 and legal white at
+`VideoDecoderConfig`, and because Chrome lets the stream's own range flag win over it, the decode worker
+also copies each frame into a new `VideoFrame` labelled full range (`mxf/fullRangeFrame.ts`, about 8 ms
+per 4K frame in the worker); the libavcodec worker labels its frames full range directly. Code values 16-255 then all stay inside the picture; blacks sit slightly above 0 and legal white at
 about 92 %, so a grade (black point, highlights) sets the final levels. The setting is per file, applies
 to every clip of it and to the export, persists with the project, and re-creates the file's decoders on
 change (also on undo/redo). Other formats keep their flagged range; the switch is hidden for them and the

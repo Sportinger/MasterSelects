@@ -5,6 +5,7 @@
 import { MxfPacketSource } from '../services/mediaRuntime/mxf/MxfPacketSource';
 import { MxfGopEngine, type MxfGopEngineStats } from '../services/mediaRuntime/mxf/mxfGopEngine';
 import { createAvcDecoderConfig, WebCodecsGopDecoder } from '../services/mediaRuntime/mxf/webCodecsGopDecoder';
+import { relabelFullRange } from '../services/mediaRuntime/mxf/fullRangeFrame';
 
 export type MxfAvcDecodeWorkerRequest =
   | { type: 'open'; file: File; codecId: string; fullRange?: boolean }
@@ -18,6 +19,8 @@ export type MxfAvcDecodeWorkerResponse =
 
 let source: MxfPacketSource | null = null;
 let engine: MxfGopEngine | null = null;
+let fullRange = false;
+
 
 function post(message: MxfAvcDecodeWorkerResponse, transfer: Transferable[] = []): void {
   (self as unknown as Worker).postMessage(message, transfer);
@@ -32,7 +35,8 @@ self.onmessage = async (event: MessageEvent<MxfAvcDecodeWorkerRequest>) => {
   if (request.type === 'open') {
     try {
       source = await MxfPacketSource.create(request.file, request.codecId);
-      const config = await createAvcDecoderConfig(source, request.fullRange === true);
+      fullRange = request.fullRange === true;
+      const config = await createAvcDecoderConfig(source, fullRange);
       engine = new MxfGopEngine(source, 'MXF AVC');
       await engine.attachDecoder(async (callbacks) => new WebCodecsGopDecoder(config, callbacks));
       post({ type: 'opened', codec: config.codec });
@@ -45,7 +49,7 @@ self.onmessage = async (event: MessageEvent<MxfAvcDecodeWorkerRequest>) => {
       return;
     }
     const current = engine;
-    current.decodeFrame(request.displayIndex).then(
+    current.decodeFrame(request.displayIndex).then(async (decoded) => fullRange ? relabelFullRange(decoded) : decoded).then(
       (frame) => post({ type: 'frame', id: request.id, frame, stats: current.stats }, [frame as unknown as Transferable]),
       (error) => post({ type: 'error', id: request.id, error: errorText(error) }),
     );
