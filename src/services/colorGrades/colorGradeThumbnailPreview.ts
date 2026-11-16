@@ -1,3 +1,4 @@
+import { colorWindowWeight } from '../../types/colorWindow';
 import {
   getPrimaryRuntimeParams,
   isNeutralPrimaryParams,
@@ -181,16 +182,24 @@ function applyPrimaryNode(
 export function applyColorGradeThumbnailPreview(
   pixels: Uint8ClampedArray,
   preview: ColorGradeThumbnailPreview,
+  width = PREVIEW_WIDTH,
 ): Uint8ClampedArray {
   const output = new Uint8ClampedArray(pixels);
+  const height = Math.max(1, Math.round(output.length / 4 / width));
   for (let index = 0; index < output.length; index += 4) {
+    const pixel = index / 4;
+    const u = ((pixel % width) + 0.5) / width;
+    const v = (Math.floor(pixel / width) + 0.5) / height;
     let rgb: [number, number, number] = [
       output[index] / 255,
       output[index + 1] / 255,
       output[index + 2] / 255,
     ];
     preview.primaryNodes.forEach((params, nodeIndex) => {
-      rgb = applyPrimaryNode(rgb, params, preview.curvesByNode[nodeIndex]);
+      const weight = colorWindowWeight(params, u, v);
+      if (weight <= 0) return;
+      const graded = applyPrimaryNode(rgb, params, preview.curvesByNode[nodeIndex]);
+      rgb = [rgb[0] + (graded[0] - rgb[0]) * weight, rgb[1] + (graded[1] - rgb[1]) * weight, rgb[2] + (graded[2] - rgb[2]) * weight];
     });
     output[index] = Math.round(clampUnit(rgb[0]) * 255);
     output[index + 1] = Math.round(clampUnit(rgb[1]) * 255);

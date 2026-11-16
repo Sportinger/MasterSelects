@@ -1,6 +1,6 @@
 import { EFFECT_REGISTRY } from '../../effects';
 import { getAllAudioEffects } from '../../engine/audio/AudioEffectRegistry';
-import { createColorNode, PRIMARY_COLOR_PARAM_DEFS, WHEEL_COLOR_PARAM_DEFS, type ColorNodeType } from '../../types/colorCorrection';
+import { createColorNode, PRIMARY_COLOR_PARAM_DEFS, WHEEL_COLOR_PARAM_DEFS, WINDOW_COLOR_PARAM_DEFS, type ColorNodeType } from '../../types/colorCorrection';
 import { listFlockOperators } from '../flock/operators/flockOperatorRegistry';
 import { listNodeCatalog } from '../operators/operatorCatalog';
 import { EFFECT_OPERATORS } from '../operators/operatorRegistry';
@@ -84,7 +84,7 @@ export function getAgentNodeCatalog(): AgentNodeDefinition[] {
       description: catalogText(`color:${type}`).description ?? `${node.name} color node.`, tags: catalogText(`color:${type}`).tags, category: 'Color Grade',
       availability: type === 'input' || type === 'output' ? 'fixed-anchor' : 'owner-dependent',
       inputs: ports.inputs.map(port), outputs: ports.outputs.map(port),
-      parameters: (type === 'primary' ? PRIMARY_COLOR_PARAM_DEFS : type === 'wheels' ? WHEEL_COLOR_PARAM_DEFS : []).map(p => ({
+      parameters: (type === 'primary' ? [...PRIMARY_COLOR_PARAM_DEFS, ...WINDOW_COLOR_PARAM_DEFS] : type === 'wheels' ? [...WHEEL_COLOR_PARAM_DEFS, ...WINDOW_COLOR_PARAM_DEFS] : []).map(p => ({
         id: p.key, label: p.label, type: 'number', default: p.defaultValue, min: p.min, max: p.max, step: p.step, animatable: true,
       })),
     });

@@ -1,3 +1,4 @@
+import { DEFAULT_COLOR_WINDOW_PARAMS, type ColorWindowParams } from './colorWindow';
 import {
   areRuntimeColorCurvesNeutral,
   getRuntimeColorCurves,
@@ -72,7 +73,7 @@ export interface ColorCorrectionState {
   ui: ColorCorrectionUiState;
 }
 
-export interface RuntimePrimaryColorParams {
+export interface RuntimePrimaryColorParams extends ColorWindowParams {
   exposure: number;
   contrast: number;
   pivot: number;
@@ -120,7 +121,7 @@ export interface RuntimeColorGrade {
 
 export interface ColorParamDefinition {
   key: keyof RuntimePrimaryColorParams;
-  section: 'Balance' | 'Tone' | 'Levels' | 'Creative' | 'Wheels';
+  section: 'Balance' | 'Tone' | 'Levels' | 'Creative' | 'Wheels' | 'Window';
   label: string;
   min: number;
   max: number;
@@ -162,6 +163,7 @@ export const DEFAULT_PRIMARY_COLOR_PARAMS: RuntimePrimaryColorParams = {
   offsetG: 0,
   offsetB: 0,
   offsetY: 0,
+  ...DEFAULT_COLOR_WINDOW_PARAMS,
 };
 
 export const PRIMARY_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
@@ -202,9 +204,21 @@ export const WHEEL_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
   { key: 'offsetY', section: 'Wheels', label: 'Offset Y', min: -1, max: 1, step: 0.001, defaultValue: 0, decimals: 3 },
 ];
 
+/** Window of the node: limits its correction to an ellipse or rectangle (see colorWindow.ts). */
+export const WINDOW_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
+  { key: 'windowShape', section: 'Window', label: 'Shape (0 off, 1 ellipse, 2 box)', min: 0, max: 2, step: 1, defaultValue: 0, decimals: 0 },
+  { key: 'windowX', section: 'Window', label: 'Center X', min: -0.5, max: 1.5, step: 0.001, defaultValue: 0.5, decimals: 3 },
+  { key: 'windowY', section: 'Window', label: 'Center Y', min: -0.5, max: 1.5, step: 0.001, defaultValue: 0.5, decimals: 3 },
+  { key: 'windowWidth', section: 'Window', label: 'Width', min: 0.01, max: 3, step: 0.001, defaultValue: 0.5, decimals: 3 },
+  { key: 'windowHeight', section: 'Window', label: 'Height', min: 0.01, max: 3, step: 0.001, defaultValue: 0.5, decimals: 3 },
+  { key: 'windowSoftness', section: 'Window', label: 'Softness', min: 0, max: 1, step: 0.01, defaultValue: 0.3, decimals: 2 },
+  { key: 'windowOutside', section: 'Window', label: 'Outside (0 in, 1 out)', min: 0, max: 1, step: 1, defaultValue: 0, decimals: 0 },
+];
+
 export const RUNTIME_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
   ...PRIMARY_COLOR_PARAM_DEFS,
   ...WHEEL_COLOR_PARAM_DEFS,
+  ...WINDOW_COLOR_PARAM_DEFS,
 ];
 
 const RUNTIME_COLOR_PARAM_KEYS = Object.keys(DEFAULT_PRIMARY_COLOR_PARAMS) as (keyof RuntimePrimaryColorParams)[];

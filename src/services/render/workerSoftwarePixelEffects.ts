@@ -1,3 +1,4 @@
+import { colorWindowWeight } from '../../types/colorWindow';
 import type { WorkerRenderSoftwareFrame } from './workerRenderHostRuntimeCommands';
 import { chromaKeyCpuKey, chromaKeyCpuScreen, prepareChromaKeyCpu } from '../../effects/keying/chroma-key/keyerCpu';
 import type { RuntimePrimaryColorParams } from '../../types/colorCorrection';
@@ -406,7 +407,10 @@ export function applyWorkerSoftwarePixelEffects(
         [r, g, b] = applyGrainAdjustment([r, g, b], adjustment, uvX, uvY, timelineTime);
       }
       for (const node of colorGradePrimaryNodes) {
-        [r, g, b] = applyPrimaryColorGrade([r, g, b], node);
+        const weight = colorWindowWeight(node, (x + 0.5) / width, (y + 0.5) / height);
+        if (weight <= 0) continue;
+        const [gr, gg, gb] = applyPrimaryColorGrade([r, g, b], node);
+        r += (gr - r) * weight; g += (gg - g) * weight; b += (gb - b) * weight;
       }
       data[targetIndex] = clampByte(r * 255);
       data[targetIndex + 1] = clampByte(g * 255);

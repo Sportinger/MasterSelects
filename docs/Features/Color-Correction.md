@@ -246,6 +246,17 @@ shows it. Turning the switch off keeps the current look on every clip as its own
 still leave the camera grade through the clip strip's grade mode (local) and keeps its own color.
 (`src/services/colorGrades/cameraColorGrade.ts`, `ColorCameraGradeToggle.tsx`.)
 
+## Node Windows
+
+Every Corrector and Wheels node has a **Window** section (Resolve-style power window). **Shape** 1 limits the
+node's correction to an ellipse, 2 to a box; 0 corrects the whole picture. **Center X/Y**, **Width** and
+**Height** are in the clip's own picture before its transform (0..1 from the top left, so a clip rotated
+by 180° has its window mirrored), **Softness** feathers the edge, and **Outside** 1 corrects everything
+except the window. Several nodes with different windows build a local grade, for example a strong lift
+outside the stage and a gentle one on the lit performers. The window is part of the grade, so a camera
+grade shares it with every clip of the camera; all window values are keyframeable. The GPU grade, the
+software render path and the grade thumbnails weight the node the same way (`src/types/colorWindow.ts`).
+
 ## Superwhites
 
 Blown-out highlights in camera MXF files are often superwhites: detail above legal white that video-range

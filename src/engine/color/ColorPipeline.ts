@@ -3,9 +3,11 @@ import { COLOR_CURVE_CHANNELS, COLOR_CURVE_SAMPLE_COUNT } from '../../types/colo
 import { Logger } from '../../services/logger';
 import { nodePreviewTextureTap } from '../../services/nodePreview/NodePreviewTextureTap';
 import { SHADOW_HIGHLIGHT_TONE_WGSL } from './shadowHighlightTone';
+import { COLOR_WINDOW_WGSL } from '../../types/colorWindow';
 
 const log = Logger.create('ColorPipeline');
-const PRIMARY_COLOR_VEC4_ROWS = 8;
+// Rows 0-7 hold the primary/wheel parameters, rows 8-9 the node window (colorWindow.ts).
+const PRIMARY_COLOR_VEC4_ROWS = 10;
 const COLOR_CURVE_VEC4_ROWS = COLOR_CURVE_SAMPLE_COUNT / 4;
 const COLOR_NODE_VEC4_ROWS = PRIMARY_COLOR_VEC4_ROWS + COLOR_CURVE_CHANNELS.length * COLOR_CURVE_VEC4_ROWS;
 const COLOR_UNIFORM_FLOATS = 4 + MAX_RUNTIME_PRIMARY_NODES * COLOR_NODE_VEC4_ROWS * 4;
@@ -53,6 +55,7 @@ fn luma(rgb: vec3f) -> f32 {
   return dot(rgb, vec3f(0.2126, 0.7152, 0.0722));
 }
 ${SHADOW_HIGHLIGHT_TONE_WGSL}
+${COLOR_WINDOW_WGSL}
 fn hueRotate(rgb: vec3f, degrees: f32) -> vec3f {
   let angle = degrees * 0.01745329252;
   let sine = sin(angle);
@@ -158,7 +161,9 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let nodeCount = min(u32(color.header.x), ${MAX_RUNTIME_PRIMARY_NODES}u);
   for (var i = 0u; i < ${MAX_RUNTIME_PRIMARY_NODES}u; i = i + 1u) {
     if (i < nodeCount) {
-      rgb = applyPrimary(rgb, i);
+      let windowBase = i * ${COLOR_NODE_VEC4_ROWS}u;
+      let weight = colorWindowWeight(input.uv, color.data[windowBase + 8u], color.data[windowBase + 9u]);
+      rgb = mix(rgb, applyPrimary(rgb, i), weight);
     }
   }
 
@@ -263,6 +268,13 @@ export class ColorPipeline {
       uniforms[offset + 29] = params.offsetG;
       uniforms[offset + 30] = params.offsetB;
       uniforms[offset + 31] = params.offsetY;
+      uniforms[offset + 32] = params.windowShape;
+      uniforms[offset + 33] = params.windowX;
+      uniforms[offset + 34] = params.windowY;
+      uniforms[offset + 35] = params.windowWidth;
+      uniforms[offset + 36] = params.windowHeight;
+      uniforms[offset + 37] = params.windowSoftness;
+      uniforms[offset + 38] = params.windowOutside;
 
       const curves = grade.curvesByNode?.[index];
       COLOR_CURVE_CHANNELS.forEach((channel, channelIndex) => {
