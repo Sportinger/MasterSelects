@@ -3,6 +3,7 @@ import { beginBackgroundActivity } from '../activity/backgroundActivity';
 import { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 import { flags } from '../../engine/featureFlags';
 import { useMediaStore } from '../../stores/mediaStore';
+import { mediaDecodesFullRange } from './mediaDataLevels';
 import { renderHostPort } from '../render/renderHostPort';
 import { timelineRuntimeCoordinator } from '../timeline/timelineRuntimeCoordinator';
 import { mediaRuntimeRegistry } from './registry';
@@ -590,6 +591,7 @@ export async function ensureRuntimeFrameProvider(
           file,
           plan: codecPlan,
           policy,
+          fullRange: mediaDecodesFullRange(runtime.descriptor.mediaFileId),
           ...createCodecProviderRenderCallbacks(
             { sourceId: binding.sourceId, sessionKey: binding.sessionKey, policy,
               mediaFileId: runtime.descriptor.mediaFileId }, descriptor.logName, options,

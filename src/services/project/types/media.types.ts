@@ -76,6 +76,9 @@ export interface ProjectMediaFile extends MediaVideoTrackMetadata {
   // Source-owned Resolve-style remote grade
   remoteColorGrade?: RemoteColorGradeState;
 
+  // Data levels override ('full' keeps superwhites of video-range camera files)
+  dataLevels?: 'full';
+
   // Timestamps
   importedAt: string;
   liveInput?: LiveInputSource;

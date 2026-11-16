@@ -63,6 +63,7 @@ export async function convertProjectMediaToStore(
         remoteColorGrade: pm.remoteColorGrade
           ? structuredClone(pm.remoteColorGrade)
           : undefined,
+        dataLevels: pm.dataLevels === 'full' ? 'full' : undefined,
         liveInput: structuredClone(pm.liveInput),
         sourceAnnotations: pm.sourceAnnotations?.map((annotation) => ({ ...annotation })),
       });
@@ -247,6 +248,7 @@ export async function convertProjectMediaToStore(
       remoteColorGrade: pm.remoteColorGrade
         ? structuredClone(pm.remoteColorGrade)
         : undefined,
+      dataLevels: pm.dataLevels === 'full' ? 'full' : undefined,
       transcriptStatus,
       transcript,
       transcriptArtifact,

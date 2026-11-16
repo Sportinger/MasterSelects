@@ -91,6 +91,7 @@ export const ProjectMediaFileFields = {
   "folderId": { class: 'content', owner: 'media' },
   "labelColor": { class: 'content', owner: 'media' },
   "remoteColorGrade": { class: 'content', owner: 'media' },
+  "dataLevels": { class: 'content', owner: 'media' },
   "importedAt": { class: 'content', owner: 'media' },
   "liveInput": { class: 'content', owner: 'media' },
   "sourceAnnotations": { class: 'content', owner: 'media' },

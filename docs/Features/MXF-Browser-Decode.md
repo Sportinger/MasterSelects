@@ -66,6 +66,20 @@ blend-deinterlaced in the decode worker ((above + 2·line + below) / 4 per plane
 (plan D3). Not yet: per-clip switch, field-rate bob/yadif on the GPU, interlaced H.264 through
 WebCodecs, interlaced ProRes.
 
+## Data levels (superwhites)
+
+Camera MXF files are flagged as video range (16-235) but often record highlights up to 255, for
+example a spot-lit face on stage. Decoded as video range those superwhites clip to white, and no grade
+can bring the detail back. The Color tab's **Superwhites** switch sets `MediaFile.dataLevels = 'full'`
+for the clip's source file: the MXF H.264 decoder gets a full-range color space in its
+`VideoDecoderConfig` (which overrides the in-band one), and the libavcodec worker labels its frames full
+range. Code values 16-255 then all stay inside the picture; blacks sit slightly above 0 and legal white at
+about 92 %, so a grade (black point, highlights) sets the final levels. The setting is per file, applies
+to every clip of it and to the export, persists with the project, and re-creates the file's decoders on
+change (also on undo/redo). Other formats keep their flagged range; the switch is hidden for them and the
+command logs a warning (`src/services/mediaRuntime/mediaDataLevels.ts`). Timeline thumbnails still use the
+flagged range.
+
 ## Audio
 
 Frame-wrapped PCM (SMPTE 382 BWF/AES3 sound elements, e.g. Sony's four mono tracks) is streamed

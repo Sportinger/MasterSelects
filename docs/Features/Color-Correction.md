@@ -246,6 +246,13 @@ shows it. Turning the switch off keeps the current look on every clip as its own
 still leave the camera grade through the clip strip's grade mode (local) and keeps its own color.
 (`src/services/colorGrades/cameraColorGrade.ts`, `ColorCameraGradeToggle.tsx`.)
 
+## Superwhites
+
+Blown-out highlights in camera MXF files are often superwhites: detail above legal white that video-range
+decoding clips. The **Superwhites** switch in the Color tab decodes the whole source file as full range so
+the grade can pull those highlights back; afterwards set the black point and highlights in the grade.
+Details in [MXF Browser Decode](MXF-Browser-Decode.md#data-levels-superwhites).
+
 ## Presets And Versions
 
 `duplicateColorVersion(...)`, `deleteColorVersion(...)`, and `setActiveColorVersion(...)` operate on `ColorCorrectionState.versions`; only the active version compiles.

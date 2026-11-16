@@ -74,7 +74,7 @@ export class WebCodecsGopDecoder implements GopDecoder {
 }
 
 /** Builds a supported decoder config from the in-band SPS of the first key frame. */
-export async function createAvcDecoderConfig(source: MxfPacketSource): Promise<VideoDecoderConfig> {
+export async function createAvcDecoderConfig(source: MxfPacketSource, fullRange = false): Promise<VideoDecoderConfig> {
   if (typeof VideoDecoder === 'undefined') throw new Error('WebCodecs VideoDecoder is unavailable');
   const firstKey = await source.getPacketByStoredIndex(source.keyframeStoredIndexFor(0));
   const codec = firstKey ? getAvcCodecStringFromAnnexB(firstKey.data) : null;
@@ -88,7 +88,12 @@ export async function createAvcDecoderConfig(source: MxfPacketSource): Promise<V
     // Avoid hardware decoder contention during concurrent MXF camera seeks.
     hardwareAcceleration: 'prefer-software',
   };
+  if (fullRange) {
+    // The config color space overrides the in-band one: keep values above legal white (superwhites).
+    const matrix = meta.height <= 576 ? 'smpte170m' : 'bt709';
+    config.colorSpace = { primaries: matrix, transfer: matrix, matrix, fullRange: true };
+  }
   const support = await VideoDecoder.isConfigSupported(config);
   if (!support.supported) throw new Error(`Browser cannot decode ${codec} (${meta.width}x${meta.height})`);
-  return support.config ?? config;
+  return { ...(support.config ?? config), ...(config.colorSpace ? { colorSpace: config.colorSpace } : {}) };
 }

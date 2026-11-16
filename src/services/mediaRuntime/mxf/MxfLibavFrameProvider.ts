@@ -39,6 +39,7 @@ export function createLibavOpenRequest(
   source: MxfPacketSource,
   codec: LibavWorkerCodec,
   eightBit: boolean,
+  fullRange = false,
 ): LibavOpenRequest {
   const video = source.mxf.video!;
   const visibleRect = video.displayYOffset > 0 || video.height !== video.codedHeight
@@ -50,6 +51,7 @@ export function createLibavOpenRequest(
     eightBit,
     visibleRect,
     colorMatrix: video.height <= 576 ? 'smpte170m' : 'bt709',
+    fullRange,
     frameDurationUs: Math.round(1e6 / (video.fps || 25)),
     deinterlace: true,
   };
@@ -89,7 +91,7 @@ export class MxfLibavFrameProvider extends CodecFrameProviderBase<MxfPacket, Mxf
     );
     this.source = source;
     const video = source.mxf.video!;
-    const open = createLibavOpenRequest(source, CODEC_FOR_ID[this.options.codecId], this.options.eightBit === true);
+    const open = createLibavOpenRequest(source, CODEC_FOR_ID[this.options.codecId], this.options.eightBit === true, this.options.fullRange === true);
     const count = this.options.workerCount
       ?? planLibavWorkerCount(this.options.policy ?? 'interactive', video.width, video.height);
     this.workers = Array.from({ length: count }, () => new LibavWorker(open));

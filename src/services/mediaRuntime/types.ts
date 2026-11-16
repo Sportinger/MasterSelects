@@ -194,6 +194,8 @@ export interface MediaSourceRuntime {
 
 export interface MediaRuntimeRegistry {
   resolveSourceId(descriptor: MediaSourceRuntimeDescriptor): string | null;
+  /** Drops the decoders and cached frames of one media file; they are re-created on demand. */
+  resetMediaDecoders(mediaFileId: string): number;
   retainRuntime(
     descriptor: MediaSourceRuntimeDescriptor,
     ownerId: string

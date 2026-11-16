@@ -274,6 +274,21 @@ class BasicMediaSourceRuntime implements MediaSourceRuntime {
     });
   }
 
+  /**
+   * Destroys the owned decoders and cached frames, so the next request decodes again with the media
+   * file's current decode settings (e.g. data levels). Returns how many decoders were dropped.
+   */
+  resetDecoders(): number {
+    let dropped = 0;
+    for (const session of this.sessions.values()) {
+      if (!session.ownsFrameProvider || !session.frameProvider) continue;
+      session.setFrameProvider(null);
+      dropped += 1;
+    }
+    this.trimFrameCache(0);
+    return dropped;
+  }
+
   /** Releases the oldest cached clones until at most `limit` remain. */
   private trimFrameCache(limit: number): void {
     while (this.frameCache.size > limit) {
@@ -551,6 +566,15 @@ class DefaultMediaRuntimeRegistry implements MediaRuntimeRegistry {
 
   getRuntime(sourceId: string): MediaSourceRuntime | null {
     return this.runtimes.get(sourceId) ?? null;
+  }
+
+  /** Re-creates the decoders of every runtime of one media file on their next frame request. */
+  resetMediaDecoders(mediaFileId: string): number {
+    let dropped = 0;
+    for (const runtime of this.runtimes.values()) {
+      if (runtime.descriptor.mediaFileId === mediaFileId) dropped += runtime.resetDecoders();
+    }
+    return dropped;
   }
 
   getSession(sourceId: string, sessionKey: string): DecodeSession | null {

@@ -106,6 +106,7 @@ export function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
       remoteColorGrade: file.remoteColorGrade
         ? structuredClone(file.remoteColorGrade)
         : undefined,
+      dataLevels: file.dataLevels === 'full' ? 'full' : undefined,
       importedAt: new Date(file.createdAt).toISOString(),
       liveInput: file.liveInput ? structuredClone(file.liveInput) : undefined,
       sourceAnnotations: file.sourceAnnotations?.map((annotation) => ({ ...annotation })),

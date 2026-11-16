@@ -37,9 +37,9 @@ class MxfAvcWorkerFrameSource implements GopFrameSource {
     });
   }
 
-  static async open(file: File, codecId: string): Promise<MxfAvcWorkerFrameSource> {
+  static async open(file: File, codecId: string, fullRange = false): Promise<MxfAvcWorkerFrameSource> {
     const client = new MxfAvcWorkerFrameSource();
-    await client.start(file, codecId);
+    await client.start(file, codecId, fullRange);
     return client;
   }
 
@@ -67,7 +67,7 @@ class MxfAvcWorkerFrameSource implements GopFrameSource {
     setTimeout(() => this.worker.terminate(), 1000);
   }
 
-  private start(file: File, codecId: string): Promise<void> {
+  private start(file: File, codecId: string, fullRange: boolean): Promise<void> {
     return new Promise((resolve, reject) => {
       this.worker.onmessage = (event: MessageEvent<MxfAvcDecodeWorkerResponse>) => {
         const message = event.data;
@@ -94,7 +94,7 @@ class MxfAvcWorkerFrameSource implements GopFrameSource {
         for (const entry of this.pending.values()) entry.reject(error);
         this.pending.clear();
       };
-      this.worker.postMessage({ type: 'open', file, codecId } satisfies MxfAvcDecodeWorkerRequest);
+      this.worker.postMessage({ type: 'open', file, codecId, fullRange } satisfies MxfAvcDecodeWorkerRequest);
     });
   }
 }
@@ -106,7 +106,7 @@ export class MxfAvcFrameProvider extends MxfGopFrameProvider<MxfAvcFrameProvider
   private codecString = '';
 
   protected async createFrameSource(): Promise<GopFrameSource> {
-    const frames = await MxfAvcWorkerFrameSource.open(this.options.file, this.options.codecId);
+    const frames = await MxfAvcWorkerFrameSource.open(this.options.file, this.options.codecId, this.options.fullRange === true);
     this.codecString = frames.codec;
     return frames;
   }

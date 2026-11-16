@@ -31,6 +31,8 @@ export interface CodecProviderCreateParams {
    * high-bit-depth VideoFrames black on some Chromium/Windows combinations).
    */
   outputProfile?: 'native' | 'sdr';
+  /** Data levels override of the media file (MediaFile.dataLevels === 'full'). */
+  fullRange?: boolean;
   onFrame?: () => void;
   onError?: (error: Error) => void;
 }
@@ -173,6 +175,7 @@ const mxfAvcDescriptor: CodecProviderDescriptor = {
       file: params.file,
       codecId: params.plan.codecId,
       policy: params.policy,
+      fullRange: params.fullRange,
       onFrame: params.onFrame,
       onError: params.onError,
     });
@@ -205,6 +208,7 @@ const mxfLibavDescriptor: CodecProviderDescriptor = {
         file: params.file,
         codecId: params.plan.codecId,
         policy: params.policy,
+        fullRange: params.fullRange,
         eightBit: params.outputProfile === 'sdr',
         onFrame: params.onFrame,
         onError: params.onError,
@@ -215,6 +219,7 @@ const mxfLibavDescriptor: CodecProviderDescriptor = {
       file: params.file,
       codecId: params.plan.codecId,
       policy: params.policy,
+      fullRange: params.fullRange,
       eightBit: params.outputProfile === 'sdr',
       onFrame: params.onFrame,
       onError: params.onError,

@@ -144,6 +144,8 @@ export interface MediaFile extends MediaItem, MediaVideoTrackMetadata {
   fileHash?: string;
   thumbnailUrl?: string;
   remoteColorGrade?: RemoteColorGradeState;
+  /** Data levels override: 'full' decodes the video as full range and keeps superwhites. */
+  dataLevels?: 'full';
   splatCount?: number;
   totalSplatCount?: number;
   splatFrameCount?: number;

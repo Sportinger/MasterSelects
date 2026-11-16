@@ -60,7 +60,7 @@ export class MxfLibavGopFrameProvider extends MxfGopFrameProvider<MxfLibavGopFra
     // Decoding already runs in the libavcodec worker; the engine and reads stay here.
     const engine = new MxfGopEngine(source, this.label);
     await engine.attachDecoder(async (callbacks: GopDecoderCallbacks): Promise<GopDecoder> => {
-      const worker = new LibavWorker(createLibavOpenRequest(source, 'mpeg2video', this.options.eightBit === true));
+      const worker = new LibavWorker(createLibavOpenRequest(source, 'mpeg2video', this.options.eightBit === true, this.options.fullRange === true));
       try {
         await worker.ready();
       } catch (error) {

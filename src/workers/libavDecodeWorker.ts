@@ -17,6 +17,8 @@ export type LibavDecodeWorkerRequest =
       eightBit: boolean;
       visibleRect: { x: number; y: number; width: number; height: number } | null;
       colorMatrix: 'bt709' | 'smpte170m';
+      /** Data levels override: label frames full range so superwhites survive conversion. */
+      fullRange?: boolean;
       frameDurationUs: number;
       /** Blend-deinterlace frames the decoder flags as interlaced (plan D3: on by default). */
       deinterlace: boolean;
@@ -185,7 +187,7 @@ function buildFrame(m: LibavModule, timestampUs: number, durationUs: number): Vi
       primaries: options!.colorMatrix === 'bt709' ? 'bt709' : 'smpte170m',
       transfer: options!.colorMatrix === 'bt709' ? 'bt709' : 'smpte170m',
       matrix: options!.colorMatrix,
-      fullRange: false,
+      fullRange: options!.fullRange === true,
     },
   });
 }

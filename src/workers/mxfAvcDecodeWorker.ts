@@ -7,7 +7,7 @@ import { MxfGopEngine, type MxfGopEngineStats } from '../services/mediaRuntime/m
 import { createAvcDecoderConfig, WebCodecsGopDecoder } from '../services/mediaRuntime/mxf/webCodecsGopDecoder';
 
 export type MxfAvcDecodeWorkerRequest =
-  | { type: 'open'; file: File; codecId: string }
+  | { type: 'open'; file: File; codecId: string; fullRange?: boolean }
   | { type: 'frame'; id: number; displayIndex: number }
   | { type: 'close' };
 
@@ -32,7 +32,7 @@ self.onmessage = async (event: MessageEvent<MxfAvcDecodeWorkerRequest>) => {
   if (request.type === 'open') {
     try {
       source = await MxfPacketSource.create(request.file, request.codecId);
-      const config = await createAvcDecoderConfig(source);
+      const config = await createAvcDecoderConfig(source, request.fullRange === true);
       engine = new MxfGopEngine(source, 'MXF AVC');
       await engine.attachDecoder(async (callbacks) => new WebCodecsGopDecoder(config, callbacks));
       post({ type: 'opened', codec: config.codec });

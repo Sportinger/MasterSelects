@@ -45,6 +45,11 @@ export interface CodecFrameProviderBaseOptions {
   sourceId: string;
   file: File;
   policy?: DecodeSessionPolicy;
+  /**
+   * Data levels override: decode the video as full range (0-255) instead of the flagged video
+   * range (16-235), so camera "superwhites" above legal white keep their detail for grading.
+   */
+  fullRange?: boolean;
   loadTimeoutMs?: number;
   onFrame?: () => void;
   onError?: (error: Error) => void;
