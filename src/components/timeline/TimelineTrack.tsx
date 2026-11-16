@@ -19,6 +19,7 @@ import { TimelineTrackResizeHandle } from './components/TimelineTrackResizeHandl
 import { useClipInteractionShellKeyframeGroupMove } from './hooks/useClipInteractionShellKeyframeGroupMove';
 import { useClipInteractionShellModuleCommandDispatcher } from './hooks/useClipInteractionShellModuleCommandDispatcher';
 import { useTimelineTrackClipRowEvents } from './hooks/useTimelineTrackClipRowEvents';
+import { useTimelineTrackSelectTool } from './hooks/useTimelineTrackSelectTool';
 import { useTimelineTrackInteractionShellState } from './hooks/useTimelineTrackInteractionShellState';
 import { useTimelineTrackPointerTools } from './hooks/useTimelineTrackPointerTools';
 import { useDocumentPassageClipDrop } from './hooks/useDocumentPassageClipDrop';
@@ -387,6 +388,7 @@ function TimelineTrackComponent({
       : undefined,
     [canvasClips, clipRenameId, track.id],
   );
+  const trackSelectTool = useTimelineTrackSelectTool({ activeTimelineToolId, trackId: track.id, pixelToTime });
   const clipRowEvents = useTimelineTrackClipRowEvents({
     clearPointerToolPreview,
     handleTimelineToolPointerClick,
@@ -477,6 +479,7 @@ function TimelineTrackComponent({
         className="track-clip-row"
         style={{ height: baseHeight }}
         {...clipRowEvents}
+        onMouseDownCapture={trackSelectTool.onMouseDownCapture}
       >
         <TimelineTrackGridCanvas
           height={baseHeight}

@@ -401,6 +401,22 @@ export function dispatchTimelineClipPointerMove(
   };
 }
 
+/** The selection a track-select tool makes from a time on a track: it acts on time, not on the clip clicked. */
+export function buildTrackSelectOperation(
+  toolId: 'track-select-forward' | 'track-select-backward' | 'track-select-forward-all',
+  trackId: string,
+  time: number,
+) {
+  return {
+    id: `${toolId}:${trackId}:${time}`,
+    type: 'select-clips-from-time' as const,
+    time,
+    direction: toolId === 'track-select-backward' ? 'backward' as const : 'forward' as const,
+    trackIds: toolId === 'track-select-forward-all' ? undefined : [trackId],
+    includeLinked: true,
+  };
+}
+
 export function dispatchTimelineClipPointerClick(
   context: TimelineClipPointerContext,
 ): TimelineClipPointerDispatchResult {
@@ -413,14 +429,7 @@ export function dispatchTimelineClipPointerClick(
     });
     return {
       handled: true,
-      operation: {
-        id: `${context.toolId}:${context.track.id}:${rawTime}`,
-        type: 'select-clips-from-time',
-        time: rawTime,
-        direction: context.toolId === 'track-select-backward' ? 'backward' : 'forward',
-        trackIds: context.toolId === 'track-select-forward-all' ? undefined : [context.track.id],
-        includeLinked: true,
-      },
+      operation: buildTrackSelectOperation(context.toolId, context.track.id, rawTime),
     };
   }
 

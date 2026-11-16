@@ -16,6 +16,7 @@ import {
 import { useTimelineHeaderAudioPopoverState } from './hooks/useTimelineHeaderAudioPopoverState';
 import { useTimelineHeaderResolvePresentation } from './hooks/useTimelineHeaderResolvePresentation';
 import { useTrackReorderDrag, trackReorderSection } from './hooks/useTrackReorderDrag';
+import { TrackReorderGrip } from './TrackReorderGrip';
 import { useTimelineOverLayout } from './hooks/useTimelineOverLayout';
 import { resolveTimelineHeaderPropertySelection, type TimelineHeaderComponentProps } from './utils/timelineHeaderPropertySelection';
 
@@ -215,14 +216,7 @@ function TimelineHeaderComponent({
         onClick={handleHeaderClick}
         onPointerDown={onHoldPointerDown}
       >
-        <div
-          className="track-reorder-handle"
-          title="Drag to reorder"
-          onPointerDown={onReorderPointerDown}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="track-reorder-grip" aria-hidden="true">{'\u22EE'}</span>
-        </div>
+        <TrackReorderGrip onPointerDown={onReorderPointerDown} />
         {showAudioSummaryMeter && <TimelineHeaderAudioSummaryMeter />}
         <div className="track-header-main">
           <span className="resolve-track-index" aria-hidden="true">{resolveTrackCode}</span>
