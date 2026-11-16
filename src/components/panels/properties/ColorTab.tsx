@@ -7,6 +7,7 @@ import {
   getEditableColorNodes,
 } from '../../../types/colorCorrection';
 import { ColorToolDock, type ColorAuxMode } from '../color-workspace/ColorToolDock';
+import { ColorCameraGradeToggle } from './ColorCameraGradeToggle';
 import '../color-workspace/ColorWorkspacePanel.css';
 import './ColorTab.css';
 
@@ -32,6 +33,7 @@ export function ColorTab({ clipId }: ColorTabProps) {
 
   return (
     <div className="properties-tab-content color-tab properties-color-controls">
+      <ColorCameraGradeToggle clipId={clipId} />
       <div className="properties-color-node-picker">
         <label htmlFor={`properties-color-node-${clipId}`}>Correction node</label>
         <select

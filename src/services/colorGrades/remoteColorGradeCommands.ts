@@ -13,7 +13,7 @@ import {
 import { cloneColorCorrectionState, ensureColorCorrectionState } from '../../types/colorCorrection';
 import { createRemoteColorGradeMediaPatch } from './remoteColorGradeMediaState';
 
-function commitRemoteGradeOwner(
+export function commitRemoteGradeOwner(
   mediaFileId: string,
   grade: RemoteColorGradeState,
 ): boolean {
@@ -27,7 +27,7 @@ function commitRemoteGradeOwner(
   return changed;
 }
 
-function synchronizeActiveRemoteClips(
+export function synchronizeActiveRemoteClips(
   mediaFileId: string,
   grade: RemoteColorGradeState,
 ): boolean {

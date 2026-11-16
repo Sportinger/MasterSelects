@@ -22,6 +22,7 @@ import {
   syncMulticamAngles,
 } from './multicam/multicamAngleRuntime';
 import { programSyncShift } from './multicam/multicamPlan';
+import { cameraRuntimeGrade } from './colorGrades/cameraColorGradeQueries';
 
 interface NestedCompInfo {
   clipId: string;
@@ -548,7 +549,8 @@ class RenderSchedulerService {
 
   private renderMulticamAngleTarget(targetId: string, compositionId: string, angleIndex: number, time: number | null): void {
     const multicam = useMediaStore.getState().compositions.find((comp) => comp.id === compositionId)?.multicam;
-    const layer = multicam && time !== null ? getMulticamAngleLayer(compositionId, multicam, angleIndex, time, this.multicamProgramShift) : null;
+    const layer = multicam && time !== null ? getMulticamAngleLayer(compositionId, multicam, angleIndex, time, this.multicamProgramShift,
+      (mediaFileId) => cameraRuntimeGrade(mediaFileId, useTimelineStore.getState().clips)) : null;
     // A decoder still catching up keeps the slot on its last picture.
     if (layer && !isMulticamAngleLayerReady(layer)) return;
     renderHostPort.renderToPreviewCanvas(targetId, layer ? [layer] : [], { compositionId, timelineTimeSeconds: time ?? 0 });

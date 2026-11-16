@@ -23,6 +23,7 @@ import {
 import { applyRangeEditOperation } from './editOperations/rangeOperations';
 import { cleanupDeletedClipResources } from './deletedClipResources';
 import { generateClipId, generateManualLinkedGroupId } from './helpers/idGenerator';
+import { cameraGradeForNewClip } from '../../services/colorGrades/cameraColorGradeQueries';
 
 const log = Logger.create('Multicam');
 
@@ -71,10 +72,13 @@ function buildProgramClip(piece: MulticamPiece, trackId: string, groupId: string
   return bindRuntimeToClip(clip, { file, filePath, mediaFileId: source.mediaFileId });
 }
 
-function buildProgramClips(pieces: readonly MulticamPiece[], multicam: CompositionMulticam): TimelineClip[] {
+function buildProgramClips(pieces: readonly MulticamPiece[], multicam: CompositionMulticam, timelineClips: readonly TimelineClip[] = []): TimelineClip[] {
   return pieces.flatMap((piece) => {
     const clip = buildProgramClip(piece, multicam.angles[piece.angleIndex]!.trackId, multicam.groupId);
-    return clip ? [clip] : [];
+    if (!clip) return [];
+    // A camera graded as a whole hands its look to every new piece of it.
+    const cameraGrade = cameraGradeForNewClip(piece.source.mediaFileId, timelineClips);
+    return [cameraGrade ? { ...clip, ...cameraGrade } : clip];
   });
 }
 
@@ -153,7 +157,7 @@ export const createMulticamSlice: SliceCreator<MulticamActions> = (set, get) => 
       nextSelection = lifted.selectedClipIds;
       deleted.push(...lifted.deletedClips);
     });
-    set({ clips: [...nextClips, ...buildProgramClips(pieces, multicam)], selectedClipIds: nextSelection });
+    set({ clips: [...nextClips, ...buildProgramClips(pieces, multicam, clips)], selectedClipIds: nextSelection });
     cleanupDeletedClipResources(deleted, { stopAudioPlayback: false });
     updateDuration();
     invalidateCache();

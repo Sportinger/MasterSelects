@@ -251,6 +251,8 @@ export function getMulticamAngleLayer(
   angleIndex: number,
   time: number,
   programShift = 0,
+  /** Grade of a camera graded as a whole (cameraRuntimeGrade); the slot shows the camera's look. */
+  gradeFor?: (mediaFileId: string) => Layer['colorCorrection'],
 ): Layer | null {
   const angle = multicam.angles[angleIndex];
   const resolved = angle ? resolveAngleSourceAt(angle, time - programShift) : null;
@@ -265,6 +267,7 @@ export function getMulticamAngleLayer(
     opacity: 1,
     blendMode: 'normal' as BlendMode,
     effects: resolved.source.template.effects,
+    colorCorrection: gradeFor?.(resolved.source.mediaFileId),
     position: { x: transform.position?.x || 0, y: transform.position?.y || 0, z: transform.position?.z || 0 },
     scale: getEffectiveScale(transform.scale),
     rotation: {

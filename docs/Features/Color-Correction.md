@@ -234,6 +234,18 @@ The shader clamps output to `[0, 1]`.
 
 ---
 
+## Camera Grade
+
+A clip of a video file with more than one clip in the composition shows a **Whole camera** switch at
+the top of the Color tab (outside multicam: **All clips of this file**). Turning it on makes the clip's
+current look the shared, source-owned (remote) grade and lets every clip of that file follow it, for
+example all program pieces of the Totale camera in a multicam cut. Editing any of them edits the camera;
+its grade versions are the camera's looks, and switching the active version switches all pieces. New
+pieces from multicam camera switches take the camera grade over, and the camera's Multi Preview slot
+shows it. Turning the switch off keeps the current look on every clip as its own grade. A single clip can
+still leave the camera grade through the clip strip's grade mode (local) and keeps its own color.
+(`src/services/colorGrades/cameraColorGrade.ts`, `ColorCameraGradeToggle.tsx`.)
+
 ## Presets And Versions
 
 `duplicateColorVersion(...)`, `deleteColorVersion(...)`, and `setActiveColorVersion(...)` operate on `ColorCorrectionState.versions`; only the active version compiles.

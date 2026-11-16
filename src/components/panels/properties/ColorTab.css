@@ -48,3 +48,26 @@
 .properties-color-controls-content > * {
   height: 100%;
 }
+
+.properties-camera-grade-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.properties-camera-grade-control input {
+  margin: 0;
+  accent-color: var(--accent, #2d8ceb);
+}
+
+.properties-camera-grade-control input:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.properties-camera-grade-control input:focus-visible {
+  outline: 2px solid var(--accent, #2d8ceb);
+  outline-offset: 2px;
+}
