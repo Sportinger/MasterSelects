@@ -146,13 +146,19 @@ export class BrowserManifestPointerStore implements AgentTimelineManifestPointer
 export function createProjectAgentTimelineStorage(): AgentTimelineArtifactStorage {
   const projectHandle = projectFileService.getProjectHandle();
   const packageSession = projectFileService.getProjectPackageSession();
-  const project = projectFileService.getProjectData();
-  const projectNamespace = project
-    ? `${project.createdAt}:${project.name}`
-    : projectFileService.getProjectPath() ?? 'unattached';
   const artifacts = createProjectAgentTimelineArtifactStore();
   const pointers = captureRepositoryDomainPublication() || projectHandle || packageSession
     ? new ProjectFileManifestPointerStore()
-    : new BrowserManifestPointerStore(globalThis.localStorage, projectNamespace);
+    : new BrowserManifestPointerStore(globalThis.localStorage, browserProjectNamespace());
   return new AgentTimelineArtifactStorage({ artifacts, pointers });
+}
+
+/**
+ * Only browser-local pointers need the project's name and creation time. Reading them decodes the whole
+ * project in repository mode (about a quarter second for a large multicam show), and this storage is
+ * created once per analysed media file, so project-backed sessions must not pay for it.
+ */
+function browserProjectNamespace(): string {
+  const project = projectFileService.getProjectData();
+  return project ? `${project.createdAt}:${project.name}` : projectFileService.getProjectPath() ?? 'unattached';
 }
