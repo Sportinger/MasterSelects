@@ -252,7 +252,7 @@ Supported codecs are checked at runtime:
 
 ### Linux: H.265 and AAC
 
-Chrome on Linux has no AAC encoder and usually cannot encode H.265; H.265 decoding depends on the graphics hardware. On Linux only, a banner at the top of the editor tells you when this affects your work, says what happens instead and what you can do. **✕** closes it for good: each notice is remembered on its own, also after a reload.
+Chrome on Linux has no AAC encoder and usually cannot encode H.265; H.265 decoding depends on the graphics hardware. On Linux only, a banner at the top of the editor tells you when this affects your work, says what happens instead and what you can do. **✕** closes it for good: each notice is remembered on its own, also after a reload. The software-decoding notice for H.265 playback appears only once per browser and fades out after 15 seconds by itself, because it comes back on every project open otherwise.
 
 | When | Banner |
 |---|---|

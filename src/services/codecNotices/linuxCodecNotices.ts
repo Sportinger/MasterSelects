@@ -40,9 +40,20 @@ export function reportLinuxCodecSupport(
     log.warn(`${message.title} ${message.body}`, { id, ...context });
   }
   const show = shouldShowLinuxCodecNotice({ platform, supported, dismissed: isLinuxCodecNoticeDismissed(id) });
-  if (show) useLinuxCodecNoticeStore.getState().show({ id, context });
+  if (show) {
+    useLinuxCodecNoticeStore.getState().show({ id, context });
+    // A passive notice (no choice to make) is shown once per browser and fades out; the log keeps it.
+    if (PASSIVE_NOTICES.has(id)) {
+      useUiSettingsStore.getState().dismissCodecNotice(id);
+      setTimeout(() => useLinuxCodecNoticeStore.getState().hide(id), PASSIVE_NOTICE_MS);
+    }
+  }
   return show;
 }
+
+/** Raised on every project open with such media, not by a user choice: shown once, then only logged. */
+const PASSIVE_NOTICES = new Set<LinuxCodecNoticeId>(['h265-decode']);
+export const PASSIVE_NOTICE_MS = 15_000;
 
 /** The condition that raised the notice no longer applies; nothing is remembered. */
 export function withdrawLinuxCodecNotice(id: LinuxCodecNoticeId): void {

@@ -47,13 +47,26 @@ function compositionPlan(plan: DomainMutationPlan, entities: ReadonlyMap<string,
   const dto = convertCompositions([{ ...after, timelineData: next ? { ...next, tracks: [], clips: [] } : undefined }])[0];
   encodedPatch(plan, entities, { compositions: [dto] }, [key]);
 }
+type MediaItem = MediaState['files'][number];
+const FINGERPRINT = /^[a-f0-9]{64}$/i;
+/**
+ * A relink to the same bytes keeps the stored full hash: exact byte length of the verified source and the same
+ * fast fingerprint, the rule restore already trusts. Rehashing every relinked original reread hundreds of GB.
+ */
+export function keepsVerifiedSource(before: MediaItem | null | undefined, after: MediaItem | null | undefined, identity: EntityDTO | undefined): boolean {
+  if (!before || !after || !(after.file instanceof Blob)) return false;
+  const value = object(identity?.value);
+  if (value?.identityStatus !== 'verified' || value.byteLength !== after.file.size) return false;
+  const previous = before.fileHash ?? '', next = after.fileHash ?? '';
+  return FINGERPRINT.test(previous) && previous.toLowerCase() === next.toLowerCase();
+}
 export function prepareMediaMutation(before: MediaState, patch: Partial<MediaState>, entities: ReadonlyMap<string, EntityDTO>): DomainMutationPlan {
   const plan = emptyPlan(), next = { ...before, ...patch };
   for (const change of changedItems(before.files, next.files)) {
     const key = entityKey('media', 'project', change.id);
     if (change.after) encodedPatch(plan, entities, { media: convertMediaFiles([change.after]) }, [key]);
     else replaceAggregate(plan, entities, key, 'media-aggregate', undefined);
-    if (change.before?.file !== change.after?.file) {
+    if (change.before?.file !== change.after?.file && !keepsVerifiedSource(change.before, change.after, entities.get(`source-identity:${change.id}`))) {
       replaceAggregate(plan, entities, `source-identity:${change.id}`, 'verified-source-identity', undefined);
       const aggregate = plan.aggregates.find(entry => entry.key === key);
       if (aggregate) aggregate.retainResultBindings = false;

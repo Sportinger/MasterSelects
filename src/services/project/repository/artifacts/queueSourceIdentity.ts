@@ -3,6 +3,7 @@ import { decodeOwnedAggregate, existingAggregate } from '../transaction/domainAd
 import { RepositoryError } from '../contracts';
 import type { RepositorySession } from '../RepositorySession';
 import type { SourceIdentity } from '../domains/sourceIdentity';
+import { trackSourceVerification } from './sourceVerificationStatus';
 export type VerifiedSourceIdentity = Extract<SourceIdentity, { identityStatus: 'verified' }>;
 const tails = new WeakMap<RepositorySession, Promise<unknown>>();
 const pendingCounts = new WeakMap<RepositorySession, number>();
@@ -12,10 +13,13 @@ export function queueSourceIdentity(session: RepositorySession, mediaId: string,
   const count = pendingCounts.get(session) ?? 0;
   if (count >= 256) return Promise.reject(new RepositoryError('budget', 'Too many pending source verifications'));
   pendingCounts.set(session, count + 1);
+  const tracked = trackSourceVerification(blob.size);
+  let hashed = false;
   const run = (tails.get(session) ?? Promise.resolve()).catch(() => {}).then(async () => {
     signal?.throwIfAborted();
     if (!isCurrent()) return null;
-    const identity = await session.client.request<{ hash: string; length: number }>({ type: 'hash-source', blob }, signal);
+    const identity = await session.client.request<{ hash: string; length: number }>({ type: 'hash-source', blob }, signal, [], tracked.progress);
+    hashed = true;
     if (!/^sha256:[a-f0-9]{64}$/.test(identity.hash) || identity.length !== blob.size) throw new RepositoryError('corrupt', 'Invalid source verification response');
     const value: VerifiedSourceIdentity = { identityStatus: 'verified', algorithm: 'sha256', contentHash: identity.hash, byteLength: identity.length };
     // Commit after a queued or running Undo/Redo, never into its activation window (that would throw and hash again).
@@ -40,6 +44,6 @@ export function queueSourceIdentity(session: RepositorySession, mediaId: string,
       await session.coordinator.flush(result.receipt);
     } catch (error) { if (!committed) session.coordinator.cancel(token); throw error; }
     return value;
-  }).finally(() => pendingCounts.set(session, (pendingCounts.get(session) ?? 1) - 1));
+  }).finally(() => { tracked.finish(hashed); pendingCounts.set(session, (pendingCounts.get(session) ?? 1) - 1); });
   tails.set(session, run); return run;
 }

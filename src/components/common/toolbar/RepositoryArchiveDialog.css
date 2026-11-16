@@ -19,6 +19,19 @@
   .media-reconnect-progress.indeterminate span { width:35%; animation:media-reconnect-slide 1.2s ease-in-out infinite; }
   .media-reconnect-counts { display:flex; gap:28px; color:var(--text-secondary); font-size:13px; }
   .media-reconnect-counts strong { margin-right:6px; color:var(--text-primary); font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; }
+  .repository-archive-dialog p.media-reconnect-summary { color:var(--text-primary); font-size:13px; }
+  .media-reconnect-folders { display:flex; flex-direction:column; gap:6px; max-height:min(50vh, 360px); margin:0; padding:0; overflow-y:auto; list-style:none; }
+  .media-reconnect-folder { display:flex; align-items:center; gap:10px; min-width:0; padding:8px 10px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); }
+  .media-reconnect-folder > svg { flex:none; color:var(--text-secondary); }
+  .media-reconnect-folder-text { display:flex; flex:1; flex-direction:column; gap:2px; min-width:0; }
+  .media-reconnect-folder-text > * { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .media-reconnect-folder-text strong { color:var(--text-primary); font-size:13px; font-weight:600; }
+  .media-reconnect-folder-text strong span { color:var(--text-secondary); font-weight:400; }
+  .media-reconnect-folder-text > span { color:var(--text-secondary); font-size:11px; }
+  .media-reconnect-folder-text > .media-reconnect-folder-note { color:var(--warning, #d9a441); }
+  .media-reconnect-folder button { flex:none; min-width:76px; }
+  .repository-archive-dialog .repository-archive-actions .media-reconnect-secondary { margin-right:auto; border-color:transparent; background:transparent; color:var(--text-secondary); }
+  .repository-archive-dialog .repository-archive-actions .media-reconnect-secondary:hover { color:var(--text-primary); background:var(--bg-hover); }
   @keyframes media-reconnect-spin { to { transform:rotate(360deg); } }
   @keyframes media-reconnect-slide { from { transform:translateX(-100%); } to { transform:translateX(290%); } }
   @media (prefers-reduced-motion: reduce) {

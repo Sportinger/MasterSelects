@@ -72,21 +72,33 @@ restored: startup logs it as info, forgets that stored folder handle and opens
 the editor without a project, the same as a browser-storage project removed
 since.
 Media imported as single files (picker or drop) keep their exact saved file
-location. The dialog's single "Reconnect media" click re-allows those files
-directly (up to 8 browser prompts) instead of asking for a folder. With more
-files, or when no saved location is left, "Choose folder…" opens the picker in
-the folder where an offline file was last found; the chosen folder becomes a
-known media folder, so later reloads need only the one-click re-allow. The
-dialog shows one large animated status with live found and missing counts while it
-checks the composition or searches folders, without any button. Afterwards it
-offers exactly one action ("Reconnect media" when the browser needs a click to
-re-allow a folder, otherwise "Choose folder…", or "Choose another folder…" with
-the missing names after a chosen folder left files missing);
-Escape, the backdrop or the close icon postpone it, and single files stay
-relinkable from the Media panel. Folder pickers start in the remembered media
-folder; without one, the browser reopens the folder last chosen for media
-reconnects. Browsers only remember folders per site origin, so a new origin
-(for example a second dev port) asks for the folder once. A file relinked on its
+location. The dialog shows one large animated status with live found and missing
+counts while it checks the composition or searches folders, without any button.
+Afterwards it lists the missing media **by folder**: one row per folder they were
+last found in, named with the folder the user picked back then and the subfolder
+inside it (for example `Ute_Marlene / Audio_Stems`), the file count and the first
+names (all names in the tooltip). Each row has one button:
+
+- **Allow** when this browser still remembers the folder (or the single files)
+  and only the permission lapsed, for example after a browser restart: one
+  browser prompt, no folder picker. With several such rows, **Allow all** re-allows
+  them (and up to 8 single files) in one click.
+- **Choose…** when this browser no longer knows the folder (cleared site data, a
+  new origin such as another dev port) or the files are no longer in it (the row
+  says "Not in this folder any more", or "Not in “<chosen>”" after a folder that
+  did not hold them). The picker opens in that folder when it is remembered,
+  otherwise in the open project folder, and each folder has its own picker id, so
+  the browser reopens the place last chosen for it. The chosen folder takes over
+  that folder's saved locations when it holds its media, and later reloads need
+  only the **Allow** click.
+
+**Other folder or drive…** picks any folder (a whole drive works) and searches it.
+Escape, the backdrop or the close icon postpone the dialog, and single files stay
+relinkable from the Media panel. Browsers keep folder handles and picker
+locations only in the site's own storage: clearing browsing data with site data,
+or opening the editor on another origin, forgets them. The project still knows
+each folder's name and the paths inside it, which is what the rows show.
+A file relinked on its
 own records the known source folder that contains it, so a reopen finds it
 without asking again. When a folder search finds several files for one media
 item and no saved path decides, the file named exactly like the media wins over
@@ -428,6 +440,18 @@ Save status belongs to the active repository session. Its operation receipt
 tracks content and navigation independently of the currently selected revision,
 so undo followed by Save confirms the new cursor position as well as the
 required records.
+
+Original media get a full-content SHA-256 (source identity) in the storage
+worker, one file at a time. The toolbar shows **Verifying media x %** with a bar
+while it runs (tooltip: file count and GB read). Large files are checkpointed
+every 512 MB per file (name, size, modification time) in the browser's
+IndexedDB, so a reload or project switch continues where it stopped instead of
+reading a 100 GB camera file from the start again. A relink keeps the stored
+hash when the new file has the verified byte length and the same fast
+fingerprint (the rule restore already uses); only other bytes are hashed again.
+Listing artifact manifests reuses manifests already validated in the session
+(records are content-addressed), instead of re-reading and re-hashing every
+manifest for each media item.
 
 Closing, switching and development reload handling use the same persistence
 boundary. Asynchronous jobs retain their original session and source identity.

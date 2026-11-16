@@ -25,6 +25,19 @@ export class StreamHash {
       this.used += bytes.length - offset;
     }
   }
+  /** Resumable state at a 64-byte boundary (the only place a long hash pauses); null mid-block. */
+  snapshot(): { state: number[]; size: number } | null {
+    if (this.finished || this.used !== 0) return null;
+    return { state: Array.from(this.state), size: this.size };
+  }
+  /** Continues a hash from `snapshot()`: the next `update` must start at byte `size` of the same input. */
+  static resume(snapshot: { state: readonly number[]; size: number }): StreamHash {
+    if (snapshot.state.length !== 8 || snapshot.size % 64 !== 0 || snapshot.size < 0) throw new Error('Invalid hash snapshot');
+    const hash = new StreamHash();
+    hash.state.set(snapshot.state);
+    hash.size = snapshot.size;
+    return hash;
+  }
   digest(): string {
     if (this.finished) throw new Error('Hash already completed');
     const bitLength = BigInt(this.size) * 8n;

@@ -17,6 +17,12 @@ interface ManifestEvent { type: 'artifact-manifest'; manifest: ArtifactManifest;
 export class WorkerRepositoryArtifactAdapter implements ArtifactStorageAdapter {
   readonly pins = new RepositoryArtifactPins();
   private readonly cache = new Map<string, ManifestEvent>();
+  /**
+   * Validated listing entries by artifact id and record hash. Records are content-addressed, so a checked
+   * entry stays valid; without this, every per-source listing re-read and re-hashed all manifests
+   * (quadratic in the number of sources, a full core on large projects).
+   */
+  private readonly listed = new Map<string, ManifestEvent>();
   private readonly session: RepositorySession;
   constructor(session: RepositorySession) {
     this.session = session;}
@@ -123,9 +129,21 @@ export class WorkerRepositoryArtifactAdapter implements ArtifactStorageAdapter {
     const page = await this.session.client.request<{ entries: RepositoryJournalEntry[]; nextCursor: RecordReference | null }>({ type: 'journal-page', cursor, limit });
     const manifests: ArtifactManifest[] = [];
     for (const entry of page.entries) if (entry.id.startsWith('artifact-manifest:')) {
-      manifests.push((await this.validate(entry.value, entry.id.slice('artifact-manifest:'.length))).manifest);
+      manifests.push((await this.validateListed(entry.value, entry.id.slice('artifact-manifest:'.length))).manifest);
     }
     return { manifests, nextCursor: page.nextCursor };
+  }
+  private async validateListed(value: unknown, id: string): Promise<ManifestEvent> {
+    const reference = (value as Partial<ManifestEvent> | null)?.manifestReference;
+    const key = reference?.hash ? `${id}|${reference.hash}` : null;
+    const known = key ? this.listed.get(key) : undefined;
+    if (known) return known;
+    const event = await this.validate(value, id);
+    if (key) {
+      this.listed.set(key, event);
+      if (this.listed.size > 16384) this.listed.delete(this.listed.keys().next().value!);
+    }
+    return event;
   }
   async listArtifactManifests(): Promise<ArtifactManifest[]> { return this.scan(); }
   async listArtifactManifestsBySource(sourceRef: string): Promise<ArtifactManifest[]> { return this.scan(sourceRef); }

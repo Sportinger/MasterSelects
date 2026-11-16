@@ -2,7 +2,7 @@ import '../runtime/arrayCopySorting';
 import { attestWritableRepositoryLocation } from '../services/project/repository/backends/repositoryLocationIdentity';
 import { readCommit, commitPath } from '../services/project/repository/persistence/publication';
 import { CommittedMetadataReader } from '../services/project/repository/index/CommittedMetadataReader';
-import { StreamHash } from '../services/project/repository/segments/streamHash';
+import { hashSourceResumable } from '../services/project/repository/segments/sourceHashCheckpoints';
 import { RepositoryJournalReader, createJournalIndexCache } from '../services/project/repository/journal/RepositoryJournalReader';
 import { RepositoryError, toRepositoryError, type RepositoryBackend, type RepositoryDescriptor, type RepositoryOwner } from '../services/project/repository/contracts';
 import { createFsaRepositoryBackend } from '../services/project/repository/backends/fsaBackend';
@@ -278,13 +278,9 @@ async function execute(request: StorageRequest, signal: AbortSignal, onRead?: Bl
           signal.throwIfAborted();
           return { hash: 'sha256:' + Array.from(digest, value => value.toString(16).padStart(2, '0')).join(''), length: request.blob.size };
         }
-        const hash = new StreamHash();
-        for (let offset = 0; offset < request.blob.size; offset += 256 * 1024) {
-          signal.throwIfAborted();
-          hash.update(new Uint8Array(await request.blob.slice(offset, offset + 256 * 1024).arrayBuffer()));
-        }
-        signal.throwIfAborted();
-        return { hash: hash.digest(), length: request.blob.size };
+        // Large originals resume an interrupted run (reload, project switch) instead of starting at byte 0.
+        const { hash } = await hashSourceResumable(request.blob, signal, onRead);
+        return { hash, length: request.blob.size };
       } finally { hashingSources--; }
     }
     case 'verify-blob': return sessionBlobs.verify(requireBackend(), request.reference, signal);
@@ -391,7 +387,7 @@ scope.onmessage = event => {
         for (const [id, request] of requests) if (id !== envelope.requestId) request.abort();
       }
       // Whole-file jobs report how far they read, so a long media copy shows progress in the tab.
-      const onRead = envelope.request.type === 'blob-hash' || envelope.request.type === 'blob-store-file'
+      const onRead = envelope.request.type === 'blob-hash' || envelope.request.type === 'blob-store-file' || envelope.request.type === 'hash-source'
         ? throttleBlobReadProgress(bytes => scope.postMessage({ type: 'request-progress', requestId: envelope.requestId, sessionEpoch: epoch, bytes }))
         : undefined;
       const run = serial ? publicationTail.catch(() => {}).then(() => execute(envelope.request, controller.signal)) : execute(envelope.request, controller.signal, onRead);

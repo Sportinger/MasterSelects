@@ -1,10 +1,12 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { IconFolder } from '@tabler/icons-react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
 import { requestRelinkDialog } from '../../../services/project/relinkDialogRuntime';
-import { MAX_FILE_ACCESS_PROMPTS, getMediaReconnectProgress, mediaFilesNeedingAccess, mediaFoldersNeedingAccess, reconnectMedia, subscribeMediaReconnect, type MediaReconnectProgress, type MediaReconnectResult } from '../../../services/project/mediaReconnect';
-import { getProjectMediaSourceRootStates } from '../../../services/project/mediaSourceRoots';
+import { getMediaReconnectProgress, mediaFoldersNeedingAccess, reconnectMedia, subscribeMediaReconnect, type MediaReconnectOptions, type MediaReconnectProgress } from '../../../services/project/mediaReconnect';
+import { folderPickerId, offlineMediaFolders, type OfflineMediaFolder } from '../../../services/project/mediaReconnectFolders';
+import { projectFileService } from '../../../services/projectFileService';
 import { isLinkedMediaConnectionRunning, subscribeLinkedMediaConnection } from '../../../services/project/repository/transaction/editorLinkedMediaConnection';
 import { getEditorRepositorySession, subscribeEditorRepositorySession } from '../../../services/project/repository/transaction/editorMutationRuntime';
 import { takeOverEditing } from '../../../services/project/repository/lifecycle/editorWriterHandover';
@@ -14,10 +16,18 @@ import './RepositoryArchiveDialog.css';
 
 type DirectoryPicker = (options?: { id?: string; mode?: 'read' | 'readwrite'; startIn?: FileSystemHandle }) => Promise<FileSystemDirectoryHandle>;
 const PHASES: Record<MediaReconnectProgress['phase'], string> = { access: 'Allowing folder access', connect: 'Connecting media', search: 'Searching media folders', relink: 'Relinking media' };
+const blurAfterPointer = (event: PointerEvent<HTMLButtonElement>) => event.currentTarget.blur();
+const fileCount = (count: number) => `${count.toLocaleString()} ${count === 1 ? 'file' : 'files'}`;
+
+function namePreview(names: string[]): string {
+  const shown = names.slice(0, 2).join(', ');
+  return names.length > 2 ? `${shown} +${(names.length - 2).toLocaleString()}` : shown;
+}
 
 /**
- * Reconnects offline media with at most one click. Allowed folders are searched without asking;
- * the single action re-allows known folders, or lets the user pick the folder that holds the media.
+ * Reconnects offline media folder by folder. Each row names the folder the media were last found in;
+ * a remembered folder is re-allowed with one click, any other folder picker opens where that folder was.
+ * Allowed folders are searched without asking.
  */
 export function MediaReconnectHost() {
   const offlineNames = useMediaStore(state => state.files.filter(mediaNeedsRelink).map(file => file.name).join('\n'));
@@ -25,10 +35,10 @@ export function MediaReconnectHost() {
   const [session, setSession] = useState(getEditorRepositorySession());
   const [connecting, setConnecting] = useState(isLinkedMediaConnectionRunning());
   const [dismissed, setDismissed] = useState<object | null>(null);
-  const [folders, setFolders] = useState<string[]>([]);
-  // Offline media with a saved file location: re-allowed directly, and the folder picker starts there.
-  const [knownFiles, setKnownFiles] = useState<string[]>([]);
-  const lastKnownLocation = useRef<FileSystemHandle | undefined>(undefined);
+  const [groups, setGroups] = useState<OfflineMediaFolder[]>([]);
+  // Per row: the folder chosen for it did not hold its files.
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [refresh, setRefresh] = useState(0);
   const [ownBusy, setBusy] = useState<MediaReconnectProgress | null>(null);
   // Offline count when the current search started: everything gone from it since then was found.
   const searchBaseline = useRef(0);
@@ -40,16 +50,16 @@ export function MediaReconnectHost() {
       if (!previous && progress) searchBaseline.current = useMediaStore.getState().files.filter(mediaNeedsRelink).length;
       return progress;
     });
+    if (!progress) setRefresh(value => value + 1);
   }), []);
   const busy = ownBusy ?? externalBusy;
-  const [result, setResult] = useState<MediaReconnectResult | null>(null);
-  const [choseFolder, setChoseFolder] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [denied, setDenied] = useState<string[]>([]);
   const titleId = useId(); const dialog = useRef<HTMLDivElement>(null);
   // Allowed folders are searched again when media go offline that no search has looked for yet; one search at a time.
   const autoSearched = useRef<{ session: object | null; names: Set<string> }>({ session: null, names: new Set() });
   const searching = useRef(false);
-  useEffect(() => subscribeEditorRepositorySession(() => { setSession(getEditorRepositorySession()); setResult(null); setChoseFolder(false); }), []);
+  useEffect(() => subscribeEditorRepositorySession(() => { setSession(getEditorRepositorySession()); setNotes({}); }), []);
   useEffect(() => subscribeLinkedMediaConnection(() => setConnecting(isLinkedMediaConnectionRunning())), []);
   // Shown while the opened composition is still being checked too, so the user sees the work instead of a silent wait.
   const visible = Boolean(session) && offline > 0 && dismissed !== session || busy !== null;
@@ -61,10 +71,10 @@ export function MediaReconnectHost() {
   const readOnly = Boolean(session && !session.opening.writable);
   useEffect(() => {
     if (!visible || connecting) return;
-    void Promise.all([mediaFoldersNeedingAccess(), mediaFilesNeedingAccess()]).then(([roots, files]) => {
-      setFolders(roots.map(root => root.name));
-      setKnownFiles(files.map(file => file.name));
-      lastKnownLocation.current = files[0]?.handle ?? roots[0]?.handle ?? undefined;
+    let current = true;
+    void Promise.all([mediaFoldersNeedingAccess(), offlineMediaFolders()]).then(([roots, folders]) => {
+      if (!current) return;
+      setGroups(folders);
       setFoldersKnown(true);
       // Folders that are still allowed need no prompt, so search them before asking for anything.
       if (autoSearched.current.session !== session) autoSearched.current = { session, names: new Set() };
@@ -74,55 +84,50 @@ export function MediaReconnectHost() {
         autoRun.current();
       }
     });
-  }, [visible, offlineNames, session, readOnly, connecting]);
-  useEffect(() => { if (visible) dialog.current?.querySelector<HTMLElement>('[data-primary]')?.focus(); }, [visible, busy]);
+    return () => { current = false; };
+  }, [visible, offlineNames, session, readOnly, connecting, refresh]);
+  useEffect(() => { if (visible) dialog.current?.querySelector<HTMLElement>('[data-primary]')?.focus(); }, [visible, busy, foldersKnown]);
   if (!visible) return null;
-  const close = () => { if (!busy) { setDismissed(session); setResult(null); } };
-  async function run(chosenFolder?: FileSystemDirectoryHandle, requestFileAccess = false) {
-    if (searching.current) return;
+  const close = () => { if (!busy) { setDismissed(session); setNotes({}); } };
+  async function run(chosenFolder?: FileSystemDirectoryHandle, options: MediaReconnectOptions = {}): Promise<boolean> {
+    if (searching.current) return false;
     searching.current = true;
     searchBaseline.current = offline;
-    setResult(null); setFailure(null); setBusy({ phase: 'access', done: 0, total: 0 });
-    try { setResult(await reconnectMedia(progress => setBusy(progress), chosenFolder, { requestFileAccess })); }
-    catch (error) { setFailure(error instanceof Error ? error.message : String(error)); }
-    finally { searching.current = false; setBusy(null); }
+    setFailure(null); setDenied([]); setBusy({ phase: 'access', done: 0, total: 0 });
+    try { setDenied((await reconnectMedia(progress => setBusy(progress), chosenFolder, options)).deniedFolders); return true; }
+    catch (error) { setFailure(error instanceof Error ? error.message : String(error)); return false; }
+    finally { searching.current = false; setBusy(null); setRefresh(value => value + 1); }
   }
   autoRun.current = () => { void run(); };
   const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
-  async function chooseFolder() {
+  async function chooseFolder(group?: OfflineMediaFolder) {
     if (!picker) return;
-    // Start where the media were last found; a remembered folder still helps when its access has lapsed.
-    const startIn = lastKnownLocation.current ?? (await getProjectMediaSourceRootStates()).find(root => root.handle)?.handle ?? undefined;
-    try { const folder = await picker({ id: 'ms-media-reconnect', mode: 'read', ...(startIn ? { startIn } : {}) }); setChoseFolder(true); await run(folder); }
-    catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) throw error; }
+    // Open where this folder was; a folder this browser no longer knows starts in the project folder next to it.
+    const projectFolder = typeof projectFileService.getProjectHandle === 'function' ? projectFileService.getProjectHandle() : null;
+    const startIn = group?.startIn ?? projectFolder ?? undefined;
+    let folder: FileSystemDirectoryHandle;
+    try { folder = await picker({ id: folderPickerId(group ?? { key: 'any' }), mode: 'read', ...(startIn ? { startIn } : {}) }); }
+    catch (error) { if (error instanceof DOMException && error.name === 'AbortError') return; throw error; }
+    if (!await run(folder, group?.rootId ? { forRootId: group.rootId } : {}) || !group) return;
+    const stillMissing = new Set(useMediaStore.getState().files.filter(mediaNeedsRelink).map(file => file.name));
+    if (group.files.some(name => stillMissing.has(name))) setNotes(previous => ({ ...previous, [group.key]: `Not in “${folder.name}”` }));
   }
-  const stillMissing = Boolean(result?.missing);
-  // Known folders and saved file locations only need the browser prompt again; otherwise the user shows where the media live.
-  const fileAccess = knownFiles.length > 0 && knownFiles.length <= MAX_FILE_ACCESS_PROMPTS;
-  const oneClick = (folders.length > 0 || fileAccess) && !stillMissing;
-  // Exactly one action; Escape, the backdrop and the close icon postpone it. Single files stay relinkable in the Media panel.
-  // A read-only tab (e.g. the tab opened to check a new deploy while an older tab still writes) takes
-  // over editing instead of reloading: the writing tab saves and steps back, then media reconnect here.
-  const primary = readOnly ? { label: 'Take over editing', action: () => { void takeOverEditing(); } }
-    : oneClick ? { label: 'Reconnect media', action: () => { void run(undefined, true); } }
-    : picker ? { label: stillMissing && choseFolder ? 'Choose another folder…' : 'Choose folder…', action: () => { void chooseFolder(); } }
-    : { label: 'Relink manually…', action: () => { close(); requestRelinkDialog(); } };
-  const files = (count: number) => `${count.toLocaleString()} media ${count === 1 ? 'file is' : 'files are'}`;
-  const missingNames = offlineNames.split('\n').slice(0, 3).join('”, “') + (offline > 3 ? '” …' : '”');
-  // Counts come from the live media list: a finished search's own number goes stale as soon as anything reconnects.
-  const status = result && offline > 0 ? `${files(offline)} still missing: “${missingNames}.` : null;
+  const allow = (group: OfflineMediaFolder) => { void run(undefined, group.rootId ? { rootIds: [group.rootId] } : { requestFileAccess: true, rootIds: [] }); };
+  const prompts = groups.filter(group => group.access === 'prompt');
   // Working: checking the composition or searching folders. One large status, live counts, no buttons.
   const working = busy !== null || (!readOnly && (connecting || !foldersKnown));
   const found = busy ? Math.max(0, searchBaseline.current - offline) : 0;
   const progress = busy?.total ? Math.min(1, busy.done / busy.total) : null;
+  // The first row's action is the default; with several remembered folders one click allows them all.
+  const allowAll = prompts.length > 1;
   return createPortal(<div className="project-name-dialog-backdrop legacy-import-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
-    <div className="project-name-dialog repository-archive-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}
+    <div className="project-name-dialog repository-archive-dialog media-reconnect-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); close(); } }}>
       <div className="project-name-dialog-accent" />
       <div className="media-reconnect-header">
         <h2 id={titleId}>Reconnect media</h2>
         <button type="button" className="project-name-dialog-close" aria-label="Reconnect later" disabled={working}
-          onPointerUp={event => event.currentTarget.blur()} onClick={close}>×</button>
+          onPointerUp={blurAfterPointer} onClick={close}>×</button>
       </div>
       {working ? <div className="media-reconnect-working" role="status" aria-live="polite">
         <div className="media-reconnect-headline">
@@ -137,18 +142,42 @@ export function MediaReconnectHost() {
           <span><strong>{offline.toLocaleString()}</strong> missing</span>
         </div>
         <p>{busy ? `${PHASES[busy.phase]}${busy.total ? ` ${busy.done.toLocaleString()} / ${busy.total.toLocaleString()}` : ''}` : 'Opening the media of this composition'}</p>
-      </div> : <>
-        <p>{files(offline)} offline.{' '}
-          {readOnly ? 'This project is open for editing in another tab, so this tab cannot save reconnected media. Take over editing here: the other tab saves its changes and switches to read-only.'
-            : oneClick ? `Allow access to “${[...folders, ...(fileAccess ? knownFiles : [])].join('”, “')}” once to reconnect them.`
-            : `Choose the folder that contains ${offline === 1 ? 'it' : 'them'}; a whole drive works too. MasterSelects finds and reconnects the files automatically.${knownFiles.length ? ` The folder picker opens where “${knownFiles[0]}” was last found.` : ''}`}</p>
-        {oneClick && !readOnly && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a browser restart.</p>}
-        {!readOnly && <InstallAppHint />}
-        {status && <p role="status" aria-live="polite">{status}</p>}
-        {failure && <p role="alert">Reconnecting stopped: {failure}</p>}
-        {result?.deniedFolders.length ? <p role="alert">Access was not granted for “{result.deniedFolders.join('”, “')}”.</p> : null}
+      </div> : readOnly ? <>
+        <p>{fileCount(offline)} offline. This project is open for editing in another tab, so this tab cannot save reconnected media. Take over editing here: the other tab saves its changes and switches to read-only.</p>
         <div className="repository-archive-actions">
-          <button data-primary onPointerUp={event => event.currentTarget.blur()} onClick={primary.action}>{primary.label}</button>
+          <button data-primary onPointerUp={blurAfterPointer} onClick={() => { void takeOverEditing(); }}>Take over editing</button>
+        </div>
+      </> : <>
+        <p className="media-reconnect-summary">{fileCount(offline)} offline</p>
+        <ul className="media-reconnect-folders" aria-label="Missing media by folder">
+          {groups.map((group, index) => {
+            const primary = index === 0 && !allowAll ? { 'data-primary': true } : {};
+            const note = notes[group.key] ?? (group.access === 'granted' ? 'Not in this folder any more' : null);
+            return <li key={group.key} className="media-reconnect-folder">
+              <IconFolder size={18} stroke={1.6} aria-hidden="true" />
+              <div className="media-reconnect-folder-text">
+                <strong title={group.subPath ? `${group.name}/${group.subPath}` : group.name}>
+                  {group.name}{group.subPath && <span> / {group.subPath}</span>}
+                </strong>
+                <span title={group.files.join('\n')}>{fileCount(group.files.length)} · {namePreview(group.files)}</span>
+                {note && <span className="media-reconnect-folder-note">{note}</span>}
+              </div>
+              {group.access === 'prompt' && !notes[group.key]
+                ? <button {...primary} aria-label={`Allow ${group.name}`} onPointerUp={blurAfterPointer} onClick={() => allow(group)}>Allow</button>
+                : picker
+                  ? <button {...primary} aria-label={`Choose ${group.name}`} onPointerUp={blurAfterPointer} onClick={() => { void chooseFolder(group); }}>Choose…</button>
+                  : null}
+            </li>;
+          })}
+        </ul>
+        {prompts.length > 0 && <InstallAppHint />}
+        {failure && <p role="alert">Reconnecting stopped: {failure}</p>}
+        {denied.length ? <p role="alert">Access was not granted for “{denied.join('”, “')}”.</p> : null}
+        <div className="repository-archive-actions">
+          {picker
+            ? <button className="media-reconnect-secondary" onPointerUp={blurAfterPointer} onClick={() => { void chooseFolder(); }}>Other folder or drive…</button>
+            : <button onPointerUp={blurAfterPointer} onClick={() => { close(); requestRelinkDialog(); }}>Relink manually…</button>}
+          {allowAll && <button data-primary onPointerUp={blurAfterPointer} onClick={() => { void run(undefined, { requestFileAccess: true }); }}>Allow all</button>}
         </div>
       </>}
     </div>

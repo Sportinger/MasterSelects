@@ -9,6 +9,7 @@ import {
   type CodecPacketReader,
 } from '../codec/CodecFrameProviderBase';
 import type { MxfGopEngineStats } from './mxfGopEngine';
+import { gopThumbnailSeekTime, gopThumbnailStrideSeconds } from '../codec/gopThumbnails';
 import { MxfPacketSource, type MxfPacket } from './MxfPacketSource';
 
 export type { GopDecoder, GopDecoderCallbacks } from './mxfGopEngine';
@@ -24,9 +25,6 @@ export interface MxfGopFrameProviderOptions extends CodecFrameProviderBaseOption
   codecId: string;
   packetSourceFactory?: (file: File, codecId: string) => Promise<MxfPacketSource>;
 }
-
-/** Upper bound of decoded timeline thumbnails per long-GOP source. */
-const MAX_DECODED_THUMBNAILS = 600;
 
 export abstract class MxfGopFrameProvider<
   TOptions extends MxfGopFrameProviderOptions,
@@ -67,18 +65,11 @@ export abstract class MxfGopFrameProvider<
   }
 
   getThumbnailSeekTime(timeSeconds: number): number {
-    const source = this.source;
-    if (!source) return timeSeconds;
-    const fps = source.metadata.fps || 25;
-    const display = Math.max(0, Math.floor(timeSeconds * fps + 1e-6));
-    const keyStored = source.keyframeStoredIndexFor(display);
-    // Middle of the key frame's display interval keeps the half-open packet test stable.
-    return (source.storedToDisplayIndex(keyStored) + 0.5) / fps;
+    return gopThumbnailSeekTime(this.source, timeSeconds);
   }
 
   getThumbnailStrideSeconds(durationSeconds: number): number {
-    // Each long-GOP thumbnail reads and decodes a (4K: multi-MB) key frame; cap the count.
-    return Math.max(1, Math.ceil(durationSeconds / MAX_DECODED_THUMBNAILS));
+    return gopThumbnailStrideSeconds(durationSeconds);
   }
 
   protected hasDecoder(): boolean {

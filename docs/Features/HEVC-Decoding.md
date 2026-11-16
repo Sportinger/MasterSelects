@@ -8,7 +8,7 @@ MP4/MOV sources tagged `hvc1` or `hev1` use the shared `hevc` frame provider. Th
 2. Ask WebCodecs whether that configuration is supported, then require an actual decoded first frame.
 3. If unsupported, configuration fails, decoding errors, or no frame arrives within the bounded wait, use FFmpeg's HEVC decoder in the existing libavcodec WASM worker. Subsequent native decoding failures use the same fallback.
 
-The WASM binary is fetched only for software decoding. No upload, external service, browser flags, or pre-conversion is required. Decode stays off the main thread. Main and Main10 4:2:0 output are supported; unsupported pixel formats report an error. Software decoding does not guarantee real-time 4K playback. This feature does not automatically create proxies. On Linux, a dismissible banner names the clip that is decoded in software ([Export: Linux H.265 and AAC](./Export.md#linux-h265-and-aac)).
+The WASM binary is fetched only for software decoding. No upload, external service, browser flags, or pre-conversion is required. Decode stays off the main thread. Main and Main10 4:2:0 output are supported; unsupported pixel formats report an error. Software decoding does not guarantee real-time 4K playback. This feature does not automatically create proxies. On Linux, a banner names the clip that is decoded in software once per browser and fades out after 15 seconds; later project opens only log it ([Export: Linux H.265 and AAC](./Export.md#linux-h265-and-aac)).
 
 ## Playback slower than real time
 
@@ -27,7 +27,7 @@ updates per second without purges during playback.
 
 - Source monitor (including audio, seeking and rotation) and muted Media hover playback.
 - Timeline playback and scrubbing, including reversed/non-monotonic source requests.
-- Media thumbnails and timeline thumbnails.
+- Media thumbnails and timeline thumbnails. Like MXF, thumbnails land on the key frame of each GOP and at most 600 are decoded per source (`codec/gopThumbnails.ts`); an exact seek per second decoded whole GOPs and kept a core busy for minutes with software decoding on Linux.
 - Explicit proxy generation through the existing codec provider strategy.
 - FAST and precise export through the existing exact-frame provider contract.
 - Temporal source-frame consumers using `SourceFrameService`.

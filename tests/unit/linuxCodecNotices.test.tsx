@@ -8,6 +8,7 @@ import {
   shouldShowLinuxCodecNotice,
 } from '../../src/services/codecNotices/linuxCodecNoticePolicy';
 import {
+  PASSIVE_NOTICE_MS,
   reportLinuxCodecSupport,
   resetLinuxCodecNoticeLogForTests,
 } from '../../src/services/codecNotices/linuxCodecNotices';
@@ -77,6 +78,20 @@ describe('reportLinuxCodecSupport', () => {
     expect(reportLinuxCodecSupport('aac-encode', false)).toBe(true);
     expect(visibleIds()).toEqual(['aac-encode']);
     expect(logged().length - before).toBe(1);
+  });
+
+  it('shows the software playback notice once per browser and fades it out', () => {
+    vi.useFakeTimers();
+    try {
+      platform('Linux x86_64');
+      expect(reportLinuxCodecSupport('h265-decode', false, { sourceName: 'A001.mp4' })).toBe(true);
+      expect(visibleIds()).toEqual(['h265-decode']);
+      vi.advanceTimersByTime(PASSIVE_NOTICE_MS);
+      expect(visibleIds()).toEqual([]);
+      // The next project open (or reload) only logs it.
+      expect(reportLinuxCodecSupport('h265-decode', false, { sourceName: 'A001.mp4' })).toBe(false);
+      expect(visibleIds()).toEqual([]);
+    } finally { vi.useRealTimers(); }
   });
 
   it('shows nothing on Linux when the browser supports the codec', () => {

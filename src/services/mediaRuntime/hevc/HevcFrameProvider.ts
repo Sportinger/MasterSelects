@@ -2,6 +2,7 @@ import { Logger } from '../../logger';
 import { CodecFrameProviderBase, closeVideoFrame, normalizeError, type CodecFrameProviderBaseOptions } from '../codec/CodecFrameProviderBase';
 import { GopDecodeEngine } from '../codec/GopDecodeEngine';
 import type { GopPacket } from '../codec/GopPacketSource';
+import { gopThumbnailSeekTime, gopThumbnailStrideSeconds } from '../codec/gopThumbnails';
 import { HevcPacketSource } from './HevcPacketSource';
 import { NativeHevcDecoder, WasmHevcDecoder, supportsNativeHevc } from './hevcDecoders';
 import { reportLinuxCodecSupport } from '../../codecNotices/linuxCodecNotices';
@@ -52,6 +53,10 @@ export class HevcFrameProvider extends CodecFrameProviderBase<GopPacket, HevcFra
   private reportSoftwareDecode(): void {
     reportLinuxCodecSupport('h265-decode', false, { sourceName: this.options.file.name });
   }
+
+  /** Thumbnails on key frames only: an exact seek per second decoded whole GOPs (in software on Linux). */
+  getThumbnailSeekTime(timeSeconds: number): number { return gopThumbnailSeekTime(this.source, timeSeconds); }
+  getThumbnailStrideSeconds(durationSeconds: number): number { return gopThumbnailStrideSeconds(durationSeconds); }
 
   protected hasDecoder(): boolean { return this.engine !== null; }
   protected getBackendDebugInfo() {

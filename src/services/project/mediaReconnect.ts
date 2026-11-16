@@ -13,6 +13,14 @@ type IterableDirectoryHandle = FileSystemDirectoryHandle & { values(): AsyncIter
 
 export interface MediaReconnectProgress { phase: 'access' | 'connect' | 'search' | 'relink'; done: number; total: number; }
 export interface MediaReconnectResult { connected: number; relinked: number; missing: number; deniedFolders: string[]; }
+export interface MediaReconnectOptions {
+  /** Re-allow saved single-file locations in the same click. */
+  requestFileAccess?: boolean;
+  /** Re-allow only these remembered folders (one row of the reconnect dialog); default: all of them. */
+  rootIds?: readonly string[];
+  /** The chosen folder replaces this remembered folder when it holds that folder's saved media. */
+  forRootId?: string;
+}
 
 export function offlineMediaFiles(): MediaFile[] { return useMediaStore.getState().files.filter(mediaNeedsRelink); }
 
@@ -62,10 +70,13 @@ async function collectFolder(root: FileSystemDirectoryHandle, rootId: string, in
 }
 
 /** A chosen folder that holds a known folder's saved media takes its place, so saved locations resolve without a search. */
-async function registerChosenFolder(folder: FileSystemDirectoryHandle): Promise<void> {
+async function registerChosenFolder(folder: FileSystemDirectoryHandle, preferredRootId?: string): Promise<void> {
   const files = useMediaStore.getState().files;
   let knownRootId: string | undefined;
-  for (const root of await getProjectMediaSourceRootStates()) {
+  // The folder chosen for one named folder in the dialog is checked against that folder first.
+  const roots = await getProjectMediaSourceRootStates();
+  const ordered = [...roots.filter(root => root.id === preferredRootId), ...roots.filter(root => root.id !== preferredRootId)];
+  for (const root of ordered) {
     if (!files.some(file => file.sourceRootId === root.id)) continue;
     if ((await checkSourceRootFolder(folder, root.id, files)).holds) { knownRootId = root.id; break; }
   }
@@ -87,7 +98,7 @@ export function subscribeMediaReconnect(listener: () => void): () => void { runn
 export async function reconnectMedia(
   onProgress: (progress: MediaReconnectProgress) => void,
   chosenFolder?: FileSystemDirectoryHandle,
-  options: { requestFileAccess?: boolean } = {},
+  options: MediaReconnectOptions = {},
 ): Promise<MediaReconnectResult> {
   publishRunning({ phase: 'access', done: 0, total: 0 });
   try {
@@ -97,10 +108,10 @@ export async function reconnectMedia(
 async function reconnectMediaNow(
   onProgress: (progress: MediaReconnectProgress) => void,
   chosenFolder: FileSystemDirectoryHandle | undefined,
-  options: { requestFileAccess?: boolean },
+  options: MediaReconnectOptions,
 ): Promise<MediaReconnectResult> {
   const deniedFolders: string[] = [];
-  const pending = await mediaFoldersNeedingAccess();
+  const pending = (await mediaFoldersNeedingAccess()).filter(root => !options.rootIds || options.rootIds.includes(root.id));
   // Saved single-file locations are re-allowed in the same click; a chosen folder already covers them.
   const files = options.requestFileAccess && !chosenFolder
     ? (await mediaFilesNeedingAccess()).slice(0, MAX_FILE_ACCESS_PROMPTS) : [];
@@ -116,7 +127,7 @@ async function reconnectMediaNow(
       if (permission && permission !== 'granted') log.info('File access was not granted', { name });
     } catch (error) { log.warn('Could not request file access', { name, error }); }
   }
-  if (chosenFolder) await registerChosenFolder(chosenFolder);
+  if (chosenFolder) await registerChosenFolder(chosenFolder, options.forRootId);
 
   const connected = await connectOfflineLinkedMedia((done, total) => onProgress({ phase: 'connect', done, total }));
   let missing = offlineMediaFiles();
