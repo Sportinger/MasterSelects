@@ -54,7 +54,7 @@ function TimelineHeaderComponent({
   audioLayerAdvancedMode = true,
   showCollapsedAudioSummaryMeter = false,
 }: TimelineHeaderComponentProps) {
-  const { onReorderPointerDown } = useTrackReorderDrag(track);
+  const { onReorderPointerDown, onHoldPointerDown } = useTrackReorderDrag(track);
   const { selectedTrackClip, propertyClipKeyframes, playheadPositionOverride } = resolveTimelineHeaderPropertySelection(
     track.id, propertySelection, clips, selectedClipIds, clipKeyframes, playheadPosition,
   );
@@ -213,6 +213,7 @@ function TimelineHeaderComponent({
         className="track-header-top"
         style={{ height: baseHeight, cursor: (track.type === 'video' || isMixerTrack) ? 'pointer' : 'default' }}
         onClick={handleHeaderClick}
+        onPointerDown={onHoldPointerDown}
       >
         <div
           className="track-reorder-handle"

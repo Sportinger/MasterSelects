@@ -56,7 +56,14 @@ scaleTracksOfType() // Resize all tracks of the same type together
 setTrackLocked()    // Lock or unlock timeline editing for a track
 setTrackParent()    // Parent tracks with cycle detection
 getTrackChildren()  // Query child tracks
+reorderTrack()      // Move a track with all its clips within its section
 ```
+
+To move a track with all its clips, hold the pointer on its header for about a
+third of a second (the header dims), then drag it up or down; a line shows where
+it lands, video among video tracks and audio among audio tracks. The ⋮ grip at
+the left edge starts the same drag without waiting. Clicks, quick drags and the
+header's buttons keep their normal behavior, and locked tracks do not move.
 
 ### Track Height
 - Track height clamps to 20-600 px.
