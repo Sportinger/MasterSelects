@@ -42,3 +42,26 @@ describe('multicam switch after the program moved', () => {
     expect(withProgramSync(multicam, [clip('p0', 'v1', 100, 20, { mediaFileId: 'jonas', inPoint: 100, outPoint: 120 })], 110)).toBe(multicam);
   });
 });
+
+describe('multicam switch next to a lead-in', () => {
+  const template = { name: 'cam', transform: {} as never, effects: [] };
+  const multicam: CompositionMulticam = {
+    version: 1, active: true, groupId: 'g',
+    angles: [
+      { trackId: 'v1', label: 'Jonas', sources: [{ mediaFileId: 'jonas', startTime: 0, inPoint: 0, duration: 5000, template }] },
+      { trackId: 'v2', label: 'holger', sources: [{ mediaFileId: 'holger', startTime: 0, inPoint: 0, duration: 5000, template }] },
+    ],
+  };
+  it('takes the program shift from the piece on air, not from a lead-in that ends at the same cut', () => {
+    const program = [
+      // Lead-in from an earlier moment (shift -480), then the program moved by -523.2.
+      clip('lead', 'v1', 0, 16.48, { mediaFileId: 'jonas', inPoint: 480, outPoint: 496.48 }),
+      clip('main', 'v1', 16.48, 27.76, { mediaFileId: 'jonas', inPoint: 539.68, outPoint: 567.44 }),
+    ];
+    const synced = withProgramSync(multicam, program, 16.48);
+    expect(synced.angles[1]!.sources[0]!.startTime).toBeCloseTo(-523.2, 6);
+    const plan = planAngleSwitch(synced, program, 16.48, 1, 'segment')!;
+    expect(plan.pieces[0]).toMatchObject({ startTime: 16.48 });
+    expect(plan.pieces[0]!.inPoint).toBeCloseTo(539.68, 6);
+  });
+});

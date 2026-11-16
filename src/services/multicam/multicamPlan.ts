@@ -194,7 +194,10 @@ export function withProgramSync(
   clips: readonly TimelineClip[],
   time: number,
 ): CompositionMulticam {
-  let best: { distance: number; shift: number } | null = null;
+  // The piece on air at `time` decides (half-open, so a piece ending exactly here does not count);
+  // only in a gap the nearest piece does, the one after the gap winning a tie. A lead-in placed
+  // before the program comes from another moment, so its shift must not leak into the program.
+  let best: { rank: number; shift: number } | null = null;
   multicam.angles.forEach((angle) => {
     for (const clip of clips) {
       if (clip.trackId !== angle.trackId) continue;
@@ -202,9 +205,10 @@ export function withProgramSync(
       const source = angle.sources.find((candidate) => candidate.mediaFileId === mediaFileId
         && clip.inPoint >= candidate.inPoint - EPSILON && clip.inPoint <= candidate.inPoint + candidate.duration + EPSILON);
       if (!source) continue;
-      const distance = time < clip.startTime ? clip.startTime - time : Math.max(0, time - clipEnd(clip));
+      const onAir = time >= clip.startTime - EPSILON && time < clipEnd(clip) - EPSILON;
+      const rank = onAir ? -1 : time < clip.startTime ? clip.startTime - time : time - clipEnd(clip) + EPSILON;
       const shift = clip.startTime - (source.startTime + (clip.inPoint - source.inPoint));
-      if (!best || distance < best.distance) best = { distance, shift };
+      if (!best || rank < best.rank) best = { rank, shift };
     }
   });
   const shift = (best as { shift: number } | null)?.shift ?? 0;
