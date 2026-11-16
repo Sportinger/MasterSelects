@@ -21,6 +21,7 @@ import {
   releaseMulticamAngles,
   syncMulticamAngles,
 } from './multicam/multicamAngleRuntime';
+import { programSyncShift } from './multicam/multicamPlan';
 
 interface NestedCompInfo {
   clipId: string;
@@ -108,6 +109,8 @@ class RenderSchedulerService {
   private nestedCompCacheTime = 0;
   /** Whether multicam angle decoders are held for camera slots. */
   private multicamAnglesLive = false;
+  /** Program shift the camera views of this frame use (see programSyncShift). */
+  private multicamProgramShift = 0;
   private readonly CACHE_INVALIDATION_MS = 100;
 
   // Reuse the main loop's pre-built layers for the active composition
@@ -525,7 +528,9 @@ class RenderSchedulerService {
     const timeline = useTimelineStore.getState();
     const time = this.getMainPlayheadTime();
     const programFrame = this.activeCompFrame;
+    this.multicamProgramShift = programSyncShift(multicam, timeline.clips, time);
     syncMulticamAngles({
+      programShift: this.multicamProgramShift,
       compositionId: activeCompId,
       multicam,
       time,
@@ -543,7 +548,7 @@ class RenderSchedulerService {
 
   private renderMulticamAngleTarget(targetId: string, compositionId: string, angleIndex: number, time: number | null): void {
     const multicam = useMediaStore.getState().compositions.find((comp) => comp.id === compositionId)?.multicam;
-    const layer = multicam && time !== null ? getMulticamAngleLayer(compositionId, multicam, angleIndex, time) : null;
+    const layer = multicam && time !== null ? getMulticamAngleLayer(compositionId, multicam, angleIndex, time, this.multicamProgramShift) : null;
     // A decoder still catching up keeps the slot on its last picture.
     if (layer && !isMulticamAngleLayerReady(layer)) return;
     renderHostPort.renderToPreviewCanvas(targetId, layer ? [layer] : [], { compositionId, timelineTimeSeconds: time ?? 0 });

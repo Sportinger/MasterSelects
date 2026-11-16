@@ -65,3 +65,23 @@ describe('multicam switch next to a lead-in', () => {
     expect(plan.pieces[0]!.inPoint).toBeCloseTo(539.68, 6);
   });
 });
+
+describe('Multi Preview cameras after the program moved', () => {
+  it('show the same moment as the program, through the shared program shift', async () => {
+    const { resolveAngleSourceAt } = await import('../../src/services/multicam/multicamAngleRuntime');
+    const { programSyncShift } = await import('../../src/services/multicam/multicamPlan');
+    const template = { name: 'cam', transform: {} as never, effects: [] };
+    const multicam: CompositionMulticam = {
+      version: 1, active: true, groupId: 'g',
+      angles: [
+        { trackId: 'v1', label: 'Jonas', sources: [{ mediaFileId: 'jonas', startTime: 0, inPoint: 0, duration: 1000, template }] },
+        { trackId: 'v2', label: 'holger', sources: [{ mediaFileId: 'holger', startTime: 0, inPoint: 3, duration: 1000, template }] },
+      ],
+    };
+    // Program moved 30 s right: Jonas at 130 plays source 100, so holger (3 s ahead in its file) must show 103.
+    const program = [clip('p1', 'v1', 130, 20, { mediaFileId: 'jonas', inPoint: 100, outPoint: 120 })];
+    const shift = programSyncShift(multicam, program, 140);
+    expect(shift).toBe(30);
+    expect(resolveAngleSourceAt(multicam.angles[1]!, 140 - shift)!.sourceTime).toBeCloseTo(113, 6);
+  });
+});

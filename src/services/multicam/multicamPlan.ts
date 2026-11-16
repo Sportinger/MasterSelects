@@ -184,19 +184,18 @@ export function isRangeShowingAngle(
 }
 
 /**
- * The camera sync as the program shows it now. Angle sources remember where each camera sat when
- * multicam was enabled; moving the program afterwards (track select + drag, ripple edits) shifts
- * the pieces but not that memory, so a later switch cut in material from the wrong moment.
- * The piece nearest to `time` tells how far the program moved there; every source shifts by that.
+ * How far the program sits from the camera sync remembered when multicam was enabled. Angle sources
+ * keep those positions; moving the program afterwards (track select + drag, ripple edits, lead-ins)
+ * shifts the pieces but not that memory. The piece on air at `time` tells the shift (half-open, so a
+ * lead-in ending exactly at the cut does not count, it comes from another moment); in a gap the nearest
+ * piece does, the one after the gap on a tie. Camera switches and the Multi Preview both read the
+ * cameras through this one shift, so they follow every edit of the program.
  */
-export function withProgramSync(
+export function programSyncShift(
   multicam: CompositionMulticam,
   clips: readonly TimelineClip[],
   time: number,
-): CompositionMulticam {
-  // The piece on air at `time` decides (half-open, so a piece ending exactly here does not count);
-  // only in a gap the nearest piece does, the one after the gap winning a tie. A lead-in placed
-  // before the program comes from another moment, so its shift must not leak into the program.
+): number {
   let best: { rank: number; shift: number } | null = null;
   multicam.angles.forEach((angle) => {
     for (const clip of clips) {
@@ -212,7 +211,17 @@ export function withProgramSync(
     }
   });
   const shift = (best as { shift: number } | null)?.shift ?? 0;
-  if (Math.abs(shift) <= EPSILON) return multicam;
+  return Math.abs(shift) <= EPSILON ? 0 : shift;
+}
+
+/** The multicam with every camera source moved by the program's current shift (see programSyncShift). */
+export function withProgramSync(
+  multicam: CompositionMulticam,
+  clips: readonly TimelineClip[],
+  time: number,
+): CompositionMulticam {
+  const shift = programSyncShift(multicam, clips, time);
+  if (shift === 0) return multicam;
   return {
     ...multicam,
     angles: multicam.angles.map((angle) => ({

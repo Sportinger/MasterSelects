@@ -189,11 +189,14 @@ export function syncMulticamAngles(params: {
   /** Main-loop layers at this exact timeline time; undefined while it catches up. */
   programLayers?: readonly Layer[];
   frameDurationSeconds?: number;
+  /** How far the program moved since multicam was enabled (programSyncShift); cameras follow it. */
+  programShift?: number;
 }): void {
   const { compositionId, multicam, time, isPlaying, isDragging, programClips, programLayers } = params;
+  const cameraTime = time - (params.programShift ?? 0);
   const live = new Set<string>();
   multicam.angles.forEach((angle, angleIndex) => {
-    const resolved = resolveAngleSourceAt(angle, time);
+    const resolved = resolveAngleSourceAt(angle, cameraTime);
     if (!resolved) return;
     const runtime = getRuntime(compositionId, angleIndex, angle, resolved.source);
     if (!runtime) return;
@@ -247,9 +250,10 @@ export function getMulticamAngleLayer(
   multicam: CompositionMulticam,
   angleIndex: number,
   time: number,
+  programShift = 0,
 ): Layer | null {
   const angle = multicam.angles[angleIndex];
-  const resolved = angle ? resolveAngleSourceAt(angle, time) : null;
+  const resolved = angle ? resolveAngleSourceAt(angle, time - programShift) : null;
   if (!angle || !resolved) return null;
   const runtime = runtimes.get(runtimeKey(compositionId, angleIndex, resolved.source));
   if (!runtime) return null;
