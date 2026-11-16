@@ -182,3 +182,38 @@ export function isRangeShowingAngle(
   const expectedLength = expected.reduce((sum, piece) => sum + piece.endTime - piece.startTime, 0);
   return Math.abs(covered - expectedLength) <= EPSILON * 10;
 }
+
+/**
+ * The camera sync as the program shows it now. Angle sources remember where each camera sat when
+ * multicam was enabled; moving the program afterwards (track select + drag, ripple edits) shifts
+ * the pieces but not that memory, so a later switch cut in material from the wrong moment.
+ * The piece nearest to `time` tells how far the program moved there; every source shifts by that.
+ */
+export function withProgramSync(
+  multicam: CompositionMulticam,
+  clips: readonly TimelineClip[],
+  time: number,
+): CompositionMulticam {
+  let best: { distance: number; shift: number } | null = null;
+  multicam.angles.forEach((angle) => {
+    for (const clip of clips) {
+      if (clip.trackId !== angle.trackId) continue;
+      const mediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
+      const source = angle.sources.find((candidate) => candidate.mediaFileId === mediaFileId
+        && clip.inPoint >= candidate.inPoint - EPSILON && clip.inPoint <= candidate.inPoint + candidate.duration + EPSILON);
+      if (!source) continue;
+      const distance = time < clip.startTime ? clip.startTime - time : Math.max(0, time - clipEnd(clip));
+      const shift = clip.startTime - (source.startTime + (clip.inPoint - source.inPoint));
+      if (!best || distance < best.distance) best = { distance, shift };
+    }
+  });
+  const shift = (best as { shift: number } | null)?.shift ?? 0;
+  if (Math.abs(shift) <= EPSILON) return multicam;
+  return {
+    ...multicam,
+    angles: multicam.angles.map((angle) => ({
+      ...angle,
+      sources: angle.sources.map((source) => ({ ...source, startTime: source.startTime + shift })),
+    })),
+  };
+}

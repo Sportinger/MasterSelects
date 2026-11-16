@@ -160,6 +160,32 @@ function adjustTrimDelta(
   return { delta: rawDelta, snapTime: null };
 }
 
+/**
+ * Selected clips that trim along with the grabbed edge: only those whose same edge sits at the same
+ * time (within half a frame), on unlocked tracks. Selecting everything and dragging the start of the
+ * first clips therefore extends just the clips that begin there, not every selected clip.
+ */
+export function alignedTrimFollowers(
+  clip: TimelineClip,
+  edge: 'left' | 'right',
+  selectedClipIds: Set<string>,
+  clipMap: Map<string, TimelineClip>,
+  tracks: TimelineTrack[],
+  frameRate: number,
+): string[] {
+  if (selectedClipIds.size < 2 || !selectedClipIds.has(clip.id)) return [];
+  const edgeTime = (candidate: TimelineClip) => edge === 'left' ? candidate.startTime : getClipEnd(candidate);
+  const tolerance = 0.5 / Math.max(1, frameRate || 30);
+  const target = edgeTime(clip);
+  const followers: string[] = [];
+  for (const id of selectedClipIds) {
+    const candidate = id === clip.id ? undefined : clipMap.get(id);
+    if (!candidate || isTrackLocked(tracks, candidate.trackId)) continue;
+    if (Math.abs(edgeTime(candidate) - target) <= tolerance) followers.push(id);
+  }
+  return followers;
+}
+
 export function shouldIncludeLinkedTrim(
   clip: Pick<TimelineClip, 'id' | 'linkedClipId'>,
   selectedClipIds: Set<string>,
@@ -426,6 +452,7 @@ export function useClipTrim({
         snapIndicatorTime: null,
         isSnapping: false,
         appliedDelta: 0,
+        followerClipIds: alignedTrimFollowers(clip, edge, selectedClipIds, clipMap, tracks, frameRate),
       };
       setClipTrim(initialTrim);
       clipTrimRef.current = initialTrim;
@@ -529,12 +556,11 @@ export function useClipTrim({
         const singleClip = commitTrim.singleClip === true;
         const includeLinked = shouldIncludeLinkedTrim(clipToTrim, selectedClipIds, singleClip);
 
-        // Multi-select trim: apply the lead clip's (snapped) delta to every other
-        // selected clip, each clamped to its own bounds ("only as much as each can").
+        // Multi-select trim: apply the lead clip's (snapped) delta to the selected clips whose
+        // same edge lines up with it, each clamped to its own bounds ("only as much as each can").
         const extraClips: NonNullable<Extract<TimelineEditOperation, { type: 'trim-clip' }>['extraClips']> = [];
-        if (!singleClip && selectedClipIds.size > 1 && selectedClipIds.has(clipToTrim.id)) {
-          for (const otherId of selectedClipIds) {
-            if (otherId === clipToTrim.id) continue;
+        if (!singleClip) {
+          for (const otherId of commitTrim.followerClipIds ?? []) {
             const otherClip = clipMap.get(otherId);
             if (!otherClip) continue;
             const otherTiming = computeTrimTiming(otherClip, commitTrim.edge, trimOriginalsFromClip(otherClip), deltaTime);

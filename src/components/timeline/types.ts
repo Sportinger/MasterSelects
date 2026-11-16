@@ -75,6 +75,8 @@ export interface ClipTrimState {
   // live clip resize matches where the trim commits, and so multi-selected
   // followers can apply the same delta clamped to their own bounds.
   appliedDelta: number;
+  /** Other selected clips whose same edge lines up with the grabbed one; they trim along (live and on commit). */
+  followerClipIds?: string[];
 }
 
 // Clip fade state (for fade-in/out handles)

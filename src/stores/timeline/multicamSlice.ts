@@ -17,6 +17,7 @@ import {
   isRangeShowingAngle,
   planAngleSwitch,
   planInitialProgram,
+  withProgramSync,
   type MulticamPiece,
 } from '../../services/multicam/multicamPlan';
 import { applyRangeEditOperation } from './editOperations/rangeOperations';
@@ -126,9 +127,10 @@ export const createMulticamSlice: SliceCreator<MulticamActions> = (set, get) => 
   switchMulticamAngle: (angleIndex, mode) => {
     const active = getActiveMulticam();
     if (!active) return false;
-    const { multicam } = active;
     const { clips, tracks, selectedClipIds, playheadPosition, isPlaying, updateDuration, invalidateCache } = get();
     const time = getPlayheadPosition(playheadPosition);
+    // Follow the program where it is now, also after it was moved since multicam was enabled.
+    const multicam = withProgramSync(active.multicam, clips, time);
     const switchMode = mode ?? (isPlaying ? 'cut' : 'segment');
     const plan = planAngleSwitch(multicam, clips, time, angleIndex, switchMode);
     // Only where the camera has material; elsewhere the previous camera stays on air.

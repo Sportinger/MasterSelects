@@ -30,7 +30,8 @@ export function isTimelineClipCanvasTrimPreviewClip(
 ): boolean {
   if (!clipTrim) return false;
   const includeLinked = clipTrim.singleClip === true ? false : clipTrim.includeLinked === true;
-  return clip.id === clipTrim.clipId || (includeLinked && clip.linkedClipId === clipTrim.clipId);
+  return clip.id === clipTrim.clipId || (includeLinked && clip.linkedClipId === clipTrim.clipId)
+    || clipTrim.followerClipIds?.includes(clip.id) === true;
 }
 
 export function resolveClipGeometry(
